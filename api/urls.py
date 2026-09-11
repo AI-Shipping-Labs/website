@@ -114,6 +114,11 @@ from api.views.marketing_pages import (
     marketing_page_preview_token_regenerate,
     marketing_pages_collection,
 )
+from api.views.maven_occurrences import (
+    maven_occurrence_detail,
+    maven_occurrence_step_retry,
+    maven_occurrences_collection,
+)
 from api.views.onboarding import (
     onboarding_personas,
     onboarding_questionnaires,
@@ -520,6 +525,22 @@ urlpatterns = [
         "event-series/<int:series_id>/occurrences/<int:occurrence_id>",
         event_series_occurrence_detail,
         name="api_event_series_occurrence_detail",
+    ),
+    # ---- Maven enrollment occurrence ledger (issue #1568) ------------
+    path(
+        "integrations/maven/occurrences",
+        maven_occurrences_collection,
+        name="api_maven_occurrences_collection",
+    ),
+    path(
+        "integrations/maven/occurrences/<int:occurrence_id>",
+        maven_occurrence_detail,
+        name="api_maven_occurrence_detail",
+    ),
+    path(
+        "integrations/maven/occurrences/<int:occurrence_id>/steps/<str:step>/retry",
+        maven_occurrence_step_retry,
+        name="api_maven_occurrence_step_retry",
     ),
     # ---- Integration settings (issues #633, #640) ---------------------
     # GET lists registered keys with metadata + source enum but never the

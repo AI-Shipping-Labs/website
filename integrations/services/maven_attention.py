@@ -13,6 +13,16 @@ from integrations.services.maven import (
 ATTENTION_AGE = RUNNING_STEP_LEASE
 
 
+def failed_step_names(occurrence):
+    """Return failed current steps in the canonical ledger order."""
+    return [
+        name
+        for name in STEP_NAMES
+        if getattr(occurrence, f"{name}_status")
+        == MavenEnrollmentEvent.STEP_FAILED
+    ]
+
+
 def failed_occurrences(queryset=None):
     """Return occurrences whose current ledger contains any failed step."""
     queryset = queryset if queryset is not None else MavenEnrollmentEvent.objects.all()

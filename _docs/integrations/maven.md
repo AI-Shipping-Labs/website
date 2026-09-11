@@ -285,6 +285,79 @@ steps resume once in dependency order; already successful or skipped work is
 left untouched. Studio reports the persisted result as recovered, skipped,
 failed again, or already running.
 
+## Operator occurrence API
+
+Remote support can inspect the same occurrence ledger and force one safe retry
+with a staff-owned operator token. A signed-in browser session alone does not
+authenticate these JSON routes. Send the exact header
+`Authorization: Token <key>`; missing, invalid, inactive-owner, and non-staff
+credentials return JSON `401` responses.
+
+The three slashless routes are:
+
+| Method | Route | Result |
+|---|---|---|
+| `GET` | `/api/integrations/maven/occurrences` | Filtered occurrence summaries |
+| `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and all five current steps |
+| `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/steps/<step>/retry` | One forced safe retry and the refreshed occurrence |
+
+List filters combine with AND. `email` is a case-insensitive exact lookup that
+matches the short-lived occurrence email and, when the canonical primary/alias
+resolver finds an account, every occurrence linked to that user. `course` and
+`cohort` match a label substring or their exact provider key. `lifecycle`
+accepts `active`, `removed`, or `legacy`; `status` accepts `all`, `failed`, or
+`needs_attention`; and `failed_step` accepts `override`, `notification`,
+`slack`, `welcome`, or `removal`.
+
+Pages default to `limit=50&offset=0`. Positive limits above 200 are clamped to
+200, and `total_count` reports all filtered rows while `count` reports rows in
+the current page. Use increasing offsets to reach older occurrences:
+
+```bash
+curl -sS \
+  -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/integrations/maven/occurrences?email=sam%40example.com&status=failed&limit=50&offset=0"
+```
+
+Diagnose an occurrence before retrying it:
+
+```bash
+curl -sS \
+  -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/integrations/maven/occurrences/123"
+```
+
+The detail response always includes `override`, `notification`, `slack`,
+`welcome`, and `removal` in dependency order. Each row reports status,
+attempts, timestamps, whether it needs attention, and a safe error class or
+controlled reason. Unsafe legacy errors appear as `last_error: "redacted"`
+with `error_redacted: true`.
+
+After fixing the provider or configuration cause, retry only the affected
+step. The URL supplies every option, so no request body is needed:
+
+```bash
+curl -sS -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/integrations/maven/occurrences/123/steps/welcome/retry"
+```
+
+An attempted provider outcome returns `200` with `retry.outcome` set to the
+persisted `succeeded`, `failed`, or `skipped` state. A caught provider failure
+therefore remains a truthful `200` with `outcome=failed`. A fresh running lease
+returns `409 maven_step_in_progress`; a step already persisted as `succeeded`
+or `skipped` returns `409 maven_step_not_retryable`. A successful forced
+`override` retry resumes only currently eligible downstream enrollment steps
+once in their normal order.
+
+The API never returns webhook payloads, dedupe or identity hashes, names,
+Slack IDs, provider bodies, audit details, or token values. After the 30-day
+retention task sets `payload_redacted_at`, `occurrence_email` remains empty and
+is never reconstructed from the linked account. The separately returned
+`user.email` is the current canonical account email retained for staff account
+support. The full contract is also available under the Maven Integrations
+section at `/api/docs`.
+
 ## Data minimization and retention
 
 The ledger never stores the webhook secret and stores only operational event,

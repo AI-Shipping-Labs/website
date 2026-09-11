@@ -25,6 +25,7 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from email_app.services.email_service import EmailServiceError
+from email_app.testing import StubSESClient, deliver_pending_mail
 
 User = get_user_model()
 
@@ -955,11 +956,11 @@ class EmailVerificationTemplateCopyTest(TestCase):
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
     @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-513-2",
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=StubSESClient(),
     )
     def test_register_render_uses_account_framing(
-        self, mock_ses, _probe,
+        self, client_factory, _probe,
     ):
         resp = self.client.post(
             "/api/register",
@@ -967,16 +968,23 @@ class EmailVerificationTemplateCopyTest(TestCase):
                 "email": "render-reg@example.com",
                 "password": "secure1234",
             }),
-            content_type="application/json",
+            content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
+        deliver_pending_mail()
 
-        mock_ses.assert_called_once()
-        self.assertEqual(mock_ses.call_args[0][0], "render-reg@example.com")
+        stub = client_factory.return_value
+        self.assertEqual(len(stub.calls), 1)
+        payload = stub.calls[0]
+        self.assertEqual(
+            payload["Destination"]["ToAddresses"],
+            ["render-reg@example.com"],
+        )
+        subject = payload["Content"]["Simple"]["Subject"]["Data"]
         # Subject mentions "Verify" for the signup flow.
-        self.assertIn("Verify", mock_ses.call_args[0][1])
+        self.assertIn("Verify", subject)
 
-        html = mock_ses.call_args[0][2]
+        html = payload["Content"]["Simple"]["Body"]["Html"]["Data"]
         html_lower = html.lower()
         # Signup framing: account creation disclosed.
         self.assertIn("signing up", html_lower)

@@ -33,21 +33,10 @@ class SignupPathDispatchesSignupVerificationTemplate(TestCase):
     """``POST /api/register`` must dispatch the signup-flow template."""
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
-    @patch("email_app.services.email_service.EmailService.send")
-    def test_register_api_dispatches_email_verification_signup(
-        self, mock_send, _probe,
-    ):
-        # Sentinel that mirrors a successful send (EmailLog row).
-        from email_app.models import EmailLog
-
-        def _fake_send(user, template_name, context=None):
-            return EmailLog.objects.create(
-                user=user,
-                email_type=template_name,
-                ses_message_id="ses-test-signup",
-            )
-
-        mock_send.side_effect = _fake_send
+    def test_register_api_dispatches_email_verification_signup(self, _probe):
+        # A1.2: the signup path dispatches through the package mail app,
+        # so the dispatch is asserted on the durable EmailDelivery rows.
+        from community_base.mail.models import EmailDelivery
 
         resp = self.client.post(
             "/api/register",
@@ -58,7 +47,7 @@ class SignupPathDispatchesSignupVerificationTemplate(TestCase):
         )
         self.assertEqual(resp.status_code, 201)
 
-        slugs = _captured_template_names(mock_send)
+        slugs = list(EmailDelivery.objects.values_list("purpose", flat=True))
         self.assertIn("email_verification_signup", slugs)
         # The legacy slug must not be used anywhere on the signup path.
         self.assertNotIn("email_verification", slugs)

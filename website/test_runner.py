@@ -183,6 +183,12 @@ class PicklableTracebackRunner(DiscoverRunner):
             self._password_hashers_override = None
             self._restore_legacy_checkout_cutoff_env()
             raise
+        # A1.2: keep the SES transport offline for the whole run — the stub
+        # returns the historical ``ses-disabled-noop`` id so EmailLog
+        # assertions are unchanged on the package mail path.
+        from email_app.testing import install_test_ses  # noqa: PLC0415
+
+        install_test_ses()
         try:
             super().setup_test_environment(**kwargs)
         except BaseException:

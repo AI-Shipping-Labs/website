@@ -7,7 +7,6 @@ hand-built approximation.
 """
 
 import json
-from unittest.mock import patch
 
 from allauth.core.exceptions import SignupClosedException
 from allauth.socialaccount.internal.flows.signup import process_signup
@@ -169,30 +168,31 @@ class AliasPasswordResetTest(TestCase):
             self.url, data=json.dumps(data), content_type="application/json"
         )
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_alias_reset_targets_canonical_primary_email(self, mock_service_cls):
+    def test_alias_reset_targets_canonical_primary_email(self):
+        from community_base.mail.models import EmailDelivery
+
         canonical, _secondary = _merge_pair()
-        service = mock_service_cls.return_value
 
         resp = self._post({"email": ALIAS_EMAIL})
 
         self.assertEqual(resp.status_code, 200)
         self.assertIn("If an account exists", resp.json()["message"])
-        # Exactly one reset email, delivered to the CANONICAL primary email,
-        # never to the typed alias.
-        self.assertEqual(service.send.call_count, 1)
-        sent_user = service.send.call_args.args[0]
-        self.assertEqual(sent_user.pk, canonical.pk)
-        self.assertEqual(sent_user.email, CANONICAL_EMAIL)
-        self.assertNotEqual(sent_user.email, ALIAS_EMAIL)
+        # Exactly one reset delivery, addressed to the CANONICAL primary
+        # email, never to the typed alias (A1.2: package mail path).
+        deliveries = EmailDelivery.objects.filter(purpose="password_reset")
+        self.assertEqual(deliveries.count(), 1)
+        delivery = deliveries.get()
+        self.assertEqual(delivery.recipient_user_id, canonical.pk)
+        self.assertEqual(delivery.recipient_email, CANONICAL_EMAIL)
+        self.assertNotEqual(delivery.recipient_email, ALIAS_EMAIL)
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_unknown_email_is_silently_non_revealing(self, mock_service_cls):
-        service = mock_service_cls.return_value
+    def test_unknown_email_is_silently_non_revealing(self):
+        from community_base.mail.models import EmailDelivery
+
         resp = self._post({"email": "nobody@example.com"})
         self.assertEqual(resp.status_code, 200)
         self.assertIn("If an account exists", resp.json()["message"])
-        self.assertEqual(service.send.call_count, 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
 
 @tag("core")

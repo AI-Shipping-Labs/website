@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 import jwt
 from allauth.socialaccount.models import SocialApp
+from community_base.mail.service import MailError
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import close_old_connections, connection
@@ -37,7 +38,6 @@ from accounts.utils.tokens import (
     resolve_password_reset_token,
 )
 from email_app.models import EmailLog
-from email_app.services.email_service import EmailServiceError
 
 JWT_ALGORITHM = "HS256"
 FAST_PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
@@ -625,6 +625,11 @@ class FreeWelcomeEmailPasswordFlowTest(TestCase):
         user = User.objects.get(email="new-free@test.com")
 
         self.assertFalse(user.email_verified)
+        # A1.2: the signup verification goes through the package mail app;
+        # its EmailLog row appears once the pending delivery is drained.
+        from email_app.testing import deliver_pending_mail
+
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=user,
@@ -942,14 +947,21 @@ class PasswordResetRequestAPITest(TestCase):
 
 
 class EmailSendHelperExceptionHandlingTest(TestCase):
-    """Issue #605: email helpers soft-fail only expected EmailService errors."""
+    """Issue #605: email helpers soft-fail only expected mail errors.
+
+    A1.2: the helpers send through ``email_app.package_mail``, so the
+    patched seam is the package ``mail.send`` behind it. ``MailError`` is
+    the soft-fail set (local validation or conflict); SES transport
+    failures land on the durable delivery in the worker and never reach
+    the caller.
+    """
 
     def setUp(self):
         self.user = User.objects.create_user(email="helper@example.com")
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_verification_email_soft_fails_email_service_error(self, service_cls):
-        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+    @patch("email_app.package_mail.package_send")
+    def test_send_verification_email_soft_fails_mail_error(self, package_send):
+        package_send.side_effect = MailError("SES down")
 
         from accounts.views.auth import _send_verification_email
 
@@ -962,22 +974,22 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
             "\n".join(logs.output),
         )
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_verification_email_unexpected_error_propagates(self, service_cls):
-        service_cls.return_value.send.side_effect = RuntimeError("template bug")
+    @patch("email_app.package_mail.package_send")
+    def test_send_verification_email_unexpected_error_propagates(self, package_send):
+        package_send.side_effect = RuntimeError("template bug")
 
         from accounts.views.auth import _send_verification_email
 
         with self.assertRaisesRegex(RuntimeError, "template bug"):
             _send_verification_email(self.user)
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_verification_email_signs_return_path(self, service_cls):
+    @patch("email_app.package_mail.package_send")
+    def test_send_verification_email_signs_return_path(self, package_send):
         from accounts.views.auth import _send_verification_email
 
         _send_verification_email(self.user, return_path="/blog/free-return-article")
 
-        _, _, context = service_cls.return_value.send.call_args.args
+        context = package_send.call_args.kwargs["context"]
         token = context["verify_url"].split("token=", 1)[1]
         payload = jwt.decode(
             token,
@@ -986,13 +998,13 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         )
         self.assertEqual(payload["return_path"], "/blog/free-return-article")
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_verification_email_discards_unsafe_return_path(self, service_cls):
+    @patch("email_app.package_mail.package_send")
+    def test_send_verification_email_discards_unsafe_return_path(self, package_send):
         from accounts.views.auth import _send_verification_email
 
         _send_verification_email(self.user, return_path="https://evil.example/phish")
 
-        _, _, context = service_cls.return_value.send.call_args.args
+        context = package_send.call_args.kwargs["context"]
         token = context["verify_url"].split("token=", 1)[1]
         payload = jwt.decode(
             token,
@@ -1001,9 +1013,9 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         )
         self.assertNotIn("return_path", payload)
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_password_reset_email_soft_fails_email_service_error(self, service_cls):
-        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+    @patch("email_app.package_mail.package_send")
+    def test_send_password_reset_email_soft_fails_mail_error(self, package_send):
+        package_send.side_effect = MailError("SES down")
 
         from accounts.views.auth import _send_password_reset_email
 
@@ -1016,17 +1028,17 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
             "\n".join(logs.output),
         )
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_password_reset_email_unexpected_error_propagates(self, service_cls):
-        service_cls.return_value.send.side_effect = RuntimeError("bad reset context")
+    @patch("email_app.package_mail.package_send")
+    def test_send_password_reset_email_unexpected_error_propagates(self, package_send):
+        package_send.side_effect = RuntimeError("bad reset context")
 
         from accounts.views.auth import _send_password_reset_email
 
         with self.assertRaisesRegex(RuntimeError, "bad reset context"):
             _send_password_reset_email(self.user)
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_password_reset_email_issues_secure_one_hour_token(self, service_cls):
+    @patch("email_app.package_mail.package_send")
+    def test_send_password_reset_email_issues_secure_one_hour_token(self, package_send):
         from accounts.views.auth import _send_password_reset_email
 
         started_at = datetime.datetime.now(datetime.timezone.utc)
@@ -1036,7 +1048,7 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         )
         _send_password_reset_email(user)
 
-        _, _, context = service_cls.return_value.send.call_args.args
+        context = package_send.call_args.kwargs["context"]
         token = context["reset_url"].split("token=", 1)[1]
         resolved_user, payload = resolve_password_reset_token(token)
         expires_at = datetime.datetime.fromtimestamp(

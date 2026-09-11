@@ -287,6 +287,32 @@ class Event(
         blank=True, default='',
         help_text='Plain-text transcript content for display and search.',
     )
+    # Issue #1597: how many times the transcript task has tried to fetch the
+    # VTT without success. Drives the retry-vs-terminal decision: once
+    # TRANSCRIPT_MAX_ATTEMPTS is reached without a parsable VTT the event is
+    # marked unavailable instead of retrying forever. Reset to 0 on success
+    # and when a later Zoom webhook delivers a transcript URL.
+    transcript_fetch_attempts = models.PositiveIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            'Failed transcript-fetch attempts for this event. Used to stop '
+            'retrying when Zoom has no transcript for the meeting.'
+        ),
+    )
+    # Issue #1597: terminal marker set when the VTT never became available
+    # (Zoom audio transcription disabled on the meeting, most commonly).
+    # Stops further automatic retries and recap drafting; a later
+    # recording.transcript.completed webhook clears it.
+    transcript_unavailable_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        editable=False,
+        help_text=(
+            'Set when Zoom has no transcript for this meeting after the '
+            'retries are exhausted. Cleared if a transcript shows up later.'
+        ),
+    )
     timestamps = models.JSONField(
         default=list, blank=True,
         help_text='JSON list of {time_seconds, label}.',

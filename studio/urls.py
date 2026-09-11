@@ -157,6 +157,7 @@ from studio.views.events import (
     event_registrations_csv,
     event_retry_recording_upload,
     event_send_followup,
+    event_sync_transcript,
 )
 from studio.views.global_search import global_search
 from studio.views.hosts import host_create, host_edit, host_list
@@ -546,6 +547,11 @@ urlpatterns = [
         'events/<int:event_id>/retry-recording-upload',
         event_retry_recording_upload,
         name='studio_event_retry_recording_upload',
+    ),
+    path(
+        'events/<int:event_id>/sync-transcript',
+        event_sync_transcript,
+        name='studio_event_sync_transcript',
     ),
     path(
         'events/<int:event_id>/notify-workshop-ready',

@@ -1382,15 +1382,23 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             event_type='recording.completed',
         )
         self.assertTrue(log.processed)
-        mock_q_async.assert_called_once()
+        self.assertEqual(mock_q_async.call_count, 2)
         self.assertEqual(
-            mock_q_async.call_args[0][0],
+            mock_q_async.call_args_list[0][0][0],
             'jobs.tasks.recording_upload.upload_recording_to_s3',
         )
-        self.assertEqual(mock_q_async.call_args[0][1], self.event.id)
+        self.assertEqual(mock_q_async.call_args_list[0][0][1], self.event.id)
         self.assertEqual(
-            mock_q_async.call_args[0][2],
+            mock_q_async.call_args_list[0][0][2],
             'https://zoom.us/rec/download/abc123',
+        )
+        self.assertEqual(
+            mock_q_async.call_args_list[1][0][:3],
+            (
+                'jobs.tasks.recording_transcript.transcribe_recording',
+                self.event.id,
+                False,
+            ),
         )
 
     @patch('jobs.tasks.helpers.q_async_task')
@@ -1413,7 +1421,19 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
         )
         self.assertEqual(self.event.recording_s3_url, '')
         self.assertEqual(self.event.published, self.initial_published)
-        self.assertEqual(mock_q_async.call_count, 1)
+        queued_functions = [call.args[0] for call in mock_q_async.call_args_list]
+        self.assertEqual(
+            queued_functions.count(
+                'jobs.tasks.recording_upload.upload_recording_to_s3',
+            ),
+            1,
+        )
+        self.assertEqual(
+            queued_functions.count(
+                'jobs.tasks.recording_transcript.transcribe_recording',
+            ),
+            2,
+        )
         self.event.refresh_from_db()
         self.assertIsNotNone(self.event.recording_upload_enqueued_at)
         self.assertEqual(
@@ -1610,7 +1630,7 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
         self.event.refresh_from_db()
         self.assertEqual(self.event.recording_url, 'https://zoom.us/rec/play/abc123')
         self.assertIsNotNone(self.event.recording_upload_enqueued_at)
-        self.assertEqual(mock_q_async.call_count, 2)
+        self.assertEqual(mock_q_async.call_count, 3)
         self.assertEqual(
             WebhookLog.objects.filter(processed=True).count(),
             1,
@@ -1644,7 +1664,15 @@ class ZoomRecordingCompletedTest(_ZoomSecretIsolationMixin, TestCase):
             self.event.transcript_url,
             'https://zoom.us/rec/download/transcript123.vtt',
         )
-        mock_q_async.assert_not_called()
+        self.assertEqual(mock_q_async.call_count, 1)
+        self.assertEqual(
+            mock_q_async.call_args.args[:3],
+            (
+                'jobs.tasks.recording_transcript.transcribe_recording',
+                self.event.id,
+                False,
+            ),
+        )
 
     @patch('jobs.tasks.helpers.q_async_task')
     def test_missing_meeting_id_is_non_fatal_and_skips_upload(self, mock_q_async):

@@ -714,6 +714,35 @@
     {% endif %}
   </div>
 
+  <div class="bg-card border border-border rounded-lg p-4" id="transcript-section" data-testid="transcript-panel">
+    <h2 class="text-sm font-medium text-foreground mb-3">Transcript &amp; recap</h2>
+    <p class="text-sm text-muted-foreground mb-2" data-testid="transcript-status">
+      {% if transcript_status == 'stored' %}
+        Transcript stored ({{ event.transcript_text|length }} characters).
+      {% elif transcript_status == 'waiting' %}
+        Transcript URL captured — download pending or retrying.
+      {% elif transcript_status == 'unavailable' %}
+        Transcript unavailable — Zoom has no transcript for this meeting.
+      {% else %}
+        No transcript captured yet.
+      {% endif %}
+    </p>
+    <p class="text-xs text-muted-foreground mb-3" data-testid="recap-draft-status">
+      {% if event.recap_notes %}Recap draft present in recap notes.{% else %}No recap draft yet.{% endif %}
+    </p>
+    <form method="post" action="{{ sync_transcript_url }}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="sync-transcript-button"
+              class="{% studio_action_class 'secondary' %} w-full">
+        Sync transcript &amp; recap
+      </button>
+    </form>
+    <p class="text-xs text-muted-foreground mt-2">
+      Re-checks Zoom for the meeting's transcript file, downloads and stores it, then drafts a recap from it when the LLM is configured. Existing recap notes are never overwritten.
+    </p>
+  </div>
+
   {% if event.status != 'draft' %}
   {% include "studio/includes/notification_actions.html" with notify_url=notify_url announce_url=announce_url compact=True notify_sending_label="Creating..." notify_status_mode="in_app_eligible_members" %}
   {% endif %}

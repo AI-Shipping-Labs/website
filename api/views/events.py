@@ -59,6 +59,11 @@ from events.services.event_series_lookup import (
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
+from events.services.recording_transcript import (
+    enqueue_recording_transcript_task,
+    refresh_transcript_from_zoom,
+    transcript_status,
+)
 from events.services.recording_upload import (
     RECORDING_UPLOAD_STATUS_IDLE,
     RECORDING_UPLOAD_STATUS_IN_PROGRESS,
@@ -83,6 +88,7 @@ from integrations.services.banner_generator import (
 )
 from integrations.services.banner_generator.dispatch import enqueue_force
 from integrations.services.banner_generator.resolve import effective_banner_url
+from integrations.services.llm import is_enabled as llm_is_enabled
 from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.utils import is_synced
 
@@ -243,6 +249,9 @@ _EVENT_EXAMPLE = {
     "recording_s3_url": "",
     "recording_upload_enqueued_at": None,
     "recording_upload_status": "idle",
+    "transcript_url": "",
+    "transcript_text": "",
+    "transcript_status": "none",
     "timestamps": [
         {
             "time_seconds": 960,
@@ -346,6 +355,11 @@ def serialize_event(event):
         "recording_s3_url": event.recording_s3_url or "",
         "recording_upload_enqueued_at": isoformat_or_none(event.recording_upload_enqueued_at),
         "recording_upload_status": recording_upload_status(event),
+        # Issue #1597: transcript ingestion state. ``transcript_status`` is
+        # derived: stored / waiting / unavailable / none.
+        "transcript_url": event.transcript_url or "",
+        "transcript_text": event.transcript_text or "",
+        "transcript_status": transcript_status(event),
         "timestamps": event.timestamps or [],
         "materials": event.materials or [],
         "hosts": [_serialize_host(host) for host in event.ordered_hosts],
@@ -1907,3 +1921,203 @@ def event_notify_recap_ready(request, slug):
             details={"reason": exc.reason},
         )
     return JsonResponse(result, status=200)
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Sync an event's transcript and recap draft",
+    methods={
+        "POST": {
+            "summary": "Sync transcript and recap draft",
+            "description": (
+                "Operator recovery path for the transcript pipeline (issue "
+                "#1597). Re-lists the meeting's recordings via the Zoom API "
+                "to pick up a transcript VTT (and MP4 download URL) the "
+                "webhook missed, then re-enqueues the transcript task, "
+                "which downloads and parses the VTT, stores transcript_text, "
+                "and chains the LLM recap draft (written to recap_notes only "
+                "when recap_notes is empty). This endpoint is never gated by "
+                "RECORDING_TRANSCRIPT_INGEST_ENABLED — it exists so a "
+                "transcript can be backfilled by hand with automation off. "
+                "Optional body {\"redraft\": true} regenerates the recap "
+                "draft even when recap_notes is non-empty (explicit opt-in; "
+                "422 llm_not_configured when the LLM provider is missing). "
+                "Allowed for synced GitHub events: the transcript and recap "
+                "draft are operational state, not content owned by the "
+                "source repo."
+            ),
+            "request_body": {
+                "body_required": False,
+                "properties": {
+                    "redraft": {
+                        "type": "boolean",
+                        "description": (
+                            "Explicitly replace existing recap_notes with a "
+                            "new transcript-based draft. Defaults to false."
+                        ),
+                        "default": False,
+                    },
+                },
+                "example": {"redraft": True},
+            },
+            "responses": {
+                200: {
+                    "description": (
+                        "Sync state after the refresh + enqueue attempt."
+                    ),
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "transcript_status": {
+                                "type": "string",
+                                "enum": [
+                                    "none",
+                                    "waiting",
+                                    "stored",
+                                    "unavailable",
+                                ],
+                            },
+                            "transcript_queued": {"type": "boolean"},
+                            "task_id": {
+                                "type": ["string", "null"],
+                                "description": (
+                                    "django-q task id when the transcript "
+                                    "task was enqueued; poll GET "
+                                    "/api/worker/tasks/<id>."
+                                ),
+                            },
+                            "recap_queued": {
+                                "type": ["boolean", "null"],
+                                "description": (
+                                    "Whether a recap (re)draft will run "
+                                    "after the transcript lands; null when "
+                                    "redraft was not requested."
+                                ),
+                            },
+                            "zoom_refresh": {
+                                "type": "string",
+                                "enum": [
+                                    "skipped",
+                                    "ok",
+                                    "transcript_found",
+                                    "failed",
+                                ],
+                            },
+                            "redraft": {"type": "boolean"},
+                        },
+                    },
+                    "example": {
+                        "transcript_status": "waiting",
+                        "transcript_queued": True,
+                        "task_id": "a1b2c3d4e5f6",
+                        "recap_queued": None,
+                        "zoom_refresh": "transcript_found",
+                        "redraft": False,
+                    },
+                },
+                400: {
+                    "description": "Malformed JSON body.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                401: {
+                    "description": "Missing, invalid, or non-staff token.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                404: {
+                    "description": "Event not found.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                422: {
+                    "description": (
+                        "Invalid redraft value, or redraft requested while "
+                        "the LLM provider is not configured."
+                    ),
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                    "example": {
+                        "error": (
+                            "Recap redraft requested but the LLM provider is "
+                            "not configured."
+                        ),
+                        "code": "llm_not_configured",
+                    },
+                },
+            },
+        },
+    },
+)
+def event_sync_transcript(request, slug):
+    """POST ``/api/events/<slug>/sync-transcript`` (issue #1597)."""
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    # Body is optional: treat an empty body as {} so operators can POST
+    # without a payload.
+    if request.body in (None, b''):
+        data = {}
+    else:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+        if not isinstance(data, dict):
+            return body_must_be_object_response()
+
+    redraft = data.get("redraft", False)
+    if not isinstance(redraft, bool):
+        return validation_response({"redraft": "Must be a boolean."})
+    if redraft and not llm_is_enabled():
+        return error_response(
+            "Recap redraft requested but the LLM provider is not configured.",
+            "llm_not_configured",
+            status=422,
+        )
+
+    zoom_refresh = "skipped"
+    if event.zoom_meeting_id:
+        try:
+            refreshed = refresh_transcript_from_zoom(event)
+            zoom_refresh = (
+                "transcript_found"
+                if refreshed.get("transcript_url")
+                else "ok"
+            )
+        except ZoomAPIError:
+            logger.warning(
+                "Zoom recordings re-list failed for event %s during "
+                "sync-transcript",
+                event.slug,
+            )
+            zoom_refresh = "failed"
+
+    transcript_queued = False
+    task_id = None
+    recap_queued = None
+    needs_transcript = (
+        not event.transcript_text
+        and event.transcript_unavailable_at is None
+    )
+    if needs_transcript or redraft:
+        task_id = enqueue_recording_transcript_task(
+            event, source="API sync", redraft=redraft,
+        )
+        transcript_queued = task_id is not None
+        recap_queued = True if redraft else None
+
+    return JsonResponse(
+        {
+            "transcript_status": transcript_status(event),
+            "transcript_queued": transcript_queued,
+            "task_id": task_id,
+            "recap_queued": recap_queued,
+            "zoom_refresh": zoom_refresh,
+            "redraft": redraft,
+        },
+        status=200,
+    )

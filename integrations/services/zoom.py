@@ -427,6 +427,50 @@ def delete_meeting(event):
     )
 
 
+def get_meeting_recordings(event):
+    """Fetch a meeting's recordings listing from the Zoom API (issue #1597).
+
+    Used by the transcript sync path to pick up a transcript VTT (and the
+    MP4 download URL) that the ``recording.completed`` webhook missed —
+    e.g. when the meeting finished before the webhook subscription was
+    active, or Zoom processed the transcript after the video event.
+
+    Args:
+        event: Event model instance with a non-empty ``zoom_meeting_id``.
+
+    Returns:
+        dict: The parsed ``GET /meetings/{id}/recordings`` response, whose
+        ``recording_files`` list carries ``recording_type`` /
+        ``download_url`` per file.
+
+    Raises:
+        ZoomAPIError: If the Zoom API call fails.
+    """
+    token = get_access_token()
+
+    url = urljoin(
+        ZOOM_API_BASE_URL,
+        f'meetings/{event.zoom_meeting_id}/recordings',
+    )
+    response = requests.get(
+        url,
+        headers={
+            'Authorization': f'Bearer {token}',
+            'Content-Type': 'application/json',
+        },
+        timeout=30,
+    )
+
+    if not 200 <= response.status_code < 300:
+        raise ZoomAPIError(
+            f'Failed to fetch Zoom meeting recordings: {response.status_code}',
+            status_code=response.status_code,
+            response_data=_response_data(response),
+        )
+
+    return response.json()
+
+
 def zoom_webhook_tolerance_seconds():
     """Return the positive webhook timestamp tolerance configured by operators.
 

@@ -137,6 +137,8 @@ _KEY_ORDER = {
         "AWS_S3_RECORDINGS_REGION",
         "RECORDING_PRESIGNED_URL_TTL_SECONDS",
         "RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD",
+        "RECORDING_TRANSCRIPT_INGEST_ENABLED",
+        "RECORDING_RECAP_AUTO_DRAFT_ENABLED",
     ),
     "ses": (
         "AWS_ACCESS_KEY_ID",
@@ -775,6 +777,26 @@ RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD = declare(
     default="true",
     secret=False,
     docs_url="_docs/integrations/s3_recordings.md#recording_auto_publish_on_s3_upload",
+)
+RECORDING_TRANSCRIPT_INGEST_ENABLED = declare(
+    key="RECORDING_TRANSCRIPT_INGEST_ENABLED",
+    group="s3_recordings",
+    label="Recording Transcript Ingest Enabled",
+    description="When on, Zoom webhooks and the post-S3-upload chain automatically download, parse, and store recording transcripts. The explicit sync-transcript recovery action still works when this is off.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/zoom.md#recording_transcript_ingest_enabled",
+)
+RECORDING_RECAP_AUTO_DRAFT_ENABLED = declare(
+    key="RECORDING_RECAP_AUTO_DRAFT_ENABLED",
+    group="s3_recordings",
+    label="Recording Recap Auto Draft Enabled",
+    description="When on, a stored transcript automatically drafts recap_notes through the configured LLM when operator notes are still empty. Registrant notifications remain explicit.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/zoom.md#recording_recap_auto_draft_enabled",
 )
 
 # --- S3 Content Images (s3_content) ---

@@ -18,11 +18,13 @@ Design notes mirroring ``remind_unverified_users`` (issue #452):
 - Paid-now gating: ``can_access_onboarding`` (effective tier level
   >= LEVEL_BASIC) is re-checked at run time so churned members are not
   chased.
-- Idempotency is EmailLog-based, no migration: a member with an existing
-  ``EmailLog`` of type ``onboarding_reminder`` is skipped. Because
-  ``EmailService.send`` writes that log on success, a cron re-tick,
-  retry, or restart can never double-send. One reminder per member,
-  ever.
+- Idempotency is two-layered. ``find_due_members`` skips any member with
+  an ``EmailLog`` of type ``onboarding_reminder`` — written by the mail
+  worker after provider acceptance. Inside the acceptance gap before
+  that row exists, the send carries the stable idempotency key
+  ``onboarding_reminder:{user.pk}`` on the durable ``EmailDelivery``, so
+  a cron re-tick, retry, or restart can never create a second delivery.
+  One reminder per member, ever.
 - All tunables (``ONBOARDING_REMINDER_ENABLED``,
   ``ONBOARDING_REMINDER_DELAY_DAYS``) resolve through the
   IntegrationSetting framework via ``get_config`` — no hard-coded values,
@@ -151,9 +153,12 @@ def remind_onboarding_incomplete():
     Returns:
         dict: ``{"sent": N, "skipped": M}`` summary for logging. ``skipped``
         counts cohort members that were NOT emailed this run (completed,
-        churned, already reminded, or a send that returned no log).
+        churned, already reminded, or a send the preference resolver
+        suppressed).
     """
-    from email_app.services.email_service import EmailService  # noqa: PLC0415
+    from community_base.mail.models import EmailDelivery  # noqa: PLC0415
+
+    from email_app.package_mail import send_package_mail  # noqa: PLC0415
 
     if not reminder_enabled():
         logger.info("remind_onboarding_incomplete skipped: disabled via %s", ENABLED_KEY)
@@ -168,23 +173,24 @@ def remind_onboarding_incomplete():
     due = find_due_members(now=now)
     team_email = (get_config("STAFF_SIGNUP_NOTIFY_EMAIL", "") or "").strip()
 
-    service = EmailService()
     sent = 0
     for user, _welcome_at in due:
         try:
-            email_log = service.send(
+            delivery = send_package_mail(
                 user,
                 REMINDER_EMAIL_TYPE,
                 {},
                 bcc=team_email or None,
+                idempotency_key=f"{REMINDER_EMAIL_TYPE}:{user.pk}",
             )
         except Exception:
             logger.exception(
                 "Failed to send onboarding reminder to %s", user.email,
             )
             continue
-        if email_log is None:
-            # Service declined the send; leave the member due for next run.
+        if delivery.state == EmailDelivery.State.SUPPRESSED:
+            # The preference resolver declined the send; leave the member
+            # due for the next run.
             continue
         sent += 1
 

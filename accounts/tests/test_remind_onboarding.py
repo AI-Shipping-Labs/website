@@ -4,12 +4,18 @@ Covers the spec's 10 scenarios: the cohort/anchor query, idempotency,
 completion / eligibility exclusion, settings resolution (enabled flag +
 delay), the team BCC, the transactional classification, and the
 ``send_onboarding_reminders --dry-run`` command.
+
+A1.2: sends go through the package mail app, so the sweep is asserted
+on the durable ``EmailDelivery`` rows; the ``EmailLog`` audit rows the
+cohort query and idempotency skip read appear once the pending
+deliveries are drained.
 """
 
 import datetime
 from io import StringIO
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.core.management import call_command
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
@@ -20,6 +26,7 @@ from accounts.tasks.remind_onboarding import (
     remind_onboarding_incomplete,
 )
 from email_app.models import EmailLog
+from email_app.package_mail import send_package_mail
 from email_app.services.email_classification import (
     DEFAULT_WELCOME_FROM_EMAIL,
     EMAIL_KIND_TRANSACTIONAL,
@@ -27,6 +34,7 @@ from email_app.services.email_classification import (
     classify_email_type,
     get_sender_for_email_type,
 )
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments.models import Tier
 from questionnaires.models import Questionnaire, Response
 from tests.fixtures import set_membership
@@ -34,35 +42,6 @@ from tests.fixtures import set_membership
 
 def _tier(slug):
     return Tier.objects.get(slug=slug)
-
-
-class _SendRecorder:
-    """Stand-in for ``EmailService.send`` recording calls and writing a log.
-
-    Because a class-instance with ``__call__`` is not a descriptor, binding
-    it as the ``send`` class attribute means ``service.send(user, ...)``
-    calls this without the bound ``EmailService`` self — so the first
-    positional arg is the recipient user, matching production semantics
-    closely enough (writes an ``EmailLog`` so idempotency holds).
-    """
-
-    def __init__(self):
-        self.calls = []
-
-    def __call__(self, user, template_name, context=None, cc=None, bcc=None):
-        self.calls.append(
-            {
-                "user": user,
-                "template": template_name,
-                "context": context,
-                "bcc": bcc,
-            }
-        )
-        return EmailLog.objects.create(
-            user=user,
-            email_type=template_name,
-            ses_message_id="ses-test",
-        )
 
 
 class OnboardingReminderSweepTest(TestCase):
@@ -95,11 +74,9 @@ class OnboardingReminderSweepTest(TestCase):
             submitted_at=timezone.now(),
         )
 
-    def _patched_send(self):
-        recorder = _SendRecorder()
-        return recorder, patch(
-            "email_app.services.email_service.EmailService.send",
-            new=recorder,
+    def _reminder_delivery(self, member):
+        return EmailDelivery.objects.get(
+            purpose=REMINDER_EMAIL_TYPE, recipient_user=member,
         )
 
     # -- Scenario: due member gets a nudge -------------------------------
@@ -108,13 +85,15 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("due@example.com", "main")
         self._welcome(member, days_ago=8, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 1)
-        self.assertEqual(len(recorder.calls), 1)
-        self.assertEqual(recorder.calls[0]["template"], REMINDER_EMAIL_TYPE)
+        delivery = self._reminder_delivery(member)
+        self.assertEqual(delivery.purpose, REMINDER_EMAIL_TYPE)
+        self.assertEqual(
+            delivery.idempotency_key, f"{REMINDER_EMAIL_TYPE}:{member.pk}",
+        )
+        deliver_pending_mail()
         self.assertTrue(
             EmailLog.objects.filter(
                 user=member, email_type=REMINDER_EMAIL_TYPE,
@@ -122,12 +101,19 @@ class OnboardingReminderSweepTest(TestCase):
         )
 
     def test_reminder_template_renders_link_and_subject(self):
-        from email_app.services.email_service import EmailService
-
         member = self._make_member("render@example.com", "basic")
-        subject, body_html = EmailService()._render_template(
-            REMINDER_EMAIL_TYPE, member, {},
-        )
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            send_package_mail(member, REMINDER_EMAIL_TYPE, {})
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
+        simple = stub.calls[0]["Content"]["Simple"]
+        subject = simple["Subject"]["Data"]
+        body_html = simple["Body"]["Html"]["Data"]
         self.assertTrue(subject.strip())
         self.assertIn("/onboarding/", body_html)
 
@@ -138,12 +124,10 @@ class OnboardingReminderSweepTest(TestCase):
         self._welcome(member, days_ago=10, email_type="basic_welcome")
         self._submit_onboarding(member)
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 0)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.assertFalse(
             EmailLog.objects.filter(
                 user=member, email_type=REMINDER_EMAIL_TYPE,
@@ -156,14 +140,12 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("fresh@example.com", "premium")
         self._welcome(member, days_ago=2, email_type="premium_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 0)
         # Not in the past-cutoff cohort at all: not counted as skipped.
         self.assertEqual(result["skipped"], 0)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
     # -- Scenario: churned member not chased -----------------------------
 
@@ -171,12 +153,10 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("churned@example.com", "free")
         self._welcome(member, days_ago=9, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 0)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
     def test_expired_override_member_not_reminded(self):
         member = self._make_member("expired@example.com", "free")
@@ -189,12 +169,10 @@ class OnboardingReminderSweepTest(TestCase):
         )
         self._welcome(member, days_ago=9, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 0)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
     # -- Scenario: never remind the same member twice --------------------
 
@@ -206,13 +184,11 @@ class OnboardingReminderSweepTest(TestCase):
             user=member, email_type=REMINDER_EMAIL_TYPE, ses_message_id="ses-old",
         )
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            result = remind_onboarding_incomplete()
+        result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 0)
         self.assertEqual(result["skipped"], 1)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.assertEqual(
             EmailLog.objects.filter(
                 user=member, email_type=REMINDER_EMAIL_TYPE,
@@ -224,13 +200,15 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("twice@example.com", "main")
         self._welcome(member, days_ago=8, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher:
-            first = remind_onboarding_incomplete()
-            second = remind_onboarding_incomplete()
+        first = remind_onboarding_incomplete()
+        # The worker records the reminder EmailLog between the runs; the
+        # stable delivery idempotency key covers the gap before that.
+        deliver_pending_mail()
+        second = remind_onboarding_incomplete()
 
         self.assertEqual(first["sent"], 1)
         self.assertEqual(second["sent"], 0)
+        self.assertEqual(EmailDelivery.objects.count(), 1)
         self.assertEqual(
             EmailLog.objects.filter(
                 user=member, email_type=REMINDER_EMAIL_TYPE,
@@ -238,30 +216,41 @@ class OnboardingReminderSweepTest(TestCase):
             1,
         )
 
+    def test_undriven_second_run_reuses_one_delivery(self):
+        """A re-tick inside the acceptance gap cannot create a second delivery."""
+        member = self._make_member("gap@example.com", "main")
+        self._welcome(member, days_ago=8, email_type="cofounder_welcome")
+
+        remind_onboarding_incomplete()
+        second = remind_onboarding_incomplete()
+
+        # The member is still "due" (no audit row yet) but the package
+        # hands back the same durable delivery.
+        self.assertEqual(EmailDelivery.objects.count(), 1)
+        self.assertEqual(second["sent"], 1)
+
     # -- Scenario: team gets a copy --------------------------------------
 
     def test_team_bcc_when_configured(self):
         member = self._make_member("bcc@example.com", "main")
         self._welcome(member, days_ago=8, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher, override_settings(STAFF_SIGNUP_NOTIFY_EMAIL="team@example.com"):
+        with override_settings(STAFF_SIGNUP_NOTIFY_EMAIL="team@example.com"):
             remind_onboarding_incomplete()
 
-        self.assertEqual(len(recorder.calls), 1)
-        self.assertEqual(recorder.calls[0]["bcc"], "team@example.com")
+        delivery = self._reminder_delivery(member)
+        self.assertEqual(delivery.transport_options["bcc"], ["team@example.com"])
 
     def test_no_bcc_when_staff_email_blank(self):
         member = self._make_member("nobcc@example.com", "main")
         self._welcome(member, days_ago=8, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher, override_settings(STAFF_SIGNUP_NOTIFY_EMAIL=""):
+        with override_settings(STAFF_SIGNUP_NOTIFY_EMAIL=""):
             result = remind_onboarding_incomplete()
 
         self.assertEqual(result["sent"], 1)
-        self.assertEqual(len(recorder.calls), 1)
-        self.assertIsNone(recorder.calls[0]["bcc"])
+        delivery = self._reminder_delivery(member)
+        self.assertNotIn("bcc", delivery.transport_options)
 
     # -- Scenario: operator disables the sweep ---------------------------
 
@@ -269,12 +258,11 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("disabled@example.com", "main")
         self._welcome(member, days_ago=8, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
-        with patcher, override_settings(ONBOARDING_REMINDER_ENABLED="false"):
+        with override_settings(ONBOARDING_REMINDER_ENABLED="false"):
             result = remind_onboarding_incomplete()
 
         self.assertEqual(result, {"sent": 0, "skipped": 0})
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.assertFalse(
             EmailLog.objects.filter(
                 user=member, email_type=REMINDER_EMAIL_TYPE,
@@ -287,18 +275,16 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("short@example.com", "main")
         self._welcome(member, days_ago=4, email_type="cofounder_welcome")
 
-        recorder, patcher = self._patched_send()
         # Default 7 days: not due yet.
-        with patcher:
-            default_result = remind_onboarding_incomplete()
+        default_result = remind_onboarding_incomplete()
         self.assertEqual(default_result["sent"], 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
 
         # Override to 3 days: the 4-day-old member is now due.
-        recorder2, patcher2 = self._patched_send()
-        with patcher2, override_settings(ONBOARDING_REMINDER_DELAY_DAYS="3"):
+        with override_settings(ONBOARDING_REMINDER_DELAY_DAYS="3"):
             short_result = remind_onboarding_incomplete()
         self.assertEqual(short_result["sent"], 1)
-        self.assertEqual(len(recorder2.calls), 1)
+        self.assertEqual(EmailDelivery.objects.count(), 1)
 
 
 @tag("core")
@@ -352,16 +338,12 @@ class SendOnboardingRemindersCommandTest(TestCase):
         self._fresh_member()
 
         out = StringIO()
-        with patch(
-            "email_app.services.email_service.EmailService.send",
-            new=_SendRecorder(),
-        ) as recorder:
-            call_command("send_onboarding_reminders", "--dry-run", stdout=out)
+        call_command("send_onboarding_reminders", "--dry-run", stdout=out)
 
         output = out.getvalue()
         self.assertIn(due.email, output)
         self.assertNotIn("cmd-fresh@example.com", output)
-        self.assertEqual(len(recorder.calls), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.assertFalse(
             EmailLog.objects.filter(email_type=REMINDER_EMAIL_TYPE).exists()
         )
@@ -371,12 +353,12 @@ class SendOnboardingRemindersCommandTest(TestCase):
         self._fresh_member()
 
         out = StringIO()
-        recorder = _SendRecorder()
-        with patch(
-            "email_app.services.email_service.EmailService.send", new=recorder,
-        ):
-            call_command("send_onboarding_reminders", stdout=out)
+        call_command("send_onboarding_reminders", stdout=out)
+        deliver_pending_mail()
 
         output = out.getvalue()
         self.assertIn("sent=1", output)
-        self.assertEqual(len(recorder.calls), 1)
+        self.assertEqual(EmailDelivery.objects.count(), 1)
+        self.assertEqual(
+            EmailLog.objects.filter(email_type=REMINDER_EMAIL_TYPE).count(), 1,
+        )

@@ -651,6 +651,9 @@ class FreeWelcomeEmailPasswordFlowTest(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
         self.assertTrue(user.account_activated)
+        # A1.2: the free welcome goes through the package mail app; its
+        # EmailLog row appears once the pending delivery is drained.
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=user,

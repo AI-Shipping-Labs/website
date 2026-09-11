@@ -102,14 +102,20 @@ def verify_email_url_builder(delivery):
 def resolve_auth_mail_context(*, delivery, context):
     """Mint the auth bearer links in the worker, not in the stored context.
 
-    The signup-verification and password-reset callers persist only inputs
-    (``return_path``, ``ttl_days``, ``site_url``); the signed URLs are built
-    here at delivery time so ``EmailDelivery.context_data`` never retains a
-    clickable token (review finding on #1610: the old EmailService path
-    persisted neither URL). Every other purpose passes through unchanged.
+    The signup-verification, password-reset and expiry-reminder callers
+    persist only inputs (``return_path``, ``ttl_days``, ``site_url``,
+    ``expires_at``); the signed URLs are built here at delivery time so
+    ``EmailDelivery.context_data`` never retains a clickable token
+    (review finding on #1610: the old EmailService path persisted neither
+    URL). Every other purpose passes through unchanged.
     """
 
-    if delivery.purpose not in ("email_verification_signup", "password_reset"):
+    if delivery.purpose not in (
+        "email_verification_signup",
+        "password_reset",
+        "email_verification_signup_reminder",
+        "email_verification_subscribe_reminder",
+    ):
         return context
     user = delivery.recipient_user
     if user is None or not getattr(user, "pk", None):

@@ -13,6 +13,8 @@ from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 from django.apps import apps
 from django.core.mail import send_mail
 from django.db import transaction
@@ -22,7 +24,7 @@ from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
 from accounts.models import AccountSession, PrivacyRequestLog
-from email_app.services.email_service import EmailService, EmailServiceError
+from email_app.package_mail import send_package_mail
 from integrations.config import (
     get_config,
     is_enabled,
@@ -142,7 +144,11 @@ class PrivacyDeletionRequestResult:
     status: str
     audit_log_id: int
     requested_at: Any
-    email_log_id: int | None = None
+    # A1.2: the durable mail identity is the EmailDelivery id; the
+    # EmailLog audit row is written later by the worker under the same
+    # dedupe key. Historical name kept so pre-adoption audit rows still
+    # read back through ``row_count_summary``.
+    email_log_id: str | None = None
     duplicate: bool = False
 
 
@@ -259,7 +265,10 @@ def request_account_deletion(user, request_context=None):
     The member row is locked across lifecycle resolution and delivery so two
     workers cannot both become senders. The partial unique constraint on
     ``PrivacyRequestLog`` is the database-level backstop for active requests.
-    Failed delivery reuses the same audit row and dedupe key on retry.
+    ``STATUS_REQUESTED`` means the durable mail delivery exists; its SES
+    outcome lands on the delivery from the worker. Local send refusals mark
+    ``STATUS_DELIVERY_FAILED`` and reuse the same audit row and dedupe key
+    on retry.
     """
     user_model = user.__class__
     with transaction.atomic():
@@ -335,16 +344,15 @@ def request_account_deletion(user, request_context=None):
         }
 
         try:
-            with transaction.atomic():
-                email_log = EmailService().send(
-                    locked_user,
-                    "account_deletion_request",
-                    context,
-                    cc=[locked_user.email],
-                    recipient_email=team_email,
-                    dedupe_key=dedupe_key,
-                )
-        except EmailServiceError:
+            delivery = send_package_mail(
+                locked_user,
+                "account_deletion_request",
+                context,
+                cc=[locked_user.email],
+                recipient_email=team_email,
+                idempotency_key=dedupe_key,
+            )
+        except MailError:
             logger.warning(
                 "Account deletion request delivery failed for user_id=%s",
                 locked_user.pk,
@@ -358,15 +366,33 @@ def request_account_deletion(user, request_context=None):
                 requested_at=request_log.requested_at,
             )
 
+        if delivery.state == EmailDelivery.State.SUPPRESSED:
+            # The preference resolver declined the team mail, so no receipt
+            # will ever exist — the same retryable refusal as a local send
+            # failure. Unreachable for this transactional purpose under the
+            # site resolver; the branch keeps the status machine honest.
+            request_log.status = PrivacyRequestLog.STATUS_DELIVERY_FAILED
+            request_log.save(update_fields=["status"])
+            return PrivacyDeletionRequestResult(
+                success=False,
+                status=request_log.status,
+                audit_log_id=request_log.pk,
+                requested_at=request_log.requested_at,
+            )
+
+        # A1.2: the summary key keeps its historical name but carries the
+        # durable EmailDelivery id — the EmailLog audit row is written by
+        # the worker after provider acceptance, keyed by the same dedupe
+        # key.
         request_log.status = PrivacyRequestLog.STATUS_REQUESTED
-        request_log.row_count_summary = {"email_log_id": email_log.pk}
+        request_log.row_count_summary = {"email_log_id": str(delivery.id)}
         request_log.save(update_fields=["status", "row_count_summary"])
         return PrivacyDeletionRequestResult(
             success=True,
             status=request_log.status,
             audit_log_id=request_log.pk,
             requested_at=request_log.requested_at,
-            email_log_id=email_log.pk,
+            email_log_id=str(delivery.id),
         )
 
 

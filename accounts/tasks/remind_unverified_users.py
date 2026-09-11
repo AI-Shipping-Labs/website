@@ -17,6 +17,12 @@ Skip conditions:
 
 Issue #767: the reminder template is chosen per user based on the slug
 of the most recent verification ``EmailLog`` row (signup vs subscribe).
+
+A1.2: the send carries the stable idempotency key
+``{template}:{user.pk}`` on the durable ``EmailDelivery``, so two
+overlapping runs cannot create two deliveries for the same member and
+template; the verify URL is minted in the worker by
+``email_app.hooks.resolve_auth_mail_context`` and never stored.
 """
 
 import datetime
@@ -34,19 +40,6 @@ VERIFICATION_SLUGS = (
     "email_verification_signup",
     "email_verification_subscribe",
 )
-
-
-def _build_verify_url(user):
-    """Return the absolute URL the reminder email points the user to."""
-    # Inline imports avoid a circular dependency at module load: the
-    # accounts app's ready() side-effects pull in tasks, while
-    # ``accounts.views.auth`` pulls in integrations.config which pulls
-    # in the database — keep the import deferred to call time.
-    from accounts.views.auth import _generate_verification_token  # noqa: PLC0415
-    from integrations.config import site_base_url  # noqa: PLC0415
-
-    token = _generate_verification_token(user.pk)
-    return f"{site_base_url()}/api/verify-email?token={token}"
 
 
 def _pick_reminder_template(user):
@@ -77,10 +70,16 @@ def _pick_reminder_template(user):
 def remind_unverified_users():
     """Send the 24-hour-before-expiry verification reminder.
 
+    The reminder goes through the package mail app (A1.2): the caller
+    persists only ``expires_at``, and ``email_app.hooks.resolve_auth_mail_context``
+    mints the signed verify URL in the worker.
+
     Returns:
         dict: ``{"sent": N, "skipped": M}`` summary for logging.
     """
-    from email_app.services.email_service import EmailService  # noqa: PLC0415
+    from community_base.mail.models import EmailDelivery  # noqa: PLC0415
+
+    from email_app.package_mail import send_package_mail  # noqa: PLC0415
 
     User = get_user_model()
     now = timezone.now()
@@ -96,20 +95,21 @@ def remind_unverified_users():
         verification_expires_at__lte=cutoff,
     )
 
-    service = EmailService()
     sent = 0
     skipped = 0
     for user in candidates:
-        verify_url = _build_verify_url(user)
         template_name = _pick_reminder_template(user)
         try:
-            email_log = service.send(
+            delivery = send_package_mail(
                 user,
                 template_name,
                 {
-                    "verify_url": verify_url,
-                    "expires_at": user.verification_expires_at,
+                    # Delivery context must be JSON values (A1.2); the
+                    # reminder templates state the window in prose, the
+                    # timestamp stays audit-only.
+                    "expires_at": user.verification_expires_at.isoformat(),
                 },
+                idempotency_key=f"{template_name}:{user.pk}",
             )
         except Exception:
             logger.exception(
@@ -119,10 +119,10 @@ def remind_unverified_users():
             skipped += 1
             continue
 
-        if email_log is None:
-            # Service skipped the send (e.g. unsubscribed flipped between
-            # the queryset and the send). Don't mark as sent so we can
-            # retry next day if circumstances change.
+        if delivery.state == EmailDelivery.State.SUPPRESSED:
+            # The preference resolver declined the send (e.g. unsubscribed
+            # flipped between the queryset and the send). Don't mark as
+            # sent so we can retry next day if circumstances change.
             skipped += 1
             continue
 

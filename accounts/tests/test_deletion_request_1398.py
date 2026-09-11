@@ -2,6 +2,9 @@ import json
 from datetime import timedelta
 from unittest.mock import patch
 
+from community_base.jobs.runner import PermanentJobError
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase, tag
 from django.utils import timezone
@@ -12,11 +15,29 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
 )
-from email_app.services.email_service import (
-    EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
-    EmailServiceError,
-)
+from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
+from email_app.testing import StubSESClient, deliver_pending_mail
 from tests.fixtures import TierSetupMixin, set_membership
+
+
+def _stub_send(stub):
+    """Return ``(to, cc, html)`` for the single captured SES send."""
+    to_addresses = stub.calls[0]["Destination"]["ToAddresses"]
+    cc_addresses = stub.calls[0]["Destination"].get("CcAddresses", [])
+    html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
+    return to_addresses, cc_addresses, html
+
+
+class _FailingSESClient(StubSESClient):
+    """SES stand-in whose transport always fails."""
+
+    def __init__(self, error):
+        super().__init__()
+        self.error = error
+
+    def send_email(self, **kwargs):
+        self.calls.append(kwargs)
+        raise self.error
 
 
 @tag("core")
@@ -26,14 +47,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         set_membership(user, tier=kwargs.pop("tier", self.free_tier))
         return user
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-privacy-1398",
-    )
-    def test_request_sends_one_transactional_team_message_with_visible_cc(
-        self,
-        send_ses,
-    ):
+    def test_request_sends_one_transactional_team_message_with_visible_cc(self):
         user = self._user(
             email="canonical@example.com",
             email_verified=False,
@@ -41,12 +55,20 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         )
         self.client.force_login(user)
 
-        response = self.client.post(
-            "/account/api/request-deletion",
-            {"email": "attacker@example.com", "user_id": 999999},
-            REMOTE_ADDR="192.0.2.10",
-            HTTP_USER_AGENT="privacy-test-agent",
-        )
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            response = self.client.post(
+                "/account/api/request-deletion",
+                {"email": "attacker@example.com", "user_id": 999999},
+                REMOTE_ADDR="192.0.2.10",
+                HTTP_USER_AGENT="privacy-test-agent",
+            )
+            # A1.2: rendering happens in the delivery worker; drain the
+            # pending delivery, then assert the audit row it wrote.
+            deliver_pending_mail()
 
         self.assertRedirects(
             response,
@@ -69,6 +91,11 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.assertNotIn(user.email, audit_payload)
         self.assertNotIn("attacker@example.com", audit_payload)
 
+        delivery = EmailDelivery.objects.get(purpose="account_deletion_request")
+        self.assertEqual(delivery.recipient_user, user)
+        self.assertEqual(
+            delivery.idempotency_key, f"account-deletion-request:{audit.pk}",
+        )
         email_log = EmailLog.objects.get(email_type="account_deletion_request")
         self.assertEqual(email_log.user, user)
         self.assertEqual(email_log.recipient_email, "team@aishippinglabs.com")
@@ -77,13 +104,11 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
             f"Account deletion request — user {user.pk} — {user.email}",
         )
         self.assertEqual(email_log.dedupe_key, f"account-deletion-request:{audit.pk}")
-        self.assertEqual(audit.row_count_summary, {"email_log_id": email_log.pk})
+        self.assertEqual(audit.row_count_summary, {"email_log_id": str(delivery.pk)})
 
-        args, kwargs = send_ses.call_args
-        self.assertEqual(args[0], "team@aishippinglabs.com")
-        self.assertEqual(kwargs["cc"], [user.email])
-        self.assertEqual(kwargs["email_type"], "account_deletion_request")
-        rendered = args[2]
+        to_addresses, cc_addresses, rendered = _stub_send(stub)
+        self.assertEqual(to_addresses, ["team@aishippinglabs.com"])
+        self.assertEqual(cc_addresses, [user.email])
         self.assertIn(user.email, rendered)
         self.assertIn(f"Support ID <strong>{user.pk}</strong>", rendered)
         self.assertIn(f"/studio/users/{user.pk}/", rendered)
@@ -101,17 +126,21 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.assertEqual(classify_email_type("account_deletion_request"), EMAIL_KIND_TRANSACTIONAL)
         self.assertIn("account_deletion_request", EMAIL_TYPES_WITHOUT_VERIFY_FOOTER)
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-idempotent-1398",
-    )
-    def test_repeated_posts_keep_one_request_and_one_email(self, send_ses):
+    def test_repeated_posts_keep_one_request_and_one_email(self):
         user = self._user(email="repeat@example.com")
         self.client.force_login(user)
+        stub = StubSESClient()
 
-        first = self.client.post("/account/api/request-deletion")
-        second = self.client.post("/account/api/request-deletion")
-        page = self.client.get("/account/")
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            first = self.client.post("/account/api/request-deletion")
+            second = self.client.post("/account/api/request-deletion")
+            page = self.client.get("/account/")
+            # The duplicate post resolves to the same audit row before
+            # any send, so exactly one delivery exists.
+            deliver_pending_mail()
 
         self.assertEqual(first.status_code, 302)
         self.assertEqual(second.status_code, 302)
@@ -122,8 +151,9 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
             ).count(),
             1,
         )
+        self.assertEqual(EmailDelivery.objects.count(), 1)
         self.assertEqual(EmailLog.objects.filter(user=user).count(), 1)
-        send_ses.assert_called_once()
+        self.assertEqual(len(stub.calls), 1)
         self.assertContains(page, 'data-testid="privacy-request-received"')
         self.assertContains(page, user.email)
         self.assertContains(page, "no later than one month")
@@ -131,37 +161,31 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         self.assertNotContains(page, 'data-testid="privacy-request-submit"')
 
     @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-configured-recipient-1398",
-    )
-    @patch(
         "accounts.services.privacy.get_config",
         return_value="privacy-ops@example.com",
     )
-    def test_request_uses_validated_configured_team_recipient(
-        self,
-        _config,
-        send_ses,
-    ):
+    def test_request_uses_validated_configured_team_recipient(self, _config):
         user = self._user(email="configured-requester@example.com")
         self.client.force_login(user)
+        stub = StubSESClient()
 
-        response = self.client.post("/account/api/request-deletion")
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            response = self.client.post("/account/api/request-deletion")
+            deliver_pending_mail()
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(
             EmailLog.objects.get().recipient_email,
             "privacy-ops@example.com",
         )
-        args, kwargs = send_ses.call_args
-        self.assertEqual(args[0], "privacy-ops@example.com")
-        self.assertEqual(kwargs["cc"], [user.email])
+        to_addresses, cc_addresses, _rendered = _stub_send(stub)
+        self.assertEqual(to_addresses, ["privacy-ops@example.com"])
+        self.assertEqual(cc_addresses, [user.email])
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-account-types-1398",
-    )
-    def test_every_authenticated_account_type_can_request_without_mutation(self, send_ses):
+    def test_every_authenticated_account_type_can_request_without_mutation(self):
         cases = [
             ("newsletter", {"signup_source": SIGNUP_SOURCE_NEWSLETTER, "account_activated": False}),
             ("paid", {"tier": self.basic_tier, "subscription_id": "sub_active"}),
@@ -181,8 +205,14 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                     "is_superuser": user.is_superuser,
                 }
                 self.client.force_login(user)
+                stub = StubSESClient()
 
-                response = self.client.post("/account/api/request-deletion")
+                with patch(
+                    "community_base.mail.backends.ses_local.configured_client",
+                    return_value=stub,
+                ):
+                    response = self.client.post("/account/api/request-deletion")
+                    deliver_pending_mail()
 
                 self.assertEqual(response.status_code, 302)
                 user.refresh_from_db()
@@ -198,8 +228,7 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                     before,
                 )
                 self.assertTrue(self.client.get("/account/").wsgi_request.user.is_authenticated)
-
-        self.assertEqual(send_ses.call_count, len(cases))
+                self.assertEqual(len(stub.calls), 1)
 
     def test_anonymous_and_csrf_rejections_have_no_side_effects(self):
         anonymous = self.client.post("/account/api/request-deletion")
@@ -269,19 +298,22 @@ class AccountDeletionRequestFailureTest(TestCase):
         self.assertEqual(audit.status, PrivacyRequestLog.STATUS_DELIVERY_FAILED)
         self.assertEqual(audit.row_count_summary, {})
         self.assertEqual(EmailLog.objects.count(), 0)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         failed_attempt_at = timezone.now() - timedelta(days=10)
         PrivacyRequestLog.objects.filter(pk=audit.pk).update(
             requested_at=failed_attempt_at,
         )
 
+        stub = StubSESClient()
         with (
             patch("accounts.services.privacy.get_config", return_value="team@aishippinglabs.com"),
             patch(
-                "email_app.services.email_service.EmailService._send_ses",
-                return_value="ses-retry-1398",
-            ) as send_ses,
+                "community_base.mail.backends.ses_local.configured_client",
+                return_value=stub,
+            ),
         ):
             retried = self.client.post("/account/api/request-deletion")
+            deliver_pending_mail()
 
         self.assertEqual(retried.status_code, 302)
         audit.refresh_from_db()
@@ -289,19 +321,51 @@ class AccountDeletionRequestFailureTest(TestCase):
         self.assertGreater(audit.requested_at, failed_attempt_at)
         self.assertEqual(PrivacyRequestLog.objects.count(), 1)
         self.assertEqual(EmailLog.objects.count(), 1)
-        send_ses.assert_called_once()
+        self.assertEqual(len(stub.calls), 1)
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        side_effect=EmailServiceError("private SES exception detail"),
-    )
-    def test_ses_failure_does_not_expose_exception_or_claim_receipt(self, _send):
-        response = self.client.post("/account/api/request-deletion")
+    def test_local_send_refusal_does_not_expose_error_or_claim_receipt(self):
+        with patch(
+            "email_app.package_mail.package_send",
+            side_effect=MailError("private local refusal detail"),
+        ):
+            response = self.client.post("/account/api/request-deletion")
 
         self.assertEqual(response.status_code, 503)
-        self.assertNotContains(response, "private SES exception detail", status_code=503)
+        self.assertNotContains(response, "private local refusal detail", status_code=503)
         self.assertNotContains(response, "Deletion request received", status_code=503)
         audit = PrivacyRequestLog.objects.get()
         self.assertEqual(audit.status, PrivacyRequestLog.STATUS_DELIVERY_FAILED)
-        self.assertNotIn("private SES exception detail", json.dumps(audit.row_count_summary))
+        self.assertNotIn(
+            "private local refusal detail", json.dumps(audit.row_count_summary),
+        )
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.assertEqual(EmailLog.objects.count(), 0)
+
+    def test_transport_failure_lands_on_delivery_without_audit_row(self):
+        # A1.2: the request no longer fails on SES trouble — the durable
+        # delivery is accepted and the worker owns the transport outcome.
+        # A dead delivery leaves the audit row STATUS_REQUESTED (the
+        # member did their part) with no EmailLog receipt.
+        stub = _FailingSESClient(RuntimeError("private SES exception detail"))
+
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            response = self.client.post("/account/api/request-deletion")
+            self.assertEqual(response.status_code, 302)
+            audit = PrivacyRequestLog.objects.get()
+            self.assertEqual(audit.status, PrivacyRequestLog.STATUS_REQUESTED)
+
+            delivery = EmailDelivery.objects.get(
+                purpose="account_deletion_request",
+            )
+            with self.assertRaises(PermanentJobError):
+                deliver_pending_mail()
+
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, EmailDelivery.State.DEAD)
+        self.assertEqual(EmailLog.objects.count(), 0)
+        self.assertNotIn(
+            "private SES exception detail", json.dumps(audit.row_count_summary),
+        )

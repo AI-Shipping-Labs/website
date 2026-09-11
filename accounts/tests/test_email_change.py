@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
 from allauth.socialaccount.models import SocialAccount
+from community_base.mail.models import EmailDelivery
 from django.core.cache import cache
 from django.test import Client, TestCase, override_settings, tag
 from django.utils import timezone
@@ -19,6 +20,7 @@ from accounts.services.email_change import (
 )
 from accounts.services.email_resolution import resolve_user_by_email
 from email_app.models import EmailLog
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -362,18 +364,21 @@ class EmailChangeConfirmServiceTest(TestCase):
         )
 
         with patch(
-            "email_app.services.email_service.EmailService._send_ses",
-            return_value="ses-notice",
-        ) as send_mock:
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=StubSESClient(),
+        ) as client_factory:
             result = confirm_email_change(token)
+            deliver_pending_mail()
 
         self.assertTrue(result.success)
-        notice_call = next(
-            call for call in send_mock.call_args_list
-            if call.kwargs["email_type"] == EMAIL_CHANGED_NOTICE_TEMPLATE
-        )
-        self.assertEqual(notice_call.args[0], "old-member@test.com")
-        notice_html = notice_call.args[2]
+        # A1.2: rendering happens in the delivery worker; the notice is
+        # the only send on this path and is asserted via the captured SES
+        # payload plus the durable delivery row.
+        delivery = EmailDelivery.objects.get(purpose=EMAIL_CHANGED_NOTICE_TEMPLATE)
+        self.assertEqual(delivery.recipient_email, "old-member@test.com")
+        stub = client_factory.return_value
+        self.assertEqual(len(stub.calls), 1)
+        notice_html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertIn("new-member@test.com", notice_html)
         self.assertNotIn("change-email/confirm", notice_html)
         self.assertNotIn("token=", notice_html)
@@ -503,20 +508,22 @@ class EmailChangeConfirmServiceTest(TestCase):
         self.user.save(update_fields=["email_verified"])
 
         with patch(
-            "email_app.services.email_service.EmailService._send_ses",
-            return_value="ses-confirm",
-        ) as send_mock:
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=StubSESClient(),
+        ) as client_factory:
             request_email_change(
                 self.user,
                 "new-member@test.com",
                 current_password="CorrectPass123!",
             )
+            deliver_pending_mail()
 
-        confirm_call = next(
-            call for call in send_mock.call_args_list
-            if call.kwargs["email_type"] == EMAIL_CHANGE_CONFIRM_TEMPLATE
-        )
-        self.assertEqual(confirm_call.args[0], "new-member@test.com")
-        confirm_html = confirm_call.args[2]
+        # A1.2: rendering happens in the delivery worker; the confirm mail
+        # is the only send on this path.
+        delivery = EmailDelivery.objects.get(purpose=EMAIL_CHANGE_CONFIRM_TEMPLATE)
+        self.assertEqual(delivery.recipient_email, "new-member@test.com")
+        stub = client_factory.return_value
+        self.assertEqual(len(stub.calls), 1)
+        confirm_html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertIn("change-email/confirm", confirm_html)
         self.assertNotIn("/api/verify-email", confirm_html)

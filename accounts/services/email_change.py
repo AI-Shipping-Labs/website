@@ -16,7 +16,7 @@ from django.utils import timezone
 from accounts.gating import is_newsletter_only_user
 from accounts.models import EmailAlias, EmailChangeRequest, User
 from accounts.services.email_resolution import normalize_email
-from email_app.services.email_service import EmailService
+from email_app.package_mail import send_package_mail
 from integrations.config import site_base_url
 
 EMAIL_CHANGE_TOKEN_BYTES = 32
@@ -144,7 +144,11 @@ def _build_confirm_url(token):
 
 
 def _send_confirm_email(user, request_obj, token):
-    EmailService().send(
+    # The confirm URL carries the bearer token and cannot be re-minted in
+    # the delivery worker (only its hash is persisted), so it travels in
+    # the delivery context. Keyed per request so a retried request row
+    # never double-sends.
+    send_package_mail(
         user,
         EMAIL_CHANGE_CONFIRM_TEMPLATE,
         {
@@ -154,6 +158,7 @@ def _send_confirm_email(user, request_obj, token):
             "expiry_hours": EMAIL_CHANGE_EXPIRY_HOURS,
         },
         recipient_email=request_obj.new_email,
+        idempotency_key=f"email-change-confirm:{request_obj.pk}",
     )
 
 
@@ -198,6 +203,9 @@ def request_email_change(user, raw_new_email, current_password=None, *, send=Tru
         try:
             _send_confirm_email(user, request_obj, token)
         except Exception:
+            # Only local refusals raise now (A1.2): SES transport outcomes
+            # land on the durable delivery from the worker, leaving the
+            # request valid while that delivery retries.
             cache.delete(f"email-change-request:{user.pk}:{new_email}")
             EmailChangeRequest.objects.filter(pk=request_obj.pk).update(
                 invalidated_at=timezone.now(),
@@ -267,8 +275,8 @@ def _ensure_former_email_alias(user, old_email):
     )
 
 
-def _send_old_email_notice(user, *, old_email, new_email):
-    EmailService().send(
+def _send_old_email_notice(user, *, old_email, new_email, request_obj):
+    send_package_mail(
         user,
         EMAIL_CHANGED_NOTICE_TEMPLATE,
         {
@@ -277,6 +285,7 @@ def _send_old_email_notice(user, *, old_email, new_email):
             "account_url": f"{site_base_url()}/account/",
         },
         recipient_email=old_email,
+        idempotency_key=f"email-change-notice:{request_obj.pk}",
     )
 
 
@@ -369,7 +378,12 @@ def confirm_email_change(token):
         request_obj.confirmed_at = now
         request_obj.save(update_fields=["confirmed_at"])
 
-    _send_old_email_notice(user, old_email=old_email, new_email=new_email)
+    _send_old_email_notice(
+        user,
+        old_email=old_email,
+        new_email=new_email,
+        request_obj=request_obj,
+    )
 
     return EmailChangeConfirmationResult(
         success=True,

@@ -29,6 +29,7 @@ from django.utils import timezone
 from accounts.models import User
 from accounts.utils.activation import mark_activated, mark_email_verified
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from payments import services as payment_services
 
 
@@ -410,6 +411,10 @@ class OAuthSocialAccountAddedSignalTest(TestCase):
         self.assertEqual(user.signup_source, 'unknown')
 
         self._trigger_signal(user)
+
+        # A1.2: the welcome goes through the package mail app; its
+        # EmailLog row appears once the pending delivery is drained.
+        deliver_pending_mail()
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)

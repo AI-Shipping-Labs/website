@@ -54,6 +54,16 @@ class MavenResult:
     exhausted_steps: list = field(default_factory=list)
 
 
+@dataclass(frozen=True)
+class MavenStepRetryResult:
+    """Persisted outcome of one operator-requested step retry."""
+
+    step: str
+    outcome: str
+    attempted: bool
+    reason: str = ""
+
+
 # Maven exposes no documented payload contract and we have never seen a real
 # delivery, so intake tolerates the obvious envelope shapes rather than
 # dropping an enrollee. ``student`` / ``member`` are accepted alongside
@@ -657,6 +667,28 @@ def run_occurrence_steps(occurrence, *, step=None, force=False):
     return actions
 
 
+def retry_occurrence_step(occurrence, step):
+    """Force one incomplete step and return its truthful persisted outcome.
+
+    The claim, attempt increment, provider call, and finish transition remain
+    owned by ``_run_step``. A successful override also resumes currently
+    eligible downstream enrollment steps through the ordinary capped runner.
+    """
+    if step not in STEP_NAMES:
+        raise ValueError("unknown Maven step")
+
+    actions = []
+    result = _run_step(occurrence.pk, step, actions, force=True)
+    if (
+        result.attempted
+        and step == "override"
+        and result.outcome == MavenEnrollmentEvent.STEP_SUCCEEDED
+    ):
+        occurrence.refresh_from_db()
+        run_occurrence_steps(occurrence)
+    return result
+
+
 def _run_step(pk, name, actions, *, force=False):
     if name not in STEP_NAMES:
         raise ValueError("unknown Maven step")
@@ -683,15 +715,30 @@ def _run_step(pk, name, actions, *, force=False):
         status = getattr(row, status_field)
         attempts = getattr(row, attempts_field)
         if status in {row.STEP_SUCCEEDED, row.STEP_SKIPPED}:
-            return
+            return MavenStepRetryResult(
+                step=name,
+                outcome=status,
+                attempted=False,
+                reason="not_retryable",
+            )
         if status == row.STEP_RUNNING:
             attempted_at = getattr(row, attempted_field)
             if attempted_at and attempted_at > timezone.now() - RUNNING_STEP_LEASE:
                 actions.append(f"{name.title()} is already running; not repeated.")
-                return
+                return MavenStepRetryResult(
+                    step=name,
+                    outcome=status,
+                    attempted=False,
+                    reason="in_progress",
+                )
         if attempts >= MAX_STEP_ATTEMPTS and not force:
             actions.append(f"{name.title()} retry limit reached.")
-            return
+            return MavenStepRetryResult(
+                step=name,
+                outcome=status,
+                attempted=False,
+                reason="attempt_limit",
+            )
         setattr(row, status_field, row.STEP_RUNNING)
         setattr(row, attempts_field, attempts + 1)
         setattr(row, attempted_field, timezone.now())
@@ -728,7 +775,11 @@ def _run_step(pk, name, actions, *, force=False):
             if not delivered:
                 _finish_step(pk, name, MavenEnrollmentEvent.STEP_SKIPPED, "")
                 actions.append("Staff enrollment heads-up skipped: no usable destination.")
-                return
+                return MavenStepRetryResult(
+                    step=name,
+                    outcome=MavenEnrollmentEvent.STEP_SKIPPED,
+                    attempted=True,
+                )
             actions.append("Sent staff enrollment heads-up.")
         elif name == "slack":
             # ``skipped`` is "we correctly did nothing" — never ``succeeded``
@@ -738,12 +789,20 @@ def _run_step(pk, name, actions, *, force=False):
             slack_status, slack_note = _invite_to_slack(row.user, actions)
             if slack_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
                 _finish_step(pk, name, slack_status, slack_note)
-                return
+                return MavenStepRetryResult(
+                    step=name,
+                    outcome=slack_status,
+                    attempted=True,
+                )
         elif name == "welcome":
             if not row.user.email_preferences.get("maven_emails", True):
                 _finish_step(pk, name, MavenEnrollmentEvent.STEP_SKIPPED, "")
                 actions.append("Maven welcome suppressed by scoped preference.")
-                return
+                return MavenStepRetryResult(
+                    step=name,
+                    outcome=MavenEnrollmentEvent.STEP_SKIPPED,
+                    attempted=True,
+                )
             _send_welcome(row.user, row.course, row.cohort, actions)
         else:
             from community.services.staff_notifications import notify_maven_cohort_removal
@@ -760,8 +819,18 @@ def _run_step(pk, name, actions, *, force=False):
         )
         _finish_step(pk, name, MavenEnrollmentEvent.STEP_FAILED, _safe_error(exc))
         actions.append(f"{name.title()} failed; persisted for retry.")
+        return MavenStepRetryResult(
+            step=name,
+            outcome=MavenEnrollmentEvent.STEP_FAILED,
+            attempted=True,
+        )
     else:
         _finish_step(pk, name, MavenEnrollmentEvent.STEP_SUCCEEDED, "")
+        return MavenStepRetryResult(
+            step=name,
+            outcome=MavenEnrollmentEvent.STEP_SUCCEEDED,
+            attempted=True,
+        )
 
 
 def _enrollment_notification_entitlement(occurrence):

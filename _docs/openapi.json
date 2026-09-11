@@ -7175,6 +7175,946 @@
         ]
       }
     },
+    "/api/integrations/maven/occurrences": {
+      "get": {
+        "description": "Return a deterministic newest-first page from the Maven enrollment ledger. Filters combine with AND. Email lookup is exact and alias-aware; redacted occurrence email is never reconstructed from the linked account.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "email",
+            "required": false,
+            "schema": {
+              "description": "Exact occurrence, primary, or alias email.",
+              "format": "email",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "description": "Course label substring or exact course key.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "description": "Cohort label substring or exact cohort key.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "lifecycle",
+            "required": false,
+            "schema": {
+              "enum": [
+                "active",
+                "removed",
+                "legacy"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "enum": [
+                "all",
+                "failed",
+                "needs_attention"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "failed_step",
+            "required": false,
+            "schema": {
+              "enum": [
+                "override",
+                "notification",
+                "slack",
+                "welcome",
+                "removal"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    },
+                    "occurrences": {
+                      "items": {
+                        "properties": {
+                          "cohort": {
+                            "type": "string"
+                          },
+                          "cohort_key": {
+                            "type": "string"
+                          },
+                          "course": {
+                            "type": "string"
+                          },
+                          "course_key": {
+                            "type": "string"
+                          },
+                          "created_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "event_type": {
+                            "type": "string"
+                          },
+                          "failed_steps": {
+                            "items": {
+                              "enum": [
+                                "override",
+                                "notification",
+                                "slack",
+                                "welcome",
+                                "removal"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "id": {
+                            "type": "integer"
+                          },
+                          "lifecycle": {
+                            "enum": [
+                              "active",
+                              "removed",
+                              "legacy"
+                            ],
+                            "type": "string"
+                          },
+                          "needs_attention_steps": {
+                            "items": {
+                              "enum": [
+                                "override",
+                                "notification",
+                                "slack",
+                                "welcome",
+                                "removal"
+                              ],
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "occurrence_email": {
+                            "format": "email",
+                            "type": "string"
+                          },
+                          "outcome": {
+                            "type": "string"
+                          },
+                          "payload_redacted_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "user": {
+                            "properties": {
+                              "email": {
+                                "format": "email",
+                                "type": "string"
+                              },
+                              "id": {
+                                "type": "integer"
+                              }
+                            },
+                            "type": [
+                              "object",
+                              "null"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "user",
+                          "occurrence_email",
+                          "course",
+                          "cohort",
+                          "course_key",
+                          "cohort_key",
+                          "event_type",
+                          "lifecycle",
+                          "outcome",
+                          "failed_steps",
+                          "needs_attention_steps",
+                          "payload_redacted_at",
+                          "created_at",
+                          "updated_at"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "offset": {
+                      "type": "integer"
+                    },
+                    "total_count": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "occurrences",
+                    "count",
+                    "total_count",
+                    "limit",
+                    "offset"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Filtered Maven occurrence page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_token",
+                  "error": "Missing or invalid staff-owned operator token."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "status"
+                  },
+                  "error": "Invalid filter or pagination value."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid filter or pagination value."
+          }
+        },
+        "summary": "List Maven enrollment occurrences",
+        "tags": [
+          "Maven Integrations"
+        ]
+      }
+    },
+    "/api/integrations/maven/occurrences/{occurrence_id}": {
+      "get": {
+        "description": "Return the current persisted occurrence and all five ledger steps. This operation is read-only and makes no provider calls.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "account_created": {
+                      "type": "boolean"
+                    },
+                    "cohort": {
+                      "type": "string"
+                    },
+                    "cohort_key": {
+                      "type": "string"
+                    },
+                    "course": {
+                      "type": "string"
+                    },
+                    "course_key": {
+                      "type": "string"
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "event_type": {
+                      "type": "string"
+                    },
+                    "failed_steps": {
+                      "items": {
+                        "enum": [
+                          "override",
+                          "notification",
+                          "slack",
+                          "welcome",
+                          "removal"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "lifecycle": {
+                      "enum": [
+                        "active",
+                        "removed",
+                        "legacy"
+                      ],
+                      "type": "string"
+                    },
+                    "needs_attention_steps": {
+                      "items": {
+                        "enum": [
+                          "override",
+                          "notification",
+                          "slack",
+                          "welcome",
+                          "removal"
+                        ],
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "occurrence_email": {
+                      "format": "email",
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "payload_redacted_at": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "removed_at": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "steps": {
+                      "items": {
+                        "properties": {
+                          "attempted_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "attempts": {
+                            "type": "integer"
+                          },
+                          "completed_at": {
+                            "format": "date-time",
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "error_redacted": {
+                            "type": "boolean"
+                          },
+                          "last_error": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "enum": [
+                              "override",
+                              "notification",
+                              "slack",
+                              "welcome",
+                              "removal"
+                            ],
+                            "type": "string"
+                          },
+                          "needs_attention": {
+                            "type": "boolean"
+                          },
+                          "status": {
+                            "enum": [
+                              "pending",
+                              "running",
+                              "succeeded",
+                              "failed",
+                              "skipped"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "status",
+                          "attempts",
+                          "attempted_at",
+                          "completed_at",
+                          "needs_attention",
+                          "last_error",
+                          "error_redacted"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "user": {
+                      "properties": {
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "welcome_eligible": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "user",
+                    "occurrence_email",
+                    "course",
+                    "cohort",
+                    "course_key",
+                    "cohort_key",
+                    "event_type",
+                    "lifecycle",
+                    "outcome",
+                    "failed_steps",
+                    "needs_attention_steps",
+                    "payload_redacted_at",
+                    "created_at",
+                    "updated_at",
+                    "account_created",
+                    "welcome_eligible",
+                    "removed_at",
+                    "steps"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Full Maven occurrence detail."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_token",
+                  "error": "Missing or invalid staff-owned operator token."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_occurrence_not_found",
+                  "error": "Maven occurrence not found."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Maven occurrence not found."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed."
+          }
+        },
+        "summary": "Inspect one Maven enrollment occurrence",
+        "tags": [
+          "Maven Integrations"
+        ]
+      }
+    },
+    "/api/integrations/maven/occurrences/{occurrence_id}/steps/{step}/retry": {
+      "post": {
+        "description": "Force one incomplete step through the shared durable Maven retry service. The URL fully identifies the operation; no request body or caller-controlled retry options are accepted. A caught provider failure is a completed request with ``retry.outcome=failed``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "step",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "occurrence": {
+                      "properties": {
+                        "account_created": {
+                          "type": "boolean"
+                        },
+                        "cohort": {
+                          "type": "string"
+                        },
+                        "cohort_key": {
+                          "type": "string"
+                        },
+                        "course": {
+                          "type": "string"
+                        },
+                        "course_key": {
+                          "type": "string"
+                        },
+                        "created_at": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "event_type": {
+                          "type": "string"
+                        },
+                        "failed_steps": {
+                          "items": {
+                            "enum": [
+                              "override",
+                              "notification",
+                              "slack",
+                              "welcome",
+                              "removal"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "id": {
+                          "type": "integer"
+                        },
+                        "lifecycle": {
+                          "enum": [
+                            "active",
+                            "removed",
+                            "legacy"
+                          ],
+                          "type": "string"
+                        },
+                        "needs_attention_steps": {
+                          "items": {
+                            "enum": [
+                              "override",
+                              "notification",
+                              "slack",
+                              "welcome",
+                              "removal"
+                            ],
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "occurrence_email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "outcome": {
+                          "type": "string"
+                        },
+                        "payload_redacted_at": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "removed_at": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "steps": {
+                          "items": {
+                            "properties": {
+                              "attempted_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "attempts": {
+                                "type": "integer"
+                              },
+                              "completed_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "error_redacted": {
+                                "type": "boolean"
+                              },
+                              "last_error": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "enum": [
+                                  "override",
+                                  "notification",
+                                  "slack",
+                                  "welcome",
+                                  "removal"
+                                ],
+                                "type": "string"
+                              },
+                              "needs_attention": {
+                                "type": "boolean"
+                              },
+                              "status": {
+                                "enum": [
+                                  "pending",
+                                  "running",
+                                  "succeeded",
+                                  "failed",
+                                  "skipped"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "status",
+                              "attempts",
+                              "attempted_at",
+                              "completed_at",
+                              "needs_attention",
+                              "last_error",
+                              "error_redacted"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "updated_at": {
+                          "format": "date-time",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "user": {
+                          "properties": {
+                            "email": {
+                              "format": "email",
+                              "type": "string"
+                            },
+                            "id": {
+                              "type": "integer"
+                            }
+                          },
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "welcome_eligible": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "user",
+                        "occurrence_email",
+                        "course",
+                        "cohort",
+                        "course_key",
+                        "cohort_key",
+                        "event_type",
+                        "lifecycle",
+                        "outcome",
+                        "failed_steps",
+                        "needs_attention_steps",
+                        "payload_redacted_at",
+                        "created_at",
+                        "updated_at",
+                        "account_created",
+                        "welcome_eligible",
+                        "removed_at",
+                        "steps"
+                      ],
+                      "type": "object"
+                    },
+                    "retry": {
+                      "properties": {
+                        "attempted": {
+                          "type": "boolean"
+                        },
+                        "outcome": {
+                          "enum": [
+                            "succeeded",
+                            "failed",
+                            "skipped"
+                          ],
+                          "type": "string"
+                        },
+                        "step": {
+                          "enum": [
+                            "override",
+                            "notification",
+                            "slack",
+                            "welcome",
+                            "removal"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "step",
+                        "outcome",
+                        "attempted"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "retry",
+                    "occurrence"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Selected attempt completed with persisted outcome."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_token",
+                  "error": "Missing or invalid staff-owned operator token."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_occurrence_not_found",
+                  "error": "Maven occurrence not found."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Maven occurrence not found."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_step_in_progress",
+                  "details": {
+                    "attempts": 2,
+                    "status": "running",
+                    "step": "welcome"
+                  },
+                  "error": "Maven step is already in progress"
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "``maven_step_in_progress`` for a fresh running lease; ``maven_step_not_retryable`` for a step already persisted as succeeded or skipped."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_maven_step",
+                  "details": {
+                    "allowed": [
+                      "notification",
+                      "override",
+                      "removal",
+                      "slack",
+                      "welcome"
+                    ]
+                  },
+                  "error": "Unknown Maven step."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unknown Maven step."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_step_retry_failed",
+                  "error": "Maven step retry failed before an outcome was persisted."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Maven step retry failed before an outcome was persisted."
+          }
+        },
+        "summary": "Retry one Maven enrollment step",
+        "tags": [
+          "Maven Integrations"
+        ]
+      }
+    },
     "/api/integrations/settings": {
       "get": {
         "description": "Returns one entry per registered key with its ``group``, ``label``, ``description``, ``is_secret``, ``is_boolean``, ``requires_restart``, ``configured`` flag, ``source`` (``db`` / ``env`` / ``django_settings`` / ``default`` / ``null``), and a ``docs_url`` path. The actual stored or env value is NEVER included.",

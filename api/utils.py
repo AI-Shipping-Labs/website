@@ -77,7 +77,7 @@ def parse_json_body(request):
         return None, JsonResponse({"error": "Invalid JSON"}, status=400)
 
 
-def require_methods(*methods):
+def require_methods(*methods, structured_errors=False):
     """Decorator restricting the allowed HTTP methods.
 
     Returns ``405`` with ``{"error": "Method not allowed"}`` for any other
@@ -90,6 +90,12 @@ def require_methods(*methods):
         @wraps(view_func)
         def wrapper(request, *args, **kwargs):
             if request.method not in methods:
+                if structured_errors:
+                    return error_response(
+                        "Method not allowed",
+                        "method_not_allowed",
+                        status=405,
+                    )
                 return JsonResponse(
                     {"error": "Method not allowed"},
                     status=405,

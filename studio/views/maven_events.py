@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 
 from community.models import CommunityAuditLog
 from integrations.models import MavenEnrollmentEvent
-from integrations.services.maven import STEP_NAMES, run_occurrence_steps
+from integrations.services.maven import STEP_NAMES, retry_occurrence_step
 from integrations.services.maven_attention import (
     failed_occurrences,
     needs_attention_occurrences,
@@ -79,8 +79,7 @@ def maven_event_retry(request, pk, step):
     if step not in STEP_NAMES:
         return redirect("studio_maven_event_detail", pk=pk)
     event = get_object_or_404(MavenEnrollmentEvent.objects.select_related("user"), pk=pk)
-    attempts_before = getattr(event, f"{step}_attempts")
-    run_occurrence_steps(event, step=step, force=True)
+    result = retry_occurrence_step(event, step)
     audit_subject = event.user or request.user
     CommunityAuditLog.objects.create(
         user=audit_subject,
@@ -92,16 +91,15 @@ def maven_event_retry(request, pk, step):
     )
     event.refresh_from_db()
     status = getattr(event, f"{step}_status")
-    attempts_after = getattr(event, f"{step}_attempts")
-    if status == MavenEnrollmentEvent.STEP_SUCCEEDED:
+    if result.reason == "not_retryable":
+        messages.info(request, f"Maven {step} step is already complete; no retry was run.")
+    elif status == MavenEnrollmentEvent.STEP_SUCCEEDED:
         messages.success(request, f"Maven {step} step recovered.")
-        if step == "override":
-            run_occurrence_steps(event)
     elif status == MavenEnrollmentEvent.STEP_SKIPPED:
         messages.info(request, f"Maven {step} step was skipped; no retry was needed.")
     elif status == MavenEnrollmentEvent.STEP_FAILED:
         messages.error(request, f"Maven {step} step failed again. Fix the cause before retrying.")
-    elif status == MavenEnrollmentEvent.STEP_RUNNING and attempts_after == attempts_before:
+    elif result.reason == "in_progress":
         messages.warning(request, f"Maven {step} step is already running and was not repeated.")
     else:
         messages.warning(request, f"Maven {step} step was not completed; review its current state before retrying.")

@@ -15,7 +15,6 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
-from accounts.models import User
 from community.services.slack import SlackCommunityService
 from community.tasks.slack_membership import refresh_slack_membership
 from payments.models import Tier

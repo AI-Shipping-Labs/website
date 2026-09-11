@@ -292,7 +292,7 @@ class RefreshSlackMembershipTaskTest(TestCase):
         # Main+ candidate scope (issue #918); these tests exercise
         # outcome/audit/chain behavior, not the tier filter itself.
         extra.setdefault('tier', _tier(20))
-        return User.objects.create_user(email=email, **extra)
+        return create_user_with_membership(email=email, **extra)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_member_outcome_sets_slack_member_true_and_timestamp(self, mock_get_service):
@@ -750,7 +750,7 @@ class RefreshSlackMembershipMainPlusScopeTest(TestCase):
     def _user(self, email, level=None, **extra):
         if level is not None:
             extra['tier'] = _tier(level)
-        return User.objects.create_user(email=email, **extra)
+        return create_user_with_membership(email=email, **extra)
 
     def _override(self, user, override_level, *, active=True, expired=False):
         expires = timezone.now() + timezone.timedelta(days=7)

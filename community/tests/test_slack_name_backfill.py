@@ -19,12 +19,13 @@ from accounts.models import User
 from community.services.slack import SlackCommunityService
 from community.tasks.slack_membership import refresh_slack_membership
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 
 def _main_user(email, **extra):
     """Create a Main-tier user so it falls inside the #918 candidate scope."""
     extra.setdefault('tier', Tier.objects.get(level=20))
-    return User.objects.create_user(email=email, **extra)
+    return create_user_with_membership(email=email, **extra)
 
 
 @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')

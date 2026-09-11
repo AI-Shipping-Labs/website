@@ -26,6 +26,7 @@ from email_app.services.email_service import (
     EmailService,
     EmailServiceError,
 )
+from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 
@@ -236,7 +237,7 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         ]
         for label, attrs, blocker in cases:
             with self.subTest(label=label):
-                target = User.objects.create_user(
+                target = create_user_with_membership(
                     email=f"{label}-blocked@test.com",
                     password="testpass",
                     **attrs,

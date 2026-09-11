@@ -46,8 +46,18 @@ class _Base924(TestCase):
 
     def _make_member(self, email, tier=None, **extras):
         user = User.objects.create_user(email=email, password='pw')
-        if tier is not None:
-            set_membership(user, tier=tier)
+        membership_fields = {
+            key: extras.pop(key)
+            for key in (
+                'pending_tier',
+                'billing_period_end',
+                'stripe_customer_id',
+                'subscription_id',
+            )
+            if key in extras
+        }
+        if tier is not None or membership_fields:
+            set_membership(user, tier=tier, **membership_fields)
         for key, value in extras.items():
             setattr(user, key, value)
         user.save()

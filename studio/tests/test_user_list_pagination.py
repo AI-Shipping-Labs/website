@@ -30,7 +30,10 @@ def _create_users(count, *, email_prefix='user', **extra):
         )
         for i in range(count)
     ]
-    return User.objects.bulk_create(users)
+    created_users = User.objects.bulk_create(users)
+    for user in created_users:
+        set_membership(user)
+    return created_users
 
 
 class PatchedUserListPageSizeMixin:

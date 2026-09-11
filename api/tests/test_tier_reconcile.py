@@ -120,7 +120,20 @@ class TierReconcileTestBase(TestCase):
             "stripe_customer_id",
             f"cus_{email.split('@')[0]}",
         )
-        return User.objects.create_user(email=email, password="x", **kwargs)
+        membership_fields = {
+            key: kwargs.pop(key)
+            for key in (
+                "tier",
+                "pending_tier",
+                "billing_period_end",
+                "stripe_customer_id",
+                "subscription_id",
+            )
+            if key in kwargs
+        }
+        user = User.objects.create_user(email=email, password="x", **kwargs)
+        set_membership(user, **membership_fields)
+        return user
 
     def _auth_header(self):
         return {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}

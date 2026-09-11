@@ -760,6 +760,7 @@ COMMUNITY_BASE = {
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'JOBS_BACKEND': 'django_q',
     'MAIL_BACKEND': 'ses_local',
+    'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
     'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',

@@ -197,16 +197,16 @@ def _send_verification_email(user, return_path=None):
 
     Args:
         user: User model instance.
-        return_path: Optional safe same-site path to include in the signed
-            verification token.
+        return_path: Optional safe same-site path; persisted as a plain
+            input and signed into the verification token by the worker
+            (the stored delivery context never carries the token).
 
     Returns:
         The durable ``EmailDelivery`` (``suppressed`` when the preference
         resolver opted the recipient out); ``None`` on a local failure.
     """
-    token = _generate_verification_token(user.pk, return_path=return_path)
+    safe_return_path = sanitize_verification_return_path(return_path, default="")
     site_url = site_base_url()
-    verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
 
     from community_base.mail.service import MailError
@@ -218,7 +218,7 @@ def _send_verification_email(user, return_path=None):
             user,
             "email_verification_signup",
             {
-                "verify_url": verify_url,
+                "return_path": safe_return_path,
                 "site_url": site_url,
                 "ttl_days": ttl_days,
             },
@@ -341,19 +341,22 @@ def _probe_slack_membership_on_signup(user):
 def _send_password_reset_email(user):
     """Send a password reset email through the package mail app (A1.2).
 
+    The reset URL carries a bearer token, so the stored context stays empty;
+    the worker mints the token at delivery time via
+    ``email_app.hooks.resolve_auth_mail_context``.
+
     Args:
         user: User model instance.
-    """
-    token = generate_password_reset_token(user, expiry_hours=1)
-    site_url = site_base_url()
-    reset_url = f"{site_url}/api/password-reset?token={token}"
 
+    Returns:
+        The durable ``EmailDelivery``; ``None`` on a local failure.
+    """
     from community_base.mail.service import MailError
 
     from email_app.package_mail import send_package_mail
 
     try:
-        send_package_mail(user, "password_reset", {"reset_url": reset_url})
+        return send_package_mail(user, "password_reset", {})
     except MailError:
         logger.exception(
             "Failed to send password reset email to %s (user_id=%s)",

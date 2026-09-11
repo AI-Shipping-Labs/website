@@ -99,6 +99,40 @@ def verify_email_url_builder(delivery):
     return f"{site_base_url()}/api/verify-email?token={token}"
 
 
+def resolve_auth_mail_context(*, delivery, context):
+    """Mint the auth bearer links in the worker, not in the stored context.
+
+    The signup-verification and password-reset callers persist only inputs
+    (``return_path``, ``ttl_days``, ``site_url``); the signed URLs are built
+    here at delivery time so ``EmailDelivery.context_data`` never retains a
+    clickable token (review finding on #1610: the old EmailService path
+    persisted neither URL). Every other purpose passes through unchanged.
+    """
+
+    if delivery.purpose not in ("email_verification_signup", "password_reset"):
+        return context
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        return context
+
+    from accounts.utils.tokens import generate_password_reset_token  # noqa: PLC0415
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    if delivery.purpose == "password_reset":
+        token = generate_password_reset_token(user, expiry_hours=1)
+        context["reset_url"] = f"{site_base_url()}/api/password-reset?token={token}"
+        return context
+
+    from accounts.views.auth import _generate_verification_token  # noqa: PLC0415
+
+    token = _generate_verification_token(
+        user.pk,
+        return_path=context.get("return_path"),
+    )
+    context["verify_url"] = f"{site_base_url()}/api/verify-email?token={token}"
+    return context
+
+
 def template_override_loader(template_key):
     """``(subject, body_markdown, footer_note)`` from EmailTemplateOverride."""
 

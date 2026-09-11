@@ -21,7 +21,6 @@ Usage:
 
 import datetime
 import os
-from unittest.mock import patch
 from urllib.parse import urlparse
 
 import pytest
@@ -512,22 +511,33 @@ class TestScenario449UnverifiedSignupFreeArticle:
 class TestScenario1160VerifyEmailReturnToContent:
     """Verification emails carry safe signed return paths back to content."""
 
-    def _capture_send(self, sent_contexts):
-        def capture_send(*args, **kwargs):
-            from email_app.models import EmailLog
+    def _latest_signup_delivery(self, email):
+        """Latest signup-verification delivery the package mail app stored.
 
-            user = args[0]
-            template_name = args[1]
-            context = args[2] if len(args) >= 3 else kwargs.get("context", {})
-            sent_contexts.append(
-                {
-                    "template": template_name,
-                    "context": dict(context or {}),
-                }
-            )
-            return EmailLog.objects.create(user=user, email_type=template_name)
+        A1.2: the send runs through ``community_base.mail`` (inline under the
+        Playwright ``JOBS_BACKEND=sync`` override), so the durable delivery
+        row — not a patched ``EmailService.send`` — is the record of the mail.
+        """
+        from community_base.mail.models import EmailDelivery
 
-        return capture_send
+        delivery = EmailDelivery.objects.filter(
+            purpose="email_verification_signup",
+            recipient_email=email,
+        ).latest("created_at")
+        connection.close()
+        return delivery
+
+    def _resolved_verify_url(self, delivery):
+        """The clickable link exactly as the worker resolves it."""
+        from email_app.hooks import resolve_auth_mail_context
+
+        resolved = resolve_auth_mail_context(
+            delivery=delivery,
+            context=dict(delivery.context_data),
+        )
+        connection.close()
+        assert "verify_url" in resolved, delivery.context_data
+        return resolved["verify_url"]
 
     def _verification_path(self, verify_url):
         parsed = urlparse(verify_url)
@@ -565,26 +575,20 @@ class TestScenario1160VerifyEmailReturnToContent:
             if cookie["name"] == "csrftoken"
         )
 
-        sent_contexts = []
-        with patch(
-            "email_app.services.email_service.EmailService.send",
-            side_effect=self._capture_send(sent_contexts),
-        ):
-            register_response = page.request.post(
-                f"{django_server}/api/register",
-                data={
-                    "email": "return-reader@test.com",
-                    "password": DEFAULT_PASSWORD,
-                    "next": "/blog/free-return-article",
-                },
-                headers={"X-CSRFToken": csrf_token},
-            )
+        register_response = page.request.post(
+            f"{django_server}/api/register",
+            data={
+                "email": "return-reader@test.com",
+                "password": DEFAULT_PASSWORD,
+                "next": "/blog/free-return-article",
+            },
+            headers={"X-CSRFToken": csrf_token},
+        )
 
         assert register_response.status == 201
         register_data = register_response.json()
         assert register_data["return_url"] == "/blog/free-return-article"
         assert "returns you to this content" in register_data["message"]
-        assert sent_contexts
 
         user = User.objects.get(email="return-reader@test.com")
         assert user.membership.tier.slug == "free"
@@ -606,7 +610,9 @@ class TestScenario1160VerifyEmailReturnToContent:
         assert "Return article body" in body
 
         verify_path = self._verification_path(
-            sent_contexts[-1]["context"]["verify_url"]
+            self._resolved_verify_url(
+                self._latest_signup_delivery("return-reader@test.com")
+            )
         )
         page.goto(f"{django_server}{verify_path}", wait_until="domcontentloaded")
         page.wait_for_url(f"{django_server}/blog/free-return-article")
@@ -653,20 +659,16 @@ class TestScenario1160VerifyEmailReturnToContent:
         assert page.get_by_test_id("verify-email-required-card").count() == 0
         assert page.locator("#email-verification-banner").is_visible()
 
-        sent_contexts = []
-        with patch(
-            "email_app.services.email_service.EmailService.send",
-            side_effect=self._capture_send(sent_contexts),
-        ):
-            page.locator("#resend-verification-btn").click()
-            page.wait_for_load_state("domcontentloaded")
+        page.locator("#resend-verification-btn").click()
+        page.wait_for_load_state("domcontentloaded")
 
         assert page.url == article_url
         assert "Verification email sent." in page.content()
-        assert sent_contexts
 
         verify_path = self._verification_path(
-            sent_contexts[-1]["context"]["verify_url"]
+            self._resolved_verify_url(
+                self._latest_signup_delivery("resend-return@test.com")
+            )
         )
         page.goto(f"{django_server}{verify_path}", wait_until="domcontentloaded")
         page.wait_for_url(f"{django_server}/blog/free-resend-return-article")

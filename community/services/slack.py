@@ -96,6 +96,18 @@ def _safe_error_code(value):
     return value if re.fullmatch(r"[a-z0-9_]{1,64}", value) else "unknown_error"
 
 
+def _channel_log_summary(results):
+    """Return bounded channel outcome counts and safe Slack error codes."""
+    succeeded = sum(bool(item.get("ok")) for item in results)
+    failed = len(results) - succeeded
+    error_codes = sorted({
+        _safe_error_code(item.get("error"))
+        for item in results
+        if not item.get("ok")
+    })
+    return len(results), succeeded, failed, ",".join(error_codes) or "none"
+
+
 class SlackAPIError(Exception):
     """Raised when a Slack API call fails."""
 
@@ -221,7 +233,9 @@ class SlackCommunityService(CommunityService):
             wait = SLACK_RETRY_AFTER_DEFAULT_SECONDS
         wait = max(0, min(wait, SLACK_RETRY_AFTER_MAX_SECONDS))
         logger.warning(
-            "Slack rate limited on %s; retrying once after %ss", method, wait,
+            "Slack API action=retry outcome=rate_limited method=%s wait_seconds=%s",
+            method,
+            wait,
         )
         if wait:
             time.sleep(wait)
@@ -451,14 +465,15 @@ class SlackCommunityService(CommunityService):
             # ratelimited, fatal_error, internal_error, service_unavailable,
             # any other Slack-side or HTTP-level failure: be conservative.
             logger.warning(
-                "Slack workspace membership check failed: error_code=%s",
+                "Slack workspace action=membership_lookup outcome=failed error_code=%s",
                 _safe_error_code(e.error_code),
             )
             return ("unknown", None)
         except requests.RequestException:
             # Network error, timeout, DNS, etc.
             logger.warning(
-                "Slack workspace membership check failed: error_code=network_error",
+                "Slack workspace action=membership_lookup outcome=failed "
+                "error_code=network_error",
             )
             return ("unknown", None)
 
@@ -486,7 +501,7 @@ class SlackCommunityService(CommunityService):
                     results.append({"channel": channel_id, "ok": True, "already_in": True})
                 else:
                     logger.warning(
-                        "Slack community channel add failed: error_code=%s",
+                        "Slack channel action=add outcome=failed error_code=%s",
                         _safe_error_code(e.error_code),
                     )
                     results.append({
@@ -520,8 +535,8 @@ class SlackCommunityService(CommunityService):
                     results.append({"channel": channel_id, "ok": True, "not_in": True})
                 else:
                     logger.warning(
-                        "Failed to remove user %s from channel %s: %s",
-                        slack_user_id, channel_id, e,
+                        "Slack channel action=remove outcome=failed error_code=%s",
+                        _safe_error_code(e.error_code),
                     )
                     results.append({
                         "channel": channel_id,
@@ -579,15 +594,27 @@ class SlackCommunityService(CommunityService):
                 }),
             )
             if joined:
+                configured, succeeded, failed, _error_codes = _channel_log_summary(results)
                 logger.info(
-                    "Invited user %s (slack=%s) to community channels",
-                    user.email, slack_user_id,
+                    "Slack community action=invite outcome=added_to_channels "
+                    "user_id=%s configured_count=%s succeeded_count=%s failed_count=%s",
+                    user.pk,
+                    configured,
+                    succeeded,
+                    failed,
                 )
                 return InviteResult(INVITE_ADDED_TO_CHANNELS)
             detail = _channel_failure_detail(results)
+            configured, succeeded, failed, error_codes = _channel_log_summary(results)
             logger.warning(
-                "User %s (slack=%s) joined no community channels: %s",
-                user.email, slack_user_id, detail,
+                "Slack community action=invite outcome=channel_join_failed "
+                "user_id=%s configured_count=%s succeeded_count=%s failed_count=%s "
+                "error_codes=%s",
+                user.pk,
+                configured,
+                succeeded,
+                failed,
+                error_codes,
             )
             return InviteResult(INVITE_CHANNEL_JOIN_FAILED, detail)
 
@@ -601,14 +628,15 @@ class SlackCommunityService(CommunityService):
                 }),
             )
             logger.info(
-                "Skipped Slack invite email for user %s (caller delivers the "
-                "join link itself)",
-                user.email,
+                "Slack community action=invite outcome=email_suppressed user_id=%s "
+                "reason=caller_delivery",
+                user.pk,
             )
             return InviteResult(INVITE_EMAIL_SUPPRESSED)
 
         # User not found in Slack - send invite email
         outcome, detail = self._send_invite_email(user)
+        error_class = detail if outcome == INVITE_EMAIL_FAILED else ""
         CommunityAuditLog.objects.create(
             user=user,
             action="invite",
@@ -619,18 +647,22 @@ class SlackCommunityService(CommunityService):
         )
         if outcome == INVITE_EMAIL_SENT:
             logger.info(
-                "Sent Slack invite email to user %s (not found in Slack)",
-                user.email,
+                "Slack community action=invite outcome=email_sent user_id=%s "
+                "reason=slack_user_not_found",
+                user.pk,
             )
         elif outcome == INVITE_EMAIL_SKIPPED:
             logger.info(
-                "Slack invite email to user %s was skipped by delivery policy",
-                user.email,
+                "Slack community action=invite outcome=email_skipped user_id=%s "
+                "reason=delivery_policy",
+                user.pk,
             )
         else:
             logger.warning(
-                "Could not send Slack invite email to user %s (not found in Slack)",
-                user.email,
+                "Slack community action=invite outcome=email_failed user_id=%s "
+                "reason=slack_user_not_found error_class=%s",
+                user.pk,
+                error_class,
             )
         return InviteResult(outcome, detail)
 
@@ -650,7 +682,9 @@ class SlackCommunityService(CommunityService):
                 }),
             )
             logger.info(
-                "Skipped removal for user %s (no slack_user_id)", user.email,
+                "Slack community action=remove outcome=skipped user_id=%s "
+                "reason=no_slack_user_id",
+                user.pk,
             )
             return
 
@@ -663,9 +697,15 @@ class SlackCommunityService(CommunityService):
                 "channels": results,
             }),
         )
+        configured, succeeded, failed, error_codes = _channel_log_summary(results)
         logger.info(
-            "Removed user %s (slack=%s) from community channels",
-            user.email, user.slack_user_id,
+            "Slack community action=remove outcome=completed user_id=%s "
+            "configured_count=%s succeeded_count=%s failed_count=%s error_codes=%s",
+            user.pk,
+            configured,
+            succeeded,
+            failed,
+            error_codes,
         )
 
     def reactivate(self, user):
@@ -695,12 +735,18 @@ class SlackCommunityService(CommunityService):
                     "channels": results,
                 }),
             )
+            configured, succeeded, failed, error_codes = _channel_log_summary(results)
             logger.info(
-                "Reactivated user %s (slack=%s) in community channels",
-                user.email, slack_user_id,
+                "Slack community action=reactivate outcome=completed user_id=%s "
+                "configured_count=%s succeeded_count=%s failed_count=%s error_codes=%s",
+                user.pk,
+                configured,
+                succeeded,
+                failed,
+                error_codes,
             )
         else:
-            outcome, _detail = self._send_invite_email(user)
+            outcome, error_class = self._send_invite_email(user)
             CommunityAuditLog.objects.create(
                 user=user,
                 action="reactivate",
@@ -711,20 +757,21 @@ class SlackCommunityService(CommunityService):
             )
             if outcome == INVITE_EMAIL_SENT:
                 logger.info(
-                    "Sent Slack invite email to user %s on reactivation",
-                    user.email,
+                    "Slack community action=reactivate outcome=email_sent user_id=%s",
+                    user.pk,
                 )
             elif outcome == INVITE_EMAIL_SKIPPED:
                 logger.info(
-                    "Slack invite email to user %s was skipped by delivery "
-                    "policy on reactivation",
-                    user.email,
+                    "Slack community action=reactivate outcome=email_skipped "
+                    "user_id=%s reason=delivery_policy",
+                    user.pk,
                 )
             else:
                 logger.warning(
-                    "Could not send Slack invite email to user %s on "
-                    "reactivation",
-                    user.email,
+                    "Slack community action=reactivate outcome=email_failed "
+                    "user_id=%s error_class=%s",
+                    user.pk,
+                    error_class,
                 )
 
     def _send_invite_email(self, user):
@@ -758,14 +805,18 @@ class SlackCommunityService(CommunityService):
             # ``site_url`` / ``user_name`` are injected by EmailService.
             sent = EmailService().send(user, "community_invite", {})
         except (EmailServiceError, BotoCoreError, ClientError) as exc:
-            logger.exception(
-                "Failed to send Slack invite email to %s", user.email,
+            logger.error(
+                "Slack invite email action=deliver outcome=failed user_id=%s "
+                "error_class=%s",
+                user.pk,
+                exc.__class__.__name__,
             )
             return INVITE_EMAIL_FAILED, exc.__class__.__name__
         if sent is None:
             logger.info(
-                "Slack invite email to %s was skipped by delivery policy",
-                user.email,
+                "Slack invite email action=deliver outcome=skipped user_id=%s "
+                "reason=delivery_policy",
+                user.pk,
             )
             return INVITE_EMAIL_SKIPPED, "suppressed by delivery policy"
         return INVITE_EMAIL_SENT, ""

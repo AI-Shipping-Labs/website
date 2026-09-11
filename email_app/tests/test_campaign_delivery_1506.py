@@ -25,7 +25,7 @@ from email_app.tasks.send_campaign import (
 )
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -33,7 +33,7 @@ User = get_user_model()
 @tag("core")
 class CampaignDelivery1506Base(TierSetupMixin, TestCase):
     def make_campaign_delivery(self, *, state=CampaignDelivery.State.PENDING, **fields):
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email=f"recipient-{uuid.uuid4().hex}@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -64,7 +64,7 @@ class CampaignStatusDerivationTest(CampaignDelivery1506Base):
         campaign, _user, failed = self.make_campaign_delivery(
             state=CampaignDelivery.State.FAILED,
         )
-        extra = User.objects.create_user(
+        extra = create_user_with_membership(
             email="still-pending@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -89,7 +89,7 @@ class CampaignStatusDerivationTest(CampaignDelivery1506Base):
         campaign, _user, failed = self.make_campaign_delivery(
             state=CampaignDelivery.State.FAILED,
         )
-        extra = User.objects.create_user(
+        extra = create_user_with_membership(
             email="ambiguous@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -125,7 +125,7 @@ class CampaignStatusDerivationTest(CampaignDelivery1506Base):
             ses_message_id="confirmed",
         )
         CampaignDelivery.objects.filter(pk=sent_delivery.pk).update(email_log=log)
-        extra = User.objects.create_user(
+        extra = create_user_with_membership(
             email="assumed@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -161,7 +161,7 @@ class CampaignStatusDerivationTest(CampaignDelivery1506Base):
             CampaignDelivery.State.FAILED,
             CampaignDelivery.State.SKIPPED,
         ):
-            extra = User.objects.create_user(
+            extra = create_user_with_membership(
                 email=f"{state}@test.com",
                 tier=self.free_tier,
                 email_verified=True,
@@ -193,14 +193,14 @@ class CampaignStatusDerivationTest(CampaignDelivery1506Base):
 
 class CampaignAudienceFreezeTest(CampaignDelivery1506Base):
     def test_late_joiner_is_not_added_on_parent_retry_or_recovery(self):
-        first = User.objects.create_user(
+        first = create_user_with_membership(
             email="first-frozen@test.com",
             tier=self.free_tier,
             email_verified=True,
         )
         campaign = EmailCampaign.objects.create(subject="Frozen", body="Hi")
         send_campaign(campaign.pk, batch_size=10)
-        User.objects.create_user(
+        create_user_with_membership(
             email="late-joiner@test.com",
             tier=self.free_tier,
             email_verified=True,

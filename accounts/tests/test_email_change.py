@@ -20,6 +20,7 @@ from accounts.services.email_change import (
 from accounts.services.email_resolution import resolve_user_by_email
 from email_app.models import EmailLog
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 @tag("core")
@@ -28,13 +29,8 @@ class EmailChangeAccountPageTest(TestCase):
     def test_activated_member_tiers_and_staff_have_no_login_email_card(self):
         for index, tier_slug in enumerate(["free", "basic", "main", "premium"]):
             with self.subTest(tier=tier_slug):
-                user = User.objects.create_user(
-                    email=f"member-{index}@test.com",
-                    password="CorrectPass123!",
-                    account_activated=True,
-                    email_verified=True,
-                    tier=Tier.objects.get(slug=tier_slug),
-                )
+                user = User.objects.create_user(email=f"member-{index}@test.com", password="CorrectPass123!", account_activated=True, email_verified=True)
+                set_membership(user, tier=Tier.objects.get(slug=tier_slug))
                 self.client.force_login(user)
 
                 response = self.client.get("/account/")
@@ -265,10 +261,13 @@ class EmailChangeConfirmServiceTest(TestCase):
             email_verified=False,
             verification_expires_at=timezone.now() + timedelta(days=2),
         )
-        self.user.tier = self.basic
-        self.user.subscription_id = "sub_keep"
-        self.user.stripe_customer_id = "cus_keep"
-        self.user.billing_period_end = timezone.now() + timedelta(days=30)
+        set_membership(
+            self.user,
+            tier=self.basic,
+            subscription_id="sub_keep",
+            stripe_customer_id="cus_keep",
+            billing_period_end=timezone.now() + timedelta(days=30),
+        )
         self.user.email_preferences = {"newsletter": True}
         self.user.slack_member = True
         self.user.slack_user_id = "U123"
@@ -315,9 +314,9 @@ class EmailChangeConfirmServiceTest(TestCase):
         self.assertEqual(self.user.email, "new-member@test.com")
         self.assertTrue(self.user.email_verified)
         self.assertIsNone(self.user.verification_expires_at)
-        self.assertEqual(self.user.tier_id, self.basic.id)
-        self.assertEqual(self.user.subscription_id, "sub_keep")
-        self.assertEqual(self.user.stripe_customer_id, "cus_keep")
+        self.assertEqual(self.user.membership.tier_id, self.basic.id)
+        self.assertEqual(self.user.membership.subscription_id, "sub_keep")
+        self.assertEqual(self.user.membership.stripe_customer_id, "cus_keep")
         self.assertEqual(self.user.email_preferences, {"newsletter": True})
         self.assertTrue(self.user.check_password("CorrectPass123!"))
         self.assertEqual(
@@ -421,8 +420,8 @@ class EmailChangeConfirmServiceTest(TestCase):
                 source=EmailAlias.SOURCE_ACCOUNT_CHANGE,
             ).exists()
         )
-        self.assertEqual(self.user.stripe_customer_id, "cus_keep")
-        self.assertEqual(self.user.subscription_id, "sub_keep")
+        self.assertEqual(self.user.membership.stripe_customer_id, "cus_keep")
+        self.assertEqual(self.user.membership.subscription_id, "sub_keep")
 
     def test_expired_reused_malformed_and_superseded_links_do_not_change_email(self):
         expired_request, expired_token = request_email_change(

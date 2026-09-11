@@ -26,6 +26,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -49,15 +50,14 @@ class _BadgeLinkTestBase(TestCase):
     def _make_member(self, email, tier=None, stripe_customer_id=''):
         user = User.objects.create_user(email=email, password='pw')
         if tier is not None:
-            user.tier = tier
-        user.stripe_customer_id = stripe_customer_id
+            set_membership(user, tier=tier, stripe_customer_id=stripe_customer_id)
         user.save()
         return user
 
     def _make_override(self, user, override_tier=None):
         return TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=override_tier or self.main,
             expires_at=timezone.now() + timedelta(days=14),
             granted_by=self.staff,

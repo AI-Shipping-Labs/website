@@ -29,6 +29,7 @@ from bookclub.summary_notifications import (
 from content.access import LEVEL_MAIN
 from notifications.models import Notification
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -81,14 +82,14 @@ class SummaryNotificationsFixture(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
         )
-        cls.staff.tier = cls.premium_tier
+        set_membership(cls.staff, tier=cls.premium_tier)
         cls.staff.save()
         cls.staff_token = Token.objects.create(user=cls.staff, name='staff')
 
     @classmethod
     def _member(cls, email, tier):
         user = User.objects.create_user(email=email, password='pw')
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.save()
         return user
 

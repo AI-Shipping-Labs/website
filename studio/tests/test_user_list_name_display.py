@@ -34,6 +34,7 @@ from django.utils.html import strip_tags
 from accounts.models import TierOverride
 from payments.models import Tier
 from studio.views.users import _row_tooltip
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -106,10 +107,8 @@ class UserListHeaderRowTest(TestCase):
         cls.free = User.objects.create_user(
             email='free@example.com', password='testpass',
         )
-        cls.paid = User.objects.create_user(
-            email='paid@example.com', password='testpass',
-            tier=Tier.objects.get(slug='main'),
-        )
+        cls.paid = User.objects.create_user(email='paid@example.com', password='testpass')
+        set_membership(cls.paid, tier=Tier.objects.get(slug='main'))
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
@@ -365,11 +364,8 @@ class UserListTierPillInsideUserCellTest(TestCase):
             email='free@example.com', password='testpass',
             first_name='Free', last_name='User',
         )
-        cls.premium_named = User.objects.create_user(
-            email='premium@example.com', password='testpass',
-            first_name='Premium', last_name='User',
-            tier=cls.premium,
-        )
+        cls.premium_named = User.objects.create_user(email='premium@example.com', password='testpass', first_name='Premium', last_name='User')
+        set_membership(cls.premium_named, tier=cls.premium)
 
         # User on Free with an active upgrade to Premium via override.
         cls.upgraded = User.objects.create_user(
@@ -419,10 +415,8 @@ class UserListTierPillInsideUserCellTest(TestCase):
 
     def test_email_as_headline_row_still_carries_tier_pill_inline(self):
         # No name → primary line is email; tier pill still sits inline.
-        unnamed_premium = User.objects.create_user(
-            email='premium-anon@example.com', password='testpass',
-            tier=self.premium,
-        )
+        unnamed_premium = User.objects.create_user(email='premium-anon@example.com', password='testpass')
+        set_membership(unnamed_premium, tier=self.premium)
         response = self.client.get(
             '/studio/users/?q=premium-anon@example.com',
         )
@@ -611,11 +605,8 @@ class RowTooltipHelperTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.full = User.objects.create_user(
-            email='full@example.com', password='testpass',
-            stripe_customer_id='cus_ABC',
-            slack_user_id='U01ABC123',
-        )
+        cls.full = User.objects.create_user(email='full@example.com', password='testpass', slack_user_id='U01ABC123')
+        set_membership(cls.full, stripe_customer_id='cus_ABC')
         cls.full.slack_member = True
         cls.full.slack_checked_at = timezone.now()
         cls.full.save(update_fields=['slack_member', 'slack_checked_at'])
@@ -667,11 +658,8 @@ class RowTooltipRenderedOnTrTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-        cls.with_ids = User.objects.create_user(
-            email='with-ids@example.com', password='testpass',
-            stripe_customer_id='cus_ABC',
-            slack_user_id='U01ABC123',
-        )
+        cls.with_ids = User.objects.create_user(email='with-ids@example.com', password='testpass', slack_user_id='U01ABC123')
+        set_membership(cls.with_ids, stripe_customer_id='cus_ABC')
         cls.with_ids.slack_member = True
         cls.with_ids.slack_checked_at = timezone.now()
         cls.with_ids.save(update_fields=['slack_member', 'slack_checked_at'])
@@ -823,8 +811,10 @@ class UserListFilteredCountMatchesRowCountTest(TestCase):
         cls.main = Tier.objects.get(slug='main')
         # 4 paid users (active Stripe subscription), 3 free.
         for idx in range(4):
-            User.objects.create_user(
-                email=f'paid-{idx}@example.com', password='testpass',
+            set_membership(
+                User.objects.create_user(
+                    email=f'paid-{idx}@example.com', password='testpass',
+                ),
                 tier=cls.main, subscription_id=f'sub_{idx}',
             )
         for idx in range(3):

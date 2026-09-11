@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, User
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 SLACK_TEAM_ID_KEY = "SLACK_TEAM_ID"
 TEST_INVITE_URL = "https://join.slack.com/t/test/shared_invite/abc"
@@ -70,8 +70,7 @@ class AccountSlackCardGatingTest(
 
     def _login_with_tier(self, email, tier):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=tier)
         self.client.login(email=email, password="pw")
         return user
 
@@ -113,8 +112,7 @@ class AccountSlackJoinCtaTest(
 
     def _login_main(self, email="main@test.com"):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = self.main_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.main_tier)
         self.client.login(email=email, password="pw")
         return user
 
@@ -149,8 +147,7 @@ class AccountSlackJoinCtaTest(
 
     def test_premium_user_also_sees_join_card(self):
         user = User.objects.create_user(email="prem@test.com", password="pw")
-        user.tier = self.premium_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.premium_tier)
         self.client.login(email="prem@test.com", password="pw")
         with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
             response = self.client.get("/account/")
@@ -237,10 +234,10 @@ class AccountSlackConnectedStateTest(
         self, email="joined@test.com", slack_user_id="U07AB12CDEF",
     ):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.slack_member = True
         user.slack_user_id = slack_user_id
-        user.save(update_fields=["tier", "slack_member", "slack_user_id"])
+        user.save(update_fields=["slack_member", "slack_user_id"])
         self.client.login(email=email, password="pw")
         return user
 
@@ -312,10 +309,10 @@ class SlackProfileUrlContextKeyTest(
     def test_context_keys_populated_for_main_member(self):
         self._set_team_id("T01TEAM123")
         user = User.objects.create_user(email="ctx@test.com", password="pw")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.slack_member = True
         user.slack_user_id = "U0CONTEXT1"
-        user.save(update_fields=["tier", "slack_member", "slack_user_id"])
+        user.save(update_fields=["slack_member", "slack_user_id"])
         self.client.login(email="ctx@test.com", password="pw")
 
         with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
@@ -336,8 +333,7 @@ class SlackProfileUrlContextKeyTest(
 
     def test_context_keys_for_free_user_disable_card(self):
         user = User.objects.create_user(email="freectx@test.com", password="pw")
-        user.tier = self.free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free_tier)
         self.client.login(email="freectx@test.com", password="pw")
 
         with self.settings(SLACK_INVITE_URL=TEST_INVITE_URL):
@@ -366,15 +362,15 @@ class AccountSlackCardOverrideTest(
 
     def _make_user(self, email, tier, slack_member=False):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.slack_member = slack_member
-        user.save(update_fields=["tier", "slack_member"])
+        user.save(update_fields=["slack_member"])
         self.client.login(email=email, password="pw")
         return user
 
     def _make_override(self, user, override_tier, **kwargs):
         defaults = {
-            "original_tier": user.tier,
+            "original_tier": user.membership.tier,
             "override_tier": override_tier,
             "expires_at": timezone.now() + timedelta(days=14),
             "is_active": True,

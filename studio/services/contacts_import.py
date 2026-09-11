@@ -28,7 +28,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from accounts.utils.tags import normalize_tag, set_tags
-from payments.models import Tier
+from payments.models import Membership, Tier
 from payments.services.backfill_tiers import backfill_user_from_stripe
 
 User = get_user_model()
@@ -37,7 +37,7 @@ User = get_user_model()
 # Long-lived override duration: 10 years. Effectively permanent for an import,
 # but keeps the row in the same audit trail as time-limited overrides created
 # from /studio/users/tier-override/ and survives Stripe webhook updates without
-# clobbering ``user.tier``.
+# clobbering the tier on the user's ``payments.Membership`` row.
 OVERRIDE_DURATION = relativedelta(years=10)
 
 # 5 MB upload cap.
@@ -440,6 +440,7 @@ def import_contact_rows(
                     unsubscribed=False,
                     signup_source="imported",
                 )
+            membership = Membership.for_user(user)
 
             # Default tag applies to every row.
             _apply_tag(user, normalized_default_tag)
@@ -454,19 +455,19 @@ def import_contact_rows(
             # same as before.
             _apply_name_fields(user, row)
             _apply_write_once_id(
-                user,
+                membership,
                 row,
                 row_key="stripe_customer_id",
-                user_attr="stripe_customer_id",
+                target_attr="stripe_customer_id",
                 conflict_reason="stripe_customer_id_conflict",
                 row_number=row_number,
                 warnings=result.warnings,
             )
             _apply_write_once_id(
-                user,
+                membership,
                 row,
                 row_key="subscription_id",
-                user_attr="subscription_id",
+                target_attr="subscription_id",
                 conflict_reason="subscription_id_conflict",
                 row_number=row_number,
                 warnings=result.warnings,
@@ -536,9 +537,9 @@ def _apply_name_fields(user, row):
 
 
 def _apply_write_once_id(
-    user, row, *, row_key, user_attr, conflict_reason, row_number, warnings,
+    target, row, *, row_key, target_attr, conflict_reason, row_number, warnings,
 ):
-    """Write a Stripe ID-style field only when the user's value is empty.
+    """Write a Stripe ID-style field only when the target value is empty.
 
     If the row carries a non-empty value and the user already has a different
     non-empty value, the field is NOT overwritten and a warning with
@@ -552,14 +553,14 @@ def _apply_write_once_id(
     trimmed = raw.strip()
     if not trimmed:
         return
-    current = getattr(user, user_attr) or ""
+    current = getattr(target, target_attr) or ""
     if current == trimmed:
         return
     if current:
         warnings.append((row_number, trimmed, conflict_reason))
         return
-    setattr(user, user_attr, trimmed)
-    user.save(update_fields=[user_attr])
+    setattr(target, target_attr, trimmed)
+    target.save(update_fields=[target_attr])
 
 
 def _sync_stripe_tier_after_customer_id_import(user, row, *, row_number, warnings):
@@ -569,7 +570,8 @@ def _sync_stripe_tier_after_customer_id_import(user, row, *, row_number, warning
     stripe_customer_id = raw.strip()
     if not stripe_customer_id:
         return None
-    if user.stripe_customer_id != stripe_customer_id:
+    # Issue #1579: the Stripe customer id lives on payments.Membership.
+    if user.membership.stripe_customer_id != stripe_customer_id:
         return None
 
     record = backfill_user_from_stripe(user)
@@ -586,7 +588,7 @@ def _apply_stripe_validated_tier_assignment(
     row_number,
     warnings,
 ):
-    if not user.stripe_customer_id:
+    if not user.membership.stripe_customer_id:
         warnings.append((
             row_number,
             requested_tier.slug,
@@ -659,7 +661,7 @@ def _apply_tier_override(user, override_tier, granted_by, *, expires_at=None):
     ).update(is_active=False)
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=override_tier,
         expires_at=expires_at or timezone.now() + OVERRIDE_DURATION,
         granted_by=granted_by,

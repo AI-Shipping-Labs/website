@@ -11,6 +11,7 @@ from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
+from tests.fixtures import set_membership
 from voting.models import Poll
 
 User = get_user_model()
@@ -31,19 +32,19 @@ class NotificationServiceNotifyTest(TestCase):
         self.free_user = User.objects.create_user(
             email='free@example.com', password='test123',
         )
-        self.free_user.tier = self.free_tier
+        set_membership(self.free_user, tier=self.free_tier)
         self.free_user.save()
 
         self.basic_user = User.objects.create_user(
             email='basic@example.com', password='test123',
         )
-        self.basic_user.tier = self.basic_tier
+        set_membership(self.basic_user, tier=self.basic_tier)
         self.basic_user.save()
 
         self.main_user = User.objects.create_user(
             email='main@example.com', password='test123',
         )
-        self.main_user.tier = self.main_tier
+        set_membership(self.main_user, tier=self.main_tier)
         self.main_user.save()
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -413,21 +414,21 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         self.user1 = User.objects.create_user(
             email='user1@example.com', password='test123',
         )
-        self.user1.tier = self.free_tier
+        set_membership(self.user1, tier=self.free_tier)
         self.user1.email_verified = True
         self.user1.save()
 
         self.user2 = User.objects.create_user(
             email='user2@example.com', password='test123',
         )
-        self.user2.tier = self.free_tier
+        set_membership(self.user2, tier=self.free_tier)
         self.user2.email_verified = True
         self.user2.save()
 
         self.user3 = User.objects.create_user(
             email='user3@example.com', password='test123',
         )
-        self.user3.tier = self.free_tier
+        set_membership(self.user3, tier=self.free_tier)
         self.user3.email_verified = True
         self.user3.save()
 
@@ -672,14 +673,14 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         unverified = User.objects.create_user(
             email='unverified@example.com', password='p',
         )
-        unverified.tier = self.free_tier
+        set_membership(unverified, tier=self.free_tier)
         unverified.email_verified = False
         unverified.save()
 
         unsubscribed = User.objects.create_user(
             email='unsubscribed@example.com', password='p',
         )
-        unsubscribed.tier = self.free_tier
+        set_membership(unsubscribed, tier=self.free_tier)
         unsubscribed.email_verified = True
         unsubscribed.unsubscribed = True
         unsubscribed.save()
@@ -687,7 +688,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         opted_out = User.objects.create_user(
             email='opted-out@example.com', password='p',
         )
-        opted_out.tier = self.free_tier
+        set_membership(opted_out, tier=self.free_tier)
         opted_out.email_verified = True
         opted_out.email_preferences = {'workshop_emails': False}
         opted_out.save()
@@ -715,7 +716,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         fresh = User.objects.create_user(
             email='fresh@example.com', password='p',
         )
-        fresh.tier = self.free_tier
+        set_membership(fresh, tier=self.free_tier)
         fresh.email_verified = True
         # email_preferences default is ``{}`` (JSONField default=dict).
         fresh.save()

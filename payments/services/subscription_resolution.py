@@ -8,10 +8,12 @@ subscription id.
 
 Resolution order:
 
-1. Exact, non-empty ``subscription_id``. Exactly one match wins. More than
-   one is a terminal :class:`WebhookAmbiguousUserError`.
-2. Non-empty ``stripe_customer_id``, but only for users whose stored
-   subscription is blank or equals the event's subscription. Exactly one
+1. Exact, non-empty ``subscription_id`` (on ``payments.Membership``).
+   Exactly one match wins. More than one is a terminal
+   :class:`WebhookAmbiguousUserError`.
+2. Non-empty ``stripe_customer_id`` (on ``payments.Membership``), but only
+   for users whose stored subscription is blank or equals the event's
+   subscription. Exactly one
    eligible match wins; more than one is ambiguous. When the only customer
    matches store a DIFFERENT non-empty subscription, the event is stale (an
    older subscription must not cancel a newer authoritative one).
@@ -53,7 +55,12 @@ def resolve_subscription_user(subscription_id, customer_id):
     customer_id = (customer_id or "").strip()
 
     if subscription_id:
-        sub_matches = list(User.objects.filter(subscription_id=subscription_id))
+        # Issue #1579: Stripe identifiers live on payments.Membership.
+        sub_matches = list(
+            User.objects.filter(
+                membership__subscription_id=subscription_id,
+            )
+        )
         if len(sub_matches) > 1:
             raise WebhookAmbiguousUserError(
                 f"Multiple local users share subscription_id={subscription_id}",
@@ -69,17 +76,17 @@ def resolve_subscription_user(subscription_id, customer_id):
 
     if customer_id:
         cust_matches = list(
-            User.objects.filter(stripe_customer_id=customer_id)
+            User.objects.filter(membership__stripe_customer_id=customer_id)
         )
         eligible = [
             u for u in cust_matches
-            if not (u.subscription_id or "").strip()
-            or u.subscription_id == subscription_id
+            if not (u.membership.subscription_id or "").strip()
+            or u.membership.subscription_id == subscription_id
         ]
         stale = [
             u for u in cust_matches
-            if (u.subscription_id or "").strip()
-            and u.subscription_id != subscription_id
+            if (u.membership.subscription_id or "").strip()
+            and u.membership.subscription_id != subscription_id
         ]
         if len(eligible) > 1:
             raise WebhookAmbiguousUserError(

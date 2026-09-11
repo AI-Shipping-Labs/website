@@ -16,6 +16,7 @@ from comments.models import Comment
 from content.access import LEVEL_MAIN
 from notifications.models import Notification
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -36,15 +37,15 @@ class NoteThreadFixture(TestCase):
         cls.free_tier = Tier.objects.get(slug='free')
 
         cls.author = User.objects.create_user(email='author@test.com', password='pw')
-        cls.author.tier = cls.main_tier
+        set_membership(cls.author, tier=cls.main_tier)
         cls.author.save()
 
         cls.reader = User.objects.create_user(email='reader@test.com', password='pw')
-        cls.reader.tier = cls.main_tier
+        set_membership(cls.reader, tier=cls.main_tier)
         cls.reader.save()
 
         cls.free_user = User.objects.create_user(email='free@test.com', password='pw')
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.note = Note.objects.create(

@@ -19,6 +19,7 @@ from email_app.models import EmailLog
 from events.models import Event, EventRegistration
 from payments.models import Tier
 from studio.views.merge import _CONFIRM_SALT, _sign_pair
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -263,10 +264,8 @@ class UnknownEmailTest(MergeUITestBase):
 class DualSubscriptionConflictTest(MergeUITestBase):
     def _make_dual(self):
         canonical, secondary = self._make_pair("paidA@test.com", "paidB@test.com")
-        canonical.subscription_id = "sub_A"
-        canonical.save(update_fields=["subscription_id"])
-        secondary.subscription_id = "sub_B"
-        secondary.save(update_fields=["subscription_id"])
+        set_membership(canonical, subscription_id="sub_A")
+        set_membership(secondary, subscription_id="sub_B")
         return canonical, secondary
 
     def test_conflict_shown_with_both_subscription_ids(self):
@@ -301,8 +300,8 @@ class DualSubscriptionConflictTest(MergeUITestBase):
         self.assertContains(response, 'data-testid="merge-error-confirm"')
         canonical.refresh_from_db()
         secondary.refresh_from_db()
-        self.assertEqual(canonical.subscription_id, "sub_A")
-        self.assertEqual(secondary.subscription_id, "sub_B")
+        self.assertEqual(canonical.membership.subscription_id, "sub_A")
+        self.assertEqual(secondary.membership.subscription_id, "sub_B")
         self.assertTrue(secondary.is_active)
 
     def test_confirm_with_force_merges_and_records_dropped_sub(self):
@@ -311,7 +310,7 @@ class DualSubscriptionConflictTest(MergeUITestBase):
         response = self._confirm(canonical.pk, secondary.pk, force=True)
         self.assertEqual(response.status_code, 200)
         canonical.refresh_from_db()
-        self.assertEqual(canonical.subscription_id, "sub_A")
+        self.assertEqual(canonical.membership.subscription_id, "sub_A")
         self.assertContains(response, "sub_B")
         self.assertContains(response, 'data-testid="merge-plan-conflict-row"')
 

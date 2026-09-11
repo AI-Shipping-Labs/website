@@ -21,6 +21,7 @@ from payments.exceptions import (
     WebhookUnmatchedUserError,
 )
 from payments.models import (
+    Membership,
     StripeWebhookDeliveryAttempt,
     WebhookEvent,
 )
@@ -127,12 +128,18 @@ def _tier_slug(tier):
 
 
 def _member_state(user):
+    # Issue #1579: tier/Stripe state lives on payments.Membership.
+    membership = Membership.for_user(user)
     return {
         "user_id": user.pk,
         "email": user.email,
-        "tier": _tier_slug(user.tier),
-        "pending_tier": _tier_slug(user.pending_tier) if user.pending_tier else None,
-        "subscription_id": user.subscription_id or "",
+        "tier": _tier_slug(membership.tier),
+        "pending_tier": (
+            _tier_slug(membership.pending_tier)
+            if membership.pending_tier
+            else None
+        ),
+        "subscription_id": membership.subscription_id or "",
     }
 
 

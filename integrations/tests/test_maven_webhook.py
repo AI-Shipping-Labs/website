@@ -200,7 +200,7 @@ class MavenEnrolledTest(TestCase):
         user = User.objects.create_user(email="ext@test.com", password="x")
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=30),
             is_active=True,
@@ -219,7 +219,7 @@ class MavenEnrolledTest(TestCase):
         far = timezone.now() + timedelta(days=9000)
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=far,
             is_active=True,
@@ -269,7 +269,7 @@ class MavenEnrolledTest(TestCase):
         # Active main access via an expiring override.
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=10),
             is_active=True,
@@ -293,7 +293,7 @@ class MavenEnrolledTest(TestCase):
         )
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() - timedelta(days=1),
             is_active=True,
@@ -321,7 +321,7 @@ class MavenEnrolledTest(TestCase):
         )
         TierOverride.objects.create(
             user=inactive,
-            original_tier=inactive.tier,
+            original_tier=inactive.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=30),
             is_active=False,
@@ -331,7 +331,7 @@ class MavenEnrolledTest(TestCase):
         )
         TierOverride.objects.create(
             user=basic_only,
-            original_tier=basic_only.tier,
+            original_tier=basic_only.membership.tier,
             override_tier=basic,
             expires_at=timezone.now() + timedelta(days=30),
             is_active=True,
@@ -401,7 +401,7 @@ class MavenRemovedTest(TestCase):
         )
         override = TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=100),
             is_active=True,

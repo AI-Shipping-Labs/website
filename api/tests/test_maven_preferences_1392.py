@@ -8,6 +8,7 @@ from django.test import TestCase
 from accounts.models import EmailAlias, Token
 from community.models import CommunityAuditLog
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -82,15 +83,10 @@ class UserApiMavenEmailPreferenceTest(TestCase):
         self.assertIn("new=False", details)
 
     def test_patch_rejects_non_booleans_without_consent_or_access_mutation(self):
-        member = User.objects.create_user(
-            email="api-invalid-1392@example.com",
-            tier=self.main,
-            email_verified=True,
-            slack_member=True,
-            email_preferences={"newsletter": True, "maven_emails": False},
-        )
+        member = User.objects.create_user(email="api-invalid-1392@example.com", email_verified=True, slack_member=True, email_preferences={"newsletter": True, "maven_emails": False})
+        set_membership(member, tier=self.main)
         before = {
-            "tier_id": member.tier_id,
+            "tier_id": member.membership.tier_id,
             "email_verified": member.email_verified,
             "slack_member": member.slack_member,
             "email_preferences": dict(member.email_preferences),
@@ -104,7 +100,7 @@ class UserApiMavenEmailPreferenceTest(TestCase):
                 self.assertEqual(response.json()["details"]["field"], "maven_emails")
 
         member.refresh_from_db()
-        self.assertEqual(member.tier_id, before["tier_id"])
+        self.assertEqual(member.membership.tier_id, before["tier_id"])
         self.assertEqual(member.email_verified, before["email_verified"])
         self.assertEqual(member.slack_member, before["slack_member"])
         self.assertEqual(member.email_preferences, before["email_preferences"])

@@ -13,7 +13,7 @@ from django.test import TestCase, tag
 
 from email_app.models import EmailCampaign
 from events.models import Event, EventRegistration
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 UTC = dt_timezone.utc
@@ -44,7 +44,7 @@ class CampaignEventAudienceTest(TierSetupMixin, TestCase):
 
     def _register(self, email, *, tier=None, unsubscribed=False,
                   email_verified=True, event=None):
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email=email,
             tier=tier or self.free_tier,
             email_verified=email_verified,
@@ -57,7 +57,7 @@ class CampaignEventAudienceTest(TierSetupMixin, TestCase):
         reg_a = self._register('a@test.com')
         reg_b = self._register('b@test.com')
         # A non-registrant verified user must NOT be in the audience.
-        User.objects.create_user(email='outsider@test.com', tier=self.free_tier,
+        create_user_with_membership(email='outsider@test.com', tier=self.free_tier,
                                  email_verified=True)
         # A registrant of a different event is excluded.
         self._register('other@test.com', event=self.other_event)
@@ -74,7 +74,7 @@ class CampaignEventAudienceTest(TierSetupMixin, TestCase):
     def test_null_target_event_uses_tier_audience(self):
         """With target_event NULL, behavior is the historical tier audience."""
         self._register('reg@test.com')
-        User.objects.create_user(email='nonreg@test.com', tier=self.free_tier,
+        create_user_with_membership(email='nonreg@test.com', tier=self.free_tier,
                                  email_verified=True)
         campaign = EmailCampaign.objects.create(
             subject='Tier', body='Hi', target_min_level=0, target_event=None,
@@ -89,7 +89,7 @@ class CampaignEventAudienceTest(TierSetupMixin, TestCase):
         main_b = self._register('main-b@test.com', tier=self.main_tier)
         # A Main user who did NOT register must not appear (proves the
         # tier filter ANDs with the registrant set, not unions).
-        User.objects.create_user(email='main-outsider@test.com',
+        create_user_with_membership(email='main-outsider@test.com',
                                  tier=self.main_tier, email_verified=True)
 
         campaign = EmailCampaign.objects.create(

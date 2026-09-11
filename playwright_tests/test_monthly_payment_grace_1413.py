@@ -23,6 +23,8 @@ from django.test import override_settings  # noqa: E402
 from django.utils import timezone  # noqa: E402
 from playwright.sync_api import expect  # noqa: E402
 
+from tests.fixtures import create_user_with_membership
+
 pytestmark = pytest.mark.local_only
 REPORT = "/studio/payments/subscription-reconciliation/?filter=payment_grace"
 
@@ -40,14 +42,13 @@ def _reset():
 
 
 def _member(email="grace-1413@test.com"):
-    from accounts.models import User
     from payments.models import Tier
 
     main = Tier.objects.get(slug="main")
     if main.stripe_price_id_monthly != "price_main_monthly":
         main.stripe_price_id_monthly = "price_main_monthly"
         main.save(update_fields=["stripe_price_id_monthly"])
-    return User.objects.create_user(
+    return create_user_with_membership(
         email=email, password="x", tier=main,
         stripe_customer_id=f"cus_{email.split('@')[0]}",
         subscription_id=f"sub_{email.split('@')[0]}",
@@ -64,8 +65,8 @@ def _grace(user, *, status="active", source="webhook", started=None,
     main = Tier.objects.get(slug="main")
     return Grace.objects.create(
         user=user, base_tier_at_start=main,
-        stripe_customer_id=user.stripe_customer_id,
-        stripe_subscription_id=user.subscription_id,
+        stripe_customer_id=user.membership.stripe_customer_id,
+        stripe_subscription_id=user.membership.subscription_id,
         stripe_invoice_id=invoice_id, livemode=False,
         source=source, status=status, interval="month", interval_count=1,
         grace_started_at=started, grace_expires_at=expires,
@@ -93,8 +94,8 @@ def _invoice(user, *, invoice_id="in_grace_1413", created=1_786_528_800,
              paid=False, collection_method="charge_automatically"):
     return {
         "id": invoice_id,
-        "customer": user.stripe_customer_id,
-        "subscription": user.subscription_id,
+        "customer": user.membership.stripe_customer_id,
+        "subscription": user.membership.subscription_id,
         "paid": paid,
         "status": "paid" if paid else "open",
         "collection_method": collection_method,
@@ -105,8 +106,8 @@ def _invoice(user, *, invoice_id="in_grace_1413", created=1_786_528_800,
 def _subscription(user, *, status="past_due", interval="month",
                   interval_count=1, price_id="price_main_monthly", items=1):
     return {
-        "id": user.subscription_id,
-        "customer": user.stripe_customer_id,
+        "id": user.membership.subscription_id,
+        "customer": user.membership.stripe_customer_id,
         "status": status,
         "items": {"data": [{"price": {
             "id": price_id,
@@ -199,7 +200,7 @@ class TestMonthlyPaymentGrace1413:
         grace = _grace(user)
         with patch.object(service, "_audit"):
             service.recover_grace(
-                subscription_id=user.subscription_id,
+                subscription_id=user.membership.subscription_id,
                 invoice_id=grace.stripe_invoice_id,
                 event_id="evt_browser_paid",
                 event_created=1_786_536_000,
@@ -275,7 +276,7 @@ class TestMonthlyPaymentGrace1413:
             service.sweep_payment_graces(now=now)
             service.sweep_payment_graces(now=now + timedelta(minutes=15))
         user.refresh_from_db()
-        assert user.tier.slug == "free"
+        assert user.membership.tier.slug == "free"
         assert EmailLog.objects.filter(
             email_type="payment_grace_expired_member",
         ).count() == 1
@@ -324,7 +325,7 @@ class TestMonthlyPaymentGrace1413:
         ), patch.object(service, "_audit"):
             service.sweep_payment_graces(now=now)
         user.refresh_from_db()
-        assert user.tier.slug == "free"
+        assert user.membership.tier.slug == "free"
         assert TierOverride.objects.filter(user=user, is_active=True).count() == 2
         connection.close()
         page = _staff_page(
@@ -356,8 +357,8 @@ class TestMonthlyPaymentGrace1413:
                 },
             )
         user.refresh_from_db()
-        assert user.tier.slug == "main"
-        assert user.pending_tier.slug == "free"
+        assert user.membership.tier.slug == "main"
+        assert user.membership.pending_tier.slug == "free"
         assert not user.monthly_payment_graces.exists()
         connection.close()
         page = _staff_page(django_server, browser)
@@ -403,9 +404,9 @@ class TestMonthlyPaymentGrace1413:
         )
         Finding.objects.create(
             run=run, user=user, email=user.email, current_tier="main",
-            current_subscription_id=user.subscription_id,
-            stripe_customer_id=user.stripe_customer_id,
-            stripe_subscription_id=user.subscription_id,
+            current_subscription_id=user.membership.subscription_id,
+            stripe_customer_id=user.membership.stripe_customer_id,
+            stripe_subscription_id=user.membership.subscription_id,
             stripe_status="past_due", latest_invoice_id="in_grace_1413",
             classification="monthly_payment_grace_active",
         )
@@ -441,7 +442,7 @@ class TestMonthlyPaymentGrace1413:
         ), patch.object(service, "_audit"):
             service.sweep_payment_graces(now=now)
         user.refresh_from_db()
-        assert user.tier.slug == "main"
+        assert user.membership.tier.slug == "main"
         connection.close()
         page = _staff_page(django_server, browser)
         row = page.get_by_test_id("payment-grace-row")

@@ -87,7 +87,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(row.binding, self.binding)
         self.assertEqual(row.user, self.user)
         self.assertEqual(row.tier, self.basic_tier)
-        self.assertEqual(self.user.tier, self.free_tier)
+        self.assertEqual(self.user.membership.tier, self.free_tier)
         self.assertFalse(PaymentAccountMismatch.objects.exists())
         self.assertEqual(row.details["purchase_kind"], "tier")
         self.assertNotIn(self.user.email, str(row.details))
@@ -108,7 +108,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.user.refresh_from_db()
         row = CheckoutFulfillment.objects.get(stripe_session_id="cs_delayed")
         self.assertEqual(row.status, CheckoutFulfillment.STATUS_FULFILLED)
-        self.assertEqual(self.user.tier, self.basic_tier)
+        self.assertEqual(self.user.membership.tier, self.basic_tier)
 
     def test_out_of_order_success_requires_session_created_inside_binding_window(self):
         original_created = timezone.now() - timedelta(days=2)
@@ -160,7 +160,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         row = CheckoutFulfillment.objects.get(stripe_session_id="cs_delayed")
         self.user.refresh_from_db()
         self.assertEqual(row.status, CheckoutFulfillment.STATUS_PAYMENT_FAILED)
-        self.assertEqual(self.user.tier, self.free_tier)
+        self.assertEqual(self.user.membership.tier, self.free_tier)
         logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
         self.assertEqual(logs.count(), 1)
         self.assertEqual(

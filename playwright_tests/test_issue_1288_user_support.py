@@ -20,6 +20,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from tests.fixtures import create_user_with_membership, set_membership
+
 pytestmark = [pytest.mark.local_only, pytest.mark.core]
 SCREENSHOTS = Path(".tmp/issue-1288-screenshots")
 
@@ -34,7 +36,7 @@ def _seed(staff_email="support-1288@test.com"):
     CRMRecord.objects.all().delete()
     User.objects.exclude(email=staff_email).delete()
     free = Tier.objects.get(slug="free")
-    member = User.objects.create_user(
+    member = create_user_with_membership(
         email="member-1288@test.com", password="pw", tier=free,
         email_verified=True, tags=["support-priority"],
     )
@@ -84,8 +86,7 @@ class TestIssue1288UserSupport:
         from accounts.models import User
         from payments.models import Tier
         member = User.objects.get(pk=member_pk)
-        member.tier = Tier.objects.get(slug="main")
-        member.save(update_fields=["tier"])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         connection.close()
         service = Mock()
         service.channel_ids = ["C_COMMUNITY"]
@@ -149,10 +150,9 @@ class TestIssue1288UserSupport:
 
         member_pk, _ = _seed()
         user = User.objects.get(pk=member_pk)
-        user.tier = Tier.objects.get(slug="main")
-        user.subscription_id = "sub_1288"
-        user.billing_period_end = timezone.now() + datetime.timedelta(days=30)
-        user.save(update_fields=["tier", "subscription_id", "billing_period_end"])
+        set_membership(user, tier=Tier.objects.get(slug='main'))
+        set_membership(user, subscription_id='sub_1288')
+        set_membership(user, billing_period_end=timezone.now() + datetime.timedelta(days=30))
         connection.close()
         context, page = _page(browser)
         page.goto(f"{django_server}/studio/users/{member_pk}/")
@@ -270,10 +270,10 @@ class TestIssue1288UserSupport:
         staff = User.objects.get(email="support-1288@test.com")
         main = Tier.objects.get(slug="main")
         premium = Tier.objects.get(slug="premium")
-        member.tier = main
-        member.subscription_id = "sub_1288_visual_long_identifier"
-        member.stripe_customer_id = "cus_1288_visual_long_identifier"
-        member.billing_period_end = timezone.now() + datetime.timedelta(days=30)
+        set_membership(member, tier=main)
+        set_membership(member, subscription_id='sub_1288_visual_long_identifier')
+        set_membership(member, stripe_customer_id='cus_1288_visual_long_identifier')
+        set_membership(member, billing_period_end=timezone.now() + datetime.timedelta(days=30))
         member.slack_member = True
         member.slack_user_id = "U01VISUAL1288"
         member.slack_checked_at = timezone.now()

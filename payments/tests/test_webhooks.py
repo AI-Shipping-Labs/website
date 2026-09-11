@@ -41,7 +41,7 @@ from payments.services import (
     is_event_already_processed,
     record_processed_event,
 )
-from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window, set_membership
 
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
@@ -234,9 +234,9 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "processed")
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
-        self.assertEqual(user.stripe_customer_id, "cus_payment_link")
-        self.assertEqual(user.subscription_id, "sub_payment_link")
+        self.assertEqual(user.membership.tier, basic_tier)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_payment_link")
+        self.assertEqual(user.membership.subscription_id, "sub_payment_link")
         self.assertEqual(
             WebhookEvent.objects.filter(
                 stripe_event_id="evt_payment_link_checkout_1",
@@ -290,8 +290,7 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         """
         free_tier = Tier.objects.get(slug="free")
         user = User.objects.create_user(email="tampered@test.com")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         # Payload A — what the attacker captured. Build a valid signature
         # for these exact bytes.
@@ -356,7 +355,7 @@ class WebhookSignatureValidationTest(QuietSubscriptionLookupMixin, TestCase):
         # The user's tier must not have moved off ``free``.
         user.refresh_from_db()
         self.assertEqual(
-            user.tier, free_tier,
+            user.membership.tier, free_tier,
             "Tampered payload must not change the user's tier.",
         )
         # No email was sent.
@@ -409,7 +408,7 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.membership.tier, basic_tier)
 
     def test_stores_stripe_customer_id(self):
         """stripe_customer_id is saved on the user after checkout."""
@@ -427,7 +426,7 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.stripe_customer_id, "cus_abc123")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_abc123")
 
     def test_stores_subscription_id(self):
         """subscription_id is saved on the user after checkout."""
@@ -445,15 +444,14 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.subscription_id, "sub_xyz789")
+        self.assertEqual(user.membership.subscription_id, "sub_xyz789")
 
     def test_clears_pending_tier_on_checkout(self):
         """pending_tier is cleared after a successful checkout."""
         basic_tier = Tier.objects.get(slug="basic")
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="pending@test.com")
-        user.pending_tier = basic_tier
-        user.save(update_fields=["pending_tier"])
+        set_membership(user, pending_tier=basic_tier)
 
         session_data = {
             "id": "cs_test_pending",
@@ -467,8 +465,8 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, main_tier)
-        self.assertIsNone(user.pending_tier)
+        self.assertEqual(user.membership.tier, main_tier)
+        self.assertIsNone(user.membership.pending_tier)
 
     def test_lookup_user_by_email_when_no_client_reference_id(self):
         """User is found by email when client_reference_id is not set."""
@@ -486,7 +484,7 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
 
     def test_legacy_reference_with_different_email_is_quarantined(self):
         user = User.objects.create_user(email="member@test.com")
@@ -504,8 +502,8 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
-        self.assertEqual(user.stripe_customer_id, "")
+        self.assertEqual(user.membership.tier.slug, "free")
+        self.assertEqual(user.membership.stripe_customer_id, "")
         self.assertFalse(
             User.objects.filter(email__iexact="billing+stripe@test.com")
             .exclude(pk=user.pk)
@@ -535,9 +533,9 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         paid_user.refresh_from_db()
         candidate.refresh_from_db()
-        self.assertEqual(paid_user.tier.slug, "free")
-        self.assertEqual(paid_user.subscription_id, "")
-        self.assertEqual(candidate.tier.slug, "free")
+        self.assertEqual(paid_user.membership.tier.slug, "free")
+        self.assertEqual(paid_user.membership.subscription_id, "")
+        self.assertEqual(candidate.membership.tier.slug, "free")
         self.assertFalse(EmailAlias.objects.filter(email=candidate.email).exists())
         mismatch = PaymentAccountMismatch.objects.get(
             stripe_session_id="cs_primary_collision_1105"
@@ -583,8 +581,8 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         paid_user.refresh_from_db()
         candidate.refresh_from_db()
-        self.assertEqual(paid_user.tier.slug, "free")
-        self.assertEqual(candidate.tier.slug, "free")
+        self.assertEqual(paid_user.membership.tier.slug, "free")
+        self.assertEqual(candidate.membership.tier.slug, "free")
         alias = EmailAlias.objects.get(email="relay-alias@test.com")
         self.assertEqual(alias.user, candidate)
         mismatch = PaymentAccountMismatch.objects.get(
@@ -609,8 +607,8 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
-        self.assertEqual(user.stripe_customer_id, "")
+        self.assertEqual(user.membership.tier.slug, "free")
+        self.assertEqual(user.membership.stripe_customer_id, "")
         self.assertEqual(
             PaymentAccountMismatch.objects.get(
                 stripe_session_id="cs_invalid_ref_1105"
@@ -632,9 +630,9 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         user = User.objects.get(email="newuser@test.com")
-        self.assertEqual(user.tier.slug, "basic")
-        self.assertEqual(user.stripe_customer_id, "cus_new")
-        self.assertEqual(user.subscription_id, "sub_new")
+        self.assertEqual(user.membership.tier.slug, "basic")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_new")
+        self.assertEqual(user.membership.subscription_id, "sub_new")
 
     def test_no_error_when_tier_not_found(self):
         """Handler does not crash when tier_slug is invalid."""
@@ -654,7 +652,7 @@ class CheckoutCompletedHandlerTest(QuietSubscriptionLookupMixin, TestCase):
 
         # Tier should remain unchanged (free)
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
 
 
 @tag('core')
@@ -806,7 +804,7 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
         # account_activated is already provided by the existing
         # mark_activated call (issue #768) — assert, don't duplicate.
         self.assertTrue(user.account_activated)
-        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.membership.tier, basic_tier)
 
     def test_already_verified_payer_is_a_noop(self):
         """An already-verified payer stays verified with no redundant save."""
@@ -1112,11 +1110,11 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
             )
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
-        self.assertEqual(user.stripe_customer_id, "cus_resolver")
-        self.assertEqual(user.subscription_id, "sub_meta")
+        self.assertEqual(user.membership.tier, self.main)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_resolver")
+        self.assertEqual(user.membership.subscription_id, "sub_meta")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             _dt.fromtimestamp(period_end, tz=_tz.utc),
         )
 
@@ -1140,11 +1138,11 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
             )
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
-        self.assertEqual(user.subscription_id, "sub_dbmap")
-        self.assertEqual(user.stripe_customer_id, "cus_resolver")
+        self.assertEqual(user.membership.tier, self.main)
+        self.assertEqual(user.membership.subscription_id, "sub_dbmap")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_resolver")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             _dt.fromtimestamp(period_end, tz=_tz.utc),
         )
 
@@ -1175,11 +1173,11 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
             )
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
-        self.assertEqual(user.subscription_id, "sub_amount")
-        self.assertEqual(user.stripe_customer_id, "cus_resolver")
+        self.assertEqual(user.membership.tier, self.main)
+        self.assertEqual(user.membership.subscription_id, "sub_amount")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_resolver")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             _dt.fromtimestamp(period_end, tz=_tz.utc),
         )
 
@@ -1208,7 +1206,7 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
                 ))
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         joined = "\n".join(logs.output)
         self.assertIn("Could not determine tier", joined)
         self.assertIn("cs_payment_link_resolver", joined)
@@ -1242,7 +1240,7 @@ class CheckoutCompletedResolverFallbackTest(TestCase):
             )
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         # Resolver helper was never invoked because session metadata
         # already supplied a valid tier (resolver is a fallback, not an
         # override).
@@ -1261,10 +1259,12 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         main_tier.save()
 
         user = User.objects.create_user(email="upgrade@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_upgrade"
-        user.stripe_customer_id = "cus_upgrade"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=basic_tier,
+            subscription_id="sub_upgrade",
+            stripe_customer_id="cus_upgrade",
+        )
 
         subscription_data = {
             "id": "sub_upgrade",
@@ -1282,7 +1282,7 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, main_tier)
+        self.assertEqual(user.membership.tier, main_tier)
 
     def test_updates_billing_period_end(self):
         """billing_period_end is updated from subscription data."""
@@ -1291,9 +1291,7 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         basic_tier.save()
 
         user = User.objects.create_user(email="billing@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_billing"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=basic_tier, subscription_id="sub_billing")
 
         subscription_data = {
             "id": "sub_billing",
@@ -1311,15 +1309,13 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertIsNotNone(user.billing_period_end)
+        self.assertIsNotNone(user.membership.billing_period_end)
 
     def test_cancel_at_period_end_does_not_change_tier(self):
         """When cancel_at_period_end is True, tier is NOT changed."""
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="cancelperiod@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_cancelperiod"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=basic_tier, subscription_id="sub_cancelperiod")
 
         subscription_data = {
             "id": "sub_cancelperiod",
@@ -1337,16 +1333,14 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.membership.tier, basic_tier)
 
     def test_cancel_at_period_end_saves_billing_period_end(self):
         """billing_period_end is saved when cancel_at_period_end is True."""
 
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="cancel_billing@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_cancel_billing"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=basic_tier, subscription_id="sub_cancel_billing")
 
         subscription_data = {
             "id": "sub_cancel_billing",
@@ -1364,10 +1358,10 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertIsNotNone(user.billing_period_end)
-        self.assertEqual(user.billing_period_end.year, 2026)
-        self.assertEqual(user.billing_period_end.month, 3)
-        self.assertEqual(user.billing_period_end.day, 25)
+        self.assertIsNotNone(user.membership.billing_period_end)
+        self.assertEqual(user.membership.billing_period_end.year, 2026)
+        self.assertEqual(user.membership.billing_period_end.month, 3)
+        self.assertEqual(user.membership.billing_period_end.day, 25)
 
     def test_cancel_at_period_end_sets_pending_tier_free_keeps_paid(self):
         """Issue #968: cancel_at_period_end=True schedules the cancellation
@@ -1376,9 +1370,7 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         basic_tier = Tier.objects.get(slug="basic")
         free_tier = Tier.objects.get(slug="free")
         user = User.objects.create_user(email="cancel_pending@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_cancel_pending"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=basic_tier, subscription_id="sub_cancel_pending")
 
         subscription_data = {
             "id": "sub_cancel_pending",
@@ -1396,11 +1388,11 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.pending_tier, free_tier)
+        self.assertEqual(user.membership.pending_tier, free_tier)
         # tier and subscription_id are untouched -- still fully paid.
-        self.assertEqual(user.tier, basic_tier)
-        self.assertEqual(user.subscription_id, "sub_cancel_pending")
-        self.assertIsNotNone(user.billing_period_end)
+        self.assertEqual(user.membership.tier, basic_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_cancel_pending")
+        self.assertIsNotNone(user.membership.billing_period_end)
 
     def test_reactivation_clears_pending_tier(self):
         """Issue #968: a follow-up cancel_at_period_end=False update (user
@@ -1411,11 +1403,9 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         basic_tier.save()
 
         user = User.objects.create_user(email="reactivate@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_reactivate"
+        set_membership(user, tier=basic_tier, subscription_id="sub_reactivate")
         # Simulate a prior scheduled cancellation.
-        user.pending_tier = free_tier
-        user.save(update_fields=["tier", "subscription_id", "pending_tier"])
+        set_membership(user, pending_tier=free_tier)
 
         subscription_data = {
             "id": "sub_reactivate",
@@ -1433,10 +1423,10 @@ class SubscriptionUpdatedHandlerTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertIsNone(user.pending_tier)
+        self.assertIsNone(user.membership.pending_tier)
         # Re-activation keeps the user on their paid tier.
-        self.assertEqual(user.tier, basic_tier)
-        self.assertEqual(user.subscription_id, "sub_reactivate")
+        self.assertEqual(user.membership.tier, basic_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_reactivate")
 
     def test_unmatched_user_raises_retryable(self):
         """Zero-match subscription update is a retryable unmatched_user error.
@@ -1468,10 +1458,12 @@ class SubscriptionDeletedHandlerTest(TestCase):
         """User's tier is set to 'free' when subscription is deleted."""
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="deleted@test.com")
-        user.tier = main_tier
-        user.subscription_id = "sub_deleted"
-        user.stripe_customer_id = "cus_deleted"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=main_tier,
+            subscription_id="sub_deleted",
+            stripe_customer_id="cus_deleted",
+        )
 
         subscription_data = {
             "id": "sub_deleted",
@@ -1481,15 +1473,13 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
 
     def test_clears_subscription_id(self):
         """subscription_id is cleared when subscription is deleted."""
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="clearsub@test.com")
-        user.tier = main_tier
-        user.subscription_id = "sub_clear"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=main_tier, subscription_id="sub_clear")
 
         subscription_data = {
             "id": "sub_clear",
@@ -1499,7 +1489,7 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.subscription_id, "")
+        self.assertEqual(user.membership.subscription_id, "")
 
     def test_clears_billing_period_end(self):
         """billing_period_end is set to None on subscription deletion."""
@@ -1507,10 +1497,12 @@ class SubscriptionDeletedHandlerTest(TestCase):
 
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="clearbilling@test.com")
-        user.tier = main_tier
-        user.subscription_id = "sub_clearbill"
-        user.billing_period_end = timezone.now()
-        user.save(update_fields=["tier", "subscription_id", "billing_period_end"])
+        set_membership(
+            user,
+            tier=main_tier,
+            subscription_id="sub_clearbill",
+            billing_period_end=timezone.now(),
+        )
 
         subscription_data = {
             "id": "sub_clearbill",
@@ -1520,17 +1512,19 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertIsNone(user.billing_period_end)
+        self.assertIsNone(user.membership.billing_period_end)
 
     def test_clears_pending_tier(self):
         """pending_tier is cleared when subscription is deleted."""
         main_tier = Tier.objects.get(slug="main")
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="clearpending@test.com")
-        user.tier = main_tier
-        user.pending_tier = basic_tier
-        user.subscription_id = "sub_clearpending"
-        user.save(update_fields=["tier", "pending_tier", "subscription_id"])
+        set_membership(
+            user,
+            tier=main_tier,
+            pending_tier=basic_tier,
+            subscription_id="sub_clearpending",
+        )
 
         subscription_data = {
             "id": "sub_clearpending",
@@ -1540,16 +1534,18 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertIsNone(user.pending_tier)
-        self.assertEqual(user.tier.slug, "free")
+        self.assertIsNone(user.membership.pending_tier)
+        self.assertEqual(user.membership.tier.slug, "free")
 
     def test_customer_fallback_does_not_delete_newer_subscription(self):
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="bycust@test.com")
-        user.tier = main_tier
-        user.subscription_id = "sub_old"
-        user.stripe_customer_id = "cus_bycust"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=main_tier,
+            subscription_id="sub_old",
+            stripe_customer_id="cus_bycust",
+        )
 
         subscription_data = {
             "id": "sub_different",
@@ -1559,8 +1555,8 @@ class SubscriptionDeletedHandlerTest(TestCase):
         handle_subscription_deleted(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
-        self.assertEqual(user.subscription_id, "sub_old")
+        self.assertEqual(user.membership.tier.slug, "main")
+        self.assertEqual(user.membership.subscription_id, "sub_old")
         self.assertTrue(
             CommunityAuditLog.objects.filter(
                 user=user, action="stale_subscription_event_ignored"
@@ -1608,13 +1604,14 @@ class StripeStatusTagReconciliationTest(QuietSubscriptionLookupMixin, TestCase):
 
     def _make_user(self, *, tier, tags, subscription_id="", customer_id=""):
         user = User.objects.create_user(email=f"tags-{User.objects.count()}@test.com")
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.tags = list(tags)
-        user.subscription_id = subscription_id
-        user.stripe_customer_id = customer_id
-        user.save(update_fields=[
-            "tier", "tags", "subscription_id", "stripe_customer_id",
-        ])
+        set_membership(
+            user,
+            subscription_id=subscription_id,
+            stripe_customer_id=customer_id,
+        )
+        user.save(update_fields=["tags"])
         return user
 
     def test_resubscribe_sheds_churned_tag(self):
@@ -1639,7 +1636,7 @@ class StripeStatusTagReconciliationTest(QuietSubscriptionLookupMixin, TestCase):
         self.assertNotIn("stripe:churned", user.tags)
         self.assertEqual(self._plan_tags(user), ["stripe:plan-main"])
         self.assertIn("stripe:imported", user.tags)
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
 
     def test_deletion_churns_active_member(self):
         """customer.subscription.deleted removes active/plan, adds churned."""
@@ -1656,7 +1653,7 @@ class StripeStatusTagReconciliationTest(QuietSubscriptionLookupMixin, TestCase):
         self.assertIn("stripe:churned", user.tags)
         self.assertNotIn("stripe:active", user.tags)
         self.assertEqual(self._plan_tags(user), [])
-        self.assertEqual(user.tier, self.free)
+        self.assertEqual(user.membership.tier, self.free)
 
     def test_upgrade_swaps_plan_tag(self):
         """An active plan change Basic -> Main swaps the plan tag."""
@@ -1721,7 +1718,7 @@ class StripeStatusTagReconciliationTest(QuietSubscriptionLookupMixin, TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.tags, before)
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
 
     def test_reconciliation_never_touches_unrelated_tags(self):
         """A non-stripe tag like slack-member is preserved on churn."""
@@ -1793,9 +1790,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         """Email/customer fields are not payment or entitlement authority."""
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="payfail@test.com")
-        user.tier = basic_tier
-        user.stripe_customer_id = "cus_payfail"
-        user.save(update_fields=["tier", "stripe_customer_id"])
+        set_membership(user, tier=basic_tier, stripe_customer_id="cus_payfail")
 
         invoice_data = {
             "customer": "cus_payfail",
@@ -1811,9 +1806,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         """User's tier is NOT changed when payment fails."""
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="keepaccess@test.com")
-        user.tier = main_tier
-        user.stripe_customer_id = "cus_keepaccess"
-        user.save(update_fields=["tier", "stripe_customer_id"])
+        set_membership(user, tier=main_tier, stripe_customer_id="cus_keepaccess")
 
         invoice_data = {
             "customer": "cus_keepaccess",
@@ -1823,7 +1816,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         handle_invoice_payment_failed(invoice_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, main_tier)
+        self.assertEqual(user.membership.tier, main_tier)
 
     @patch("payments.services.send_mail")
     def test_does_not_lookup_entitlement_by_invoice_email(self, mock_send_mail):
@@ -1859,9 +1852,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         mock_send_mail.side_effect = SMTPException("smtp down")
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="smtpdown@test.com")
-        user.tier = main_tier
-        user.stripe_customer_id = "cus_smtpdown"
-        user.save(update_fields=["tier", "stripe_customer_id"])
+        set_membership(user, tier=main_tier, stripe_customer_id="cus_smtpdown")
         invoice_data = {
             "customer": "cus_smtpdown",
             "customer_email": "smtpdown@test.com",
@@ -1870,7 +1861,7 @@ class InvoicePaymentFailedHandlerTest(TestCase):
         handle_invoice_payment_failed(invoice_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, main_tier)
+        self.assertEqual(user.membership.tier, main_tier)
         mock_send_mail.assert_not_called()
 
     @patch("payments.services.send_mail")
@@ -1879,12 +1870,10 @@ class InvoicePaymentFailedHandlerTest(TestCase):
     ):
         """Transport is never entered without authoritative billing data."""
         mock_send_mail.side_effect = RuntimeError("template bug")
-        user = User.objects.create_user(
-            email="emailbug@test.com",
-            stripe_customer_id="cus_emailbug",
-        )
+        user = User.objects.create_user(email="emailbug@test.com")
+        set_membership(user, stripe_customer_id="cus_emailbug")
         invoice_data = {
-            "customer": user.stripe_customer_id,
+            "customer": user.membership.stripe_customer_id,
             "customer_email": user.email,
         }
 
@@ -1941,8 +1930,8 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
         # Process first time
         handle_checkout_completed(session_data)
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
-        self.assertEqual(user.stripe_customer_id, "cus_idemp")
+        self.assertEqual(user.membership.tier, basic_tier)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_idemp")
 
         # Snapshot counters AFTER the first call so we can assert the
         # second call is a true no-op (zero delta in WebhookEvent rows
@@ -1953,8 +1942,8 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
         # Process second time (should produce the same result)
         handle_checkout_completed(session_data)
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
-        self.assertEqual(user.stripe_customer_id, "cus_idemp")
+        self.assertEqual(user.membership.tier, basic_tier)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_idemp")
 
         # The second call must not record any extra WebhookEvent row or
         # send any extra email. A regression that double-records would
@@ -2077,9 +2066,7 @@ class WebhookIdempotencyTest(QuietSubscriptionLookupMixin, TestCase):
         # InvoicePaymentFailedHandlerTest tests.
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="payfail-dupe@test.com")
-        user.tier = basic_tier
-        user.stripe_customer_id = "cus_payfail_dupe"
-        user.save(update_fields=["tier", "stripe_customer_id"])
+        set_membership(user, tier=basic_tier, stripe_customer_id="cus_payfail_dupe")
 
         event_data = _make_event_payload(
             "evt_payfail_dupe_1",
@@ -2177,8 +2164,7 @@ class WebhookHandlerFailureTest(TestCase):
         free_tier = Tier.objects.get(slug="free")
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="retry@test.com")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         event_id = "evt_retry_1"
 
@@ -2215,7 +2201,7 @@ class WebhookHandlerFailureTest(TestCase):
             )
             user.refresh_from_db()
             self.assertEqual(
-                user.tier, free_tier,
+                user.membership.tier, free_tier,
                 "Patched handler raised before doing work; tier must not have changed.",
             )
 
@@ -2239,7 +2225,7 @@ class WebhookHandlerFailureTest(TestCase):
         )
         user.refresh_from_db()
         self.assertEqual(
-            user.tier, basic_tier,
+            user.membership.tier, basic_tier,
             "Retry must update the user's tier to the purchased tier.",
         )
         self.assertEqual(
@@ -2356,7 +2342,7 @@ class WebhookHandlerFailureTest(TestCase):
         self.assertEqual(rows.count(), 1)
         self.assertEqual(rows.first().status, WebhookEvent.STATUS_PROCESSED)
         user.refresh_from_db()
-        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.membership.tier, basic_tier)
 
     # ------------------------------------------------------------------
     # Scenario 4 — error logs include the event id and event type

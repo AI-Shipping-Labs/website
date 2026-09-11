@@ -3,7 +3,7 @@ import re
 from django.test import TestCase, tag
 
 from accounts.models import User
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll, PollOption, PollVote
 
 REQUIRED_CLASSES = {
@@ -55,7 +55,7 @@ class PollActionAccessibilityTest(TierSetupMixin, TestCase):
         cls.main_user = User.objects.create_user(
             email='poll-a11y-main@test.com', password='testpass'
         )
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
     def _assert_contract(self, opening_tag):

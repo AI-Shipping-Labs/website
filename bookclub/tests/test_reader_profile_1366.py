@@ -28,6 +28,7 @@ from bookclub.models import (
 from bookclub.profiles import notes_are_public, public_note_author_ids
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -51,7 +52,7 @@ class ReaderProfileFixture(TestCase):
     @classmethod
     def _member(cls, email, visibility=None, tier=None):
         user = User.objects.create_user(email=email, password='pw')
-        user.tier = tier or cls.main_tier
+        set_membership(user, tier=tier or cls.main_tier)
         user.save()
         if visibility is not None:
             ReaderProfile.objects.create(user=user, visibility=visibility)

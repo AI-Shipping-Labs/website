@@ -587,7 +587,7 @@ class TestScenario1160VerifyEmailReturnToContent:
         assert sent_contexts
 
         user = User.objects.get(email="return-reader@test.com")
-        assert user.tier.slug == "free"
+        assert user.membership.tier.slug == "free"
         assert user.email_verified is False
         connection.close()
 

@@ -31,7 +31,7 @@ from payments.services import (
     handle_subscription_deleted,
     handle_subscription_updated,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 
 @override_settings(STRIPE_PAYMENT_LINKS={
@@ -239,7 +239,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
             self.assertEqual(row.status, expected_status)
             self.assertEqual(row.reason, "" if session_id == "cs_unpaid" else reason)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
 
     @override_settings(STRIPE_SECRET_KEY="sk_live_example")
     def test_live_key_accepts_only_live_session(self):
@@ -260,8 +260,8 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
         handle_checkout_completed(payload)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
-        self.assertEqual(user.subscription_id, "sub_secure")
+        self.assertEqual(user.membership.tier, self.basic_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_secure")
         self.assertFalse(EmailAlias.objects.filter(email="billing-new@test.com").exists())
         fulfillment = CheckoutFulfillment.objects.get(stripe_session_id="cs_secure")
         self.assertEqual(fulfillment.status, CheckoutFulfillment.STATUS_FULFILLED)
@@ -282,7 +282,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
                 self.assertEqual(row.status, CheckoutFulfillment.STATUS_QUARANTINED)
                 self.assertEqual(row.reason, reason)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
 
     def test_revoked_and_wrong_purpose_bindings_are_quarantined(self):
         user = User.objects.create_user(email="bound@test.com")
@@ -328,7 +328,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
         with patch("payments.services.webhook_handlers._bound_checkout_price_id", return_value="price_main_m"):
             handle_checkout_completed(self.session(reference, session_id="cs_wrong_price"))
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
         self.assertEqual(
             CheckoutFulfillment.objects.get(stripe_session_id="cs_wrong_price").reason,
             PaymentAccountMismatch.REASON_TIER_MISMATCH,
@@ -400,9 +400,9 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
                 handle_checkout_completed(payload)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
-        self.assertEqual(user.subscription_id, "")
-        self.assertEqual(user.stripe_customer_id, "")
+        self.assertEqual(user.membership.tier, self.free_tier)
+        self.assertEqual(user.membership.subscription_id, "")
+        self.assertEqual(user.membership.stripe_customer_id, "")
         self.assertFalse(
             PaymentAccountMismatch.objects.filter(
                 stripe_session_id="cs_first_lookup_retry",
@@ -429,7 +429,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(email="legacy@test.com")
         handle_checkout_completed(self.session(str(user.pk), session_id="cs_legacy", email=user.email))
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(user.membership.tier, self.basic_tier)
 
         other = User.objects.create_user(email="other@test.com")
         handle_checkout_completed(self.session(str(user.pk), session_id="cs_legacy_bad", email=other.email, subscription="sub_other"))
@@ -444,7 +444,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
                 self.session(str(user.pk), session_id="cs_legacy_off", email=user.email)
             )
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
         self.assertEqual(
             CheckoutFulfillment.objects.get(stripe_session_id="cs_legacy_off").status,
             CheckoutFulfillment.STATUS_QUARANTINED,
@@ -479,7 +479,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
         fulfillment = CheckoutFulfillment.objects.get(
             stripe_session_id="cs_legacy_cutoff"
         )
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
         self.assertEqual(fulfillment.status, CheckoutFulfillment.STATUS_QUARANTINED)
         self.assertEqual(
             fulfillment.reason,
@@ -520,23 +520,22 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
             with self.assertRaises(RuntimeError):
                 handle_checkout_completed(payload)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
         self.assertEqual(
             CheckoutFulfillment.objects.get(stripe_session_id="cs_retry").status,
             CheckoutFulfillment.STATUS_PROCESSING,
         )
         handle_checkout_completed(payload)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(user.membership.tier, self.basic_tier)
 
     def test_existing_distinct_subscription_is_quarantined(self):
         user = User.objects.create_user(email="bound@test.com")
-        user.subscription_id = "sub_authoritative"
-        user.save(update_fields=["subscription_id"])
+        set_membership(user, subscription_id="sub_authoritative")
         _binding, reference = self.issue(user)
         handle_checkout_completed(self.session(reference, session_id="cs_conflict"))
         user.refresh_from_db()
-        self.assertEqual(user.subscription_id, "sub_authoritative")
+        self.assertEqual(user.membership.subscription_id, "sub_authoritative")
         self.assertEqual(
             CheckoutFulfillment.objects.get(stripe_session_id="cs_conflict").reason,
             PaymentAccountMismatch.REASON_SUBSCRIPTION_CONFLICT,
@@ -544,8 +543,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
 
     def test_existing_distinct_customer_is_quarantined(self):
         user = User.objects.create_user(email="customer-conflict@test.com")
-        user.stripe_customer_id = "cus_authoritative"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_authoritative")
         _binding, reference = self.issue(user)
         handle_checkout_completed(self.session(
             reference,
@@ -553,7 +551,7 @@ class CheckoutSecurityHandlerTest(TierSetupMixin, TestCase):
             email=user.email,
         ))
         user.refresh_from_db()
-        self.assertEqual(user.stripe_customer_id, "cus_authoritative")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_authoritative")
         self.assertEqual(
             CheckoutFulfillment.objects.get(
                 stripe_session_id="cs_customer_conflict"
@@ -667,8 +665,8 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
         self._deliver_concurrently([payload, dict(payload)])
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
-        self.assertEqual(user.subscription_id, "sub_same")
+        self.assertEqual(user.membership.tier, self.basic_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_same")
         self.assertEqual(
             CheckoutFulfillment.objects.filter(
                 stripe_session_id="cs_concurrent_same",
@@ -741,7 +739,7 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
 
         mock_notify.assert_called_once()
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(user.membership.tier, self.basic_tier)
         self.assertEqual(
             CheckoutFulfillment.objects.filter(
                 stripe_session_id="cs_post_commit_failure",
@@ -780,7 +778,7 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
 
             mock_notify.assert_not_called()
             user.refresh_from_db()
-            self.assertEqual(user.tier.slug, "free")
+            self.assertEqual(user.membership.tier.slug, "free")
             self.assertFalse(user.account_activated)
             self.assertFalse(user.email_verified)
             self.assertEqual(
@@ -794,7 +792,7 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
 
         mock_notify.assert_called_once()
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(user.membership.tier, self.basic_tier)
         self.assertTrue(user.account_activated)
         self.assertTrue(user.email_verified)
 
@@ -853,7 +851,7 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
             for message in logs.output
         ))
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic_tier)
+        self.assertEqual(user.membership.tier, self.basic_tier)
         self.assertEqual(
             CheckoutFulfillment.objects.get(
                 stripe_session_id="cs_welcome_provider_failure",
@@ -893,10 +891,12 @@ class CheckoutConcurrencySecurityTest(TransactionTestCase):
 class SubscriptionOrderingSecurityTest(TierSetupMixin, TestCase):
     def test_old_update_and_delete_cannot_mutate_new_subscription(self):
         user = User.objects.create_user(email="ordered@test.com")
-        user.tier = self.main_tier
-        user.stripe_customer_id = "cus_ordered"
-        user.subscription_id = "sub_new"
-        user.save(update_fields=["tier", "stripe_customer_id", "subscription_id"])
+        set_membership(
+            user,
+            tier=self.main_tier,
+            stripe_customer_id="cus_ordered",
+            subscription_id="sub_new",
+        )
 
         handle_subscription_updated({
             "id": "sub_old",
@@ -907,8 +907,8 @@ class SubscriptionOrderingSecurityTest(TierSetupMixin, TestCase):
         handle_subscription_deleted({"id": "sub_old", "customer": "cus_ordered"})
 
         user.refresh_from_db()
-        self.assertEqual(user.subscription_id, "sub_new")
-        self.assertEqual(user.tier, self.main_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_new")
+        self.assertEqual(user.membership.tier, self.main_tier)
         self.assertEqual(
             CommunityAuditLog.objects.filter(
                 user=user,

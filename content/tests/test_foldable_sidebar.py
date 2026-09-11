@@ -22,7 +22,7 @@ from content.models import (
     WorkshopPage,
 )
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -57,7 +57,7 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
             password="pw12345!",
             email_verified=True,
         )
-        cls.user.tier = cls.free_tier
+        set_membership(cls.user, tier=cls.free_tier)
         cls.user.save()
         cls.workshop = Workshop.objects.create(
             title="Foldable Workshop",

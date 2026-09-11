@@ -19,6 +19,7 @@ from payments.models import (
     Tier,
     WebhookEvent,
 )
+from tests.fixtures import set_membership
 
 WEBHOOK_URL = "/api/webhooks/payments"
 SECRET = "whsec_refund_dispute_test"
@@ -70,14 +71,14 @@ class RefundDisputeReviewTest(TestCase):
 
     def _member(self, *, email="member@test.com", sub="sub_member",
                 customer="cus_member", tier=None):
-        return User.objects.create_user(
-            email=email,
+        user = User.objects.create_user(email=email, tags=["active", "plan-main"], slack_member=True)
+        set_membership(
+            user,
             tier=tier or self.main,
             subscription_id=sub,
             stripe_customer_id=customer,
-            tags=["active", "plan-main"],
-            slack_member=True,
         )
+        return user
 
     def _refund(self, **overrides):
         data = {
@@ -148,9 +149,11 @@ class RefundDisputeReviewTest(TestCase):
 
     def test_partial_refund_preserves_every_entitlement_surface(self):
         user = self._member(tier=self.premium)
-        user.pending_tier = self.main
-        user.billing_period_end = timezone.now() + timedelta(days=25)
-        user.save(update_fields=["pending_tier", "billing_period_end"])
+        set_membership(
+            user,
+            pending_tier=self.main,
+            billing_period_end=timezone.now() + timedelta(days=25),
+        )
         override = TierOverride.objects.create(
             user=user,
             original_tier=self.premium,
@@ -178,11 +181,11 @@ class RefundDisputeReviewTest(TestCase):
             user=user, course=course, stripe_session_id="cs_course",
         )
         snapshot = {
-            "tier_id": user.tier_id,
-            "pending_tier_id": user.pending_tier_id,
-            "billing_period_end": user.billing_period_end,
-            "subscription_id": user.subscription_id,
-            "stripe_customer_id": user.stripe_customer_id,
+            "tier_id": user.membership.tier_id,
+            "pending_tier_id": user.membership.pending_tier_id,
+            "billing_period_end": user.membership.billing_period_end,
+            "subscription_id": user.membership.subscription_id,
+            "stripe_customer_id": user.membership.stripe_customer_id,
             "tags": list(user.tags),
             "slack_member": user.slack_member,
         }
@@ -207,11 +210,11 @@ class RefundDisputeReviewTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(
             {
-                "tier_id": user.tier_id,
-                "pending_tier_id": user.pending_tier_id,
-                "billing_period_end": user.billing_period_end,
-                "subscription_id": user.subscription_id,
-                "stripe_customer_id": user.stripe_customer_id,
+                "tier_id": user.membership.tier_id,
+                "pending_tier_id": user.membership.pending_tier_id,
+                "billing_period_end": user.membership.billing_period_end,
+                "subscription_id": user.membership.subscription_id,
+                "stripe_customer_id": user.membership.stripe_customer_id,
                 "tags": list(user.tags),
                 "slack_member": user.slack_member,
             },
@@ -242,7 +245,7 @@ class RefundDisputeReviewTest(TestCase):
         self.assertIn("resolution=non_membership_charge", attempt.error_message)
         client.invoices.retrieve.assert_not_called()
         unrelated.refresh_from_db()
-        self.assertEqual(unrelated.tier, self.main)
+        self.assertEqual(unrelated.membership.tier, self.main)
         self.assertNotIn("Local user email:", mail.call_args.args[1])
 
     def test_dispute_created_follows_charge_and_invoice_to_exact_owner(self):

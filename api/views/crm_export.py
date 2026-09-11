@@ -165,11 +165,12 @@ def _q_matches(user, q_normalized, q_lower):
     / ``slack_user_id`` (case-insensitive), plus a normalized substring
     match inside any tag.
     """
+    # Issue #1579: the Stripe customer id lives on payments.Membership.
     haystacks = [
         user.email or "",
         user.first_name or "",
         user.last_name or "",
-        user.stripe_customer_id or "",
+        user.membership.stripe_customer_id or "",
         user.slack_user_id or "",
     ]
     for value in haystacks:
@@ -236,7 +237,9 @@ def _base_queryset():
     gated query covers the whole page rather than one per member.
     """
     return (
-        User.objects.select_related("tier", "pending_tier", "attribution")
+        User.objects.select_related(
+            "membership__tier", "membership__pending_tier", "attribution",
+        )
         .prefetch_related(
             "plans",
             "interview_notes",

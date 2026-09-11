@@ -17,7 +17,7 @@ from accounts.models import TierOverride
 from content.access import LEVEL_MAIN
 from email_app.models import EmailCampaign
 from studio.views.campaigns import _recipient_count_for_level
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -27,15 +27,14 @@ class RecipientCountOverrideTest(TierSetupMixin, TestCase):
     """The preview count includes active override holders."""
 
     def _user(self, email, tier, *, verified=True, unsub=False):
-        return User.objects.create_user(
-            email=email, password="pw", tier=tier,
-            email_verified=verified, unsubscribed=unsub,
-        )
+        user = User.objects.create_user(email=email, password="pw", email_verified=verified, unsubscribed=unsub)
+        set_membership(user, tier=tier)
+        return user
 
     def _override(self, user, tier, *, is_active=True, expires_in_days=7):
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=tier,
             expires_at=timezone.now() + timedelta(days=expires_in_days),
             is_active=is_active,

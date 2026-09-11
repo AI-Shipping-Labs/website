@@ -14,6 +14,7 @@ from bookclub.models import Book, Chapter
 from content.access import LEVEL_MAIN
 from events.models import Event, EventSeries
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -26,7 +27,7 @@ class BookMeetingsTest(TestCase):
         cls.main_user = User.objects.create_user(
             email='main@test.com', password='pw',
         )
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
         # Cadence-less collection with one published kickoff occurrence.

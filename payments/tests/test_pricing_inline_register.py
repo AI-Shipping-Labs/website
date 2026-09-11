@@ -11,6 +11,7 @@ from django.test import TestCase
 
 from content.models import SiteConfig
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class PricingFreeTierJoinButtonTest(TestCase):
@@ -61,8 +62,7 @@ class PricingFreeTierJoinButtonTest(TestCase):
         user = self.User.objects.create_user(
             email="auth-pricing@test.com", password="testpass123",
         )
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         self.client.force_login(user)
         response = self.client.get("/membership")
         self.assertEqual(response.status_code, 200)

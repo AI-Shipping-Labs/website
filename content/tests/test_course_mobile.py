@@ -19,7 +19,7 @@ from django.utils import timezone
 from content.access import LEVEL_MAIN
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -63,7 +63,7 @@ class CourseMobileSetupMixin(TierSetupMixin):
 
     def _login_main_user(self):
         user = User.objects.create_user(email="main-mobile@test.com", password="testpass")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email="main-mobile@test.com", password="testpass")
         return user

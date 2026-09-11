@@ -38,6 +38,7 @@ from questionnaires.models import (
     Response,
     ResponseQuestion,
 )
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -560,9 +561,9 @@ class CrmExportSearchTest(CrmExportTestBase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.alpha = cls._make_member("alpha-unique@test.com")
-        cls.alpha.stripe_customer_id = "cus_alphaXYZ"
+        set_membership(cls.alpha, stripe_customer_id='cus_alphaXYZ')
         cls.alpha.tags = ["vip-cohort"]
-        cls.alpha.save(update_fields=["stripe_customer_id", "tags"])
+        cls.alpha.save(update_fields=["tags"])
         cls.beta = cls._make_member("beta@test.com")
         cls.beta.slack_user_id = "U0BETA999"
         cls.beta.save(update_fields=["slack_user_id"])
@@ -604,8 +605,7 @@ class CrmExportEmailLookupTest(CrmExportTestBase):
         cls.no_signal = cls._make_member("bare@example.com")
 
         cls.q_match_only = cls._make_member("fragment-match@example.com")
-        cls.q_match_only.stripe_customer_id = "cus_should_not_win"
-        cls.q_match_only.save(update_fields=["stripe_customer_id"])
+        set_membership(cls.q_match_only, stripe_customer_id='cus_should_not_win')
 
     def _lookup(self, **params):
         params.setdefault("scope", "all")

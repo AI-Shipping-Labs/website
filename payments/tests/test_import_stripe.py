@@ -16,6 +16,7 @@ from payments.services.import_stripe import (
     register_stripe_import_adapter,
     stripe_customer_import_adapter,
 )
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -156,7 +157,7 @@ class StripeImportAdapterTest(TestCase):
 
         self.assertEqual(batch.users_created, 1)
         user = User.objects.get(email="plain@example.com")
-        self.assertEqual(user.stripe_customer_id, "cus_plain")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_plain")
         self.assertEqual(user.first_name, "Plain")
         self.assertEqual(user.last_name, "Customer")
         self.assertEqual(user.tags, ["stripe:imported"])
@@ -188,13 +189,13 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="active@example.com")
-        self.assertEqual(user.stripe_customer_id, "cus_active")
-        self.assertEqual(user.subscription_id, "sub_active")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_active")
+        self.assertEqual(user.membership.subscription_id, "sub_active")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(period_end, tz=datetime_timezone.utc),
         )
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         self.assertEqual(user.tags, ["stripe:imported", "stripe:active", "stripe:plan-basic"])
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
@@ -211,14 +212,15 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="trial@example.com")
-        self.assertEqual(user.subscription_id, "sub_trial")
+        self.assertEqual(user.membership.subscription_id, "sub_trial")
         self.assertIn("stripe:active", user.tags)
         self.assertIn("stripe:plan-main", user.tags)
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
     def test_no_active_subscription_does_not_change_existing_tier(self):
-        User.objects.create_user(email="inactive@example.com", tier=self.main)
+        member_user_1 = User.objects.create_user(email="inactive@example.com")
+        set_membership(member_user_1, tier=self.main)
         customers = [customer("cus_inactive", "inactive@example.com")]
         subscriptions = {
             "cus_inactive": [
@@ -231,8 +233,8 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="inactive@example.com")
-        self.assertEqual(user.tier, self.main)
-        self.assertEqual(user.subscription_id, "")
+        self.assertEqual(user.membership.tier, self.main)
+        self.assertEqual(user.membership.subscription_id, "")
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
     def test_churned_customer_imports_without_paid_access(self):
@@ -248,9 +250,9 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="churned@example.com")
-        self.assertEqual(user.stripe_customer_id, "cus_churned")
-        self.assertEqual(user.subscription_id, "")
-        self.assertIsNone(user.billing_period_end)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_churned")
+        self.assertEqual(user.membership.subscription_id, "")
+        self.assertIsNone(user.membership.billing_period_end)
         self.assertEqual(user.tags, ["stripe:imported", "stripe:churned"])
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
@@ -269,8 +271,8 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="unknown@example.com")
-        self.assertEqual(user.stripe_customer_id, "cus_unknown")
-        self.assertEqual(user.subscription_id, "sub_unknown")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_unknown")
+        self.assertEqual(user.membership.subscription_id, "sub_unknown")
         self.assertEqual(user.tags, ["stripe:imported", "stripe:active"])
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
         self.assertIn("price_not_configured", user.import_metadata["stripe"]["subscription_price_id"])
@@ -303,16 +305,16 @@ class StripeImportAdapterTest(TestCase):
             run_import_batch("stripe", stripe_customer_import_adapter, send_welcome=False)
 
         user = User.objects.get(email="multi@example.com")
-        self.assertEqual(user.subscription_id, "sub_main_late")
+        self.assertEqual(user.membership.subscription_id, "sub_main_late")
         self.assertIn("stripe:plan-main", user.tags)
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
 
     def test_existing_redundant_override_is_deactivated_for_active_subscription(self):
         user = User.objects.create_user(email="redundant@example.com")
         override = TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=30),
         )
@@ -329,14 +331,14 @@ class StripeImportAdapterTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
         self.assertFalse(override.is_active)
 
     def test_existing_different_override_stays_active_for_active_subscription(self):
         user = User.objects.create_user(email="courtesy@example.com")
         override = TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main,
             expires_at=timezone.now() + timedelta(days=30),
         )
@@ -353,14 +355,12 @@ class StripeImportAdapterTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.premium)
+        self.assertEqual(user.membership.tier, self.premium)
         self.assertTrue(override.is_active)
 
     def test_existing_customer_id_is_not_overwritten(self):
-        existing = User.objects.create_user(
-            email="existing@example.com",
-            stripe_customer_id="cus_existing",
-        )
+        existing = User.objects.create_user(email="existing@example.com")
+        set_membership(existing, stripe_customer_id="cus_existing")
         customers = [customer("cus_new", "existing@example.com")]
         customer_patch, subscription_patch = self._patch_stripe(customers)
 
@@ -376,7 +376,7 @@ class StripeImportAdapterTest(TestCase):
         self.assertEqual(batch.errors[0]["kind"], "conflict")
         self.assertEqual(batch.errors[0]["field"], "stripe_customer_id")
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_existing")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_existing")
         self.assertEqual(existing.import_metadata["stripe"]["stripe_customer_id"], "cus_new")
         self.assertEqual(User.objects.filter(email="existing@example.com").count(), 1)
 
@@ -427,9 +427,14 @@ class StripeImportAdapterTest(TestCase):
         user = User.objects.get(email="webhook-linked@example.com")
         # Customer-id fallback must not let an event for a different
         # subscription replace the exact imported subscription authority.
-        self.assertEqual(user.tier, self.basic)
-        self.assertEqual(user.subscription_id, "sub_webhook")
-        self.assertEqual(User.objects.filter(stripe_customer_id="cus_webhook").count(), 1)
+        self.assertEqual(user.membership.tier, self.basic)
+        self.assertEqual(user.membership.subscription_id, "sub_webhook")
+        self.assertEqual(
+            User.objects.filter(
+                membership__stripe_customer_id="cus_webhook",
+            ).count(),
+            1,
+        )
 
     # ------------------------------------------------------------------
     # Period-end resolution across subscription-level / item-level fields
@@ -459,7 +464,7 @@ class StripeImportAdapterTest(TestCase):
 
         user = User.objects.get(email="item-only@example.com")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime(2027, 5, 18, 9, 50, 17, tzinfo=datetime_timezone.utc),
         )
 
@@ -484,7 +489,7 @@ class StripeImportAdapterTest(TestCase):
 
         user = User.objects.get(email="both-levels@example.com")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(sub_period, tz=datetime_timezone.utc),
         )
 
@@ -507,9 +512,9 @@ class StripeImportAdapterTest(TestCase):
         user = User.objects.get(email="neither@example.com")
         # Missing period end must not abort the write — the tier is still
         # resolved and saved against the user.
-        self.assertEqual(user.tier, self.basic)
-        self.assertEqual(user.subscription_id, "sub_neither")
-        self.assertIsNone(user.billing_period_end)
+        self.assertEqual(user.membership.tier, self.basic)
+        self.assertEqual(user.membership.subscription_id, "sub_neither")
+        self.assertIsNone(user.membership.billing_period_end)
 
     def test_subscription_level_period_end_is_used_when_item_level_is_absent(self):
         sub_period = 1_800_000_000
@@ -530,6 +535,6 @@ class StripeImportAdapterTest(TestCase):
 
         user = User.objects.get(email="sub-only@example.com")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(sub_period, tz=datetime_timezone.utc),
         )

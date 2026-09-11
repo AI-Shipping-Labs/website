@@ -13,6 +13,7 @@ from payments.models import (
     WebhookEvent,
 )
 from payments.services.stripe_endpoint_verifier import REQUIRED_EVENTS
+from tests.fixtures import set_membership
 
 VERIFY_URL = "/api/payments/stripe-webhooks/verify"
 STATUS_URL = "/api/payments/stripe-webhooks/status"
@@ -84,10 +85,12 @@ class StripeWebhookApiTest(TestCase):
 
     def _paid_user(self, email, sub, cus):
         u = User.objects.create_user(email=email)
-        u.tier = Tier.objects.get(slug="main")
-        u.subscription_id = sub
-        u.stripe_customer_id = cus
-        u.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            u,
+            tier=Tier.objects.get(slug="main"),
+            subscription_id=sub,
+            stripe_customer_id=cus,
+        )
         return u
 
     def _mock_verifier(self, endpoints, secret="sk_live_abc"):
@@ -290,7 +293,7 @@ class StripeWebhookApiTest(TestCase):
         self.assertEqual(data["target"]["email"], "replay@test.com")
         self.assertEqual(data["transition"]["proposed"]["tier"], "free")
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main", "Dry-run must not mutate.")
+        self.assertEqual(user.membership.tier.slug, "main", "Dry-run must not mutate.")
 
     def test_replay_confirmed_applies_and_records_operator_attempt(self):
         user = self._paid_user("confirm@test.com", "sub_cf", "cus_cf")
@@ -316,7 +319,7 @@ class StripeWebhookApiTest(TestCase):
         self.assertEqual(data["membership_before"]["tier"], "main")
         self.assertEqual(data["membership_after"]["tier"], "free")
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         attempt = StripeWebhookDeliveryAttempt.objects.get(
             stripe_event_id="evt_cf", source="operator_replay",
         )

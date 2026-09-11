@@ -15,6 +15,7 @@ from integrations.maven_config import maven_override_duration_days
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from jobs.tasks.cleanup import retry_maven_enrollment_steps
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 SECRET = "notification-test-secret"
@@ -143,7 +144,7 @@ class MavenEnrollmentNotificationTest(TestCase):
         primary = User.objects.create_user(email="primary@example.com")
         alias_user = User.objects.create_user(email="canonical@example.com")
         EmailAlias.objects.create(user=alias_user, email="alias@example.com")
-        active = User.objects.create_user(
+        active = create_user_with_membership(
             email="active@example.com",
             tier=self.main,
             slack_member=True,

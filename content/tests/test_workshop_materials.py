@@ -19,7 +19,7 @@ from django.utils import timezone
 
 from content.models import Workshop
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -199,12 +199,10 @@ class WorkshopVideoMaterialsTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.user_basic = User.objects.create_user(
-            email='basic@test.com', password='pw', tier=cls.basic_tier,
-        )
-        cls.user_main = User.objects.create_user(
-            email='main@test.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_basic = User.objects.create_user(email='basic@test.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
+        cls.user_main = User.objects.create_user(email='main@test.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_video_renders_workshop_materials_under_pages_gate_not_recording_gate(self):
         # Workshop has materials; user clears pages (Basic) but NOT

@@ -13,6 +13,7 @@ from playwright_tests.conftest import (
     auth_context,
     create_user,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -418,9 +419,8 @@ class TestMemberConfirmsEmailChange:
     ):
         with django_db_blocker.unblock():
             user = _seed_member("alias-primary-1209@test.com")
-            user.stripe_customer_id = "cus_alias_1209"
-            user.subscription_id = "sub_alias_1209"
-            user.save(update_fields=["stripe_customer_id", "subscription_id"])
+            set_membership(user, stripe_customer_id='cus_alias_1209')
+            set_membership(user, subscription_id='sub_alias_1209')
             from django.db import connection
 
             from accounts.models import EmailAlias
@@ -451,8 +451,8 @@ class TestMemberConfirmsEmailChange:
             from accounts.models import EmailAlias, User
 
             changed = User.objects.get(email="billing-alias-1209@test.com")
-            assert changed.stripe_customer_id == "cus_alias_1209"
-            assert changed.subscription_id == "sub_alias_1209"
+            assert changed.membership.stripe_customer_id == "cus_alias_1209"
+            assert changed.membership.subscription_id == "sub_alias_1209"
             assert not EmailAlias.objects.filter(
                 email="billing-alias-1209@test.com"
             ).exists()

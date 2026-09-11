@@ -24,7 +24,7 @@ from plans.models import (
     Week,
 )
 from questionnaires.models import Questionnaire, Response
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -83,11 +83,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, _expected_sprint_range(start_date, 8))
 
     def test_ended_shared_plan_card_shows_recap_feedback_and_next_action(self):
-        user = User.objects.create_user(
-            email='ended-card@test.com',
-            password='pw',
-            tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='ended-card@test.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         ended = Sprint.objects.create(
             name='Ended Sprint',
             slug='ended-sprint',
@@ -186,9 +183,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         )
 
     def test_eligible_user_without_plan_sees_active_sprint_opportunity(self):
-        User.objects.create_user(
-            email='main-sprint@test.com', password='pw', tier=self.main_tier,
-        )
+        member_user_1 = User.objects.create_user(email='main-sprint@test.com', password='pw')
+        set_membership(member_user_1, tier=self.main_tier)
         sprint = Sprint.objects.create(
             name='Main Sprint', slug='main-sprint',
             start_date=_active_sprint_start(),
@@ -210,9 +206,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, '6-week cohort')
 
     def test_ineligible_user_does_not_see_locked_active_sprint(self):
-        User.objects.create_user(
-            email='basic-sprint@test.com', password='pw', tier=self.basic_tier,
-        )
+        member_user_2 = User.objects.create_user(email='basic-sprint@test.com', password='pw')
+        set_membership(member_user_2, tier=self.basic_tier)
         Sprint.objects.create(
             name='Premium Sprint', slug='premium-sprint',
             start_date=_active_sprint_start(),
@@ -229,9 +224,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'href="/sprints"')
 
     def test_free_visible_sprint_has_free_open_label(self):
-        User.objects.create_user(
-            email='free-sprint@test.com', password='pw', tier=self.free_tier,
-        )
+        member_user_3 = User.objects.create_user(email='free-sprint@test.com', password='pw')
+        set_membership(member_user_3, tier=self.free_tier)
         Sprint.objects.create(
             name='Open Sprint', slug='open-sprint',
             start_date=_active_sprint_start(),
@@ -257,9 +251,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Unlock with Main')
 
     def test_enrolled_user_without_plan_links_active_sprint_to_cohort(self):
-        user = User.objects.create_user(
-            email='enrolled-sprint@test.com', password='pw', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='enrolled-sprint@test.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         sprint = Sprint.objects.create(
             name='Enrolled Sprint', slug='enrolled-sprint',
             start_date=_active_sprint_start(),
@@ -280,9 +273,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-feed-kind="sprint"')
 
     def test_user_with_plan_keeps_plan_card_without_duplicate_sprint_feed(self):
-        user = User.objects.create_user(
-            email='planned-sprint@test.com', password='pw', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='planned-sprint@test.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         current_start = _active_sprint_start()
         current = Sprint.objects.create(
             name='Current Sprint', slug='current-sprint',
@@ -321,9 +313,8 @@ class DashboardSprintPlanCardTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Current cohort')
 
     def test_user_with_plan_and_no_other_opportunities_has_no_duplicate_cohort(self):
-        user = User.objects.create_user(
-            email='planned-only@test.com', password='pw', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='planned-only@test.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         current = Sprint.objects.create(
             name='Current Only Sprint', slug='current-only-sprint',
             start_date=_active_sprint_start(),

@@ -2,6 +2,8 @@
 
 from dataclasses import dataclass
 
+from payments.models import Membership
+
 
 def format_period_end(value):
     if value is None:
@@ -33,12 +35,14 @@ def _state(badge, note, action_label, action_kind):
 
 
 def _build_context(tier, user, active_override):
-    base_tier = user.tier
-    pending_tier = user.pending_tier
-    has_subscription = bool(user.subscription_id)
+    # Issue #1579: tier/Stripe state lives on payments.Membership.
+    membership = Membership.for_user(user)
+    base_tier = membership.tier
+    pending_tier = membership.pending_tier
+    has_subscription = bool(membership.subscription_id)
     base_level = base_tier.level if base_tier else 0
     tier_level = tier.level
-    pending_end = format_period_end(user.billing_period_end)
+    pending_end = format_period_end(membership.billing_period_end)
     override_tier = active_override.override_tier if active_override else None
     override_level = override_tier.level if override_tier else 0
     override_end = (

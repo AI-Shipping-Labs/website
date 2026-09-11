@@ -27,6 +27,7 @@ from questionnaires.models import (
     ResponseQuestion,
 )
 from questionnaires.onboarding import GENERIC_ONBOARDING_SLUG
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -43,9 +44,8 @@ PERSONA_NAMES = ['Alex', 'Priya', 'Sam', 'Taylor']
 class OnboardingAccessControlTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='member@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='member@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def test_anonymous_redirected_to_login(self):
         resp = self.client.get('/onboarding/')
@@ -63,9 +63,8 @@ class OnboardingAccessControlTest(TestCase):
 class SelfIdentificationRoutingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='router@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='router@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -130,9 +129,8 @@ class SelfIdentificationRoutingTest(TestCase):
 class PersonaNameNeverLeaksTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='leak@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='leak@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -181,9 +179,8 @@ class PersonaNameNeverLeaksTest(TestCase):
 class OnboardingCompletionGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='gate@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='gate@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -222,9 +219,8 @@ class OnboardingCompletionGatingTest(TestCase):
 class OnboardingSubmitTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='submit@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='submit@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -312,9 +308,8 @@ class OnboardingSubmitTest(TestCase):
 class OnboardingResumeTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='resume@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='resume@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -371,9 +366,8 @@ class OnboardingResumeTest(TestCase):
 class OnboardingCompletedConfirmationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='done@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='done@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
         generic = Questionnaire.objects.get(slug=GENERIC_ONBOARDING_SLUG)
         cls.response = Response.objects.create(
             questionnaire=generic, respondent=cls.member, status='submitted',
@@ -407,9 +401,8 @@ class OnboardingChangePersonaTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='switcher@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='switcher@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
         personas = list(
             Persona.objects
             .filter(is_active=True, default_questionnaire__isnull=False)
@@ -540,12 +533,10 @@ class OnboardingChangePersonaTest(TestCase):
 class OnboardingCrossMemberIsolationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member_a = User.objects.create_user(
-            email='a@test.com', password='pw', tier=_basic_tier(),
-        )
-        cls.member_b = User.objects.create_user(
-            email='b@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member_a = User.objects.create_user(email='a@test.com', password='pw')
+        set_membership(cls.member_a, tier=_basic_tier())
+        cls.member_b = User.objects.create_user(email='b@test.com', password='pw')
+        set_membership(cls.member_b, tier=_basic_tier())
         generic = Questionnaire.objects.get(slug=GENERIC_ONBOARDING_SLUG)
         cls.response_b = Response.objects.create(
             questionnaire=generic, respondent=cls.member_b, status='draft',
@@ -563,9 +554,8 @@ class OnboardingCrossMemberIsolationTest(TestCase):
 class OnboardingNotReadyTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='notready@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='notready@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         # Simulate an environment where the onboarding questionnaires are
@@ -598,12 +588,10 @@ class OnboardingQuestionsIdFreeUrlTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='idfree@test.com', password='pw', tier=_basic_tier(),
-        )
-        cls.other = User.objects.create_user(
-            email='idfree-other@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='idfree@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
+        cls.other = User.objects.create_user(email='idfree-other@test.com', password='pw')
+        set_membership(cls.other, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)

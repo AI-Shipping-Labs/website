@@ -12,6 +12,7 @@ from django.test import TestCase, tag
 from bookclub.models import Book, Chapter, Note
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -135,7 +136,7 @@ class ChapterSummaryStudioTest(TestCase):
             user = User.objects.create_user(
                 email=f'{name.lower()}@test.com', password='pw', first_name=name,
             )
-            user.tier = self.main_tier
+            set_membership(user, tier=self.main_tier)
             user.save()
             Note.objects.create(
                 chapter=self.chapter, user=user, body=f'{name} note body.',
@@ -182,7 +183,7 @@ class ChapterSummaryStudioTest(TestCase):
         self.assertIn(response.status_code, (302, 403))
         # An authenticated non-staff member is forbidden.
         member = User.objects.create_user(email='m@test.com', password='pw')
-        member.tier = self.main_tier
+        set_membership(member, tier=self.main_tier)
         member.save()
         self.client.login(email='m@test.com', password='pw')
         response = self.client.post(

@@ -17,6 +17,7 @@ from accounts.services.import_users import run_import_batch
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -133,7 +134,7 @@ class CourseDbCsvAdapterTest(TestCase):
 
         user = User.objects.get(email="alum@example.com")
         self.assertEqual(user.import_source, IMPORT_SOURCE_COURSE_DB)
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertFalse(user.email_verified)
         self.assertEqual(
             user.tags,
@@ -150,14 +151,12 @@ class CourseDbCsvAdapterTest(TestCase):
 
     def test_existing_user_reconciliation_preserves_source_subscription_and_metadata(self):
         basic_tier = Tier.objects.get(slug="basic")
-        user = User.objects.create_user(
-            email="paid@example.com",
-            import_source="stripe",
+        user = User.objects.create_user(email="paid@example.com", import_source="stripe", tags=["paid"], import_metadata={"stripe": {"customer": "cus_existing"}})
+        set_membership(
+            user,
             stripe_customer_id="cus_existing",
             subscription_id="sub_existing",
             tier=basic_tier,
-            tags=["paid"],
-            import_metadata={"stripe": {"customer": "cus_existing"}},
         )
         path = csv_file(
             "email,name,course_slug,enrollment_date,course_db_user_id\n"
@@ -168,9 +167,9 @@ class CourseDbCsvAdapterTest(TestCase):
 
         user.refresh_from_db()
         self.assertEqual(user.import_source, "stripe")
-        self.assertEqual(user.stripe_customer_id, "cus_existing")
-        self.assertEqual(user.subscription_id, "sub_existing")
-        self.assertEqual(user.tier, basic_tier)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_existing")
+        self.assertEqual(user.membership.subscription_id, "sub_existing")
+        self.assertEqual(user.membership.tier, basic_tier)
         self.assertEqual(user.tags, ["paid", "course:llm-zoomcamp"])
         self.assertEqual(user.import_metadata["stripe"], {"customer": "cus_existing"})
         self.assertEqual(

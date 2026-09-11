@@ -31,6 +31,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -71,7 +72,7 @@ def _seed_users():
     nl.signup_source = "newsletter"
     nl.account_activated = False
     nl.email_verified = True
-    nl.tier = tiers["free"]
+    set_membership(nl, tier=tiers['free'])
     nl.unsubscribed = False
     nl.save()
     users["newsletter"] = nl
@@ -91,7 +92,7 @@ def _seed_users():
     su.signup_source = "signup"
     su.account_activated = False
     su.email_verified = True
-    su.tier = tiers["free"]
+    set_membership(su, tier=tiers['free'])
     su.save()
     users["signup"] = su
 
@@ -111,8 +112,8 @@ def _seed_users():
     mb.signup_source = "signup"
     mb.account_activated = True
     mb.email_verified = True
-    mb.tier = tiers["main"]
-    mb.subscription_id = "sub_member_test_123"
+    set_membership(mb, tier=tiers['main'])
+    set_membership(mb, subscription_id='sub_member_test_123')
     mb.save()
     users["member"] = mb
 

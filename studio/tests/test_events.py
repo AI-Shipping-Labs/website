@@ -24,7 +24,7 @@ from freezegun import freeze_time
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from events.models import Event, EventSeries
-from tests.fixtures import StaffUserMixin, TierSetupMixin
+from tests.fixtures import StaffUserMixin, TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -898,14 +898,14 @@ class StudioEventEditTest(StaffUserMixin, TierSetupMixin, TestCase):
             password='pass',
             email_verified=True,
         )
-        free_user.tier = self.free_tier
+        set_membership(free_user, tier=self.free_tier)
         free_user.save()
         main_user = User.objects.create_user(
             email='main-event-gate@test.com',
             password='pass',
             email_verified=True,
         )
-        main_user.tier = self.main_tier
+        set_membership(main_user, tier=self.main_tier)
         main_user.save()
 
         self.client.logout()

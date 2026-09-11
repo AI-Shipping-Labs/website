@@ -22,6 +22,7 @@ from questionnaires.services_onboarding_ai import (
     get_or_create_ai_onboarding_response,
 )
 from questionnaires.tests.test_onboarding_ai_core import VALID_EXTRACTION
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -66,9 +67,8 @@ class AnonymousAccessTest(TestCase):
 class RoutingGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ai-route@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ai-route@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -207,9 +207,8 @@ class LlmDisabledTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ai-disabled@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ai-disabled@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -232,9 +231,8 @@ class LlmDisabledTest(TestCase):
 class ChatTurnTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ai-turn@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ai-turn@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -339,9 +337,8 @@ class ChatTurnTest(TestCase):
 class AlreadyOnboardedTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ai-done@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ai-done@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -383,9 +380,8 @@ class AlreadyOnboardedTest(TestCase):
 class PersonaSignalNeverLeaksTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ai-leak@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ai-leak@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def test_chat_page_has_no_persona_name(self):
         self.client.force_login(self.member)

@@ -94,7 +94,7 @@ def _add_override(email, override_slug="main", *, days=14, is_active=True):
     user = User.objects.get(email=email)
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=Tier.objects.get(slug=override_slug),
         expires_at=timezone.now() + datetime.timedelta(days=days),
         is_active=is_active,

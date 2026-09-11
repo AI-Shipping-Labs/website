@@ -24,7 +24,7 @@ from accounts.models import TierOverride
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
-from payments.models import WebhookEvent
+from payments.models import Membership, WebhookEvent
 from payments.services import subscription_reconciliation as _recon
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.import_stripe import _price_to_tier_map
@@ -65,15 +65,17 @@ MAX_USERS_PER_REQUEST = 500
 
 def _eligible_users_queryset():
     """Users who could conceivably have a Stripe-driven tier mismatch."""
+    # Issue #1579: the Stripe identifiers and tier live on payments.Membership.
     return (
-        User.objects.exclude(stripe_customer_id="")
-        .select_related("tier")
+        User.objects.exclude(membership__stripe_customer_id="")
+        .select_related("membership__tier", "membership__pending_tier")
         .order_by("email")
     )
 
 def _current_tier_slug(user):
-    if user.tier_id and user.tier:
-        return user.tier.slug
+    membership = user.membership
+    if membership.tier_id and membership.tier:
+        return membership.tier.slug
     return "free"
 
 
@@ -83,15 +85,15 @@ def _current_tier_source(user):
     Returns ``"override"`` when an active TierOverride matches the user's
     current direct tier (so the override is what's holding them at that
     level — the "redundant override" case from #473). Returns ``"direct"``
-    when ``user.tier`` is paid and no matching override is active. Returns
-    ``"none"`` when the user is on free.
+    when the membership tier is paid and no matching override is active.
+    Returns ``"none"`` when the user is on free.
     """
     slug = _current_tier_slug(user)
     if slug == "free":
         return "none"
     has_matching_override = TierOverride.objects.filter(
         user_id=user.pk,
-        override_tier_id=user.tier_id,
+        override_tier_id=user.membership.tier_id,
         is_active=True,
         expires_at__gt=timezone.now(),
     ).exists()
@@ -131,13 +133,14 @@ def _serialize_diagnostic(user, record):
         # subscription at all (skipped, free user, no Stripe sub).
         stripe_active_tier = record.new_tier_slug or None
 
+    # Issue #1579: the billing state lives on payments.Membership.
     billing_period_end = None
-    if user.billing_period_end is not None:
-        billing_period_end = user.billing_period_end.isoformat()
+    if user.membership.billing_period_end is not None:
+        billing_period_end = user.membership.billing_period_end.isoformat()
 
     return {
         "email": user.email,
-        "stripe_customer_id": user.stripe_customer_id,
+        "stripe_customer_id": user.membership.stripe_customer_id,
         "current_tier": _current_tier_slug(user),
         "current_tier_source": _current_tier_source(user),
         "stripe_active_tier": stripe_active_tier,
@@ -203,7 +206,7 @@ def _serialize_diagnostic(user, record):
 def tier_reconcile_diagnostics(request):
     """``GET /api/payments/tier-reconcile/diagnostics``.
 
-    Returns users whose ``user.tier`` likely needs reconciling against their
+    Returns users whose membership tier likely needs reconciling against their
     active Stripe subscription, computed by calling
     ``backfill_user_from_stripe(user, dry_run=True)`` per candidate user.
 
@@ -285,9 +288,10 @@ def _serialize_apply_result(
 
 
 def _billing_period_end_iso(user):
-    if user is None or user.billing_period_end is None:
+    # Issue #1579: the billing state lives on payments.Membership.
+    if user is None or user.membership.billing_period_end is None:
         return None
-    return user.billing_period_end.isoformat()
+    return user.membership.billing_period_end.isoformat()
 
 
 @token_required
@@ -380,7 +384,8 @@ def tier_reconcile_apply(request):
 
     When ``force`` is true and Stripe says the user is actively paying,
     every active ``TierOverride`` on the user is deactivated (not only the
-    one matching the resolved tier) and ``user.billing_period_end`` is
+    one matching the resolved tier) and the membership's
+    ``billing_period_end`` is
     overwritten with Stripe's ``current_period_end`` even when it is
     already populated. ``force`` is ignored for users with no
     ``stripe_customer_id`` or no active subscription — it never escalates
@@ -533,7 +538,7 @@ def tier_reconcile_apply(request):
             if missing:
                 broader = (
                     User.objects.filter(email__in=missing)
-                    .select_related("tier")
+                    .select_related("membership__tier")
                 )
                 for user in broader:
                     lowered = user.email.lower()
@@ -597,7 +602,8 @@ def tier_reconcile_apply(request):
             original_email.lower(),
         ) or customer_ids_by_lower_email.get(user.email.lower())
         if supplied_customer_id:
-            existing = user.stripe_customer_id or ""
+            # Issue #1579: the Stripe customer id lives on payments.Membership.
+            existing = user.membership.stripe_customer_id or ""
             if existing and existing != supplied_customer_id:
                 warning_msg = (
                     f"warning: customer_id_mismatch — supplied "
@@ -609,7 +615,7 @@ def tier_reconcile_apply(request):
                     "status": "warning",
                     "from": _current_tier_slug(user),
                     "to": None,
-                    "subscription_id": user.subscription_id or "",
+                    "subscription_id": user.membership.subscription_id or "",
                     "deactivated_override": False,
                     "saved_metadata": False,
                     "audit_event_id": "",
@@ -622,18 +628,19 @@ def tier_reconcile_apply(request):
                 continue
             if not existing:
                 if dry_run_raw:
-                    # In dry-run mode the user row must NOT be mutated.
+                    # In dry-run mode the membership row must NOT be mutated.
                     # We still want backfill to PREVIEW what Stripe would
                     # return, so the supplied id is set on the in-memory
-                    # instance only — backfill_user_from_stripe will use
-                    # it to call Stripe but the dry_run guard inside the
-                    # service skips every write.
-                    user.stripe_customer_id = supplied_customer_id
+                    # membership instance only — backfill_user_from_stripe
+                    # will use it to call Stripe but the dry_run guard
+                    # inside the service skips every write.
+                    user.membership.stripe_customer_id = supplied_customer_id
                 else:
-                    User.objects.filter(pk=user.pk).update(
+                    Membership.objects.filter(pk=user.membership.pk).update(
                         stripe_customer_id=supplied_customer_id,
                     )
                     user.refresh_from_db()
+                    user.membership = Membership.objects.get(user=user)
 
         # Issue #1308: cancellation-aware reconciliation. Canceled/scheduled
         # states cannot be repaired by ``backfill_user_from_stripe`` (which
@@ -673,7 +680,7 @@ def tier_reconcile_apply(request):
             record,
             status=normalized_status,
             billing_period_end=_billing_period_end_iso(user),
-            stripe_customer_id=user.stripe_customer_id or "",
+            stripe_customer_id=user.membership.stripe_customer_id or "",
         ))
         processed += 1
         if normalized_status in ("changed", "would_change"):
@@ -760,7 +767,7 @@ def _reconcile_apply_row(user, price_to_tier, duplicate_ids, *, dry_run):
         "status": status,
         "from": old_tier_slug,
         "to": _current_tier_slug(user) if not dry_run else proposed_to,
-        "subscription_id": user.subscription_id or "",
+        "subscription_id": user.membership.subscription_id or "",
         "audit_event_id": audit_event_id,
         "message": message,
         "billing_period_end": _billing_period_end_iso(user),
@@ -774,11 +781,11 @@ def _reconcile_row_base(user):
         "status": "",
         "from": _current_tier_slug(user),
         "to": None,
-        "subscription_id": user.subscription_id or "",
+        "subscription_id": user.membership.subscription_id or "",
         "deactivated_override": False,
         "saved_metadata": False,
         "audit_event_id": "",
         "message": "",
         "billing_period_end": _billing_period_end_iso(user),
-        "stripe_customer_id": user.stripe_customer_id or "",
+        "stripe_customer_id": user.membership.stripe_customer_id or "",
     }

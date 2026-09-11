@@ -12,6 +12,7 @@ from payments.models import (
     PaymentAccountMismatch,
     Tier,
 )
+from tests.fixtures import set_membership
 
 
 class PaymentMismatchApiTest(TestCase):
@@ -202,8 +203,7 @@ class PaymentMismatchApiTest(TestCase):
         mismatch = self._mismatch()
         paid = mismatch.paid_user
         candidate = mismatch.candidate_user
-        candidate.tier = Tier.objects.get(slug="free")
-        candidate.save(update_fields=["tier"])
+        set_membership(candidate, tier=Tier.objects.get(slug="free"))
         alias = EmailAlias.objects.create(
             user=candidate,
             email="candidate-relay-1105@test.com",
@@ -224,7 +224,7 @@ class PaymentMismatchApiTest(TestCase):
         self.assertTrue(paid.is_active)
         self.assertTrue(candidate.is_active)
         self.assertEqual(alias.user, candidate)
-        self.assertEqual(candidate.tier.slug, "free")
+        self.assertEqual(candidate.membership.tier.slug, "free")
 
     def test_patch_rejects_invalid_status_empty_note_and_unknown_field(self):
         mismatch = self._mismatch()

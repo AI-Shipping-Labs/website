@@ -8,6 +8,8 @@ and any tag (after ``normalize_tag``) on the user.
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from tests.fixtures import set_membership
+
 User = get_user_model()
 
 
@@ -30,14 +32,8 @@ class StudioUserListSearchTest(TestCase):
         cls.ada.tags = ['ai-buildcamp', 'maven']
         cls.ada.save(update_fields=['tags'])
 
-        cls.grace = User.objects.create_user(
-            email='grace@example.com',
-            password='testpass',
-            first_name='Grace',
-            last_name='Hopper',
-            stripe_customer_id='cus_USSV1H5ew94CBG',
-            slack_user_id='U02GRACE9',
-        )
+        cls.grace = User.objects.create_user(email='grace@example.com', password='testpass', first_name='Grace', last_name='Hopper', slack_user_id='U02GRACE9')
+        set_membership(cls.grace, stripe_customer_id='cus_USSV1H5ew94CBG')
         cls.grace.tags = ['stripe']
         cls.grace.save(update_fields=['tags'])
 

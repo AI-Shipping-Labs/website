@@ -61,7 +61,7 @@ def _grant_override(email, override_tier_slug, *, expires_in_days=7,
     override_tier = Tier.objects.get(slug=override_tier_slug)
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=override_tier,
         expires_at=timezone.now() + timedelta(days=expires_in_days),
         is_active=is_active,

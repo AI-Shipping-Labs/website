@@ -10,6 +10,7 @@ from playwright_tests.conftest import (
     auth_context,
     create_user,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -290,8 +291,7 @@ def test_authenticated_pricing_keeps_account_state_and_no_inline_register(
     with django_db_blocker.unblock():
         _seed_pricing(oauth=True)
         user = create_user("pricing-1188-main@test.com", tier_slug="main")
-        user.subscription_id = "sub_pricing_1188_main"
-        user.save(update_fields=["subscription_id"])
+        set_membership(user, subscription_id='sub_pricing_1188_main')
 
     context = auth_context(browser, "pricing-1188-main@test.com")
     page = context.new_page()

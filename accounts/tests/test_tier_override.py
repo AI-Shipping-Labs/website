@@ -22,6 +22,7 @@ from content.access import (
     get_user_level,
 )
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class TierOverrideTestBase(TestCase):
@@ -38,8 +39,7 @@ class TierOverrideTestBase(TestCase):
         kwargs.setdefault("email_verified", True)
         user = User.objects.create_user(email=email, **kwargs)
         if tier is not None:
-            user.tier = tier
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=tier)
         return user
 
     def _make_staff(self, email="staff@example.com"):
@@ -47,7 +47,7 @@ class TierOverrideTestBase(TestCase):
 
     def _make_override(self, user, override_tier, granted_by=None, **kwargs):
         defaults = {
-            "original_tier": user.tier,
+            "original_tier": user.membership.tier,
             "expires_at": timezone.now() + timedelta(days=14),
             "granted_by": granted_by,
             "is_active": True,
@@ -196,8 +196,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
         self._make_override(user, self.premium_tier)
 
         # User buys Main subscription via Stripe
-        user.tier = self.main_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.main_tier)
 
         # Override still active, max(20, 30) = 30
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
@@ -207,8 +206,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
         user = self._make_user()
         override = self._make_override(user, self.premium_tier)
 
-        user.tier = self.main_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.main_tier)
 
         # Expire override
         override.expires_at = timezone.now() - timedelta(seconds=1)
@@ -223,8 +221,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
         override = self._make_override(user, self.premium_tier)
 
         # User upgrades to Premium
-        user.tier = self.premium_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.premium_tier)
 
         # Override redundant but harmless
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
@@ -240,8 +237,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
         self._make_override(user, self.premium_tier)
 
         # User cancels -> webhook sets tier to Free
-        user.tier = self.free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free_tier)
 
         # Override still active
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
@@ -252,8 +248,7 @@ class SelfUpgradeDuringOverrideTest(TierOverrideTestBase):
         override = self._make_override(user, self.premium_tier)
 
         # Cancel
-        user.tier = self.free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free_tier)
 
         # Expire override
         override.expires_at = timezone.now() - timedelta(seconds=1)
@@ -478,17 +473,15 @@ class BillingInteractionsTest(TierOverrideTestBase):
         When billing_period_end arrives and tier changes to Basic,
         override still grants Premium."""
         user = self._make_user(tier=self.main_tier)
-        user.pending_tier = self.basic_tier
-        user.save(update_fields=["pending_tier"])
+        set_membership(user, pending_tier=self.basic_tier)
 
         override = self._make_override(user, self.premium_tier)
 
         # Override active: max(20, 30) = 30
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
 
-        # Stripe fires subscription.updated -> user.tier becomes Basic
-        user.tier = self.basic_tier
-        user.save(update_fields=["tier"])
+        # Stripe fires subscription.updated -> user.membership.tier becomes Basic
+        set_membership(user, tier=self.basic_tier)
 
         # Override still active: max(10, 30) = 30
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
@@ -504,17 +497,15 @@ class BillingInteractionsTest(TierOverrideTestBase):
         """#24: User cancels subscription (pending_tier=Free) while Premium
         override is active."""
         user = self._make_user(tier=self.main_tier)
-        user.pending_tier = self.free_tier
-        user.save(update_fields=["pending_tier"])
+        set_membership(user, pending_tier=self.free_tier)
 
         override = self._make_override(user, self.premium_tier)
 
         # Override active
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
 
-        # Subscription ends -> user.tier becomes Free
-        user.tier = self.free_tier
-        user.save(update_fields=["tier"])
+        # Subscription ends -> user.membership.tier becomes Free
+        set_membership(user, tier=self.free_tier)
 
         # Override still active: max(0, 30) = 30
         self.assertEqual(get_user_level(user), LEVEL_PREMIUM)
@@ -535,12 +526,12 @@ class SlackAccessTest(TierOverrideTestBase):
 
     def test_25_free_user_with_main_override_no_slack(self):
         """#25: Free user with Main override -> dashboard does NOT show Slack
-        join link (checks user.tier.level, not overridden level)."""
+        join link (checks user.membership.tier.level, not overridden level)."""
         user = self._make_user()
         self._make_override(user, self.main_tier)
 
-        # user.tier.level is still 0 (Free)
-        has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
+        # user.membership.tier.level is still 0 (Free)
+        has_qualifying_tier = user.membership.tier_id and user.membership.tier.level >= LEVEL_MAIN
         self.assertFalse(has_qualifying_tier)
 
     def test_26_main_user_retains_slack_after_override_expires(self):
@@ -557,7 +548,7 @@ class SlackAccessTest(TierOverrideTestBase):
         override.save(update_fields=["expires_at"])
 
         # User still Main via subscription
-        has_qualifying_tier = user.tier_id and user.tier.level >= LEVEL_MAIN
+        has_qualifying_tier = user.membership.tier_id and user.membership.tier.level >= LEVEL_MAIN
         self.assertTrue(has_qualifying_tier)
         self.assertTrue(bool(user.slack_user_id))
 
@@ -614,7 +605,7 @@ class EmailCampaignTargetingTest(TierOverrideTestBase):
         user = self._make_user()
         override = self._make_override(user, self.premium_tier)
 
-        effective_level = max(user.tier.level if user.tier else 0, override.override_tier.level)
+        effective_level = max(user.membership.tier.level if user.membership.tier else 0, override.override_tier.level)
         self.assertEqual(effective_level, LEVEL_PREMIUM)
 
     def test_30_basic_with_main_override_targeted(self):
@@ -622,7 +613,7 @@ class EmailCampaignTargetingTest(TierOverrideTestBase):
         user = self._make_user(tier=self.basic_tier)
         override = self._make_override(user, self.main_tier)
 
-        effective_level = max(user.tier.level, override.override_tier.level)
+        effective_level = max(user.membership.tier.level, override.override_tier.level)
         self.assertEqual(effective_level, LEVEL_MAIN)
 
 
@@ -635,11 +626,11 @@ class NotificationTargetingTest(TierOverrideTestBase):
 
     def test_31_free_user_with_premium_override_no_notification(self):
         """#31: Free user with Premium override -> _get_eligible_users()
-        checks user.tier.level -> user does NOT receive notification."""
+        checks user.membership.tier.level -> user does NOT receive notification."""
         user = self._make_user()
         self._make_override(user, self.premium_tier)
 
-        user_tier_level = user.tier.level if user.tier else 0
+        user_tier_level = user.membership.tier.level if user.membership.tier else 0
         premium_content_level = LEVEL_PREMIUM
         self.assertFalse(user_tier_level >= premium_content_level)
 
@@ -768,8 +759,7 @@ class AccountPageDisplayTest(TierOverrideTestBase):
             tier=self.basic_tier,
             password="testpass",
         )
-        user.subscription_id = "sub_override_base"
-        user.save(update_fields=["subscription_id"])
+        set_membership(user, subscription_id="sub_override_base")
         admin = self._make_staff()
         self._make_override(user, self.premium_tier, granted_by=admin)
 
@@ -908,7 +898,7 @@ class AuditTrailTest(TierOverrideTestBase):
         overrides[-1].refresh_from_db()
         self.assertTrue(overrides[-1].is_active)
 
-        # Each original_tier reflects user.tier at creation time (Free)
+        # Each original_tier reflects user.membership.tier at creation time (Free)
         for o in overrides:
             self.assertEqual(o.original_tier, self.free_tier)
 
@@ -948,8 +938,7 @@ class DataIntegrityTest(TierOverrideTestBase):
         """#48: User with user.tier=None -> original_tier is null."""
         user = self._make_user()
         # Force tier to None
-        user.tier = None
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=None)
 
         override = self._make_override(user, self.premium_tier, original_tier=None)
         self.assertIsNone(override.original_tier)

@@ -32,6 +32,7 @@ from django.test import TestCase
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -71,16 +72,13 @@ class StudioUserListStripeIndicatorTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-        cls.user_with_stripe = User.objects.create_user(
-            email='paid@test.com', password='testpass',
-            stripe_customer_id='cus_ABC',
-        )
-        cls.user_without_stripe = User.objects.create_user(
-            email='free@test.com', password='testpass',
-            stripe_customer_id='',
-        )
-        cls.imported_paid_user = User.objects.create_user(
-            email='imported-paid@test.com', password='testpass',
+        cls.user_with_stripe = User.objects.create_user(email='paid@test.com', password='testpass')
+        set_membership(cls.user_with_stripe, stripe_customer_id='cus_ABC')
+        cls.user_without_stripe = User.objects.create_user(email='free@test.com', password='testpass')
+        set_membership(cls.user_without_stripe, stripe_customer_id='')
+        cls.imported_paid_user = User.objects.create_user(email='imported-paid@test.com', password='testpass')
+        set_membership(
+            cls.imported_paid_user,
             stripe_customer_id='cus_PAID',
             tier=Tier.objects.get(slug='main'),
         )

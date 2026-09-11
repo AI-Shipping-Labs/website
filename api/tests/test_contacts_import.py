@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from accounts.models import TierOverride, Token
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -95,7 +96,7 @@ class ContactsImportTest(TestCase):
         self.assertFalse(
             TierOverride.objects.filter(user=user, is_active=True).exists()
         )
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         warnings = response.json()["warnings"]
         self.assertEqual(
             warnings[0]["reason"],
@@ -106,9 +107,7 @@ class ContactsImportTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.subscription_id = "sub_MAIN"
-            user.save(update_fields=["tier", "subscription_id"])
+            set_membership(user, tier=main, subscription_id="sub_MAIN")
 
             class Record:
                 status = "changed"
@@ -131,8 +130,8 @@ class ContactsImportTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user = User.objects.get(email="tiered-stripe@test.com")
-        self.assertEqual(user.tier.slug, "main")
-        self.assertEqual(user.subscription_id, "sub_MAIN")
+        self.assertEqual(user.membership.tier.slug, "main")
+        self.assertEqual(user.membership.subscription_id, "sub_MAIN")
         self.assertFalse(
             TierOverride.objects.filter(user=user, is_active=True).exists()
         )
@@ -142,8 +141,7 @@ class ContactsImportTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -166,7 +164,7 @@ class ContactsImportTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user = User.objects.get(email="tier-mismatch@test.com")
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertFalse(
             TierOverride.objects.filter(user=user, is_active=True).exists()
         )
@@ -326,8 +324,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -350,7 +347,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user = User.objects.get(email="default-match@test.com")
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertFalse(
             TierOverride.objects.filter(user=user, is_active=True).exists()
         )
@@ -365,8 +362,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -414,11 +410,8 @@ class ContactsImportStripeValidatedTierTest(TestCase):
 
         # User already exists with a customer id so the validation branch
         # reaches the dry-run lookup (no customer-id sync to short-circuit on).
-        user = User.objects.create_user(
-            email="unknown-price@test.com",
-            password=None,
-            stripe_customer_id="cus_WARN",
-        )
+        user = User.objects.create_user(email="unknown-price@test.com", password=None)
+        set_membership(user, stripe_customer_id="cus_WARN")
 
         with mock.patch(
             "studio.services.contacts_import.backfill_user_from_stripe",
@@ -433,7 +426,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertFalse(
             TierOverride.objects.filter(user=user, is_active=True).exists()
         )
@@ -454,11 +447,8 @@ class ContactsImportStripeValidatedTierTest(TestCase):
                 "no-sub@test.com; leaving tier free unchanged"
             )
 
-        user = User.objects.create_user(
-            email="no-sub@test.com",
-            password=None,
-            stripe_customer_id="cus_NOSUB",
-        )
+        user = User.objects.create_user(email="no-sub@test.com", password=None)
+        set_membership(user, stripe_customer_id="cus_NOSUB")
 
         with mock.patch(
             "studio.services.contacts_import.backfill_user_from_stripe",
@@ -473,7 +463,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         warnings = response.json()["warnings"]
         self.assertTrue(
             any(w["reason"] == "stripe_tier_validation_failed" for w in warnings),
@@ -487,8 +477,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -520,8 +509,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -587,12 +575,10 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         # because the tier already matches.
         def sync_from_stripe(user, **kwargs):
             dry_run = kwargs.get("dry_run", False)
-            already_on_main = (user.tier_id == main.pk)
+            already_on_main = (user.membership.tier_id == main.pk)
 
             if not already_on_main and not dry_run:
-                user.tier = main
-                user.subscription_id = "sub_MAIN"
-                user.save(update_fields=["tier", "subscription_id"])
+                set_membership(user, tier=main, subscription_id="sub_MAIN")
 
                 class ChangedRecord:
                     status = "changed"
@@ -634,7 +620,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         self.assertEqual(r2.json()["warnings"], [])
 
         user = User.objects.get(email="idempotent@test.com")
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertEqual(
             TierOverride.objects.filter(user=user, is_active=True).count(),
             0,
@@ -659,8 +645,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user, **kwargs):
-            user.tier = main
-            user.save(update_fields=["tier"])
+            set_membership(user, tier=main)
 
             class Record:
                 status = "changed"
@@ -693,11 +678,8 @@ class ContactsImportStripeValidatedTierTest(TestCase):
     def test_import_calls_backfill_with_dry_run_when_customer_id_unchanged(self):
         """User already has customer_id; tier-only row -> dry_run + commit."""
         main = Tier.objects.get(slug="main")
-        user = User.objects.create_user(
-            email="existing-cid@test.com",
-            password=None,
-            stripe_customer_id="cus_EXISTING",
-        )
+        user = User.objects.create_user(email="existing-cid@test.com", password=None)
+        set_membership(user, stripe_customer_id="cus_EXISTING")
 
         call_log = []
 
@@ -705,8 +687,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
             dry_run = kwargs.get("dry_run", False)
             call_log.append({"dry_run": dry_run})
             if not dry_run:
-                user.tier = main
-                user.save(update_fields=["tier"])
+                set_membership(user, tier=main)
 
                 class ChangedRecord:
                     status = "changed"
@@ -735,7 +716,7 @@ class ContactsImportStripeValidatedTierTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         # Exactly two calls: dry_run first (validation), then a real commit
         # (because the dry_run reported changes pending).
         self.assertEqual(

@@ -44,6 +44,7 @@ from accounts.models import EmailAlias, TierOverride
 from accounts.services.email_resolution import normalize_email
 from accounts.utils.tags import normalize_tags, set_tags
 from community.models import CommunityAuditLog
+from payments.models import Membership
 
 logger = logging.getLogger(__name__)
 
@@ -397,6 +398,20 @@ def _strategy_operator_token(
     plan.credentials["operator_tokens_deleted"] = deleted
 
 
+def _strategy_membership(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Keep both Membership rows (issue #1579).
+
+    Every User row must keep exactly one Membership row, so the secondary's
+    row is neither repointed to canonical nor dropped. The tier/Stripe
+    values are reconciled in ``_reconcile_scalars`` (higher tier wins,
+    subscription moves) and the secondary's identifiers are scrubbed when
+    the secondary is deactivated.
+    """
+    return
+
+
 # Keyed by ``(app_label.ModelName, field_name)``.
 #
 # These cover the cases the generic unique-key walker cannot express correctly:
@@ -409,6 +424,7 @@ def _strategy_operator_token(
 _SPECIAL_STRATEGIES = {
     ("accounts.MemberAPIKey", "user"): _strategy_member_api_key,
     ("accounts.Token", "user"): _strategy_operator_token,
+    ("payments.Membership", "user"): _strategy_membership,
     ("analytics.UserAttribution", "user"): _strategy_user_attribution,
     ("crm.CRMRecord", "user"): _strategy_crm_record,
     ("content.UserCourseProgress", "user"): _strategy_course_progress,
@@ -653,30 +669,44 @@ _BOUNCE_RANK = {
 def _reconcile_scalars(plan, canonical, secondary):
     """Reconcile canonical <- secondary scalar fields by groomed precedence."""
     rec = plan.reconciled
+    # Issue #1579: tier/Stripe state lives on payments.Membership; the merge
+    # writes canonical's and secondary's membership rows directly.
+    canon_membership = Membership.for_user(canonical)
+    sec_membership = Membership.for_user(secondary)
 
     # tier: higher stored subscription/base level wins. Temporary effective
     # access from TierOverride is reconciled separately below.
-    canon_level = canonical.tier.level if canonical.tier_id else 0
-    sec_level = secondary.tier.level if secondary.tier_id else 0
+    canon_level = (
+        canon_membership.tier.level if canon_membership.tier_id else 0
+    )
+    sec_level = sec_membership.tier.level if sec_membership.tier_id else 0
     if sec_level > canon_level:
         rec["tier"] = {
-            "from": canonical.tier.slug if canonical.tier_id else None,
-            "to": secondary.tier.slug,
+            "from": (
+                canon_membership.tier.slug if canon_membership.tier_id else None
+            ),
+            "to": sec_membership.tier.slug,
             "source": "secondary",
         }
-        canonical.tier = secondary.tier
+        canon_membership.tier = sec_membership.tier
 
     # Billing identifiers: move secondary's only when canonical has no sub.
-    if not canonical.subscription_id and secondary.subscription_id:
-        if secondary.stripe_customer_id:
-            canonical.stripe_customer_id = secondary.stripe_customer_id
-        canonical.subscription_id = secondary.subscription_id
-        canonical.billing_period_end = secondary.billing_period_end
-        canonical.pending_tier = secondary.pending_tier
+    if (
+        not canon_membership.subscription_id
+        and sec_membership.subscription_id
+    ):
+        if sec_membership.stripe_customer_id:
+            canon_membership.stripe_customer_id = (
+                sec_membership.stripe_customer_id
+            )
+        canon_membership.subscription_id = sec_membership.subscription_id
+        canon_membership.billing_period_end = sec_membership.billing_period_end
+        canon_membership.pending_tier = sec_membership.pending_tier
         plan.stripe = {
-            "subscription_moved": secondary.subscription_id,
-            "customer_moved": secondary.stripe_customer_id,
+            "subscription_moved": sec_membership.subscription_id,
+            "customer_moved": sec_membership.stripe_customer_id,
         }
+    canon_membership.save()
 
     # email_verified / account_activated: OR.
     if secondary.email_verified and not canonical.email_verified:
@@ -774,7 +804,11 @@ def _reconcile_tier_overrides(plan, canonical):
     # Redundant-after-paid: if canonical's real stored tier now meets or exceeds the
     # surviving override's level, the override is courtesy fat -- revoke it
     # (mirrors ``_apply_stripe_subscription_tier``).
-    canon_level = canonical.tier.level if canonical.tier_id else 0
+    canon_level = (
+        canonical.membership.tier.level
+        if canonical.membership.tier_id
+        else 0
+    )
     if keeper.override_tier.level <= canon_level:
         keeper.is_active = False
         keeper.save(update_fields=["is_active"])
@@ -834,8 +868,8 @@ def merge_accounts(
                 "Refusing to merge into / from a staff account without force."
             )
 
-        canon_sub = canonical.subscription_id or ""
-        sec_sub = secondary.subscription_id or ""
+        canon_sub = canonical.membership.subscription_id or ""
+        sec_sub = secondary.membership.subscription_id or ""
         if canon_sub and sec_sub and canon_sub != sec_sub:
             if not force:
                 raise SubscriptionConflictError(canon_sub, sec_sub)
@@ -862,13 +896,13 @@ def merge_accounts(
             _register_alias(plan, canonical, secondary, actor)
             # Clear secondary's billing identifiers that moved to canonical so a
             # future webhook can't resolve the dead row ahead of canonical.
+            # Issue #1579: those identifiers live on the Membership row now.
+            secondary_membership = Membership.for_user(secondary)
             secondary.is_active = False
             secondary.unsubscribed = True
-            update_fields = [
+            secondary_update_fields = [
                 "is_active",
                 "unsubscribed",
-                "stripe_customer_id",
-                "subscription_id",
             ]
             # Scrub the secondary's email so the original address exists ONLY as
             # an EmailAlias of canonical (#845): restores the invariant
@@ -879,11 +913,15 @@ def merge_accounts(
             scrubbed = scrub_merged_email(secondary)
             if scrubbed is not None:
                 secondary.email = scrubbed
-                update_fields.append("email")
+                secondary_update_fields.append("email")
+            secondary.save(update_fields=secondary_update_fields)
             if plan.stripe.get("subscription_moved"):
-                secondary.stripe_customer_id = ""
-                secondary.subscription_id = ""
-            secondary.save(update_fields=update_fields)
+                secondary_membership.stripe_customer_id = ""
+                secondary_membership.subscription_id = ""
+                secondary_membership.save(update_fields=[
+                    "stripe_customer_id",
+                    "subscription_id",
+                ])
             plan.secondary_deactivated = True
 
             _write_audit(plan, canonical, actor_label)

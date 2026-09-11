@@ -22,6 +22,7 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import auth_context as _auth_context
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -57,7 +58,7 @@ def _seed_users():
     comped = User.objects.create_user(
         email="comped-971@test.com", password=None, email_verified=True,
     )
-    comped.tier = tiers["free"]
+    set_membership(comped, tier=tiers['free'])
     comped.slack_member = False
     comped.save()
     TierOverride.objects.create(
@@ -72,7 +73,7 @@ def _seed_users():
     expired = User.objects.create_user(
         email="expired-971@test.com", password=None, email_verified=True,
     )
-    expired.tier = tiers["free"]
+    set_membership(expired, tier=tiers['free'])
     expired.slack_member = False
     expired.save()
     TierOverride.objects.create(

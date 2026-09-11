@@ -3,7 +3,7 @@ from django.test import TestCase
 from django.urls import resolve
 from django.views.generic import RedirectView
 
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 
 class CommunityLandingRedirectTest(TierSetupMixin, TestCase):
@@ -17,9 +17,8 @@ class CommunityLandingRedirectTest(TierSetupMixin, TestCase):
         self.assertEqual(anonymous.status_code, 301)
         self.assertEqual(anonymous['Location'], '/')
 
-        user = get_user_model().objects.create_user(
-            email='community-redirect@example.com', password='pw', tier=self.main_tier
-        )
+        user = get_user_model().objects.create_user(email='community-redirect@example.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         self.client.force_login(user)
         authenticated = self.client.get('/community')
         self.assertEqual(authenticated.status_code, 301)

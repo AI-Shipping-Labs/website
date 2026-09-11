@@ -14,6 +14,7 @@ from accounts.models import Token
 from bookclub.models import Book, Chapter, Note
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -143,7 +144,7 @@ class BookSummaryApiTest(TestCase):
             user = User.objects.create_user(
                 email=f'{name.lower()}@test.com', password='pw', first_name=name,
             )
-            user.tier = self.main_tier
+            set_membership(user, tier=self.main_tier)
             user.save()
             Note.objects.create(
                 chapter=self.chapter, user=user, body=f'{name} body.',

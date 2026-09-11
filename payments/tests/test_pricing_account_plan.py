@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 @override_settings(
@@ -23,10 +24,12 @@ class PricingAccountPlanStateTest(TestCase):
 
     def _user(self, email, tier=None, subscription_id="", pending_tier=None):
         user = self.User.objects.create_user(email=email, password="testpass123")
-        user.tier = tier if tier is not None else self.free
-        user.subscription_id = subscription_id
-        user.pending_tier = pending_tier
-        user.save(update_fields=["tier", "subscription_id", "pending_tier"])
+        set_membership(
+            user,
+            tier=tier if tier is not None else self.free,
+            subscription_id=subscription_id,
+            pending_tier=pending_tier,
+        )
         return user
 
     def _pricing_states(self, user=None):
@@ -111,8 +114,10 @@ class PricingAccountPlanStateTest(TestCase):
             "sub_canceling",
             self.free,
         )
-        user.billing_period_end = datetime(2026, 6, 15, 12, 0, tzinfo=dt_timezone.utc)
-        user.save(update_fields=["billing_period_end"])
+        set_membership(
+            user,
+            billing_period_end=datetime(2026, 6, 15, 12, 0, tzinfo=dt_timezone.utc),
+        )
         states, response = self._pricing_states(user)
 
         self.assertEqual(states["basic"]["badge"], "Access ending")
@@ -162,8 +167,7 @@ class PricingAccountPlanStateTest(TestCase):
 
     def test_stale_subscription_uses_safe_management_for_paid_tiers(self):
         user = self._user("stale-pricing@test.com", self.free, "sub_stale")
-        user.tier = None
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=None)
 
         states, response = self._pricing_states(user)
 

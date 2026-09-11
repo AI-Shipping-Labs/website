@@ -17,6 +17,7 @@ import pytest
 from django.utils import timezone
 
 from playwright_tests.conftest import auth_context as _auth_context
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -54,7 +55,7 @@ def _seed_users_and_content():
     ov = User.objects.create_user(
         email="ov-member@test.com", password=None, email_verified=True,
     )
-    ov.tier = tiers["free"]
+    set_membership(ov, tier=tiers['free'])
     ov.save()
     TierOverride.objects.create(
         user=ov,
@@ -68,15 +69,15 @@ def _seed_users_and_content():
     paid = User.objects.create_user(
         email="paid-main@test.com", password=None, email_verified=True,
     )
-    paid.tier = tiers["main"]
-    paid.subscription_id = "sub_main_965"
+    set_membership(paid, tier=tiers['main'])
+    set_membership(paid, subscription_id='sub_main_965')
     paid.save()
 
     # Free member, no override.
     free = User.objects.create_user(
         email="free-member@test.com", password=None, email_verified=True,
     )
-    free.tier = tiers["free"]
+    set_membership(free, tier=tiers['free'])
     free.save()
 
     # Main-gated article for the no-paywall scenario.

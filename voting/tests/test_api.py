@@ -8,7 +8,7 @@ from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from accounts.models import User
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll, PollOption, PollVote
 
 
@@ -26,7 +26,7 @@ class VoteToggleAPITest(TierSetupMixin, TestCase):
         self.option_b = PollOption.objects.create(poll=self.poll, title='B')
         self.option_c = PollOption.objects.create(poll=self.poll, title='C')
         self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
 
     def _vote(self, poll_id, option_id, user=None):
@@ -110,7 +110,7 @@ class VoteToggleAPITest(TierSetupMixin, TestCase):
     def test_vote_insufficient_access_level(self):
         """Basic user cannot vote on topic poll (requires Main)."""
         basic_user = User.objects.create_user(email='basic@test.com', password='testpass')
-        basic_user.tier = self.basic_tier
+        set_membership(basic_user, tier=self.basic_tier)
         basic_user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self._vote(self.poll.id, self.option_a.id)
@@ -186,7 +186,7 @@ class ProposeOptionAPITest(TierSetupMixin, TestCase):
             allow_proposals=True,
         )
         self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
 
     def _propose(self, poll_id, title, description=''):
@@ -233,7 +233,7 @@ class ProposeOptionAPITest(TierSetupMixin, TestCase):
 
     def test_propose_insufficient_access_returns_403(self):
         basic_user = User.objects.create_user(email='basic@test.com', password='testpass')
-        basic_user.tier = self.basic_tier
+        set_membership(basic_user, tier=self.basic_tier)
         basic_user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self._propose(self.poll.id, 'New Topic')

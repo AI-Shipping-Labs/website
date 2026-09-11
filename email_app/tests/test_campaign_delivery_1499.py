@@ -29,14 +29,14 @@ from email_app.tasks.send_campaign import (
 )
 from jobs.tasks import build_task_name
 from payments.models import Tier
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
 
 class CampaignDeliveryBase(TierSetupMixin):
     def make_campaign_delivery(self, *, state=CampaignDelivery.State.PENDING):
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email=f"recipient-{uuid.uuid4().hex}@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -101,7 +101,7 @@ class CampaignClaimAndFanOutTest(CampaignDeliveryBase, TestCase):
         )
 
     def test_snapshot_is_frozen_and_parent_retry_is_a_noop(self):
-        first = User.objects.create_user(
+        first = create_user_with_membership(
             email="frozen-first@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -109,7 +109,7 @@ class CampaignClaimAndFanOutTest(CampaignDeliveryBase, TestCase):
         campaign = EmailCampaign.objects.create(subject="Frozen", body="Hi")
 
         initial = send_campaign(campaign.pk, batch_size=1)
-        User.objects.create_user(
+        create_user_with_membership(
             email="late-joiner@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -130,7 +130,7 @@ class CampaignClaimAndFanOutTest(CampaignDeliveryBase, TestCase):
         )
 
     def test_snapshot_and_schedules_roll_back_together(self):
-        User.objects.create_user(
+        create_user_with_membership(
             email="rollback-recipient@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -174,7 +174,7 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         from accounts.services.account_merge import merge_accounts
 
         campaign, secondary, delivery = self.make_campaign_delivery()
-        canonical = User.objects.create_user(
+        canonical = create_user_with_membership(
             email="durable-canonical@test.com",
             tier=self.free_tier,
             email_verified=True,
@@ -398,7 +398,7 @@ class CampaignAggregationAndReconciliationTest(CampaignDeliveryBase, TestCase):
             CampaignDelivery.State.ASSUMED_SENT,
             CampaignDelivery.State.FAILED,
         ):
-            extra = User.objects.create_user(
+            extra = create_user_with_membership(
                 email=f"aggregate-{state}@test.com",
                 tier=self.free_tier,
                 email_verified=True,
@@ -431,7 +431,7 @@ class CampaignAggregationAndReconciliationTest(CampaignDeliveryBase, TestCase):
         _campaign, _user, delivery = self.make_campaign_delivery(
             state=CampaignDelivery.State.FAILED,
         )
-        actor = User.objects.create_user(
+        actor = create_user_with_membership(
             email="resolver@test.com",
             tier=self.free_tier,
             is_staff=True,
@@ -462,7 +462,7 @@ class CampaignAggregationAndReconciliationTest(CampaignDeliveryBase, TestCase):
         campaign, _user, delivery = self.make_campaign_delivery(
             state=CampaignDelivery.State.AMBIGUOUS,
         )
-        actor = User.objects.create_user(
+        actor = create_user_with_membership(
             email="assumer@test.com",
             tier=self.free_tier,
             is_staff=True,
@@ -487,7 +487,7 @@ class CampaignAggregationAndReconciliationTest(CampaignDeliveryBase, TestCase):
         campaign, _user, delivery = self.make_campaign_delivery(
             state=CampaignDelivery.State.AMBIGUOUS,
         )
-        actor = User.objects.create_user(
+        actor = create_user_with_membership(
             email="rollback-assumer@test.com",
             tier=self.free_tier,
             is_staff=True,

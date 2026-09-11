@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -50,7 +51,7 @@ class _Base586(TestCase):
     def _make_member(self, email, tier=None, **extras):
         user = User.objects.create_user(email=email, password='pw')
         if tier is not None:
-            user.tier = tier
+            set_membership(user, tier=tier)
         for key, value in extras.items():
             setattr(user, key, value)
         user.save()
@@ -59,7 +60,7 @@ class _Base586(TestCase):
     def _make_override(self, user, override_tier=None, days=14):
         return TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=override_tier or self.main,
             expires_at=timezone.now() + timedelta(days=days),
             granted_by=self.staff,

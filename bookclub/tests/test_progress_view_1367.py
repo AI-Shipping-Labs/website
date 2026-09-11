@@ -35,6 +35,7 @@ from integrations.middleware import (
     get_announcement_banner,
 )
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -71,7 +72,7 @@ class ProgressBoardTestMixin:
         cls.free_user = User.objects.create_user(
             email='free@test.com', password='pw',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
     @classmethod
@@ -81,7 +82,7 @@ class ProgressBoardTestMixin:
         user = User.objects.create_user(
             email=email, password='pw', first_name=first_name,
         )
-        user.tier = cls.main_tier
+        set_membership(user, tier=cls.main_tier)
         user.save()
         if visibility is not None:
             ReaderProfile.objects.create(user=user, visibility=visibility)
@@ -165,7 +166,7 @@ class ProgressGatingTest(ProgressBoardTestMixin, TestCase):
         staff = User.objects.create_user(
             email='staff-free@test.com', password='pw', is_staff=True,
         )
-        staff.tier = self.free_tier
+        set_membership(staff, tier=self.free_tier)
         staff.save()
         _mark_read(self.viewer, self.chapters, 2)
         self.client.force_login(staff)

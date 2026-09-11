@@ -11,7 +11,7 @@ from django.test import TestCase
 from analytics.models import UserActivity
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Article, Project, Tutorial
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -20,13 +20,10 @@ class BlogResourceViewWiringTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.member = User.objects.create_user(
-            email='member@test.com', password='pw', tier=cls.main_tier,
-        )
-        cls.free = User.objects.create_user(
-            email='free@test.com', password='pw', tier=cls.free_tier,
-            email_verified=True,
-        )
+        cls.member = User.objects.create_user(email='member@test.com', password='pw')
+        set_membership(cls.member, tier=cls.main_tier)
+        cls.free = User.objects.create_user(email='free@test.com', password='pw', email_verified=True)
+        set_membership(cls.free, tier=cls.free_tier)
         cls.open_article = Article.objects.create(
             title='Open Read', slug='open-read', date=date(2026, 1, 1),
             published=True, required_level=LEVEL_OPEN,
@@ -90,9 +87,8 @@ class ProjectTutorialWiringTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.member = User.objects.create_user(
-            email='pt@test.com', password='pw', tier=cls.main_tier,
-        )
+        cls.member = User.objects.create_user(email='pt@test.com', password='pw')
+        set_membership(cls.member, tier=cls.main_tier)
         cls.project = Project.objects.create(
             title='Build It', slug='build-it', date=date(2026, 1, 1),
             published=True, required_level=LEVEL_OPEN,
@@ -136,10 +132,8 @@ class CourseUnitNoDoubleEmitTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         from content.models import Course, Module, Unit
 
-        cls.member = User.objects.create_user(
-            email='cu@test.com', password='pw', tier=cls.main_tier,
-            email_verified=True,
-        )
+        cls.member = User.objects.create_user(email='cu@test.com', password='pw', email_verified=True)
+        set_membership(cls.member, tier=cls.main_tier)
         cls.course = Course.objects.create(
             title='LLM Zoomcamp', slug='llm', status='published',
             required_level=LEVEL_OPEN,

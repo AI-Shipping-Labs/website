@@ -17,6 +17,7 @@ from playwright.sync_api import expect
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
 from playwright_tests.conftest import create_session_for_user as _create_session
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -48,7 +49,7 @@ def _create_user(email, preferred_timezone=''):
     user, _ = User.objects.get_or_create(email=email)
     user.set_password(DEFAULT_PASSWORD)
     user.email_verified = True
-    user.tier = tier
+    set_membership(user, tier=tier)
     user.preferred_timezone = preferred_timezone
     user.save()
     connection.close()

@@ -29,6 +29,7 @@ from email_app.services.email_classification import (
 )
 from payments.models import Tier
 from questionnaires.models import Questionnaire, Response
+from tests.fixtures import set_membership
 
 
 def _tier(slug):
@@ -72,9 +73,9 @@ class OnboardingReminderSweepTest(TestCase):
         )
 
     def _make_member(self, email, tier_slug="main"):
-        return User.objects.create_user(
-            email=email, password="pw", tier=_tier(tier_slug),
-        )
+        user = User.objects.create_user(email=email, password="pw")
+        set_membership(user, tier=_tier(tier_slug))
+        return user
 
     def _welcome(self, user, days_ago, email_type="cofounder_welcome"):
         """Create a welcome EmailLog dated ``days_ago`` (bypasses auto_now_add)."""
@@ -181,7 +182,7 @@ class OnboardingReminderSweepTest(TestCase):
         member = self._make_member("expired@example.com", "free")
         TierOverride.objects.create(
             user=member,
-            original_tier=member.tier,
+            original_tier=member.membership.tier,
             override_tier=_tier("main"),
             expires_at=timezone.now() - datetime.timedelta(days=1),
             is_active=True,
@@ -325,9 +326,8 @@ class SendOnboardingRemindersCommandTest(TestCase):
         )
 
     def _due_member(self):
-        member = User.objects.create_user(
-            email="cmd-due@example.com", password="pw", tier=_tier("main"),
-        )
+        member = User.objects.create_user(email="cmd-due@example.com", password="pw")
+        set_membership(member, tier=_tier("main"))
         log = EmailLog.objects.create(
             user=member, email_type="cofounder_welcome", ses_message_id="w",
         )
@@ -337,9 +337,8 @@ class SendOnboardingRemindersCommandTest(TestCase):
         return member
 
     def _fresh_member(self):
-        member = User.objects.create_user(
-            email="cmd-fresh@example.com", password="pw", tier=_tier("premium"),
-        )
+        member = User.objects.create_user(email="cmd-fresh@example.com", password="pw")
+        set_membership(member, tier=_tier("premium"))
         log = EmailLog.objects.create(
             user=member, email_type="premium_welcome", ses_message_id="w",
         )

@@ -25,7 +25,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from events.models import Event, EventRegistration
-from tests.fixtures import StaffUserMixin, TierSetupMixin
+from tests.fixtures import StaffUserMixin, TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -46,15 +46,10 @@ class EventEditRegistrationsContextTest(TierSetupMixin, StaffUserMixin, TestCase
             slug='roster-event',
             start_datetime=timezone.now() + timedelta(days=5),
         )
-        cls.alice = User.objects.create_user(
-            email='alice@test.com', password='pw',
-            first_name='Alice', last_name='Anders',
-            tier=cls.main_tier,
-        )
-        cls.bob = User.objects.create_user(
-            email='bob@test.com', password='pw',
-            tier=cls.basic_tier,
-        )
+        cls.alice = User.objects.create_user(email='alice@test.com', password='pw', first_name='Alice', last_name='Anders')
+        set_membership(cls.alice, tier=cls.main_tier)
+        cls.bob = User.objects.create_user(email='bob@test.com', password='pw')
+        set_membership(cls.bob, tier=cls.basic_tier)
         cls.carol = User.objects.create_user(
             email='carol@test.com', password='pw',
         )
@@ -218,15 +213,10 @@ class EventRegistrationsCsvTest(TierSetupMixin, StaffUserMixin, TestCase):
             slug='csv-roster-event',
             start_datetime=timezone.now() + timedelta(days=7),
         )
-        cls.alice = User.objects.create_user(
-            email='alice@test.com', password='pw',
-            first_name='Alice', last_name='Anders',
-            tier=cls.main_tier,
-        )
-        cls.bob = User.objects.create_user(
-            email='bob@test.com', password='pw',
-            tier=cls.premium_tier,
-        )
+        cls.alice = User.objects.create_user(email='alice@test.com', password='pw', first_name='Alice', last_name='Anders')
+        set_membership(cls.alice, tier=cls.main_tier)
+        cls.bob = User.objects.create_user(email='bob@test.com', password='pw')
+        set_membership(cls.bob, tier=cls.premium_tier)
         cls.reg_alice = EventRegistration.objects.create(
             event=cls.event, user=cls.alice,
         )
@@ -287,7 +277,7 @@ class EventRegistrationsCsvTest(TierSetupMixin, StaffUserMixin, TestCase):
         self.assertEqual(rows['bob@test.com']['tier'], 'Premium')
 
     def test_csv_user_without_tier_defaults_to_free(self):
-        """``user.tier`` is FK-defaulted to ``free`` on create, but if a
+        """``user.membership.tier`` is FK-defaulted to ``free`` on create, but if a
         future code path nulls it the export still renders ``Free`` so
         the column never goes blank."""
         carol = User.objects.create_user(

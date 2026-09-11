@@ -25,6 +25,7 @@ from payments.services import handle_checkout_completed as _handle_checkout_comp
 from tests.fixtures import (
     TierSetupMixin,
     call_checkout_in_legacy_numeric_compat_window,
+    set_membership,
 )
 
 User = get_user_model()
@@ -170,7 +171,7 @@ class CanAccessWithCourseAccessTest(TierSetupMixin, TestCase):
         self.assertTrue(can_access(granted_user, self.paid_course))
 
         # Case: tier upgrade -> allowed (no CourseAccess needed)
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.assertTrue(can_access(self.user, self.paid_course))
 
@@ -236,7 +237,7 @@ class CourseDetailBuyButtonTest(TierSetupMixin, TestCase):
     def test_main_user_does_not_see_buy_button(self):
         """A user with tier access should not see the buy button."""
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/buyable-course')
@@ -371,11 +372,11 @@ class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
                 'course_id': str(self.course.pk),
             },
         }
-        original_tier = self.user.tier
+        original_tier = self.user.membership.tier
         handle_checkout_completed(session_data)
 
         self.user.refresh_from_db()
-        self.assertEqual(self.user.tier, original_tier)
+        self.assertEqual(self.user.membership.tier, original_tier)
 
     def test_stores_stripe_customer_id(self):
         """Course purchase saves stripe_customer_id if not already set."""
@@ -393,7 +394,7 @@ class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         self.user.refresh_from_db()
-        self.assertEqual(self.user.stripe_customer_id, 'cus_new_buyer')
+        self.assertEqual(self.user.membership.stripe_customer_id, 'cus_new_buyer')
 
     def test_idempotent_on_duplicate(self):
         """Processing the same checkout twice does not create duplicate access."""
@@ -471,7 +472,7 @@ class WebhookCoursePurchaseTest(TierSetupMixin, TestCase):
             handle_checkout_completed(session_data)
 
         self.user.refresh_from_db()
-        self.assertEqual(self.user.tier.slug, 'main')
+        self.assertEqual(self.user.membership.tier.slug, 'main')
         # No CourseAccess should be created
         self.assertEqual(CourseAccess.objects.count(), 0)
 
@@ -733,7 +734,7 @@ class CourseUnitAccessWithPurchaseTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
 
     def test_tier_access_still_works_for_units(self):
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.client.login(email='unit@test.com', password='testpass')
         response = self.client.get('/courses/unit-access/module-1/lesson-1')

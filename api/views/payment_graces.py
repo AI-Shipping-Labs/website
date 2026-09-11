@@ -42,7 +42,12 @@ def _serialize(grace, *, detail=False):
         "status": grace.status,
         "source": grace.source,
         "user": {"id": grace.user_id, "email": grace.user.email},
-        "base_tier": grace.user.tier.slug if grace.user.tier_id else "free",
+        # Issue #1579: the base tier lives on payments.Membership.
+        "base_tier": (
+            grace.user.membership.tier.slug
+            if grace.user.membership.tier_id
+            else "free"
+        ),
         "base_tier_at_start": grace.base_tier_at_start.slug,
         "effective_tier": effective.slug if effective else "free",
         "stripe_customer_id": grace.stripe_customer_id,
@@ -114,7 +119,9 @@ def _parse_datetime_filter(request, field):
     }},
 )
 def payment_graces_collection(request):
-    qs = Grace.objects.select_related("user__tier", "base_tier_at_start").prefetch_related("deliveries")
+    qs = Grace.objects.select_related(
+        "user__membership__tier", "base_tier_at_start",
+    ).prefetch_related("deliveries")
     status = (request.GET.get("status") or "").strip().lower()
     if status:
         if status not in VALID_STATUS:
@@ -129,7 +136,7 @@ def payment_graces_collection(request):
     if tier:
         if tier not in VALID_TIERS:
             return _validation("tier", "Unknown tier filter")
-        qs = qs.filter(user__tier__slug=tier)
+        qs = qs.filter(user__membership__tier__slug=tier)
     interval = (request.GET.get("interval") or "").strip().lower()
     if interval:
         if interval not in {"month", "year", "week", "day"}:
@@ -186,7 +193,9 @@ def payment_graces_collection(request):
 )
 def payment_grace_detail(request, grace_id):
     grace = (
-        Grace.objects.select_related("user__tier", "base_tier_at_start")
+        Grace.objects.select_related(
+            "user__membership__tier", "base_tier_at_start",
+        )
         .prefetch_related("deliveries").filter(pk=grace_id).first()
     )
     if grace is None:

@@ -15,6 +15,7 @@ from accounts.models import MemberAPIKey
 from bookclub.models import Book, Chapter, ChapterRead
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -42,13 +43,13 @@ class MemberBooksApiTest(TestCase):
         Chapter.objects.create(book=cls.draft, number=0, title="Hidden")
 
         cls.member = User.objects.create_user(email="owner@test.com")
-        cls.member.tier = cls.main_tier
+        set_membership(cls.member, tier=cls.main_tier)
         cls.member.save()
         cls.other = User.objects.create_user(email="other@test.com")
-        cls.other.tier = cls.main_tier
+        set_membership(cls.other, tier=cls.main_tier)
         cls.other.save()
         cls.free_user = User.objects.create_user(email="free@test.com")
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.key, cls.plaintext = MemberAPIKey.create_for_user(

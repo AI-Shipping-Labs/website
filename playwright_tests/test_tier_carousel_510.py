@@ -17,6 +17,7 @@ from playwright_tests.conftest import (
     create_user,
     ensure_site_config_tiers,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -467,8 +468,7 @@ def test_pricing_logged_in_main_member_account_states(
     with django_db_blocker.unblock():
         _ensure_pricing_tiers()
         user = create_user("issue-510-main@test.com", tier_slug="main")
-        user.subscription_id = "sub_issue_510_main"
-        user.save(update_fields=["subscription_id"])
+        set_membership(user, subscription_id='sub_issue_510_main')
 
     context = auth_context(browser, "issue-510-main@test.com")
     page = context.new_page()

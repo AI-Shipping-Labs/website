@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from accounts.models import Token
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -137,7 +138,7 @@ class ContactsExportTest(TestCase):
 
 
 class ContactsExportTierResolutionTest(TestCase):
-    """Tier slug serialization: pulls user.tier.slug straight, no overrides."""
+    """Tier slug serialization: pulls user.membership.tier.slug straight, no overrides."""
 
     @classmethod
     def setUpTestData(cls):
@@ -153,7 +154,7 @@ class ContactsExportTierResolutionTest(TestCase):
 
     def test_main_tier_user_serializes_main(self):
         u = User.objects.create_user(email="paid@test.com", password=None)
-        u.tier = Tier.objects.get(slug="main")
+        set_membership(u, tier=Tier.objects.get(slug="main"))
         u.save()
 
         response = self.client.get(

@@ -27,6 +27,7 @@ from payments.models import (
     SubscriptionReconciliationRun as Run,
 )
 from payments.services import subscription_reconciliation as recon
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -87,8 +88,25 @@ class ReconBase(TestCase):
         cls.premium = Tier.objects.get(slug="premium")
 
     def _user(self, email, **kwargs):
-        kwargs.setdefault("stripe_customer_id", f"cus_{email.split('@')[0]}")
-        return User.objects.create_user(email=email, password="x", **kwargs)
+        # Issue #1579: tier/Stripe fields live on payments.Membership.
+        stripe_customer_id = kwargs.pop(
+            "stripe_customer_id", f"cus_{email.split('@')[0]}"
+        )
+        # Issue #1579: default free tier mirrors the old User.save() default.
+        tier = kwargs.pop("tier", self.free)
+        pending_tier = kwargs.pop("pending_tier", None)
+        subscription_id = kwargs.pop("subscription_id", "")
+        billing_period_end = kwargs.pop("billing_period_end", None)
+        user = User.objects.create_user(email=email, password="x", **kwargs)
+        set_membership(
+            user,
+            tier=tier,
+            pending_tier=pending_tier,
+            stripe_customer_id=stripe_customer_id,
+            subscription_id=subscription_id,
+            billing_period_end=billing_period_end,
+        )
+        return user
 
     def _classify(self, user, sub=None, subs=None):
         with patch.object(
@@ -161,7 +179,7 @@ class ClassificationMatrixTest(ReconBase):
             stripe_event_id="evt_del",
             event_type="customer.subscription.deleted",
             stripe_subscription_id="sub_1",
-            stripe_customer_id=user.stripe_customer_id,
+            stripe_customer_id=user.membership.stripe_customer_id,
             outcome=StripeWebhookDeliveryAttempt.OUTCOME_PROCESSED,
             finished_at=timezone.now(),
         )
@@ -302,9 +320,9 @@ class ApplyTransitionTest(ReconBase):
             recon.apply_deterministic(result)
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
-        self.assertEqual(user.subscription_id, "")
-        self.assertIsNone(user.pending_tier_id)
+        self.assertEqual(user.membership.tier.slug, "free")
+        self.assertEqual(user.membership.subscription_id, "")
+        self.assertIsNone(user.membership.pending_tier_id)
         # Override survives; community NOT removed (effective access is Main).
         self.assertTrue(override.is_active)
         remove.assert_not_called()
@@ -314,7 +332,7 @@ class ApplyTransitionTest(ReconBase):
             payload__user_id=user.pk,
         )
         self.assertEqual(audit.subject_user_id, user.pk)
-        self.assertEqual(audit.stripe_customer_id, user.stripe_customer_id)
+        self.assertEqual(audit.stripe_customer_id, user.membership.stripe_customer_id)
         self.assertEqual(audit.stripe_subscription_id, "sub_1")
 
     def test_apply_is_idempotent(self):
@@ -322,7 +340,7 @@ class ApplyTransitionTest(ReconBase):
         result = self._classify(user, sub=make_sub(status="canceled"))
         recon.apply_deterministic(result)
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         # Re-classify: now free locally, canceled Stripe -> in sync, no action.
         result2 = self._classify(user, sub=make_sub(status="canceled"))
         self.assertEqual(result2.classification, recon.CLASSIFICATION_OK)
@@ -345,7 +363,7 @@ class RunOrchestrationTest(ReconBase):
         run.refresh_from_db()
         paid_ended.refresh_from_db()
         # Read-only: no membership change.
-        self.assertEqual(paid_ended.tier.slug, "main")
+        self.assertEqual(paid_ended.membership.tier.slug, "main")
         self.assertEqual(run.status, Run.STATUS_COMPLETED)
         self.assertEqual(run.cohort_count, 1)
         self.assertEqual(run.actionable_count, 1)
@@ -380,7 +398,7 @@ class RunOrchestrationTest(ReconBase):
                 mode=Run.MODE_APPLY, users=[user], confirm=True,
             )
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertEqual(run.changed_count, 1)
         self.assertEqual(run.findings.get().outcome, Finding.OUTCOME_CHANGED)
 
@@ -396,5 +414,5 @@ class RunOrchestrationTest(ReconBase):
                 mode=Run.MODE_APPLY, users=[user], confirm=False,
             )
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertEqual(run.changed_count, 0)

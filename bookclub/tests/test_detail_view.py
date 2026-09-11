@@ -8,6 +8,7 @@ from django.test import TestCase
 from bookclub.models import Book, Chapter
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -30,13 +31,13 @@ class BookDetailGatingTest(TestCase):
         cls.free_user = User.objects.create_user(
             email='free@test.com', password='pw',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.main_user = User.objects.create_user(
             email='main@test.com', password='pw',
         )
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
     def test_header_and_gate_render_for_anonymous_guest(self):
@@ -119,7 +120,7 @@ class BookRoadmapWeekGroupingTest(TestCase):
                 deadline=today + timedelta(days=14),
             )
         cls.member = User.objects.create_user(email='wk@test.com', password='pw')
-        cls.member.tier = Tier.objects.get(slug='main')
+        set_membership(cls.member, tier=Tier.objects.get(slug='main'))
         cls.member.save()
 
     def test_roadmap_renders_a_group_per_week(self):
@@ -193,12 +194,12 @@ class BookRegisteredWallTest(TestCase):
         cls.verified_free = User.objects.create_user(
             email='vfree@test.com', password='pw', email_verified=True,
         )
-        cls.verified_free.tier = cls.free_tier
+        set_membership(cls.verified_free, tier=cls.free_tier)
         cls.verified_free.save()
         cls.unverified_free = User.objects.create_user(
             email='ufree@test.com', password='pw', email_verified=False,
         )
-        cls.unverified_free.tier = cls.free_tier
+        set_membership(cls.unverified_free, tier=cls.free_tier)
         cls.unverified_free.save()
 
     def test_anonymous_gets_gate(self):

@@ -17,7 +17,7 @@ from django.test import Client, TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN
 from content.models import CuratedLink
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -359,7 +359,7 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='basic@test.com', password='testpass',
         )
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/resources')
@@ -369,7 +369,7 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='basic2@test.com', password='testpass',
         )
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic2@test.com', password='testpass')
         response = self.client.get('/resources')
@@ -380,7 +380,7 @@ class ResourcesGatingTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='free@test.com', password='testpass',
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/resources')
@@ -409,7 +409,7 @@ class ResourcesGatingMainTierTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='basic@test.com', password='testpass',
         )
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/resources')
@@ -420,7 +420,7 @@ class ResourcesGatingMainTierTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='main@test.com', password='testpass',
         )
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/resources')

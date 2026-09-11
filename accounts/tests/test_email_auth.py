@@ -177,8 +177,8 @@ class RegisterAPITest(TestCase):
         """New user gets free tier."""
         self._post({"email": "free@example.com", "password": "secure1234"})
         user = User.objects.get(email="free@example.com")
-        self.assertIsNotNone(user.tier)
-        self.assertEqual(user.tier.slug, "free")
+        self.assertIsNotNone(user.membership.tier)
+        self.assertEqual(user.membership.tier.slug, "free")
 
     def test_register_duplicate_email_returns_400(self):
         """Cannot register with an email that already exists."""
@@ -260,7 +260,7 @@ class RegisterAPITest(TestCase):
         user = User.objects.get(email="strong-pw@example.com")
         self.assertTrue(user.check_password("TestPass123!"))
         self.assertFalse(user.email_verified)
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertEqual(int(self.client.session["_auth_user_id"]), user.pk)
 
     def test_register_empty_email_returns_400(self):

@@ -16,7 +16,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from accounts.tier_audience import effective_level_at_least_q
 from content.access import LEVEL_MAIN
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -27,14 +27,13 @@ class EffectiveLevelAtLeastQTest(TierSetupMixin, TestCase):
 
     def _user(self, email, tier):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=tier)
         return user
 
     def _override(self, user, tier, *, is_active=True, expires_in_days=7):
         return TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=tier,
             expires_at=timezone.now() + timedelta(days=expires_in_days),
             is_active=is_active,

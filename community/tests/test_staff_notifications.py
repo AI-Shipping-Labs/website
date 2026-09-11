@@ -25,7 +25,7 @@ from payments import services as payment_services
 from payments.models import Tier
 from payments.services import handle_checkout_completed as _handle_checkout_completed
 from plans.models import Sprint
-from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window, set_membership
 
 
 def handle_checkout_completed(session_data):
@@ -2261,7 +2261,7 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
     def _session_for(self, user, *, tier_slug):
         return {
             "id": f"cs_{tier_slug}_{user.pk}",
-            "customer": user.stripe_customer_id or f"cus_{user.pk}",
+            "customer": user.membership.stripe_customer_id or f"cus_{user.pk}",
             "customer_details": {"email": user.email},
             "subscription": "",
             "client_reference_id": str(user.pk),
@@ -2281,13 +2281,8 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
     def test_returning_churned_member_gets_welcome_back_kir_case(self):
         from email_app.models import EmailLog
 
-        user = User.objects.create_user(
-            email="kir@test.com",
-            first_name="Kir",
-            tier=self.free_tier,
-            stripe_customer_id="cus_kir",
-            tags=["stripe:churned", "stripe:plan-main"],
-        )
+        user = User.objects.create_user(email="kir@test.com", first_name="Kir", tags=["stripe:churned", "stripe:plan-main"])
+        set_membership(user, tier=self.free_tier, stripe_customer_id="cus_kir")
 
         self._run(user, tier_slug="main")
 
@@ -2344,13 +2339,8 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
         from email_app.models import EmailLog
 
         # Existing free user, never subscribed -> no stripe:churned.
-        user = User.objects.create_user(
-            email="firsttime@test.com",
-            first_name="Sam",
-            tier=self.free_tier,
-            stripe_customer_id="cus_ft",
-            tags=["stripe:imported"],
-        )
+        user = User.objects.create_user(email="firsttime@test.com", first_name="Sam", tags=["stripe:imported"])
+        set_membership(user, tier=self.free_tier, stripe_customer_id="cus_ft")
 
         self._run(user, tier_slug="basic")
 
@@ -2369,13 +2359,8 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
 
         # Active Basic member upgrading to Main — never carried
         # stripe:churned -> standard Main tier welcome, not welcome_back.
-        user = User.objects.create_user(
-            email="upgrader@test.com",
-            first_name="Alex",
-            tier=self.basic_tier,
-            stripe_customer_id="cus_up",
-            tags=["stripe:active", "stripe:plan-basic"],
-        )
+        user = User.objects.create_user(email="upgrader@test.com", first_name="Alex", tags=["stripe:active", "stripe:plan-basic"])
+        set_membership(user, tier=self.basic_tier, stripe_customer_id="cus_up")
 
         self._run(user, tier_slug="main")
 

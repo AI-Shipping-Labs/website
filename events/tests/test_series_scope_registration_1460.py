@@ -29,7 +29,7 @@ from events.services.series_registration import (
     enroll_series_registrants_in_event,
     enroll_user_in_series,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -83,7 +83,7 @@ class RegisterScopeSeriesDefaultTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -181,7 +181,7 @@ class RegisterScopeStandaloneEventTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -227,7 +227,7 @@ class RegisterScopeGatedSiblingsTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='free@test.com', password='pass', email_verified=True,
             tier=self.free_tier,
         )
@@ -291,7 +291,7 @@ class RegistrationEmailScopeTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -345,7 +345,7 @@ class SeriesOccurrenceOptOutLifecycleTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -397,7 +397,7 @@ class SeriesOccurrenceOptOutLifecycleTest(TierSetupMixin, TestCase):
         )
 
     def test_user_with_neither_registration_nor_flag_gets_404(self):
-        stranger = User.objects.create_user(
+        stranger = create_user_with_membership(
             email='stranger@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -496,7 +496,7 @@ class OptOutRespectedByFanOutTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -543,7 +543,7 @@ class DraftPublicationAutoEnrolTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -579,7 +579,7 @@ class EventCardSeriesCopyTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='main@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )

@@ -10,6 +10,7 @@ from accounts.models import TierOverride
 from crm.models import CRMRecord
 from payments.models import Tier
 from plans.models import InterviewNote
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -60,12 +61,12 @@ class Issue1288StudioTest(TestCase):
         self.assertContains(response, 'No renewal date cached. Use Sync from Stripe.')
         self.assertEqual(response.content.decode().count('&mdash;'), 2)
 
-        member.tier = Tier.objects.get(slug='main')
-        member.subscription_id = 'sub_ui_1288'
-        member.billing_period_end = datetime.datetime(
-            2027, 2, 3, 12, 0, tzinfo=datetime.UTC,
+        set_membership(
+            member,
+            tier=Tier.objects.get(slug='main'),
+            subscription_id='sub_ui_1288',
+            billing_period_end=datetime.datetime( 2027, 2, 3, 12, 0, tzinfo=datetime.UTC, ),
         )
-        member.save(update_fields=['tier', 'subscription_id', 'billing_period_end'])
         response = self.client.get(f'/studio/users/{member.pk}/')
         self.assertContains(response, 'data-testid="user-detail-subscription-plan">Main')
         self.assertContains(response, 'data-testid="user-detail-subscription-status">\n              Active')

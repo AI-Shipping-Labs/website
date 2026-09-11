@@ -53,7 +53,7 @@ def build_campaign_recipient_rows(campaign):
     if mode == "preview":
         users = (
             campaign.get_eligible_recipients()
-            .select_related("tier")
+            .select_related("membership__tier")
             .order_by("email")
         )
         return [

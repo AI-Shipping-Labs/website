@@ -3,7 +3,7 @@
 Verifies:
 - No N+1 queries in _get_in_progress_courses (uses annotation instead of per-course total_units())
 - get_active_override called at most once per request (not duplicated by get_user_level)
-- user.tier prefetched via select_related
+- user.membership.tier prefetched via select_related
 - Total dashboard DB queries stay under a reasonable bound
 """
 
@@ -25,7 +25,7 @@ from content.models import (
     UserCourseProgress,
 )
 from events.models import Event, EventRegistration
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll
 
 User = get_user_model()
@@ -158,7 +158,7 @@ class BelowTierWithCourseAccessQueryCountTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='below-tier@example.com', password='testpass',
         )
-        cls.user.tier = cls.basic_tier
+        set_membership(cls.user, tier=cls.basic_tier)
         cls.user.save()
 
         now = timezone.now()
@@ -260,7 +260,7 @@ class DuplicateOverrideQueryTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='override@example.com', password='testpass',
         )
-        cls.user.tier = cls.basic_tier
+        set_membership(cls.user, tier=cls.basic_tier)
         cls.user.save()
 
     def test_get_active_override_called_once(self):
@@ -274,8 +274,10 @@ class DuplicateOverrideQueryTest(TierSetupMixin, TestCase):
 
     def test_get_user_level_with_precomputed_override_skips_db(self):
         """Passing active_override=None to get_user_level should not query for overrides."""
-        # Pre-fetch the user with tier
-        user = User.objects.select_related('tier').get(pk=self.user.pk)
+        # Pre-fetch the user with the membership tier (issue #1579).
+        user = User.objects.select_related('membership__tier').get(
+            pk=self.user.pk,
+        )
 
         # With active_override=None explicitly passed, no override DB query should happen
         with self.assertNumQueries(0):
@@ -284,7 +286,7 @@ class DuplicateOverrideQueryTest(TierSetupMixin, TestCase):
 
 
 class SelectRelatedTierTest(TierSetupMixin, TestCase):
-    """Verify user.tier is prefetched and does not cause extra queries."""
+    """Verify user.membership.tier is prefetched and does not cause extra queries."""
 
     @classmethod
     def setUpTestData(cls):
@@ -292,18 +294,21 @@ class SelectRelatedTierTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='tiertest@example.com', password='testpass',
         )
-        cls.user.tier = cls.main_tier
+        set_membership(cls.user, tier=cls.main_tier)
         cls.user.save()
 
     def test_dashboard_prefetches_user_tier(self):
-        """Accessing user.tier.name after the dashboard view prefetch should not query."""
-        # Simulate what the dashboard does
-        user = User.objects.select_related('tier').get(pk=self.user.pk)
+        """Accessing user.membership.tier.name after the dashboard view prefetch should not query."""
+        # Simulate what the dashboard does (issue #1579: the tier lives
+        # on payments.Membership, so the prefetch covers that relation).
+        user = User.objects.select_related('membership__tier').get(
+            pk=self.user.pk,
+        )
 
         # Accessing tier attributes should not trigger additional queries
         with self.assertNumQueries(0):
-            _ = user.tier.name
-            _ = user.tier.level
+            _ = user.membership.tier.name
+            _ = user.membership.tier.level
 
 
 class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
@@ -316,7 +321,7 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
             email='totalq@example.com', password='testpass',
             first_name='QueryTest',
         )
-        cls.user.tier = cls.main_tier
+        set_membership(cls.user, tier=cls.main_tier)
         cls.user.save()
 
         now = timezone.now()

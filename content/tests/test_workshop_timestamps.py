@@ -25,7 +25,7 @@ from content.templatetags.video_utils import (
     parse_video_timestamp,
 )
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -287,12 +287,10 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='setup', title='Setup',
             sort_order=2, body='hi', video_start='16:00',
         )
-        cls.user_basic = User.objects.create_user(
-            email='basic@x.com', password='pw', tier=cls.basic_tier,
-        )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_basic = User.objects.create_user(email='basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_main_user_sees_watch_bar_when_video_start_set(self):
         self.client.force_login(self.user_main)
@@ -356,12 +354,10 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='setup-page', title='Setup Page',
             sort_order=2, body='hi', video_start='16:00',
         )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
-        cls.user_basic = User.objects.create_user(
-            email='basic@x.com', password='pw', tier=cls.basic_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
+        cls.user_basic = User.objects.create_user(email='basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
 
     def test_inverse_links_render_for_matching_timestamps(self):
         self.client.force_login(self.user_main)
@@ -463,9 +459,8 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='second', title='Second Page',
             sort_order=2, body='hi', video_start='0:00',
         )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_lowest_sort_order_page_wins(self):
         self.client.force_login(self.user_main)
@@ -499,9 +494,8 @@ class WorkshopVideoCanonicalTimestampShapeTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='setup', title='Setup Page',
             sort_order=1, body='hi', video_start='16:00',
         )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_canonical_shape_links_to_tutorial(self):
         self.client.force_login(self.user_main)
@@ -527,9 +521,8 @@ class WorkshopVideoFallbackEmbedStartTest(TierSetupMixin, TestCase):
             recording_embed_url='https://drive.example.com/embed/xyz',
         )
         cls.workshop = _make_workshop(slug='fb', event=cls.event)
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_fallback_iframe_url_carries_start(self):
         self.client.force_login(self.user_main)
@@ -583,9 +576,8 @@ class WorkshopVideoSelfHostedCueTest(TierSetupMixin, TestCase):
             ],
         )
         cls.workshop = _make_workshop(slug='sh', event=cls.event)
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_self_hosted_video_element_renders(self):
         self.client.force_login(self.user_main)

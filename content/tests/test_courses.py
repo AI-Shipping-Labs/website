@@ -31,7 +31,7 @@ from content.models import (
     UserCourseProgress,
 )
 from content.models.cohort import CohortEnrollment
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -602,10 +602,8 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
             end_date=timezone.now().date() + datetime.timedelta(days=35),
             is_active=True,
         )
-        user = User.objects.create_user(
-            email='cohort-actions@test.com', password='pw', tier=self.main_tier,
-            email_verified=True,
-        )
+        user = User.objects.create_user(email='cohort-actions@test.com', password='pw', email_verified=True)
+        set_membership(user, tier=self.main_tier)
         self.client.force_login(user)
         response = self.client.get('/courses/detail-course')
         self.assertContains(response, f'data-testid="cohort-enroll-{cohort.pk}"')
@@ -774,7 +772,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def test_authorized_user_sees_clickable_links(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/paid-course')
@@ -782,7 +780,7 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def test_authorized_user_sees_progress_bar(self):
         user = User.objects.create_user(email='main2@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
         response = self.client.get('/courses/paid-course')
@@ -853,7 +851,7 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.user = User.objects.create_user(email='prog@test.com', password='testpass')
-        cls.user.tier = cls.premium_tier
+        set_membership(cls.user, tier=cls.premium_tier)
         cls.user.save()
 
         cls.course = Course.objects.create(
@@ -953,7 +951,7 @@ class ApiCoursesListTest(TierSetupMixin, TestCase):
             status='published', required_level=LEVEL_MAIN,
         )
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/api/courses')
@@ -1021,7 +1019,7 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
 
     def test_authenticated_includes_progress(self):
         user = User.objects.create_user(email='prog@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         UserCourseProgress.objects.create(
             user=user, unit=self.unit, completed_at=timezone.now(),
@@ -1039,7 +1037,7 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
 
     def test_not_locked_for_authorized_user(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/api/courses/api-detail')
@@ -1172,7 +1170,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
 
     def test_free_tier_user_does_not_see_discussion(self):
         user = User.objects.create_user(email='free-disc@test.com', password='testpass')
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email='free-disc@test.com', password='testpass')
         response = self.client.get('/courses/free-with-discussion')
@@ -1180,7 +1178,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
 
     def test_basic_tier_user_does_not_see_discussion(self):
         user = User.objects.create_user(email='basic-disc@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic-disc@test.com', password='testpass')
         response = self.client.get('/courses/free-with-discussion')
@@ -1189,7 +1187,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
     def test_main_tier_user_not_on_free_course(self):
         """Main user does NOT see discussion on free course (Slack is paid-only)."""
         user = User.objects.create_user(email='main-disc@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main-disc@test.com', password='testpass')
         response = self.client.get('/courses/free-with-discussion')
@@ -1198,7 +1196,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
     def test_main_tier_user_sees_discussion_on_paid(self):
         """Main user sees discussion on paid course."""
         user = User.objects.create_user(email='main-disc2@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main-disc2@test.com', password='testpass')
         response = self.client.get('/courses/paid-with-discussion')
@@ -1206,7 +1204,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
 
     def test_premium_tier_user_sees_discussion_on_paid(self):
         user = User.objects.create_user(email='prem-disc@test.com', password='testpass')
-        user.tier = self.premium_tier
+        set_membership(user, tier=self.premium_tier)
         user.save()
         self.client.login(email='prem-disc@test.com', password='testpass')
         response = self.client.get('/courses/paid-with-discussion')
@@ -1214,7 +1212,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
 
     def test_main_tier_sees_discussion_on_paid_course(self):
         user = User.objects.create_user(email='main-paid@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main-paid@test.com', password='testpass')
         response = self.client.get('/courses/paid-with-discussion')
@@ -1227,7 +1225,7 @@ class DiscussionButtonTierRestrictionTest(TierSetupMixin, TestCase):
         )
         Module.objects.create(course=course, title='M', slug='m', sort_order=1)
         user = User.objects.create_user(email='main-nodisc@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main-nodisc@test.com', password='testpass')
         response = self.client.get('/courses/no-discussion')
@@ -1699,7 +1697,7 @@ class CourseDetailFreeSignupActionsTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='free@test.com', password='testpass',
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.force_login(user)
         response = self.client.get('/courses/demo-course')

@@ -27,7 +27,7 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
     def test_relay_checkout_routes_to_canonical_account(self):
         """A relay-email checkout upgrades the alias owner; no duplicate user."""
         canonical = User.objects.create_user(email="stefano@test.com")
-        self.assertEqual(canonical.tier.slug, "free")
+        self.assertEqual(canonical.membership.tier.slug, "free")
         EmailAlias.objects.create(user=canonical, email="relay@icloud.test")
 
         session_data = {
@@ -42,9 +42,9 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         canonical.refresh_from_db()
-        self.assertEqual(canonical.tier.slug, "main")
-        self.assertEqual(canonical.stripe_customer_id, "cus_relay")
-        self.assertEqual(canonical.subscription_id, "sub_relay")
+        self.assertEqual(canonical.membership.tier.slug, "main")
+        self.assertEqual(canonical.membership.stripe_customer_id, "cus_relay")
+        self.assertEqual(canonical.membership.subscription_id, "sub_relay")
         # No new user spawned for the relay address.
         self.assertFalse(
             User.objects.filter(email="relay@icloud.test").exists()
@@ -71,8 +71,8 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         canonical.refresh_from_db()
-        self.assertEqual(canonical.tier.slug, "main")
-        self.assertEqual(canonical.stripe_customer_id, "cus_former_email")
+        self.assertEqual(canonical.membership.tier.slug, "main")
+        self.assertEqual(canonical.membership.stripe_customer_id, "cus_former_email")
         self.assertFalse(
             User.objects.filter(email="old-member@test.com").exists()
         )
@@ -98,10 +98,10 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
         user_a.refresh_from_db()
         user_b.refresh_from_db()
         # A (primary) is upgraded; B is untouched.
-        self.assertEqual(user_a.tier.slug, "main")
-        self.assertEqual(user_a.stripe_customer_id, "cus_primary")
-        self.assertEqual(user_b.tier.slug, "free")
-        self.assertEqual(user_b.stripe_customer_id, "")
+        self.assertEqual(user_a.membership.tier.slug, "main")
+        self.assertEqual(user_a.membership.stripe_customer_id, "cus_primary")
+        self.assertEqual(user_b.membership.tier.slug, "free")
+        self.assertEqual(user_b.membership.stripe_customer_id, "")
 
     def test_unknown_email_with_no_alias_still_creates_user(self):
         """No primary, no alias -> a brand-new user is created (unchanged)."""
@@ -117,8 +117,8 @@ class CheckoutAliasResolutionTest(QuietSubscriptionLookupMixin, TestCase):
         handle_checkout_completed(session_data)
 
         new_user = User.objects.get(email="brand-new@test.com")
-        self.assertEqual(new_user.tier.slug, "main")
-        self.assertEqual(new_user.stripe_customer_id, "cus_new")
+        self.assertEqual(new_user.membership.tier.slug, "main")
+        self.assertEqual(new_user.membership.stripe_customer_id, "cus_new")
 
 
 @override_settings(

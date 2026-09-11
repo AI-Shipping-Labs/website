@@ -19,7 +19,7 @@ from events.models import (
     SeriesOccurrenceOptOut,
     SeriesRegistration,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
 
@@ -30,19 +30,12 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.member = User.objects.create_user(
-            email="event-member@test.com",
-            tier=cls.main_tier,
-            account_activated=False,
-        )
-        cls.other = User.objects.create_user(
-            email="event-other@test.com",
-            tier=cls.main_tier,
-        )
-        cls.free_member = User.objects.create_user(
-            email="event-free@test.com",
-            tier=cls.free_tier,
-        )
+        cls.member = User.objects.create_user(email="event-member@test.com", account_activated=False)
+        set_membership(cls.member, tier=cls.main_tier)
+        cls.other = User.objects.create_user(email="event-other@test.com")
+        set_membership(cls.other, tier=cls.main_tier)
+        cls.free_member = User.objects.create_user(email="event-free@test.com")
+        set_membership(cls.free_member, tier=cls.free_tier)
         cls.key, cls.plaintext = MemberAPIKey.create_for_user(
             user=cls.member,
             name="events",
@@ -447,7 +440,8 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
         self.assertEqual(summary["skipped_no_access"], 1)
         self.assertEqual(summary["skipped_opted_out"], 1)
 
-        another = User.objects.create_user(email="single@test.com", tier=self.main_tier)
+        another = User.objects.create_user(email="single@test.com")
+        set_membership(another, tier=self.main_tier)
         _, another_key = MemberAPIKey.create_for_user(user=another, name="single")
         single = self.client.post(
             f"/member-api/v1/events/{second.id}/register",

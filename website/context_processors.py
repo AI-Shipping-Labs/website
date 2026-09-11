@@ -16,6 +16,7 @@ from content.nav_availability import (
 )
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
+from payments.models import Membership
 from website.search_indexing import (
     request_indexing_disabled,
     search_indexing_disabled,
@@ -64,7 +65,7 @@ def _ga_member_tier_slug(request):
     if not getattr(user, 'is_authenticated', False):
         return ''
 
-    tier = getattr(user, 'tier', None)
+    tier = Membership.for_user(user).tier
     slug = getattr(tier, 'slug', '') if tier is not None else ''
     return slug if isinstance(slug, str) else ''
 

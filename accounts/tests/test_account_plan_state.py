@@ -31,6 +31,7 @@ from accounts.views.account import (
     _suppress_steady_state_plan_state,
 )
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -142,13 +143,11 @@ class AccountPagePlanStateRenderingTest(TestCase):
 
     def test_paid_current_plan_user_no_frame(self):
         user = User.objects.create_user(email="premium@example.com")
-        user.tier = self.premium_tier
-        user.subscription_id = "sub_premium_test_123"
-        user.billing_period_end = timezone.make_aware(
-            datetime.datetime(2026, 5, 1, 12, 0, 0)
-        )
-        user.save(
-            update_fields=["tier", "subscription_id", "billing_period_end"]
+        set_membership(
+            user,
+            tier=self.premium_tier,
+            subscription_id="sub_premium_test_123",
+            billing_period_end=timezone.make_aware( datetime.datetime(2026, 5, 1, 12, 0, 0) ),
         )
         self.client.force_login(user)
 
@@ -161,11 +160,12 @@ class AccountPagePlanStateRenderingTest(TestCase):
         """A non-free ``pending_tier`` (no real producer after #968) must
         not resurrect the removed amber downgrade notice or a frame."""
         user = User.objects.create_user(email="dg@example.com")
-        user.tier = self.main_tier
-        user.subscription_id = "sub_main_dg_123"
-        user.pending_tier = self.basic_tier
-        user.billing_period_end = timezone.make_aware(
-            datetime.datetime(2026, 4, 1, 12, 0, 0)
+        set_membership(
+            user,
+            tier=self.main_tier,
+            subscription_id="sub_main_dg_123",
+            pending_tier=self.basic_tier,
+            billing_period_end=timezone.make_aware( datetime.datetime(2026, 4, 1, 12, 0, 0) ),
         )
         user.save()
         self.client.force_login(user)
@@ -178,11 +178,12 @@ class AccountPagePlanStateRenderingTest(TestCase):
 
     def test_pending_cancellation_user_no_frame_but_red_notice_present(self):
         user = User.objects.create_user(email="cancel@example.com")
-        user.tier = self.main_tier
-        user.subscription_id = "sub_main_cancel_123"
-        user.pending_tier = self.free_tier
-        user.billing_period_end = timezone.make_aware(
-            datetime.datetime(2026, 5, 15, 12, 0, 0)
+        set_membership(
+            user,
+            tier=self.main_tier,
+            subscription_id="sub_main_cancel_123",
+            pending_tier=self.free_tier,
+            billing_period_end=timezone.make_aware( datetime.datetime(2026, 5, 15, 12, 0, 0) ),
         )
         user.save()
         self.client.force_login(user)
@@ -200,10 +201,11 @@ class AccountPagePlanStateRenderingTest(TestCase):
 
     def test_active_override_keeps_frame_and_dedicated_notice(self):
         user = User.objects.create_user(email="ov@example.com")
-        user.tier = self.basic_tier
-        user.subscription_id = "sub_basic_ov_123"
-        user.billing_period_end = timezone.make_aware(
-            datetime.datetime(2026, 4, 1, 12, 0, 0)
+        set_membership(
+            user,
+            tier=self.basic_tier,
+            subscription_id="sub_basic_ov_123",
+            billing_period_end=timezone.make_aware( datetime.datetime(2026, 4, 1, 12, 0, 0) ),
         )
         user.save()
         TierOverride.objects.create(
@@ -231,10 +233,9 @@ class AccountPagePlanStateRenderingTest(TestCase):
         """A user with ``subscription_id`` but no paid tier sees the
         ``Your subscription needs review.`` frame."""
         user = User.objects.create_user(email="stale@example.com")
-        user.subscription_id = "sub_stale_123"
+        set_membership(user, subscription_id="sub_stale_123")
         # tier left None / free implicitly
-        user.tier = None
-        user.save(update_fields=["subscription_id", "tier"])
+        set_membership(user, tier=None)
         self.client.force_login(user)
 
         response = self.client.get("/account/")

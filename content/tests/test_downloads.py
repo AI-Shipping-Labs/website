@@ -21,7 +21,7 @@ from django.test import Client, TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Download
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -385,10 +385,8 @@ class DownloadsListAccessControlTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'download-inline-subscribe-form')
 
     def test_basic_user_sees_download_for_basic_resource(self):
-        User.objects.create_user(
-            email='basic@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        member_user_1 = User.objects.create_user(email='basic@test.com', password='testpass')
+        set_membership(member_user_1, tier=self.basic_tier)
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/downloads')
         # Catalog still hands off to the single detail/access surface.
@@ -455,12 +453,8 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
         self.assertEqual(response['Location'], 'https://example.com/files/free.pdf')
 
     def test_unverified_free_user_gets_email_verification_signal(self):
-        User.objects.create_user(
-            email='dl_unverified@test.com',
-            password='testpass',
-            tier=self.free_tier,
-            email_verified=False,
-        )
+        member_user_2 = User.objects.create_user(email='dl_unverified@test.com', password='testpass', email_verified=False)
+        set_membership(member_user_2, tier=self.free_tier)
         self.client.login(email='dl_unverified@test.com', password='testpass')
 
         response = self.client.get('/api/downloads/free-pdf/file')
@@ -502,38 +496,30 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_unauthorized_user_gets_403(self):
         """User without sufficient tier gets 403."""
-        User.objects.create_user(
-            email='dl_noauth@test.com', password='testpass',
-            tier=self.free_tier,
-        )
+        member_user_3 = User.objects.create_user(email='dl_noauth@test.com', password='testpass')
+        set_membership(member_user_3, tier=self.free_tier)
         self.client.login(email='dl_noauth@test.com', password='testpass')
         response = self.client.get('/api/downloads/basic-pdf/file')
         self.assertEqual(response.status_code, 403)
 
     def test_basic_user_can_download_basic_resource(self):
-        User.objects.create_user(
-            email='dl_basic@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        member_user_4 = User.objects.create_user(email='dl_basic@test.com', password='testpass')
+        set_membership(member_user_4, tier=self.basic_tier)
         self.client.login(email='dl_basic@test.com', password='testpass')
         response = self.client.get('/api/downloads/basic-pdf/file')
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], 'https://example.com/files/basic.pdf')
 
     def test_basic_user_cannot_download_premium_resource(self):
-        User.objects.create_user(
-            email='dl_basic2@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        member_user_5 = User.objects.create_user(email='dl_basic2@test.com', password='testpass')
+        set_membership(member_user_5, tier=self.basic_tier)
         self.client.login(email='dl_basic2@test.com', password='testpass')
         response = self.client.get('/api/downloads/premium-pdf/file')
         self.assertEqual(response.status_code, 403)
 
     def test_premium_user_can_download_premium_resource(self):
-        User.objects.create_user(
-            email='dl_premium@test.com', password='testpass',
-            tier=self.premium_tier,
-        )
+        member_user_6 = User.objects.create_user(email='dl_premium@test.com', password='testpass')
+        set_membership(member_user_6, tier=self.premium_tier)
         self.client.login(email='dl_premium@test.com', password='testpass')
         response = self.client.get('/api/downloads/premium-pdf/file')
         self.assertEqual(response.status_code, 302)
@@ -573,10 +559,8 @@ class DownloadFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_403_never_exposes_file_url(self):
         """Verify the file URL is not in the 403 response body."""
-        User.objects.create_user(
-            email='dl_nourl@test.com', password='testpass',
-            tier=self.free_tier,
-        )
+        member_user_7 = User.objects.create_user(email='dl_nourl@test.com', password='testpass')
+        set_membership(member_user_7, tier=self.free_tier)
         self.client.login(email='dl_nourl@test.com', password='testpass')
         response = self.client.get('/api/downloads/premium-pdf/file')
         self.assertEqual(response.status_code, 403)
@@ -731,10 +715,8 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
         self.assertIn('Download', html)
 
     def test_shortcode_gated_shows_upgrade_cta(self):
-        user = User.objects.create_user(
-            email='sc_free@test.com', password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='sc_free@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         html = self._render_shortcode('{{download:gated-shortcode}}', user=user)
         self.assertIn(
             'href="/downloads/gated-shortcode?surface=shortcode"',
@@ -743,10 +725,8 @@ class DownloadShortcodeTest(TierSetupMixin, TestCase):
         self.assertIn('View Basic access', html)
 
     def test_shortcode_authorized_user_for_gated(self):
-        user = User.objects.create_user(
-            email='sc_basic@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email='sc_basic@test.com', password='testpass')
+        set_membership(user, tier=self.basic_tier)
         html = self._render_shortcode('{{download:gated-shortcode}}', user=user)
         self.assertIn(
             'href="/downloads/gated-shortcode?surface=shortcode"',
@@ -1018,10 +998,8 @@ class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_basic_member_gets_file_and_count_increments(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario4AuthorizedMemberDownloads::test_basic_member_downloads_file_and_count_increments
-        User.objects.create_user(
-            email='basic_dl@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        member_user_8 = User.objects.create_user(email='basic_dl@test.com', password='testpass')
+        set_membership(member_user_8, tier=self.basic_tier)
         self.client.login(email='basic_dl@test.com', password='testpass')
 
         # Listing hands off to the detail page.
@@ -1045,10 +1023,8 @@ class DownloadsFileEndpointTest(TierSetupMixin, TestCase):
 
     def test_basic_member_403_on_premium_and_count_unchanged(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario5InsufficientTierUpgradeCTA::test_basic_member_cannot_access_premium_download
-        User.objects.create_user(
-            email='basic_p@test.com', password='testpass',
-            tier=self.basic_tier,
-        )
+        member_user_9 = User.objects.create_user(email='basic_p@test.com', password='testpass')
+        set_membership(member_user_9, tier=self.basic_tier)
         self.client.login(email='basic_p@test.com', password='testpass')
 
         # Listing shows the detail handoff, never the file URL.
@@ -1222,11 +1198,8 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
 
     def test_authenticated_inline_card(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario9AuthenticatedShortcodeDownload::test_authenticated_user_sees_direct_download_link
-        User.objects.create_user(
-            email='free_sc@test.com', password='testpass',
-            tier=self.free_tier,
-            email_verified=True,
-        )
+        member_user_10 = User.objects.create_user(email='free_sc@test.com', password='testpass', email_verified=True)
+        set_membership(member_user_10, tier=self.free_tier)
         self.client.login(email='free_sc@test.com', password='testpass')
 
         _create_article_with_shortcode(
@@ -1250,11 +1223,8 @@ class DownloadShortcodeRenderingTest(TierSetupMixin, TestCase):
 
     def test_free_user_sees_upgrade_cta(self):
         # Replaces playwright_tests/test_downloadable_resources.py::TestScenario10FreeUserGatedShortcode::test_free_user_sees_upgrade_cta_in_shortcode_card
-        User.objects.create_user(
-            email='free_gated@test.com', password='testpass',
-            tier=self.free_tier,
-            email_verified=True,
-        )
+        member_user_11 = User.objects.create_user(email='free_gated@test.com', password='testpass', email_verified=True)
+        set_membership(member_user_11, tier=self.free_tier)
         self.client.login(email='free_gated@test.com', password='testpass')
 
         _create_article_with_shortcode(

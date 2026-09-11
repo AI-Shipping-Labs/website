@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -46,27 +47,16 @@ class StudioUserListTest(TestCase):
             password='testpass',
             unsubscribed=True,
         )
-        cls.main_user = User.objects.create_user(
-            email='main@test.com',
-            password='testpass',
-            tier=cls.main_tier,
-            subscription_id='sub_MAIN',
-            signup_source='signup',
-            account_activated=True,
-        )
-        cls.premium_user = User.objects.create_user(
-            email='premium@test.com',
-            password='testpass',
+        cls.main_user = User.objects.create_user(email='main@test.com', password='testpass', signup_source='signup', account_activated=True)
+        set_membership(cls.main_user, tier=cls.main_tier, subscription_id='sub_MAIN')
+        cls.premium_user = User.objects.create_user(email='premium@test.com', password='testpass', signup_source='signup', account_activated=True)
+        set_membership(
+            cls.premium_user,
             tier=cls.premium_tier,
             subscription_id='sub_PREMIUM',
-            signup_source='signup',
-            account_activated=True,
         )
-        cls.override_user = User.objects.create_user(
-            email='override@test.com',
-            password='testpass',
-            tier=cls.free_tier,
-        )
+        cls.override_user = User.objects.create_user(email='override@test.com', password='testpass')
+        set_membership(cls.override_user, tier=cls.free_tier)
         TierOverride.objects.create(
             user=cls.override_user,
             original_tier=cls.free_tier,
@@ -322,8 +312,11 @@ class StudioUserListSlackFilterTest(TestCase):
     def test_filter_combines_with_tier_filter(self):
         # Make member also paid (active Stripe subscription on a paid tier).
         main_tier = Tier.objects.get(slug='main')
-        StudioUserListSlackFilterTest.member.tier = main_tier
-        StudioUserListSlackFilterTest.member.subscription_id = 'sub_member'
+        set_membership(
+            StudioUserListSlackFilterTest.member,
+            tier=main_tier,
+            subscription_id='sub_member',
+        )
         StudioUserListSlackFilterTest.member.save()
 
         response = self.client.get('/studio/users/?filter=paid&slack=yes')
@@ -331,8 +324,11 @@ class StudioUserListSlackFilterTest(TestCase):
         self.assertEqual(emails, ['member@test.com'])
 
         # Reset.
-        StudioUserListSlackFilterTest.member.tier = None
-        StudioUserListSlackFilterTest.member.subscription_id = ''
+        set_membership(
+            StudioUserListSlackFilterTest.member,
+            tier=None,
+            subscription_id='',
+        )
         StudioUserListSlackFilterTest.member.save()
 
 
@@ -369,19 +365,10 @@ class StudioUserExportTest(TestCase):
             password='testpass',
             unsubscribed=True,
         )
-        cls.main_user = User.objects.create_user(
-            email='main@test.com',
-            password='testpass',
-            tier=cls.main_tier,
-            subscription_id='sub_MAIN',
-            signup_source='signup',
-            account_activated=True,
-        )
-        cls.override_user = User.objects.create_user(
-            email='override@test.com',
-            password='testpass',
-            tier=cls.free_tier,
-        )
+        cls.main_user = User.objects.create_user(email='main@test.com', password='testpass', signup_source='signup', account_activated=True)
+        set_membership(cls.main_user, tier=cls.main_tier, subscription_id='sub_MAIN')
+        cls.override_user = User.objects.create_user(email='override@test.com', password='testpass')
+        set_membership(cls.override_user, tier=cls.free_tier)
         cls.override_user.tags = ['vip']
         cls.override_user.save(update_fields=['tags'])
         TierOverride.objects.create(

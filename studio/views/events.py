@@ -930,7 +930,7 @@ def _event_edit_panels_context(event) -> dict:
     registrations = (
         EventRegistration.objects
         .filter(event=event)
-        .select_related('user', 'user__tier')
+        .select_related('user', 'user__membership__tier')
         .order_by('-registered_at')
     )
     context['registrations'] = registrations
@@ -1291,7 +1291,7 @@ def event_registrations_csv(request, event_id):
     registrations = (
         EventRegistration.objects
         .filter(event=event)
-        .select_related('user', 'user__tier')
+        .select_related('user', 'user__membership__tier')
         .order_by('-registered_at')
     )
 
@@ -1313,7 +1313,10 @@ def event_registrations_csv(request, event_id):
     for reg in registrations:
         user = reg.user
         name = user.get_full_name() or ''
-        tier_name = user.tier.name if user.tier_id else 'Free'
+        # Issue #1579: the tier lives on payments.Membership.
+        tier_name = (
+            user.membership.tier.name if user.membership.tier_id else 'Free'
+        )
         writer.writerow([
             user.email,
             name,

@@ -42,7 +42,7 @@ from content.models import (
     Workshop,
     WorkshopPage,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -138,9 +138,8 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
 
     def test_authenticated_user_gets_progress_fill_bar(self):
         """Logged-in user sees the fill bar with the right testid."""
-        user = User.objects.create_user(
-            email='main@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='main@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
         url = '/workshops/regional-setup/tutorial/regional-setup'
@@ -202,10 +201,8 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         )
 
     def test_free_user_on_gated_page_does_not_see_progress_bar(self):
-        free_user = User.objects.create_user(
-            email='free@test.com', password='x', tier=self.free_tier,
-            email_verified=True,
-        )
+        free_user = User.objects.create_user(email='free@test.com', password='x', email_verified=True)
+        set_membership(free_user, tier=self.free_tier)
         client = Client()
         client.force_login(free_user)
         response = client.get('/workshops/main-only/tutorial/intro')
@@ -260,9 +257,8 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
 
     def test_main_user_on_paid_workshop_sees_progress_bar(self):
         """Main user on a Main-tier-gated workshop CAN access; bar renders."""
-        main_user = User.objects.create_user(
-            email='main2@test.com', password='x', tier=self.main_tier,
-        )
+        main_user = User.objects.create_user(email='main2@test.com', password='x')
+        set_membership(main_user, tier=self.main_tier)
         client = Client()
         client.force_login(main_user)
         response = client.get('/workshops/main-only/tutorial/intro')
@@ -289,9 +285,8 @@ class CourseUnitReaderMobileProgressBarTest(TierSetupMixin, TestCase):
 
     def test_sixth_unit_overall_reads_lesson_six_of_nine(self):
         """Module 2 / Unit 2 is unit #6 across the flat list (4+2)."""
-        user = User.objects.create_user(
-            email='main-c@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='main-c@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
         response = client.get('/courses/intro-to-llms/module-2/m2-u2')
@@ -308,9 +303,8 @@ class CourseUnitReaderMobileProgressBarTest(TierSetupMixin, TestCase):
         )
 
     def test_first_unit_reads_lesson_one_of_nine(self):
-        user = User.objects.create_user(
-            email='main-c2@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='main-c2@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
         response = client.get('/courses/intro-to-llms/module-1/m1-u1')
@@ -319,9 +313,8 @@ class CourseUnitReaderMobileProgressBarTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Lesson 1 of 9')
 
     def test_last_unit_reads_lesson_nine_of_nine(self):
-        user = User.objects.create_user(
-            email='main-c3@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='main-c3@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
         response = client.get('/courses/intro-to-llms/module-3/m3-u2')
@@ -427,9 +420,8 @@ class ReaderMobileProgressBarFillProportionTest(TierSetupMixin, TestCase):
         """2 of 5 completed -> width: 40%."""
         from content.services import completion as completion_service
 
-        user = User.objects.create_user(
-            email='fill@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='fill@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         # Mark first two pages as completed.
         for slug in ('p1', 'p2'):
             page = WorkshopPage.objects.get(workshop=self.workshop, slug=slug)
@@ -445,9 +437,8 @@ class ReaderMobileProgressBarFillProportionTest(TierSetupMixin, TestCase):
         self.assertIn('width: 40%', body)
 
     def test_fill_bar_zero_when_nothing_completed(self):
-        user = User.objects.create_user(
-            email='zero@test.com', password='x', tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='zero@test.com', password='x')
+        set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
         response = client.get('/workshops/fill/tutorial/p1')

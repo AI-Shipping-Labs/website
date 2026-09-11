@@ -4,7 +4,7 @@ from django.urls import reverse
 
 from content.access import get_active_override
 from integrations.config import get_config
-from payments.models import Tier
+from payments.models import Membership, Tier
 from payments.stripe_links import get_stripe_payment_links
 from payments.tier_state import build_tier_state
 
@@ -29,10 +29,12 @@ def build_membership_payment_context(user, *, checkout_error_code=''):
     stripe_links = get_stripe_payment_links()
     active_override = get_active_override(user)
     prefilled_email = user.email if user.is_authenticated else ''
+    # Issue #1579: the tier/subscription state lives on payments.Membership.
+    membership = Membership.for_user(user) if user.is_authenticated else None
     is_paid_member = (
         user.is_authenticated
-        and user.tier is not None
-        and user.tier.level > 0
+        and membership.tier is not None
+        and membership.tier.level > 0
     )
 
     tiers_data = []
@@ -52,7 +54,7 @@ def build_membership_payment_context(user, *, checkout_error_code=''):
         if (
             tier.slug == 'free'
             and user.is_authenticated
-            and user.subscription_id
+            and membership.subscription_id
             and tier_state['action_label'] == 'Included'
         ):
             tier_state = _membership_state_without_helper_copy(

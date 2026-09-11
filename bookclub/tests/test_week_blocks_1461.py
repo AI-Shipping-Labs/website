@@ -24,6 +24,7 @@ from bookclub.views import _meeting_display_label
 from content.access import LEVEL_MAIN
 from events.models import Event, EventSeries
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -47,7 +48,7 @@ class WeekBlockFixture(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(email='wk@test.com', password='pw')
-        cls.member.tier = Tier.objects.get(slug='main')
+        set_membership(cls.member, tier=Tier.objects.get(slug='main'))
         cls.member.save()
 
         cls.series = EventSeries.objects.create(
@@ -263,7 +264,7 @@ class WeeklessBookTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(email='flat@test.com', password='pw')
-        cls.member.tier = Tier.objects.get(slug='main')
+        set_membership(cls.member, tier=Tier.objects.get(slug='main'))
         cls.member.save()
         cls.series = EventSeries.objects.create(
             name='Flat Book Club', slug='flat-book-club', cadence='none',
@@ -332,7 +333,7 @@ class NoChapterBookTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.member = User.objects.create_user(email='nc@test.com', password='pw')
-        cls.member.tier = Tier.objects.get(slug='main')
+        set_membership(cls.member, tier=Tier.objects.get(slug='main'))
         cls.member.save()
         cls.series = EventSeries.objects.create(
             name='Empty Roadmap Club', slug='empty-roadmap-club', cadence='none',

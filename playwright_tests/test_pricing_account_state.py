@@ -16,6 +16,7 @@ pytestmark = pytest.mark.local_only
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )
+from tests.fixtures import set_membership
 
 
 def _seed_pricing_user(email, tier_slug="free", subscription_id=""):
@@ -43,8 +44,8 @@ def _seed_pricing_user(email, tier_slug="free", subscription_id=""):
     )
     user.set_password(DEFAULT_PASSWORD)
     user.email_verified = True
-    user.tier = tier
-    user.subscription_id = subscription_id
+    set_membership(user, tier=tier)
+    set_membership(user, subscription_id=subscription_id)
     user.save()
     return user
 
@@ -83,16 +84,10 @@ def _seed_stale_subscription_user(email):
     )
     user.set_password(DEFAULT_PASSWORD)
     user.email_verified = True
-    user.tier = None
-    user.pending_tier = None
-    user.subscription_id = "sub_stale_pricing"
-    user.save(update_fields=[
-        "password",
-        "email_verified",
-        "tier",
-        "pending_tier",
-        "subscription_id",
-    ])
+    set_membership(user, tier=None)
+    set_membership(user, pending_tier=None)
+    set_membership(user, subscription_id='sub_stale_pricing')
+    user.save(update_fields=["password", "email_verified"])
     return user
 
 
@@ -260,8 +255,7 @@ def test_operator_queue_shows_complete_stripe_repair_trail(
             is_staff=True,
         )
         paid = User.objects.create_user(email="payment-trail-paid@test.com")
-        paid.tier = Tier.objects.get(slug="free")
-        paid.save(update_fields=["tier"])
+        set_membership(paid, tier=Tier.objects.get(slug='free'))
         mismatch = PaymentAccountMismatch.objects.create(
             stripe_session_id="cs_operator_trail_1105",
             stripe_customer_id="cus_operator_trail_1105",

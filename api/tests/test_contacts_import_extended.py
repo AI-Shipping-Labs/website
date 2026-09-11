@@ -22,6 +22,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -121,7 +122,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
             password=None,
         )
         # Sanity: blank by default.
-        self.assertEqual(existing.stripe_customer_id, "")
+        self.assertEqual(existing.membership.stripe_customer_id, "")
 
         with patch("studio.services.contacts_import.backfill_user_from_stripe"):
             response = self._post({
@@ -132,7 +133,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
             })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_ABC")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_ABC")
         # Identical-write should never produce a conflict warning.
         self.assertEqual(response.json()["warnings"], [])
 
@@ -144,9 +145,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
         main = Tier.objects.get(slug="main")
 
         def sync_from_stripe(user):
-            user.tier = main
-            user.subscription_id = "sub_SYNCED"
-            user.save(update_fields=["tier", "subscription_id"])
+            set_membership(user, tier=main, subscription_id="sub_SYNCED")
 
             class Record:
                 status = "changed"
@@ -167,9 +166,9 @@ class ContactsImportExtendedFieldsTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_SYNC")
-        self.assertEqual(existing.tier.slug, "main")
-        self.assertEqual(existing.subscription_id, "sub_SYNCED")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_SYNC")
+        self.assertEqual(existing.membership.tier.slug, "main")
+        self.assertEqual(existing.membership.subscription_id, "sub_SYNCED")
         mock_backfill.assert_called_once()
         self.assertEqual(response.json()["warnings"], [])
 
@@ -196,16 +195,13 @@ class ContactsImportExtendedFieldsTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_WARN")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_WARN")
         warnings = response.json()["warnings"]
         self.assertEqual(warnings[0]["reason"], "stripe_sync_warning")
 
     def test_import_does_not_overwrite_existing_stripe_customer_id(self):
-        existing = User.objects.create_user(
-            email="webhook@test.com",
-            password=None,
-            stripe_customer_id="cus_OLD",
-        )
+        existing = User.objects.create_user(email="webhook@test.com", password=None)
+        set_membership(existing, stripe_customer_id="cus_OLD")
 
         response = self._post({
             "contacts": [{
@@ -215,7 +211,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_OLD")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_OLD")
 
         warnings = response.json()["warnings"]
         conflict = next(
@@ -229,11 +225,8 @@ class ContactsImportExtendedFieldsTest(TestCase):
         self.assertEqual(conflict["value"], "cus_NEW")
 
     def test_import_identical_stripe_customer_id_is_silent_noop(self):
-        existing = User.objects.create_user(
-            email="same@test.com",
-            password=None,
-            stripe_customer_id="cus_SAME",
-        )
+        existing = User.objects.create_user(email="same@test.com", password=None)
+        set_membership(existing, stripe_customer_id="cus_SAME")
 
         with patch("studio.services.contacts_import.backfill_user_from_stripe"):
             response = self._post({
@@ -244,7 +237,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
             })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_SAME")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_SAME")
         self.assertEqual(response.json()["warnings"], [])
 
     def test_import_first_row_wins_for_stripe_customer_id(self):
@@ -263,14 +256,11 @@ class ContactsImportExtendedFieldsTest(TestCase):
         self.assertEqual(body["created"], 1)
         self.assertEqual(body["skipped"], 1)
         user = User.objects.get(email="race@test.com")
-        self.assertEqual(user.stripe_customer_id, "cus_FIRST")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_FIRST")
 
     def test_import_subscription_id_same_overwrite_rule(self):
-        existing = User.objects.create_user(
-            email="sub@test.com",
-            password=None,
-            subscription_id="sub_OLD",
-        )
+        existing = User.objects.create_user(email="sub@test.com", password=None)
+        set_membership(existing, subscription_id="sub_OLD")
 
         response = self._post({
             "contacts": [{
@@ -280,7 +270,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.subscription_id, "sub_OLD")
+        self.assertEqual(existing.membership.subscription_id, "sub_OLD")
         warnings = response.json()["warnings"]
         conflict = next(
             (w for w in warnings if w["reason"] == "subscription_id_conflict"),
@@ -297,7 +287,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
             email="newsub@test.com",
             password=None,
         )
-        self.assertEqual(existing.subscription_id, "")
+        self.assertEqual(existing.membership.subscription_id, "")
 
         response = self._post({
             "contacts": [{
@@ -307,14 +297,11 @@ class ContactsImportExtendedFieldsTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.subscription_id, "sub_FRESH")
+        self.assertEqual(existing.membership.subscription_id, "sub_FRESH")
 
     def test_import_blank_stripe_customer_id_is_noop(self):
-        existing = User.objects.create_user(
-            email="blank@test.com",
-            password=None,
-            stripe_customer_id="cus_KEEP",
-        )
+        existing = User.objects.create_user(email="blank@test.com", password=None)
+        set_membership(existing, stripe_customer_id="cus_KEEP")
 
         response = self._post({
             "contacts": [{
@@ -324,7 +311,7 @@ class ContactsImportExtendedFieldsTest(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         existing.refresh_from_db()
-        self.assertEqual(existing.stripe_customer_id, "cus_KEEP")
+        self.assertEqual(existing.membership.stripe_customer_id, "cus_KEEP")
         self.assertEqual(response.json()["warnings"], [])
 
     # -- slack_member -------------------------------------------------------
@@ -491,8 +478,8 @@ class ContactsImportExtendedFieldsTest(TestCase):
         user = User.objects.get(email="compat@test.com")
         self.assertEqual(user.first_name, "")
         self.assertEqual(user.last_name, "")
-        self.assertEqual(user.stripe_customer_id, "")
-        self.assertEqual(user.subscription_id, "")
+        self.assertEqual(user.membership.stripe_customer_id, "")
+        self.assertEqual(user.membership.subscription_id, "")
         self.assertFalse(user.slack_member)
         self.assertIsNone(user.slack_checked_at)
         self.assertEqual(response.json()["warnings"], [])
@@ -518,12 +505,8 @@ class ContactsExportNewColumnsTest(TestCase):
 
     def test_export_includes_new_columns_json(self):
         stamp = timezone.now()
-        u = User.objects.create_user(
-            email="full@test.com",
-            password=None,
-            stripe_customer_id="cus_ABC",
-            subscription_id="sub_XYZ",
-        )
+        u = User.objects.create_user(email="full@test.com", password=None)
+        set_membership(u, stripe_customer_id="cus_ABC", subscription_id="sub_XYZ")
         u.slack_member = True
         u.slack_checked_at = stamp
         u.save(update_fields=["slack_member", "slack_checked_at"])
@@ -580,12 +563,8 @@ class ContactsExportNewColumnsTest(TestCase):
 
     def test_export_csv_row_carries_new_columns(self):
         stamp = timezone.now()
-        u = User.objects.create_user(
-            email="csvrow@test.com",
-            password=None,
-            stripe_customer_id="cus_CSV",
-            subscription_id="sub_CSV",
-        )
+        u = User.objects.create_user(email="csvrow@test.com", password=None)
+        set_membership(u, stripe_customer_id="cus_CSV", subscription_id="sub_CSV")
         u.slack_member = True
         u.slack_checked_at = stamp
         u.save(update_fields=["slack_member", "slack_checked_at"])

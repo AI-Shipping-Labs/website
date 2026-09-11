@@ -43,6 +43,7 @@ from payments.services import (
 from tests.fixtures import (
     TierSetupMixin,
     call_checkout_in_legacy_numeric_compat_window,
+    set_membership,
 )
 
 User = get_user_model()
@@ -89,13 +90,13 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='progress@test.com', password='testpass',
         )
-        self.user.tier = self.premium_tier
-        self.user.subscription_id = 'sub_progress_test'
-        self.user.stripe_customer_id = 'cus_progress_test'
-        self.user.billing_period_end = timezone.now() + timedelta(days=30)
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id', 'billing_period_end',
-        ])
+        set_membership(
+            self.user,
+            tier=self.premium_tier,
+            subscription_id='sub_progress_test',
+            stripe_customer_id='cus_progress_test',
+            billing_period_end=timezone.now() + timedelta(days=30),
+        )
 
         # Create a Premium course with 4 units
         self.course = Course.objects.create(
@@ -151,21 +152,20 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
 
     def test_tier_reverted_to_free(self):
         self._fire_subscription_deleted()
-        self.assertEqual(self.user.tier.slug, 'free')
+        self.assertEqual(self.user.membership.tier.slug, 'free')
 
     def test_subscription_id_cleared(self):
         self._fire_subscription_deleted()
-        self.assertEqual(self.user.subscription_id, '')
+        self.assertEqual(self.user.membership.subscription_id, '')
 
     def test_billing_period_end_cleared(self):
         self._fire_subscription_deleted()
-        self.assertIsNone(self.user.billing_period_end)
+        self.assertIsNone(self.user.membership.billing_period_end)
 
     def test_pending_tier_cleared(self):
-        self.user.pending_tier = self.basic_tier
-        self.user.save(update_fields=['pending_tier'])
+        set_membership(self.user, pending_tier=self.basic_tier)
         self._fire_subscription_deleted()
-        self.assertIsNone(self.user.pending_tier)
+        self.assertIsNone(self.user.membership.pending_tier)
 
     def test_course_progress_records_preserved(self):
         self._fire_subscription_deleted()
@@ -207,10 +207,10 @@ class SubscriptionDeletedProgressRetentionTest(TierSetupMixin, TestCase):
         """Verify handle_subscription_deleted only touches tier, subscription_id,
         billing_period_end, and pending_tier -- nothing else on the user."""
         original_email = self.user.email
-        original_stripe_customer_id = self.user.stripe_customer_id
+        original_stripe_customer_id = self.user.membership.stripe_customer_id
         self._fire_subscription_deleted()
         self.assertEqual(self.user.email, original_email)
-        self.assertEqual(self.user.stripe_customer_id, original_stripe_customer_id)
+        self.assertEqual(self.user.membership.stripe_customer_id, original_stripe_customer_id)
 
 
 # ============================================================
@@ -228,12 +228,12 @@ class ResubscriptionProgressRetentionTest(
         self.user = User.objects.create_user(
             email='resub@test.com', password='testpass',
         )
-        self.user.tier = self.premium_tier
-        self.user.subscription_id = 'sub_resub_test'
-        self.user.stripe_customer_id = 'cus_resub_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.premium_tier,
+            subscription_id='sub_resub_test',
+            stripe_customer_id='cus_resub_test',
+        )
 
         # Create a Premium course with 4 units
         self.course = Course.objects.create(
@@ -267,7 +267,7 @@ class ResubscriptionProgressRetentionTest(
             'customer': 'cus_resub_test',
         })
         self.user.refresh_from_db()
-        self.assertEqual(self.user.tier.slug, 'free')
+        self.assertEqual(self.user.membership.tier.slug, 'free')
 
     def _fire_checkout_completed(self, tier_slug='premium'):
         """Simulate a checkout.session.completed webhook for re-subscription."""
@@ -283,11 +283,11 @@ class ResubscriptionProgressRetentionTest(
 
     def test_tier_restored_to_premium(self):
         self._fire_checkout_completed('premium')
-        self.assertEqual(self.user.tier.slug, 'premium')
+        self.assertEqual(self.user.membership.tier.slug, 'premium')
 
     def test_pending_tier_cleared(self):
         self._fire_checkout_completed('premium')
-        self.assertIsNone(self.user.pending_tier)
+        self.assertIsNone(self.user.membership.pending_tier)
 
     def test_progress_records_unchanged(self):
         self._fire_checkout_completed('premium')
@@ -324,12 +324,12 @@ class DashboardProgressCancellationTest(
         self.user = User.objects.create_user(
             email='dashboard@test.com', password='testpass',
         )
-        self.user.tier = self.premium_tier
-        self.user.subscription_id = 'sub_dashboard_test'
-        self.user.stripe_customer_id = 'cus_dashboard_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.premium_tier,
+            subscription_id='sub_dashboard_test',
+            stripe_customer_id='cus_dashboard_test',
+        )
         self.client = Client()
         self.client.login(email='dashboard@test.com', password='testpass')
 
@@ -482,12 +482,12 @@ class DashboardEventRegistrationRetentionTest(
         self.user = User.objects.create_user(
             email='eventuser@test.com', password='testpass',
         )
-        self.user.tier = self.main_tier
-        self.user.subscription_id = 'sub_event_test'
-        self.user.stripe_customer_id = 'cus_event_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            subscription_id='sub_event_test',
+            stripe_customer_id='cus_event_test',
+        )
 
         self.event = Event.objects.create(
             slug='workshop', title='AI Workshop',
@@ -537,12 +537,12 @@ class ProjectSubmissionRetentionTest(
         self.user = User.objects.create_user(
             email='builder@test.com', password='testpass',
         )
-        self.user.tier = self.main_tier
-        self.user.subscription_id = 'sub_project_test'
-        self.user.stripe_customer_id = 'cus_project_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            subscription_id='sub_project_test',
+            stripe_customer_id='cus_project_test',
+        )
 
         self.project = Project.objects.create(
             title='Builder Project', slug='builder-project',
@@ -591,12 +591,12 @@ class DowngradeTierProgressFilteringTest(
         self.user = User.objects.create_user(
             email='partial@test.com', password='testpass',
         )
-        self.user.tier = self.premium_tier
-        self.user.subscription_id = 'sub_partial_test'
-        self.user.stripe_customer_id = 'cus_partial_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.premium_tier,
+            subscription_id='sub_partial_test',
+            stripe_customer_id='cus_partial_test',
+        )
         self.client_http = Client()
         self.client_http.login(email='partial@test.com', password='testpass')
 
@@ -742,12 +742,12 @@ class ResumeCourseAfterResubTest(
         self.user = User.objects.create_user(
             email='resume@test.com', password='testpass',
         )
-        self.user.tier = self.main_tier
-        self.user.subscription_id = 'sub_resume_test'
-        self.user.stripe_customer_id = 'cus_resume_test'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            subscription_id='sub_resume_test',
+            stripe_customer_id='cus_resume_test',
+        )
         self.client_http = Client()
         self.client_http.login(email='resume@test.com', password='testpass')
 
@@ -848,12 +848,12 @@ class OpenCourseProgressAlwaysVisibleTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='free_course@test.com', password='testpass',
         )
-        self.user.tier = self.main_tier
-        self.user.subscription_id = 'sub_free_course'
-        self.user.stripe_customer_id = 'cus_free_course'
-        self.user.save(update_fields=[
-            'tier', 'subscription_id', 'stripe_customer_id',
-        ])
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            subscription_id='sub_free_course',
+            stripe_customer_id='cus_free_course',
+        )
         self.client_http = Client()
         self.client_http.login(email='free_course@test.com', password='testpass')
 

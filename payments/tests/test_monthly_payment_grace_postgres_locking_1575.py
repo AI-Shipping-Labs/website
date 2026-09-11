@@ -1,9 +1,9 @@
 """PostgreSQL regressions for monthly-payment-grace row locks (#1575).
 
-The service loads nullable ``User.tier`` relations while locking the user,
-grace, or delivery row that owns each state transition. PostgreSQL rejects a
-bare ``FOR UPDATE`` across those outer joins. SQLite omits the clause, so this
-module runs only in the serial PostgreSQL verification lane.
+The service loads nullable ``Membership.tier`` relations while locking the
+user, grace, or delivery row that owns each state transition. PostgreSQL
+rejects a bare ``FOR UPDATE`` across those outer joins. SQLite omits the clause,
+so this module runs only in the serial PostgreSQL verification lane.
 """
 
 from datetime import timedelta
@@ -19,7 +19,7 @@ from email_app.models import EmailLog
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.services import monthly_payment_grace as service
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 USER_TABLE = User._meta.db_table
 GRACE_TABLE = Grace._meta.db_table
@@ -71,14 +71,15 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
             )
 
     def make_user(self, **kwargs):
-        defaults = {
-            "email": "postgres-grace-member@example.com",
-            "tier": self.main_tier,
-            "stripe_customer_id": "cus_postgres_grace",
-            "subscription_id": "sub_postgres_grace",
-        }
-        defaults.update(kwargs)
-        return User.objects.create_user(**defaults)
+        email = kwargs.pop("email", "postgres-grace-member@example.com")
+        user = User.objects.create_user(email=email, **kwargs)
+        set_membership(
+            user,
+            tier=self.main_tier,
+            stripe_customer_id="cus_postgres_grace",
+            subscription_id="sub_postgres_grace",
+        )
+        return user
 
     def create_grace(self, *, user=None, **kwargs):
         user = user or self.make_user()
@@ -144,7 +145,7 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
         self.assertEqual(grace.status, Grace.STATUS_ACTIVE)
         self.assertEqual(grace.user_id, user.pk)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.main_tier)
+        self.assertEqual(user.membership.tier, self.main_tier)
         deliveries = list(grace.deliveries.order_by("kind"))
         self.assertEqual(
             {delivery.kind for delivery in deliveries},
@@ -161,7 +162,7 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
             )
             self.assertIn("grace", claimed._state.fields_cache)
             self.assertIn("user", claimed.grace._state.fields_cache)
-            self.assertEqual(claimed.grace.user.tier, self.main_tier)
+            self.assertEqual(claimed.grace.user.membership.tier, self.main_tier)
 
             with CaptureQueriesContext(connection) as transport_queries:
                 fenced = service._begin_delivery_transport(delivery.pk, token, now)
@@ -193,7 +194,7 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
         recovered.refresh_from_db()
         user.refresh_from_db()
         self.assertEqual(recovered.status, Grace.STATUS_RECOVERED)
-        self.assertEqual(user.tier, self.main_tier)
+        self.assertEqual(user.membership.tier, self.main_tier)
         self.assertIn("stripe:active", user.tags)
         self.assertIn("stripe:plan-main", user.tags)
         self.assertFalse(recovered.deliveries.exists())
@@ -284,8 +285,8 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
         user.refresh_from_db()
         override.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_EXPIRED)
-        self.assertEqual(user.tier, self.free_tier)
-        self.assertEqual(user.subscription_id, "sub_postgres_grace")
+        self.assertEqual(user.membership.tier, self.free_tier)
+        self.assertEqual(user.membership.subscription_id, "sub_postgres_grace")
         self.assertTrue(override.is_active)
         self.assertEqual(service._effective_tier(user), self.premium_tier)
         delivery = grace.deliveries.get(kind=Delivery.KIND_EXPIRED_MEMBER)

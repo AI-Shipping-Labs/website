@@ -131,7 +131,7 @@ class TestSharedAuthJourneys:
             from accounts.models import User
 
             user = User.objects.get(email=email)
-            assert user.tier.slug == "free"
+            assert user.membership.tier.slug == "free"
             assert user.email_verified is False
 
     def test_register_password_mismatch_does_not_call_api_then_can_retry(

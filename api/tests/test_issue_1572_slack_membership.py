@@ -9,6 +9,7 @@ from api.openapi import build_spec
 from api.urls import urlpatterns
 from community.models import CommunityAuditLog
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 
 class SlackMembershipCheckApiTest(TestCase):
@@ -27,7 +28,7 @@ class SlackMembershipCheckApiTest(TestCase):
         cls.nonstaff.is_staff = False
         cls.nonstaff.save(update_fields=["is_staff"])
         cls.main = Tier.objects.get(level=20)
-        cls.member = User.objects.create_user(
+        cls.member = create_user_with_membership(
             email="canonical-1572@test.com", tier=cls.main,
         )
         cls.alias = EmailAlias.objects.create(

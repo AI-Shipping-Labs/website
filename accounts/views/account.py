@@ -98,7 +98,7 @@ from integrations.services.maven_preferences import (
     is_maven_relevant,
     maven_email_preference,
 )
-from payments.models import Tier
+from payments.models import Membership, Tier
 from payments.tier_state import build_tier_state
 
 # Issue #581: ``build_tier_state`` is shared with the pricing page where the
@@ -251,14 +251,16 @@ def _render_account_page(
     values through so the user keeps their input.
     """
     user = request.user
-    tier = user.tier
-    pending_tier = user.pending_tier
+    # Issue #1579: tier/billing state lives on payments.Membership.
+    membership = Membership.for_user(user)
+    tier = membership.tier
+    pending_tier = membership.pending_tier
 
     # Determine tier level for conditional display
     is_free = tier is None or tier.level == 0
     is_premium = tier is not None and tier.slug == "premium"
     is_basic = tier is not None and tier.slug == "basic"
-    has_subscription = bool(user.subscription_id)
+    has_subscription = bool(membership.subscription_id)
 
     # Determine display states
     # pending_tier.slug == "free" means cancellation is scheduled at period end.
@@ -365,7 +367,7 @@ def _render_account_page(
         "is_basic": is_basic,
         "has_subscription": has_subscription,
         "is_pending_cancellation": is_pending_cancellation,
-        "billing_period_end": user.billing_period_end,
+        "billing_period_end": membership.billing_period_end,
         "email_preferences": user.email_preferences,
         "newsletter_subscribed": not user.unsubscribed,
         # Issue #655: per-content-type opt-out. Default is ON (opted in)

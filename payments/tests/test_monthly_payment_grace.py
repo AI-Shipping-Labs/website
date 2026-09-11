@@ -30,13 +30,14 @@ from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
 from integrations.models import IntegrationSetting
+from payments.models import Membership, Tier
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.models import SubscriptionReconciliationFinding as Finding
 from payments.models import SubscriptionReconciliationRun as Run
-from payments.models import Tier
 from payments.services import monthly_payment_grace as service
 from payments.services.webhook_dispatch import process_event
+from tests.fixtures import set_membership
 
 
 def subscription(*, status="past_due", price_id="price_main_monthly",
@@ -80,10 +81,18 @@ class GraceBase(TestCase):
         cls.main.save(update_fields=["stripe_price_id_monthly", "stripe_price_id_yearly"])
 
     def make_user(self, **kwargs):
-        kwargs.setdefault("tier", self.main)
-        kwargs.setdefault("stripe_customer_id", "cus_grace")
-        kwargs.setdefault("subscription_id", "sub_grace")
-        return User.objects.create_user(email="member@example.com", **kwargs)
+        # Issue #1579: tier/Stripe fields live on payments.Membership.
+        tier = kwargs.pop("tier", self.main)
+        stripe_customer_id = kwargs.pop("stripe_customer_id", "cus_grace")
+        subscription_id = kwargs.pop("subscription_id", "sub_grace")
+        user = User.objects.create_user(email="member@example.com", **kwargs)
+        set_membership(
+            user,
+            tier=tier,
+            stripe_customer_id=stripe_customer_id,
+            subscription_id=subscription_id,
+        )
+        return user
 
     def create_grace(self, user=None, **kwargs):
         user = user or self.make_user()
@@ -116,9 +125,12 @@ class MonthlyPaymentGraceModelTest(GraceBase):
                 livemode=True,
             )
 
-        other = User.objects.create_user(
-            email="other@example.com", tier=self.main,
-            stripe_customer_id="cus_other", subscription_id="sub_other",
+        other = User.objects.create_user(email="other@example.com")
+        set_membership(
+            other,
+            tier=self.main,
+            stripe_customer_id="cus_other",
+            subscription_id="sub_other",
         )
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.create_grace(user=other)
@@ -127,7 +139,8 @@ class MonthlyPaymentGraceModelTest(GraceBase):
         first = self.create_grace(livemode=None)
         first.status = Grace.STATUS_RECOVERED
         first.save(update_fields=["status"])
-        other = User.objects.create_user(email="other@example.com", tier=self.main)
+        other = User.objects.create_user(email="other@example.com")
+        set_membership(other, tier=self.main)
         with self.assertRaises(IntegrityError), transaction.atomic():
             self.create_grace(user=other, livemode=None)
 
@@ -303,7 +316,7 @@ class GraceLifecycleTest(GraceBase):
         grace.user.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_ACTIVE)
         self.assertIsNone(grace.policy_enforced_at)
-        self.assertEqual(grace.user.tier, self.main)
+        self.assertEqual(grace.user.membership.tier, self.main)
         retrieve.assert_not_called()
 
     @override_settings(STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce")
@@ -344,8 +357,8 @@ class GraceLifecycleTest(GraceBase):
         user.refresh_from_db()
         grace.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.free)
-        self.assertEqual(user.subscription_id, "sub_grace")
+        self.assertEqual(user.membership.tier, self.free)
+        self.assertEqual(user.membership.subscription_id, "sub_grace")
         self.assertEqual(grace.status, Grace.STATUS_EXPIRED)
         self.assertTrue(override.is_active)
         self.assertEqual(service._effective_tier(user), premium)
@@ -365,7 +378,7 @@ class GraceLifecycleTest(GraceBase):
         grace.refresh_from_db()
         grace.user.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_REVIEW)
-        self.assertEqual(grace.user.tier, self.main)
+        self.assertEqual(grace.user.membership.tier, self.main)
         self.assertEqual(grace.last_error_code, "stripe_lookup_error")
 
     @override_settings(STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce")
@@ -393,8 +406,8 @@ class GraceLifecycleTest(GraceBase):
         ):
             service.sweep_payment_graces(now=now)
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free)
-        self.assertEqual(user.subscription_id, "sub_grace")
+        self.assertEqual(user.membership.tier, self.free)
+        self.assertEqual(user.membership.subscription_id, "sub_grace")
         self.assertEqual(user.tags, ["keep-me", "stripe:lapsed"])
         self.assertTrue(Enrollment.objects.filter(pk=enrollment.pk).exists())
         remove.assert_called_once_with(user)
@@ -733,7 +746,7 @@ class QaRegressionAndScenarioTest(GraceBase):
         recovered.refresh_from_db()
         recovered.user.refresh_from_db()
         self.assertEqual(recovered.status, Grace.STATUS_RECOVERED)
-        self.assertEqual(recovered.user.tier, self.main)
+        self.assertEqual(recovered.user.membership.tier, self.main)
         self.assertFalse(
             recovered.deliveries.filter(
                 kind__in=[
@@ -789,7 +802,7 @@ class QaRegressionAndScenarioTest(GraceBase):
         grace.refresh_from_db()
         grace.user.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_EXPIRED)
-        self.assertEqual(grace.user.tier, self.free)
+        self.assertEqual(grace.user.membership.tier, self.free)
         delivery = grace.deliveries.get(kind=Delivery.KIND_EXPIRED_MEMBER)
         self.assertEqual(delivery.status, Delivery.STATUS_SENT)
         self.assertEqual(delivery.attempt_count, 1)
@@ -867,8 +880,7 @@ class QaRegressionAndScenarioTest(GraceBase):
 
     def test_manual_base_or_subscription_change_never_records_recovery(self):
         base_grace = self.create_grace()
-        base_grace.user.tier = self.free
-        base_grace.user.save(update_fields=["tier"])
+        set_membership(base_grace.user, tier=self.free)
         with patch.object(service, "_audit"):
             service.recover_grace(
                 subscription_id="sub_grace",
@@ -880,11 +892,12 @@ class QaRegressionAndScenarioTest(GraceBase):
         base_grace.user.refresh_from_db()
         self.assertEqual(base_grace.status, Grace.STATUS_REVIEW)
         self.assertEqual(base_grace.last_error_code, "manual_tier_change")
-        self.assertEqual(base_grace.user.tier, self.free)
+        self.assertEqual(base_grace.user.membership.tier, self.free)
         self.assertIsNone(base_grace.recovered_at)
 
-        other_user = User.objects.create_user(
-            email="manual-sub@test.com",
+        other_user = User.objects.create_user(email="manual-sub@test.com")
+        set_membership(
+            other_user,
             tier=self.main,
             stripe_customer_id="cus_manual_sub",
             subscription_id="sub_manual_old",
@@ -896,8 +909,7 @@ class QaRegressionAndScenarioTest(GraceBase):
             stripe_invoice_id="in_manual_sub",
             livemode=True,
         )
-        other_user.subscription_id = "sub_manual_new"
-        other_user.save(update_fields=["subscription_id"])
+        set_membership(other_user, subscription_id="sub_manual_new")
         with patch.object(service, "_audit"):
             service.recover_grace(
                 subscription_id="sub_manual_old",
@@ -909,13 +921,14 @@ class QaRegressionAndScenarioTest(GraceBase):
         other_user.refresh_from_db()
         self.assertEqual(sub_grace.status, Grace.STATUS_SUPERSEDED)
         self.assertEqual(sub_grace.last_error_code, "manual_subscription_change")
-        self.assertEqual(other_user.subscription_id, "sub_manual_new")
+        self.assertEqual(other_user.membership.subscription_id, "sub_manual_new")
         self.assertIsNone(sub_grace.recovered_at)
 
     def test_verified_recovery_mode_isolated_and_event_time_is_stable(self):
         test_grace = self.create_grace(livemode=False)
-        live_user = User.objects.create_user(
-            email="live-mode@test.com",
+        live_user = User.objects.create_user(email="live-mode@test.com")
+        set_membership(
+            live_user,
             tier=self.main,
             stripe_customer_id="cus_live",
             subscription_id="sub_live",
@@ -962,8 +975,9 @@ class QaRegressionAndScenarioTest(GraceBase):
             grace_expires_at=now,
             policy_enforced_at=now - timedelta(days=8),
         )
-        self.assertEqual(grace.user.tier, self.main)  # populate stale relation cache
-        User.objects.filter(pk=grace.user_id).update(tier=self.free)
+        self.assertEqual(grace.user.membership.tier, self.main)  # populate stale relation cache
+        # A concurrent staff tier edit writes the Membership row (#1579).
+        Membership.objects.filter(user_id=grace.user_id).update(tier=self.free)
         with transaction.atomic(), patch.object(
             service, "_retrieve_subscription", return_value=subscription(),
         ), patch.object(
@@ -974,7 +988,7 @@ class QaRegressionAndScenarioTest(GraceBase):
         grace.user.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_REVIEW)
         self.assertEqual(grace.last_error_code, "manual_tier_change")
-        self.assertEqual(grace.user.tier, self.free)
+        self.assertEqual(grace.user.membership.tier, self.free)
         self.assertIsNone(grace.expired_at)
 
     def test_expiry_locked_row_preserves_manual_subscription_change(self):
@@ -984,8 +998,9 @@ class QaRegressionAndScenarioTest(GraceBase):
             grace_expires_at=now,
             policy_enforced_at=now - timedelta(days=8),
         )
-        self.assertEqual(grace.user.subscription_id, "sub_grace")
-        User.objects.filter(pk=grace.user_id).update(
+        self.assertEqual(grace.user.membership.subscription_id, "sub_grace")
+        # A concurrent staff subscription edit writes Membership (#1579).
+        Membership.objects.filter(user_id=grace.user_id).update(
             subscription_id="sub_staff_replacement",
         )
         with transaction.atomic(), patch.object(
@@ -996,26 +1011,28 @@ class QaRegressionAndScenarioTest(GraceBase):
         grace.user.refresh_from_db()
         self.assertEqual(grace.status, Grace.STATUS_REVIEW)
         self.assertEqual(grace.last_error_code, "manual_subscription_change")
-        self.assertEqual(grace.user.subscription_id, "sub_staff_replacement")
-        self.assertEqual(grace.user.tier, self.main)
+        self.assertEqual(grace.user.membership.subscription_id, "sub_staff_replacement")
+        self.assertEqual(grace.user.membership.tier, self.main)
         self.assertIsNone(grace.expired_at)
         retrieve.assert_not_called()
 
     def test_ambiguous_subscription_recovery_mutates_no_grace(self):
         users = [
-            User.objects.create_user(
-                email=f"ambiguous-{index}@test.com",
+            User.objects.create_user(email=f"ambiguous-{index}@test.com")
+            for index in range(2)
+        ]
+        for index, user in enumerate(users):
+            set_membership(
+                user,
                 tier=self.main,
                 stripe_customer_id=f"cus_ambiguous_{index}",
                 subscription_id="sub_ambiguous",
             )
-            for index in range(2)
-        ]
         graces = [
             self.create_grace(
                 user=user,
                 status=Grace.STATUS_REVIEW,
-                stripe_customer_id=user.stripe_customer_id,
+                stripe_customer_id=user.membership.stripe_customer_id,
                 stripe_subscription_id="sub_ambiguous",
                 stripe_invoice_id=f"in_ambiguous_{index}",
                 livemode=False,

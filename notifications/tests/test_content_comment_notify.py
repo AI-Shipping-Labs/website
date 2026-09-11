@@ -28,6 +28,7 @@ from notifications.models import Notification
 from notifications.services.notification_service import NotificationService
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import create_user_with_membership, set_membership
 
 User = get_user_model()
 
@@ -506,13 +507,13 @@ class ContentCommentBookNoteNotifyTest(TestCase):
     def setUpTestData(cls):
         cls.main_tier = Tier.objects.get(slug='main')
         cls.free_tier = Tier.objects.get(slug='free')
-        cls.note_owner = User.objects.create_user(
+        cls.note_owner = create_user_with_membership(
             email='note-owner@test.com', password='pw', tier=cls.main_tier,
         )
-        cls.parent_author = User.objects.create_user(
+        cls.parent_author = create_user_with_membership(
             email='note-reader@test.com', password='pw', tier=cls.main_tier,
         )
-        cls.replier = User.objects.create_user(
+        cls.replier = create_user_with_membership(
             email='note-replier@test.com', password='pw', tier=cls.main_tier,
         )
         cls.book = Book.objects.create(
@@ -571,8 +572,7 @@ class ContentCommentBookNoteNotifyTest(TestCase):
     def test_book_reply_skips_parent_author_who_lost_tier_access(self):
         parent = self._comment(self.parent_author, body='Before downgrade')
         Notification.objects.all().delete()
-        self.parent_author.tier = self.free_tier
-        self.parent_author.save(update_fields=['tier'])
+        set_membership(self.parent_author, tier=self.free_tier)
 
         self._comment(self.replier, parent=parent)
 

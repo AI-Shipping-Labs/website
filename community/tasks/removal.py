@@ -34,7 +34,7 @@ def scheduled_community_removal(user_id):
         user_id: Primary key of the User to remove.
     """
     try:
-        user = User.objects.select_related("tier").get(pk=user_id)
+        user = User.objects.select_related("membership__tier").get(pk=user_id)
     except User.DoesNotExist:
         logger.error(
             "Scheduled removal: user %s not found", user_id,

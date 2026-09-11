@@ -30,7 +30,7 @@ from payments.services import (
 from payments.services import (
     handle_checkout_completed as _handle_checkout_completed,
 )
-from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window, set_membership
 
 
 def handle_checkout_completed(session_data):
@@ -318,9 +318,9 @@ class SubscriptionExtractionTest(TestCase):
         handle_checkout_completed(session_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(1774396800, tz=timezone.utc),
         )
         attribution = ConversionAttribution.objects.get(
@@ -541,8 +541,7 @@ class PaymentNotificationEmailTest(TestCase):
         # Pre-existing user already on free tier — checkout upgrades them.
         free_tier = Tier.objects.get(slug="free")
         user = User.objects.create_user(email="upgrade@test.com")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         handle_checkout_completed(self._basic_session_data(user))
 
@@ -613,8 +612,7 @@ class PaymentNotificationEmailTest(TestCase):
         # --- 2. Existing user upgrade ---
         existing = User.objects.create_user(email="subj-upgrade@test.com")
         free_tier = Tier.objects.get(slug="free")
-        existing.tier = free_tier
-        existing.save(update_fields=["tier"])
+        set_membership(existing, tier=free_tier)
         handle_checkout_completed(self._basic_session_data(
             existing, session_id="cs_subject_upgrade",
         ))
@@ -660,8 +658,7 @@ class PaymentNotificationEmailTest(TestCase):
 
         user = User.objects.create_user(email="body@test.com")
         free_tier = Tier.objects.get(slug="free")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         session_data = {
             "id": "cs_body_test",
@@ -704,8 +701,7 @@ class PaymentNotificationEmailTest(TestCase):
 
         user = User.objects.create_user(email="smtp@test.com")
         free_tier = Tier.objects.get(slug="free")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         with patch("payments.services.logger") as mock_logger:
             # Critically, this MUST NOT raise.
@@ -713,7 +709,7 @@ class PaymentNotificationEmailTest(TestCase):
 
         # The handler still committed the tier change before sending.
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
         # The failure was logged at WARNING level (not error/exception),
         # because a missing operator notification is not a payment
         # failure — the user has been served.
@@ -764,8 +760,7 @@ class PaymentNotificationEmailTest(TestCase):
 
         user = User.objects.create_user(email="dupe-notify@test.com")
         free_tier = Tier.objects.get(slug="free")
-        user.tier = free_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=free_tier)
 
         event_data = {
             "id": "evt_dupe_notify_1",

@@ -31,6 +31,7 @@ from crm.models import CRMRecord
 from email_app.models import EmailCampaign, EmailLog
 from events.models import Event, EventRegistration
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -597,10 +598,8 @@ class ScalarReconcileTest(UserMergeTestBase):
 
     def test_tier_resolves_to_higher_level(self):
         canonical, secondary = self._make_pair()
-        canonical.tier = self.free
-        canonical.save(update_fields=["tier"])
-        secondary.tier = self.main
-        secondary.save(update_fields=["tier"])
+        set_membership(canonical, tier=self.free)
+        set_membership(secondary, tier=self.main)
 
         response = self._post(
             {"canonical_email": "keep@test.com", "merge_email": "dupe@test.com"}
@@ -608,7 +607,7 @@ class ScalarReconcileTest(UserMergeTestBase):
         self.assertEqual(response.status_code, 200)
 
         canonical.refresh_from_db()
-        self.assertEqual(canonical.tier.slug, "main")
+        self.assertEqual(canonical.membership.tier.slug, "main")
         self.assertEqual(response.json()["reconciled"]["tier"]["to"], "main")
 
     def test_secondary_unsubscribe_still_reconciles_to_canonical(self):
@@ -861,25 +860,19 @@ class TierOverrideReconcileTest(UserMergeTestBase):
 class StefanoRedundantOverrideTest(UserMergeTestBase):
     def test_paid_via_moved_subscription_revokes_redundant_override(self):
         canonical, secondary = self._make_pair()
-        canonical.tier = self.free
-        canonical.save(update_fields=["tier"])
+        set_membership(canonical, tier=self.free)
         courtesy = TierOverride.objects.create(
             user=canonical,
             override_tier=self.main,
             expires_at=timezone.now() + timezone.timedelta(days=365),
             is_active=True,
         )
-        secondary.tier = self.main
-        secondary.subscription_id = "sub_live_123"
-        secondary.stripe_customer_id = "cus_123"
-        secondary.billing_period_end = timezone.now() + timezone.timedelta(days=30)
-        secondary.save(
-            update_fields=[
-                "tier",
-                "subscription_id",
-                "stripe_customer_id",
-                "billing_period_end",
-            ]
+        set_membership(
+            secondary,
+            tier=self.main,
+            subscription_id="sub_live_123",
+            stripe_customer_id="cus_123",
+            billing_period_end=timezone.now() + timezone.timedelta(days=30),
         )
 
         response = self._post(
@@ -888,9 +881,9 @@ class StefanoRedundantOverrideTest(UserMergeTestBase):
         self.assertEqual(response.status_code, 200, response.content)
 
         canonical.refresh_from_db()
-        self.assertEqual(canonical.tier.slug, "main")
-        self.assertEqual(canonical.subscription_id, "sub_live_123")
-        self.assertEqual(canonical.stripe_customer_id, "cus_123")
+        self.assertEqual(canonical.membership.tier.slug, "main")
+        self.assertEqual(canonical.membership.subscription_id, "sub_live_123")
+        self.assertEqual(canonical.membership.stripe_customer_id, "cus_123")
         courtesy.refresh_from_db()
         self.assertFalse(courtesy.is_active)
 
@@ -903,10 +896,8 @@ class StefanoRedundantOverrideTest(UserMergeTestBase):
 class DualSubscriptionTest(UserMergeTestBase):
     def _make_dual(self):
         canonical, secondary = self._make_pair()
-        canonical.subscription_id = "sub_A"
-        canonical.save(update_fields=["subscription_id"])
-        secondary.subscription_id = "sub_B"
-        secondary.save(update_fields=["subscription_id"])
+        set_membership(canonical, subscription_id="sub_A")
+        set_membership(secondary, subscription_id="sub_B")
         EmailLog.objects.create(user=secondary, email_type="campaign")
         return canonical, secondary
 
@@ -922,8 +913,8 @@ class DualSubscriptionTest(UserMergeTestBase):
         self.assertEqual(EmailLog.objects.filter(user=secondary).count(), 1)
         canonical.refresh_from_db()
         secondary.refresh_from_db()
-        self.assertEqual(canonical.subscription_id, "sub_A")
-        self.assertEqual(secondary.subscription_id, "sub_B")
+        self.assertEqual(canonical.membership.subscription_id, "sub_A")
+        self.assertEqual(secondary.membership.subscription_id, "sub_B")
         self.assertFalse(
             CommunityAuditLog.objects.filter(action="merge_accounts").exists()
         )
@@ -940,7 +931,7 @@ class DualSubscriptionTest(UserMergeTestBase):
         self.assertEqual(response.status_code, 200, response.content)
 
         canonical.refresh_from_db()
-        self.assertEqual(canonical.subscription_id, "sub_A")
+        self.assertEqual(canonical.membership.subscription_id, "sub_A")
         conflicts = response.json()["conflicts"]
         self.assertTrue(
             any(c.get("dropped_subscription_id") == "sub_B" for c in conflicts)

@@ -19,7 +19,7 @@ from analytics.models import UserActivity
 from content.access import LEVEL_BASIC, LEVEL_OPEN
 from events.models import Event
 from integrations.config import clear_config_cache
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -48,13 +48,15 @@ class EventRecordingStreamTest(TierSetupMixin, TestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         cls.basic_user = User.objects.create_user(
-            email='basic-rec@test.com', password='pw', tier=cls.basic_tier,
+            email='basic-rec@test.com', password='pw',
             email_verified=True,
         )
+        set_membership(cls.basic_user, tier=cls.basic_tier)
         cls.free_user = User.objects.create_user(
-            email='free-rec@test.com', password='pw', tier=cls.free_tier,
+            email='free-rec@test.com', password='pw',
             email_verified=True,
         )
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.gated_event = Event.objects.create(
             title='Basic Rec Event',
             slug='basic-rec-event',

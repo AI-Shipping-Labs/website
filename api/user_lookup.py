@@ -13,7 +13,11 @@ def find_user_by_primary_email(email):
         return None
     return (
         User.objects
-        .select_related("tier", "pending_tier", "attribution")
+        .select_related(
+            "membership__tier",
+            "membership__pending_tier",
+            "attribution",
+        )
         .filter(email__iexact=email)
         .first()
     )

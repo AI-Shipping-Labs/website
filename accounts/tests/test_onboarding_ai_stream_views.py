@@ -30,6 +30,7 @@ from questionnaires.services_onboarding_ai import (
     get_or_create_ai_onboarding_response,
 )
 from questionnaires.tests.test_onboarding_ai_core import VALID_EXTRACTION
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -96,9 +97,8 @@ class StreamAccessControlTest(TestCase):
 class StreamResponseShapeTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='stream-shape@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='stream-shape@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -201,9 +201,8 @@ class StreamResponseShapeTest(TestCase):
 class StreamCompletionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='stream-complete@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='stream-complete@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -258,9 +257,8 @@ class StreamCompletionTest(TestCase):
             ))
         streamed = Response.objects.get(respondent=self.member)
 
-        other = User.objects.create_user(
-            email='stream-nonstream@test.com', password='pw', tier=_basic_tier(),
-        )
+        other = User.objects.create_user(email='stream-nonstream@test.com', password='pw')
+        set_membership(other, tier=_basic_tier())
         response, conversation = get_or_create_ai_onboarding_response(other)
         with patch(
             'questionnaires.onboarding_ai.llm.complete',
@@ -295,9 +293,8 @@ class StreamCompletionTest(TestCase):
 class StreamFallbackTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='stream-fallback@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='stream-fallback@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -430,9 +427,8 @@ class StreamFallbackTest(TestCase):
 class StreamGatingTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='stream-gate@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='stream-gate@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -472,9 +468,8 @@ class StreamGatingTest(TestCase):
 class StreamAlreadyOnboardedTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='stream-done@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='stream-done@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -517,8 +512,10 @@ class StreamCrossMemberIsolationTest(TestCase):
 
     @LLM_ON
     def test_stream_uses_only_the_logged_in_members_response(self):
-        member_a = User.objects.create_user(email='a@test.com', password='pw', tier=_basic_tier())
-        member_b = User.objects.create_user(email='b@test.com', password='pw', tier=_basic_tier())
+        member_a = User.objects.create_user(email='a@test.com', password='pw')
+        set_membership(member_a, tier=_basic_tier())
+        member_b = User.objects.create_user(email='b@test.com', password='pw')
+        set_membership(member_b, tier=_basic_tier())
         # B starts a conversation.
         get_or_create_ai_onboarding_response(member_b)
 

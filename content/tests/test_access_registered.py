@@ -28,7 +28,7 @@ from content.access import (
     get_gated_reason,
 )
 from content.models import Course, CourseAccess, Module, Unit
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 
 @tag('core')
@@ -81,7 +81,7 @@ class CanAccessRegisteredUnitTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email=f'{label}@reg.test', email_verified=verified,
         )
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.save()
         return user
 
@@ -199,7 +199,7 @@ class BuildGatingContextRegisteredTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='unv@reg.test', email_verified=False,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         ctx = build_gating_context(user, self.unit, 'unit')
         self.assertTrue(ctx['is_gated'])
@@ -209,7 +209,7 @@ class BuildGatingContextRegisteredTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='ver@reg.test', email_verified=True,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         ctx = build_gating_context(user, self.unit, 'unit')
         self.assertFalse(ctx['is_gated'])

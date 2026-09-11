@@ -36,7 +36,7 @@ from content.models import (
 )
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.services import completion as completion_service
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -290,7 +290,7 @@ class WorkshopPageCompleteEndpointTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email=f'wapi-{id(self)}@example.com', password='pw',
         )
-        self.user.tier = self.basic_tier
+        set_membership(self.user, tier=self.basic_tier)
         self.user.save()
 
     def _url(self, page=None):
@@ -310,7 +310,7 @@ class WorkshopPageCompleteEndpointTest(TierSetupMixin, TestCase):
         free_user = User.objects.create_user(
             email='free@example.com', password='pw',
         )
-        free_user.tier = self.free_tier
+        set_membership(free_user, tier=self.free_tier)
         free_user.save()
         self.client.login(email='free@example.com', password='pw')
         response = self.client.post(self._url())
@@ -367,7 +367,7 @@ class WorkshopPageDetailIsCompletedContextTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='wpd@example.com', password='x',
         )
-        self.user.tier = self.basic_tier
+        set_membership(self.user, tier=self.basic_tier)
         self.user.save()
 
     def _extract_btn_html(self, html: str) -> str:
@@ -438,7 +438,7 @@ class WorkshopPageDetailIsCompletedContextTest(TierSetupMixin, TestCase):
         free_user = User.objects.create_user(
             email='free2@example.com', password='x',
         )
-        free_user.tier = self.free_tier
+        set_membership(free_user, tier=self.free_tier)
         free_user.save()
         self.client.login(email='free2@example.com', password='x')
         response = self.client.get(self.pages[0].get_absolute_url())
@@ -461,7 +461,7 @@ class DashboardContinueLearningWorkshopsTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='dash@example.com', password='x',
         )
-        self.user.tier = self.basic_tier
+        set_membership(self.user, tier=self.basic_tier)
         self.user.save()
         self.client.login(email='dash@example.com', password='x')
 
@@ -501,7 +501,7 @@ class DashboardContinueLearningWorkshopsTest(TierSetupMixin, TestCase):
     def test_workshop_hidden_when_user_below_required_level(self):
         # User completed a page but has since downgraded to free.
         self._mark(self.pages[0])
-        self.user.tier = self.free_tier
+        set_membership(self.user, tier=self.free_tier)
         self.user.save()
         response = self.client.get('/')
         items = response.context['in_progress_learning']

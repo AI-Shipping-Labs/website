@@ -19,7 +19,7 @@ from django.test import TestCase
 
 from content.access import LEVEL_MAIN
 from content.models import Course, Module, Unit
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -200,7 +200,7 @@ class ModuleOverviewGatedCardTest(TierSetupMixin, TestCase):
             email='module-free@test.com', password='testpass',
             email_verified=True,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email=user.email, password='testpass')
 
@@ -222,7 +222,7 @@ class ModuleOverviewGatedCardTest(TierSetupMixin, TestCase):
             email='module-main@test.com', password='testpass',
             email_verified=True,
         )
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email=user.email, password='testpass')
 

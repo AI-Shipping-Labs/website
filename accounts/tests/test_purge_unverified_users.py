@@ -29,11 +29,18 @@ from accounts.tasks.purge_unverified_users import (
     _standard_base_queryset,
 )
 from email_app.models import EmailLog, SesEvent
+from tests.fixtures import set_membership
 
 
 def _make_unverified(email, *, expires_offset_hours, **extra):
-    """Fixture: an unverified user with a verification window relative to now."""
-    return User.objects.create_user(
+    """Fixture: an unverified user with a verification window relative to now.
+
+    Issue #1579: ``stripe_customer_id`` / ``subscription_id`` live on the
+    user's Membership row, so they are routed there instead of the User.
+    """
+    stripe_customer_id = extra.pop("stripe_customer_id", None)
+    subscription_id = extra.pop("subscription_id", None)
+    user = User.objects.create_user(
         email=email,
         password="secure1234",
         email_verified=False,
@@ -41,6 +48,11 @@ def _make_unverified(email, *, expires_offset_hours, **extra):
         + datetime.timedelta(hours=expires_offset_hours),
         **extra,
     )
+    set_membership(
+        user, stripe_customer_id=stripe_customer_id or "",
+        subscription_id=subscription_id or "",
+    )
+    return user
 
 
 class PurgeUnverifiedUsersTest(TestCase):
@@ -211,9 +223,11 @@ def _make_eager_candidate(email, *, bounce_age_hours, **extra):
 
     Mirrors the production state set by ``_mark_permanent_bounce`` so
     each eager-bucket test exercises one safety gate without leaking
-    state across tests.
+    state across tests. Issue #1579: ``stripe_customer_id`` lives on the
+    user's Membership row.
     """
-    return User.objects.create_user(
+    stripe_customer_id = extra.pop("stripe_customer_id", None)
+    user = User.objects.create_user(
         email=email,
         password="secure1234",
         email_verified=False,
@@ -224,6 +238,8 @@ def _make_eager_candidate(email, *, bounce_age_hours, **extra):
         last_bounce_diagnostic="550 5.1.1 No such mailbox",
         **extra,
     )
+    set_membership(user, stripe_customer_id=stripe_customer_id or "")
+    return user
 
 
 class EagerBounceBucketTest(TestCase):
@@ -400,8 +416,8 @@ class BoundedPurgeQueryPlanTest(TestCase):
         sql = str(queryset.query)
 
         self.assertIn('"last_login" IS NULL', sql)
-        self.assertIn('"stripe_customer_id" =', sql)
-        self.assertIn('"subscription_id" =', sql)
+        self.assertIn('"payments_membership"."stripe_customer_id" =', sql)
+        self.assertIn('"payments_membership"."subscription_id" =', sql)
         self.assertIn('"email_verified"', sql)
         self.assertIn('"verification_expires_at" IS NOT NULL', sql)
 

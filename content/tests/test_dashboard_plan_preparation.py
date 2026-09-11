@@ -9,7 +9,7 @@ from django.utils import timezone
 
 from plans.models import Plan, Sprint, SprintEnrollment
 from questionnaires.models import Questionnaire, Response
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -26,12 +26,9 @@ class DashboardPlanPreparationStateTest(TierSetupMixin, TestCase):
         )
 
     def _member(self, email="member@test.com"):
-        return User.objects.create_user(
-            email=email,
-            password="pw",
-            tier=self.main_tier,
-            email_verified=True,
-        )
+        user = User.objects.create_user(email=email, password="pw", email_verified=True)
+        set_membership(user, tier=self.main_tier)
+        return user
 
     def _submit_onboarding(self, user):
         return Response.objects.create(

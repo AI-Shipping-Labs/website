@@ -30,13 +30,21 @@ from accounts.models import (
     TierOverride,
 )
 from accounts.utils.tags import normalize_tags, set_tags
-from payments.models import Tier
+from payments.models import Membership, Tier
 
 User = get_user_model()
 
 ADAPTERS = {}
 WELCOME_TASK_PATH = "email_app.tasks.welcome_imported.enqueue_imported_welcome_email"
 LONG_LIVED_OVERRIDE_DURATION = relativedelta(years=10)
+
+# Issue #1579: these adapter-supplied fields live on payments.Membership,
+# not on User, so they are routed to the membership row on reconcile.
+MEMBERSHIP_FIELDS = frozenset({
+    "stripe_customer_id",
+    "subscription_id",
+    "billing_period_end",
+})
 
 PROTECTED_USER_FIELDS = {
     "id",
@@ -330,8 +338,14 @@ def _validate_extra_user_fields(extra_user_fields):
     for field_name in extra_user_fields:
         if field_name in PROTECTED_USER_FIELDS:
             raise RowError(f"protected user field: {field_name}")
+        # Issue #1579: membership-owned fields are validated against the
+        # Membership model; everything else against the User model.
+        if field_name in MEMBERSHIP_FIELDS:
+            model = Membership
+        else:
+            model = User
         try:
-            User._meta.get_field(field_name)
+            model._meta.get_field(field_name)
         except FieldDoesNotExist:
             raise RowError(f"unknown user field: {field_name}") from None
 
@@ -478,9 +492,19 @@ def _apply_extra_field_updates(
     dry_run,
     allow_overwrite,
 ):
+    # Issue #1579: membership-owned fields go to the payments.Membership row;
+    # the abandoned User columns are never written by new code.
+    user_fields = {}
+    membership_fields = {}
     for field_name, value in extra_user_fields.items():
         if value in (None, ""):
             continue
+        if field_name in MEMBERSHIP_FIELDS:
+            membership_fields[field_name] = value
+        else:
+            user_fields[field_name] = value
+
+    for field_name, value in user_fields.items():
         existing_value = getattr(user, field_name, None)
         model_field = User._meta.get_field(field_name)
         can_fill_boolean = (
@@ -506,6 +530,33 @@ def _apply_extra_field_updates(
                     "or email mismatch"
                 ),
             )
+
+    if not membership_fields:
+        return
+    membership = Membership.for_user(user)
+    membership_update_fields = []
+    for field_name, value in membership_fields.items():
+        existing_value = getattr(membership, field_name, None)
+        if allow_overwrite or existing_value in (None, ""):
+            if not dry_run:
+                setattr(membership, field_name, value)
+            membership_update_fields.append(field_name)
+        elif existing_value != value:
+            _append_conflict(
+                batch,
+                row_number=row_number,
+                email=email,
+                field=field_name,
+                existing_value=existing_value,
+                incoming_value=value,
+                incoming_source=source,
+                message=(
+                    f"Existing {field_name} differs; possible duplicate customer "
+                    "or email mismatch"
+                ),
+            )
+    if membership_update_fields and not dry_run:
+        membership.save(update_fields=membership_update_fields)
 
 
 def _split_name(name):
@@ -599,7 +650,8 @@ def _apply_tier_override(
     expires_at = tier_expiry or timezone.now() + LONG_LIVED_OVERRIDE_DURATION
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        # Issue #1579: the base tier lives on payments.Membership.
+        original_tier=user.membership.tier,
         override_tier=tier,
         expires_at=expires_at,
         granted_by=actor,
@@ -609,9 +661,11 @@ def _apply_tier_override(
 
 
 def _apply_stripe_subscription_tier(user, tier):
-    if user.tier_id != tier.id:
-        user.tier = tier
-        user.save(update_fields=["tier"])
+    # Issue #1579: the direct Stripe import tier write lands on Membership.
+    membership = Membership.for_user(user)
+    if membership.tier_id != tier.id:
+        membership.tier = tier
+        membership.save(update_fields=["tier"])
 
     TierOverride.objects.filter(
         user=user,

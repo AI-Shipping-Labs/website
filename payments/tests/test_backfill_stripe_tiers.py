@@ -11,6 +11,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier, WebhookEvent
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -78,8 +79,25 @@ class BackfillStripeTiersCommandTest(TestCase):
         ])
 
     def _user(self, email, **kwargs):
-        kwargs.setdefault("stripe_customer_id", f"cus_{email.split('@')[0]}")
-        return User.objects.create_user(email=email, password="x", **kwargs)
+        # Issue #1579: tier/Stripe fields live on payments.Membership.
+        stripe_customer_id = kwargs.pop(
+            "stripe_customer_id", f"cus_{email.split('@')[0]}"
+        )
+        # Issue #1579: default free tier mirrors the old User.save() default.
+        tier = kwargs.pop("tier", self.free)
+        pending_tier = kwargs.pop("pending_tier", None)
+        subscription_id = kwargs.pop("subscription_id", "")
+        billing_period_end = kwargs.pop("billing_period_end", None)
+        user = User.objects.create_user(email=email, password="x", **kwargs)
+        set_membership(
+            user,
+            tier=tier,
+            pending_tier=pending_tier,
+            stripe_customer_id=stripe_customer_id,
+            subscription_id=subscription_id,
+            billing_period_end=billing_period_end,
+        )
+        return user
 
     def _patch_subscriptions(self, subscriptions_by_customer):
         def list_subscriptions(**kwargs):
@@ -95,21 +113,21 @@ class BackfillStripeTiersCommandTest(TestCase):
         period_end = 1_800_000_123
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [subscription(current_period_end=period_end)]
+            user.membership.stripe_customer_id: [subscription(current_period_end=period_end)]
         }):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
-        self.assertEqual(user.subscription_id, "sub_active")
+        self.assertEqual(user.membership.tier.slug, "main")
+        self.assertEqual(user.membership.subscription_id, "sub_active")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(period_end, tz=datetime_timezone.utc),
         )
         audit = WebhookEvent.objects.get(event_type="backfill_stripe_tiers")
         self.assertEqual(audit.subject_user_id, user.pk)
-        self.assertEqual(audit.stripe_customer_id, user.stripe_customer_id)
-        self.assertEqual(audit.stripe_subscription_id, user.subscription_id)
+        self.assertEqual(audit.stripe_customer_id, user.membership.stripe_customer_id)
+        self.assertEqual(audit.stripe_subscription_id, user.membership.subscription_id)
         self.assertEqual(audit.payload["old_tier_slug"], "free")
         self.assertEqual(audit.payload["new_tier_slug"], "main")
 
@@ -123,13 +141,13 @@ class BackfillStripeTiersCommandTest(TestCase):
         )
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [subscription()]
+            user.membership.stripe_customer_id: [subscription()]
         }):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertFalse(override.is_active)
 
     def test_backfill_skips_when_tier_already_matches(self):
@@ -146,12 +164,12 @@ class BackfillStripeTiersCommandTest(TestCase):
         out = StringIO()
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [subscription(current_period_end=period_end)]
+            user.membership.stripe_customer_id: [subscription(current_period_end=period_end)]
         }):
             call_command("backfill_stripe_tiers", stdout=out)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertIn("no change: already on main", out.getvalue())
         self.assertFalse(WebhookEvent.objects.exists())
 
@@ -159,11 +177,11 @@ class BackfillStripeTiersCommandTest(TestCase):
         user = self._user("nosub@test.com", tier=self.main)
         err = StringIO()
 
-        with self._patch_subscriptions({user.stripe_customer_id: []}):
+        with self._patch_subscriptions({user.membership.stripe_customer_id: []}):
             call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         self.assertIn("no active Stripe subscription", err.getvalue())
 
     def test_dry_run_does_not_write(self):
@@ -176,13 +194,13 @@ class BackfillStripeTiersCommandTest(TestCase):
         )
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [subscription()]
+            user.membership.stripe_customer_id: [subscription()]
         }):
             call_command("backfill_stripe_tiers", "--dry-run", stdout=StringIO())
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertTrue(override.is_active)
         self.assertFalse(WebhookEvent.objects.exists())
 
@@ -192,8 +210,8 @@ class BackfillStripeTiersCommandTest(TestCase):
         no_customer = User.objects.create_user(email="plain@test.com", password="x")
 
         with self._patch_subscriptions({
-            target.stripe_customer_id: [subscription("sub_target")],
-            other.stripe_customer_id: [subscription("sub_other")],
+            target.membership.stripe_customer_id: [subscription("sub_target")],
+            other.membership.stripe_customer_id: [subscription("sub_other")],
         }):
             call_command(
                 "backfill_stripe_tiers",
@@ -205,23 +223,23 @@ class BackfillStripeTiersCommandTest(TestCase):
         target.refresh_from_db()
         other.refresh_from_db()
         no_customer.refresh_from_db()
-        self.assertEqual(target.tier.slug, "main")
-        self.assertEqual(other.tier.slug, "free")
-        self.assertEqual(no_customer.tier.slug, "free")
+        self.assertEqual(target.membership.tier.slug, "main")
+        self.assertEqual(other.membership.tier.slug, "free")
+        self.assertEqual(no_customer.membership.tier.slug, "free")
 
     def test_unknown_price_logs_warning(self):
         user = self._user("unknown@test.com")
         err = StringIO()
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(price_id="price_unknown")
             ]
         }):
             call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertIn("unknown price price_unknown", err.getvalue())
 
     def test_stripe_lookup_error_logs_warning_without_crashing(self):
@@ -238,7 +256,7 @@ class BackfillStripeTiersCommandTest(TestCase):
             call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertIn("Stripe lookup failed", err.getvalue())
         self.assertFalse(WebhookEvent.objects.exists())
 
@@ -252,7 +270,7 @@ class BackfillStripeTiersCommandTest(TestCase):
         err = StringIO()
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     price_id="price_regenerated_unknown",
                     price_metadata={"tier_slug": "main"},
@@ -262,7 +280,7 @@ class BackfillStripeTiersCommandTest(TestCase):
             call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
         # No "unknown price" warning should be emitted.
         self.assertNotIn("unknown price", err.getvalue())
 
@@ -273,7 +291,7 @@ class BackfillStripeTiersCommandTest(TestCase):
         user = self._user("amount-match@test.com")
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     price_id="price_regenerated_unknown",
                     unit_amount=5000,
@@ -284,14 +302,14 @@ class BackfillStripeTiersCommandTest(TestCase):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_resolver_amount_match_works_for_yearly_prices(self):
         """Yearly prices match ``Tier.price_eur_year * 100`` rather than monthly."""
         user = self._user("amount-yearly@test.com")
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     price_id="price_regenerated_yearly",
                     unit_amount=50000,  # €500 / year = main
@@ -302,21 +320,21 @@ class BackfillStripeTiersCommandTest(TestCase):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_resolver_falls_back_to_db_map_when_both_metadata_paths_missing(self):
         """Empty metadata, but price ID matches the local map: today's behaviour."""
         user = self._user("dbmap@test.com")
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(price_id="price_main_monthly")
             ]
         }):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_resolver_warns_when_all_three_paths_miss(self):
         """All resolver steps miss: warning_unknown_price, no writes."""
@@ -324,14 +342,14 @@ class BackfillStripeTiersCommandTest(TestCase):
         err = StringIO()
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(price_id="price_unknown_xyz"),
             ]
         }):
             call_command("backfill_stripe_tiers", stdout=StringIO(), stderr=err)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertIn("unknown price price_unknown_xyz", err.getvalue())
         # No tier change, so no audit row.
         self.assertFalse(WebhookEvent.objects.exists())
@@ -345,7 +363,7 @@ class BackfillStripeTiersCommandTest(TestCase):
         user = self._user("unknown-meta-slug@test.com")
 
         with self._patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     price_id="price_main_monthly",
                     price_metadata={"tier_slug": "no-such-tier"},
@@ -355,7 +373,7 @@ class BackfillStripeTiersCommandTest(TestCase):
             call_command("backfill_stripe_tiers", stdout=StringIO())
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_subscription_list_expand_path_stays_under_stripe_4_level_limit(self):
         """Stripe rejects expansions deeper than 4 levels. The list call

@@ -26,6 +26,7 @@ import uuid
 import jwt
 import pytest
 from django.conf import settings
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     DEFAULT_PASSWORD,
@@ -736,11 +737,11 @@ class TestScenario7LeadMagnetSubscribeFlow:
         )
         assert card.locator('input[type="email"]').count() == 0
         card.get_by_test_id("download-card-body-link").click()
-        assert page.url == (
+        expect(page).to_have_url(
             f"{django_server}/downloads/free-ai-cheat-sheet?surface=catalog"
         )
         form = page.get_by_test_id("download-request-form")
-        assert form.count() == 1
+        expect(form).to_have_count(1)
         assert form.get_attribute("data-endpoint") == (
             "/api/downloads/free-ai-cheat-sheet/request?surface=catalog"
         )
@@ -886,11 +887,16 @@ class TestScenario8AuthenticatedLeadMagnetDownload:
         card = page.get_by_test_id("download-card").filter(has_text="Free Guide")
         assert card.locator('a[href="/api/downloads/free-guide/file"]').count() == 0
         card.get_by_test_id("download-card-body-link").click()
-        assert page.url == f"{django_server}/downloads/free-guide?surface=catalog"
+        expect(page).to_have_url(
+            f"{django_server}/downloads/free-guide?surface=catalog"
+        )
 
         # Then: Direct download action is present on detail (no signup CTA)
         download_link = page.get_by_test_id("download-file-cta")
-        assert download_link.count() == 1
+        expect(download_link).to_have_count(1)
+        expect(download_link).to_have_attribute(
+            "href", "/api/downloads/free-guide/file?surface=catalog"
+        )
 
         # No "Sign Up to Download" button for authenticated user
         signup_btn = page.locator(

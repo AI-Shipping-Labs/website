@@ -1727,13 +1727,13 @@ class TestScenario11FreeMemberGatedDownloads:
             has_text="Free Lead Magnet"
         )
         lead_magnet_card.get_by_test_id("download-card-body-link").click()
-        assert page.url == (
+        expect(page).to_have_url(
             f"{django_server}/downloads/free-lead-magnet?surface=catalog"
         )
         download_btn = page.get_by_test_id("download-file-cta")
-        assert download_btn.is_visible()
-        assert "/api/downloads/free-lead-magnet/file" in download_btn.get_attribute(
-            "href"
+        expect(download_btn).to_be_visible()
+        expect(download_btn).to_have_attribute(
+            "href", "/api/downloads/free-lead-magnet/file?surface=catalog"
         )
 
         page.goto(f"{django_server}/downloads", wait_until="domcontentloaded")
@@ -1743,16 +1743,18 @@ class TestScenario11FreeMemberGatedDownloads:
         gated_card.get_by_test_id("download-card-body-link").click()
 
         # Main-gated detail has the shared tier gate and pricing path.
+        expect(page).to_have_url(
+            f"{django_server}/downloads/main-gated-resource?surface=catalog"
+        )
         gate = page.get_by_test_id("download-tier-gate")
-        assert gate.is_visible()
-        assert "Main or above required" in gate.inner_text()
+        expect(gate).to_be_visible()
+        expect(gate).to_contain_text("Main or above required")
         pricing_link = page.get_by_test_id("download-pricing-cta")
-        assert pricing_link.is_visible()
+        expect(pricing_link).to_be_visible()
 
         # Click View Pricing
-        pricing_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
-        assert "/membership" in page.url
+        pricing_link.click()
+        expect(page).to_have_url(f"{django_server}/membership")
 # ---------------------------------------------------------------
 # Scenario 12: Free member tries to register for Main-gated event
 # ---------------------------------------------------------------

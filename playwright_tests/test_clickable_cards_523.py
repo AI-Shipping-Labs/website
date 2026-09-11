@@ -202,12 +202,10 @@ class TestDownloadCardBodyClickLeadMagnet:
 
         page.goto(f'{django_server}/downloads', wait_until='domcontentloaded')
         page.locator('text="A free PDF for everyone."').first.click()
-        page.wait_for_load_state('domcontentloaded')
-
-        assert page.url == (
+        expect(page).to_have_url(
             f'{django_server}/downloads/free-cheatsheet?surface=catalog'
         )
-        assert page.get_by_test_id('download-request-form').count() == 1
+        expect(page.get_by_test_id('download-request-form')).to_have_count(1)
 
 
 # ---------------------------------------------------------------

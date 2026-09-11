@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 from urllib.parse import quote
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     SETTLE_TIMEOUT_MS,
@@ -153,11 +154,23 @@ class TestIssue1288UserSupport:
         page.goto(f"{django_server}/studio/users/?q=member-1288&tag=support-priority")
         joined = page.get_by_role("link", name="Joined")
         joined.click()
-        assert "q=member-1288" in page.url and "tag=support-priority" in page.url
-        assert page.locator('th[aria-sort="ascending"]').count() == 1
+        expect(page).to_have_url(
+            f"{django_server}/studio/users/"
+            "?q=member-1288&tag=support-priority&sort=joined"
+        )
+        expect(page.locator('th[aria-sort="ascending"]')).to_have_count(1)
         page.get_by_role("link", name="Last login").click()
+        expect(page).to_have_url(
+            f"{django_server}/studio/users/"
+            "?q=member-1288&tag=support-priority&sort=last_login"
+        )
+        expect(page.locator('th[aria-sort="ascending"]')).to_have_count(1)
         page.get_by_role("link", name="Last login").click()
-        assert page.locator('th[aria-sort="descending"]').count() == 1
+        expect(page).to_have_url(
+            f"{django_server}/studio/users/"
+            "?q=member-1288&tag=support-priority&sort=-last_login"
+        )
+        expect(page.locator('th[aria-sort="descending"]')).to_have_count(1)
         context.close()
 
     def test_crm_exact_tag_filter_composes(self, django_server, browser):

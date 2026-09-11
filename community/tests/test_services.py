@@ -14,6 +14,7 @@ All Slack API calls are mocked. Tests verify:
 import json
 from unittest.mock import MagicMock, patch
 
+import requests
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
@@ -36,6 +37,15 @@ from payments.models import Tier
 from tests.fixtures import set_membership
 
 MOCK_CHANNELS = ["C001", "C002"]
+PII_EMAIL = "private-member@example.com"
+PII_NAME = "Private Member"
+PII_SLACK_USER_ID = "U_PRIVATE_MEMBER"
+PII_CHANNEL_IDS = ["C_PRIVATE_ONE", "C_PRIVATE_TWO"]
+PII_TOKEN = "xoxb-private-token"
+PII_PROVIDER_MESSAGE = (
+    f"provider echoed {PII_EMAIL} {PII_NAME} {PII_SLACK_USER_ID} "
+    f"{PII_CHANNEL_IDS[0]} {PII_TOKEN}"
+)
 
 
 class CommunityServiceInterfaceTest(TestCase):
@@ -71,6 +81,270 @@ class SlackCommunityServiceEnvironmentTest(TestCase):
         )
         self.assertEqual(service.channel_ids, ["CEXPLICIT"])
 
+
+@override_settings(SLACK_ENABLED=True)
+class SlackLoggingPrivacyTest(TestCase):
+    """Slack service logs correlate locally without retaining provider PII."""
+
+    def setUp(self):
+        first_name, last_name = PII_NAME.split()
+        self.user = User.objects.create_user(
+            email=PII_EMAIL,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        self.service = SlackCommunityService(
+            bot_token=PII_TOKEN,
+            channel_ids=PII_CHANNEL_IDS,
+        )
+
+    def _set_slack_user_id(self, value):
+        self.user.slack_user_id = value
+        self.user.save(update_fields=["slack_user_id"])
+
+    def _assert_no_sentinels(self, records):
+        rendered = "\n".join(records)
+        for marker in (
+            PII_EMAIL,
+            PII_NAME,
+            PII_SLACK_USER_ID,
+            *PII_CHANNEL_IDS,
+            PII_TOKEN,
+            PII_PROVIDER_MESSAGE,
+        ):
+            self.assertNotIn(marker, rendered)
+        return rendered
+
+    def _assert_safe(self, records, *, action, outcome):
+        rendered = self._assert_no_sentinels(records)
+        self.assertIn(f"action={action}", rendered)
+        self.assertIn(f"outcome={outcome}", rendered)
+        self.assertIn(f"user_id={self.user.pk}", rendered)
+
+    def test_invite_logs_cover_channel_and_email_outcomes_without_pii(self):
+        channel_cases = (
+            (
+                INVITE_ADDED_TO_CHANNELS,
+                [{"channel": PII_CHANNEL_IDS[0], "ok": True}],
+            ),
+            (
+                INVITE_CHANNEL_JOIN_FAILED,
+                [{
+                    "channel": PII_CHANNEL_IDS[0],
+                    "ok": False,
+                    "error": "not_in_channel",
+                }],
+            ),
+        )
+        for outcome, results in channel_cases:
+            with self.subTest(outcome=outcome):
+                self._set_slack_user_id(PII_SLACK_USER_ID)
+                with (
+                    patch.object(self.service, "add_to_channels", return_value=results),
+                    self.assertLogs("community.services.slack", level="INFO") as logs,
+                ):
+                    result = self.service.invite(self.user)
+                self.assertEqual(result.outcome, outcome)
+                self._assert_safe(logs.output, action="invite", outcome=outcome)
+
+        self._set_slack_user_id("")
+        with (
+            patch.object(self.service, "lookup_user_by_email", return_value=None),
+            self.assertLogs("community.services.slack", level="INFO") as logs,
+        ):
+            result = self.service.invite(self.user, send_invite_email=False)
+        self.assertEqual(result.outcome, INVITE_EMAIL_SUPPRESSED)
+        self._assert_safe(
+            logs.output,
+            action="invite",
+            outcome=INVITE_EMAIL_SUPPRESSED,
+        )
+
+        email_cases = (
+            (INVITE_EMAIL_SENT, object(), None),
+            (INVITE_EMAIL_SKIPPED, None, None),
+            (
+                INVITE_EMAIL_FAILED,
+                None,
+                EmailServiceError(PII_PROVIDER_MESSAGE),
+            ),
+        )
+        for outcome, return_value, side_effect in email_cases:
+            with self.subTest(outcome=outcome):
+                self._set_slack_user_id("")
+                with (
+                    patch.object(self.service, "lookup_user_by_email", return_value=None),
+                    patch("community.services.slack.EmailService") as email_service,
+                ):
+                    email_service.return_value.send.return_value = return_value
+                    email_service.return_value.send.side_effect = side_effect
+                    with self.assertLogs(
+                        "community.services.slack", level="INFO"
+                    ) as logs:
+                        result = self.service.invite(self.user)
+                self.assertEqual(result.outcome, outcome)
+                self._assert_safe(logs.output, action="invite", outcome=outcome)
+                if outcome == INVITE_EMAIL_FAILED:
+                    self.assertIn(
+                        "error_class=EmailServiceError",
+                        "\n".join(logs.output),
+                    )
+
+    def test_removal_logs_cover_skipped_success_and_failure_without_pii(self):
+        self._set_slack_user_id("")
+        with self.assertLogs("community.services.slack", level="INFO") as logs:
+            self.service.remove(self.user)
+        self._assert_safe(logs.output, action="remove", outcome="skipped")
+
+        for results in (
+            [{"channel": PII_CHANNEL_IDS[0], "ok": True}],
+            [{
+                "channel": PII_CHANNEL_IDS[0],
+                "ok": False,
+                "error": "channel_not_found",
+            }],
+        ):
+            with self.subTest(results=results):
+                self._set_slack_user_id(PII_SLACK_USER_ID)
+                with (
+                    patch.object(
+                        self.service,
+                        "remove_from_channels",
+                        return_value=results,
+                    ),
+                    self.assertLogs("community.services.slack", level="INFO") as logs,
+                ):
+                    self.service.remove(self.user)
+                self._assert_safe(logs.output, action="remove", outcome="completed")
+
+    def test_reactivation_logs_cover_channel_and_email_outcomes_without_pii(self):
+        self._set_slack_user_id(PII_SLACK_USER_ID)
+        with (
+            patch.object(
+                self.service,
+                "add_to_channels",
+                return_value=[{"channel": PII_CHANNEL_IDS[0], "ok": True}],
+            ),
+            self.assertLogs("community.services.slack", level="INFO") as logs,
+        ):
+            self.service.reactivate(self.user)
+        self._assert_safe(logs.output, action="reactivate", outcome="completed")
+
+        email_cases = (
+            (INVITE_EMAIL_SENT, object(), None),
+            (INVITE_EMAIL_SKIPPED, None, None),
+            (
+                INVITE_EMAIL_FAILED,
+                None,
+                EmailServiceError(PII_PROVIDER_MESSAGE),
+            ),
+        )
+        for outcome, return_value, side_effect in email_cases:
+            with self.subTest(outcome=outcome):
+                self._set_slack_user_id("")
+                with (
+                    patch.object(self.service, "lookup_user_by_email", return_value=None),
+                    patch("community.services.slack.EmailService") as email_service,
+                ):
+                    email_service.return_value.send.return_value = return_value
+                    email_service.return_value.send.side_effect = side_effect
+                    with self.assertLogs(
+                        "community.services.slack", level="INFO"
+                    ) as logs:
+                        self.service.reactivate(self.user)
+                self._assert_safe(logs.output, action="reactivate", outcome=outcome)
+                if outcome == INVITE_EMAIL_FAILED:
+                    self.assertIn(
+                        "error_class=EmailServiceError",
+                        "\n".join(logs.output),
+                    )
+
+    def test_channel_failure_logs_keep_safe_codes_without_external_ids(self):
+        unsafe_error = SlackAPIError(
+            PII_PROVIDER_MESSAGE,
+            method="conversations.invite",
+            error_code="not_in_channel",
+        )
+        with (
+            patch.object(self.service, "_api_call", side_effect=unsafe_error),
+            self.assertLogs("community.services.slack", level="WARNING") as logs,
+        ):
+            self.service.add_to_channels(PII_SLACK_USER_ID)
+        rendered = self._assert_no_sentinels(logs.output)
+        self.assertIn("action=add outcome=failed error_code=not_in_channel", rendered)
+
+        unsafe_error = SlackAPIError(
+            PII_PROVIDER_MESSAGE,
+            method="conversations.kick",
+            error_code="channel_not_found",
+        )
+        with (
+            patch.object(self.service, "_api_call", side_effect=unsafe_error),
+            self.assertLogs("community.services.slack", level="WARNING") as logs,
+        ):
+            self.service.remove_from_channels(PII_SLACK_USER_ID)
+        rendered = self._assert_no_sentinels(logs.output)
+        self.assertIn(
+            "action=remove outcome=failed error_code=channel_not_found",
+            rendered,
+        )
+
+    def test_rate_limit_log_keeps_bounded_retry_without_pii(self):
+        throttled = MagicMock(
+            status_code=429,
+            headers={"Retry-After": "999"},
+        )
+        missing = MagicMock(status_code=200, headers={})
+        missing.json.return_value = {"ok": False, "error": "users_not_found"}
+
+        with (
+            patch(
+                "community.services.slack.requests.post",
+                side_effect=[throttled, missing],
+            ),
+            patch("community.services.slack.time.sleep") as sleep,
+            self.assertLogs("community.services.slack", level="WARNING") as logs,
+        ):
+            result = self.service.check_workspace_membership(PII_EMAIL)
+
+        self.assertEqual(result, ("not_member", None))
+        sleep.assert_called_once_with(30)
+        rendered = self._assert_no_sentinels(logs.output)
+        self.assertIn(
+            "action=retry outcome=rate_limited method=users.lookupByEmail "
+            "wait_seconds=30",
+            rendered,
+        )
+
+    def test_membership_failure_logs_keep_safe_codes_without_pii(self):
+        cases = (
+            (
+                SlackAPIError(
+                    PII_PROVIDER_MESSAGE,
+                    method="users.lookupByEmail",
+                    error_code=PII_PROVIDER_MESSAGE,
+                ),
+                "unknown_error",
+            ),
+            (requests.ConnectionError(PII_PROVIDER_MESSAGE), "network_error"),
+        )
+        for error, expected_code in cases:
+            with self.subTest(expected_code=expected_code):
+                with (
+                    patch.object(self.service, "_api_call", side_effect=error),
+                    self.assertLogs(
+                        "community.services.slack", level="WARNING"
+                    ) as logs,
+                ):
+                    result = self.service.check_workspace_membership(PII_EMAIL)
+
+                self.assertEqual(result, ("unknown", None))
+                rendered = self._assert_no_sentinels(logs.output)
+                self.assertIn(
+                    "action=membership_lookup outcome=failed "
+                    f"error_code={expected_code}",
+                    rendered,
+                )
 
 @override_settings(SLACK_ENABLED=True)
 @tag('core')

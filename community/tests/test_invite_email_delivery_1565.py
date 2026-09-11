@@ -48,7 +48,8 @@ class PaidCheckoutInviteEmailTest(TestCase):
     def test_invite_task_sends_community_invite_with_the_gated_link(
         self, send_ses, _lookup,
     ):
-        community_invite_task(self.user.pk)
+        with self.assertLogs("community.services.slack", level="INFO") as logs:
+            community_invite_task(self.user.pk)
 
         self.assertEqual(send_ses.call_count, 1)
         self.assertEqual(send_ses.call_args.kwargs["email_type"], "community_invite")
@@ -59,13 +60,21 @@ class PaidCheckoutInviteEmailTest(TestCase):
 
         details = CommunityAuditLog.objects.get(user=self.user, action="invite").details
         self.assertIn('"status": "email_sent"', details)
+        rendered_logs = "\n".join(logs.output)
+        self.assertIn(
+            f"action=invite outcome=email_sent user_id={self.user.pk}",
+            rendered_logs,
+        )
+        self.assertNotIn(self.user.email, rendered_logs)
 
     @patch(
         "community.services.slack.SlackCommunityService.lookup_user_by_email",
         return_value=None,
     )
     @patch.object(
-        EmailService, "send", side_effect=EmailServiceError("SES rejected"),
+        EmailService,
+        "send",
+        side_effect=EmailServiceError("SES rejected paid@example.com U_PRIVATE"),
     )
     def test_a_failed_send_is_logged_and_audited_as_email_failed(
         self, _send, _lookup,
@@ -73,7 +82,11 @@ class PaidCheckoutInviteEmailTest(TestCase):
         with self.assertLogs("community.services.slack", level="ERROR") as logs:
             community_invite_task(self.user.pk)
 
-        self.assertTrue(any("EmailServiceError" in line for line in logs.output))
+        rendered_logs = "\n".join(logs.output)
+        self.assertIn("error_class=EmailServiceError", rendered_logs)
+        self.assertIn(f"user_id={self.user.pk}", rendered_logs)
+        self.assertNotIn(self.user.email, rendered_logs)
+        self.assertNotIn("U_PRIVATE", rendered_logs)
         details = CommunityAuditLog.objects.get(user=self.user, action="invite").details
         self.assertIn('"status": "email_failed"', details)
         self.assertNotIn("email_sent", details)

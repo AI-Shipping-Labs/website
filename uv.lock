@@ -56,7 +56,7 @@ requires-dist = [
     { name = "anthropic", specifier = ">=0.105.2" },
     { name = "apispec", specifier = ">=6.6.0" },
     { name = "boto3", specifier = ">=1.42.52" },
-    { name = "community-base", extras = ["django-q"], git = "https://github.com/DataTalksClub/community-base?rev=v0.3.0" },
+    { name = "community-base", extras = ["django-q"], git = "https://github.com/DataTalksClub/community-base?rev=v0.3.2" },
     { name = "croniter", specifier = ">=6.0.0" },
     { name = "cryptography", specifier = ">=46.0.5" },
     { name = "dj-database-url", specifier = ">=3.1.2" },
@@ -344,8 +344,8 @@ wheels = [
 
 [[package]]
 name = "community-base"
-version = "0.3.0"
-source = { git = "https://github.com/DataTalksClub/community-base?rev=v0.3.0#fae109b4e34c0afe20c935c6778a476eb968e9cb" }
+version = "0.3.2"
+source = { git = "https://github.com/DataTalksClub/community-base?rev=v0.3.2#c6181a53edb57e3ac218ce62aec5ac0a58d5f0cb" }
 dependencies = [
     { name = "apispec" },
     { name = "cryptography" },

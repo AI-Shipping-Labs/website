@@ -193,7 +193,7 @@ def _generate_password_reset_token(user_id, expiry_hours=1):
 
 
 def _send_verification_email(user, return_path=None):
-    """Send a verification email to the user using EmailService.
+    """Send a verification email through the package mail app (A1.2).
 
     Args:
         user: User model instance.
@@ -201,18 +201,20 @@ def _send_verification_email(user, return_path=None):
             verification token.
 
     Returns:
-        EmailLog instance when SES accepted the send; ``None`` on failure.
+        The durable ``EmailDelivery`` (``suppressed`` when the preference
+        resolver opted the recipient out); ``None`` on a local failure.
     """
     token = _generate_verification_token(user.pk, return_path=return_path)
     site_url = site_base_url()
     verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
 
-    from email_app.services.email_service import EmailService, EmailServiceError
+    from community_base.mail.service import MailError
+
+    from email_app.package_mail import send_package_mail
 
     try:
-        service = EmailService()
-        return service.send(
+        return send_package_mail(
             user,
             "email_verification_signup",
             {
@@ -221,7 +223,7 @@ def _send_verification_email(user, return_path=None):
                 "ttl_days": ttl_days,
             },
         )
-    except EmailServiceError:
+    except MailError:
         logger.exception(
             "Failed to send verification email to %s (user_id=%s)",
             user.email,
@@ -337,7 +339,7 @@ def _probe_slack_membership_on_signup(user):
 
 
 def _send_password_reset_email(user):
-    """Send a password reset email to the user using EmailService.
+    """Send a password reset email through the package mail app (A1.2).
 
     Args:
         user: User model instance.
@@ -346,12 +348,13 @@ def _send_password_reset_email(user):
     site_url = site_base_url()
     reset_url = f"{site_url}/api/password-reset?token={token}"
 
-    from email_app.services.email_service import EmailService, EmailServiceError
+    from community_base.mail.service import MailError
+
+    from email_app.package_mail import send_package_mail
 
     try:
-        service = EmailService()
-        service.send(user, "password_reset", {"reset_url": reset_url})
-    except EmailServiceError:
+        send_package_mail(user, "password_reset", {"reset_url": reset_url})
+    except MailError:
         logger.exception(
             "Failed to send password reset email to %s (user_id=%s)",
             user.email,

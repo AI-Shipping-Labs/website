@@ -185,6 +185,7 @@ INSTALLED_APPS = [
     'jobs',
     'community_base.studio',
     'community_base.jobs',
+    'community_base.mail',
     'community',
     'notifications',
     'plans.apps.PlansConfig',
@@ -199,13 +200,8 @@ INSTALLED_APPS = [
     'triggers.apps.TriggersConfig',
 ]
 
-# Community-base package (DataTalksClub/community-base) settings, read through
-# community_base.kernel.conf. The durable jobs app (plan issue A1.1) runs its
-# intents on this site's django-q cluster; mail stays on the site SES stack
-# until the mail adoption issue lands.
-COMMUNITY_BASE = {
-    'JOBS_BACKEND': 'django_q',
-}
+# Community-base package settings are declared once, further down this file
+# (site key, access policy, jobs and mail backends, template dir and hooks).
 
 MIDDLEWARE = [
     # Outermost so every dev response and every production-private response,
@@ -752,14 +748,23 @@ Q_CLUSTER = {
 
 IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_HOUR', '50'))
 
-# Community-base package configuration (A0.2/A0.3). The access policy wires
-# the site's tier semantics into the kernel protocol; the backend keys name
-# the sites' existing owners and activate nothing. A0.2 adds the settings
-# framework apps above; JOBS_BACKEND/MAIL_BACKEND adoption is a later issue.
+# Community-base package configuration. The access policy wires the site's
+# tier semantics into the kernel protocol. JOBS_BACKEND (A1.1) runs the
+# package's durable job intents on this site's django-q cluster. MAIL_BACKEND
+# (A1.2) routes transactional mail through the package on the transitional
+# ses_local backend, with the site hooks in email_app.hooks keeping the
+# EmailLog audit row, template overrides, newsletter opt-out and the
+# unsubscribe / verify-email footers.
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'JOBS_BACKEND': 'django_q',
     'MAIL_BACKEND': 'ses_local',
+    'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',
+    'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
+    'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',
+    'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
+    'MAIL_TEMPLATE_OVERRIDE_LOADER': 'email_app.hooks.template_override_loader',
+    'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
 }

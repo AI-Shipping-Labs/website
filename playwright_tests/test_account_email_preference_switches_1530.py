@@ -16,7 +16,11 @@ from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
-pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.core]
+pytestmark = [
+    pytest.mark.django_db(transaction=True),
+    pytest.mark.core,
+    pytest.mark.local_only,
+]
 
 
 def _member(email, *, workshop_emails=True):

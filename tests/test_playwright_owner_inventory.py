@@ -1177,7 +1177,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             3,
         )
 
-    def test_dev_goto_resilience_owners_collect_as_two_native_tests(self):
+    def test_dev_goto_resilience_owners_collect_as_six_native_tests(self):
         source = ROOT / "playwright_tests" / "test_dev_goto_resilience_guard.py"
 
         self.assertFalse(source.exists())
@@ -1185,7 +1185,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             defaultTestLoader.loadTestsFromName(
                 DEV_GOTO_RESILIENCE_GUARD_DESTINATION
             ).countTestCases(),
-            2,
+            6,
         )
 
     def test_date_rot_guard_owners_collect_as_seven_native_tests(self):

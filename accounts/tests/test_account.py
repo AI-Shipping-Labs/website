@@ -15,6 +15,7 @@ from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
 from email_app.models import EmailLog
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class _ButtonAttributeParser(HTMLParser):
@@ -185,8 +186,7 @@ class AccountPageAdminRoleTest(TestCase):
             is_superuser=True,
             email_verified=True,
         )
-        user.tier = main_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=main_tier)
         self.client.force_login(user)
 
         response = self.client.get("/account/")
@@ -206,11 +206,11 @@ class AccountPagePaidUserTest(TestCase):
     def setUp(self):
         self.main_tier = Tier.objects.get(slug="main")
         self.user = User.objects.create_user(email="paid@example.com")
-        self.user.tier = self.main_tier
-        self.user.subscription_id = "sub_test123"
-        self.user.billing_period_end = timezone.now()
-        self.user.save(
-            update_fields=["tier", "subscription_id", "billing_period_end"]
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            subscription_id="sub_test123",
+            billing_period_end=timezone.now(),
         )
         self.client.force_login(self.user)
 
@@ -237,10 +237,10 @@ class AccountPagePaidUserTest(TestCase):
         """Billing period end is formatted as a member full date."""
         from datetime import datetime
 
-        self.user.billing_period_end = timezone.make_aware(
-            datetime(2026, 3, 15, 12, 0, 0)
+        set_membership(
+            self.user,
+            billing_period_end=timezone.make_aware( datetime(2026, 3, 15, 12, 0, 0) ),
         )
-        self.user.save(update_fields=["billing_period_end"])
         response = self.client.get("/account/")
         content = response.content.decode()
         self.assertIn("March 15, 2026", content)
@@ -278,11 +278,11 @@ class AccountPagePremiumUserTest(TestCase):
     def setUp(self):
         self.premium_tier = Tier.objects.get(slug="premium")
         self.user = User.objects.create_user(email="premium@example.com")
-        self.user.tier = self.premium_tier
-        self.user.subscription_id = "sub_premium123"
-        self.user.billing_period_end = timezone.now()
-        self.user.save(
-            update_fields=["tier", "subscription_id", "billing_period_end"]
+        set_membership(
+            self.user,
+            tier=self.premium_tier,
+            subscription_id="sub_premium123",
+            billing_period_end=timezone.now(),
         )
         self.client.force_login(self.user)
 
@@ -309,11 +309,11 @@ class AccountPageBasicUserTest(TestCase):
     def setUp(self):
         self.basic_tier = Tier.objects.get(slug="basic")
         self.user = User.objects.create_user(email="basic@example.com")
-        self.user.tier = self.basic_tier
-        self.user.subscription_id = "sub_basic123"
-        self.user.billing_period_end = timezone.now()
-        self.user.save(
-            update_fields=["tier", "subscription_id", "billing_period_end"]
+        set_membership(
+            self.user,
+            tier=self.basic_tier,
+            subscription_id="sub_basic123",
+            billing_period_end=timezone.now(),
         )
         self.client.force_login(self.user)
 
@@ -342,19 +342,12 @@ class AccountPagePendingCancellationTest(TestCase):
         self.main_tier = Tier.objects.get(slug="main")
         self.free_tier = Tier.objects.get(slug="free")
         self.user = User.objects.create_user(email="cancel@example.com")
-        self.user.tier = self.main_tier
-        self.user.pending_tier = self.free_tier
-        self.user.subscription_id = "sub_cancel789"
-        self.user.billing_period_end = timezone.make_aware(
-            timezone.datetime(2026, 5, 15, 12, 0, 0)
-        )
-        self.user.save(
-            update_fields=[
-                "tier",
-                "pending_tier",
-                "subscription_id",
-                "billing_period_end",
-            ]
+        set_membership(
+            self.user,
+            tier=self.main_tier,
+            pending_tier=self.free_tier,
+            subscription_id="sub_cancel789",
+            billing_period_end=timezone.make_aware( timezone.datetime(2026, 5, 15, 12, 0, 0) ),
         )
         self.client.force_login(self.user)
 
@@ -410,19 +403,12 @@ class AccountPageMembershipActionStateTest(TestCase):
 
     def _user(self, email, tier=None, subscription_id="", pending_tier=None):
         user = User.objects.create_user(email=email)
-        user.tier = tier
-        user.subscription_id = subscription_id
-        user.pending_tier = pending_tier
-        user.billing_period_end = timezone.make_aware(
-            timezone.datetime(2026, 5, 29, 12, 0, 0)
-        )
-        user.save(
-            update_fields=[
-                "tier",
-                "subscription_id",
-                "pending_tier",
-                "billing_period_end",
-            ]
+        set_membership(
+            user,
+            tier=tier,
+            subscription_id=subscription_id,
+            pending_tier=pending_tier,
+            billing_period_end=timezone.make_aware( timezone.datetime(2026, 5, 29, 12, 0, 0) ),
         )
         return user
 
@@ -557,20 +543,15 @@ class AccountPageMembershipCardServingMembersTest(TestCase):
             account_activated=account_activated,
             email_verified=True,
         )
-        user.tier = tier
-        user.subscription_id = subscription_id
-        user.billing_period_end = billing_period_end
-        user.pending_tier = pending_tier
+        set_membership(
+            user,
+            tier=tier,
+            subscription_id=subscription_id,
+            billing_period_end=billing_period_end,
+            pending_tier=pending_tier,
+        )
         user.save(
-            update_fields=[
-                "tier",
-                "subscription_id",
-                "billing_period_end",
-                "pending_tier",
-                "signup_source",
-                "account_activated",
-                "email_verified",
-            ]
+            update_fields=["signup_source", "account_activated", "email_verified"]
         )
         return user
 
@@ -1148,11 +1129,8 @@ class AccountEmailPreferenceSwitchAccessibilityTest(TestCase):
 class AccountPagePolish1206Test(TestCase):
     def test_activated_member_sections_render_in_job_first_order_with_slack(self):
         main_tier = Tier.objects.get(slug="main")
-        user = User.objects.create_user(
-            email="order-1206@example.com",
-            tier=main_tier,
-            email_verified=True,
-        )
+        user = User.objects.create_user(email="order-1206@example.com", email_verified=True)
+        set_membership(user, tier=main_tier)
         self.client.force_login(user)
 
         with self.settings(SLACK_INVITE_URL="https://slack.example/invite"):

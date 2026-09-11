@@ -39,6 +39,8 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -66,8 +68,7 @@ def _set_tier(email, tier_slug):
     from payments.models import Tier
 
     user = User.objects.get(email=email)
-    user.tier = Tier.objects.get(slug=tier_slug)
-    user.save(update_fields=["tier"])
+    set_membership(user, tier=Tier.objects.get(slug=tier_slug))
     connection.close()
 
 

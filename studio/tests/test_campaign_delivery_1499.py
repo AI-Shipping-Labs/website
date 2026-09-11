@@ -8,7 +8,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -18,22 +18,12 @@ class CampaignDeliveryStudioTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.staff = User.objects.create_user(
-            email="campaign-resolver@test.com",
-            password="pw",
-            tier=cls.free_tier,
-            is_staff=True,
-        )
-        cls.non_staff = User.objects.create_user(
-            email="campaign-member@test.com",
-            password="pw",
-            tier=cls.free_tier,
-        )
-        cls.recipient = User.objects.create_user(
-            email="ambiguous-recipient@test.com",
-            tier=cls.free_tier,
-            email_verified=True,
-        )
+        cls.staff = User.objects.create_user(email="campaign-resolver@test.com", password="pw", is_staff=True)
+        set_membership(cls.staff, tier=cls.free_tier)
+        cls.non_staff = User.objects.create_user(email="campaign-member@test.com", password="pw")
+        set_membership(cls.non_staff, tier=cls.free_tier)
+        cls.recipient = User.objects.create_user(email="ambiguous-recipient@test.com", email_verified=True)
+        set_membership(cls.recipient, tier=cls.free_tier)
 
     def setUp(self):
         self.campaign = EmailCampaign.objects.create(

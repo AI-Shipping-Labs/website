@@ -29,7 +29,7 @@ from content.services.course_units import (
     decide_course_unit_access,
     decide_course_unit_drip_lock,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -77,8 +77,7 @@ class CourseUnitAccessDecisionTest(TierSetupMixin, TestCase):
 
     def _user(self, email, tier, *, verified=True):
         user = User.objects.create_user(email=email, email_verified=verified)
-        user.tier = tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=tier)
         return user
 
     def test_preview_unit_allows_anonymous(self):
@@ -244,8 +243,7 @@ class CourseUnitDripDecisionTest(TierSetupMixin, TestCase):
             available_after_days=14,
         )
         self.user = User.objects.create_user(email='main@policy.test')
-        self.user.tier = self.main_tier
-        self.user.save(update_fields=['tier'])
+        set_membership(self.user, tier=self.main_tier)
 
     def test_drip_lock_decision_is_locked_before_available_date(self):
         cohort = Cohort.objects.create(

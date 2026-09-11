@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -40,11 +40,8 @@ class CampaignDeliveryApi1506Test(TierSetupMixin, TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {token.key}"}
 
     def _snapshotted(self, *, state, email="recipient-1506@test.com"):
-        user = User.objects.create_user(
-            email=email,
-            tier=self.free_tier,
-            email_verified=True,
-        )
+        user = User.objects.create_user(email=email, email_verified=True)
+        set_membership(user, tier=self.free_tier)
         campaign = EmailCampaign.objects.create(
             subject="API campaign",
             body="Hi",

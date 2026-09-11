@@ -27,7 +27,7 @@ from content.models import (
     Module,
     Unit,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -214,7 +214,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
 
     def test_shows_enroll_button_for_authorized_user(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/cohort-course')
@@ -222,7 +222,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
 
     def test_shows_enrolled_button_for_enrolled_user(self):
         user = User.objects.create_user(email='enrolled@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         CohortEnrollment.objects.create(cohort=self.cohort, user=user)
         self.client.login(email='enrolled@test.com', password='testpass')
@@ -237,7 +237,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
 
         # Login as a different authorized user
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/courses/cohort-course')
@@ -251,7 +251,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
     def test_no_enroll_button_for_user_without_tier(self):
         """Users with insufficient tier should not see enroll button."""
         user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/courses/cohort-course')
@@ -282,7 +282,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
 
     def _login_main_user(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         return user
@@ -307,7 +307,7 @@ class CohortEnrollApiTest(TierSetupMixin, TestCase):
 
     def test_enroll_requires_tier(self):
         user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.post(
@@ -428,7 +428,7 @@ class CohortUnenrollApiTest(TierSetupMixin, TestCase):
             is_active=True,
         )
         self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.client.login(email='main@test.com', password='testpass')
 
@@ -500,7 +500,7 @@ class DripScheduleTest(TierSetupMixin, TestCase):
         )
         # User with access
         self.user = User.objects.create_user(email='main@test.com', password='testpass')
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.client.login(email='main@test.com', password='testpass')
 

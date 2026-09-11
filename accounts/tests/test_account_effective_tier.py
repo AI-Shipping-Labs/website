@@ -13,6 +13,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride, User
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class AccountEffectiveTierContextTest(TestCase):
@@ -27,8 +28,7 @@ class AccountEffectiveTierContextTest(TestCase):
 
     def test_override_user_headline_and_provenance_in_context(self):
         user = User.objects.create_user(email="ov@example.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         TierOverride.objects.create(
             user=user,
             original_tier=self.free,
@@ -48,8 +48,7 @@ class AccountEffectiveTierContextTest(TestCase):
 
     def test_override_headline_renders_effective_tier_name(self):
         user = User.objects.create_user(email="ov2@example.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         TierOverride.objects.create(
             user=user,
             original_tier=self.free,
@@ -72,8 +71,7 @@ class AccountEffectiveTierContextTest(TestCase):
 
     def test_paid_member_no_override_shows_base_tier_no_provenance(self):
         user = User.objects.create_user(email="paid@example.com")
-        user.tier = self.main
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.main)
 
         response = self._get_account(user)
 
@@ -85,8 +83,7 @@ class AccountEffectiveTierContextTest(TestCase):
 
     def test_free_member_no_override_shows_free(self):
         user = User.objects.create_user(email="free@example.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
 
         response = self._get_account(user)
         content = response.content.decode()

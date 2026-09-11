@@ -33,6 +33,7 @@ from community.services.slack import (
 )
 from email_app.services.email_service import EmailServiceError
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 MOCK_CHANNELS = ["C001", "C002"]
 
@@ -581,7 +582,7 @@ def _create_user(email, tier_slug="free"):
         defaults={"email_verified": True},
     )
     user.set_password("testpass123")
-    user.tier = Tier.objects.get(slug=tier_slug)
+    set_membership(user, tier=Tier.objects.get(slug=tier_slug))
     user.email_verified = True
     user.save()
     return user
@@ -696,8 +697,7 @@ class CommunityDowngradeRemovalTaskTest(TestCase):
 
         # Simulate downgrade to Basic
         basic_tier = Tier.objects.get(slug="basic")
-        user.tier = basic_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=basic_tier)
 
         with patch(
             "community.tasks.removal.get_community_service"
@@ -798,16 +798,16 @@ class SubscriptionDeletionRemovalTest(TestCase):
     def test_subscription_deleted_reverts_tier_and_triggers_removal(self):
         """handle_subscription_deleted reverts tier and enqueues removal task."""
         user = _create_user("deleted-sub@test.com", tier_slug="main")
-        user.stripe_customer_id = "cus_test_deletion"
-        user.subscription_id = "sub_test_deletion"
+        set_membership(
+            user,
+            stripe_customer_id="cus_test_deletion",
+            subscription_id="sub_test_deletion",
+        )
         user.slack_user_id = "UDELETION"
-        user.billing_period_end = timezone.now()
-        user.save(update_fields=[
-            "stripe_customer_id", "subscription_id",
-            "slack_user_id", "billing_period_end",
-        ])
+        set_membership(user, billing_period_end=timezone.now())
+        user.save(update_fields=["slack_user_id"])
 
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
         with patch("jobs.tasks.async_task") as mock_async:
             from payments.services import handle_subscription_deleted
@@ -817,8 +817,8 @@ class SubscriptionDeletionRemovalTest(TestCase):
             })
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
-        self.assertEqual(user.subscription_id, "")
+        self.assertEqual(user.membership.tier.slug, "free")
+        self.assertEqual(user.membership.subscription_id, "")
 
         mock_async.assert_called()
         call_args_list = mock_async.call_args_list

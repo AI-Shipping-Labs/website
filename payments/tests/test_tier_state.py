@@ -9,6 +9,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from payments.models import Tier
 from payments.tier_state import build_tier_state, format_period_end
+from tests.fixtures import set_membership
 
 
 class TierStateSnapshotTest(TestCase):
@@ -24,10 +25,12 @@ class TierStateSnapshotTest(TestCase):
 
     def _user(self, email, tier=None, subscription_id="", pending_tier=None):
         user = self.User.objects.create_user(email=email, password="testpass123")
-        user.tier = tier if tier is not None else self.tiers["free"]
-        user.subscription_id = subscription_id
-        user.pending_tier = pending_tier
-        user.save(update_fields=["tier", "subscription_id", "pending_tier"])
+        set_membership(
+            user,
+            tier=tier if tier is not None else self.tiers["free"],
+            subscription_id=subscription_id,
+            pending_tier=pending_tier,
+        )
         return user
 
     def _states_for(self, user, active_override=None):
@@ -144,10 +147,10 @@ class TierStateSnapshotTest(TestCase):
             "sub_basic_canceling",
             self.tiers["free"],
         )
-        user.billing_period_end = datetime(
-            2026, 6, 15, 12, 0, tzinfo=dt_timezone.utc
+        set_membership(
+            user,
+            billing_period_end=datetime( 2026, 6, 15, 12, 0, tzinfo=dt_timezone.utc ),
         )
-        user.save(update_fields=["billing_period_end"])
 
         self.assertEqual(
             self._states_for(user),
@@ -185,8 +188,7 @@ class TierStateSnapshotTest(TestCase):
             self.tiers["free"],
             "sub_stale_snapshot",
         )
-        user.tier = None
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=None)
 
         self.assertEqual(
             self._states_for(user),

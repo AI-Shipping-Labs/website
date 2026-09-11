@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -44,8 +45,7 @@ class _InlineOverrideTestBase(TestCase):
     def _make_member(self, email, tier=None, stripe_customer_id=''):
         user = User.objects.create_user(email=email, password='pw')
         if tier is not None:
-            user.tier = tier
-        user.stripe_customer_id = stripe_customer_id
+            set_membership(user, tier=tier, stripe_customer_id=stripe_customer_id)
         user.save()
         return user
 
@@ -55,7 +55,7 @@ class _InlineOverrideTestBase(TestCase):
     ):
         return TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=override_tier or self.main,
             expires_at=expires_at or (timezone.now() + timedelta(days=14)),
             granted_by=granted_by or self.staff,
@@ -408,7 +408,7 @@ class UserTierOverrideCreateEndpointTest(_InlineOverrideTestBase):
         regular = User.objects.create_user(
             email='regular@test.com', password='pw',
         )
-        regular.tier = self.free
+        set_membership(regular, tier=self.free)
         regular.save()
         self.client.login(email='regular@test.com', password='pw')
         response = self.client.post(

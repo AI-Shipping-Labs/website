@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from events.models import Event, EventSeries
 from notifications.models import Notification
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -29,7 +30,7 @@ class SeriesActionMixin:
         cls.member = User.objects.create_user(
             email='member@test.com', password='pass',
         )
-        cls.member.tier = free_tier
+        set_membership(cls.member, tier=free_tier)
         cls.member.save()
 
         cls.series = EventSeries.objects.create(

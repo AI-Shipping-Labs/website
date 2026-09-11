@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -568,7 +568,7 @@ class RecordingDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def test_main_user_gated_recording_no_inline_player(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get(self.gated_recording.get_absolute_url())

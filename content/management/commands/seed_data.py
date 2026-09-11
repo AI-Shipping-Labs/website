@@ -26,7 +26,7 @@ from django.utils import timezone
 from content.models import Cohort, CohortEnrollment, Course
 from events.models import EventRegistration
 from notifications.models import Notification
-from payments.models import Tier
+from payments.models import Membership, Tier
 from voting.models import Poll, PollOption, PollVote
 
 User = get_user_model()
@@ -224,7 +224,10 @@ class Command(BaseCommand):
                     last_name=user_data.get('last_name', ''),
                     signup_source="staff_create",
                 )
-            user.tier = tier
+            # Issue #1579: the tier lives on payments.Membership.
+            membership = Membership.for_user(user)
+            membership.tier = tier
+            membership.save(update_fields=["tier"])
             user.email_verified = True
             user.save()
             count += 1

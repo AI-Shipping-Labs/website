@@ -10,7 +10,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from email_app.models import EmailCampaign
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -61,19 +61,19 @@ class GetEligibleRecipientsAudienceVerificationTest(
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.verified_subscribed = User.objects.create_user(
+        cls.verified_subscribed = create_user_with_membership(
             email="v-sub@test.com", tier=cls.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        cls.verified_unsubscribed = User.objects.create_user(
+        cls.verified_unsubscribed = create_user_with_membership(
             email="v-unsub@test.com", tier=cls.free_tier,
             email_verified=True, unsubscribed=True,
         )
-        cls.unverified_subscribed = User.objects.create_user(
+        cls.unverified_subscribed = create_user_with_membership(
             email="u-sub@test.com", tier=cls.free_tier,
             email_verified=False, unsubscribed=False,
         )
-        cls.unverified_unsubscribed = User.objects.create_user(
+        cls.unverified_unsubscribed = create_user_with_membership(
             email="u-unsub@test.com", tier=cls.free_tier,
             email_verified=False, unsubscribed=True,
         )

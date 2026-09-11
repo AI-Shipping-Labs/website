@@ -8,6 +8,7 @@ from django.test import TestCase, tag
 from bookclub.models import Book, Chapter, ChapterRead
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -29,11 +30,11 @@ class ChapterReadViewTest(TestCase):
         cls.main_tier = Tier.objects.get(slug="main")
 
         cls.member = User.objects.create_user(email="main@test.com")
-        cls.member.tier = cls.main_tier
+        set_membership(cls.member, tier=cls.main_tier)
         cls.member.save()
 
         cls.free_user = User.objects.create_user(email="free@test.com")
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
     @property

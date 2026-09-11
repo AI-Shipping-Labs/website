@@ -54,11 +54,12 @@ from notifications.models import Notification
 from notifications.services.notification_service import content_comment_urls
 from payments.models import (
     ConversionAttribution,
+    Membership,
     PaymentAccountMismatch,
     WebhookEvent,
 )
 from plans.models import Plan, Sprint
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll, PollOption, PollVote
 
 
@@ -139,17 +140,10 @@ class PrivacyExportTest(TierSetupMixin, TestCase):
         )
         user.email_preferences = {"newsletter": True}
         user.dashboard_dismissals = ["slack_join"]
-        user.tier = self.main_tier
-        user.stripe_customer_id = "cus_export"
+        set_membership(user, tier=self.main_tier, stripe_customer_id="cus_export")
         user.slack_user_id = "U_EXPORT"
         user.save(
-            update_fields=[
-                "email_preferences",
-                "dashboard_dismissals",
-                "tier",
-                "stripe_customer_id",
-                "slack_user_id",
-            ]
+            update_fields=["email_preferences", "dashboard_dismissals", "slack_user_id"]
         )
         EmailAlias.objects.create(user=user, email="alias-export@test.com")
         member_key, plaintext = MemberAPIKey.create_for_user(
@@ -993,12 +987,8 @@ class PrivacyDeletionGuardTest(TierSetupMixin, TestCase):
 
     @patch("accounts.services.privacy.notify_privacy_staff")
     def test_active_subscription_is_blocked_and_notifies_staff(self, notify):
-        user = User.objects.create_user(
-            email="paid-delete@test.com",
-            password="TestPass123!",
-            tier=self.basic_tier,
-            subscription_id="sub_active",
-        )
+        user = User.objects.create_user(email="paid-delete@test.com", password="TestPass123!")
+        set_membership(user, tier=self.basic_tier, subscription_id="sub_active")
         old_user_id = user.pk
 
         result = delete_account_for_privacy(
@@ -1015,13 +1005,19 @@ class PrivacyDeletionGuardTest(TierSetupMixin, TestCase):
             result.blocker_reason,
             PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION,
         )
+        # Issue #1579: tier/Stripe state lives on payments.Membership.
         self.assertTrue(
             User.objects.filter(
                 pk=old_user_id,
                 email="paid-delete@test.com",
+                is_active=True,
+            ).exists(),
+        )
+        self.assertTrue(
+            Membership.objects.filter(
+                user_id=old_user_id,
                 tier=self.basic_tier,
                 subscription_id="sub_active",
-                is_active=True,
             ).exists(),
         )
         log = PrivacyRequestLog.objects.get(pk=result.audit_log_id)
@@ -1277,9 +1273,7 @@ class PrivacyDeletionSuccessTest(TierSetupMixin, TestCase):
     def test_retains_payment_records_and_scrubs_webhook_payload(self, notify):
         user = User.objects.create_user(email="stripe-delete@test.com")
         old_user_id = user.pk
-        user.stripe_customer_id = "cus_delete"
-        user.subscription_id = ""
-        user.save(update_fields=["stripe_customer_id", "subscription_id"])
+        set_membership(user, stripe_customer_id="cus_delete", subscription_id="")
         ConversionAttribution.objects.create(
             user=user,
             stripe_session_id="cs_delete",

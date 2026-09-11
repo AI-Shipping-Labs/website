@@ -34,7 +34,7 @@ from events.models.event import EXTERNAL_HOST_CHOICES
 from integrations.services.github_sync.dispatchers.events import (
     _build_synced_event_content_defaults,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -278,7 +278,7 @@ class ExternalEventDetailTest(TierSetupMixin, TestCase):
         free_user = User.objects.create_user(
             email='free@test.com', password='pw',
         )
-        free_user.tier = self.free_tier
+        set_membership(free_user, tier=self.free_tier)
         free_user.email_verified = True
         free_user.save()
         self.client.force_login(free_user)

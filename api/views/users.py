@@ -169,7 +169,9 @@ def _find_user_or_alias(email):
         return None
     return (
         User.objects
-        .select_related("tier", "pending_tier", "attribution")
+        .select_related(
+            "membership__tier", "membership__pending_tier", "attribution",
+        )
         .filter(pk=resolved.pk)
         .first()
     )
@@ -389,7 +391,10 @@ def users_collection(request):
 
     q = (request.GET.get("q") or "").strip()
 
-    qs = User.objects.select_related("tier", "pending_tier", "attribution")
+    # Issue #1579: tier/Stripe state lives on payments.Membership.
+    qs = User.objects.select_related(
+        "membership__tier", "membership__pending_tier", "attribution",
+    )
 
     if since is not None:
         qs = qs.filter(date_joined__gte=since)
@@ -402,7 +407,7 @@ def users_collection(request):
             Q(email__icontains=q)
             | Q(first_name__icontains=q)
             | Q(last_name__icontains=q)
-            | Q(stripe_customer_id__icontains=q)
+            | Q(membership__stripe_customer_id__icontains=q)
             | Q(slack_user_id__icontains=q)
         )
         normalized = normalize_tag(q)

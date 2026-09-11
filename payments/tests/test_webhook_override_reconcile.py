@@ -1,7 +1,7 @@
 """Issue #970: webhook tier changes reconcile TierOverride + billing_period_end.
 
 These tests fire Stripe payloads into the handlers and assert the resulting
-``user.tier``, ``TierOverride.is_active``, ``billing_period_end``, effective
+``user.membership.tier``, ``TierOverride.is_active``, ``billing_period_end``, effective
 level (via ``content.access.get_user_level``), and community side effects
 (mocked ``_community_remove``).
 
@@ -29,6 +29,7 @@ from payments.services import (
     handle_subscription_deleted,
     handle_subscription_updated,
 )
+from tests.fixtures import set_membership
 
 from .test_webhooks import QuietSubscriptionLookupMixin, handle_checkout_completed
 
@@ -37,7 +38,7 @@ def _make_override(user, override_tier, *, expires_in_days=30, is_active=True):
     """Create a TierOverride. Negative ``expires_in_days`` makes it lapsed."""
     return TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=override_tier,
         expires_at=timezone.now() + timedelta(days=expires_in_days),
         is_active=is_active,
@@ -68,38 +69,35 @@ class CheckoutOverrideReconcileTest(QuietSubscriptionLookupMixin, TestCase):
     def test_equal_tier_checkout_retires_override(self):
         """Paid checkout for `main` retires an active `main` override."""
         user = User.objects.create_user(email="equal@test.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         override = _make_override(user, self.main)
 
         handle_checkout_completed(self._checkout(user, "main"))
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
         self.assertFalse(override.is_active)
         self.assertEqual(get_user_level(user), 20)
 
     def test_checkout_below_override_keeps_override(self):
         """Paid checkout for `basic` keeps an active `premium` override (Option A)."""
         user = User.objects.create_user(email="below@test.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         override = _make_override(user, self.premium)
 
         handle_checkout_completed(self._checkout(user, "basic"))
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         self.assertTrue(override.is_active)
         self.assertEqual(get_user_level(user), 30)
 
     def test_checkout_consistency_invariant_end_to_end(self):
         """Premium checkout: override retired, billing date set, effective=30."""
         user = User.objects.create_user(email="invariant@test.com")
-        user.tier = self.free
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.free)
         override = _make_override(user, self.premium)
 
         billing_end = timezone.now() + timedelta(days=30)
@@ -111,9 +109,9 @@ class CheckoutOverrideReconcileTest(QuietSubscriptionLookupMixin, TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.premium)
+        self.assertEqual(user.membership.tier, self.premium)
         self.assertFalse(override.is_active)
-        self.assertIsNotNone(user.billing_period_end)
+        self.assertIsNotNone(user.membership.billing_period_end)
         self.assertEqual(get_user_level(user), 30)
 
 
@@ -132,10 +130,12 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
     def test_update_to_higher_tier_retires_matching_override(self):
         """An active update from basic to main retires the `main` override."""
         user = User.objects.create_user(email="upgrade970@test.com")
-        user.tier = self.basic
-        user.subscription_id = "sub_upgrade970"
-        user.stripe_customer_id = "cus_upgrade970"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=self.basic,
+            subscription_id="sub_upgrade970",
+            stripe_customer_id="cus_upgrade970",
+        )
         override = _make_override(user, self.main)
 
         subscription_data = {
@@ -151,7 +151,7 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.main)
+        self.assertEqual(user.membership.tier, self.main)
         self.assertFalse(override.is_active)
 
     def test_free_resulting_update_without_period_end_clears_billing(self):
@@ -161,13 +161,13 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         self.free.save(update_fields=["stripe_price_id_monthly"])
 
         user = User.objects.create_user(email="stalebill@test.com")
-        user.tier = self.main
-        user.subscription_id = "sub_stalebill"
-        user.stripe_customer_id = "cus_stalebill"
-        user.billing_period_end = timezone.now() + timedelta(days=10)
-        user.save(update_fields=[
-            "tier", "subscription_id", "stripe_customer_id", "billing_period_end",
-        ])
+        set_membership(
+            user,
+            tier=self.main,
+            subscription_id="sub_stalebill",
+            stripe_customer_id="cus_stalebill",
+            billing_period_end=timezone.now() + timedelta(days=10),
+        )
 
         subscription_data = {
             "id": "sub_stalebill",
@@ -181,8 +181,8 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free)
-        self.assertIsNone(user.billing_period_end)
+        self.assertEqual(user.membership.tier, self.free)
+        self.assertIsNone(user.membership.billing_period_end)
 
     def test_downgrade_keeps_community_when_main_override_survives(self):
         """Base tier downgrades below Main, but an active Main override keeps
@@ -191,10 +191,12 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         self.basic.save(update_fields=["stripe_price_id_monthly"])
 
         user = User.objects.create_user(email="downgrade-override@test.com")
-        user.tier = self.main
-        user.subscription_id = "sub_downgrade_override"
-        user.stripe_customer_id = "cus_downgrade_override"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=self.main,
+            subscription_id="sub_downgrade_override",
+            stripe_customer_id="cus_downgrade_override",
+        )
         override = _make_override(user, self.main)
 
         subscription_data = {
@@ -211,7 +213,7 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         self.assertTrue(override.is_active)
         self.assertEqual(get_user_level(user), 20)
         mock_remove.assert_not_called()
@@ -223,10 +225,12 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         self.basic.save(update_fields=["stripe_price_id_monthly"])
 
         user = User.objects.create_user(email="downgrade-no-override@test.com")
-        user.tier = self.main
-        user.subscription_id = "sub_downgrade_no_override"
-        user.stripe_customer_id = "cus_downgrade_no_override"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=self.main,
+            subscription_id="sub_downgrade_no_override",
+            stripe_customer_id="cus_downgrade_no_override",
+        )
 
         subscription_data = {
             "id": "sub_downgrade_no_override",
@@ -241,7 +245,7 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
             handle_subscription_updated(subscription_data)
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.basic)
+        self.assertEqual(user.membership.tier, self.basic)
         self.assertEqual(get_user_level(user), 10)
         mock_remove.assert_called_once()
 
@@ -253,13 +257,13 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
         self.basic.save(update_fields=["stripe_price_id_monthly"])
 
         user = User.objects.create_user(email="reactivate970@test.com")
-        user.tier = self.main
-        user.subscription_id = "sub_react970"
-        user.stripe_customer_id = "cus_react970"
-        user.pending_tier = free_tier
-        user.save(update_fields=[
-            "tier", "subscription_id", "stripe_customer_id", "pending_tier",
-        ])
+        set_membership(
+            user,
+            tier=self.main,
+            subscription_id="sub_react970",
+            stripe_customer_id="cus_react970",
+            pending_tier=free_tier,
+        )
         # An override granting `main` would be retired if the update wrongly
         # treated a no-change update as a new grant. The price below resolves
         # to `main` (same as current tier) -> no tier change -> override stays.
@@ -280,8 +284,8 @@ class SubscriptionUpdatedOverrideReconcileTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertIsNone(user.pending_tier)
-        self.assertEqual(user.tier, self.main)
+        self.assertIsNone(user.membership.pending_tier)
+        self.assertEqual(user.membership.tier, self.main)
         # No tier change occurred, so the same-tier override is undisturbed.
         self.assertTrue(override.is_active)
 
@@ -298,19 +302,19 @@ class SubscriptionDeletedOverrideReconcileTest(TestCase):
 
     def _deleted_payload(self, user):
         return {
-            "id": user.subscription_id,
-            "customer": user.stripe_customer_id,
+            "id": user.membership.subscription_id,
+            "customer": user.membership.stripe_customer_id,
         }
 
     def _make_paid_user(self, email, tier, sub="sub_x", cus="cus_x"):
         user = User.objects.create_user(email=email)
-        user.tier = tier
-        user.subscription_id = sub
-        user.stripe_customer_id = cus
-        user.billing_period_end = timezone.now() + timedelta(days=5)
-        user.save(update_fields=[
-            "tier", "subscription_id", "stripe_customer_id", "billing_period_end",
-        ])
+        set_membership(
+            user,
+            tier=tier,
+            subscription_id=sub,
+            stripe_customer_id=cus,
+            billing_period_end=timezone.now() + timedelta(days=5),
+        )
         return user
 
     def test_main_override_keeps_community_access(self):
@@ -326,10 +330,10 @@ class SubscriptionDeletedOverrideReconcileTest(TestCase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier, self.free)
+        self.assertEqual(user.membership.tier, self.free)
         self.assertTrue(override.is_active)
         self.assertEqual(get_user_level(user), 20)
-        self.assertIsNone(user.billing_period_end)
+        self.assertIsNone(user.membership.billing_period_end)
         mock_remove.assert_not_called()
 
     def test_no_override_removes_community_access(self):
@@ -343,8 +347,8 @@ class SubscriptionDeletedOverrideReconcileTest(TestCase):
             handle_subscription_deleted(self._deleted_payload(user))
 
         user.refresh_from_db()
-        self.assertEqual(user.tier, self.free)
-        self.assertIsNone(user.billing_period_end)
+        self.assertEqual(user.membership.tier, self.free)
+        self.assertIsNone(user.membership.billing_period_end)
         mock_remove.assert_called_once()
 
     def test_expired_override_removes_community_access(self):

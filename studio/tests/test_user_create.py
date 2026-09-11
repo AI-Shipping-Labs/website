@@ -144,8 +144,8 @@ class UserCreateRegularUserTest(TestCase):
         self.assertFalse(user.is_staff)
         self.assertFalse(user.is_superuser)
         # Default tier is free per the User.save() default.
-        self.assertIsNotNone(user.tier)
-        self.assertEqual(user.tier.slug, 'free')
+        self.assertIsNotNone(user.membership.tier)
+        self.assertEqual(user.membership.tier.slug, 'free')
 
     def test_email_is_marked_verified(self):
         self.client.post('/studio/users/new/', {'email': 'verified@test.com'})

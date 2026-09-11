@@ -17,6 +17,7 @@ from accounts.services.privacy_recipient import encrypt_recipient
 from email_app.services.email_service import EmailServiceError
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
 from scripts.browser_journey_policy import browser_journey
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -133,8 +134,7 @@ def test_active_subscription_is_a_truthful_retryable_blocker(django_server, brow
     """Stripe-backed members remain intact and create no completion delivery."""
     admin = create_staff_user("privacy-sub-admin@test.com")
     member = create_user("privacy-sub-member@test.com")
-    member.subscription_id = "sub_privacy_e2e"
-    member.save(update_fields=["subscription_id"])
+    set_membership(member, subscription_id='sub_privacy_e2e')
     request_log = _accepted_request(member)
 
     context, page = _review_page(browser, django_server, admin.email, request_log.pk)

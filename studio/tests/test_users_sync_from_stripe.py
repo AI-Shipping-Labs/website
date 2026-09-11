@@ -3,6 +3,8 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from tests.fixtures import set_membership
+
 User = get_user_model()
 
 
@@ -14,11 +16,8 @@ class StudioUserSyncFromStripeTest(TestCase):
             password="testpass",
             is_staff=True,
         )
-        cls.member = User.objects.create_user(
-            email="member@test.com",
-            password="testpass",
-            stripe_customer_id="cus_member",
-        )
+        cls.member = User.objects.create_user(email="member@test.com", password="testpass")
+        set_membership(cls.member, stripe_customer_id="cus_member")
 
     def test_anonymous_redirected(self):
         response = self.client.post(

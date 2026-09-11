@@ -20,19 +20,20 @@ from django.utils import timezone
 from accounts.models import TierOverride, User
 from content.access import LEVEL_REGISTERED
 from content.access_policy import TierAccessPolicy
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 POLICY = TierAccessPolicy()
 
 
 def make_user(email, tier=None, *, verified=True, staff=False):
-    return User.objects.create_user(
+    user = User.objects.create_user(
         email=email,
         password="testpass",
-        tier=tier,
         email_verified=verified,
         is_staff=staff,
     )
+    set_membership(user, tier=tier)
+    return user
 
 
 @tag('core')

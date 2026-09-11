@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -339,8 +340,7 @@ class SprintsIndexTest(TestCase):
             min_tier_level=30,
         )
         member = User.objects.create_user(email='free545@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='free')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='free'))
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
@@ -354,8 +354,7 @@ class SprintsIndexTest(TestCase):
     def test_enrolled_member_with_plan_keeps_badge_and_detail_link(self):
         sprint = _create_sprint('Main Sprint', 'main-sprint')
         member = User.objects.create_user(email='main545@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         SprintEnrollment.objects.create(sprint=sprint, user=member)
         plan = Plan.objects.create(member=member, sprint=sprint, visibility='cohort')
 
@@ -377,8 +376,7 @@ class SprintsIndexTest(TestCase):
     def test_enrolled_member_without_plan_keeps_badge_and_detail_link(self):
         sprint = _create_sprint('Board Sprint', 'board-sprint')
         member = User.objects.create_user(email='board545@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         SprintEnrollment.objects.create(sprint=sprint, user=member)
 
         self.client.force_login(member)
@@ -423,8 +421,7 @@ class SprintsIndexTest(TestCase):
         member = User.objects.create_user(
             email='query-main@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         Plan.objects.create(
             member=member, sprint=current, visibility='cohort',
         )
@@ -542,8 +539,7 @@ class SprintCardNavigationTest(TestCase):
         member = User.objects.create_user(
             email='free1315@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='free')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='free'))
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
@@ -565,8 +561,7 @@ class SprintCardNavigationTest(TestCase):
         member = User.objects.create_user(
             email='main1315@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
 
         self.client.force_login(member)
         response = self.client.get('/sprints')
@@ -588,8 +583,7 @@ class SprintCardNavigationTest(TestCase):
         member = User.objects.create_user(
             email='plan1315@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         SprintEnrollment.objects.create(sprint=sprint, user=member)
         plan = Plan.objects.create(
             member=member, sprint=sprint, visibility='cohort',
@@ -622,8 +616,7 @@ class SprintCardNavigationTest(TestCase):
         member = User.objects.create_user(
             email='board1315@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         SprintEnrollment.objects.create(sprint=sprint, user=member)
 
         self.client.force_login(member)
@@ -670,8 +663,7 @@ class SprintCardNavigationTest(TestCase):
         member = User.objects.create_user(
             email='freeactive1315@example.com', password='pw',
         )
-        member.tier = Tier.objects.get(slug='free')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='free'))
 
         self.client.force_login(member)
         response = self.client.get('/sprints')

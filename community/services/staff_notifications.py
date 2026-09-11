@@ -561,7 +561,9 @@ def _build_slack_join_context(user):
     name, email, id), how we know them (tier name + first-touch UTM
     source), and the absolute Studio profile link. No Stripe block.
     """
-    tier = getattr(user, "tier", None)
+    from payments.models import Membership
+
+    tier = Membership.for_user(user).tier
     tier_name = (getattr(tier, "name", "") or getattr(tier, "slug", "")) if tier else ""
 
     attribution = _safe_attribution(user)

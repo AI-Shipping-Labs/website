@@ -36,7 +36,7 @@ from content.models import (
     Workshop,
     WorkshopPage,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -187,7 +187,7 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email="bn@test.com", password="x",
         )
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email="bn@test.com", password="x")
 
@@ -325,7 +325,7 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email="parity@test.com", password="x",
         )
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email="parity@test.com", password="x")
 
@@ -394,7 +394,7 @@ class DashboardZeroCountSuppressionTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email="dz@test.com", password="x",
         )
-        cls.user.tier = cls.main_tier
+        set_membership(cls.user, tier=cls.main_tier)
         cls.user.save()
 
     def setUp(self):
@@ -458,7 +458,7 @@ class TestNoDjangoCommentLeak(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email="leak@test.com", password="x",
         )
-        cls.user.tier = cls.main_tier
+        set_membership(cls.user, tier=cls.main_tier)
         cls.user.save()
 
     def setUp(self):

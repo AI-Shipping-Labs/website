@@ -4,7 +4,7 @@ Policy (Option A): an active, non-expired ``TierOverride`` grants
 Slack/community access. The dashboard Join Slack card must resolve via
 ``content.access.get_user_level`` — the same predicate as the join
 redirect (community/views.py) and the membership-sync job
-(slack_membership.main_plus_q) — not the raw base ``user.tier.level``.
+(slack_membership.main_plus_q) — not the raw base ``user.membership.tier.level``.
 """
 
 from datetime import timedelta
@@ -14,7 +14,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import TierOverride
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -26,15 +26,15 @@ class DashboardSlackOverrideCardTest(TierSetupMixin, TestCase):
 
     def _make_user(self, email, tier, slack_member=False):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.slack_member = slack_member
-        user.save(update_fields=["tier", "slack_member"])
+        user.save(update_fields=["slack_member"])
         self.client.login(email=email, password="pw")
         return user
 
     def _make_override(self, user, override_tier, **kwargs):
         defaults = {
-            "original_tier": user.tier,
+            "original_tier": user.membership.tier,
             "override_tier": override_tier,
             "expires_at": timezone.now() + timedelta(days=14),
             "is_active": True,

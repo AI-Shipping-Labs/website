@@ -40,6 +40,7 @@ from payments.models import (
     CHECKOUT_BINDING_PREFIX,
     CheckoutAccountBinding,
     CheckoutFulfillment,
+    Membership,
     PaymentAccountMismatch,
     StripeWebhookDeliveryAttempt,
     Tier,
@@ -684,7 +685,8 @@ def handle_checkout_completed(session_data, event_context=None):
 
     # Remember the previous tier so we can tell upgrade-vs-new-paid-user
     # apart when building the operator notification email below.
-    previous_tier = user.tier
+    # Issue #1579: tier/Stripe state lives on payments.Membership.
+    previous_tier = Membership.for_user(user).tier
 
     # Issue #976: snapshot whether this is a RETURNING member (a churned
     # subscriber who is re-subscribing) so the welcome path can send the
@@ -724,10 +726,15 @@ def handle_checkout_completed(session_data, event_context=None):
                 )
                 return
         user = User.objects.select_for_update().get(pk=user.pk)
+        # Issue #1579: the entitlement write lands on payments.Membership.
+        # The User row lock stays: it serializes concurrent handlers for
+        # the same user, which transitively serializes the membership
+        # write. Locking semantics are unchanged (see also #1575).
+        membership = Membership.for_user(user)
         if (
-            user.stripe_customer_id
+            membership.stripe_customer_id
             and customer_id
-            and user.stripe_customer_id != customer_id
+            and membership.stripe_customer_id != customer_id
         ):
             _quarantine_checkout(
                 fulfillment=fulfillment,
@@ -735,13 +742,13 @@ def handle_checkout_completed(session_data, event_context=None):
                 session_data=session_data,
                 paid_user=user,
                 reason=PaymentAccountMismatch.REASON_CUSTOMER_CONFLICT,
-                extra_details={"existing_customer_id": user.stripe_customer_id},
+                extra_details={"existing_customer_id": membership.stripe_customer_id},
             )
             return
         if (
-            user.subscription_id
+            membership.subscription_id
             and subscription_id
-            and user.subscription_id != subscription_id
+            and membership.subscription_id != subscription_id
         ):
             _quarantine_checkout(
                 fulfillment=fulfillment,
@@ -749,7 +756,7 @@ def handle_checkout_completed(session_data, event_context=None):
                 session_data=session_data,
                 paid_user=user,
                 reason=PaymentAccountMismatch.REASON_SUBSCRIPTION_CONFLICT,
-                extra_details={"existing_subscription_id": user.subscription_id},
+                extra_details={"existing_subscription_id": membership.subscription_id},
             )
             return
 
@@ -764,28 +771,35 @@ def handle_checkout_completed(session_data, event_context=None):
                 session_data=session_data,
             )
 
-        user.tier = tier
-        user.stripe_customer_id = customer_id or user.stripe_customer_id
-        user.subscription_id = subscription_id or user.subscription_id
-        user.pending_tier = None
+        membership.tier = tier
+        membership.stripe_customer_id = (
+            customer_id or membership.stripe_customer_id
+        )
+        membership.subscription_id = (
+            subscription_id or membership.subscription_id
+        )
+        membership.pending_tier = None
 
         if subscription_id:
             billing_end = _services._get_subscription_period_end(subscription_id)
             if billing_end:
-                user.billing_period_end = billing_end
-        # Capture name from Stripe receipt (issue #699). The helper refuses
-        # to overwrite a name the member already supplied.
-        update_fields = [
+                membership.billing_period_end = billing_end
+        membership_fields = [
             "tier",
             "stripe_customer_id",
             "subscription_id",
             "billing_period_end",
             "pending_tier",
         ]
+        membership.save(update_fields=membership_fields)
+        # Capture name from Stripe receipt (issue #699). The helper refuses
+        # to overwrite a name the member already supplied.
+        update_fields = []
         stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
         if set_name_from_external(user, full_name=stripe_name, source="stripe"):
             update_fields.extend(["first_name", "last_name"])
-        user.save(update_fields=update_fields)
+        if update_fields:
+            user.save(update_fields=update_fields)
 
         # Issue #1439: these flags must be committed with the entitlement so
         # the welcome handoff can run immediately after the winning transaction
@@ -1069,12 +1083,14 @@ def handle_checkout_async_payment_failed(session_data, event_context=None):
                 return
         if user is not None:
             user = User.objects.select_for_update().get(pk=user.pk)
+            # Issue #1579: conflict checks read payments.Membership.
+            membership = Membership.for_user(user)
             customer_id = session_data.get("customer", "") or ""
             subscription_id = session_data.get("subscription", "") or ""
             if (
-                user.stripe_customer_id
+                membership.stripe_customer_id
                 and customer_id
-                and user.stripe_customer_id != customer_id
+                and membership.stripe_customer_id != customer_id
             ):
                 _quarantine_checkout(
                     fulfillment=locked,
@@ -1082,14 +1098,16 @@ def handle_checkout_async_payment_failed(session_data, event_context=None):
                     session_data=session_data,
                     paid_user=user,
                     reason=PaymentAccountMismatch.REASON_CUSTOMER_CONFLICT,
-                    extra_details={"existing_customer_id": user.stripe_customer_id},
+                    extra_details={
+                        "existing_customer_id": membership.stripe_customer_id
+                    },
                 )
                 return
             if (
                 tier is not None
-                and user.subscription_id
+                and membership.subscription_id
                 and subscription_id
-                and user.subscription_id != subscription_id
+                and membership.subscription_id != subscription_id
             ):
                 _quarantine_checkout(
                     fulfillment=locked,
@@ -1098,7 +1116,7 @@ def handle_checkout_async_payment_failed(session_data, event_context=None):
                     paid_user=user,
                     reason=PaymentAccountMismatch.REASON_SUBSCRIPTION_CONFLICT,
                     extra_details={
-                        "existing_subscription_id": user.subscription_id,
+                        "existing_subscription_id": membership.subscription_id,
                     },
                 )
                 return
@@ -1498,9 +1516,11 @@ def _handle_course_purchase(
             }:
                 return
         user = User.objects.select_for_update().get(pk=user.pk)
+        # Issue #1579: the customer id lives on payments.Membership.
+        membership = Membership.for_user(user)
         if (
-            user.stripe_customer_id and customer_id
-            and user.stripe_customer_id != customer_id
+            membership.stripe_customer_id and customer_id
+            and membership.stripe_customer_id != customer_id
         ):
             if fulfillment is not None:
                 _quarantine_checkout(
@@ -1523,14 +1543,17 @@ def _handle_course_purchase(
 
         stripe_name = session_data.get("customer_details", {}).get("name", "") or ""
         name_changed = set_name_from_external(user, full_name=stripe_name, source="stripe")
-        update_fields = []
-        if customer_id and not user.stripe_customer_id:
-            user.stripe_customer_id = customer_id
-            update_fields.append("stripe_customer_id")
+        membership_update_fields = []
+        if customer_id and not membership.stripe_customer_id:
+            membership.stripe_customer_id = customer_id
+            membership_update_fields.append("stripe_customer_id")
+        if membership_update_fields:
+            membership.save(update_fields=membership_update_fields)
+        user_update_fields = []
         if name_changed:
-            update_fields.extend(["first_name", "last_name"])
-        if update_fields:
-            user.save(update_fields=update_fields)
+            user_update_fields.extend(["first_name", "last_name"])
+        if user_update_fields:
+            user.save(update_fields=user_update_fields)
 
         if fulfillment is not None:
             fulfillment.user = user
@@ -1667,13 +1690,17 @@ def handle_subscription_updated(subscription_data, event_context=None):
 
     with transaction.atomic():
         user = User.objects.select_for_update().get(pk=user.pk)
+        # Issue #1579: the subscription state write lands on
+        # payments.Membership. The User row lock stays (locking semantics
+        # unchanged; see also #1575).
+        membership = Membership.for_user(user)
 
         # Issue #970 (R3): a live ``current_period_end`` sets the field; when
         # the payload carries none we must not LEAVE a stale prior value if the
         # resulting state has no active paid subscription.
         current_period_end = subscription_data.get("current_period_end")
         if current_period_end:
-            user.billing_period_end = datetime.fromtimestamp(
+            membership.billing_period_end = datetime.fromtimestamp(
                 current_period_end, tz=timezone.utc
             )
 
@@ -1684,12 +1711,12 @@ def handle_subscription_updated(subscription_data, event_context=None):
             # Keep the paid tier and subscription_id until
             # customer.subscription.deleted, which stays the authority that
             # flips the user to free at the scheduled end.
-            user.pending_tier = Tier.objects.filter(slug="free").first()
+            membership.pending_tier = Tier.objects.filter(slug="free").first()
             if not cancel_at_period_end and future_cancel_at is not None:
                 # A custom future cancel date drives the access-ending date.
-                user.billing_period_end = future_cancel_at
-            user.subscription_id = subscription_id
-            user.save(update_fields=[
+                membership.billing_period_end = future_cancel_at
+            membership.subscription_id = subscription_id
+            membership.save(update_fields=[
                 "billing_period_end", "pending_tier", "subscription_id",
             ])
             _services.logger.info(
@@ -1701,10 +1728,14 @@ def handle_subscription_updated(subscription_data, event_context=None):
             # Issue #969: a scheduled cancellation keeps the subscription
             # active until the end, so the user stays ``stripe:active`` on
             # their current plan — do NOT churn the tags yet.
-            reconcile_stripe_status_tags(user, active=True, tier=user.tier)
+            reconcile_stripe_status_tags(user, active=True, tier=membership.tier)
             # Schedule community removal from the stored paid subscription. A
             # future deletion still re-checks effective access before removing.
-            if user.tier and user.tier.level >= 20 and user.billing_period_end:
+            if (
+                membership.tier
+                and membership.tier.level >= 20
+                and membership.billing_period_end
+            ):
                 _services._community_schedule_removal(user)
             # A recovered payment may still leave the subscription scheduled
             # to cancel at period end. Cancellation remains authoritative for
@@ -1726,17 +1757,17 @@ def handle_subscription_updated(subscription_data, event_context=None):
         # ONLY on an explicit no-cancellation update — never merely because the
         # subscription is in a dunning/review state (issue #1314).
         if status not in DUNNING_STATUSES:
-            user.pending_tier = None
+            membership.pending_tier = None
 
         # Look up the new tier from price_id. Subscription movement compares
         # stored Stripe tiers, not temporary effective access.
-        old_tier_level = user.tier.level if user.tier else 0
+        old_tier_level = membership.tier.level if membership.tier else 0
         tier_changed_to = None
         if price_id:
             new_tier = _services._tier_for_price_id(price_id)
-            if new_tier and new_tier != user.tier:
+            if new_tier and new_tier != membership.tier:
                 if status == "active":
-                    user.tier = new_tier
+                    membership.tier = new_tier
                     tier_changed_to = new_tier
                     _services.logger.info(
                         "customer.subscription.updated: user=%s new_tier=%s",
@@ -1747,12 +1778,12 @@ def handle_subscription_updated(subscription_data, event_context=None):
         # Issue #970 (R3): if the resulting base tier is free and the payload
         # carried no live ``current_period_end``, do not retain a stale prior
         # billing date — the user has no active paid subscription cycle.
-        resulting_free = user.tier is None or user.tier.level == 0
+        resulting_free = membership.tier is None or membership.tier.level == 0
         if resulting_free and not current_period_end:
-            user.billing_period_end = None
+            membership.billing_period_end = None
 
-        user.subscription_id = subscription_id
-        user.save(
+        membership.subscription_id = subscription_id
+        membership.save(
             update_fields=[
                 "tier",
                 "subscription_id",
@@ -1768,12 +1799,12 @@ def handle_subscription_updated(subscription_data, event_context=None):
 
         # Issue #969: an active subscription update is still "active on tier",
         # so resync the stripe:* status tags.
-        reconcile_stripe_status_tags(user, active=True, tier=user.tier)
+        reconcile_stripe_status_tags(user, active=True, tier=membership.tier)
 
         # Community integration: transition detection uses stored Stripe tiers,
         # while removal is guarded by effective access so surviving Main+
         # overrides keep community access.
-        new_tier_level = user.tier.level if user.tier else 0
+        new_tier_level = membership.tier.level if membership.tier else 0
         if new_tier_level >= 20 and old_tier_level < 20:
             _services._community_reactivate(user)
         elif new_tier_level < 20 and old_tier_level >= 20:
@@ -1835,7 +1866,10 @@ def handle_customer_updated(customer_data):
         _services.logger.info("customer.updated: missing customer id, ignoring")
         return
 
-    user = User.objects.filter(stripe_customer_id=customer_id).first()
+    # Issue #1579: the Stripe customer id lives on payments.Membership.
+    user = User.objects.filter(
+        membership__stripe_customer_id=customer_id,
+    ).first()
     if user is None:
         # Stripe may carry customers that pre-date the local account,
         # or test-mode customers that never had a local user. Returning
@@ -1990,11 +2024,14 @@ def _ignore_stale_subscription_event(*, user, event_type, event_subscription_id)
     diagnostic_id = f"stale:{event_type}:{event_subscription_id}"
     details = {
         "stripe_session_id": diagnostic_id,
-        "stripe_customer_id": user.stripe_customer_id,
+        # Issue #1579: Stripe identifiers live on payments.Membership.
+        "stripe_customer_id": Membership.for_user(user).stripe_customer_id,
         "stripe_subscription_id": event_subscription_id,
         "event_type": event_type,
         "event_subscription_id": event_subscription_id,
-        "authoritative_subscription_id": user.subscription_id,
+        "authoritative_subscription_id": (
+            Membership.for_user(user).subscription_id
+        ),
         "reference_kind": "subscription_event",
         "actor": "system",
     }
@@ -2015,7 +2052,7 @@ def _ignore_stale_subscription_event(*, user, event_type, event_subscription_id)
         event_type,
         event_subscription_id,
         user.pk,
-        user.subscription_id,
+        Membership.for_user(user).subscription_id,
     )
 
 

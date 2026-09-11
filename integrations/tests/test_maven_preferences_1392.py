@@ -14,6 +14,7 @@ from content.models import Course, Enrollment
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven_preferences import is_maven_relevant
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 
@@ -95,7 +96,7 @@ class MavenAccountPreferenceTest(TestCase):
     def test_member_toggle_changes_only_maven_consent_and_preserves_access(self):
         free = Tier.objects.get(slug="free")
         main = Tier.objects.get(slug="main")
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email="access-1392@example.com",
             tier=free,
             email_verified=True,

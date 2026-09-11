@@ -36,7 +36,7 @@ from payments.services import (
 from payments.services import (
     handle_subscription_updated,
 )
-from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window, set_membership
 
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
@@ -457,9 +457,9 @@ class AttributionFailureDoesNotBlockTierTest(QuietSubscriptionLookupMixin, TestC
 
         # Tier update still succeeded
         user.refresh_from_db()
-        self.assertEqual(user.tier, tier)
-        self.assertEqual(user.stripe_customer_id, "cus_boom_1")
-        self.assertEqual(user.subscription_id, "sub_boom_1")
+        self.assertEqual(user.membership.tier, tier)
+        self.assertEqual(user.membership.stripe_customer_id, "cus_boom_1")
+        self.assertEqual(user.membership.subscription_id, "sub_boom_1")
         # No attribution row was created
         self.assertFalse(
             ConversionAttribution.objects.filter(user=user).exists(),
@@ -480,10 +480,12 @@ class SubscriptionUpdateDoesNotCreateSnapshotTest(TestCase):
         )
         user = User.objects.create_user(email="upgrade@test.com")
         _build_attribution(user)
-        user.tier = basic
-        user.subscription_id = "sub_upgrade"
-        user.stripe_customer_id = "cus_upgrade"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=basic,
+            subscription_id="sub_upgrade",
+            stripe_customer_id="cus_upgrade",
+        )
 
         # Seed an initial ConversionAttribution row
         initial = ConversionAttribution.objects.create(
@@ -519,7 +521,7 @@ class SubscriptionUpdateDoesNotCreateSnapshotTest(TestCase):
         self.assertEqual(initial.billing_period, "monthly")
         # User's tier still updated as expected
         user.refresh_from_db()
-        self.assertEqual(user.tier, main)
+        self.assertEqual(user.membership.tier, main)
 
 
 class ConflictingResubscribeQuarantineTest(QuietSubscriptionLookupMixin, TestCase):

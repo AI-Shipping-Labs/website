@@ -29,7 +29,7 @@ from events.services.registration import (
     get_or_create_series_registration,
 )
 from events.services.series_registration import enroll_user_in_series
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -304,7 +304,7 @@ class AnonymousRegisterCollisionTest(TierSetupMixin, TestCase):
 class SeriesRegisterCollisionTest(TierSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='series-race@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )
@@ -372,7 +372,7 @@ class SeriesRegisterCollisionTest(TierSetupMixin, TestCase):
 class MemberApiRegisterCollisionTest(TierSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.member = User.objects.create_user(
+        self.member = create_user_with_membership(
             email='member-race@test.com', password='pass',
             tier=self.main_tier,
         )
@@ -425,7 +425,7 @@ class MemberApiRegisterCollisionTest(TierSetupMixin, TestCase):
 class SeriesFanOutCollisionTest(TierSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
-        self.user = User.objects.create_user(
+        self.user = create_user_with_membership(
             email='fanout-race@test.com', password='pass', email_verified=True,
             tier=self.main_tier,
         )

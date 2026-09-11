@@ -182,7 +182,7 @@ def can_access_onboarding(user):
 
     This is the SINGLE shared predicate backing every onboarding surface
     (dashboard prompt, ``/onboarding/...`` views, AI chat, request-a-call
-    CTA). Never read ``user.tier.level`` directly at a call site.
+    CTA). Never read the membership tier level directly at a call site.
     """
     return get_user_level(user) >= LEVEL_BASIC
 

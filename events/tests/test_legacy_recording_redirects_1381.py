@@ -2,13 +2,13 @@
 
 from datetime import timedelta
 
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Workshop
 from events.models import Event
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 
 def _event(slug, **overrides):
@@ -169,7 +169,7 @@ class LegacyRecordingRedirectAccessSafety1381Test(TestCase):
     @classmethod
     def setUpTestData(cls):
         basic = Tier.objects.get(level=10)
-        cls.user = get_user_model().objects.create_user(
+        cls.user = create_user_with_membership(
             email='basic-legacy-1381@example.com',
             password='test-password',
             tier=basic,

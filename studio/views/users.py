@@ -209,9 +209,10 @@ def _base_tier_level(user):
     Used for paid-vs-comped counts and upward-only override authoring; display
     helpers layer active overrides on top separately.
     """
-    if user.tier_id is None:
+    # Issue #1579: the base tier lives on payments.Membership.
+    if user.membership.tier_id is None:
         return 0
-    return user.tier.level
+    return user.membership.tier.level
 
 
 def _active_override_map(users):
@@ -239,7 +240,9 @@ def _active_override_map(users):
 
 def _effective_tier_name(user, override=None):
     """Return the effective tier label without provenance suffixes."""
-    base_name = user.tier.name if user.tier_id else 'Free'
+    base_name = (
+        user.membership.tier.name if user.membership.tier_id else 'Free'
+    )
     if override is None:
         return base_name
 
@@ -252,7 +255,9 @@ def _effective_tier_name(user, override=None):
 
 def _effective_tier_slug(user, override=None):
     """Return the effective tier slug for Studio pill colour mapping."""
-    base_slug = user.tier.slug if user.tier_id else 'free'
+    base_slug = (
+        user.membership.tier.slug if user.membership.tier_id else 'free'
+    )
     if override is None:
         return base_slug
 
@@ -292,7 +297,7 @@ def _active_subscription_q():
     helper relies on that annotation and is used by BOTH the stat counts and
     the Paid filter chip so the card and the filtered rows always agree.
     """
-    return ~Q(subscription_id='') & Q(base_tier_level__gt=0)
+    return ~Q(membership__subscription_id='') & Q(base_tier_level__gt=0)
 
 
 def _annotated_user_queryset():
@@ -300,10 +305,10 @@ def _annotated_user_queryset():
     active_override = _active_override_subquery(timezone.now())
     return (
         User.objects
-        .select_related('tier', 'attribution')
+        .select_related('membership__tier', 'attribution')
         .annotate(
             base_tier_level=Coalesce(
-                'tier__level',
+                'membership__tier__level',
                 Value(0),
                 output_field=IntegerField(),
             ),
@@ -338,7 +343,7 @@ def _apply_user_listing_filters(
             Q(email__icontains=search)
             | Q(first_name__icontains=search)
             | Q(last_name__icontains=search)
-            | Q(stripe_customer_id__icontains=search)
+            | Q(membership__stripe_customer_id__icontains=search)
             | Q(slack_user_id__icontains=search)
         )
         tag_user_ids = user_ids_matching_tag_search(normalized_search)
@@ -487,8 +492,8 @@ def _row_tooltip(user, slack_status):
     parts = []
     if user.slack_user_id:
         parts.append(f'Slack ID: {user.slack_user_id}')
-    if user.stripe_customer_id:
-        parts.append(f'Stripe customer: {user.stripe_customer_id}')
+    if user.membership.stripe_customer_id:
+        parts.append(f'Stripe customer: {user.membership.stripe_customer_id}')
     newsletter_state = 'unsubscribed' if user.unsubscribed else 'subscribed'
     parts.append(f'Newsletter: {newsletter_state}')
     parts.append(
@@ -552,7 +557,7 @@ def _user_rows_from_users(users):
             'slack_member': bool(user.slack_member),
             'slack_checked_at': user.slack_checked_at,
             'slack_user_id': user.slack_user_id or '',
-            'stripe_customer_id': user.stripe_customer_id or '',
+            'stripe_customer_id': user.membership.stripe_customer_id or '',
             'row_tooltip': _row_tooltip(user, slack_status),
         })
     return user_rows
@@ -941,10 +946,9 @@ def user_create(request):
     )
     if make_admin:
         # Admins bypass tier gates everywhere they appear, so the tier value
-        # on the row is moot. We still let the default-free-tier branch in
-        # User.save() run -- keeping ``tier`` non-null preserves row
-        # invariants the rest of the codebase relies on (e.g. the tier
-        # override page reads ``user.tier`` directly).
+        # is moot. The post-create receiver (issue #1579) still creates the
+        # user's Membership row with the default free tier, preserving row
+        # invariants the rest of the codebase relies on.
         user.is_staff = True
         user.is_superuser = True
     user.set_password(password)
@@ -1008,7 +1012,7 @@ def _tier_source(user, has_override):
     """
     if has_override:
         return 'override'
-    if user.stripe_customer_id:
+    if user.membership.stripe_customer_id:
         return 'stripe'
     return 'default'
 
@@ -1219,7 +1223,10 @@ def _build_activity_timeline(user):
 def _payment_mismatch_queryset():
     return (
         PaymentAccountMismatch.objects
-        .select_related('paid_user', 'candidate_user', 'resolved_by')
+        .select_related(
+            'paid_user', 'candidate_user', 'resolved_by',
+            'paid_user__membership__tier',
+        )
         .order_by('-created_at')
     )
 
@@ -1384,7 +1391,7 @@ def user_detail(request, user_id):
     the CRM record page now.
     """
     user = get_object_or_404(
-        User.objects.select_related('tier', 'pending_tier'),
+        User.objects.select_related('membership__tier', 'membership__pending_tier'),
         pk=user_id,
     )
     deletion_request = (
@@ -1403,7 +1410,7 @@ def user_detail(request, user_id):
             deletion_request_blocker = "Login identity changed; a fresh request is required."
         elif user.is_staff or user.is_superuser:
             deletion_request_blocker = "Protected staff account"
-        elif user.subscription_id:
+        elif user.membership.subscription_id:
             deletion_request_blocker = "Active subscription cleanup required"
     override = _active_override_for_user(user)
     crm_record = CRMRecord.objects.filter(user=user).first()
@@ -1440,7 +1447,9 @@ def user_detail(request, user_id):
     # Inline override authoring follows the stored base tier, not the
     # effective display tier, so an active comp does not block valid upgrades
     # above the user's real subscription.
-    current_level = user.tier.level if user.tier_id else 0
+    current_level = (
+        user.membership.tier.level if user.membership.tier_id else 0
+    )
     available_override_tiers = list(
         Tier.objects.filter(level__gt=current_level).order_by('level')
     )
@@ -1564,7 +1573,9 @@ def user_tier_override_create(request, user_id):
     tier level) is enforced here too; downgrade / same-tier attempts
     are rejected with a flash error and no row is created.
     """
-    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    user = get_object_or_404(
+        User.objects.select_related('membership__tier'), pk=user_id,
+    )
     tier_id = (request.POST.get('tier_id') or '').strip()
     duration = (request.POST.get('duration') or '').strip()
     redirect_url = _tier_override_redirect_url(request, user)
@@ -1605,12 +1616,14 @@ def user_tier_override_create(request, user_id):
 
     # Same upward-only base-tier rule as the standalone override page:
     # compare against the stored subscription, not temporary effective access.
-    current_level = user.tier.level if user.tier_id else 0
+    current_level = (
+        user.membership.tier.level if user.membership.tier_id else 0
+    )
     if override_tier.level <= current_level:
         messages.error(
             request,
             'Tier override must upgrade the user. '
-            f'Pick a tier above {user.tier.name if user.tier_id else "Free"}.',
+            f'Pick a tier above {user.membership.tier.name if user.membership.tier_id else "Free"}.',
         )
         return redirect(redirect_url)
 
@@ -1622,7 +1635,7 @@ def user_tier_override_create(request, user_id):
 
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=override_tier,
         expires_at=expires_at,
         granted_by=request.user,
@@ -1681,7 +1694,9 @@ def _tier_override_redirect_url(request, user):
 @require_POST
 def user_sync_from_stripe(request, user_id):
     """POST handler: backfill one user's direct tier from Stripe."""
-    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    user = get_object_or_404(
+        User.objects.select_related('membership__tier'), pk=user_id,
+    )
     record = backfill_user_from_stripe(user)
     if record.status == 'warning':
         messages.warning(request, record.message)

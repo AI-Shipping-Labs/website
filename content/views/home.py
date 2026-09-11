@@ -36,6 +36,7 @@ from events.services.time_windows import (
     upcoming_events_queryset,
 )
 from integrations.config import get_config
+from payments.models import Membership
 from payments.stripe_links import get_stripe_payment_links
 from plans.dashboard import (
     build_active_sprint_opportunities_context,
@@ -284,11 +285,11 @@ def _dashboard(request):
     from django.contrib.auth import get_user_model
     User = get_user_model()
 
-    # Re-fetch user with select_related('tier') to avoid a lazy-load query
-    # every time user.tier.name or user.tier.level is accessed.
-    user = User.objects.select_related('tier').get(pk=request.user.pk)
+    # Re-fetch user with the membership relation prefetched to avoid
+    # lazy-load queries when the badge reads the tier (issue #1579).
+    user = User.objects.select_related('membership__tier').get(pk=request.user.pk)
     # Reuse the prefetched user for template/context-processor rendering too.
-    # The GA context needs user.tier.slug; keeping request.user on Django's
+    # keeping request.user on Django's
     # auth-loaded instance would add a duplicate tier query on the dashboard.
     request.user = user
 
@@ -299,8 +300,10 @@ def _dashboard(request):
     user_level = get_user_level(user, active_override=active_override)
 
     tier_name = ''
-    if user.tier_id:
-        tier_name = user.tier.name
+    # Issue #1579: the badge tier lives on payments.Membership.
+    membership = Membership.for_user(user)
+    if membership.tier_id:
+        tier_name = membership.tier.name
 
     # If there is an active override, show the override tier name with "(trial)"
     override_tier_name = ''

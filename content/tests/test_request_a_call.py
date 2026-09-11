@@ -6,7 +6,7 @@ from django.test import TestCase, tag
 from community.models import CallHost
 from questionnaires.models import Questionnaire, Response
 from questionnaires.onboarding import GENERIC_ONBOARDING_SLUG
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -23,13 +23,11 @@ class RequestACallGateTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.onboarded = User.objects.create_user(
-            email='alice-call-profile@test.com', password='pw', tier=cls.free_tier,
-        )
+        cls.onboarded = User.objects.create_user(email='alice-call-profile@test.com', password='pw')
+        set_membership(cls.onboarded, tier=cls.free_tier)
         _complete_onboarding(cls.onboarded)
-        cls.not_onboarded = User.objects.create_user(
-            email='bob-call-profile@test.com', password='pw', tier=cls.free_tier,
-        )
+        cls.not_onboarded = User.objects.create_user(email='bob-call-profile@test.com', password='pw')
+        set_membership(cls.not_onboarded, tier=cls.free_tier)
         CallHost.objects.update(is_active=False, booking_url='')
 
     def test_anonymous_redirected_to_login(self):
@@ -143,13 +141,11 @@ class DashboardRequestCallEntryPointTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.onboarded = User.objects.create_user(
-            email='done@test.com', password='pw', tier=cls.free_tier,
-        )
+        cls.onboarded = User.objects.create_user(email='done@test.com', password='pw')
+        set_membership(cls.onboarded, tier=cls.free_tier)
         _complete_onboarding(cls.onboarded)
-        cls.not_onboarded = User.objects.create_user(
-            email='todo@test.com', password='pw', tier=cls.free_tier,
-        )
+        cls.not_onboarded = User.objects.create_user(email='todo@test.com', password='pw')
+        set_membership(cls.not_onboarded, tier=cls.free_tier)
 
     def _quick_action_urls(self, response):
         return [action['url'] for action in response.context['quick_actions']]

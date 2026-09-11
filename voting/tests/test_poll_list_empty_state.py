@@ -5,7 +5,7 @@ from html.parser import HTMLParser
 from django.test import TestCase
 
 from accounts.models import User
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll
 
 
@@ -53,7 +53,7 @@ class PollListEmptyStateTest(TierSetupMixin, TestCase):
             email='free-empty-1227@example.com',
             password='testpass',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
     def test_anonymous_empty_state_has_exact_copy_and_sign_in_cta(self):
@@ -89,7 +89,7 @@ class PollListEmptyStateTest(TierSetupMixin, TestCase):
             email='main-poll-1227@example.com',
             password='testpass',
         )
-        main_user.tier = self.main_tier
+        set_membership(main_user, tier=self.main_tier)
         main_user.save()
         self.client.force_login(main_user)
 

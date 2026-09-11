@@ -7,14 +7,14 @@ from django.test import TestCase
 
 from payments.models import Tier
 from plans.models import Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
 
 def _make_user(email, *, tier_slug='premium'):
     user = User.objects.create_user(email=email, password='pw')
-    user.tier = Tier.objects.get(slug=tier_slug)
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug=tier_slug))
     return user
 
 

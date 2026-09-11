@@ -255,7 +255,7 @@ class RunImportTest(TestCase):
         user = User.objects.get(email='studio-override@test.com')
         # Stripe is never consulted from the Studio path (the user has no
         # stripe_customer_id) and the long-lived override IS created.
-        self.assertEqual(user.stripe_customer_id, '')
+        self.assertEqual(user.membership.stripe_customer_id, '')
         override = TierOverride.objects.get(user=user, is_active=True)
         self.assertEqual(override.override_tier, self.main_tier)
         self.assertEqual(override.granted_by, self.staff)

@@ -45,6 +45,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
 from django.utils import timezone
 
+from tests.fixtures import set_membership
+
 pytestmark = [pytest.mark.local_only, pytest.mark.core]
 
 
@@ -60,8 +62,7 @@ def _set_subscription(email, subscription_id):
     from accounts.models import User
 
     user = User.objects.get(email=email)
-    user.subscription_id = subscription_id
-    user.save(update_fields=["subscription_id"])
+    set_membership(user, subscription_id=subscription_id)
     connection.close()
 
 
@@ -75,7 +76,7 @@ def _grant_override(email, tier_slug):
     override_tier = Tier.objects.get(slug=tier_slug)
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier or free,
+        original_tier=user.membership.tier or free,
         override_tier=override_tier,
         expires_at=timezone.now() + timedelta(days=14),
         is_active=True,

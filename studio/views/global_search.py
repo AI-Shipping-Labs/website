@@ -142,7 +142,7 @@ def _user_results(query):
     if query.isdigit():
         predicate |= Q(pk=int(query))
     candidates = list(
-        User.objects.filter(predicate).select_related('tier').order_by('email')[
+        User.objects.filter(predicate).select_related('membership__tier').order_by('email')[
             :CANDIDATE_LIMIT
         ]
     )
@@ -161,7 +161,8 @@ def _user_results(query):
             label=display_name(user),
             summary=user.email,
             metadata=(
-                f'{user.tier.name if user.tier_id else "Free"} · '
+                # Issue #1579: the tier lives on payments.Membership.
+                f'{user.membership.tier.name if user.membership.tier_id else "Free"} · '
                 f'{"verified" if user.email_verified else "unverified"} · '
                 f'{user.get_bounce_state_display()}'
             ),

@@ -101,9 +101,11 @@ def _normalize_account_lifecycle_filter(raw):
 
 def _active_tier_info(user):
     """Return effective tier display fields for CRM list/detail templates."""
-    base_name = user.tier.name if user.tier_id else 'Free'
-    base_slug = user.tier.slug if user.tier_id else 'free'
-    base_info = {'name': base_name, 'slug': base_slug, 'source': 'stripe' if user.stripe_customer_id else 'default'}
+    # Issue #1579: the base tier and Stripe id live on payments.Membership.
+    membership = user.membership
+    base_name = membership.tier.name if membership.tier_id else 'Free'
+    base_slug = membership.tier.slug if membership.tier_id else 'free'
+    base_info = {'name': base_name, 'slug': base_slug, 'source': 'stripe' if membership.stripe_customer_id else 'default'}
     override = (
         TierOverride.objects
         .filter(
@@ -119,7 +121,7 @@ def _active_tier_info(user):
         return base_info
     # Local base comparison is internal to this effective display helper: only
     # show the override source when it exceeds the stored subscription tier.
-    base_level = user.tier.level if user.tier_id else 0
+    base_level = membership.tier.level if membership.tier_id else 0
     if override.override_tier.level <= base_level:
         return base_info
     return {
@@ -166,7 +168,7 @@ def crm_list(request):
 
     records_qs = (
         CRMRecord.objects
-        .select_related('user', 'user__tier', 'user__attribution')
+        .select_related('user', 'user__membership__tier', 'user__attribution')
         .annotate(
             plans_count=Count('user__plans', distinct=True),
             notes_count=Count('user__interview_notes', distinct=True),
@@ -298,7 +300,7 @@ def crm_list(request):
 
 def _get_record(crm_id):
     return get_object_or_404(
-        CRMRecord.objects.select_related('user', 'user__tier', 'user__attribution'),
+        CRMRecord.objects.select_related('user', 'user__membership__tier', 'user__attribution'),
         pk=crm_id,
     )
 

@@ -19,6 +19,7 @@ from email_app.services.email_service import EmailService, EmailServiceError
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 SLACK_SETTINGS = dict(
     SLACK_ENABLED=True,
@@ -36,12 +37,8 @@ class PaidCheckoutInviteEmailTest(TestCase):
     def setUp(self):
         clear_config_cache()
         self.addCleanup(clear_config_cache)
-        self.user = User.objects.create_user(
-            email="paid@example.com",
-            password="x",
-            tier=Tier.objects.get(slug="main"),
-            first_name="Ada",
-        )
+        self.user = User.objects.create_user(email="paid@example.com", password="x", first_name="Ada")
+        set_membership(self.user, tier=Tier.objects.get(slug="main"))
 
     @patch(
         "community.services.slack.SlackCommunityService.lookup_user_by_email",

@@ -1,7 +1,7 @@
 """
 Access control utilities for content gating.
 
-Provides the core access check pattern: user.tier.level >= content.required_level.
+Provides the core access check pattern: membership tier level >= content.required_level.
 Anonymous users are treated as level 0 (free tier).
 """
 
@@ -118,7 +118,7 @@ def get_user_level(user, active_override=_SENTINEL):
     Staff and superuser accounts always get maximum access (LEVEL_PREMIUM).
 
     If the user has an active TierOverride (is_active=True and not yet
-    expired), returns ``max(user.tier.level, override.override_tier.level)``
+    expired), returns ``max(membership tier level, override.override_tier.level)``
     so the override only ever grants MORE access, never less.
 
     Args:
@@ -134,8 +134,15 @@ def get_user_level(user, active_override=_SENTINEL):
         return LEVEL_PREMIUM
 
     base_level = 0
-    if user.tier_id is not None:
-        base_level = user.tier.level
+    # Issue #1579: the user's tier lives on payments.Membership now. The
+    # membership row is guaranteed by the post-create receiver and the
+    # backfill migration; for_user() lazily creates it if a row is ever
+    # missing, preserving the old "no tier = level 0" fallback.
+    from payments.models import Membership
+
+    membership = Membership.for_user(user)
+    if membership.tier_id is not None:
+        base_level = membership.tier.level
 
     # Check for active tier override
     if active_override is _SENTINEL:

@@ -17,6 +17,7 @@ from playwright_tests.conftest import (
     create_staff_user,
     create_user,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -602,8 +603,7 @@ class TestAccountPrivacyDeletionRequest1398:
             newsletter.account_activated = False
             newsletter.save(update_fields=["signup_source", "account_activated"])
             paid = create_user("privacy-paid-request-1398@test.com", tier_slug="basic")
-            paid.subscription_id = "sub_request_1398"
-            paid.save(update_fields=["subscription_id"])
+            set_membership(paid, subscription_id='sub_request_1398')
             create_staff_user("privacy-staff-request-1398@test.com")
 
         for email in (

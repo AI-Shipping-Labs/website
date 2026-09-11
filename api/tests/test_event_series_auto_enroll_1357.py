@@ -19,7 +19,7 @@ from events.models import (
 from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -34,12 +34,8 @@ class EventSeriesAutoEnrollApiTest(TierSetupMixin, TestCase):
             is_staff=True,
         )
         cls.token = Token.objects.create(user=cls.staff, name="events-1357")
-        cls.registrant = User.objects.create_user(
-            email="registrant-1357@test.com",
-            password="pw",
-            email_verified=True,
-            tier=cls.main_tier,
-        )
+        cls.registrant = User.objects.create_user(email="registrant-1357@test.com", password="pw", email_verified=True)
+        set_membership(cls.registrant, tier=cls.main_tier)
         cls.series = EventSeries.objects.create(
             name="API enrollment series",
             slug="api-enrollment-series-1357",
@@ -202,23 +198,15 @@ class EventSeriesAutoEnrollApiTest(TierSetupMixin, TestCase):
         self,
         enqueue_update,
     ):
-        opted_out = User.objects.create_user(
-            email="opted-out-1357@test.com",
-            password="pw",
-            email_verified=True,
-            tier=self.main_tier,
-        )
+        opted_out = User.objects.create_user(email="opted-out-1357@test.com", password="pw", email_verified=True)
+        set_membership(opted_out, tier=self.main_tier)
         standing_registration = SeriesRegistration.objects.create(
             series=self.series,
             user=opted_out,
         )
         standing_registration.delete()
-        inaccessible = User.objects.create_user(
-            email="inaccessible-1357@test.com",
-            password="pw",
-            email_verified=True,
-            tier=self.free_tier,
-        )
+        inaccessible = User.objects.create_user(email="inaccessible-1357@test.com", password="pw", email_verified=True)
+        set_membership(inaccessible, tier=self.free_tier)
         SeriesRegistration.objects.create(
             series=self.series,
             user=inaccessible,

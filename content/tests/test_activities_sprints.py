@@ -9,6 +9,7 @@ from django.urls import reverse
 from content.models import CuratedLink, SiteConfig
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -302,8 +303,7 @@ class ActivitiesSprintHubTest(TestCase):
             min_tier_level=30,
         )
         member = User.objects.create_user(email='free@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='free')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='free'))
 
         self.client.force_login(member)
         response = self.client.get('/membership')
@@ -325,8 +325,7 @@ class ActivitiesSprintHubTest(TestCase):
             min_tier_level=20,
         )
         member = User.objects.create_user(email='eligible@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
 
         self.client.force_login(member)
         response = self.client.get('/membership')
@@ -347,8 +346,7 @@ class ActivitiesSprintHubTest(TestCase):
             min_tier_level=20,
         )
         member = User.objects.create_user(email='main@example.com', password='pw')
-        member.tier = Tier.objects.get(slug='main')
-        member.save(update_fields=['tier'])
+        set_membership(member, tier=Tier.objects.get(slug='main'))
         SprintEnrollment.objects.create(sprint=sprint, user=member)
         Plan.objects.create(member=member, sprint=sprint, visibility='cohort')
 

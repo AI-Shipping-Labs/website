@@ -9,6 +9,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -38,14 +39,13 @@ class TierOverrideIssue587Test(TestCase):
     def _user(self, email, tier=None, **kwargs):
         user = User.objects.create_user(email=email, password='pw', **kwargs)
         if tier is not None:
-            user.tier = tier
-            user.save(update_fields=['tier'])
+            set_membership(user, tier=tier)
         return user
 
     def _override(self, user, tier=None, *, active=True):
         return TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=tier or self.main,
             expires_at=timezone.now() + timedelta(days=30),
             granted_by=self.staff,

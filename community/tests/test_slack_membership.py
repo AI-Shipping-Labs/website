@@ -29,6 +29,7 @@ from community.tasks.slack_membership import (
     refresh_slack_membership,
 )
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership, set_membership
 
 
 def _tier(level):
@@ -38,7 +39,7 @@ def _tier(level):
 
 class SlackChannelReconciliationTest(TestCase):
     def _user(self, level=20, **fields):
-        return User.objects.create_user(
+        return create_user_with_membership(
             email=fields.pop("email", "member@test.com"),
             tier=_tier(level),
             **fields,
@@ -621,7 +622,9 @@ class RefreshSlackMembershipChunkChainTest(TestCase):
 
     def _make_user(self, email):
         # Main tier so the user is inside the Main+ candidate scope.
-        return User.objects.create_user(email=email, tier=_tier(20))
+        user = User.objects.create_user(email=email)
+        set_membership(user, tier=_tier(20))
+        return user
 
     def test_chunk_size_fits_under_worker_timeout(self):
         # Lock the design decision (issues #715, #918) into the suite so
@@ -930,7 +933,9 @@ class RefreshSlackMembershipResolvesNotAllUnknownTest(TestCase):
     """The task resolves real membership instead of all-unknown (#918)."""
 
     def _main_user(self, email):
-        return User.objects.create_user(email=email, tier=_tier(20))
+        user = User.objects.create_user(email=email)
+        set_membership(user, tier=_tier(20))
+        return user
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_mixed_outcomes_resolve_members_and_not_members(self, mock_get_service):
@@ -1043,7 +1048,9 @@ class RateLimitRetryTest(TestCase):
         # profile lookup is stubbed out so it doesn't consume the mocked
         # membership responses below.
         for email in ('m1@test.com', 'm2@test.com', 'm3@test.com'):
-            User.objects.create_user(email=email, tier=_tier(20))
+            set_membership(
+                User.objects.create_user(email=email), tier=_tier(20),
+            )
 
         # Order is NULLs-first then by email; emails sort m1 < m2 < m3.
         mock_post.side_effect = [

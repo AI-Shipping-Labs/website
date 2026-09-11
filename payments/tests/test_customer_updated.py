@@ -25,6 +25,7 @@ from community.models import CommunityAuditLog
 from payments.exceptions import WebhookPermanentError
 from payments.services import handle_customer_updated
 from payments.services.webhook_dispatch import EVENT_HANDLERS
+from tests.fixtures import set_membership
 
 
 def _make_customer_payload(
@@ -51,8 +52,7 @@ class CustomerUpdatedHandlerTest(TestCase):
     def test_customer_updated_syncs_changed_email(self):
         """A new, unique email replaces the local user's email."""
         user = User.objects.create_user(email="old@example.com")
-        user.stripe_customer_id = "cus_sync_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_sync_1")
 
         handle_customer_updated(
             _make_customer_payload(
@@ -67,8 +67,7 @@ class CustomerUpdatedHandlerTest(TestCase):
     def test_customer_updated_with_matching_email_is_noop(self):
         """If Stripe sends the same email, nothing changes, no audit row."""
         user = User.objects.create_user(email="same@example.com")
-        user.stripe_customer_id = "cus_match_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_match_1")
         audit_count_before = CommunityAuditLog.objects.count()
 
         handle_customer_updated(
@@ -119,8 +118,7 @@ class CustomerUpdatedHandlerTest(TestCase):
     def test_customer_updated_with_empty_email_is_noop(self):
         """Empty/missing email leaves the local email untouched."""
         user = User.objects.create_user(email="kept@example.com")
-        user.stripe_customer_id = "cus_empty_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_empty_1")
         audit_count_before = CommunityAuditLog.objects.count()
 
         # Stripe sends the full customer object on every update event —
@@ -149,14 +147,12 @@ class CustomerUpdatedHandlerTest(TestCase):
         Stripe stops retrying, and on-call has a row to investigate.
         """
         owner = User.objects.create_user(email="owner@example.com")
-        owner.stripe_customer_id = "cus_owner_1"
-        owner.save(update_fields=["stripe_customer_id"])
+        set_membership(owner, stripe_customer_id="cus_owner_1")
 
         # The user Stripe is updating: a DIFFERENT account whose Stripe
         # customer just had its email changed to "owner@example.com".
         editor = User.objects.create_user(email="editor@example.com")
-        editor.stripe_customer_id = "cus_editor_1"
-        editor.save(update_fields=["stripe_customer_id"])
+        set_membership(editor, stripe_customer_id="cus_editor_1")
 
         with self.assertRaises(WebhookPermanentError):
             handle_customer_updated(
@@ -197,8 +193,7 @@ class CustomerUpdatedHandlerTest(TestCase):
         rather than quietly stuffing fields into this one.
         """
         user = User.objects.create_user(email="scope@example.com")
-        user.stripe_customer_id = "cus_scope_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_scope_1")
 
         # Send a payload with name / metadata / phone — the handler
         # MUST only touch email and ignore the rest.
@@ -235,8 +230,7 @@ class CustomerUpdatedHandlerTest(TestCase):
         email sync paths.
         """
         user = User.objects.create_user(email="before@example.com")
-        user.stripe_customer_id = "cus_audit_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_audit_1")
 
         handle_customer_updated(
             _make_customer_payload(
@@ -270,8 +264,7 @@ class CustomerUpdatedHandlerTest(TestCase):
         ``customer.updated`` on lots of unrelated edits in the portal).
         """
         user = User.objects.create_user(email="noop@example.com")
-        user.stripe_customer_id = "cus_noop_1"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_noop_1")
         audit_count_before = CommunityAuditLog.objects.count()
 
         # 1. matching email
@@ -301,8 +294,7 @@ class CustomerUpdatedHandlerTest(TestCase):
 
     def test_customer_updated_with_same_user_alias_does_not_roll_back_primary(self):
         user = User.objects.create_user(email="new-login@example.com")
-        user.stripe_customer_id = "cus_alias_same_user"
-        user.save(update_fields=["stripe_customer_id"])
+        set_membership(user, stripe_customer_id="cus_alias_same_user")
         EmailAlias.objects.create(
             user=user,
             email="old-login@example.com",
@@ -328,8 +320,7 @@ class CustomerUpdatedHandlerTest(TestCase):
     def test_customer_updated_with_other_user_alias_raises_permanent_error(self):
         owner = User.objects.create_user(email="owner@example.com")
         editor = User.objects.create_user(email="editor@example.com")
-        editor.stripe_customer_id = "cus_alias_other_user"
-        editor.save(update_fields=["stripe_customer_id"])
+        set_membership(editor, stripe_customer_id="cus_alias_other_user")
         EmailAlias.objects.create(user=owner, email="alias@example.com")
 
         with self.assertRaises(WebhookPermanentError):

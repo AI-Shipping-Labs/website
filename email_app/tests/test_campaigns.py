@@ -22,7 +22,7 @@ from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership, set_membership
 
 User = get_user_model()
 
@@ -33,11 +33,11 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_everyone(self):
         """target_min_level=0 includes all verified, subscribed users."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='free@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='premium@test.com', tier=self.premium_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -49,15 +49,15 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_basic_plus(self):
         """target_min_level=10 includes Basic+ only."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='free@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='basic@test.com', tier=self.basic_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='main@test.com', tier=self.main_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -73,11 +73,11 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_premium_only(self):
         """target_min_level=30 includes Premium only."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='main@test.com', tier=self.main_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='premium@test.com', tier=self.premium_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -90,7 +90,7 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_includes_active_override(self):
         """Active tier overrides count toward campaign eligibility."""
-        override_user = User.objects.create_user(
+        override_user = create_user_with_membership(
             email='override@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -112,11 +112,11 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_excludes_unsubscribed(self):
         """Unsubscribed users are excluded from recipients."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='subscribed@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='unsub@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=True,
         )
@@ -129,11 +129,11 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_get_eligible_recipients_excludes_unverified(self):
         """Unverified users are excluded from recipients."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='verified@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='unverified@test.com', tier=self.free_tier,
             email_verified=False, unsubscribed=False,
         )
@@ -147,7 +147,7 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
     def test_get_recipient_count(self):
         """get_recipient_count returns the count of eligible recipients."""
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'user{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -158,12 +158,12 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_slack_filter_yes_returns_only_members(self):
         """Issue #358: slack_filter='yes' restricts to slack_member=True."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='in@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=True,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='out@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=False,
@@ -177,12 +177,12 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_slack_filter_no_returns_only_non_members(self):
         """Issue #358: slack_filter='no' restricts to slack_member=False."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='in@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=True,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='out@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=False,
@@ -196,12 +196,12 @@ class EmailCampaignModelTest(TierSetupMixin, TestCase):
 
     def test_slack_filter_any_does_not_restrict(self):
         """Issue #358: default slack_filter='any' applies no Slack filter."""
-        User.objects.create_user(
+        create_user_with_membership(
             email='in@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=True,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='out@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
             slack_member=False,
@@ -226,21 +226,21 @@ class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         # Three Free, verified, subscribed users with different tag shapes.
-        self.alice = User.objects.create_user(
+        self.alice = create_user_with_membership(
             email='alice@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
         self.alice.tags = ['early-adopter']
         self.alice.save(update_fields=['tags'])
 
-        self.bob = User.objects.create_user(
+        self.bob = create_user_with_membership(
             email='bob@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
         self.bob.tags = ['early-adopter', 'bounced']
         self.bob.save(update_fields=['tags'])
 
-        self.carol = User.objects.create_user(
+        self.carol = create_user_with_membership(
             email='carol@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -320,8 +320,7 @@ class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
     def test_tag_filter_ands_with_target_min_level(self):
         """Tag filter ANDs with the existing tier-level filter."""
         # Promote Alice to Main, leave Bob on Free with the tag.
-        self.alice.tier = self.main_tier
-        self.alice.save(update_fields=['tier'])
+        set_membership(self.alice, tier=self.main_tier)
 
         campaign = EmailCampaign.objects.create(
             subject='Main+ early adopters', body='Hi',
@@ -336,14 +335,14 @@ class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
 
     def test_tag_filter_excludes_unverified_and_unsubscribed(self):
         """Tag filter does not bypass the verification/subscribed gates."""
-        unverified = User.objects.create_user(
+        unverified = create_user_with_membership(
             email='unverified@test.com', tier=self.free_tier,
             email_verified=False, unsubscribed=False,
         )
         unverified.tags = ['early-adopter']
         unverified.save(update_fields=['tags'])
 
-        unsub = User.objects.create_user(
+        unsub = create_user_with_membership(
             email='unsub@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=True,
         )
@@ -372,7 +371,7 @@ class CampaignDuplicateCopiesTagsTest(TierSetupMixin, TestCase):
             email='admin@test.com', password='adminpass123',
         )
         self.admin.email_verified = True
-        self.admin.tier = self.free_tier
+        set_membership(self.admin, tier=self.free_tier)
         self.admin.save()
         self.client.login(email='admin@test.com', password='adminpass123')
 
@@ -425,7 +424,7 @@ class CampaignFormTagPersistTest(TierSetupMixin, TestCase):
             email='admin@test.com', password='adminpass123',
         )
         self.admin.email_verified = True
-        self.admin.tier = self.free_tier
+        set_membership(self.admin, tier=self.free_tier)
         self.admin.save()
         self.client.login(email='admin@test.com', password='adminpass123')
 
@@ -526,20 +525,20 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
 
     def setUp(self):
         # Create eligible users
-        self.user1 = User.objects.create_user(
+        self.user1 = create_user_with_membership(
             email='user1@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = create_user_with_membership(
             email='user2@test.com', tier=self.basic_tier,
             email_verified=True, unsubscribed=False,
         )
         # Ineligible user (unsubscribed)
-        self.user3 = User.objects.create_user(
+        self.user3 = create_user_with_membership(
             email='user3@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=True,
         )
-        self.inactive_user = User.objects.create_user(
+        self.inactive_user = create_user_with_membership(
             email='inactive@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False, is_active=False,
         )
@@ -570,7 +569,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
         """send_campaign chunks recipients and schedules one batch each."""
         # Add more recipients so chunking happens at batch_size=3.
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -606,7 +605,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     def test_send_campaign_staggers_batches_by_interval(self):
         """Batch i is scheduled at now + i * interval; batch 0 immediate."""
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -637,7 +636,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     def test_send_campaign_interval_read_from_config(self):
         """The stagger reads CAMPAIGN_BATCH_INTERVAL_SECONDS from config."""
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -659,7 +658,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     def test_send_campaign_zero_interval_schedules_all_immediately(self):
         """Interval 0 means no stagger: every batch is scheduled at ~now."""
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -681,7 +680,7 @@ class SendCampaignFanOutTest(TierSetupMixin, TestCase):
     def test_send_campaign_unparseable_interval_falls_back_to_default(self):
         """A non-numeric config value falls back to the 60s default."""
         for i in range(5):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'extra{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -836,15 +835,15 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
     """Test the chunked send_campaign_batch task."""
 
     def setUp(self):
-        self.user1 = User.objects.create_user(
+        self.user1 = create_user_with_membership(
             email='user1@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
-        self.user2 = User.objects.create_user(
+        self.user2 = create_user_with_membership(
             email='user2@test.com', tier=self.basic_tier,
             email_verified=True, unsubscribed=False,
         )
-        self.user3 = User.objects.create_user(
+        self.user3 = create_user_with_membership(
             email='user3@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=True,
         )
@@ -1250,23 +1249,23 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
         from api.views.ses_events import _mark_complaint
 
-        permanent = User.objects.create_user(
+        permanent = create_user_with_membership(
             email='permanent@test.com',
             tier=self.free_tier,
             email_verified=True,
         )
-        threshold = User.objects.create_user(
+        threshold = create_user_with_membership(
             email='threshold@test.com',
             tier=self.free_tier,
             email_verified=True,
             soft_bounce_count=2,
         )
-        complaint = User.objects.create_user(
+        complaint = create_user_with_membership(
             email='complaint@test.com',
             tier=self.free_tier,
             email_verified=True,
         )
-        below_threshold = User.objects.create_user(
+        below_threshold = create_user_with_membership(
             email='soft@test.com',
             tier=self.free_tier,
             email_verified=True,
@@ -1382,7 +1381,7 @@ class EmailLogUniquenessTest(TierSetupMixin, TestCase):
         """Two EmailLogs for the same (campaign, user) violate the constraint."""
         from django.db import IntegrityError, transaction
 
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email='dup@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -1403,7 +1402,7 @@ class EmailLogUniquenessTest(TierSetupMixin, TestCase):
     def test_multiple_transactional_logs_per_user_allowed(self):
         """Constraint only applies when campaign is set; transactional
         emails (campaign IS NULL) can have multiple rows per user."""
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email='trans@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -1428,7 +1427,7 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
         """7 recipients with batch_size=3 produce 3 chunks; running each
         chunk results in all 7 receiving the campaign and status=sent."""
         users = [
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'eu{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )
@@ -1489,7 +1488,7 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
             password='adminpass123',
         )
         self.admin_user.email_verified = True
-        self.admin_user.tier = self.free_tier
+        set_membership(self.admin_user, tier=self.free_tier)
         self.admin_user.save()
         self.client.force_login(self.admin_user)
         self.campaign = EmailCampaign.objects.create(
@@ -1573,7 +1572,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
     def test_campaign_recipient_unverified_at_send_time_sees_cta(
         self, mock_ses,
     ):
-        unverified = User.objects.create_user(
+        unverified = create_user_with_membership(
             email='unv@test.com', tier=self.free_tier,
             email_verified=False, unsubscribed=False,
         )
@@ -1598,7 +1597,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
     def test_campaign_recipient_verified_at_send_time_omits_cta(
         self, mock_ses,
     ):
-        verified = User.objects.create_user(
+        verified = create_user_with_membership(
             email='ver@test.com', tier=self.free_tier,
             email_verified=True, unsubscribed=False,
         )
@@ -1627,7 +1626,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         ``send_campaign_batch`` must use the fresh DB value (no CTA),
         not the stale in-memory value (would-render CTA).
         """
-        recipient = User.objects.create_user(
+        recipient = create_user_with_membership(
             email='flip@test.com', tier=self.free_tier,
             email_verified=False, unsubscribed=False,
         )
@@ -1670,36 +1669,36 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
         Then: sent_count is 3 (2 Main + 1 Premium).
         """
         # 2 verified Main members (eligible)
-        User.objects.create_user(
+        create_user_with_membership(
             email='main-eligible-1@test.com', tier=self.main_tier,
             email_verified=True, unsubscribed=False,
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email='main-eligible-2@test.com', tier=self.main_tier,
             email_verified=True, unsubscribed=False,
         )
 
         # 1 verified Premium member (eligible)
-        User.objects.create_user(
+        create_user_with_membership(
             email='premium-eligible@test.com', tier=self.premium_tier,
             email_verified=True, unsubscribed=False,
         )
 
         # 1 unsubscribed Main member (NOT eligible)
-        User.objects.create_user(
+        create_user_with_membership(
             email='main-unsub@test.com', tier=self.main_tier,
             email_verified=True, unsubscribed=True,
         )
 
         # 1 unverified Main member (NOT eligible)
-        User.objects.create_user(
+        create_user_with_membership(
             email='main-unverified@test.com', tier=self.main_tier,
             email_verified=False, unsubscribed=False,
         )
 
         # 3 Free members (NOT eligible for level 20)
         for i in range(3):
-            User.objects.create_user(
+            create_user_with_membership(
                 email=f'free-ineligible-{i}@test.com', tier=self.free_tier,
                 email_verified=True, unsubscribed=False,
             )

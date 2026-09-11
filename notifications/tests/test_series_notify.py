@@ -12,6 +12,7 @@ from notifications.services.notification_service import (
     NotificationService,
     series_notification_title,
 )
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -27,19 +28,19 @@ class NotifySeriesTest(TestCase):
         self.free_user = User.objects.create_user(
             email='free@example.com', password='x',
         )
-        self.free_user.tier = self.free_tier
+        set_membership(self.free_user, tier=self.free_tier)
         self.free_user.save()
 
         self.basic_user = User.objects.create_user(
             email='basic@example.com', password='x',
         )
-        self.basic_user.tier = self.basic_tier
+        set_membership(self.basic_user, tier=self.basic_tier)
         self.basic_user.save()
 
         self.main_user = User.objects.create_user(
             email='main@example.com', password='x',
         )
-        self.main_user.tier = self.main_tier
+        set_membership(self.main_user, tier=self.main_tier)
         self.main_user.save()
 
         self.series = EventSeries.objects.create(

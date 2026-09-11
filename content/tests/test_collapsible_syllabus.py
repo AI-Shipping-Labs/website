@@ -16,7 +16,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Module, Unit, UserCourseProgress
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -131,7 +131,7 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
 
     def test_authorized_user_sees_unit_links(self):
         user = User.objects.create_user(email="main@collapsible.com", password="pass")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email="main@collapsible.com", password="pass")
         response = self.client.get("/courses/access-course")
@@ -142,7 +142,7 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
 
     def test_completed_unit_shows_check_icon(self):
         user = User.objects.create_user(email="prog@collapsible.com", password="pass")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         UserCourseProgress.objects.create(
             user=user, unit=self.unit_normal, completed_at=timezone.now(),
@@ -163,7 +163,7 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
         the circle — issue #248 — so the assertion subject is the
         authorized user.)"""
         user = User.objects.create_user(email="circle@collapsible.com", password="pass")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email="circle@collapsible.com", password="pass")
         response = self.client.get("/courses/access-course")

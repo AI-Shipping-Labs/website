@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from notifications.models import Notification
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 BASE_DIR = Path(settings.BASE_DIR)
 HOME = BASE_DIR / 'templates' / 'home.html'
@@ -200,11 +200,8 @@ class StackedHeaderRenderedBehaviorTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'data-testid="home-upcoming-events-section"')
         self.assertNotContains(response, 'data-testid="home-upcoming-events-link"')
 
-        user = get_user_model().objects.create_user(
-            email='stacked-1278@example.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = get_user_model().objects.create_user(email='stacked-1278@example.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'content/dashboard.html')
@@ -216,11 +213,8 @@ class StackedHeaderRenderedBehaviorTest(TierSetupMixin, TestCase):
         self.assertIn('/accounts/login', response.url)
 
     def test_notification_mark_all_visibility_is_preserved(self):
-        user = get_user_model().objects.create_user(
-            email='notifications-1278@example.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = get_user_model().objects.create_user(email='notifications-1278@example.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
         response = self.client.get('/notifications')
         self.assertContains(response, 'id="mark-all-btn" hidden')

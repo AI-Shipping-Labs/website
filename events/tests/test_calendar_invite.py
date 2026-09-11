@@ -23,6 +23,7 @@ from events.services.calendar_invite import (
 )
 from events.services.registration_email import send_registration_confirmation
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 @override_settings(
@@ -372,8 +373,7 @@ class SendRegistrationConfirmationTest(TestCase):
             password='testpass123',
             first_name='Test',
         )
-        cls.user.tier = cls.tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.tier)
 
         cls.start = timezone.now() + timedelta(days=1)
         cls.event = Event.objects.create(
@@ -829,8 +829,7 @@ class RegistrationApiEmailTest(TestCase):
             password='testpass123',
             email_verified=True,
         )
-        cls.user.tier = cls.tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.tier)
 
         cls.event = Event.objects.create(
             slug='api-event',

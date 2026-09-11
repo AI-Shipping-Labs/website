@@ -16,6 +16,7 @@ from freezegun import freeze_time
 from events.models import Event, EventSeries
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 FROZEN_CALL_NOW = '2026-06-15T12:00:00Z'
@@ -29,24 +30,22 @@ def _active_sprint_start_date():
 def _premium_user(email):
     """Create a Premium-tier user so eligibility tests pass."""
     user = User.objects.create_user(email=email, password='pw')
-    user.tier = Tier.objects.get(slug='premium')
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug='premium'))
     return user
 
 
 def _free_user(email):
     user = User.objects.create_user(email=email, password='pw')
     # New users default to ``free`` already; explicit assignment for clarity.
-    user.tier = Tier.objects.get(slug='free')
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug='free'))
     return user
 
 
 def _main_user(email, *, preferred_timezone=''):
     user = User.objects.create_user(email=email, password='pw')
-    user.tier = Tier.objects.get(slug='main')
+    set_membership(user, tier=Tier.objects.get(slug='main'))
     user.preferred_timezone = preferred_timezone
-    user.save(update_fields=['tier', 'preferred_timezone'])
+    user.save(update_fields=['preferred_timezone'])
     return user
 
 

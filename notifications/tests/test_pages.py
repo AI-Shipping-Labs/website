@@ -8,6 +8,7 @@ from django.test import Client, TestCase
 from content.models import Article
 from notifications.models import Notification
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -273,7 +274,7 @@ class NotificationVisibilityTest(TestCase):
         cls.free_user = User.objects.create_user(
             email='free@example.com', password='testpass123',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
     def test_free_user_only_sees_their_own_notifications(self):

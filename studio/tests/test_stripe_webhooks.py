@@ -13,6 +13,7 @@ from payments.models import (
     Tier,
 )
 from payments.services.stripe_endpoint_verifier import REQUIRED_EVENTS
+from tests.fixtures import set_membership
 
 EXPECTED_URL = "https://aishippinglabs.com/api/webhooks/payments"
 ALL_EVENTS = list(REQUIRED_EVENTS)
@@ -136,10 +137,12 @@ class StripeWebhooksStudioTest(TestCase):
 
     def test_inspect_event_is_read_only_preview(self):
         user = User.objects.create_user(email="target@test.com")
-        user.tier = Tier.objects.get(slug="main")
-        user.subscription_id = "sub_ins"
-        user.stripe_customer_id = "cus_ins"
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=Tier.objects.get(slug="main"),
+            subscription_id="sub_ins",
+            stripe_customer_id="cus_ins",
+        )
 
         event = {
             "id": "evt_ins", "type": "customer.subscription.deleted",
@@ -168,4 +171,4 @@ class StripeWebhooksStudioTest(TestCase):
         # Studio never executes a replay.
         self.assertContains(resp, "Studio does not execute replays")
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main", "Preview must not mutate.")
+        self.assertEqual(user.membership.tier.slug, "main", "Preview must not mutate.")

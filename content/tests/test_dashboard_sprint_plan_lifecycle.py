@@ -15,7 +15,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from plans.models import Plan, Sprint
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -27,9 +27,8 @@ def _today():
 @tag("core")
 class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
     def _login_with_plan(self, email, start_date, duration_weeks, status):
-        user = User.objects.create_user(
-            email=email, password="pw", tier=self.main_tier,
-        )
+        user = User.objects.create_user(email=email, password="pw")
+        set_membership(user, tier=self.main_tier)
         sprint = Sprint.objects.create(
             name="Accountability Sprint",
             slug=f"sprint-{email.split('@')[0]}",
@@ -113,9 +112,8 @@ class DashboardSprintPlanLifecycleTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, "get_status_display")
 
     def test_no_plan_omits_card(self):
-        User.objects.create_user(
-            email="noplan@test.com", password="pw", tier=self.main_tier,
-        )
+        member_user_1 = User.objects.create_user(email="noplan@test.com", password="pw")
+        set_membership(member_user_1, tier=self.main_tier)
         self.client.login(email="noplan@test.com", password="pw")
         response = self.client.get("/")
         self.assertNotContains(

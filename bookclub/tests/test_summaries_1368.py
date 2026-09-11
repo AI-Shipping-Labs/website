@@ -22,6 +22,7 @@ from bookclub.summaries import (
 )
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -107,7 +108,7 @@ class NotesDigestTest(TestCase):
                 email=f'{name.lower()}@test.com', password='pw',
                 first_name=name,
             )
-            user.tier = cls.main_tier
+            set_membership(user, tier=cls.main_tier)
             user.save()
             Note.objects.create(
                 chapter=cls.chapter, user=user, body=f'{name} takeaway body.',
@@ -176,12 +177,12 @@ class SummaryRenderFixture(TestCase):
         cls.member = User.objects.create_user(
             email='main@test.com', password='pw',
         )
-        cls.member.tier = cls.main_tier
+        set_membership(cls.member, tier=cls.main_tier)
         cls.member.save()
         cls.free_user = User.objects.create_user(
             email='free@test.com', password='pw',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,

@@ -11,6 +11,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, Token
 from community.tasks.slack_membership import SlackMembershipCheckResult
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -30,8 +31,10 @@ class Issue1288ApiTest(TestCase):
         return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
 
     def test_users_sort_validation_and_subscription_summary(self):
-        member = User.objects.create_user(
-            email='sub-1288@test.com', tier=self.main,
+        member = User.objects.create_user(email='sub-1288@test.com')
+        set_membership(
+            member,
+            tier=self.main,
             subscription_id='sub_1288',
             billing_period_end=timezone.now() + datetime.timedelta(days=30),
         )
@@ -40,8 +43,7 @@ class Issue1288ApiTest(TestCase):
         response = self.client.get(f'/api/users/{member.email}', **self.auth())
         self.assertEqual(response.json()['subscription']['status'], 'active')
         free = Tier.objects.get(slug='free')
-        member.pending_tier = free
-        member.save(update_fields=['pending_tier'])
+        set_membership(member, pending_tier=free)
         response = self.client.get(f'/api/users/{member.email}', **self.auth())
         self.assertEqual(
             response.json()['subscription']['status'], 'cancellation_scheduled',

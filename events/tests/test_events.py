@@ -31,7 +31,7 @@ from events.models import (
     EventRegistration,
 )
 from events.services.anon_registration_confirmation import SESSION_KEY
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -993,8 +993,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
             password='pass',
             email_verified=True,
         )
-        user.tier = self.main_tier
-        user.save()
+        set_membership(user, tier=self.main_tier)
         self.client.login(email='main@test.com', password='pass')
         response = self.client.get(self.gated_event.get_absolute_url())
         self.assertTrue(response.context['has_access'])
@@ -1007,8 +1006,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
             password='pass',
             email_verified=True,
         )
-        user.tier = self.basic_tier
-        user.save()
+        set_membership(user, tier=self.basic_tier)
         self.client.login(email='basic@test.com', password='pass')
         response = self.client.get(self.gated_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Main to attend')
@@ -1034,8 +1032,7 @@ class EventDetailAccessControlTest(TierSetupMixin, TestCase):
             password='pass',
             email_verified=True,
         )
-        user.tier = self.basic_tier
-        user.save()
+        set_membership(user, tier=self.basic_tier)
         self.client.login(email='basic-premium@test.com', password='pass')
         response = self.client.get(premium_event.get_absolute_url())
         self.assertContains(response, 'Upgrade to Premium to attend')
@@ -1232,8 +1229,7 @@ class RegisterForEventAPITest(TierSetupMixin, TestCase):
             status='upcoming',
             required_level=LEVEL_PREMIUM,
         )
-        self.user.tier = self.free_tier
-        self.user.save()
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='apiuser@test.com', password='pass')
         response = self.client.post('/api/events/gated-api/register')
         self.assertEqual(response.status_code, 403)
@@ -2448,8 +2444,7 @@ class EventUnderTierCopyConsistencyTest(TierSetupMixin, TestCase):
             password='pass',
             email_verified=True,
         )
-        user.tier = tier
-        user.save()
+        set_membership(user, tier=tier)
         self.client.login(email=user.email, password='pass')
         return user
 

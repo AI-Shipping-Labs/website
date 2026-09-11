@@ -9,6 +9,7 @@ from accounts.models import TierOverride, Token, User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class PaymentGraceApiTest(TestCase):
@@ -19,9 +20,12 @@ class PaymentGraceApiTest(TestCase):
         cls.nonstaff = User.objects.create_user(email="plain@test.com")
         cls.free = Tier.objects.get(slug="free")
         cls.main = Tier.objects.get(slug="main")
-        cls.member = User.objects.create_user(
-            email="grace-member@test.com", tier=cls.main,
-            stripe_customer_id="cus_api_grace", subscription_id="sub_api_grace",
+        cls.member = User.objects.create_user(email="grace-member@test.com")
+        set_membership(
+            cls.member,
+            tier=cls.main,
+            stripe_customer_id="cus_api_grace",
+            subscription_id="sub_api_grace",
         )
         now = timezone.now()
         cls.grace = Grace.objects.create(

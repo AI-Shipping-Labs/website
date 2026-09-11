@@ -42,7 +42,7 @@ class StripeNameCaptureTierCheckoutTest(TestCase):
         self.assertEqual(user.first_name, "Salvador Castillo")
         self.assertEqual(user.last_name, "Raya")
         # Tier update was preserved (folded into the same save).
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
 
     def test_single_token_name_fills_first_only(self):
         user = User.objects.create_user(email="madonna-stripe@test.com")
@@ -52,7 +52,7 @@ class StripeNameCaptureTierCheckoutTest(TestCase):
         user.refresh_from_db()
         self.assertEqual(user.first_name, "Madonna")
         self.assertEqual(user.last_name, "")
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
 
     def test_does_not_overwrite_existing_name(self):
         user = User.objects.create_user(
@@ -69,7 +69,7 @@ class StripeNameCaptureTierCheckoutTest(TestCase):
         self.assertEqual(user.first_name, "Custom")
         self.assertEqual(user.last_name, "Edit")
         # Tier upgrade still applied.
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
 
     def test_missing_name_is_noop_for_name_fields(self):
         user = User.objects.create_user(email="noname-stripe@test.com")
@@ -83,7 +83,7 @@ class StripeNameCaptureTierCheckoutTest(TestCase):
         self.assertEqual(user.first_name, "")
         self.assertEqual(user.last_name, "")
         # Tier still updated.
-        self.assertEqual(user.tier.slug, "basic")
+        self.assertEqual(user.membership.tier.slug, "basic")
 
     def test_new_user_created_by_webhook_gets_name(self):
         """Stripe Payment Link case: webhook creates the user AND fills name."""

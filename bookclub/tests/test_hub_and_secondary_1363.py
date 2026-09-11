@@ -18,6 +18,7 @@ from bookclub.models import Book, Chapter
 from bookclub.views import _derive_current_chapter
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 from website.context_processors import _build_primary_nav
 
 User = get_user_model()
@@ -136,7 +137,7 @@ class BookDetailBranchingTest(TestCase):
     def setUpTestData(cls):
         cls.main_tier = Tier.objects.get(slug='main')
         cls.main_user = User.objects.create_user(email='main@test.com', password='pw')
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
         cls.staff = User.objects.create_user(
             email='staff2@test.com', password='pw', is_staff=True,
@@ -239,7 +240,7 @@ class SecondaryPageContentTest(TestCase):
             start_date=date(2026, 10, 1),
         )
         main_user = User.objects.create_user(email='m2@test.com', password='pw')
-        main_user.tier = Tier.objects.get(slug='main')
+        set_membership(main_user, tier=Tier.objects.get(slug='main'))
         main_user.save()
         self.client.force_login(main_user)
         response = self.client.get('/books/soon2-book')
@@ -250,7 +251,7 @@ class ThisWeekCalloutTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.main_user = User.objects.create_user(email='reader@test.com', password='pw')
-        cls.main_user.tier = Tier.objects.get(slug='main')
+        set_membership(cls.main_user, tier=Tier.objects.get(slug='main'))
         cls.main_user.save()
 
     def test_callout_names_current_chapter_for_member(self):

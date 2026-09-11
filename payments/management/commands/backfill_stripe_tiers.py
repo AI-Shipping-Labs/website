@@ -10,7 +10,7 @@ User = get_user_model()
 
 
 class Command(BaseCommand):
-    help = "Backfill user.tier from active Stripe subscriptions."
+    help = "Backfill membership tiers from active Stripe subscriptions (issue #1579: reads payments.Membership)."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -26,7 +26,10 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         dry_run = options["dry_run"]
         email = options.get("email")
-        queryset = User.objects.select_related("tier").exclude(stripe_customer_id="")
+        queryset = (
+            User.objects.select_related("membership__tier")
+            .exclude(membership__stripe_customer_id="")
+        )
 
         if email:
             queryset = queryset.filter(email__iexact=email)

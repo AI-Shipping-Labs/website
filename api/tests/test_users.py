@@ -16,6 +16,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, Token
 from email_app.models import EmailLog, SesEvent
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 
@@ -39,7 +40,11 @@ class _UserApiBase(TestCase):
         return {"HTTP_AUTHORIZATION": f"Token {self.token.key}"}
 
     def _make_user(self, email="alice@test.com", **kwargs):
-        return User.objects.create_user(email=email, password=None, **kwargs)
+        return create_user_with_membership(
+            email=email,
+            password=None,
+            **kwargs,
+        )
 
 
 # ---------------------------------------------------------------------------

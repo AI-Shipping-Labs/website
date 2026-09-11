@@ -44,6 +44,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -103,11 +105,11 @@ def _create_member(
         password=DEFAULT_PASSWORD,
         email_verified=True,
     )
-    user.tier = tier
+    set_membership(user, tier=tier)
     if slack_user_id:
         user.slack_user_id = slack_user_id
     if stripe_customer_id:
-        user.stripe_customer_id = stripe_customer_id
+        set_membership(user, stripe_customer_id=stripe_customer_id)
     if first_name:
         user.first_name = first_name
     if last_name:
@@ -129,7 +131,7 @@ def _make_override(email, tier_slug, granted_by_email, days=30):
     granted_by = User.objects.get(email=granted_by_email)
     TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=tier,
         expires_at=timezone.now() + timedelta(days=days),
         granted_by=granted_by,

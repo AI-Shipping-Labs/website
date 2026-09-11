@@ -8,7 +8,7 @@ whole checklist gets its close control only after every applicable row is done.
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -21,9 +21,8 @@ class DashboardOnboardingDismissTest(TierSetupMixin, TestCase):
     """Incomplete onboarding stays visible without a close control."""
 
     def _login_basic(self, email="ob@test.com", dismissals=None):
-        user = User.objects.create_user(
-            email=email, password="pw", tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email=email, password="pw")
+        set_membership(user, tier=self.basic_tier)
         if dismissals is not None:
             user.dashboard_dismissals = dismissals
             user.save(update_fields=["dashboard_dismissals"])
@@ -62,9 +61,8 @@ class DashboardSlackDismissTest(TierSetupMixin, TestCase):
     """Slack is an unfinished Main checklist row, not a separate card."""
 
     def _login_main(self, email="sl@test.com", dismissals=None):
-        user = User.objects.create_user(
-            email=email, password="pw", tier=self.main_tier,
-        )
+        user = User.objects.create_user(email=email, password="pw")
+        set_membership(user, tier=self.main_tier)
         if dismissals is not None:
             user.dashboard_dismissals = dismissals
             user.save(update_fields=["dashboard_dismissals"])

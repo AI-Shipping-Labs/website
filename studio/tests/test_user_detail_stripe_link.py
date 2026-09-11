@@ -20,6 +20,7 @@ from django.test import TestCase
 
 from integrations.config import clear_config_cache, get_config
 from integrations.models import IntegrationSetting
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -34,14 +35,10 @@ class StudioUserDetailStripeLinkTest(TestCase):
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='testpass', is_staff=True,
         )
-        cls.user_with_stripe = User.objects.create_user(
-            email='paid@test.com', password='testpass',
-            stripe_customer_id='cus_ABC',
-        )
-        cls.user_without_stripe = User.objects.create_user(
-            email='free@test.com', password='testpass',
-            stripe_customer_id='',
-        )
+        cls.user_with_stripe = User.objects.create_user(email='paid@test.com', password='testpass')
+        set_membership(cls.user_with_stripe, stripe_customer_id='cus_ABC')
+        cls.user_without_stripe = User.objects.create_user(email='free@test.com', password='testpass')
+        set_membership(cls.user_without_stripe, stripe_customer_id='')
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
@@ -181,7 +178,7 @@ class StudioUserDetailStripeLinkTest(TestCase):
         response = self.client.get(
             f'/studio/users/{self.user_without_stripe.pk}/',
         )
-        # The existing {% if detail_user.stripe_customer_id %} guard means
+        # The existing {% if detail_user.membership.stripe_customer_id %} guard means
         # the whole Stripe row is omitted. No anchor and no plain-text
         # placeholder should appear for this user.
         self.assertNotContains(

@@ -26,6 +26,7 @@ from crm.models import CRMRecord
 from notifications.models import Notification
 from payments.models import Tier
 from questionnaires.models import Response, ResponseQuestion
+from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 
@@ -37,7 +38,7 @@ class OnboardingFormNotifiesStaffTest(TestCase):
         # Issue #982: onboarding is paid-gated, so the member who drives the
         # real submission views must be on a paid (Basic) tier to enter the
         # flow at all.
-        cls.member = User.objects.create_user(
+        cls.member = create_user_with_membership(
             email='alice@test.com', password='pw', first_name='Alice',
             tier=Tier.objects.get(slug='basic'),
         )
@@ -208,7 +209,7 @@ class OnboardingFormNotifiesStaffTest(TestCase):
 class OnboardingSlackChannelTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
+        cls.member = create_user_with_membership(
             email='bob@test.com', password='pw', first_name='Bob',
             tier=Tier.objects.get(slug='basic'),
         )
@@ -281,7 +282,7 @@ class OnboardingNotifyBestEffortTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
+        cls.member = create_user_with_membership(
             email='carol@test.com', password='pw',
             tier=Tier.objects.get(slug='basic'),
         )

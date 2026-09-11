@@ -191,7 +191,7 @@ class SlackImportAdapterTest(TestCase):
         self.assertEqual(regular.import_metadata["slack"]["slack_id"], "UREG")
         self.assertEqual(regular.import_metadata["slack"]["slack_team_id"], "T123")
         self.assertNotIn("avatar", regular.import_metadata["slack"])
-        self.assertEqual(regular.tier.slug, "free")
+        self.assertEqual(regular.membership.tier.slug, "free")
         self.assertEqual(TierOverride.objects.count(), 0)
 
     @patch("community.services.slack.SlackCommunityService._api_call")

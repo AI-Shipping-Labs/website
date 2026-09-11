@@ -13,6 +13,7 @@ from email_app.tests.test_email_service import assert_no_internal_footer_text
 from jobs.tasks import build_task_name
 from payments.models import Tier
 from studio.views.campaigns import TEST_EMAIL_FOOTER_NOTE
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -440,23 +441,15 @@ class StudioCampaignCreateFormTest(TestCase):
     def test_create_form_shows_recipient_count_for_default_audience(self):
         """GET renders the recipient-count helper using level=0."""
         # 2 eligible at level 0 (free tier, verified, subscribed)
-        User.objects.create_user(
-            email="free1@t.com", password="p", tier=self.free,
-            email_verified=True, unsubscribed=False,
-        )
-        User.objects.create_user(
-            email="main1@t.com", password="p", tier=self.main,
-            email_verified=True, unsubscribed=False,
-        )
+        member_user_1 = User.objects.create_user(email="free1@t.com", password="p", email_verified=True, unsubscribed=False)
+        set_membership(member_user_1, tier=self.free)
+        member_user_2 = User.objects.create_user(email="main1@t.com", password="p", email_verified=True, unsubscribed=False)
+        set_membership(member_user_2, tier=self.main)
         # Not counted: unsubscribed + unverified
-        User.objects.create_user(
-            email="free2@t.com", password="p", tier=self.free,
-            email_verified=True, unsubscribed=True,
-        )
-        User.objects.create_user(
-            email="free3@t.com", password="p", tier=self.free,
-            email_verified=False, unsubscribed=False,
-        )
+        member_user_3 = User.objects.create_user(email="free2@t.com", password="p", email_verified=True, unsubscribed=True)
+        set_membership(member_user_3, tier=self.free)
+        member_user_4 = User.objects.create_user(email="free3@t.com", password="p", email_verified=False, unsubscribed=False)
+        set_membership(member_user_4, tier=self.free)
 
         response = self.client.get("/studio/campaigns/new")
         # Staff user from setUp has no tier assigned so they are NOT counted.
@@ -568,14 +561,10 @@ class StudioCampaignEditTest(TestCase):
         target_min_level (not the default level=0 count)."""
         # Setup: one Main-tier user, one Free-tier user. Only Main counts
         # at level=20.
-        User.objects.create_user(
-            email="free-u@t.com", password="p", tier=self.free,
-            email_verified=True, unsubscribed=False,
-        )
-        User.objects.create_user(
-            email="main-u@t.com", password="p", tier=self.main,
-            email_verified=True, unsubscribed=False,
-        )
+        member_user_5 = User.objects.create_user(email="free-u@t.com", password="p", email_verified=True, unsubscribed=False)
+        set_membership(member_user_5, tier=self.free)
+        member_user_6 = User.objects.create_user(email="main-u@t.com", password="p", email_verified=True, unsubscribed=False)
+        set_membership(member_user_6, tier=self.main)
         self.campaign.target_min_level = 20
         self.campaign.save(update_fields=["target_min_level"])
 
@@ -897,9 +886,12 @@ class StudioCampaignDetailPreviewTest(TestCase):
             slug="free", defaults={"name": "Free", "level": 0},
         )
         for i in range(3):
-            User.objects.create_user(
-                email=f"u{i}@t.com", password="p", tier=free,
-                email_verified=True, unsubscribed=False,
+            set_membership(
+                User.objects.create_user(
+                    email=f"u{i}@t.com", password="p",
+                    email_verified=True, unsubscribed=False,
+                ),
+                tier=free,
             )
         # The staff user from setUp has no tier; not counted.
         campaign = EmailCampaign.objects.create(

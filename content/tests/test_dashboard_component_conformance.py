@@ -13,7 +13,7 @@ from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import Course, Enrollment, Workshop
 from events.models import Event
 from plans.models import Sprint
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -40,9 +40,8 @@ class DashboardGuidanceGridLayoutTest(TierSetupMixin, TestCase):
     """Sprint discovery uses the single-column home feed."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='layout@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='layout@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='layout@test.com', password='pw')
 
     def test_sprint_opportunity_is_a_home_feed_row(self):
@@ -76,9 +75,8 @@ class DashboardBadgeOwnerTest(TierSetupMixin, TestCase):
     """#1312 items 1 and 2: badges come from the member_badges owner."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='badges@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='badges@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='badges@test.com', password='pw')
 
     def _badge(self, response, testid):
@@ -109,8 +107,7 @@ class DashboardBadgeOwnerTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Free Open Sprint')
 
     def test_paid_member_sprint_is_an_accessible_feed_entry(self):
-        self.user.tier = self.main_tier
-        self.user.save(update_fields=['tier'])
+        set_membership(self.user, tier=self.main_tier)
         _active_sprint('Main Sprint', 'main-sprint', LEVEL_MAIN)
 
         response = self.client.get('/')
@@ -125,9 +122,8 @@ class DashboardEmptyStateOwnerTest(TierSetupMixin, TestCase):
     """Empty feed lanes stay hidden while destinations remain available."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='empty@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='empty@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='empty@test.com', password='pw')
 
     def test_empty_poll_lane_is_hidden_and_destination_remains(self):
@@ -149,9 +145,8 @@ class DashboardInteractiveLinkContractTest(TierSetupMixin, TestCase):
     """Dashboard-specific links keep the canonical keyboard/tap contract."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='dashboard-links@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='dashboard-links@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email=self.user.email, password='pw')
 
     def assert_focus_classes(self, class_value):
@@ -239,9 +234,8 @@ class DashboardLightThemeContrastTest(TierSetupMixin, TestCase):
         return [token for token in tokens if not token.startswith('dark:')]
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='contrast@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='contrast@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='contrast@test.com', password='pw')
 
     def test_checkout_success_banner_has_a_light_theme_foreground(self):
@@ -287,9 +281,8 @@ class DashboardTypographyTest(TierSetupMixin, TestCase):
     """#1312 items 4 and 5: eyebrow and section-heading scale."""
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='type@test.com', password='pw', tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='type@test.com', password='pw')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email='type@test.com', password='pw')
 
     def test_checklist_eyebrow_and_heading_match_the_dashboard_contract(self):

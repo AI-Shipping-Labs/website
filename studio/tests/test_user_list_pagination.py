@@ -14,6 +14,7 @@ from django.test import SimpleTestCase, TestCase, override_settings
 
 from payments.models import Tier
 from studio.views.users import USER_LIST_PAGE_SIZE
+from tests.fixtures import set_membership
 
 User = get_user_model()
 FAST_PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
@@ -105,9 +106,7 @@ class StudioUserListPaginationTest(PatchedUserListPageSizeMixin, TestCase):
     def test_paid_filter_out_of_range_page_clamps_to_last(self):
         paid_tier = Tier.objects.get(slug='basic')
         for index, user in enumerate(User.objects.filter(email__startswith='user')):
-            user.tier = paid_tier
-            user.subscription_id = f'sub_{index}'
-            user.save(update_fields=['tier', 'subscription_id'])
+            set_membership(user, tier=paid_tier, subscription_id=f'sub_{index}')
 
         response = self.client.get('/studio/users/?filter=paid&page=999')
 

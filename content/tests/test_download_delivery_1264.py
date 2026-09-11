@@ -20,6 +20,7 @@ from content.services.download_validation import (
     validate_download_metadata,
 )
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -457,10 +458,8 @@ class DownloadDelivery1264Test(TestCase):
     @patch('content.services.download_delivery.build_download_presigned_url')
     def test_under_tier_session_is_denied_before_presign(self, presign):
         download = make_download(required_level=10)
-        user = User.objects.create_user(
-            email='free@example.com', password='password',
-            email_verified=True, tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='free@example.com', password='password', email_verified=True)
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
         response = self.client.get(f'/api/downloads/{download.slug}/file')
         self.assertEqual(response.status_code, 403)
@@ -472,12 +471,8 @@ class DownloadDelivery1264Test(TestCase):
     @patch('content.services.download_requests.EmailService.send')
     def test_under_tier_grant_redirects_to_safe_recovery(self, send, presign):
         download = make_download(required_level=30)
-        user = User.objects.create_user(
-            email='basic-requester@example.com', password='password',
-            email_verified=True, tier=self.basic_tier,
-            unsubscribed=True,
-            email_preferences={'newsletter': False},
-        )
+        user = User.objects.create_user(email='basic-requester@example.com', password='password', email_verified=True, unsubscribed=True, email_preferences={'newsletter': False})
+        set_membership(user, tier=self.basic_tier)
         request_response = self.client.post(
             f'/api/downloads/{download.slug}/request',
             data=json.dumps({
@@ -524,10 +519,8 @@ class DownloadDelivery1264Test(TestCase):
     )
     def test_eligible_authenticated_member_gets_direct_presigned_handoff(self, presign):
         download = make_download(required_level=10)
-        user = User.objects.create_user(
-            email='basic@example.com', password='password',
-            email_verified=True, tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email='basic@example.com', password='password', email_verified=True)
+        set_membership(user, tier=self.basic_tier)
         self.client.force_login(user)
         detail = self.client.get(download.get_absolute_url())
         self.assertContains(detail, 'data-testid="download-file-cta"')
@@ -544,12 +537,8 @@ class DownloadDelivery1264Test(TestCase):
         from analytics.models import UserActivity
 
         download = make_download(required_level=10)
-        user = User.objects.create_user(
-            email='analytics-private@example.com',
-            password='password',
-            email_verified=True,
-            tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email='analytics-private@example.com', password='password', email_verified=True)
+        set_membership(user, tier=self.basic_tier)
         self.client.force_login(user)
 
         with self.assertLogs('content.views.api', level='INFO') as captured:
@@ -675,12 +664,8 @@ class DownloadDelivery1264Test(TestCase):
             'SENTINEL_ENDPOINT=https://session-presign-secret.example',
         )
         download = make_download(required_level=10)
-        user = User.objects.create_user(
-            email='session-secret@example.com',
-            password='password',
-            email_verified=True,
-            tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email='session-secret@example.com', password='password', email_verified=True)
+        set_membership(user, tier=self.basic_tier)
         self.client.force_login(user)
 
         with self.assertLogs('content.views.api', level='ERROR') as captured:

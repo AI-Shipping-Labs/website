@@ -105,7 +105,8 @@ class SubscriberAdmin(admin.ModelAdmin):
                 user.last_name,
                 user.email_verified,
                 user.unsubscribed,
-                user.tier.name if user.tier else "Free",
+                # Issue #1579: the tier lives on payments.Membership.
+                user.membership.tier.name if user.membership.tier else "Free",
                 user.date_joined.strftime("%Y-%m-%d %H:%M:%S"),
             ])
 

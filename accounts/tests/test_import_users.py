@@ -22,6 +22,7 @@ from accounts.services.import_users import (
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -92,7 +93,7 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(User.objects.filter(email__iexact="ada@example.com").count(), 1)
         user.refresh_from_db()
         self.assertEqual(user.import_source, "stripe")
-        self.assertEqual(user.stripe_customer_id, "cus_123")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_123")
         self.assertEqual(user.tags, ["existing-tag", "paid"])
         self.assertEqual(user.import_metadata, {"stripe": {"customer": "cus_123"}})
         self.assertEqual(batch.users_updated, 1)
@@ -128,14 +129,8 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(user.tags, ["member", "active"])
 
     def test_same_source_identifier_conflict_keeps_existing_value(self):
-        user = User.objects.create_user(
-            email="same-conflict@example.com",
-            import_source="stripe",
-            imported_at=timezone.now(),
-            stripe_customer_id="cus_existing",
-            import_metadata={"stripe": {"stripe_customer_id": "cus_existing"}},
-            tags=["stripe:imported"],
-        )
+        user = User.objects.create_user(email="same-conflict@example.com", import_source="stripe", imported_at=timezone.now(), import_metadata={"stripe": {"stripe_customer_id": "cus_existing"}}, tags=["stripe:imported"])
+        set_membership(user, stripe_customer_id="cus_existing")
 
         batch = run_import_batch(
             "stripe",
@@ -150,7 +145,7 @@ class ImportUsersServiceTest(TestCase):
         )
 
         user.refresh_from_db()
-        self.assertEqual(user.stripe_customer_id, "cus_existing")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_existing")
         self.assertEqual(user.import_metadata["stripe"]["stripe_customer_id"], "cus_new")
         self.assertEqual(user.import_metadata["stripe"]["status"], "active")
         self.assertEqual(user.tags, ["stripe:imported", "stripe:active"])
@@ -189,17 +184,8 @@ class ImportUsersServiceTest(TestCase):
         )
 
     def test_cross_source_merge_logs_conflicts_and_fills_only_empty_fields(self):
-        user = User.objects.create_user(
-            email="merge-conflict@example.com",
-            first_name="Alice",
-            last_name="Existing",
-            import_source="slack",
-            imported_at=timezone.now(),
-            slack_user_id="U1",
-            stripe_customer_id="cus_existing",
-            import_metadata={"slack": {"slack_user_id": "U1"}},
-            tags=["slack-member"],
-        )
+        user = User.objects.create_user(email="merge-conflict@example.com", first_name="Alice", last_name="Existing", import_source="slack", imported_at=timezone.now(), slack_user_id="U1", import_metadata={"slack": {"slack_user_id": "U1"}}, tags=["slack-member"])
+        set_membership(user, stripe_customer_id="cus_existing")
 
         batch = run_import_batch(
             "stripe",
@@ -221,8 +207,8 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(user.import_source, "slack")
         self.assertEqual(user.first_name, "Alice")
         self.assertEqual(user.last_name, "Existing")
-        self.assertEqual(user.stripe_customer_id, "cus_existing")
-        self.assertEqual(user.subscription_id, "sub_new")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_existing")
+        self.assertEqual(user.membership.subscription_id, "sub_new")
         self.assertEqual(user.tags, ["slack-member", "stripe:active"])
         self.assertEqual(user.import_metadata["stripe"]["stripe_customer_id"], "cus_new")
         self.assertEqual(batch.users_updated, 1)
@@ -384,7 +370,7 @@ class ImportUsersServiceTest(TestCase):
         )
 
         user = User.objects.get(email="tiered@example.com")
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         override = TierOverride.objects.get(user=user)
         self.assertEqual(override.override_tier, self.main_tier)
         self.assertEqual(override.expires_at, expiry)
@@ -405,7 +391,7 @@ class ImportUsersServiceTest(TestCase):
         )
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertFalse(TierOverride.objects.filter(user=user).exists())
         self.assertEqual(batch.users_updated, 1)
 
@@ -414,7 +400,7 @@ class ImportUsersServiceTest(TestCase):
         user = User.objects.create_user(email="tier-conflict@example.com")
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=premium_tier,
             expires_at=timezone.now() + timedelta(days=30),
         )
@@ -434,7 +420,7 @@ class ImportUsersServiceTest(TestCase):
         user = User.objects.create_user(email="tier-same@example.com")
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=self.main_tier,
             expires_at=timezone.now() + timedelta(days=30),
         )

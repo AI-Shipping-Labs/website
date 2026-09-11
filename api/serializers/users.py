@@ -24,6 +24,7 @@ from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
 from api.serializers.datetime import isoformat_or_none
 from email_app.services.ses_identity import event_identity_summary
+from payments.models import Membership
 
 BOUNCE_STATE_NONE = "none"
 BOUNCE_STATE_SOFT = "soft"
@@ -71,11 +72,14 @@ def serialize_user_state(user, *, compact=False):
     carry?" -- bouncing back to a list call would be silly.
     """
     # Base tier resolution: the user's actually-paid tier slug + level.
-    # ``user.tier_id`` can legitimately be NULL for the bare "free" case.
-    if user.tier_id:
+    # The membership ``tier_id`` can legitimately be NULL for the bare
+    # "free" case. Issue #1579: the tier/Stripe state lives on
+    # payments.Membership.
+    membership = Membership.for_user(user)
+    if membership.tier_id:
         base_tier_payload = {
-            "slug": user.tier.slug,
-            "level": user.tier.level,
+            "slug": membership.tier.slug,
+            "level": membership.tier.level,
         }
     else:
         base_tier_payload = {"slug": "free", "level": 0}
@@ -138,8 +142,8 @@ def serialize_user_state(user, *, compact=False):
         "email_verified": bool(user.email_verified),
         "slack_member": bool(user.slack_member),
         "slack_user_id": user.slack_user_id or "",
-        "stripe_customer_id": user.stripe_customer_id or "",
-        "subscription_id": user.subscription_id or "",
+        "stripe_customer_id": membership.stripe_customer_id or "",
+        "subscription_id": membership.subscription_id or "",
         "date_joined": isoformat_or_none(user.date_joined),
         "last_login": isoformat_or_none(user.last_login),
         **lifecycle_payload(user),

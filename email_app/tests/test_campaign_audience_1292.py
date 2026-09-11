@@ -10,7 +10,7 @@ from email_app.models import EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count
 from email_app.services.campaign_recipients import build_campaign_recipient_rows
 from events.models import Event, EventRegistration
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -66,11 +66,11 @@ class CampaignAudienceParityTest(TierSetupMixin, TestCase):
             title="Audience event", slug="audience-event-1292",
             start_datetime=datetime(2026, 7, 18, tzinfo=dt_timezone.utc),
         )
-        eligible = User.objects.create_user(
+        eligible = create_user_with_membership(
             email="eligible-all-1292@example.com", tier=self.main_tier,
             email_verified=True, slack_member=True, tags=["include"],
         )
-        overridden = User.objects.create_user(
+        overridden = create_user_with_membership(
             email="override-all-1292@example.com", tier=self.free_tier,
             email_verified=True, slack_member=True, tags=["include"],
         )
@@ -79,24 +79,24 @@ class CampaignAudienceParityTest(TierSetupMixin, TestCase):
             override_tier=self.main_tier,
             expires_at=timezone.now() + timedelta(days=1), is_active=True,
         )
-        excluded = User.objects.create_user(
+        excluded = create_user_with_membership(
             email="excluded-all-1292@example.com", tier=self.main_tier,
             email_verified=True, slack_member=True, tags=["include", "exclude"],
         )
-        unverified = User.objects.create_user(
+        unverified = create_user_with_membership(
             email="unverified-all-1292@example.com", tier=self.main_tier,
             email_verified=False, slack_member=True, tags=["include"],
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email="unsubscribed-all-1292@example.com", tier=self.main_tier,
             email_verified=True, unsubscribed=True, slack_member=True,
             tags=["include"],
         )
-        User.objects.create_user(
+        create_user_with_membership(
             email="wrong-slack-all-1292@example.com", tier=self.main_tier,
             email_verified=True, slack_member=False, tags=["include"],
         )
-        inactive = User.objects.create_user(
+        inactive = create_user_with_membership(
             email="inactive-all-1292@example.com", tier=self.main_tier,
             email_verified=True, is_active=False, slack_member=True,
             tags=["include"],

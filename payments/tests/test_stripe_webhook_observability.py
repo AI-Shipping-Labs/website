@@ -30,6 +30,7 @@ from payments.services.stripe_endpoint_verifier import (
     verify_stripe_endpoint,
 )
 from payments.services.subscription_resolution import resolve_subscription_user
+from tests.fixtures import set_membership
 
 WEBHOOK_URL = "/api/webhooks/payments"
 TEST_WEBHOOK_SECRET = "whsec_test_secret_key_for_testing"
@@ -70,10 +71,12 @@ class DeliveryAttemptTest(TestCase):
 
     def _paid_user(self, email, sub="sub_1", cus="cus_1"):
         user = User.objects.create_user(email=email)
-        user.tier = Tier.objects.get(slug="main")
-        user.subscription_id = sub
-        user.stripe_customer_id = cus
-        user.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            user,
+            tier=Tier.objects.get(slug="main"),
+            subscription_id=sub,
+            stripe_customer_id=cus,
+        )
         return user
 
     def test_processed_delivery_records_attempt_and_terminal_event(self):
@@ -141,9 +144,7 @@ class DeliveryAttemptTest(TestCase):
         u2 = User.objects.create_user(email="amb2@test.com")
         main = Tier.objects.get(slug="main")
         for u in (u1, u2):
-            u.tier = main
-            u.stripe_customer_id = "cus_amb"
-            u.save(update_fields=["tier", "stripe_customer_id"])
+            set_membership(u, tier=main, stripe_customer_id="cus_amb")
 
         with patch("payments.services.webhook_dispatch.mail_admins") as mock_mail:
             resp = _post(
@@ -157,8 +158,8 @@ class DeliveryAttemptTest(TestCase):
         # Nobody was mutated.
         u1.refresh_from_db()
         u2.refresh_from_db()
-        self.assertEqual(u1.tier, main)
-        self.assertEqual(u2.tier, main)
+        self.assertEqual(u1.membership.tier, main)
+        self.assertEqual(u2.membership.tier, main)
         # Terminal row + exactly one alert.
         self.assertTrue(
             WebhookEvent.objects.filter(
@@ -187,10 +188,10 @@ class DeliveryAttemptTest(TestCase):
         self.assertEqual(attempt.outcome, "failed_transient")
         user.refresh_from_db()
         self.assertEqual(
-            user.tier, main,
+            user.membership.tier, main,
             "A transient failure must roll back the local tier change.",
         )
-        self.assertEqual(user.subscription_id, "sub_t")
+        self.assertEqual(user.membership.subscription_id, "sub_t")
         self.assertFalse(
             WebhookEvent.objects.filter(stripe_event_id="evt_t1").exists()
         )
@@ -242,17 +243,13 @@ class UniqueResolutionTest(TestCase):
         main = Tier.objects.get(slug="main")
         for email in ("d1@test.com", "d2@test.com"):
             u = User.objects.create_user(email=email)
-            u.tier = main
-            u.stripe_customer_id = "cus_dup"
-            u.save(update_fields=["tier", "stripe_customer_id"])
+            set_membership(u, tier=main, stripe_customer_id="cus_dup")
         with self.assertRaises(WebhookAmbiguousUserError):
             resolve_subscription_user("", "cus_dup")
 
     def test_subscription_id_match_wins(self):
         u = User.objects.create_user(email="win@test.com")
-        u.subscription_id = "sub_win"
-        u.stripe_customer_id = "cus_win"
-        u.save(update_fields=["subscription_id", "stripe_customer_id"])
+        set_membership(u, subscription_id="sub_win", stripe_customer_id="cus_win")
         res = resolve_subscription_user("sub_win", "cus_win")
         self.assertEqual(res.user, u)
         self.assertEqual(res.matched_by, "subscription_id")
@@ -262,10 +259,12 @@ class UniqueResolutionTest(TestCase):
 class CancellationContractTest(TestCase):
     def _user(self, sub="sub_c", cus="cus_c"):
         u = User.objects.create_user(email="cancel@test.com")
-        u.tier = Tier.objects.get(slug="main")
-        u.subscription_id = sub
-        u.stripe_customer_id = cus
-        u.save(update_fields=["tier", "subscription_id", "stripe_customer_id"])
+        set_membership(
+            u,
+            tier=Tier.objects.get(slug="main"),
+            subscription_id=sub,
+            stripe_customer_id=cus,
+        )
         return u
 
     def test_future_cancel_at_schedules_without_removing_access(self):
@@ -282,18 +281,17 @@ class CancellationContractTest(TestCase):
             "items": {"data": [{"price": {"id": "price_x"}}]},
         })
         u.refresh_from_db()
-        self.assertEqual(u.tier, main, "Paid access is retained.")
-        self.assertEqual(u.pending_tier, free)
-        self.assertEqual(u.subscription_id, "sub_c")
-        self.assertIsNotNone(u.billing_period_end)
+        self.assertEqual(u.membership.tier, main, "Paid access is retained.")
+        self.assertEqual(u.membership.pending_tier, free)
+        self.assertEqual(u.membership.subscription_id, "sub_c")
+        self.assertIsNotNone(u.membership.billing_period_end)
         # billing_period_end is driven by cancel_at.
-        self.assertEqual(int(u.billing_period_end.timestamp()), future)
+        self.assertEqual(int(u.membership.billing_period_end.timestamp()), future)
 
     def test_dunning_state_does_not_clear_pending_cancellation(self):
         u = self._user()
         free = Tier.objects.get(slug="free")
-        u.pending_tier = free
-        u.save(update_fields=["pending_tier"])
+        set_membership(u, pending_tier=free)
         handle_subscription_updated({
             "id": "sub_c",
             "customer": "cus_c",
@@ -303,15 +301,14 @@ class CancellationContractTest(TestCase):
         })
         u.refresh_from_db()
         self.assertEqual(
-            u.pending_tier, free,
+            u.membership.pending_tier, free,
             "past_due must not clear a scheduled cancellation.",
         )
 
     def test_explicit_no_cancellation_clears_pending(self):
         u = self._user()
         free = Tier.objects.get(slug="free")
-        u.pending_tier = free
-        u.save(update_fields=["pending_tier"])
+        set_membership(u, pending_tier=free)
         handle_subscription_updated({
             "id": "sub_c",
             "customer": "cus_c",
@@ -320,7 +317,7 @@ class CancellationContractTest(TestCase):
             "items": {"data": [{"price": {"id": "price_x"}}]},
         })
         u.refresh_from_db()
-        self.assertIsNone(u.pending_tier)
+        self.assertIsNone(u.membership.pending_tier)
 
 
 def _endpoint(url, events, status="enabled", livemode=True, ep_id="we_1",

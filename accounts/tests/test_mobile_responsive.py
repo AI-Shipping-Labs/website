@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -91,9 +92,7 @@ class AccountPageBillingActionMobileTest(TestCase):
         cls.user = User.objects.create_user(
             email="modal@example.com", password="testpass123"
         )
-        cls.user.tier = cls.main_tier
-        cls.user.subscription_id = "sub_test_modal"
-        cls.user.save(update_fields=["tier", "subscription_id"])
+        set_membership(cls.user, tier=cls.main_tier, subscription_id="sub_test_modal")
 
     def setUp(self):
         self.client.force_login(self.user)
@@ -134,9 +133,7 @@ class CancelModalTapTargetsTest(TestCase):
         cls.user = User.objects.create_user(
             email="cancel-tap@example.com", password="testpass123"
         )
-        cls.user.tier = cls.main_tier
-        cls.user.subscription_id = "sub_cancel_tap"
-        cls.user.save(update_fields=["tier", "subscription_id"])
+        set_membership(cls.user, tier=cls.main_tier, subscription_id="sub_cancel_tap")
 
     def setUp(self):
         self.client.force_login(self.user)

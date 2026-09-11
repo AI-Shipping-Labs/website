@@ -105,11 +105,15 @@ def subscription_reconciliation_report(request):
     grace_qs = Grace.objects.none()
     if active_filter == "payment_grace":
         grace_qs = (
-            Grace.objects.select_related("user__tier", "base_tier_at_start")
+            Grace.objects.select_related(
+                "user__membership__tier", "base_tier_at_start",
+            )
             .prefetch_related("deliveries")
         )
         if active_tier:
-            grace_qs = grace_qs.filter(user__tier__slug=active_tier)
+            grace_qs = grace_qs.filter(
+                user__membership__tier__slug=active_tier,
+            )
         grace_qs = grace_qs.order_by("-grace_started_at", "-created_at")
         pager = studio_pagination_context(request, grace_qs)
     else:
@@ -139,7 +143,12 @@ def subscription_reconciliation_report(request):
             effective = _effective_tier(grace.user)
             grace_rows.append({
                 "grace": grace,
-                "base_tier": grace.user.tier.slug if grace.user.tier_id else "free",
+                # Issue #1579: the base tier lives on payments.Membership.
+                "base_tier": (
+                    grace.user.membership.tier.slug
+                    if grace.user.membership.tier_id
+                    else "free"
+                ),
                 "effective_tier": effective.slug if effective else "free",
                 "customer_url": _stripe_url(
                     stripe_account_id, "customers", grace.stripe_customer_id,

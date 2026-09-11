@@ -23,7 +23,7 @@ from events.models import (
     EventSeries,
     SeriesRegistration,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -67,8 +67,7 @@ class EventDetailRegistrationSourceTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='main@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
         cls.series = _make_series()
         cls.event = _make_occurrence(cls.series, slug='covered')
 
@@ -134,8 +133,7 @@ class EventDetailRegistrationCardTemplateTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='main@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
         cls.series = _make_series()
         cls.event = _make_occurrence(cls.series, slug='covered')
 
@@ -198,8 +196,7 @@ class EventDetailSeriesJoinAndFeedbackTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='main@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
         cls.series = _make_series()
 
     def setUp(self):
@@ -254,8 +251,7 @@ class EventDetailSeriesAccessLossTest(TierSetupMixin, TestCase):
             email='main@test.com', password='pass', email_verified=True,
         )
         # Free-tier user can NOT access a main-only occurrence.
-        cls.user.tier = cls.free_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.free_tier)
         cls.series = _make_series(slug='gated-series', name='Gated Series')
         cls.event = _make_occurrence(
             cls.series, slug='gated-occ', required_level=LEVEL_MAIN,

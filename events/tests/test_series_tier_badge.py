@@ -31,7 +31,7 @@ from content.access import (
     LEVEL_PREMIUM,
 )
 from events.models import Event, EventSeries
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -176,8 +176,7 @@ class SeriesTierBadgeAuthenticatedTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='member@test.com', password='pass', email_verified=True,
         )
-        user.tier = tier
-        user.save()
+        set_membership(user, tier=tier)
         self.client.force_login(user)
         return user
 

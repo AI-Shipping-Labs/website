@@ -16,7 +16,7 @@ from events.models import (
     SeriesOccurrenceOptOut,
     SeriesRegistration,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 NOW = datetime(2026, 8, 29, 12, 0, tzinfo=UTC)
 REGISTRATION_TABLES = (
@@ -79,14 +79,10 @@ class MemberEventRegistrationQueryBudgetTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.member = User.objects.create_user(
-            email="query-budget-member@test.com",
-            tier=cls.main_tier,
-        )
-        cls.other = User.objects.create_user(
-            email="query-budget-other@test.com",
-            tier=cls.main_tier,
-        )
+        cls.member = User.objects.create_user(email="query-budget-member@test.com")
+        set_membership(cls.member, tier=cls.main_tier)
+        cls.other = User.objects.create_user(email="query-budget-other@test.com")
+        set_membership(cls.other, tier=cls.main_tier)
         _, cls.plaintext = MemberAPIKey.create_for_user(
             user=cls.member,
             name="events budget",

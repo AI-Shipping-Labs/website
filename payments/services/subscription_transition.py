@@ -16,7 +16,7 @@ handler and the reconcile apply do this).
 """
 
 from payments import services as _services
-from payments.models import Tier
+from payments.models import Membership, Tier
 from payments.services.stripe_tags import reconcile_stripe_status_tags
 
 
@@ -25,16 +25,24 @@ def apply_ended_subscription(user):
 
     Returns a dict describing what changed so callers can audit:
     ``{"community_removed": bool, "old_tier_slug": str}``.
+
+    Issue #1579: the tier/Stripe write lands on ``payments.Membership``.
+    The caller still holds the ``select_for_update`` lock on the User row
+    (locking semantics unchanged), which serializes concurrent transitions
+    for the same user and transitively the membership write.
     """
-    old_tier_slug = user.tier.slug if user.tier_id and user.tier else "free"
-    had_community = bool(user.tier and user.tier.level >= 20)
+    membership = Membership.for_user(user)
+    old_tier_slug = (
+        membership.tier.slug if membership.tier_id and membership.tier else "free"
+    )
+    had_community = bool(membership.tier and membership.tier.level >= 20)
 
     free_tier = Tier.objects.filter(slug="free").first()
-    user.tier = free_tier
-    user.subscription_id = ""
-    user.billing_period_end = None
-    user.pending_tier = None
-    user.save(
+    membership.tier = free_tier
+    membership.subscription_id = ""
+    membership.billing_period_end = None
+    membership.pending_tier = None
+    membership.save(
         update_fields=[
             "tier",
             "subscription_id",

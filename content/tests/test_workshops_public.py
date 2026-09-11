@@ -40,7 +40,7 @@ from content.models import (
     WorkshopPage,
 )
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -863,15 +863,12 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         cls.page2 = _make_page(cls.workshop, 'setup', 'Setup', 2)
         cls.page3 = _make_page(cls.workshop, 'deploy', 'Deploy', 3)
 
-        cls.user_free = User.objects.create_user(
-            email='free@x.com', password='pw', tier=cls.free_tier,
-        )
-        cls.user_basic = User.objects.create_user(
-            email='basic@x.com', password='pw', tier=cls.basic_tier,
-        )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_free = User.objects.create_user(email='free@x.com', password='pw')
+        set_membership(cls.user_free, tier=cls.free_tier)
+        cls.user_basic = User.objects.create_user(email='basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_landing_404_for_draft(self):
         Workshop.objects.create(
@@ -1065,12 +1062,8 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             recording=20,
         )
         _make_page(ws, 'intro', 'Intro', 1)
-        user = User.objects.create_user(
-            email='free-unverified-pages@example.com',
-            password='pw',
-            tier=self.free_tier,
-            email_verified=False,
-        )
+        user = User.objects.create_user(email='free-unverified-pages@example.com', password='pw', email_verified=False)
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
 
         response = self.client.get(ws.get_absolute_url())
@@ -1094,12 +1087,8 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
             pages=10,
             recording=20,
         )
-        user = User.objects.create_user(
-            email='free-unverified-landing@example.com',
-            password='pw',
-            tier=self.free_tier,
-            email_verified=False,
-        )
+        user = User.objects.create_user(email='free-unverified-landing@example.com', password='pw', email_verified=False)
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
 
         response = self.client.get(ws.get_absolute_url())
@@ -1318,12 +1307,10 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
         ]
         cls.workshop.event.transcript_text = 'Workshop transcript text.'
         cls.workshop.event.save()
-        cls.user_basic = User.objects.create_user(
-            email='basic@x.com', password='pw', tier=cls.basic_tier,
-        )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_basic = User.objects.create_user(email='basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_video_404_for_draft(self):
         ws = Workshop.objects.create(
@@ -1407,9 +1394,8 @@ class WorkshopVideoTest(TierSetupMixin, TestCase):
             landing=20, pages=20, recording=20, with_event=True,
         )
         # Basic user fails landing gate (level 10 < 20)
-        u = User.objects.create_user(
-            email='b2@x.com', password='pw', tier=self.basic_tier,
-        )
+        u = User.objects.create_user(email='b2@x.com', password='pw')
+        set_membership(u, tier=self.basic_tier)
         self.client.force_login(u)
         response = self.client.get(f'{ws.get_absolute_url()}/video')
         self.assertContains(response, 'data-testid="video-landing-paywall"')
@@ -1431,9 +1417,8 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         )
         cls.p3 = _make_page(cls.workshop, 'three', 'Three', 3)
 
-        cls.user_basic = User.objects.create_user(
-            email='basic@x.com', password='pw', tier=cls.basic_tier,
-        )
+        cls.user_basic = User.objects.create_user(email='basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
 
     def test_page_404_for_draft_workshop(self):
         ws = Workshop.objects.create(
@@ -1490,9 +1475,8 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         )
 
     def test_page_free_member_sees_current_access_state(self):
-        user_free = User.objects.create_user(
-            email='free-page@x.com', password='pw', tier=self.free_tier,
-        )
+        user_free = User.objects.create_user(email='free-page@x.com', password='pw')
+        set_membership(user_free, tier=self.free_tier)
         self.client.force_login(user_free)
         response = self.client.get('/workshops/ws/tutorial/one')
         self.assertEqual(response.status_code, 403)
@@ -1590,9 +1574,8 @@ class LegacyDatedWorkshopUrlRedirectsTest(TierSetupMixin, TestCase):
         cls.page = _make_page(
             cls.workshop, 'starting-notebook', 'Starting Notebook', 1,
         )
-        cls.user_basic = User.objects.create_user(
-            email='legacy-basic@x.com', password='pw', tier=cls.basic_tier,
-        )
+        cls.user_basic = User.objects.create_user(email='legacy-basic@x.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
 
     def test_slug_only_landing_for_published_workshop_renders(self):
         response = self.client.get('/workshops/legacy-ws')
@@ -1696,10 +1679,8 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
             cls.workshop_basic, 'lesson', 'Lesson', 1,
             body='# Lesson\n\nBasic-required body.',
         )
-        cls.user_free = User.objects.create_user(
-            email='per-page-free@example.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user_free = User.objects.create_user(email='per-page-free@example.com', password='pw', email_verified=True)
+        set_membership(cls.user_free, tier=cls.free_tier)
 
     def test_anonymous_on_open_override_sees_full_body(self):
         # Page-level open override beats the workshop-default LEVEL_REGISTERED.
@@ -1809,9 +1790,8 @@ class EventWorkshopCrossLinksTest(TierSetupMixin, TestCase):
             slug='ws', title='WriteUp Workshop',
             with_event=True, landing=0, pages=0, recording=0,
         )
-        cls.user_main = User.objects.create_user(
-            email='main@x.com', password='pw', tier=cls.main_tier,
-        )
+        cls.user_main = User.objects.create_user(email='main@x.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
 
     def test_events_past_card_redirects_to_workshop(self):
         """When an event has kind='workshop' and a linked Workshop, the
@@ -2011,9 +1991,9 @@ class WorkshopPagesPaywallInlineRegisterTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='reg@test.com', password='testpass',
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.email_verified = True
-        user.save(update_fields=['tier', 'email_verified'])
+        user.save(update_fields=['email_verified'])
         self.client.force_login(user)
         response = self.client.get('/workshops/anon-pages')
         self.assertNotContains(response, 'data-testid="workshop-pages-paywall"')

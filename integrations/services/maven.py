@@ -488,7 +488,8 @@ def _grant_or_refresh_override(user, tier, target_expiry, cohort, course, *, sou
             return f"Extended Maven entitlement to {grant.expires_at.isoformat()}."
         return "Maven entitlement already satisfies the requested tier and duration."
     TierOverride.objects.create(
-        user=user, original_tier=user.tier, override_tier=tier, expires_at=target_expiry,
+        # Issue #1579: the base tier lives on payments.Membership.
+        user=user, original_tier=user.membership.tier, override_tier=tier, expires_at=target_expiry,
         granted_by=None, is_active=True, source=source,
     )
     _audit_override(user, tier, target_expiry, cohort, course, refreshed=False)
@@ -857,13 +858,15 @@ def _enrollment_notification_entitlement(occurrence):
             override_tier__level__gte=tier.level,
         ).values_list("expires_at", flat=True)
     )
+    # Issue #1579: tier/billing state lives on payments.Membership.
+    user_membership = occurrence.user.membership
     if (
-        occurrence.user.tier_id
-        and occurrence.user.tier.level >= tier.level
-        and occurrence.user.billing_period_end
-        and occurrence.user.billing_period_end > now
+        user_membership.tier_id
+        and user_membership.tier.level >= tier.level
+        and user_membership.billing_period_end
+        and user_membership.billing_period_end > now
     ):
-        expiry_candidates.append(occurrence.user.billing_period_end)
+        expiry_candidates.append(user_membership.billing_period_end)
     if grant is not None and grant.expires_at not in expiry_candidates:
         expiry_candidates.append(grant.expires_at)
     return tier, max(expiry_candidates)

@@ -6,7 +6,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from accounts.models import User
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll, PollOption, PollVote
 
 
@@ -36,7 +36,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
 
     def test_main_user_sees_topic_poll(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -46,7 +46,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
 
     def test_premium_user_sees_both_polls(self):
         user = User.objects.create_user(email='premium@test.com', password='testpass')
-        user.tier = self.premium_tier
+        set_membership(user, tier=self.premium_tier)
         user.save()
         self.client.login(email='premium@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -56,7 +56,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
 
     def test_closed_poll_not_shown(self):
         user = User.objects.create_user(email='prem@test.com', password='testpass')
-        user.tier = self.premium_tier
+        set_membership(user, tier=self.premium_tier)
         user.save()
         self.client.login(email='prem@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -70,7 +70,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
             closes_at=timezone.now() - timedelta(hours=1),
         )
         user = User.objects.create_user(email='main2@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -80,7 +80,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
         PollOption.objects.create(poll=self.topic_poll, title='Opt A')
         PollOption.objects.create(poll=self.topic_poll, title='Opt B')
         user = User.objects.create_user(email='main3@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main3@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -89,7 +89,7 @@ class PollListViewTest(TierSetupMixin, TestCase):
     def test_basic_user_cannot_see_polls(self):
         """Basic users (level 10) cannot see topic polls (level 20)."""
         user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/vote')
@@ -113,11 +113,11 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
         # Create some votes: B has 3, A has 1, C has 0
         for i in range(3):
             u = User.objects.create_user(email=f'voter{i}@test.com')
-            u.tier = self.main_tier
+            set_membership(u, tier=self.main_tier)
             u.save()
             PollVote.objects.create(poll=self.poll, option=self.opt_b, user=u)
         voter_a = User.objects.create_user(email='voterA@test.com')
-        voter_a.tier = self.main_tier
+        set_membership(voter_a, tier=self.main_tier)
         voter_a.save()
         PollVote.objects.create(poll=self.poll, option=self.opt_a, user=voter_a)
 
@@ -128,7 +128,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_gated_for_basic_user(self):
         user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -136,7 +136,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_accessible_for_main_user(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -148,7 +148,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_options_sorted_by_vote_count(self):
         user = User.objects.create_user(email='main@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -162,7 +162,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_user_voted_shown(self):
         user = User.objects.create_user(email='main2@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         PollVote.objects.create(poll=self.poll, option=self.opt_a, user=user)
         self.client.login(email='main2@test.com', password='testpass')
@@ -171,7 +171,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_proposal_form_shown_when_allowed(self):
         user = User.objects.create_user(email='main3@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main3@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -181,7 +181,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
         self.poll.allow_proposals = False
         self.poll.save()
         user = User.objects.create_user(email='main4@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main4@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -191,7 +191,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
         self.poll.status = 'closed'
         self.poll.save()
         user = User.objects.create_user(email='main5@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main5@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -209,7 +209,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
 
     def test_votes_remaining_shown(self):
         user = User.objects.create_user(email='main6@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main6@test.com', password='testpass')
         response = self.client.get(f'/vote/{self.poll.id}')
@@ -221,7 +221,7 @@ class PollDetailViewTest(TierSetupMixin, TestCase):
             title='Course Poll', poll_type='course', status='open',
         )
         user = User.objects.create_user(email='main7@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main7@test.com', password='testpass')
         response = self.client.get(f'/vote/{course_poll.id}')
@@ -248,7 +248,7 @@ class PollGatingTest(TierSetupMixin, TestCase):
         self.free_user = User.objects.create_user(
             email='free@test.com', password='testpass',
         )
-        self.free_user.tier = self.free_tier
+        set_membership(self.free_user, tier=self.free_tier)
         self.free_user.save()
         self.client.login(email='free@test.com', password='testpass')
 
@@ -308,7 +308,7 @@ class CoursePollGatingTest(TierSetupMixin, TestCase):
         self.main_user = User.objects.create_user(
             email='main@test.com', password='testpass',
         )
-        self.main_user.tier = self.main_tier
+        set_membership(self.main_user, tier=self.main_tier)
         self.main_user.save()
         self.client.login(email='main@test.com', password='testpass')
 
@@ -369,12 +369,12 @@ class ClosedPollDisplayTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='main@test.com', password='testpass',
         )
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         other = User.objects.create_user(
             email='other@test.com', password='testpass',
         )
-        other.tier = self.main_tier
+        set_membership(other, tier=self.main_tier)
         other.save()
         # Add some votes so vote counts are non-zero
         PollVote.objects.create(
@@ -488,7 +488,7 @@ class PollUnverifiedEmailGateTest(TierSetupMixin, TestCase):
         self.unverified_user = User.objects.create_user(
             email='unverified@test.com', password='testpass',
         )
-        self.unverified_user.tier = self.free_tier
+        set_membership(self.unverified_user, tier=self.free_tier)
         self.unverified_user.email_verified = False
         self.unverified_user.save()
         self.client.login(email='unverified@test.com', password='testpass')

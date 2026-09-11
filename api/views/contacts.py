@@ -30,7 +30,7 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.datetime import isoformat_or_none
 from api.utils import parse_json_body, require_methods
-from payments.models import Tier
+from payments.models import Membership, Tier
 from studio.services.contacts_import import import_contact_rows
 
 User = get_user_model()
@@ -61,12 +61,15 @@ def _serialize_user(user):
     """Build the export dict for a single ``User`` row.
 
     Tier resolution mirrors ``user_export_csv`` minus the override layer:
-    the base ``user.tier.slug`` (or "free" when ``tier_id is None``). Effective
+    the base tier slug on the user's ``payments.Membership`` row (or "free"
+    when ``tier_id is None``). Effective
     tier override resolution is intentionally NOT applied here for v1 -- a
     follow-up issue can add an override-aware export when the API has callers
     that need it.
     """
-    tier_slug = user.tier.slug if user.tier_id else "free"
+    # Issue #1579: the tier/Stripe state lives on payments.Membership.
+    membership = Membership.for_user(user)
+    tier_slug = membership.tier.slug if membership.tier_id else "free"
     return {
         "email": user.email,
         "first_name": user.first_name,
@@ -77,8 +80,8 @@ def _serialize_user(user):
         "unsubscribed": user.unsubscribed,
         "date_joined": isoformat_or_none(user.date_joined),
         "last_login": isoformat_or_none(user.last_login),
-        "stripe_customer_id": user.stripe_customer_id,
-        "subscription_id": user.subscription_id,
+        "stripe_customer_id": membership.stripe_customer_id,
+        "subscription_id": membership.subscription_id,
         "slack_member": user.slack_member,
         "slack_checked_at": isoformat_or_none(user.slack_checked_at),
     }
@@ -290,7 +293,7 @@ def contacts_export(request):
     is ordered by ``id`` so repeat calls are deterministic.
     """
     users = list(
-        User.objects.select_related("tier").order_by("id")
+        User.objects.select_related("membership__tier").order_by("id")
     )
     rows = [_serialize_user(user) for user in users]
 

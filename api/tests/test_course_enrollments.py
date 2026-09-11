@@ -21,13 +21,13 @@ from content.models.enrollment import (
     Enrollment,
 )
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
 
 def _attach_tier(user, slug):
-    user.tier = Tier.objects.get(slug=slug)
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug=slug))
     return user
 
 

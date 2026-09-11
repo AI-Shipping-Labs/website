@@ -184,7 +184,7 @@ class WebhookAttributionIntentionalBroadCatchTest(TestCase):
             handle_checkout_completed(session_data)
 
         user = User.objects.get(email='attr@test.com')
-        self.assertEqual(user.tier, self.tier)
+        self.assertEqual(user.membership.tier, self.tier)
 
     @patch('payments.services._record_conversion_attribution')
     def test_course_purchase_swallows_attribution_integrity_error(

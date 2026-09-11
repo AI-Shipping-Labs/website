@@ -13,7 +13,7 @@ from django.utils import timezone
 from accounts.templatetags.accounts_extras import button_classes
 from content.models import SiteConfig
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 HOME_TEMPLATE = Path(settings.BASE_DIR) / 'templates' / 'home.html'
 
@@ -286,9 +286,8 @@ class HomepageFunnelTest(TierSetupMixin, TestCase):
             self.assertIn(f'id="{section_id}"', body)
 
     def test_authenticated_member_keeps_dashboard_without_anonymous_assets(self):
-        user = get_user_model().objects.create_user(
-            email='member1241@example.com', password='pw', tier=self.main_tier
-        )
+        user = get_user_model().objects.create_user(email='member1241@example.com', password='pw')
+        set_membership(user, tier=self.main_tier)
         self.client.force_login(user)
         response = self.client.get('/')
         self.assertTemplateUsed(response, 'content/dashboard.html')

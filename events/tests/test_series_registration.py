@@ -32,7 +32,7 @@ from events.services.series_registration import (
     enroll_user_in_series,
     promote_event_registrations_to_series,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership, set_membership
 
 User = get_user_model()
 
@@ -73,8 +73,7 @@ class EnrollUserInSeriesTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='member@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
 
     def test_fans_out_to_all_upcoming_open_occurrences(self):
         series = _make_series()
@@ -138,7 +137,7 @@ class EnrollUserInSeriesTest(TierSetupMixin, TestCase):
         basic_user = User.objects.create_user(
             email='basic@test.com', password='pass', email_verified=True,
         )
-        basic_user.tier = self.basic_tier
+        set_membership(basic_user, tier=self.basic_tier)
         basic_user.save()
         # 4 open + 2 main-only.
         for i in range(1, 5):
@@ -183,8 +182,7 @@ class EnrollSeriesRegistrantsInEventTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='member@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
 
     def test_new_upcoming_occurrence_enrolls_registrant(self):
         series = _make_series()
@@ -221,7 +219,7 @@ class EnrollSeriesRegistrantsInEventTest(TierSetupMixin, TestCase):
         basic_user = User.objects.create_user(
             email='basic@test.com', password='pass', email_verified=True,
         )
-        basic_user.tier = self.basic_tier
+        set_membership(basic_user, tier=self.basic_tier)
         basic_user.save()
         SeriesRegistration.objects.create(series=series, user=basic_user)
         main_only = _make_occurrence(
@@ -256,8 +254,7 @@ class SeriesRegistrationApiTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='member@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
 
     def setUp(self):
         self.series = _make_series()
@@ -297,7 +294,7 @@ class SeriesRegistrationApiTest(TierSetupMixin, TestCase):
         )
 
     def test_partial_tier_register_persists_only_accessible_occurrences(self):
-        free_user = User.objects.create_user(
+        free_user = create_user_with_membership(
             email='free-series@test.com',
             password='pass',
             email_verified=True,
@@ -469,8 +466,7 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='m@test.com', password='pass', email_verified=True,
         )
-        user.tier = self.main_tier
-        user.save()
+        set_membership(user, tier=self.main_tier)
         self.client.force_login(user)
 
         response = self.client.get(self.url)
@@ -484,8 +480,7 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='m@test.com', password='pass', email_verified=True,
         )
-        user.tier = self.main_tier
-        user.save()
+        set_membership(user, tier=self.main_tier)
         SeriesRegistration.objects.create(series=self.series, user=user)
         EventRegistration.objects.create(event=self.upcoming, user=user)
         self.client.force_login(user)
@@ -504,8 +499,7 @@ class SeriesPublicPageTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='single@test.com', password='pass', email_verified=True,
         )
-        user.tier = self.main_tier
-        user.save()
+        set_membership(user, tier=self.main_tier)
         EventRegistration.objects.create(event=self.upcoming, user=user)
         self.client.force_login(user)
 
@@ -551,7 +545,7 @@ class StudioAddOccurrenceAutoEnrollTest(TierSetupMixin, TestCase):
         cls.member = User.objects.create_user(
             email='member@test.com', password='pass', email_verified=True,
         )
-        cls.member.tier = cls.main_tier
+        set_membership(cls.member, tier=cls.main_tier)
         cls.member.save()
 
     def test_studio_edit_publishing_occurrence_enrolls_registrant(self):
@@ -607,12 +601,11 @@ class PromoteEventRegistrationsToSeriesTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='reg1@test.com', password='pass', email_verified=True,
         )
-        cls.user.tier = cls.main_tier
-        cls.user.save()
+        set_membership(cls.user, tier=cls.main_tier)
         cls.other = User.objects.create_user(
             email='reg2@test.com', password='pass', email_verified=True,
         )
-        cls.other.tier = cls.main_tier
+        set_membership(cls.other, tier=cls.main_tier)
         cls.other.save()
 
     def test_promotes_registrants_and_fans_out_to_siblings(self):

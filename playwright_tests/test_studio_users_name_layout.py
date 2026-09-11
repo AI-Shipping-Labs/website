@@ -56,6 +56,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -97,7 +99,7 @@ def _set_user_extras(email, *, stripe_customer_id='', tags=None,
 
     user = User.objects.get(email=email)
     if stripe_customer_id:
-        user.stripe_customer_id = stripe_customer_id
+        set_membership(user, stripe_customer_id=stripe_customer_id)
     if tags is not None:
         user.tags = list(tags)
     if slack_user_id:
@@ -132,7 +134,7 @@ def _seed_dense_paid_users(count):
     tallest layout (name + email).
     """
     from accounts.models import User
-    from payments.models import Tier
+    from payments.models import Membership, Tier
 
     paid = Tier.objects.get(slug='main')
     # Issue #930: ``filter=paid`` now requires an active Stripe subscription
@@ -144,14 +146,22 @@ def _seed_dense_paid_users(count):
             email=f'dense-{idx:03d}@example.com',
             first_name=f'First{idx:03d}',
             last_name=f'Last{idx:03d}',
-            tier=paid,
-            subscription_id=f'sub_dense_{idx:03d}',
             email_verified=True,
             password='!',
         )
         for idx in range(count)
     ]
     User.objects.bulk_create(users)
+    Membership.objects.bulk_create(
+        [
+            Membership(
+                user=user,
+                tier=paid,
+                subscription_id=f'sub_dense_{idx:03d}',
+            )
+            for idx, user in enumerate(users)
+        ]
+    )
     connection.close()
 
 

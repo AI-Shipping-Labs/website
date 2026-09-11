@@ -19,6 +19,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -99,13 +100,11 @@ class StudioUserSearchNameAndEmailTest(TestCase):
         free_user = self._user(
             'free@test.com', first_name='Free', last_name='User',
         )
-        free_user.tier = free
-        free_user.save(update_fields=['tier'])
+        set_membership(free_user, tier=free)
         main_user = self._user(
             'main@test.com', first_name='Main', last_name='Person',
         )
-        main_user.tier = main
-        main_user.save(update_fields=['tier'])
+        set_membership(main_user, tier=main)
 
         response = self.client.get(reverse('studio_user_search'), {'q': 'test'})
 
@@ -129,8 +128,7 @@ class StudioUserSearchNameAndEmailTest(TestCase):
             first_name='Active',
             last_name='Override',
         )
-        active_main.tier = free
-        active_main.save(update_fields=['tier'])
+        set_membership(active_main, tier=free)
         TierOverride.objects.create(
             user=active_main,
             original_tier=free,
@@ -143,8 +141,7 @@ class StudioUserSearchNameAndEmailTest(TestCase):
             first_name='Premium',
             last_name='Override',
         )
-        active_premium.tier = free
-        active_premium.save(update_fields=['tier'])
+        set_membership(active_premium, tier=free)
         TierOverride.objects.create(
             user=active_premium,
             original_tier=free,
@@ -174,11 +171,9 @@ class StudioUserSearchNameAndEmailTest(TestCase):
         basic = Tier.objects.get(slug='basic')
         main = Tier.objects.get(slug='main')
         no_override = self._user('no-override@test.com')
-        no_override.tier = free
-        no_override.save(update_fields=['tier'])
+        set_membership(no_override, tier=free)
         expired = self._user('expired-override@test.com')
-        expired.tier = free
-        expired.save(update_fields=['tier'])
+        set_membership(expired, tier=free)
         TierOverride.objects.create(
             user=expired,
             original_tier=free,
@@ -187,8 +182,7 @@ class StudioUserSearchNameAndEmailTest(TestCase):
             is_active=True,
         )
         inactive = self._user('inactive-override@test.com')
-        inactive.tier = free
-        inactive.save(update_fields=['tier'])
+        set_membership(inactive, tier=free)
         TierOverride.objects.create(
             user=inactive,
             original_tier=free,
@@ -197,8 +191,7 @@ class StudioUserSearchNameAndEmailTest(TestCase):
             is_active=False,
         )
         basic_only = self._user('basic-only-override@test.com')
-        basic_only.tier = free
-        basic_only.save(update_fields=['tier'])
+        set_membership(basic_only, tier=free)
         TierOverride.objects.create(
             user=basic_only,
             original_tier=free,

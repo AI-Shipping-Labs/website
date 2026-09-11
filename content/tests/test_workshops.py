@@ -23,7 +23,7 @@ from content.models import (
     get_workshop_skill_level_description,
     get_workshop_skill_level_label,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -371,18 +371,14 @@ class WorkshopSplitGatingTest(TierSetupMixin, TestCase):
             pages_required_level=10,  # Basic
             recording_required_level=20,  # Main
         )
-        cls.user_free = User.objects.create_user(
-            email='free@example.com', password='pw', tier=cls.free_tier,
-        )
-        cls.user_basic = User.objects.create_user(
-            email='basic@example.com', password='pw', tier=cls.basic_tier,
-        )
-        cls.user_main = User.objects.create_user(
-            email='main@example.com', password='pw', tier=cls.main_tier,
-        )
-        cls.user_premium = User.objects.create_user(
-            email='premium@example.com', password='pw', tier=cls.premium_tier,
-        )
+        cls.user_free = User.objects.create_user(email='free@example.com', password='pw')
+        set_membership(cls.user_free, tier=cls.free_tier)
+        cls.user_basic = User.objects.create_user(email='basic@example.com', password='pw')
+        set_membership(cls.user_basic, tier=cls.basic_tier)
+        cls.user_main = User.objects.create_user(email='main@example.com', password='pw')
+        set_membership(cls.user_main, tier=cls.main_tier)
+        cls.user_premium = User.objects.create_user(email='premium@example.com', password='pw')
+        set_membership(cls.user_premium, tier=cls.premium_tier)
 
     def test_free_user_fails_both_gates(self):
         self.assertFalse(self.workshop.user_can_access_pages(self.user_free))
@@ -410,10 +406,8 @@ class WorkshopSplitGatingTest(TierSetupMixin, TestCase):
 
     def test_staff_bypasses_gates(self):
         """Staff/superusers pass both gates via get_user_level."""
-        staff = User.objects.create_user(
-            email='staff@example.com', password='pw',
-            tier=self.free_tier, is_staff=True,
-        )
+        staff = User.objects.create_user(email='staff@example.com', password='pw', is_staff=True)
+        set_membership(staff, tier=self.free_tier)
         self.assertTrue(self.workshop.user_can_access_pages(staff))
         self.assertTrue(self.workshop.user_can_access_recording(staff))
 
@@ -450,10 +444,8 @@ class WorkshopSplitGatingTest(TierSetupMixin, TestCase):
             pages_required_level=30,
             recording_required_level=30,
         )
-        staff = User.objects.create_user(
-            email='landing-staff@example.com', password='pw',
-            tier=self.free_tier, is_staff=True,
-        )
+        staff = User.objects.create_user(email='landing-staff@example.com', password='pw', is_staff=True)
+        set_membership(staff, tier=self.free_tier)
         self.assertTrue(workshop.user_can_access_landing(staff))
 
 
@@ -555,10 +547,8 @@ class WorkshopPageRequiredLevelTest(TierSetupMixin, TestCase):
             body='Body.',
             required_level=0,  # open override
         )
-        cls.user_free = User.objects.create_user(
-            email='free-page@example.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user_free = User.objects.create_user(email='free-page@example.com', password='pw', email_verified=True)
+        set_membership(cls.user_free, tier=cls.free_tier)
 
     def test_effective_level_inherits_when_null(self):
         # Page without an override resolves to the workshop default.

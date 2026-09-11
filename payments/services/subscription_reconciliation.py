@@ -36,6 +36,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, User
 from integrations.config import get_config
 from payments.models import (
+    Membership,
     StripeWebhookDeliveryAttempt,
     SubscriptionReconciliationFinding,
     SubscriptionReconciliationRun,
@@ -185,10 +186,11 @@ def cohort_queryset():
     """
     # DB-filterable indicators (portable across SQLite + Postgres): a non-empty
     # Stripe customer/subscription id, or a paid base tier.
+    # Issue #1579: the five membership/billing fields live on Membership.
     stripe_indicator = (
-        ~Q(stripe_customer_id="")
-        | ~Q(subscription_id="")
-        | Q(tier__slug__in=_PAID_TIER_SLUGS)
+        ~Q(membership__stripe_customer_id="")
+        | ~Q(membership__subscription_id="")
+        | Q(membership__tier__slug__in=_PAID_TIER_SLUGS)
     )
     base_ids = set(
         User.objects.filter(stripe_indicator).values_list("pk", flat=True)
@@ -207,7 +209,7 @@ def cohort_queryset():
             base_ids.add(user.pk)
     return (
         User.objects.filter(pk__in=base_ids)
-        .select_related("tier", "pending_tier")
+        .select_related("membership__tier", "membership__pending_tier")
         .order_by("email")
     )
 
@@ -287,14 +289,17 @@ def _resolve_stripe_state(user):
     ambiguous.
     """
     try:
-        if user.subscription_id:
-            sub = _retrieve_subscription(user.subscription_id)
+        # Issue #1579: the Stripe identifiers live on payments.Membership.
+        if user.membership.subscription_id:
+            sub = _retrieve_subscription(user.membership.subscription_id)
             if sub is not None:
                 return _state_from_subscription(sub)
             # Stored subscription no longer exists — fall through to a customer
             # listing so a re-subscribe under a new id is still discovered.
-        if user.stripe_customer_id:
-            subs = _list_subscriptions_for_customer(user.stripe_customer_id)
+        if user.membership.stripe_customer_id:
+            subs = _list_subscriptions_for_customer(
+                user.membership.stripe_customer_id
+            )
             return _select_state(subs)
     except CONFIGURATION_ERRORS as exc:
         message = str(exc).splitlines()[0] or exc.__class__.__name__
@@ -381,7 +386,13 @@ def _correlate_deletion_evidence(subscription_id, customer_id):
 
 
 def _tier_slug(user):
-    return user.tier.slug if user.tier_id and user.tier else "free"
+    # Issue #1579: the base tier lives on payments.Membership.
+    membership = user.membership
+    return (
+        membership.tier.slug
+        if membership.tier_id and membership.tier
+        else "free"
+    )
 
 
 def _has_paid_tier(user):
@@ -452,7 +463,7 @@ def classify_user(user, *, price_to_tier=None, duplicate_ids=None):
 
     # No Stripe subscription/history found.
     if not state.found:
-        if _has_paid_tier(user) or user.subscription_id:
+        if _has_paid_tier(user) or user.membership.subscription_id:
             result.classification = CLASSIFICATION_MISSING_SUBSCRIPTION
             result.action = ACTION_REVIEW
             result.message = (
@@ -565,11 +576,18 @@ def _classify_active(user, state, result):
 
     # Entitled now. Desired state is the mapped paid base tier + subscription
     # metadata, pending_tier cleared. Flag metadata drift if any diverges.
+    # Issue #1579: the drift check reads payments.Membership.
     drift = (
-        user.tier_id != tier.pk
-        or (state.subscription_id and user.subscription_id != state.subscription_id)
-        or (state.period_end and user.billing_period_end != state.period_end)
-        or user.pending_tier_id is not None
+        user.membership.tier_id != tier.pk
+        or (
+            state.subscription_id
+            and user.membership.subscription_id != state.subscription_id
+        )
+        or (
+            state.period_end
+            and user.membership.billing_period_end != state.period_end
+        )
+        or user.membership.pending_tier_id is not None
     )
     if not drift:
         result.classification = CLASSIFICATION_OK
@@ -593,7 +611,9 @@ def _classify_active(user, state, result):
 
 
 def _classify_ended(user, state, result):
-    still_entitled = _has_paid_tier(user) or bool(user.subscription_id)
+    still_entitled = (
+        _has_paid_tier(user) or bool(user.membership.subscription_id)
+    )
     if not still_entitled:
         # Already free locally; the ended subscription matches website truth.
         result.classification = CLASSIFICATION_OK
@@ -608,8 +628,8 @@ def _classify_ended(user, state, result):
         result.webhook_processed_at,
         result.webhook_evidence,
     ) = _correlate_deletion_evidence(
-        state.subscription_id or user.subscription_id,
-        user.stripe_customer_id,
+        state.subscription_id or user.membership.subscription_id,
+        user.membership.stripe_customer_id,
     )
 
     result.action = ACTION_REVERT_TO_FREE
@@ -643,8 +663,8 @@ def _duplicate_ownership_map(users):
     by_customer = {}
     by_subscription = {}
     for user in users:
-        cust = (user.stripe_customer_id or "").strip()
-        sub = (user.subscription_id or "").strip()
+        cust = (user.membership.stripe_customer_id or "").strip()
+        sub = (user.membership.subscription_id or "").strip()
         if cust:
             by_customer.setdefault(cust, []).append(user.pk)
         if sub:
@@ -803,44 +823,52 @@ def apply_deterministic(result):
             _apply_active_repair(locked, result)
     _write_audit(result)
     # Refresh the in-memory user so callers/serializers see written state.
+    # Issue #1579: the repair writes landed on Membership — reload that row
+    # and rebind the cached reverse relation alongside the user refresh.
     user.refresh_from_db()
+    user.membership = Membership.objects.select_related(
+        "tier", "pending_tier",
+    ).get(user=user)
 
 
 def _apply_scheduled_repair(user, result):
     from payments.models import Tier
+
+    membership = Membership.for_user(user)
     fields = []
-    if user.pending_tier_id is None or (
-        user.pending_tier and user.pending_tier.slug != "free"
+    if membership.pending_tier_id is None or (
+        membership.pending_tier and membership.pending_tier.slug != "free"
     ):
-        user.pending_tier = Tier.objects.filter(slug="free").first()
+        membership.pending_tier = Tier.objects.filter(slug="free").first()
         fields.append("pending_tier")
-    if result.stripe_period_end and user.billing_period_end != result.stripe_period_end:
-        user.billing_period_end = result.stripe_period_end
+    if result.stripe_period_end and membership.billing_period_end != result.stripe_period_end:
+        membership.billing_period_end = result.stripe_period_end
         fields.append("billing_period_end")
-    if result.stripe_subscription_id and user.subscription_id != result.stripe_subscription_id:
-        user.subscription_id = result.stripe_subscription_id
+    if result.stripe_subscription_id and membership.subscription_id != result.stripe_subscription_id:
+        membership.subscription_id = result.stripe_subscription_id
         fields.append("subscription_id")
     if fields:
-        user.save(update_fields=fields)
+        membership.save(update_fields=fields)
 
 
 def _apply_active_repair(user, result):
     tier = result.stripe_tier
+    membership = Membership.for_user(user)
     fields = []
-    if tier is not None and user.tier_id != tier.pk:
-        user.tier = tier
+    if tier is not None and membership.tier_id != tier.pk:
+        membership.tier = tier
         fields.append("tier")
-    if result.stripe_subscription_id and user.subscription_id != result.stripe_subscription_id:
-        user.subscription_id = result.stripe_subscription_id
+    if result.stripe_subscription_id and membership.subscription_id != result.stripe_subscription_id:
+        membership.subscription_id = result.stripe_subscription_id
         fields.append("subscription_id")
-    if result.stripe_period_end and user.billing_period_end != result.stripe_period_end:
-        user.billing_period_end = result.stripe_period_end
+    if result.stripe_period_end and membership.billing_period_end != result.stripe_period_end:
+        membership.billing_period_end = result.stripe_period_end
         fields.append("billing_period_end")
-    if user.pending_tier_id is not None:
-        user.pending_tier = None
+    if membership.pending_tier_id is not None:
+        membership.pending_tier = None
         fields.append("pending_tier")
     if fields:
-        user.save(update_fields=fields)
+        membership.save(update_fields=fields)
     # An active subscription is "active on tier" — resync status tags + retire
     # a now-redundant override.
     if tier is not None:
@@ -880,7 +908,7 @@ def _write_audit(result):
         "stripe_status": result.stripe_status,
         "stripe_subscription_id": result.stripe_subscription_id,
         "stripe_tier": result.stripe_tier_slug,
-        "old_subscription_id": user.subscription_id,
+        "old_subscription_id": Membership.for_user(user).subscription_id,
         "source": "subscription_reconciliation",
     }
     WebhookEvent.objects.create(
@@ -888,7 +916,7 @@ def _write_audit(result):
         event_type="subscription_reconciliation_apply",
         payload=payload,
         subject_user_id=user.pk,
-        stripe_customer_id=user.stripe_customer_id or "",
+        stripe_customer_id=Membership.for_user(user).stripe_customer_id or "",
         stripe_subscription_id=result.stripe_subscription_id or "",
     )
     return event_id
@@ -906,13 +934,14 @@ def _error_result(user, exc):
 
 def _persist_finding(run, result, *, outcome):
     user = result.user
+    membership = Membership.for_user(user)
     Finding.objects.create(
         run=run,
         user=user,
         email=user.email,
         current_tier=_tier_slug(user),
-        current_subscription_id=user.subscription_id or "",
-        stripe_customer_id=user.stripe_customer_id or "",
+        current_subscription_id=membership.subscription_id or "",
+        stripe_customer_id=membership.stripe_customer_id or "",
         stripe_subscription_id=result.stripe_subscription_id,
         stripe_status=result.stripe_status,
         cancel_at_period_end=result.cancel_at_period_end,

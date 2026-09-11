@@ -16,18 +16,15 @@ from email_app.services.email_service import (
     EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
     EmailServiceError,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 
 @tag("core")
 class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
     def _user(self, email="requester@example.com", **kwargs):
-        return User.objects.create_user(
-            email=email,
-            password="TestPass123!",
-            tier=kwargs.pop("tier", self.free_tier),
-            **kwargs,
-        )
+        user = User.objects.create_user(email=email, password="TestPass123!", **kwargs)
+        set_membership(user, tier=kwargs.pop("tier", self.free_tier))
+        return user
 
     @patch(
         "email_app.services.email_service.EmailService._send_ses",
@@ -176,9 +173,9 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
             with self.subTest(label=label):
                 user = self._user(email=f"{label}@example.com", **attrs)
                 before = {
-                    "tier_id": user.tier_id,
-                    "pending_tier_id": user.pending_tier_id,
-                    "subscription_id": user.subscription_id,
+                    "tier_id": user.membership.tier_id,
+                    "pending_tier_id": user.membership.pending_tier_id,
+                    "subscription_id": user.membership.subscription_id,
                     "account_activated": user.account_activated,
                     "is_staff": user.is_staff,
                     "is_superuser": user.is_superuser,
@@ -191,9 +188,9 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                 user.refresh_from_db()
                 self.assertEqual(
                     {
-                        "tier_id": user.tier_id,
-                        "pending_tier_id": user.pending_tier_id,
-                        "subscription_id": user.subscription_id,
+                        "tier_id": user.membership.tier_id,
+                        "pending_tier_id": user.membership.pending_tier_id,
+                        "subscription_id": user.membership.subscription_id,
                         "account_activated": user.account_activated,
                         "is_staff": user.is_staff,
                         "is_superuser": user.is_superuser,

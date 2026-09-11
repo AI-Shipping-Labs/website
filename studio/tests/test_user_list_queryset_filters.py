@@ -12,6 +12,7 @@ from django.utils import timezone
 from accounts.models import TierOverride
 from payments.models import Tier
 from studio.views import users as users_view
+from tests.fixtures import set_membership
 
 User = get_user_model()
 FAST_PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
@@ -28,47 +29,27 @@ class StudioUserListQuerySetFiltersTest(TestCase):
         cls.main = Tier.objects.get(slug='main')
         cls.premium = Tier.objects.get(slug='premium')
 
-        cls.staff = User.objects.create_user(
-            email='staff@test.com',
-            password='pw',
-            is_staff=True,
-            tier=cls.free,
-        )
-        cls.basic_user = User.objects.create_user(
-            email='basic@test.com',
-            password='pw',
-            tier=cls.basic,
-            subscription_id='sub_BASIC',
-            tags=['early-adopter-2026'],
-        )
-        cls.main_user = User.objects.create_user(
-            email='main@test.com',
-            password='pw',
+        cls.staff = User.objects.create_user(email='staff@test.com', password='pw', is_staff=True)
+        set_membership(cls.staff, tier=cls.free)
+        cls.basic_user = User.objects.create_user(email='basic@test.com', password='pw', tags=['early-adopter-2026'])
+        set_membership(cls.basic_user, tier=cls.basic, subscription_id='sub_BASIC')
+        cls.main_user = User.objects.create_user(email='main@test.com', password='pw', first_name='Ada', slack_user_id='U01MAIN123')
+        set_membership(
+            cls.main_user,
             tier=cls.main,
             subscription_id='sub_MAIN',
-            first_name='Ada',
             stripe_customer_id='cus_MAIN123',
-            slack_user_id='U01MAIN123',
         )
-        cls.premium_user = User.objects.create_user(
-            email='premium@test.com',
-            password='pw',
+        cls.premium_user = User.objects.create_user(email='premium@test.com', password='pw')
+        set_membership(
+            cls.premium_user,
             tier=cls.premium,
             subscription_id='sub_PREMIUM',
         )
-        cls.override_user = User.objects.create_user(
-            email='trial@test.com',
-            password='pw',
-            tier=cls.free,
-            tags=['cohort-a', 'early-adopter'],
-            slack_member=True,
-            slack_checked_at=timezone.now(),
-        )
-        cls.expired_override_user = User.objects.create_user(
-            email='expired@test.com',
-            password='pw',
-            tier=cls.free,
-        )
+        cls.override_user = User.objects.create_user(email='trial@test.com', password='pw', tags=['cohort-a', 'early-adopter'], slack_member=True, slack_checked_at=timezone.now())
+        set_membership(cls.override_user, tier=cls.free)
+        cls.expired_override_user = User.objects.create_user(email='expired@test.com', password='pw')
+        set_membership(cls.expired_override_user, tier=cls.free)
 
         TierOverride.objects.create(
             user=cls.override_user,
@@ -148,9 +129,10 @@ class StudioUserListQuerySetFiltersTest(TestCase):
 
     def test_list_builds_rows_only_for_the_current_page(self):
         for index in range(6):
-            User.objects.create_user(
-                email=f'bulk-{index}@test.com',
-                password='pw',
+            set_membership(
+                User.objects.create_user(
+                    email=f'bulk-{index}@test.com', password='pw',
+                ),
                 tier=self.free,
             )
 

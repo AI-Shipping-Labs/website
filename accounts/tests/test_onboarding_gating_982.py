@@ -37,6 +37,7 @@ from questionnaires.onboarding import (
     GENERIC_ONBOARDING_SLUG,
     can_access_onboarding,
 )
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -52,9 +53,9 @@ def _tier(slug):
 
 def _make_user(email, slug='free'):
     """Create a member on the named tier (``free`` by default)."""
-    return User.objects.create_user(
-        email=email, password='pw', tier=_tier(slug),
-    )
+    user = User.objects.create_user(email=email, password='pw')
+    set_membership(user, tier=_tier(slug))
+    return user
 
 
 def _add_override(user, override_slug='main', *, days=14, is_active=True):
@@ -65,7 +66,7 @@ def _add_override(user, override_slug='main', *, days=14, is_active=True):
     """
     return TierOverride.objects.create(
         user=user,
-        original_tier=user.tier,
+        original_tier=user.membership.tier,
         override_tier=_tier(override_slug),
         expires_at=timezone.now() + datetime.timedelta(days=days),
         is_active=is_active,

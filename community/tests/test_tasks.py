@@ -23,6 +23,7 @@ from community.tasks.hooks import (
 from community.tasks.removal import scheduled_community_removal
 from community.tasks.slack_membership import main_plus_q
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 @override_settings(
@@ -41,9 +42,9 @@ class ScheduledRemovalTest(TestCase):
     def test_removes_user_below_community_tier(self, mock_get_service):
         """User with free tier gets removed from community."""
         user = User.objects.create_user(email="remove_sched@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
 
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -56,9 +57,9 @@ class ScheduledRemovalTest(TestCase):
     def test_skips_if_user_resubscribed(self, mock_get_service):
         """If user re-subscribed to Main+, removal is skipped."""
         user = User.objects.create_user(email="resub@test.com")
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
 
         mock_service = MagicMock()
         mock_get_service.return_value = mock_service
@@ -82,9 +83,9 @@ class ScheduledRemovalTest(TestCase):
     def test_skips_with_active_main_override(self, mock_get_service):
         """Free-base member with an active, non-expired Main override is NOT removed."""
         user = User.objects.create_user(email="override_main@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,
@@ -109,9 +110,9 @@ class ScheduledRemovalTest(TestCase):
     def test_removes_with_expired_override(self, mock_get_service):
         """Free-base member whose Main override has expired IS removed."""
         user = User.objects.create_user(email="override_expired@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,
@@ -136,9 +137,9 @@ class ScheduledRemovalTest(TestCase):
     def test_removes_with_deactivated_override(self, mock_get_service):
         """Free-base member with an is_active=False Main override IS removed."""
         user = User.objects.create_user(email="override_inactive@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,
@@ -159,9 +160,9 @@ class ScheduledRemovalTest(TestCase):
         """Active Basic override does not raise effective level to Main; IS removed."""
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="override_basic@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,
@@ -187,9 +188,9 @@ class ScheduledRemovalTest(TestCase):
         cross-layer contradiction.
         """
         user = User.objects.create_user(email="cross_layer@test.com")
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,

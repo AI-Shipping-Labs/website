@@ -202,7 +202,8 @@ def qualify_monthly_failure(invoice, subscription, *, price_to_tier=None):
 
 def _effective_tier(user):
     """Return canonical strongest current membership tier (base or override)."""
-    tier = user.tier
+    # Issue #1579: the base tier lives on payments.Membership.
+    tier = user.membership.tier
     # Source-specific courtesy grants may coexist.  The shared access resolver
     # orders them by tier strength (then expiry), matching ``get_user_level``;
     # choosing the newest row can under-report an older, stronger grant.
@@ -287,9 +288,10 @@ def start_grace_from_failure(*, invoice, subscription, event_id="",
     with transaction.atomic():
         user = (
             User.objects.select_for_update(of=("self",))
-            .select_related("tier")
+            .select_related("membership__tier")
             .get(pk=user.pk)
         )
+        membership = user.membership
         recovered = Grace.objects.filter(
             stripe_invoice_id=qualification.invoice_id,
             livemode=livemode,
@@ -314,12 +316,12 @@ def start_grace_from_failure(*, invoice, subscription, event_id="",
             qualification.code = "active_grace_exists"
             qualification.message = "A prior invoice still has active grace"
             return active, qualification
-        if user.subscription_id != qualification.subscription_id:
+        if membership.subscription_id != qualification.subscription_id:
             qualification.eligible = False
             qualification.code = "manual_subscription_change"
             qualification.message = "Local authoritative subscription changed"
             return None, qualification
-        if user.tier_id != qualification.tier.pk:
+        if membership.tier_id != qualification.tier.pk:
             qualification.eligible = False
             qualification.code = "manual_tier_change"
             qualification.message = "Local base tier does not match Stripe"
@@ -354,7 +356,7 @@ def start_grace_from_failure(*, invoice, subscription, event_id="",
         effective = _effective_tier(user)
         _audit(
             grace, "started", actor=("stripe_webhook" if source == Grace.SOURCE_WEBHOOK else "scheduled_reconciliation"),
-            reason=source, old_base=user.tier, new_base=user.tier,
+            reason=source, old_base=membership.tier, new_base=membership.tier,
             old_effective=effective, new_effective=effective, run_id=run_id,
         )
     process_due_deliveries(grace_ids=[grace.pk], initial_only=True)
@@ -401,14 +403,15 @@ def recover_grace(*, subscription_id, invoice_id="", event_id="",
         grace = candidates[0]
         user = (
             User.objects.select_for_update(of=("self",))
-            .select_related("tier")
+            .select_related("membership__tier")
             .get(pk=grace.user_id)
         )
+        membership = user.membership
         grace.user = user
         now = timezone.now()
         recovered_at = _utc_timestamp(event_created) or now
         old_effective = _effective_tier(user)
-        if user.subscription_id != grace.stripe_subscription_id:
+        if membership.subscription_id != grace.stripe_subscription_id:
             grace.status = Grace.STATUS_SUPERSEDED
             grace.last_checked_at = now
             grace.last_error_code = "manual_subscription_change"
@@ -431,14 +434,14 @@ def recover_grace(*, subscription_id, invoice_id="", event_id="",
                 "superseded",
                 actor=actor,
                 reason="Authoritative subscription changed before recovery",
-                old_base=user.tier,
-                new_base=user.tier,
+                old_base=membership.tier,
+                new_base=membership.tier,
                 old_effective=old_effective,
                 new_effective=old_effective,
                 run_id=run_id,
             )
             return grace
-        if user.tier_id != grace.base_tier_at_start_id:
+        if membership.tier_id != grace.base_tier_at_start_id:
             _review(
                 grace,
                 "manual_tier_change",
@@ -478,11 +481,11 @@ def recover_grace(*, subscription_id, invoice_id="", event_id="",
         from payments.services.stripe_tags import reconcile_stripe_status_tags
 
         before_tags = set(grace.user.tags or [])
-        if user.tier_id and user.tier.level > 0:
+        if membership.tier_id and membership.tier.level > 0:
             reconcile_stripe_status_tags(
                 user,
                 active=True,
-                tier=user.tier,
+                tier=membership.tier,
             )
         after_tags = set(user.tags or [])
         tag_changes = [
@@ -491,7 +494,7 @@ def recover_grace(*, subscription_id, invoice_id="", event_id="",
         ]
         _audit(
             grace, "recovered", actor=actor, reason="Stripe payment recovered",
-            old_base=user.tier, new_base=user.tier,
+            old_base=membership.tier, new_base=membership.tier,
             old_effective=old_effective, new_effective=old_effective,
             tag_changes=tag_changes, run_id=run_id,
         )
@@ -535,7 +538,8 @@ def _review(grace, code, message, *, actor="grace_sweep"):
         _audit(
             grace, "review", actor=actor,
             reason=f"{bounded_code}: {bounded_message}",
-            old_base=grace.user.tier, new_base=grace.user.tier,
+            old_base=grace.user.membership.tier,
+            new_base=grace.user.membership.tier,
             old_effective=effective, new_effective=effective,
         )
 
@@ -556,7 +560,8 @@ def _restore_active(grace):
     _audit(
         grace, "resumed", actor="grace_sweep",
         reason="Review resolved; monthly payment grace resumed",
-        old_base=grace.user.tier, new_base=grace.user.tier,
+        old_base=grace.user.membership.tier,
+        new_base=grace.user.membership.tier,
         old_effective=effective, new_effective=effective,
     )
 
@@ -566,9 +571,9 @@ def _revalidate(grace):
     # this call.  Check that local manual authority first, before any Stripe
     # ownership lookup can collapse a subscription edit into a generic stale
     # ownership result.
-    if grace.user.subscription_id != grace.stripe_subscription_id:
+    if grace.user.membership.subscription_id != grace.stripe_subscription_id:
         return None, None, "manual_subscription_change", "Authoritative subscription changed"
-    if grace.user.tier_id != grace.base_tier_at_start_id:
+    if grace.user.membership.tier_id != grace.base_tier_at_start_id:
         return None, None, "manual_tier_change", "Base tier changed while grace was active"
     try:
         subscription = _retrieve_subscription(grace.stripe_subscription_id)
@@ -619,9 +624,10 @@ def _expire_locked(grace):
     # a concurrent staff tier/subscription edit must win over this transition.
     user = (
         User.objects.select_for_update(of=("self",))
-        .select_related("tier")
+        .select_related("membership__tier")
         .get(pk=grace.user_id)
     )
+    membership = user.membership
     grace.user = user
     subscription, invoice, code, message = _revalidate(grace)
     if code == "recovered":
@@ -635,13 +641,13 @@ def _expire_locked(grace):
         _review(grace, code, message)
         return grace
 
-    old_base = user.tier
+    old_base = membership.tier
     old_effective = _effective_tier(user)
     free = Tier.objects.get(slug="free")
-    user.tier = free
-    user.pending_tier = None
-    user.billing_period_end = None
-    user.save(update_fields=["tier", "pending_tier", "billing_period_end"])
+    membership.tier = free
+    membership.pending_tier = None
+    membership.billing_period_end = None
+    membership.save(update_fields=["tier", "pending_tier", "billing_period_end"])
     tag_changes = _reconcile_lapsed_tags(user)
     new_effective = _effective_tier(user)
     community_removed = False
@@ -685,7 +691,7 @@ def sweep_payment_graces(*, now=None):
         with transaction.atomic():
             grace = (
                 Grace.objects.select_for_update(of=("self",)).select_related(
-                    "user__tier", "base_tier_at_start",
+                    "user__membership__tier", "base_tier_at_start",
                 ).get(pk=grace_id)
             )
             if grace.status not in {Grace.STATUS_ACTIVE, Grace.STATUS_REVIEW}:
@@ -730,7 +736,7 @@ def _delivery_backoff(delivery):
 def _claim_delivery(delivery_id, now):
     with transaction.atomic():
         delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
-            "grace__user__tier", "grace__base_tier_at_start",
+            "grace__user__membership__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
         if delivery.status == Delivery.STATUS_SENT or delivery.attempt_count >= MAX_DELIVERY_ATTEMPTS:
             return None
@@ -777,7 +783,7 @@ def _begin_delivery_transport(delivery_id, token, now):
     """Fence stale workers immediately before the irreversible SES call."""
     with transaction.atomic():
         delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
-            "grace__user__tier", "grace__base_tier_at_start",
+            "grace__user__membership__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
         if (
             delivery.status == Delivery.STATUS_SENT
@@ -799,9 +805,15 @@ def _delivery_template(delivery):
     context = {
         "recovery_url": portal,
         "deadline_utc": deadline.strftime("%Y-%m-%d %H:%M UTC"),
-        "base_tier": user.tier.name if user.tier_id else "Free",
+        "base_tier": (
+            user.membership.tier.name if user.membership.tier_id else "Free"
+        ),
         "effective_tier": effective.name if effective else "Free",
-        "override_continues": bool(effective and effective.level > (user.tier.level if user.tier_id else 0)),
+        "override_continues": bool(
+            effective
+            and effective.level
+            > (user.membership.tier.level if user.membership.tier_id else 0)
+        ),
         "stripe_customer_id": grace.stripe_customer_id,
         "stripe_subscription_id": grace.stripe_subscription_id,
         "stripe_invoice_id": grace.stripe_invoice_id,

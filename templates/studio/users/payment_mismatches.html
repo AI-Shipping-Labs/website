@@ -75,7 +75,7 @@
         <td class="px-4 py-3 align-top" data-label="Paid account">
           {% if row.paid_user %}
           <a href="{% url 'studio_user_detail' row.paid_user.pk %}" class="text-sm text-accent hover:underline break-all">{{ row.paid_user.email }}</a>
-          <p class="text-xs text-muted-foreground mt-1">{{ row.paid_user.tier.name }}</p>
+          <p class="text-xs text-muted-foreground mt-1">{{ row.paid_user.membership.tier.name }}</p>
           {% else %}
           <span class="text-sm text-muted-foreground">Unresolved</span>
           {% endif %}

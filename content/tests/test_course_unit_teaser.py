@@ -22,7 +22,7 @@ from django.test import TestCase
 
 from content.access import LEVEL_MAIN
 from content.models import Course, Module, Unit
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -89,7 +89,7 @@ class NonEligibleUserTeaserTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(email='basic@test.com', password='testpass')
-        self.user.tier = self.basic_tier
+        set_membership(self.user, tier=self.basic_tier)
         self.user.save()
         self.client.login(email='basic@test.com', password='testpass')
 
@@ -228,7 +228,7 @@ class EligibleUserNoRegressionTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def setUp(self):
         self.user = User.objects.create_user(email='paid@test.com', password='testpass')
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.client.login(email='paid@test.com', password='testpass')
 
@@ -269,7 +269,7 @@ class PreviewUnitNoRegressionTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_basic_user_gets_200(self):
         user = User.objects.create_user(email='basic2@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic2@test.com', password='testpass')
         response = self.client.get(self.preview_url)
@@ -295,7 +295,7 @@ class EmptyBodyFallbackTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def setUp(self):
         user = User.objects.create_user(email='basic3@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic3@test.com', password='testpass')
 
@@ -347,7 +347,7 @@ class CourseOutlineLockedRowsTest(CourseUnitTeaserSetupMixin, TestCase):
 
     def test_basic_user_sees_locked_rows_clickable(self):
         user = User.objects.create_user(email='basic4@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic4@test.com', password='testpass')
         response = self.client.get('/courses/teaser-course')
@@ -359,7 +359,7 @@ class CourseOutlineLockedRowsTest(CourseUnitTeaserSetupMixin, TestCase):
     def test_eligible_user_sees_no_lock_marker(self):
         """Lock testids are only for the gated path."""
         user = User.objects.create_user(email='paid2@test.com', password='testpass')
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='paid2@test.com', password='testpass')
         response = self.client.get('/courses/teaser-course')

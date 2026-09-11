@@ -30,7 +30,7 @@ from content.services.enrollment import (
     is_enrolled,
     unenroll,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -508,7 +508,7 @@ class DashboardEnrollmentSourceTest(TierSetupMixin, TestCase):
     def test_tier_gated_enrollment_visible_when_access_returns(self):
         # Same setup as above but user is on Main tier — card should
         # show (issue #236 acceptance criterion).
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         gated, units = _make_course_with_units(
             title='Gated Course', slug='dsh-gated2', required_level=LEVEL_MAIN,

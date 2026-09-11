@@ -18,6 +18,7 @@ from payments.exceptions import WebhookUnmatchedUserError
 from payments.models import StripeWebhookDeliveryAttempt, Tier, WebhookEvent
 from payments.services import webhook_dispatch
 from payments.services.webhook_dispatch import process_event
+from tests.fixtures import set_membership
 
 
 @tag("core")
@@ -76,6 +77,9 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
     def test_terminal_winner_runs_handler_once_and_loser_short_circuits(self):
         member = User.objects.create_user(
             email="concurrent-webhook@test.com",
+        )
+        set_membership(
+            member,
             stripe_customer_id=self.event_obj["customer"],
             subscription_id=self.event_obj["id"],
             tier=Tier.objects.get(slug="main"),
@@ -130,8 +134,8 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
             1,
         )
         member.refresh_from_db()
-        self.assertEqual(member.tier.slug, "free")
-        self.assertEqual(member.subscription_id, "")
+        self.assertEqual(member.membership.tier.slug, "free")
+        self.assertEqual(member.membership.subscription_id, "")
         community_remove.assert_called_once_with(member)
 
     def test_retryable_winner_releases_claim_for_waiting_delivery(self):

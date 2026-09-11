@@ -24,6 +24,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, Token
 from api.views import tier_reconcile as tier_reconcile_module
 from payments.models import Tier, WebhookEvent
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -154,7 +155,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
     def test_diagnostics_lists_users_whose_stripe_tier_differs_from_direct_tier(self):
         user = self._user("paid@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._get_diagnostics()
 
         self.assertEqual(response.status_code, 200)
@@ -167,7 +168,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         self.assertEqual(entry["action_needed"], "set_direct_tier")
         self.assertEqual(entry["current_tier_source"], "none")
         self.assertEqual(entry["subscription_id"], "sub_active")
-        self.assertEqual(entry["stripe_customer_id"], user.stripe_customer_id)
+        self.assertEqual(entry["stripe_customer_id"], user.membership.stripe_customer_id)
 
     def test_diagnostics_flags_users_whose_paid_access_comes_from_a_redundant_override(self):
         user = self._user("override@test.com")
@@ -178,7 +179,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._get_diagnostics()
 
         body = response.json()
@@ -203,7 +204,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._get_diagnostics()
 
         body = response.json()
@@ -216,7 +217,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
     def test_diagnostics_flags_paid_users_with_no_active_stripe_subscription(self):
         user = self._user("nosub@test.com", tier=self.main)
 
-        with patch_subscriptions({user.stripe_customer_id: []}):
+        with patch_subscriptions({user.membership.stripe_customer_id: []}):
             response = self._get_diagnostics()
 
         body = response.json()
@@ -230,7 +231,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         user = self._user("weirdprice@test.com")
 
         with patch_subscriptions({
-            user.stripe_customer_id: [subscription(price_id="price_unknown")]
+            user.membership.stripe_customer_id: [subscription(price_id="price_unknown")]
         }):
             response = self._get_diagnostics()
 
@@ -253,7 +254,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         )
 
         with patch_subscriptions({
-            user.stripe_customer_id: [subscription(current_period_end=period_end)]
+            user.membership.stripe_customer_id: [subscription(current_period_end=period_end)]
         }):
             response = self._get_diagnostics()
 
@@ -274,7 +275,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         )
 
         with patch_subscriptions({
-            user.stripe_customer_id: [subscription(current_period_end=period_end)]
+            user.membership.stripe_customer_id: [subscription(current_period_end=period_end)]
         }):
             response = self._get_diagnostics(include="ok")
 
@@ -289,9 +290,9 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         carol = self._user("carol@test.com")
 
         with patch_subscriptions({
-            alice.stripe_customer_id: [subscription("sub_alice")],
-            bob.stripe_customer_id: [subscription("sub_bob")],
-            carol.stripe_customer_id: [subscription("sub_carol")],
+            alice.membership.stripe_customer_id: [subscription("sub_alice")],
+            bob.membership.stripe_customer_id: [subscription("sub_bob")],
+            carol.membership.stripe_customer_id: [subscription("sub_carol")],
         }):
             response = self._get_diagnostics(email="ALICE@test.com")
 
@@ -316,7 +317,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         User.objects.create_user(email="plain2@test.com", password="x")
 
         with patch_subscriptions({
-            eligible.stripe_customer_id: [subscription("sub_e")],
+            eligible.membership.stripe_customer_id: [subscription("sub_e")],
         }) as stripe_list:
             response = self._get_diagnostics()
 
@@ -334,9 +335,9 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         bob = self._user("bob@test.com")
 
         with patch_subscriptions({
-            alice.stripe_customer_id: [subscription("sub_a")],
-            bob.stripe_customer_id: [subscription("sub_b")],
-            carol.stripe_customer_id: [subscription("sub_c")],
+            alice.membership.stripe_customer_id: [subscription("sub_a")],
+            bob.membership.stripe_customer_id: [subscription("sub_b")],
+            carol.membership.stripe_customer_id: [subscription("sub_c")],
         }):
             response = self._get_diagnostics()
 
@@ -412,7 +413,7 @@ class TierReconcileDiagnosticsTest(TierReconcileTestBase):
         user = self._user("metadata-resolves@test.com")
 
         with patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     price_id="price_regenerated_unknown",
                     price_metadata={"tier_slug": "main"},
@@ -439,7 +440,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({
                 "emails": ["paid@test.com"],
                 "dry_run": True,
@@ -454,7 +455,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
 
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertTrue(override.is_active)
         self.assertFalse(
             WebhookEvent.objects.filter(
@@ -467,7 +468,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         period_end = 1_800_000_123
 
         with patch_subscriptions({
-            user.stripe_customer_id: [subscription(current_period_end=period_end)]
+            user.membership.stripe_customer_id: [subscription(current_period_end=period_end)]
         }):
             response = self._post_apply({"emails": ["paid@test.com"]})
 
@@ -479,10 +480,10 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(body["results"][0]["status"], "changed")
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
-        self.assertEqual(user.subscription_id, "sub_active")
+        self.assertEqual(user.membership.tier.slug, "main")
+        self.assertEqual(user.membership.subscription_id, "sub_active")
         self.assertEqual(
-            user.billing_period_end,
+            user.membership.billing_period_end,
             datetime.fromtimestamp(period_end, tz=datetime_timezone.utc),
         )
         self.assertEqual(
@@ -501,7 +502,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({"emails": ["override@test.com"]})
 
         body = response.json()
@@ -518,9 +519,9 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         User.objects.create_user(email="plain2@test.com", password="x")
 
         with patch_subscriptions({
-            alice.stripe_customer_id: [subscription("sub_a")],
-            bob.stripe_customer_id: [subscription("sub_b")],
-            carol.stripe_customer_id: [subscription("sub_c")],
+            alice.membership.stripe_customer_id: [subscription("sub_a")],
+            bob.membership.stripe_customer_id: [subscription("sub_b")],
+            carol.membership.stripe_customer_id: [subscription("sub_c")],
         }) as stripe_list:
             response = self._post_apply({})
 
@@ -549,7 +550,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
     def test_apply_email_match_is_case_insensitive(self):
         user = self._user("alice@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({"emails": ["ALICE@TEST.COM"]})
 
         body = response.json()
@@ -571,8 +572,8 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         )
 
         with patch_subscriptions({
-            mismatched.stripe_customer_id: [subscription()],
-            in_sync.stripe_customer_id: [
+            mismatched.membership.stripe_customer_id: [subscription()],
+            in_sync.membership.stripe_customer_id: [
                 subscription(current_period_end=period_end),
             ],
         }):
@@ -596,7 +597,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
     def test_apply_with_warning_status_records_warning_in_response_and_does_not_write(self):
         user = self._user("nosub@test.com", tier=self.main)
 
-        with patch_subscriptions({user.stripe_customer_id: []}):
+        with patch_subscriptions({user.membership.stripe_customer_id: []}):
             response = self._post_apply({"emails": ["nosub@test.com"]})
 
         body = response.json()
@@ -607,7 +608,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertIsNone(body["results"][0]["to"])
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_apply_with_stripe_lookup_error_returns_warning_not_500(self):
         user = self._user("stripe-error@test.com")
@@ -632,7 +633,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertIn("Stripe lookup failed", body["results"][0]["message"])
 
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
 
     def test_apply_caps_at_max_users_when_emails_omitted(self):
         for index in range(3):
@@ -682,7 +683,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
     def test_apply_unauthenticated_returns_401_with_no_writes(self):
         user = self._user("paid@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self.client.post(
                 APPLY_URL,
                 data=json.dumps({"emails": ["paid@test.com"]}),
@@ -695,7 +696,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
             {"error": "Authentication token required"},
         )
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertFalse(
             WebhookEvent.objects.filter(
                 event_type="backfill_stripe_tiers",
@@ -733,7 +734,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
     def test_apply_response_field_names_match_documented_shape(self):
         user = self._user("paid@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({"emails": ["paid@test.com"]})
 
         body = response.json()
@@ -764,7 +765,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
     def test_diagnostics_response_field_names_match_documented_shape(self):
         user = self._user("paid@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._get_diagnostics()
 
         body = response.json()
@@ -812,7 +813,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("force-sweep@test.com")
         matching, other = self._create_two_overrides(user, self.main, basic)
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({
                 "emails": [user.email],
                 "force": True,
@@ -832,7 +833,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("noforce-keep-other@test.com")
         matching, other = self._create_two_overrides(user, self.main, basic)
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({"emails": [user.email]})
 
         self.assertEqual(response.status_code, 200)
@@ -856,7 +857,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         )
 
         with patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(current_period_end=stripe_period),
             ]
         }):
@@ -872,7 +873,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(body["results"][0]["billing_period_end"], expected.isoformat())
 
         user.refresh_from_db()
-        self.assertEqual(user.billing_period_end, expected)
+        self.assertEqual(user.membership.billing_period_end, expected)
 
     def test_apply_without_force_refreshes_existing_billing_period_end(self):
         stripe_period = 1_800_000_456
@@ -888,7 +889,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         )
 
         with patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(current_period_end=stripe_period),
             ]
         }):
@@ -899,7 +900,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         expected = datetime.fromtimestamp(
             stripe_period, tz=datetime_timezone.utc,
         )
-        self.assertEqual(user.billing_period_end, expected)
+        self.assertEqual(user.membership.billing_period_end, expected)
 
     def test_apply_with_force_and_no_stripe_customer_id_is_still_skipped_no_writes(self):
         """User with no Stripe customer ID is excluded by
@@ -931,7 +932,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         override.refresh_from_db()
         plain.refresh_from_db()
         self.assertTrue(override.is_active)
-        self.assertEqual(plain.tier.slug, "free")
+        self.assertEqual(plain.membership.tier.slug, "free")
         self.assertFalse(
             WebhookEvent.objects.filter(
                 event_type="backfill_stripe_tiers",
@@ -947,7 +948,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
             expires_at=timezone.now() + timedelta(days=30),
         )
 
-        with patch_subscriptions({user.stripe_customer_id: []}):
+        with patch_subscriptions({user.membership.stripe_customer_id: []}):
             response = self._post_apply({
                 "emails": [user.email],
                 "force": True,
@@ -973,7 +974,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("force-dryrun@test.com")
         matching, other = self._create_two_overrides(user, self.main, basic)
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({
                 "emails": [user.email],
                 "force": True,
@@ -993,7 +994,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user.refresh_from_db()
         self.assertTrue(matching.is_active)
         self.assertTrue(other.is_active)
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertFalse(
             WebhookEvent.objects.filter(
                 event_type="backfill_stripe_tiers",
@@ -1022,7 +1023,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("item-only@test.com")
 
         with patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(
                     current_period_end=None,
                     item_current_period_end=item_period,
@@ -1038,7 +1039,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(row["billing_period_end"], expected.isoformat())
 
         user.refresh_from_db()
-        self.assertEqual(user.billing_period_end, expected)
+        self.assertEqual(user.membership.billing_period_end, expected)
 
     def test_apply_response_includes_billing_period_end_per_row(self):
         """Every per-row apply result carries ``billing_period_end``.
@@ -1050,7 +1051,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("bpe-iso@test.com")
 
         with patch_subscriptions({
-            user.stripe_customer_id: [
+            user.membership.stripe_customer_id: [
                 subscription(current_period_end=period_end),
             ]
         }):
@@ -1073,7 +1074,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         user = self._user("force-audit@test.com")
         matching, other = self._create_two_overrides(user, self.main, basic)
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({
                 "emails": [user.email],
                 "force": True,
@@ -1104,11 +1105,8 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         the call, the user has a tier, a subscription id, and a
         billing period end — without any manual prod shell write.
         """
-        user = User.objects.create_user(
-            email="casraysa@test.com",
-            password="x",
-            stripe_customer_id="",
-        )
+        user = User.objects.create_user(email="casraysa@test.com", password="x")
+        set_membership(user, stripe_customer_id="")
 
         with patch_subscriptions({
             "cus_recovered": [subscription("sub_recovered")],
@@ -1134,9 +1132,9 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(row["stripe_customer_id"], "cus_recovered")
 
         user.refresh_from_db()
-        self.assertEqual(user.stripe_customer_id, "cus_recovered")
-        self.assertEqual(user.tier.slug, "main")
-        self.assertEqual(user.subscription_id, "sub_recovered")
+        self.assertEqual(user.membership.stripe_customer_id, "cus_recovered")
+        self.assertEqual(user.membership.tier.slug, "main")
+        self.assertEqual(user.membership.subscription_id, "sub_recovered")
 
     def test_apply_with_customer_ids_does_not_overwrite_existing_customer_id(self):
         """Stomping a non-empty ``stripe_customer_id`` is destructive.
@@ -1147,7 +1145,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         skip the Stripe call entirely.
         """
         user = self._user("existing-id@test.com")  # cus_existing-id
-        original_customer_id = user.stripe_customer_id
+        original_customer_id = user.membership.stripe_customer_id
 
         with patch_subscriptions({}) as stripe_list:
             response = self._post_apply({
@@ -1167,7 +1165,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         # No Stripe call should have happened — the mismatch short-circuits.
         self.assertEqual(stripe_list.call_count, 0)
         user.refresh_from_db()
-        self.assertEqual(user.stripe_customer_id, original_customer_id)
+        self.assertEqual(user.membership.stripe_customer_id, original_customer_id)
 
     def test_apply_without_customer_ids_is_unchanged_behaviour(self):
         """When ``customer_ids`` is omitted entirely, the response shape
@@ -1175,7 +1173,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         """
         user = self._user("nochange@test.com")
 
-        with patch_subscriptions({user.stripe_customer_id: [subscription()]}):
+        with patch_subscriptions({user.membership.stripe_customer_id: [subscription()]}):
             response = self._post_apply({"emails": [user.email]})
 
         self.assertEqual(response.status_code, 200)
@@ -1188,7 +1186,7 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         self.assertEqual(row["to"], "main")
         # The new ``stripe_customer_id`` field reflects today's existing
         # value, not an injected one.
-        self.assertEqual(row["stripe_customer_id"], user.stripe_customer_id)
+        self.assertEqual(row["stripe_customer_id"], user.membership.stripe_customer_id)
 
     def test_apply_with_customer_ids_not_an_object_returns_400_invalid_type(self):
         self._user("paid@test.com")
@@ -1265,11 +1263,8 @@ class TierReconcileApplyTest(TierReconcileTestBase):
         The response still previews the would-change row so operators
         can confirm the recovery before re-running with ``dry_run=False``.
         """
-        user = User.objects.create_user(
-            email="dryrun-recover@test.com",
-            password="x",
-            stripe_customer_id="",
-        )
+        user = User.objects.create_user(email="dryrun-recover@test.com", password="x")
+        set_membership(user, stripe_customer_id="")
 
         with patch_subscriptions({
             "cus_dryrun": [subscription("sub_dryrun")],
@@ -1289,4 +1284,4 @@ class TierReconcileApplyTest(TierReconcileTestBase):
 
         user.refresh_from_db()
         # The user's stripe_customer_id is unchanged in dry-run.
-        self.assertEqual(user.stripe_customer_id, "")
+        self.assertEqual(user.membership.stripe_customer_id, "")

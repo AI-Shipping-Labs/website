@@ -72,6 +72,7 @@ from playwright_tests.worktree_guard import (
     current_xdist_worker_id,
 )
 from scripts.browser_journey_policy import register_browser_journey_policy
+from tests.fixtures import set_membership
 from website.test_database_guard import assert_playwright_database_is_safe
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -883,7 +884,7 @@ def create_user(
     )
     user.set_password(password)
     tier = Tier.objects.get(slug=tier_slug)
-    user.tier = tier
+    set_membership(user, tier=tier)
     user.email_verified = email_verified
     user.unsubscribed = unsubscribed
     user.is_staff = is_staff

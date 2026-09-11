@@ -16,6 +16,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -43,11 +44,8 @@ class StudioUserListTagFilterTest(TestCase):
         )
         # A paid user (active Stripe subscription) with the early-adopter tag
         # (used by combined-filter test).
-        cls.dan = User.objects.create_user(
-            email='dan@test.com', password='testpass',
-            tier=cls.main_tier, subscription_id='sub_DAN',
-            tags=['early-adopter'],
-        )
+        cls.dan = User.objects.create_user(email='dan@test.com', password='testpass', tags=['early-adopter'])
+        set_membership(cls.dan, tier=cls.main_tier, subscription_id='sub_DAN')
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
@@ -113,9 +111,8 @@ class StudioUserListTagFilterTest(TestCase):
             'vip',
             'cohort-a',
         ]
-        self.alice.tier = self.main_tier
-        self.alice.subscription_id = 'sub_ALICE'
-        self.alice.save(update_fields=['tags', 'tier', 'subscription_id'])
+        set_membership(self.alice, tier=self.main_tier, subscription_id='sub_ALICE')
+        self.alice.save(update_fields=['tags'])
 
         response = self.client.get('/studio/users/?filter=paid&q=alice')
         row = response.context['user_rows'][0]

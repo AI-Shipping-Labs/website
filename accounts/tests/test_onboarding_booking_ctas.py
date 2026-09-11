@@ -17,6 +17,7 @@ from django.urls import reverse
 
 from community.models import CallHost
 from questionnaires.models import Response, ResponseQuestion
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -61,9 +62,8 @@ def _submit_onboarding(client):
 class OnboardingSubmitLandsOnCompletionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='complete-form@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='complete-form@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)
@@ -97,9 +97,8 @@ class CompletionScreenBookingCtasTest(TestCase):
 
     @classmethod
     def setUpTestData(cls):
-        cls.member = User.objects.create_user(
-            email='ctas@test.com', password='pw', tier=_basic_tier(),
-        )
+        cls.member = User.objects.create_user(email='ctas@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
         self.client.force_login(self.member)

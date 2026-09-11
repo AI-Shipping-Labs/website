@@ -15,23 +15,22 @@ import datetime
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import User
 from email_app.models import EmailCampaign
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 
 @tag("core")
 class CampaignExcludesUnverifiedTest(TierSetupMixin, TestCase):
     def test_campaign_audience_excludes_unverified_users(self):
         """Only the verified user makes it into the campaign audience."""
-        verified = User.objects.create_user(
+        verified = create_user_with_membership(
             email="verified@example.com",
             tier=self.free_tier,
             email_verified=True,
             unsubscribed=False,
         )
         # Soon-to-expire unverified user.
-        User.objects.create_user(
+        create_user_with_membership(
             email="expiring@example.com",
             tier=self.free_tier,
             email_verified=False,
@@ -41,7 +40,7 @@ class CampaignExcludesUnverifiedTest(TierSetupMixin, TestCase):
         )
         # Already-expired unverified user (would be purged on the next
         # daily run, but might still be in the DB at campaign send time).
-        User.objects.create_user(
+        create_user_with_membership(
             email="expired@example.com",
             tier=self.free_tier,
             email_verified=False,

@@ -20,7 +20,7 @@ from notifications.services.notification_service import (
     NotificationService,
     _get_eligible_users,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -30,14 +30,14 @@ class EligibleUsersOverrideTest(TierSetupMixin, TestCase):
     """_get_eligible_users includes active override members."""
 
     def _user(self, email, tier, *, is_active=True):
-        return User.objects.create_user(
+        return create_user_with_membership(
             email=email, password="pw", tier=tier, is_active=is_active,
         )
 
     def _override(self, user, tier, *, is_active=True, expires_in_days=7):
         TierOverride.objects.create(
             user=user,
-            original_tier=user.tier,
+            original_tier=user.membership.tier,
             override_tier=tier,
             expires_at=timezone.now() + timedelta(days=expires_in_days),
             is_active=is_active,

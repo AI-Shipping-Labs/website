@@ -17,7 +17,7 @@ from accounts.templatetags.accounts_extras import (
     button_classes,
 )
 from plans.models import Plan, Sprint
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -153,12 +153,8 @@ class ButtonClassesTagTest(TestCase):
 
 class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
     def test_dashboard_welcome_and_plan_ctas_use_canonical_classes(self):
-        user = User.objects.create_user(
-            email='dashboard-buttons@test.com',
-            password='pw',
-            tier=self.main_tier,
-            email_verified=True,
-        )
+        user = User.objects.create_user(email='dashboard-buttons@test.com', password='pw', email_verified=True)
+        set_membership(user, tier=self.main_tier)
         sprint = Sprint.objects.create(
             name='Button Sprint',
             slug='button-sprint',
@@ -192,13 +188,12 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
 
     @override_settings(STRIPE_CUSTOMER_PORTAL_URL='https://billing.example.test/portal')
     def test_account_page_membership_and_form_ctas_use_canonical_classes(self):
-        user = User.objects.create_user(
-            email='account-buttons@test.com',
-            password='pw',
+        user = User.objects.create_user(email='account-buttons@test.com', password='pw', email_verified=True)
+        set_membership(
+            user,
             tier=self.main_tier,
             subscription_id='sub_test_buttons',
             billing_period_end=timezone.now() + datetime.timedelta(days=30),
-            email_verified=True,
         )
         self.client.force_login(user)
 

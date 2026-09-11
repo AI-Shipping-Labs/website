@@ -68,7 +68,7 @@ class TierOverridesGrantTest(TestCase):
 
     def test_grants_ten_year_main_override(self):
         member = User.objects.create_user(email="vinayak@example.com", password=None)
-        self.assertEqual(member.tier.slug, "free")
+        self.assertEqual(member.membership.tier.slug, "free")
 
         before = timezone.now()
         response = self._post({"emails": ["vinayak@example.com"]})

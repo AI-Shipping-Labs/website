@@ -37,6 +37,8 @@ from scripts.browser_journey_policy import browser_journey
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -303,7 +305,7 @@ def _create_user(email, password="testpass123", tier_slug=None):
     user.email_verified = True
     if tier_slug:
         tier = Tier.objects.get(slug=tier_slug)
-        user.tier = tier
+        set_membership(user, tier=tier)
     user.save()
     connection.close()
     return user

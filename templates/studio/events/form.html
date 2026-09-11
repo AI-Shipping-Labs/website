@@ -447,7 +447,7 @@
               {{ reg.registered_at|operator_datetime }}
             </td>
             <td class="px-3 py-2 align-top text-foreground">
-              {{ reg.user.tier.name|default:"Free" }}
+              {{ reg.user.membership.tier.name|default:"Free" }}
             </td>
             <td class="px-3 py-2 align-top whitespace-nowrap" data-testid="registration-joined">
               {% if reg.joined_at %}
@@ -486,7 +486,7 @@
           </div>
           <div class="flex gap-2">
             <dt class="w-24 shrink-0 text-muted-foreground">Tier</dt>
-            <dd class="text-foreground min-w-0 break-words">{{ reg.user.tier.name|default:"Free" }}</dd>
+            <dd class="text-foreground min-w-0 break-words">{{ reg.user.membership.tier.name|default:"Free" }}</dd>
           </div>
           <div class="flex gap-2" data-testid="registration-card-joined">
             <dt class="w-24 shrink-0 text-muted-foreground">Joined</dt>

@@ -3,7 +3,7 @@
 A user is eligible at level N if their *effective* tier level is >= N, where
 the effective level is the higher of:
 
-- their real subscription tier (``user.tier.level``), OR
+- their real subscription tier (the level on their ``payments.Membership`` row), OR
 - an active, non-expired ``TierOverride`` whose ``override_tier.level >= N``.
 
 This is the canonical recipient/audience predicate. It is the same OR-clause
@@ -35,7 +35,8 @@ def effective_level_at_least_q(min_level):
     rows.
     """
     now = timezone.now()
-    return Q(tier__level__gte=min_level) | Q(
+    # Issue #1579: the base tier lives on payments.Membership.
+    return Q(membership__tier__level__gte=min_level) | Q(
         tier_overrides__is_active=True,
         tier_overrides__expires_at__gt=now,
         tier_overrides__override_tier__level__gte=min_level,

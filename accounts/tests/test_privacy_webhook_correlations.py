@@ -21,6 +21,7 @@ from payments.models import (
     Tier,
     WebhookEvent,
 )
+from tests.fixtures import set_membership
 
 
 @tag("core")
@@ -32,8 +33,7 @@ class PrivacyWebhookCorrelationTest(TestCase):
             last_name="Member",
         )
         target_id = target.pk
-        target.stripe_customer_id = "cus_target"
-        target.save(update_fields=["stripe_customer_id"])
+        set_membership(target, stripe_customer_id="cus_target")
 
         host = CallHost.objects.create(
             name="Alexey",
@@ -276,8 +276,7 @@ class PrivacyWebhookCorrelationTest(TestCase):
 
     def test_payment_correlations_include_only_subject_owned_rows(self):
         target = User.objects.create_user(email="payment-target@test.example")
-        target.stripe_customer_id = "cus_user_owned"
-        target.save(update_fields=["stripe_customer_id"])
+        set_membership(target, stripe_customer_id="cus_user_owned")
         main = Tier.objects.get(slug="main")
         now = timezone.now()
 
@@ -384,8 +383,7 @@ class PrivacyWebhookCorrelationTest(TestCase):
 
     def test_customer_and_subscription_object_ids_are_redacted(self):
         target = User.objects.create_user(email="object-id-target@test.example")
-        target.stripe_customer_id = "cus_object_target"
-        target.save(update_fields=["stripe_customer_id"])
+        set_membership(target, stripe_customer_id="cus_object_target")
         customer_event = WebhookEvent.objects.create(
             stripe_event_id="evt_customer_object_id",
             event_type="customer.updated",
@@ -414,8 +412,7 @@ class PrivacyWebhookCorrelationTest(TestCase):
 
     def test_oversized_numeric_subject_values_do_not_break_privacy_scrubbing(self):
         target = User.objects.create_user(email="oversized-subject@test.example")
-        target.stripe_customer_id = "cus_oversized_subject"
-        target.save(update_fields=["stripe_customer_id"])
+        set_membership(target, stripe_customer_id="cus_oversized_subject")
         oversized_numeric_value = "9" * 4301
         event = WebhookEvent.objects.create(
             stripe_event_id="evt_oversized_subject",
@@ -536,8 +533,7 @@ class PrivacyWebhookCorrelationTest(TestCase):
             email="rollback-target@test.example",
             first_name="Rollback",
         )
-        target.stripe_customer_id = "cus_rollback"
-        target.save(update_fields=["stripe_customer_id"])
+        set_membership(target, stripe_customer_id="cus_rollback")
         event = WebhookEvent.objects.create(
             stripe_event_id="evt_privacy_rollback",
             event_type="checkout.session.completed",

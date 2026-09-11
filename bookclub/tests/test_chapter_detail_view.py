@@ -20,6 +20,7 @@ from content.access import LEVEL_MAIN
 from notifications.models import Notification
 from notifications.services.notification_service import content_comment_urls
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -50,19 +51,19 @@ class ChapterDetailFixture(TestCase):
         cls.free_user = User.objects.create_user(
             email='free@test.com', password='pw',
         )
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.main_user = User.objects.create_user(
             email='main@test.com', password='pw',
         )
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
         cls.other_main = User.objects.create_user(
             email='main2@test.com', password='pw',
         )
-        cls.other_main.tier = cls.main_tier
+        set_membership(cls.other_main, tier=cls.main_tier)
         cls.other_main.save()
 
     def _url(self, number):

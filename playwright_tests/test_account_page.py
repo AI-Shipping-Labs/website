@@ -31,6 +31,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_session_for_user as _create_session_for_user,
 )
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -83,11 +84,9 @@ def _create_test_users():
         },
     )
     basic_user.set_password(DEFAULT_PASSWORD)
-    basic_user.tier = tiers["basic"]
-    basic_user.subscription_id = "sub_basic_test_123"
-    basic_user.billing_period_end = timezone.make_aware(
-        datetime.datetime(2026, 3, 15, 0, 0, 0)
-    )
+    set_membership(basic_user, tier=tiers['basic'])
+    set_membership(basic_user, subscription_id='sub_basic_test_123')
+    set_membership(basic_user, billing_period_end=timezone.make_aware(datetime.datetime(2026, 3, 15, 0, 0, 0)))
     basic_user.save()
     users["basic"] = basic_user
 
@@ -105,12 +104,10 @@ def _create_test_users():
         },
     )
     main_user.set_password(DEFAULT_PASSWORD)
-    main_user.tier = tiers["main"]
-    main_user.subscription_id = "sub_main_test_123"
-    main_user.billing_period_end = timezone.make_aware(
-        datetime.datetime(2026, 4, 1, 0, 0, 0)
-    )
-    main_user.pending_tier = None
+    set_membership(main_user, tier=tiers['main'])
+    set_membership(main_user, subscription_id='sub_main_test_123')
+    set_membership(main_user, billing_period_end=timezone.make_aware(datetime.datetime(2026, 4, 1, 0, 0, 0)))
+    set_membership(main_user, pending_tier=None)
     main_user.save()
     users["main"] = main_user
 
@@ -128,11 +125,9 @@ def _create_test_users():
         },
     )
     premium_user.set_password(DEFAULT_PASSWORD)
-    premium_user.tier = tiers["premium"]
-    premium_user.subscription_id = "sub_premium_test_123"
-    premium_user.billing_period_end = timezone.make_aware(
-        datetime.datetime(2026, 5, 1, 0, 0, 0)
-    )
+    set_membership(premium_user, tier=tiers['premium'])
+    set_membership(premium_user, subscription_id='sub_premium_test_123')
+    set_membership(premium_user, billing_period_end=timezone.make_aware(datetime.datetime(2026, 5, 1, 0, 0, 0)))
     premium_user.save()
     users["premium"] = premium_user
 
@@ -148,10 +143,10 @@ def _create_test_users():
         },
     )
     comped_basic_user.set_password(DEFAULT_PASSWORD)
-    comped_basic_user.tier = tiers["basic"]
-    comped_basic_user.subscription_id = ""
-    comped_basic_user.billing_period_end = None
-    comped_basic_user.pending_tier = None
+    set_membership(comped_basic_user, tier=tiers['basic'])
+    set_membership(comped_basic_user, subscription_id='')
+    set_membership(comped_basic_user, billing_period_end=None)
+    set_membership(comped_basic_user, pending_tier=None)
     comped_basic_user.save()
     users["comped_basic"] = comped_basic_user
 
@@ -167,10 +162,10 @@ def _create_test_users():
         },
     )
     override_main_user.set_password(DEFAULT_PASSWORD)
-    override_main_user.tier = tiers["free"]
-    override_main_user.subscription_id = ""
-    override_main_user.billing_period_end = None
-    override_main_user.pending_tier = None
+    set_membership(override_main_user, tier=tiers['free'])
+    set_membership(override_main_user, subscription_id='')
+    set_membership(override_main_user, billing_period_end=None)
+    set_membership(override_main_user, pending_tier=None)
     override_main_user.save()
     TierOverride.objects.filter(user=override_main_user).delete()
     TierOverride.objects.create(
@@ -196,12 +191,10 @@ def _create_test_users():
         },
     )
     main_downgrade_user.set_password(DEFAULT_PASSWORD)
-    main_downgrade_user.tier = tiers["main"]
-    main_downgrade_user.pending_tier = tiers["basic"]
-    main_downgrade_user.subscription_id = "sub_main_dg_test_123"
-    main_downgrade_user.billing_period_end = timezone.make_aware(
-        datetime.datetime(2026, 4, 1, 0, 0, 0)
-    )
+    set_membership(main_downgrade_user, tier=tiers['main'])
+    set_membership(main_downgrade_user, pending_tier=tiers['basic'])
+    set_membership(main_downgrade_user, subscription_id='sub_main_dg_test_123')
+    set_membership(main_downgrade_user, billing_period_end=timezone.make_aware(datetime.datetime(2026, 4, 1, 0, 0, 0)))
     main_downgrade_user.save()
     users["main_downgrade"] = main_downgrade_user
 
@@ -220,12 +213,10 @@ def _create_test_users():
         },
     )
     main_cancel_user.set_password(DEFAULT_PASSWORD)
-    main_cancel_user.tier = tiers["main"]
-    main_cancel_user.pending_tier = tiers["free"]
-    main_cancel_user.subscription_id = "sub_main_cancel_test_123"
-    main_cancel_user.billing_period_end = timezone.make_aware(
-        datetime.datetime(2026, 5, 15, 0, 0, 0)
-    )
+    set_membership(main_cancel_user, tier=tiers['main'])
+    set_membership(main_cancel_user, pending_tier=tiers['free'])
+    set_membership(main_cancel_user, subscription_id='sub_main_cancel_test_123')
+    set_membership(main_cancel_user, billing_period_end=timezone.make_aware(datetime.datetime(2026, 5, 15, 0, 0, 0)))
     main_cancel_user.save()
     users["main_cancel"] = main_cancel_user
 

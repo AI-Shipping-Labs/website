@@ -25,7 +25,7 @@ from content.access import (
     LEVEL_REGISTERED,
 )
 from content.models import Course, Module, Unit
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 
 @tag('core')
@@ -58,7 +58,7 @@ class RegisteredCourseUnitViewTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='free-v@reg.test', password='pw', email_verified=True,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email='free-v@reg.test', password='pw')
         return user
@@ -153,7 +153,7 @@ class CatalogVsUnitDecouplingTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='free-deco@reg.test', password='pw', email_verified=True,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email='free-deco@reg.test', password='pw')
         return user
@@ -232,7 +232,7 @@ class LegacyIsPreviewStillWorksTest(TierSetupMixin, TestCase):
             email='basic-legacy@reg.test', password='pw',
             email_verified=True,
         )
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic-legacy@reg.test', password='pw')
         response = self.client.get('/courses/legacy/m/gated')
@@ -261,7 +261,7 @@ class UnverifiedFreeOnRegisteredUnitTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='unv-reg@reg.test', password='pw', email_verified=False,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email='unv-reg@reg.test', password='pw')
 

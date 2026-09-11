@@ -27,10 +27,10 @@
     <div>
       <p class="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subscription Tier</p>
       <p class="mt-1">
-        {% if detail_user.tier %}
-        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ detail_user.tier.slug|studio_tier_pill_classes }}"
+        {% if detail_user.membership.tier %}
+        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ detail_user.membership.tier.slug|studio_tier_pill_classes }}"
               data-testid="tier-override-user-base-tier-pill"
-              data-tier="{{ detail_user.tier.slug }}">{{ detail_user.tier.name }}</span>
+              data-tier="{{ detail_user.membership.tier.slug }}">{{ detail_user.membership.tier.name }}</span>
         {% else %}
         <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ 'free'|studio_tier_pill_classes }}"
               data-testid="tier-override-user-base-tier-pill"

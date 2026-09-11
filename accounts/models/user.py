@@ -356,15 +356,11 @@ class User(AbstractUser):
         return self.email
 
     def save(self, *args, **kwargs):
-        """Assign defaults and keep tag JSON synchronized with its relation."""
-        if self.pk is None and self.tier_id is None:
-            from payments.models import Tier
+        """Save the user and keep tag JSON synchronized with its relation.
 
-            try:
-                self.tier = Tier.objects.get(slug="free")
-            except Tier.DoesNotExist:
-                pass
-
+        Issue #1579 moves the free-tier default to Membership creation, so
+        this method no longer assigns a default tier on the User row.
+        """
         deactivating = False
         update_fields = kwargs.get("update_fields")
         saving_is_active = (

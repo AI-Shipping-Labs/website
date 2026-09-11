@@ -43,7 +43,7 @@ from content.models import (
     WorkshopPage,
 )
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -175,26 +175,20 @@ class UserCanAccessPagesRegisteredTest(TierSetupMixin, TestCase):
         self.assertFalse(self.workshop.user_can_access_pages(AnonymousUser()))
 
     def test_free_verified_user_allowed(self):
-        user = User.objects.create_user(
-            email='reg-free@x.com', password='pw',
-            tier=self.free_tier, email_verified=True,
-        )
+        user = User.objects.create_user(email='reg-free@x.com', password='pw', email_verified=True)
+        set_membership(user, tier=self.free_tier)
         self.assertTrue(self.workshop.user_can_access_pages(user))
 
     def test_free_unverified_user_blocked(self):
-        user = User.objects.create_user(
-            email='reg-unv@x.com', password='pw',
-            tier=self.free_tier, email_verified=False,
-        )
+        user = User.objects.create_user(email='reg-unv@x.com', password='pw', email_verified=False)
+        set_membership(user, tier=self.free_tier)
         self.assertFalse(self.workshop.user_can_access_pages(user))
 
     def test_basic_paid_user_allowed_even_unverified(self):
         # Mirror can_access semantics: paid tiers bypass the verify gate
         # because their billing is the verification.
-        user = User.objects.create_user(
-            email='reg-basic@x.com', password='pw',
-            tier=self.basic_tier, email_verified=False,
-        )
+        user = User.objects.create_user(email='reg-basic@x.com', password='pw', email_verified=False)
+        set_membership(user, tier=self.basic_tier)
         self.assertTrue(self.workshop.user_can_access_pages(user))
 
 
@@ -300,10 +294,8 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
         )
         cls.url = '/workshops/paid-tut/tutorial/lesson'
         # Issue #532: the test user is read-only — no test mutates it.
-        cls.user = User.objects.create_user(
-            email='free-paid@x.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='free-paid@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.free_tier)
 
     def setUp(self):
         self.client.login(email='free-paid@x.com', password='pw')
@@ -363,10 +355,8 @@ class EligibleUserTutorialTest(TierSetupMixin, TestCase):
         )
         cls.url = '/workshops/eligible-tut/tutorial/lesson'
         # Issue #532: read-only test user.
-        cls.user = User.objects.create_user(
-            email='main-eligible@x.com', password='pw',
-            tier=cls.main_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='main-eligible@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.main_tier)
 
     def setUp(self):
         self.client.login(email='main-eligible@x.com', password='pw')
@@ -401,10 +391,8 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
         )
         cls.url = '/workshops/empty-body/tutorial/empty'
         # Issue #532: read-only test user.
-        cls.user = User.objects.create_user(
-            email='empty-body-free@x.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='empty-body-free@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.free_tier)
 
     def setUp(self):
         self.client.login(email='empty-body-free@x.com', password='pw')
@@ -446,10 +434,8 @@ class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
         )
 
     def test_unverified_user_sees_verify_card(self):
-        User.objects.create_user(
-            email='unverified@x.com', password='pw',
-            tier=self.free_tier, email_verified=False,
-        )
+        member_user_1 = User.objects.create_user(email='unverified@x.com', password='pw', email_verified=False)
+        set_membership(member_user_1, tier=self.free_tier)
         self.client.login(email='unverified@x.com', password='pw')
         response = self.client.get('/workshops/verify-tut/tutorial/intro')
         # Verify-email path returns 200 (the user can resolve it without
@@ -598,10 +584,8 @@ class FreeUserOnPaidRecordingTest(TierSetupMixin, TestCase):
             description=_LONG_DESCRIPTION,
         )
         # Issue #532: read-only test user.
-        cls.user = User.objects.create_user(
-            email='free-vid@x.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='free-vid@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.free_tier)
 
     def setUp(self):
         self.client.login(email='free-vid@x.com', password='pw')
@@ -642,10 +626,8 @@ class EligibleVideoTest(TierSetupMixin, TestCase):
             description=_LONG_DESCRIPTION,
         )
         # Issue #532: read-only test user.
-        cls.user = User.objects.create_user(
-            email='premium@x.com', password='pw',
-            tier=cls.premium_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='premium@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.premium_tier)
 
     def setUp(self):
         self.client.login(email='premium@x.com', password='pw')
@@ -751,10 +733,8 @@ class LandingRecordingTeaserGateTest(TierSetupMixin, TestCase):
         cls.workshop = _make_workshop(
             'rec-teaser', pages=LEVEL_OPEN, recording=LEVEL_MAIN,
         )
-        cls.user = User.objects.create_user(
-            email='free-rec@x.com', password='pw',
-            tier=cls.free_tier, email_verified=True,
-        )
+        cls.user = User.objects.create_user(email='free-rec@x.com', password='pw', email_verified=True)
+        set_membership(cls.user, tier=cls.free_tier)
 
     def setUp(self):
         self.client.login(email='free-rec@x.com', password='pw')

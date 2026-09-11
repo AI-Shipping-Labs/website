@@ -6,6 +6,7 @@ from django.test import Client, TestCase
 
 from accounts.models import User
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 
 class SlackMembershipCheckStudioTest(TestCase):
@@ -32,7 +33,7 @@ class SlackMembershipCheckStudioTest(TestCase):
 
     @patch("community.tasks.slack_membership.get_community_service")
     def test_complete_member_message(self, get_service):
-        member = User.objects.create_user(email="complete-1572@test.com", tier=self.main)
+        member = create_user_with_membership(email="complete-1572@test.com", tier=self.main)
         get_service.return_value = self.service()
         response = self.client.post(
             f"/studio/users/{member.pk}/slack-membership/check", follow=True,
@@ -44,7 +45,7 @@ class SlackMembershipCheckStudioTest(TestCase):
 
     @patch("community.tasks.slack_membership.get_community_service")
     def test_partial_member_message(self, get_service):
-        member = User.objects.create_user(email="partial-1572@test.com", tier=self.main)
+        member = create_user_with_membership(email="partial-1572@test.com", tier=self.main)
         get_service.return_value = self.service([
             {"channel": "C_ONE", "ok": True},
             {"channel": "C_TWO", "ok": False, "error": "not_allowed"},
@@ -71,7 +72,7 @@ class SlackMembershipCheckStudioTest(TestCase):
         get_service.return_value.add_to_channels.assert_not_called()
 
     def test_csrf_and_staff_guards_have_no_side_effects(self):
-        member = User.objects.create_user(email="guard-1572@test.com", tier=self.main)
+        member = create_user_with_membership(email="guard-1572@test.com", tier=self.main)
         url = f"/studio/users/{member.pk}/slack-membership/check"
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.staff)

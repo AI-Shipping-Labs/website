@@ -30,7 +30,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from content.models import Course, Module, Unit, Workshop, WorkshopPage
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -215,8 +215,7 @@ class FooterNewsletterSuppressionTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='free@test.com', password='testpass',
         )
-        user.tier = self.free_tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
         response = self.client.get('/courses/free-101')
         self.assertEqual(response.status_code, 200)

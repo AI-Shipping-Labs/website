@@ -20,7 +20,7 @@ from events.models import (
     SeriesOccurrenceOptOut,
     SeriesRegistration,
 )
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -33,14 +33,10 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
             email='guest-api-staff@test.com', is_staff=True,
         )
         cls.token = Token.objects.create(user=cls.staff, name='guest-api')
-        cls.host = User.objects.create_user(
-            email='alexey@datatalks.club', tier=cls.premium_tier,
-            email_verified=True,
-        )
-        cls.guest = User.objects.create_user(
-            email='alexey.s.grigoriev@gmail.com', tier=cls.free_tier,
-            email_verified=True,
-        )
+        cls.host = User.objects.create_user(email='alexey@datatalks.club', email_verified=True)
+        set_membership(cls.host, tier=cls.premium_tier)
+        cls.guest = User.objects.create_user(email='alexey.s.grigoriev@gmail.com', email_verified=True)
+        set_membership(cls.guest, tier=cls.free_tier)
         cls.start = timezone.now() + timedelta(days=7)
         cls.event = Event.objects.create(
             title='Remote agentic workloads',
@@ -156,7 +152,7 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
 
         user = User.objects.get(email='new.guest@example.com')
         self.assertFalse(user.email_verified)
-        self.assertEqual(user.tier, self.free_tier)
+        self.assertEqual(user.membership.tier, self.free_tier)
         self.assertIsNotNone(user.verification_expires_at)
         self.assertEqual(first.json()['guest_email'], 'new.guest@example.com')
         self.assertEqual(second.json()['email_status'], 'already_sent')

@@ -30,7 +30,7 @@ from plans.tasks.sprint_end import (
     send_sprint_end_recaps,
 )
 from questionnaires.models import Question, Questionnaire, Response
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
 
@@ -40,7 +40,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
     today = datetime.date(2026, 7, 10)
 
     def _member(self, email, *, active=True, tier=None):
-        return User.objects.create_user(
+        return create_user_with_membership(
             email=email,
             password='pw',
             is_active=active,

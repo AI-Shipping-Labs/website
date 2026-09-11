@@ -12,6 +12,7 @@ from django.utils import timezone
 from content.models import Workshop
 from events.models import Event, EventSeries
 from payments.models import Tier
+from tests.fixtures import create_user_with_membership
 
 ROOT = Path(__file__).resolve().parents[2]
 NO_RECORDING_COPY = "This event has ended. No recording is available."
@@ -222,7 +223,7 @@ class PastEventClosureStateTest(TestCase):
 
     def test_under_tier_member_with_hidden_recording_never_gets_false_closure(self):
         free = Tier.objects.get(slug="free")
-        user = User.objects.create_user(
+        user = create_user_with_membership(
             email="free-1232@example.com",
             password="test-password",
             tier=free,

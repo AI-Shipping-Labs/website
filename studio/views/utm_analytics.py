@@ -282,7 +282,7 @@ def utm_link_detail(request, campaign_slug, link_id):
         utm_source=filters['utm_source'] or None,
         utm_medium=filters['utm_medium'] or None,
         attribution=filters['attribution'],
-    ).select_related('user', 'user__tier')
+    ).select_related('user', 'user__membership__tier')
 
     conversion_rows = []
     for sa in signups:
@@ -301,7 +301,12 @@ def utm_link_detail(request, campaign_slug, link_id):
             'user': user,
             'email': user.email if user else '',
             'signup_ts': getattr(sa, aggregations._attribution_field(filters['attribution'], 'ts')),
-            'tier': user.tier if user and user.tier_id else None,
+            # Issue #1579: the tier lives on payments.Membership.
+            'tier': (
+                user.membership.tier
+                if user and user.membership.tier_id
+                else None
+            ),
             'paid': paid,
             'mrr': mrr or 0,
         })

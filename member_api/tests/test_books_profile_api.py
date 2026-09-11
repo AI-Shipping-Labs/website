@@ -13,6 +13,7 @@ from django.test import TestCase, tag
 from accounts.models import MemberAPIKey
 from bookclub.models import READER_VISIBILITY_PUBLIC, ReaderProfile
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -26,7 +27,7 @@ class MemberReaderProfileApiTest(TestCase):
         cls.main_tier = Tier.objects.get(slug="main")
 
         cls.member = User.objects.create_user(email="owner@test.com")
-        cls.member.tier = cls.main_tier
+        set_membership(cls.member, tier=cls.main_tier)
         cls.member.save()
 
         # A key that can write the profile, and a read-only key for the same
@@ -116,7 +117,7 @@ class MemberReaderProfileApiTest(TestCase):
         # A stray user field in the body must not target another member — the
         # endpoint only ever acts on the key owner.
         other = User.objects.create_user(email="other@test.com")
-        other.tier = self.main_tier
+        set_membership(other, tier=self.main_tier)
         other.save()
         response = self._put(
             self.write_plaintext,

@@ -20,6 +20,7 @@ from django.utils import timezone
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
 from playwright_tests.conftest import create_session_for_user as _create_session_for_user
+from tests.fixtures import set_membership
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
@@ -52,12 +53,12 @@ def _seed_users():
             defaults={"email_verified": True})
         user.set_password(DEFAULT_PASSWORD)
         user.email_verified = True
-        user.tier = tiers.get(tier_slug)
-        user.subscription_id = subscription_id
-        user.pending_tier = tiers.get(pending_slug) if pending_slug else None
+        set_membership(user, tier=tiers.get(tier_slug))
+        set_membership(user, subscription_id=subscription_id)
+        set_membership(user, pending_tier=tiers.get(pending_slug) if pending_slug else None)
         user.unsubscribed = False
         if billing_period_end is not None:
-            user.billing_period_end = billing_period_end
+            set_membership(user, billing_period_end=billing_period_end)
         user.save()
         return user
 

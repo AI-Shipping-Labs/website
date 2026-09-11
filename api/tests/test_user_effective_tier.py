@@ -15,6 +15,7 @@ from django.utils import timezone
 from accounts.models import TierOverride, Token, User
 from api.serializers.users import serialize_user_state
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class SerializeUserEffectiveTierTest(TestCase):
@@ -46,9 +47,8 @@ class SerializeUserEffectiveTierTest(TestCase):
         self.assertEqual(payload["tier_override"]["tier_slug"], "main")
 
     def test_main_base_no_override_reports_subscription(self):
-        user = User.objects.create_user(
-            email="paid@test.com", password="x", tier=self.main
-        )
+        user = User.objects.create_user(email="paid@test.com", password="x")
+        set_membership(user, tier=self.main)
 
         payload = serialize_user_state(user)
 
@@ -88,9 +88,8 @@ class SerializeUserEffectiveTierTest(TestCase):
     def test_override_below_or_equal_base_does_not_downgrade(self):
         # Main base with a Basic override: the override grants nothing extra,
         # so the reported tier stays Main and the source stays subscription.
-        user = User.objects.create_user(
-            email="hi@test.com", password="x", tier=self.main
-        )
+        user = User.objects.create_user(email="hi@test.com", password="x")
+        set_membership(user, tier=self.main)
         self._override(user, override_tier=self.basic, original_tier=self.main)
 
         payload = serialize_user_state(user)
@@ -115,13 +114,8 @@ class SerializeUserEffectiveTierTest(TestCase):
         # Regression guard: the serializer must NOT call get_user_level,
         # which short-circuits staff/superuser to Premium. A staff member
         # with a Main base reports Main, not Premium.
-        user = User.objects.create_user(
-            email="staff@test.com",
-            password="x",
-            tier=self.main,
-            is_staff=True,
-            is_superuser=True,
-        )
+        user = User.objects.create_user(email="staff@test.com", password="x", is_staff=True, is_superuser=True)
+        set_membership(user, tier=self.main)
 
         payload = serialize_user_state(user)
 

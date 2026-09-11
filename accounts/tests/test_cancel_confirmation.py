@@ -4,6 +4,7 @@ from django.test import TestCase, override_settings
 
 from accounts.models import User
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 @override_settings(STRIPE_CUSTOMER_PORTAL_URL="https://billing.example.test/portal")
@@ -13,9 +14,7 @@ class CustomerPortalBillingManagementTest(TestCase):
     def test_paid_member_sees_portal_link_without_local_cancel_controls(self):
         main_tier = Tier.objects.get(slug="main")
         user = User.objects.create_user(email="portal-billing@test.com")
-        user.tier = main_tier
-        user.subscription_id = "sub_portal"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=main_tier, subscription_id="sub_portal")
         self.client.force_login(user)
 
         response = self.client.get("/account/")

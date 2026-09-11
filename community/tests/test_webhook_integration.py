@@ -18,7 +18,7 @@ from payments.services import (
     handle_subscription_deleted,
     handle_subscription_updated,
 )
-from tests.fixtures import call_checkout_in_legacy_numeric_compat_window
+from tests.fixtures import call_checkout_in_legacy_numeric_compat_window, set_membership
 
 
 def handle_checkout_completed(session_data):
@@ -111,9 +111,7 @@ class SubscriptionUpdatedCommunityTest(TestCase):
     def test_upgrade_to_main_triggers_reactivate(self, mock_reactivate):
         """Upgrading from Basic to Main triggers community reactivate."""
         user = User.objects.create_user(email="upgrade_comm@test.com")
-        user.tier = self.basic_tier
-        user.subscription_id = "sub_upgrade"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=self.basic_tier, subscription_id="sub_upgrade")
 
         subscription_data = {
             "id": "sub_upgrade",
@@ -134,9 +132,7 @@ class SubscriptionUpdatedCommunityTest(TestCase):
     def test_downgrade_below_main_triggers_remove(self, mock_remove):
         """Downgrading from Main to Basic triggers community remove."""
         user = User.objects.create_user(email="downgrade_comm@test.com")
-        user.tier = self.main_tier
-        user.subscription_id = "sub_downgrade"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=self.main_tier, subscription_id="sub_downgrade")
 
         subscription_data = {
             "id": "sub_downgrade",
@@ -157,9 +153,7 @@ class SubscriptionUpdatedCommunityTest(TestCase):
     def test_cancel_at_period_end_schedules_removal(self, mock_schedule):
         """cancel_at_period_end with community tier schedules removal."""
         user = User.objects.create_user(email="cancel_comm@test.com")
-        user.tier = self.main_tier
-        user.subscription_id = "sub_cancel"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=self.main_tier, subscription_id="sub_cancel")
 
         subscription_data = {
             "id": "sub_cancel",
@@ -187,10 +181,9 @@ class SubscriptionDeletedCommunityTest(TestCase):
     def test_deleted_with_community_tier_triggers_remove(self, mock_remove):
         """Deleting subscription for Main-tier user triggers removal."""
         user = User.objects.create_user(email="deleted_comm@test.com")
-        user.tier = self.main_tier
-        user.subscription_id = "sub_deleted"
+        set_membership(user, tier=self.main_tier, subscription_id="sub_deleted")
         user.slack_user_id = "U123"
-        user.save(update_fields=["tier", "subscription_id", "slack_user_id"])
+        user.save(update_fields=["slack_user_id"])
 
         subscription_data = {
             "id": "sub_deleted",
@@ -206,9 +199,7 @@ class SubscriptionDeletedCommunityTest(TestCase):
         """Deleting subscription for Basic-tier user does NOT trigger removal."""
         basic_tier = Tier.objects.get(slug="basic")
         user = User.objects.create_user(email="deleted_basic@test.com")
-        user.tier = basic_tier
-        user.subscription_id = "sub_deleted_basic"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=basic_tier, subscription_id="sub_deleted_basic")
 
         subscription_data = {
             "id": "sub_deleted_basic",

@@ -18,7 +18,7 @@ from django.utils import timezone
 from content.access import LEVEL_BASIC, LEVEL_OPEN
 from content.models import Workshop
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -32,14 +32,10 @@ class WorkshopRecordingS3PlayerTest(TierSetupMixin, TestCase):
     @classmethod
     def setUpTestData(cls):
         super().setUpTestData()
-        cls.basic_user = User.objects.create_user(
-            email='ws-basic@test.com', password='pw', tier=cls.basic_tier,
-            email_verified=True,
-        )
-        cls.free_user = User.objects.create_user(
-            email='ws-free@test.com', password='pw', tier=cls.free_tier,
-            email_verified=True,
-        )
+        cls.basic_user = User.objects.create_user(email='ws-basic@test.com', password='pw', email_verified=True)
+        set_membership(cls.basic_user, tier=cls.basic_tier)
+        cls.free_user = User.objects.create_user(email='ws-free@test.com', password='pw', email_verified=True)
+        set_membership(cls.free_user, tier=cls.free_tier)
 
         # S3-backed workshop: event has recording_s3_url, recording gated
         # to Basic.

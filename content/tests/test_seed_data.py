@@ -54,7 +54,7 @@ class SeedDataCommandTest(TestCase):
         }
         for tier_slug, email in tier_emails.items():
             user = User.objects.get(email=email)
-            self.assertEqual(user.tier.slug, tier_slug)
+            self.assertEqual(user.membership.tier.slug, tier_slug)
             self.assertTrue(user.email_verified)
 
     def test_creates_expected_user_count(self):

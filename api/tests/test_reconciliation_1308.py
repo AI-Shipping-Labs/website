@@ -22,6 +22,7 @@ from payments.models import (
 from payments.models import Tier
 from payments.services import subscription_reconciliation as recon
 from payments.tests.test_subscription_reconciliation import make_sub
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -51,10 +52,14 @@ class ApplyGuardTest(TestCase):
         )
 
     def _canceled_user(self, email="cx@t.com"):
-        return User.objects.create_user(
-            email=email, password="x", tier=self.main,
-            stripe_customer_id=f"cus_{email}", subscription_id="sub_1",
+        user = User.objects.create_user(email=email, password="x")
+        set_membership(
+            user,
+            tier=self.main,
+            stripe_customer_id=f"cus_{email}",
+            subscription_id="sub_1",
         )
+        return user
 
     def _patch_stripe(self, sub):
         return patch.object(
@@ -72,7 +77,7 @@ class ApplyGuardTest(TestCase):
         body = resp.json()
         self.assertTrue(body["dry_run"])
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_dry_run_false_without_confirm_is_rejected_no_writes(self):
         user = self._canceled_user()
@@ -82,7 +87,7 @@ class ApplyGuardTest(TestCase):
         self.assertEqual(resp.status_code, 422)
         self.assertEqual(resp.json()["code"], "confirmation_required")
         user.refresh_from_db()
-        self.assertEqual(user.tier.slug, "main")
+        self.assertEqual(user.membership.tier.slug, "main")
 
     def test_confirmed_apply_reverts_canceled_and_preserves_override(self):
         user = self._canceled_user()
@@ -107,17 +112,23 @@ class ApplyGuardTest(TestCase):
         self.assertEqual(row["to"], "free")
         user.refresh_from_db()
         override.refresh_from_db()
-        self.assertEqual(user.tier.slug, "free")
+        self.assertEqual(user.membership.tier.slug, "free")
         self.assertTrue(override.is_active)
 
     def test_duplicate_ownership_targets_are_skipped_on_apply(self):
-        u1 = User.objects.create_user(
-            email="d1@t.com", password="x", tier=self.main,
-            stripe_customer_id="cus_shared", subscription_id="sub_1",
+        u1 = User.objects.create_user(email="d1@t.com", password="x")
+        set_membership(
+            u1,
+            tier=self.main,
+            stripe_customer_id="cus_shared",
+            subscription_id="sub_1",
         )
-        u2 = User.objects.create_user(
-            email="d2@t.com", password="x", tier=self.main,
-            stripe_customer_id="cus_shared", subscription_id="sub_1",
+        u2 = User.objects.create_user(email="d2@t.com", password="x")
+        set_membership(
+            u2,
+            tier=self.main,
+            stripe_customer_id="cus_shared",
+            subscription_id="sub_1",
         )
         p1, p2 = self._patch_stripe(make_sub(status="canceled"))
         with p1, p2:
@@ -132,7 +143,7 @@ class ApplyGuardTest(TestCase):
             self.assertEqual(row["status"], "warning")
             self.assertIn("Duplicate Stripe ownership", row["message"])
         u1.refresh_from_db()
-        self.assertEqual(u1.tier.slug, "main")
+        self.assertEqual(u1.membership.tier.slug, "main")
 
 
 @override_settings(STRIPE_SECRET_KEY="sk_test_1308")

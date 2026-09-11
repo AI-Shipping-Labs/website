@@ -29,6 +29,7 @@ from integrations.config import (
     site_base_url,
     validate_email_config_value,
 )
+from payments.models import Membership
 
 logger = logging.getLogger(__name__)
 
@@ -384,7 +385,8 @@ def delete_account_for_privacy(user, request_context=None, *, notify_staff=True)
             blocker_reason=PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT,
         )
 
-    if user.subscription_id:
+    # Issue #1579: the active-subscription blocker reads payments.Membership.
+    if user.membership.subscription_id:
         log = log_blocked_privacy_delete(
             user,
             PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION,
@@ -544,14 +546,16 @@ def _membership_payment(user):
     mismatch = _model("payments", "PaymentAccountMismatch")
     binding = _model("payments", "CheckoutAccountBinding")
     fulfillment = _model("payments", "CheckoutFulfillment")
+    # Issue #1579: the tier/Stripe snapshot values come from payments.Membership.
+    membership = Membership.for_user(user)
     return {
-        "current_tier": _tier_snapshot(user.tier),
-        "base_tier": _tier_snapshot(user.tier),
+        "current_tier": _tier_snapshot(membership.tier),
+        "base_tier": _tier_snapshot(membership.tier),
         "effective_tier": _tier_snapshot(_effective_tier(user)),
-        "pending_tier": _tier_snapshot(user.pending_tier),
-        "billing_period_end": _plain(user.billing_period_end),
-        "stripe_customer_id": user.stripe_customer_id,
-        "subscription_id": user.subscription_id,
+        "pending_tier": _tier_snapshot(membership.pending_tier),
+        "billing_period_end": _plain(membership.billing_period_end),
+        "stripe_customer_id": membership.stripe_customer_id,
+        "subscription_id": membership.subscription_id,
         "tier_overrides": _values(
             _model("accounts", "TierOverride"),
             Q(user=user),
@@ -1301,9 +1305,11 @@ def _tier_snapshot(tier):
 
 
 def _effective_tier(user):
+    # Issue #1579: the base tier lives on payments.Membership.
+    base_tier = Membership.for_user(user).tier
     override_model = _model("accounts", "TierOverride")
     if override_model is None:
-        return user.tier
+        return base_tier
     active = (
         override_model.objects.filter(
             user=user,
@@ -1314,9 +1320,9 @@ def _effective_tier(user):
         .order_by("-override_tier__level")
         .first()
     )
-    if active and (user.tier is None or active.override_tier.level > user.tier.level):
+    if active and (base_tier is None or active.override_tier.level > base_tier.level):
         return active.override_tier
-    return user.tier
+    return base_tier
 
 
 def _child_values(plan_model, user, related_name):
@@ -1638,10 +1644,12 @@ def _collect_privacy_correlations(user):
     customer_ids = set()
     subscription_ids = set()
 
-    if user.stripe_customer_id:
-        customer_ids.add(user.stripe_customer_id)
-    if user.subscription_id:
-        subscription_ids.add(user.subscription_id)
+    # Issue #1579: the user's own Stripe identifiers live on payments.Membership.
+    membership = Membership.for_user(user)
+    if membership.stripe_customer_id:
+        customer_ids.add(membership.stripe_customer_id)
+    if membership.subscription_id:
+        subscription_ids.add(membership.subscription_id)
 
     def collect_payment_ids(model_name, *fields):
         model = _model("payments", model_name)

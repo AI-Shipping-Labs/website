@@ -12,6 +12,8 @@ from scripts.browser_journey_policy import browser_journey
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 
+from tests.fixtures import create_user_with_membership
+
 pytestmark = [
     pytest.mark.django_db(transaction=True),
     pytest.mark.local_only,
@@ -21,11 +23,10 @@ pytestmark = [
 
 
 def _create_member(email, *, tier_slug="main", is_staff=False):
-    from accounts.models import User
     from payments.models import Tier
 
     ensure_tiers()
-    user = User.objects.create_user(
+    user = create_user_with_membership(
         email=email,
         password="pw",
         tier=Tier.objects.get(slug=tier_slug),

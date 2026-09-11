@@ -71,7 +71,12 @@ def get_deletion_request_for_review(request_id):
         request_type=PrivacyRequestLog.REQUEST_DELETE,
         status=PrivacyRequestLog.STATUS_COMPLETED,
     ).first()
-    target = get_user_model().objects.filter(pk=request_log.old_user_id).first()
+    target = (
+        get_user_model()
+        .objects.select_related("membership")
+        .filter(pk=request_log.old_user_id)
+        .first()
+    )
     blocker = ""
     if request_log.status == PrivacyRequestLog.STATUS_REQUESTED:
         if target is None:
@@ -80,7 +85,7 @@ def get_deletion_request_for_review(request_id):
             blocker = BLOCKER_IDENTITY_CHANGED
         elif target.is_staff or target.is_superuser:
             blocker = PrivacyRequestLog.BLOCKER_STAFF_ACCOUNT
-        elif target.subscription_id:
+        elif target.membership.subscription_id:
             blocker = PrivacyRequestLog.BLOCKER_ACTIVE_SUBSCRIPTION
 
     delivery = getattr(request_log, "completion_delivery", None)

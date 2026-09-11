@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from content.models import Course
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -116,9 +116,7 @@ class PricingPaymentLinksTest(TierSetupMixin, TestCase):
             email="paid-pricing@test.com",
             password="testpass123",
         )
-        user.tier = self.basic_tier
-        user.subscription_id = "sub_basic"
-        user.save(update_fields=["tier", "subscription_id"])
+        set_membership(user, tier=self.basic_tier, subscription_id="sub_basic")
         self.client.login(email="paid-pricing@test.com", password="testpass123")
 
         response = self.client.get("/membership")
@@ -140,9 +138,7 @@ class AccountPageCustomerPortalTest(TierSetupMixin, TestCase):
         cls.paid_user = User.objects.create_user(
             email="paidacct@test.com", password="testpass123"
         )
-        cls.paid_user.tier = cls.main_tier
-        cls.paid_user.subscription_id = "sub_test123"
-        cls.paid_user.save(update_fields=["tier", "subscription_id"])
+        set_membership(cls.paid_user, tier=cls.main_tier, subscription_id="sub_test123")
 
         cls.free_user = User.objects.create_user(
             email="freeacct@test.com", password="testpass123"

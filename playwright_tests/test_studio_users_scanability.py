@@ -29,6 +29,8 @@ os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 from django.utils import timezone  # noqa: E402
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -60,17 +62,14 @@ def _seed_scanability_user():
     ]
     user.slack_member = True
     user.slack_user_id = "U01SCAN999"
-    user.stripe_customer_id = "cus_SCANABILITY"
+    set_membership(user, stripe_customer_id='cus_SCANABILITY')
     # Issue #930: ``filter=paid`` requires an active Stripe subscription
     # (non-empty ``subscription_id`` + paid base tier), not just a paid
     # tier, so this premium user must carry a subscription id to appear
     # under the Paid chip used by the scanability scenario.
-    user.subscription_id = "sub_SCANABILITY"
+    set_membership(user, subscription_id='sub_SCANABILITY')
     user.slack_checked_at = timezone.now()
-    user.save(update_fields=[
-        "tags", "slack_member", "slack_user_id",
-        "stripe_customer_id", "subscription_id", "slack_checked_at",
-    ])
+    user.save(update_fields=["tags", "slack_member", "slack_user_id", "slack_checked_at"])
     user_pk = user.pk
     connection.close()
     return email, user_pk

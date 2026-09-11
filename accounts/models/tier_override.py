@@ -7,7 +7,8 @@ class TierOverride(models.Model):
 
     Allows admins to grant time-limited access to a higher tier for trials,
     promotions, or courtesy access. The override sits on top of the real
-    subscription tier (user.tier) so there are no conflicts with Stripe
+    subscription tier (the tier on the users ``payments.Membership`` row) so
+    there are no conflicts with Stripe
     webhooks.
 
     Normal staff tooling keeps one manual override active. Source-specific

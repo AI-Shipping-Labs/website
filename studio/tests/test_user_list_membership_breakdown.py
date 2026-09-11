@@ -19,6 +19,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 FAST_PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
@@ -36,28 +37,22 @@ class MembershipBreakdownCountsTest(TestCase):
         cls.main = Tier.objects.get(slug='main')
         cls.premium = Tier.objects.get(slug='premium')
 
-        cls.staff = User.objects.create_user(
-            email='staff@test.com', password='pw', is_staff=True,
-            tier=cls.free,
-        )
+        cls.staff = User.objects.create_user(email='staff@test.com', password='pw', is_staff=True)
+        set_membership(cls.staff, tier=cls.free)
 
         # --- Paid via Stripe (active subscription, grouped by base tier) ---
         # 1 paid Basic, 2 paid Main, 1 paid Premium.
-        cls.paid_basic = User.objects.create_user(
-            email='paid-basic@test.com', password='pw',
-            tier=cls.basic, subscription_id='sub_basic',
-        )
-        cls.paid_main_1 = User.objects.create_user(
-            email='paid-main-1@test.com', password='pw',
-            tier=cls.main, subscription_id='sub_main_1',
-        )
-        cls.paid_main_2 = User.objects.create_user(
-            email='paid-main-2@test.com', password='pw',
-            tier=cls.main, subscription_id='sub_main_2',
-        )
-        cls.paid_premium = User.objects.create_user(
-            email='paid-premium@test.com', password='pw',
-            tier=cls.premium, subscription_id='sub_premium',
+        cls.paid_basic = User.objects.create_user(email='paid-basic@test.com', password='pw')
+        set_membership(cls.paid_basic, tier=cls.basic, subscription_id='sub_basic')
+        cls.paid_main_1 = User.objects.create_user(email='paid-main-1@test.com', password='pw')
+        set_membership(cls.paid_main_1, tier=cls.main, subscription_id='sub_main_1')
+        cls.paid_main_2 = User.objects.create_user(email='paid-main-2@test.com', password='pw')
+        set_membership(cls.paid_main_2, tier=cls.main, subscription_id='sub_main_2')
+        cls.paid_premium = User.objects.create_user(email='paid-premium@test.com', password='pw')
+        set_membership(
+            cls.paid_premium,
+            tier=cls.premium,
+            subscription_id='sub_premium',
         )
 
         # --- Override grants (comped, no subscription) ---
@@ -68,10 +63,8 @@ class MembershipBreakdownCountsTest(TestCase):
 
         # --- Edge: user with BOTH active sub AND active override ---
         # Counts under Paid (by sub tier = Main), never under Override.
-        cls.both = User.objects.create_user(
-            email='both@test.com', password='pw',
-            tier=cls.main, subscription_id='sub_both',
-        )
+        cls.both = User.objects.create_user(email='both@test.com', password='pw')
+        set_membership(cls.both, tier=cls.main, subscription_id='sub_both')
         TierOverride.objects.create(
             user=cls.both, original_tier=cls.main, override_tier=cls.premium,
             expires_at=timezone.now() + timedelta(days=7),
@@ -79,21 +72,16 @@ class MembershipBreakdownCountsTest(TestCase):
         )
 
         # --- Edge: canceled subscriber (webhook cleared sub + reverted) ---
-        cls.canceled = User.objects.create_user(
-            email='canceled@test.com', password='pw',
-            tier=cls.free, subscription_id='',
-        )
+        cls.canceled = User.objects.create_user(email='canceled@test.com', password='pw')
+        set_membership(cls.canceled, tier=cls.free, subscription_id='')
 
         # --- Edge: stale subscription_id but base tier Free ---
-        cls.stale = User.objects.create_user(
-            email='stale@test.com', password='pw',
-            tier=cls.free, subscription_id='sub_stale',
-        )
+        cls.stale = User.objects.create_user(email='stale@test.com', password='pw')
+        set_membership(cls.stale, tier=cls.free, subscription_id='sub_stale')
 
         # --- Edge: expired override (must not count as comped) ---
-        cls.expired_ov = User.objects.create_user(
-            email='expired-ov@test.com', password='pw', tier=cls.free,
-        )
+        cls.expired_ov = User.objects.create_user(email='expired-ov@test.com', password='pw')
+        set_membership(cls.expired_ov, tier=cls.free)
         TierOverride.objects.create(
             user=cls.expired_ov, original_tier=cls.free,
             override_tier=cls.premium,
@@ -102,9 +90,8 @@ class MembershipBreakdownCountsTest(TestCase):
         )
 
         # --- Edge: inactive override (must not count as comped) ---
-        cls.inactive_ov = User.objects.create_user(
-            email='inactive-ov@test.com', password='pw', tier=cls.free,
-        )
+        cls.inactive_ov = User.objects.create_user(email='inactive-ov@test.com', password='pw')
+        set_membership(cls.inactive_ov, tier=cls.free)
         TierOverride.objects.create(
             user=cls.inactive_ov, original_tier=cls.free,
             override_tier=cls.main,
@@ -113,9 +100,8 @@ class MembershipBreakdownCountsTest(TestCase):
         )
 
     def _comp(self, email, override_tier):
-        user = User.objects.create_user(
-            email=email, password='pw', tier=self.free,
-        )
+        user = User.objects.create_user(email=email, password='pw')
+        set_membership(user, tier=self.free)
         TierOverride.objects.create(
             user=user, original_tier=self.free, override_tier=override_tier,
             expires_at=timezone.now() + timedelta(days=7),

@@ -18,6 +18,7 @@ from accounts.models import User
 from community.services import staff_notifications
 from community.tasks.slack_membership import refresh_slack_membership
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 def _tier(level):
@@ -64,12 +65,8 @@ class NotifySlackJoinHelperTest(TestCase):
     SLACK_CHANNEL = "C0SLACKJOIN"
 
     def setUp(self):
-        self.user = User.objects.create_user(
-            email="joiner@test.com",
-            first_name="Alex",
-            last_name="Grigorev",
-            tier=_tier(20),
-        )
+        self.user = User.objects.create_user(email="joiner@test.com", first_name="Alex", last_name="Grigorev")
+        set_membership(self.user, tier=_tier(20))
 
     def test_happy_path_sends_email_and_slack(self):
         with patch(
@@ -285,8 +282,10 @@ class RefreshSlackMembershipJoinTriggerTest(TestCase):
     """Tests for the join-notification trigger inside refresh_slack_membership."""
 
     def _make_user(self, email, **extra):
-        extra.setdefault("tier", _tier(20))
-        return User.objects.create_user(email=email, **extra)
+        tier = extra.pop("tier", _tier(20))
+        user = User.objects.create_user(email=email, **extra)
+        set_membership(user, tier=tier)
+        return user
 
     def _run(self, outcome=("member", "U_X"), enabled=True):
         """Run the refresh with a mocked service + patched notifier.

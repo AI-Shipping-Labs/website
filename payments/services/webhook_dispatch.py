@@ -361,7 +361,12 @@ def _send_review_alert(*, event_id, livemode, attempt, review):
         lines.extend([
             f"Local user id: {review.user.pk}",
             f"Local user email: {review.user.email}",
-            f"Base tier: {review.user.tier.slug if review.user.tier_id else 'free'}",
+            # Issue #1579: the base tier lives on payments.Membership.
+            f"Base tier: {
+                review.user.membership.tier.slug
+                if review.user.membership.tier_id
+                else 'free'
+            }",
             f"Effective tier: {effective.slug if effective else 'free'}",
         ])
         member_url = _review_member_url(review.user.pk)

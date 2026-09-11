@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride, User
 from analytics.models import UserActivity
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 INVITE_URL = "https://join.slack.com/t/test/shared_invite/abc123"
 
@@ -25,8 +25,7 @@ class SlackJoinRedirectEligibleTest(TierSetupMixin, TestCase):
 
     def _login(self, email, tier):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=tier)
         self.client.login(email=email, password="pw")
         return user
 
@@ -63,8 +62,8 @@ class SlackJoinRedirectEligibleTest(TierSetupMixin, TestCase):
     def test_staff_user_is_eligible(self):
         user = User.objects.create_user(email="staff@test.com", password="pw")
         user.is_staff = True
-        user.tier = self.free_tier
-        user.save(update_fields=["is_staff", "tier"])
+        set_membership(user, tier=self.free_tier)
+        user.save(update_fields=["is_staff"])
         self.client.login(email="staff@test.com", password="pw")
         response = self.client.get("/community/slack")
         self.assertEqual(response.status_code, 302)
@@ -76,8 +75,7 @@ class SlackJoinRedirectDeniedTest(TierSetupMixin, TestCase):
 
     def _login(self, email, tier):
         user = User.objects.create_user(email=email, password="pw")
-        user.tier = tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=tier)
         self.client.login(email=email, password="pw")
         return user
 
@@ -139,8 +137,7 @@ class SlackJoinRedirectUnsetUrlTest(TierSetupMixin, TestCase):
     @override_settings(SLACK_INVITE_URL="")
     def test_eligible_member_blank_url_shows_unavailable(self):
         user = User.objects.create_user(email="main2@test.com", password="pw")
-        user.tier = self.main_tier
-        user.save(update_fields=["tier"])
+        set_membership(user, tier=self.main_tier)
         self.client.login(email="main2@test.com", password="pw")
         response = self.client.get("/community/slack")
         self.assertEqual(response.status_code, 200)

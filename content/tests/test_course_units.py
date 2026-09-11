@@ -25,7 +25,7 @@ from content.services.course_units import (
     get_prev_unit,
 )
 from content.tests.factories import make_course_with_units
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -103,8 +103,7 @@ class CourseUnitSetupMixin(TierSetupMixin):
 
     def _create_tier_user(self, email, tier):
         user = User.objects.create_user(email=email)
-        user.tier = tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=tier)
         return user
 
     def _login_tier_user(self, email, tier):
@@ -952,8 +951,7 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
 
     def test_free_tier_user_does_not_see_discussion_on_unit(self):
         user = User.objects.create_user(email='free-unit@test.com')
-        user.tier = self.free_tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=self.free_tier)
         self.client.force_login(user)
         response = self.client.get(self.unit_url)
         self.assertEqual(response.status_code, 403)
@@ -961,8 +959,7 @@ class UnitDetailDiscussionButtonTest(TierSetupMixin, TestCase):
 
     def test_main_tier_user_sees_discussion_on_unit(self):
         user = User.objects.create_user(email='main-unit@test.com')
-        user.tier = self.main_tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=self.main_tier)
         self.client.force_login(user)
         response = self.client.get(self.unit_url)
         self.assertEqual(response.status_code, 200)

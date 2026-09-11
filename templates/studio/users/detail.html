@@ -122,7 +122,7 @@
       <dd class="text-foreground">{{ detail_user.last_login|operator_date }}</dd>
     </div>
     {% endif %}
-    {% if detail_user.stripe_customer_id %}
+    {% if detail_user.membership.stripe_customer_id %}
     {# Stripe row (issue #566). When STRIPE_DASHBOARD_ACCOUNT_ID is set #}
     {# the cus_* value is rendered as a deep-link anchor opening the    #}
     {# matching customer in the Stripe Dashboard in a new tab; when the #}
@@ -133,13 +133,13 @@
       <dt class="text-muted-foreground">Stripe</dt>
       {% if stripe_account_id %}
       <dd>
-        <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ detail_user.stripe_customer_id }}"
+        <a href="https://dashboard.stripe.com/{{ stripe_account_id }}/customers/{{ detail_user.membership.stripe_customer_id }}"
            target="_blank" rel="noopener"
            data-testid="user-detail-stripe-link"
-           class="text-accent hover:underline font-mono break-all">{{ detail_user.stripe_customer_id }}</a>
+           class="text-accent hover:underline font-mono break-all">{{ detail_user.membership.stripe_customer_id }}</a>
       </dd>
       {% else %}
-      <dd class="text-foreground font-mono break-all">{{ detail_user.stripe_customer_id }}</dd>
+      <dd class="text-foreground font-mono break-all">{{ detail_user.membership.stripe_customer_id }}</dd>
       {% endif %}
     </div>
     {% endif %}
@@ -159,14 +159,14 @@
           </div>
           <div class="flex justify-between gap-4">
             <dt class="text-xs text-muted-foreground">{% if subscription.date_kind == 'access_until' %}Access until{% elif subscription.date_kind == 'renews' %}Renews{% else %}Date{% endif %}</dt>
-            <dd data-testid="user-detail-subscription-date">{% if subscription.current_period_end %}{{ detail_user.billing_period_end|operator_date }}{% else %}&mdash;{% endif %}</dd>
+            <dd data-testid="user-detail-subscription-date">{% if subscription.current_period_end %}{{ detail_user.membership.billing_period_end|operator_date }}{% else %}&mdash;{% endif %}</dd>
           </div>
         </dl>
         {% if not subscription.current_period_end %}<p class="mt-2 text-xs text-muted-foreground" data-testid="user-detail-subscription-date-hint">No renewal date cached. Use Sync from Stripe.</p>{% endif %}
       </dd>
     </div>
   </dl>
-  {% if detail_user.stripe_customer_id %}
+  {% if detail_user.membership.stripe_customer_id %}
   <form method="post" action="{% url 'studio_user_sync_from_stripe' detail_user.pk %}" class="mt-5">
     {% csrf_token %}
     <button type="submit"
@@ -193,7 +193,7 @@
       <div class="grid gap-2 text-sm sm:grid-cols-2">
         <div><p class="text-xs text-muted-foreground">Status</p><div class="mt-1">{% studio_status_badge grace.status grace.get_status_display %}</div></div>
         <div><p class="text-xs text-muted-foreground">Deadline</p><p class="text-foreground">{{ grace.effective_expires_at|operator_datetime }} UTC</p></div>
-        <div><p class="text-xs text-muted-foreground">Base tier</p><p class="text-foreground">{{ detail_user.tier.slug|default:'free' }}</p></div>
+        <div><p class="text-xs text-muted-foreground">Base tier</p><p class="text-foreground">{{ detail_user.membership.tier.slug|default:'free' }}</p></div>
         <div><p class="text-xs text-muted-foreground">Effective tier</p><p class="text-foreground">{{ tier_slug }}</p></div>
         <div><p class="text-xs text-muted-foreground">Invoice</p><p class="font-mono text-foreground break-all">{% if stripe_account_id %}<a href="https://dashboard.stripe.com/{{ stripe_account_id }}/invoices/{{ grace.stripe_invoice_id }}" target="_blank" rel="noopener" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_invoice_id }}</a>{% else %}{{ grace.stripe_invoice_id }}{% endif %}</p></div>
         <div><p class="text-xs text-muted-foreground">Subscription</p><p class="font-mono text-foreground break-all">{% if stripe_account_id %}<a href="https://dashboard.stripe.com/{{ stripe_account_id }}/subscriptions/{{ grace.stripe_subscription_id }}" target="_blank" rel="noopener" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ grace.stripe_subscription_id }}</a>{% else %}{{ grace.stripe_subscription_id }}{% endif %}</p></div>
@@ -300,7 +300,7 @@
         </div>
         {% if has_override and active_override %}
         <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
-          Base: {% if detail_user.tier %}{{ detail_user.tier.name }}{% else %}Free{% endif %}
+          Base: {% if detail_user.membership.tier %}{{ detail_user.membership.tier.name }}{% else %}Free{% endif %}
           &middot; expires {{ active_override.expires_at|operator_datetime }} UTC
         </p>
         {% endif %}

@@ -21,7 +21,7 @@ from accounts.models import TierOverride
 from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
 
@@ -344,30 +344,14 @@ class StudioEventNotifyTest(TierSetupMixin, TestCase):
         self.event.required_level = 20
         self.event.save(update_fields=['required_level'])
 
-        eligible = User.objects.create_user(
-            email='eligible@test.com',
-            password='p',
-            tier=self.main_tier,
-            is_active=True,
-        )
-        inactive = User.objects.create_user(
-            email='inactive@test.com',
-            password='p',
-            tier=self.main_tier,
-            is_active=False,
-        )
-        below_tier = User.objects.create_user(
-            email='below@test.com',
-            password='p',
-            tier=self.free_tier,
-            is_active=True,
-        )
-        override_user = User.objects.create_user(
-            email='override@test.com',
-            password='p',
-            tier=self.free_tier,
-            is_active=True,
-        )
+        eligible = User.objects.create_user(email='eligible@test.com', password='p', is_active=True)
+        set_membership(eligible, tier=self.main_tier)
+        inactive = User.objects.create_user(email='inactive@test.com', password='p', is_active=False)
+        set_membership(inactive, tier=self.main_tier)
+        below_tier = User.objects.create_user(email='below@test.com', password='p', is_active=True)
+        set_membership(below_tier, tier=self.free_tier)
+        override_user = User.objects.create_user(email='override@test.com', password='p', is_active=True)
+        set_membership(override_user, tier=self.free_tier)
         TierOverride.objects.create(
             user=override_user,
             original_tier=self.free_tier,

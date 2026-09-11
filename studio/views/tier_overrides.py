@@ -52,7 +52,8 @@ def _user_override_context(user):
     )
     # Override authoring is intentionally based on the stored base tier, not
     # effective access, so staff can grant only tiers above the real subscription.
-    current_level = user.tier.level if user.tier_id else 0
+    # Issue #1579: the base tier lives on payments.Membership.
+    current_level = user.membership.tier.level if user.membership.tier_id else 0
     highest_tier = Tier.objects.order_by('-level').first()
     is_highest_tier = bool(highest_tier and current_level >= highest_tier.level)
     available_tiers = []
@@ -81,7 +82,9 @@ def tier_override_page(request):
 @staff_required
 def user_tier_override_page(request, user_id):
     """Per-user tier override management page."""
-    user = get_object_or_404(User.objects.select_related('tier'), pk=user_id)
+    user = get_object_or_404(
+        User.objects.select_related('membership__tier'), pk=user_id,
+    )
     return render(
         request,
         'studio/users/tier_override.html',
@@ -177,7 +180,7 @@ def studio_user_search(request):
     candidates = list(
         User.objects
         .filter(name_or_email)
-        .select_related('tier')
+        .select_related('membership__tier')
         [:50]
     )
 

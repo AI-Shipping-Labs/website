@@ -119,7 +119,7 @@ def _send_invite_email_only(action, user):
 def community_invite_task(user_id):
     """Invite a user to the community. Called on checkout completion for Main+."""
     try:
-        user = User.objects.select_related("tier").get(pk=user_id)
+        user = User.objects.select_related("membership__tier").get(pk=user_id)
     except User.DoesNotExist:
         logger.error("community_invite_task: user %s not found", user_id)
         return
@@ -138,7 +138,7 @@ def community_invite_task(user_id):
 def community_reactivate_task(user_id):
     """Reactivate a user in the community. Called on re-subscribe to Main+."""
     try:
-        user = User.objects.select_related("tier").get(pk=user_id)
+        user = User.objects.select_related("membership__tier").get(pk=user_id)
     except User.DoesNotExist:
         logger.error("community_reactivate_task: user %s not found", user_id)
         return
@@ -157,7 +157,7 @@ def community_reactivate_task(user_id):
 def community_remove_task(user_id):
     """Remove a user from the community. Called on subscription deletion."""
     try:
-        user = User.objects.select_related("tier").get(pk=user_id)
+        user = User.objects.select_related("membership__tier").get(pk=user_id)
     except User.DoesNotExist:
         logger.error("community_remove_task: user %s not found", user_id)
         return

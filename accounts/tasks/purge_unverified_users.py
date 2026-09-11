@@ -33,6 +33,18 @@ _PURGE_IGNORED_RELATIONS = frozenset({
     "emailaddress",
     "socialaccount",
     "attribution",
+    # payments.Membership (issue #1579): a OneToOne created by a
+    # ``post_save`` receiver, so every user has exactly one. Its Stripe
+    # identifiers are checked explicitly by the batched field gates, so the
+    # row itself must not block.
+    "membership",
+    # analytics.UserActivity (issue #853): every user gets a ``signup``
+    # row written by the same ``post_save`` chokepoint as ``attribution``.
+    # For an unverified, never-logged-in email signup that is the ONLY
+    # possible row (enroll / lesson / payment / event all require a
+    # verified, authenticated session), so this relation is signup
+    # bookkeeping — not user-driven activity — and must not block the
+    # purge of an abandoned account.
     "activities",
 })
 
@@ -64,10 +76,10 @@ def _positive_int_config(key, default):
 
 def _candidate_queryset(base_queryset):
     """Push every cheap, fail-closed field gate into the database query."""
-    return base_queryset.filter(
+    return base_queryset.select_related("membership").filter(
         last_login__isnull=True,
-        stripe_customer_id="",
-        subscription_id="",
+        membership__stripe_customer_id="",
+        membership__subscription_id="",
     )
 
 
@@ -140,9 +152,9 @@ def _warn_skipped(user, reason, *, eager):
 def _field_blocker(user):
     if user.last_login is not None:
         return "last_login"
-    if user.stripe_customer_id:
+    if user.membership.stripe_customer_id:
         return "stripe_customer_id"
-    if user.subscription_id:
+    if user.membership.subscription_id:
         return "subscription_id"
     return None
 
@@ -165,11 +177,11 @@ def _record_field_blockers(
         return
     blocker_filter = (
         Q(last_login__isnull=False)
-        | ~Q(stripe_customer_id="")
-        | ~Q(subscription_id="")
+        | ~Q(membership__stripe_customer_id="")
+        | ~Q(membership__subscription_id="")
     )
     blocked_users = list(
-        base_queryset.filter(blocker_filter)
+        base_queryset.select_related("membership").filter(blocker_filter)
         .order_by("pk")[:warning_limit]
     )
     for user in blocked_users:

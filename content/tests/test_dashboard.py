@@ -39,7 +39,7 @@ from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from events.models import Event, EventRegistration, EventSeries
 from notifications.models import Notification
 from plans.models import Plan, Sprint, SprintEnrollment
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll
 
 User = get_user_model()
@@ -104,10 +104,8 @@ class DashboardHeaderTest(TierSetupMixin, TestCase):
     """The dashboard renders a compact identity header and tier pill."""
 
     def _login_user(self, email, *, tier=None, first_name=''):
-        user = User.objects.create_user(
-            email=email, password='testpass', first_name=first_name,
-            tier=tier,
-        )
+        user = User.objects.create_user(email=email, password='testpass', first_name=first_name)
+        set_membership(user, tier=tier)
         self.client.login(email=email, password='testpass')
         return user
 
@@ -546,7 +544,7 @@ class ContinueLearningCourseAccessTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='granted@example.com', password='testpass',
         )
-        cls.user.tier = cls.free_tier
+        set_membership(cls.user, tier=cls.free_tier)
         cls.user.save()
 
         # Premium-gated course with one unit so it can be "in progress"
@@ -1035,7 +1033,7 @@ class RecentContentTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Unlock with Premium')
 
     def test_shows_gated_content_for_premium_user(self):
-        self.user.tier = self.premium_tier
+        set_membership(self.user, tier=self.premium_tier)
         self.user.save()
         Article.objects.create(
             title='Premium Article', slug='premium-article',
@@ -1090,7 +1088,7 @@ class ActivePollsTest(TierSetupMixin, TestCase):
         self.user = User.objects.create_user(
             email='voter@example.com', password='testpass',
         )
-        self.user.tier = self.main_tier
+        set_membership(self.user, tier=self.main_tier)
         self.user.save()
         self.client.login(email='voter@example.com', password='testpass')
 
@@ -1209,7 +1207,7 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='main@example.com', password='testpass',
         )
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main@example.com', password='testpass')
         response = self.client.get('/')
@@ -1234,7 +1232,7 @@ class QuickActionsTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='actions-main@example.com', password='testpass',
         )
-        user.tier = self.main_tier
+        set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='actions-main@example.com', password='testpass')
         response = self.client.get('/')
@@ -1283,11 +1281,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
 
     def test_brand_new_free_member_sees_checklist_before_unlock_more(self):
-        user = User.objects.create_user(
-            email='free-activation@test.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='free-activation@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         self._login_user(user)
 
         response = self.client.get('/')
@@ -1319,11 +1314,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
                 self.fail(f"{item['title']} links to missing route {path}: {exc}")
 
     def test_checklist_completion_reflects_existing_activity(self):
-        user = User.objects.create_user(
-            email='free-progress@test.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='free-progress@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         course, unit = self._create_ai_hero()
         Enrollment.objects.create(user=user, course=course)
         UserCourseProgress.objects.create(user=user, unit=unit, completed_at=timezone.now())
@@ -1370,11 +1362,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
 
     def test_member_can_skip_an_individual_checklist_row(self):
-        user = User.objects.create_user(
-            email='free-skip@test.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='free-skip@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         self._login_user(user)
 
         initial = self.client.get('/')
@@ -1410,11 +1399,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
 
     def test_active_sprint_plan_completes_sprint_checklist_item(self):
-        user = User.objects.create_user(
-            email='free-plan@test.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='free-plan@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         sprint = self._create_active_sprint(slug='planned-sprint')
         Plan.objects.create(member=user, sprint=sprint)
         self._login_user(user)
@@ -1432,11 +1418,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="free-plan-teaser"')
 
     def test_basic_members_start_paid_checklist_with_onboarding(self):
-        user = User.objects.create_user(
-            email='basic-activation@test.com',
-            password='testpass',
-            tier=self.basic_tier,
-        )
+        user = User.objects.create_user(email='basic-activation@test.com', password='testpass')
+        set_membership(user, tier=self.basic_tier)
         self._login_user(user)
 
         response = self.client.get('/')
@@ -1456,11 +1439,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
 
     def test_paid_member_with_plan_still_sees_onboarding_prompt(self):
-        user = User.objects.create_user(
-            email='planned-onboarding@test.com',
-            password='testpass',
-            tier=self.main_tier,
-        )
+        user = User.objects.create_user(email='planned-onboarding@test.com', password='testpass')
+        set_membership(user, tier=self.main_tier)
         sprint = self._create_active_sprint(slug='planned-onboarding')
         Plan.objects.create(member=user, sprint=sprint, shared_at=timezone.now())
         self._login_user(user)
@@ -1472,12 +1452,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="account-sprint-plan-card"')
 
     def test_completed_free_checklist_reappears_with_paid_tasks_after_upgrade(self):
-        user = User.objects.create_user(
-            email='upgrade-checklist@test.com',
-            password='testpass',
-            tier=self.free_tier,
-            dashboard_dismissals=['free_activation_sprint_guide_seen'],
-        )
+        user = User.objects.create_user(email='upgrade-checklist@test.com', password='testpass', dashboard_dismissals=['free_activation_sprint_guide_seen'])
+        set_membership(user, tier=self.free_tier)
         course, _unit = self._create_ai_hero()
         Enrollment.objects.create(user=user, course=course)
         event = Event.objects.create(
@@ -1506,8 +1482,7 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
             self.client.get('/'), 'data-testid="free-activation-checklist"',
         )
 
-        user.tier = self.main_tier
-        user.save(update_fields=['tier'])
+        set_membership(user, tier=self.main_tier)
         with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
             upgraded = self.client.get('/')
 
@@ -1534,11 +1509,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
 
     def test_free_user_with_active_paid_override_uses_paid_dashboard(self):
-        user = User.objects.create_user(
-            email='override-activation@test.com',
-            password='testpass',
-            tier=self.free_tier,
-        )
+        user = User.objects.create_user(email='override-activation@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
         TierOverride.objects.create(
             user=user,
             original_tier=self.free_tier,
@@ -1564,10 +1536,8 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
 
 class FreeUnlockPreviewTest(TierSetupMixin, TestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='free-unlock@test.com', password='testpass',
-            tier=self.free_tier,
-        )
+        self.user = User.objects.create_user(email='free-unlock@test.com', password='testpass')
+        set_membership(self.user, tier=self.free_tier)
         self.client.login(email=self.user.email, password='testpass')
 
     def test_current_book_uses_together_copy(self):
@@ -1655,7 +1625,7 @@ class SlackJoinPromptTest(TierSetupMixin, TestCase):
     def _create_user(self, email, tier=None, slack_user_id='', slack_member=False):
         user = User.objects.create_user(email=email, password='testpass')
         if tier:
-            user.tier = tier
+            set_membership(user, tier=tier)
             user.save()
         if slack_user_id:
             user.slack_user_id = slack_user_id

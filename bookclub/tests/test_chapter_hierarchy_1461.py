@@ -20,6 +20,7 @@ from bookclub.models import (
 )
 from content.access import LEVEL_MAIN
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
@@ -39,10 +40,10 @@ class ChapterHierarchyFixture(TestCase):
             book=cls.book, number=1, title='Prerequisites',
         )
         cls.member = User.objects.create_user(email='me@test.com', password='pw')
-        cls.member.tier = Tier.objects.get(slug='main')
+        set_membership(cls.member, tier=Tier.objects.get(slug='main'))
         cls.member.save()
         cls.other = User.objects.create_user(email='them@test.com', password='pw')
-        cls.other.tier = Tier.objects.get(slug='main')
+        set_membership(cls.other, tier=Tier.objects.get(slug='main'))
         cls.other.save()
         ReaderProfile.objects.create(
             user=cls.other, visibility=READER_VISIBILITY_PUBLIC,
@@ -90,7 +91,7 @@ class OwnNoteRendersOnceTest(ChapterHierarchyFixture):
 
     def test_private_author_is_still_excluded_from_the_count_and_feed(self):
         ghost = User.objects.create_user(email='ghost@test.com', password='pw')
-        ghost.tier = Tier.objects.get(slug='main')
+        set_membership(ghost, tier=Tier.objects.get(slug='main'))
         ghost.save()
         ReaderProfile.objects.create(
             user=ghost, visibility=READER_VISIBILITY_PRIVATE,

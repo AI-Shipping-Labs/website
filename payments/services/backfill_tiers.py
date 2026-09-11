@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from accounts.models import TierOverride
 from integrations.config import get_config
-from payments.models import WebhookEvent
+from payments.models import Membership, WebhookEvent
 from payments.services import tier_resolution as _tier_resolution
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,
@@ -59,16 +59,20 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
 
     When ``force=True`` and the user has an active Stripe subscription that
     resolves to a tier, every active ``TierOverride`` on the user is
-    deactivated (not just the one matching the resolved tier), and
-    ``user.billing_period_end`` is overwritten with Stripe's current
+    deactivated (not just the one matching the resolved tier), and the
+    membership's ``billing_period_end`` is overwritten with Stripe's current
     ``current_period_end`` even when it is already populated.
 
     Force is only ever honored when Stripe says the user is actively paying.
     Users with no ``stripe_customer_id`` or no active subscription are
     returned with their existing ``skipped`` / ``warning`` outcome and no
     writes occur — force never escalates a non-Stripe user.
+
+    Issue #1579: every read and write below goes through
+    ``payments.Membership`` (the ``user`` argument keeps its name).
     """
-    if not user.stripe_customer_id:
+    membership = Membership.for_user(user)
+    if not membership.stripe_customer_id:
         return ChangeRecord(
             user_id=user.pk,
             email=user.email,
@@ -80,13 +84,15 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
 
     price_to_tier = price_to_tier or _price_to_tier_map()
     try:
-        subscriptions = _active_subscriptions_for_customer(user.stripe_customer_id)
+        subscriptions = _active_subscriptions_for_customer(
+            membership.stripe_customer_id
+        )
     except CONFIGURATION_ERRORS as exc:
         warning = _stripe_lookup_warning(user.email, exc)
         return ChangeRecord(
             user_id=user.pk,
             email=user.email,
-            stripe_customer_id=user.stripe_customer_id,
+            stripe_customer_id=membership.stripe_customer_id,
             status="warning",
             message=warning,
             old_tier_slug=_tier_slug(user),
@@ -104,7 +110,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
             return ChangeRecord(
                 user_id=user.pk,
                 email=user.email,
-                stripe_customer_id=user.stripe_customer_id,
+                stripe_customer_id=membership.stripe_customer_id,
                 status="warning",
                 message=warning,
                 old_tier_slug=old_tier_slug,
@@ -113,7 +119,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
         return ChangeRecord(
             user_id=user.pk,
             email=user.email,
-            stripe_customer_id=user.stripe_customer_id,
+            stripe_customer_id=membership.stripe_customer_id,
             status="skipped",
             message="no change: no active Stripe subscription",
             old_tier_slug=old_tier_slug,
@@ -132,7 +138,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
         return ChangeRecord(
             user_id=user.pk,
             email=user.email,
-            stripe_customer_id=user.stripe_customer_id,
+            stripe_customer_id=membership.stripe_customer_id,
             status="warning",
             message=warning,
             old_tier_slug=old_tier_slug,
@@ -158,26 +164,26 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
     # flag; operators should not need force merely to refresh cached billing
     # metadata on the normal Sync from Stripe path.
     subscription_id_would_change = bool(
-        subscription_id and user.subscription_id != subscription_id
+        subscription_id and membership.subscription_id != subscription_id
     )
     billing_period_end_would_change = bool(
-        period_end and user.billing_period_end != period_end
+        period_end and membership.billing_period_end != period_end
     )
     billing_period_end_overwritten = bool(
         force
         and period_end
-        and user.billing_period_end is not None
-        and user.billing_period_end != period_end
+        and membership.billing_period_end is not None
+        and membership.billing_period_end != period_end
     )
 
     metadata_saved = subscription_id_would_change or billing_period_end_would_change
-    tier_changed = user.tier_id != tier.pk
+    tier_changed = membership.tier_id != tier.pk
 
     if not tier_changed and not override_deactivated and not metadata_saved:
         return ChangeRecord(
             user_id=user.pk,
             email=user.email,
-            stripe_customer_id=user.stripe_customer_id,
+            stripe_customer_id=membership.stripe_customer_id,
             status="skipped",
             message=f"no change: already on {tier.slug}",
             old_tier_slug=old_tier_slug,
@@ -189,7 +195,7 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
     record = ChangeRecord(
         user_id=user.pk,
         email=user.email,
-        stripe_customer_id=user.stripe_customer_id,
+        stripe_customer_id=membership.stripe_customer_id,
         status="changed",
         message=_change_message(
             old_tier_slug,
@@ -214,16 +220,16 @@ def backfill_user_from_stripe(user, *, dry_run=False, price_to_tier=None, force=
 
     update_fields = []
     if tier_changed:
-        user.tier = tier
+        membership.tier = tier
         update_fields.append("tier")
     if subscription_id_would_change:
-        user.subscription_id = subscription_id
+        membership.subscription_id = subscription_id
         update_fields.append("subscription_id")
     if billing_period_end_would_change:
-        user.billing_period_end = period_end
+        membership.billing_period_end = period_end
         update_fields.append("billing_period_end")
     if update_fields:
-        user.save(update_fields=update_fields)
+        membership.save(update_fields=update_fields)
     for override in sweep_overrides:
         override.is_active = False
         override.save(update_fields=["is_active"])
@@ -288,8 +294,10 @@ def _active_matching_override(user, tier):
 
 
 def _tier_slug(user):
-    if user.tier_id and user.tier:
-        return user.tier.slug
+    # Issue #1579: the base tier lives on payments.Membership.
+    membership = user.membership
+    if membership.tier_id and membership.tier:
+        return membership.tier.slug
     return "free"
 
 

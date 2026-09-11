@@ -32,6 +32,8 @@ from playwright_tests.conftest import (
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
 
+from tests.fixtures import set_membership
+
 # Issue #656: this module uses local-only fixtures (DB seeding,
 # session-cookie injection, etc.) and cannot run against the
 # deployed dev environment. See _docs/testing-guidelines.md.
@@ -87,8 +89,8 @@ def _create_paid_member(email, stripe_customer_id):
         password=DEFAULT_PASSWORD,
         email_verified=True,
     )
-    user.tier = tier
-    user.stripe_customer_id = stripe_customer_id
+    set_membership(user, tier=tier)
+    set_membership(user, stripe_customer_id=stripe_customer_id)
     user.save()
     pk = user.pk
     connection.close()

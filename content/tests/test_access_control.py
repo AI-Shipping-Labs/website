@@ -35,7 +35,7 @@ from content.models import (
     WorkshopPage,
 )
 from events.models import Event
-from tests.fixtures import TierSetupMixin
+from tests.fixtures import TierSetupMixin, set_membership
 
 # --- Unit Tests for access.py utilities ---
 
@@ -53,23 +53,23 @@ class GetUserLevelTest(TierSetupMixin, TestCase):
         super().setUpTestData()
         cls.anon = AnonymousUser()
         cls.no_tier_user = User.objects.create_user(email='notier@example.com')
-        cls.no_tier_user.tier = None
+        set_membership(cls.no_tier_user, tier=None)
         cls.no_tier_user.save()
 
         cls.free_user = User.objects.create_user(email='free@example.com')
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.basic_user = User.objects.create_user(email='basic@example.com')
-        cls.basic_user.tier = cls.basic_tier
+        set_membership(cls.basic_user, tier=cls.basic_tier)
         cls.basic_user.save()
 
         cls.main_user = User.objects.create_user(email='main@example.com')
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
         cls.premium_user = User.objects.create_user(email='premium@example.com')
-        cls.premium_user.tier = cls.premium_tier
+        set_membership(cls.premium_user, tier=cls.premium_tier)
         cls.premium_user.save()
 
     def test_returns_correct_level_per_tier(self):
@@ -98,7 +98,7 @@ class GetUserLevelTest(TierSetupMixin, TestCase):
         for label, attrs in cases:
             with self.subTest(user=label):
                 user = User.objects.create_user(email=attrs['email'])
-                user.tier = attrs.get('tier')
+                set_membership(user, tier=attrs.get('tier'))
                 user.is_staff = attrs.get('is_staff', False)
                 user.is_superuser = attrs.get('is_superuser', False)
                 user.save()
@@ -122,19 +122,19 @@ class CanAccessTest(TierSetupMixin, TestCase):
         cls.anon = AnonymousUser()
 
         cls.free_user = User.objects.create_user(email='free@test.com', email_verified=True)
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
 
         cls.basic_user = User.objects.create_user(email='basic@test.com', email_verified=True)
-        cls.basic_user.tier = cls.basic_tier
+        set_membership(cls.basic_user, tier=cls.basic_tier)
         cls.basic_user.save()
 
         cls.main_user = User.objects.create_user(email='main@test.com', email_verified=True)
-        cls.main_user.tier = cls.main_tier
+        set_membership(cls.main_user, tier=cls.main_tier)
         cls.main_user.save()
 
         cls.premium_user = User.objects.create_user(email='prem@test.com', email_verified=True)
-        cls.premium_user.tier = cls.premium_tier
+        set_membership(cls.premium_user, tier=cls.premium_tier)
         cls.premium_user.save()
 
         cls.open_article = Article.objects.create(
@@ -181,19 +181,19 @@ class CanAccessTest(TierSetupMixin, TestCase):
         privileged = []
 
         staff_with_tier = User.objects.create_user(email='staff-access@test.com')
-        staff_with_tier.tier = self.free_tier
+        set_membership(staff_with_tier, tier=self.free_tier)
         staff_with_tier.is_staff = True
         staff_with_tier.save()
         privileged.append(('staff with free tier', staff_with_tier))
 
         superuser_with_tier = User.objects.create_user(email='super-access@test.com')
-        superuser_with_tier.tier = self.free_tier
+        set_membership(superuser_with_tier, tier=self.free_tier)
         superuser_with_tier.is_superuser = True
         superuser_with_tier.save()
         privileged.append(('superuser with free tier', superuser_with_tier))
 
         staff_no_tier = User.objects.create_user(email='staff-notier@test.com')
-        staff_no_tier.tier = None
+        set_membership(staff_no_tier, tier=None)
         staff_no_tier.is_staff = True
         staff_no_tier.save()
         privileged.append(('staff without tier', staff_no_tier))
@@ -227,7 +227,7 @@ class CanAccessEmailVerifiedTest(TierSetupMixin, TestCase):
             email_verified=verified,
             **kwargs,
         )
-        user.tier = tier
+        set_membership(user, tier=tier)
         user.save()
         return user
 
@@ -387,7 +387,7 @@ class OverrideGatingRegressionTest(TierSetupMixin, TestCase):
         cls.user = User.objects.create_user(
             email='override-gate@test.com', email_verified=True,
         )
-        cls.user.tier = cls.free_tier
+        set_membership(cls.user, tier=cls.free_tier)
         cls.user.save()
         TierOverride.objects.create(
             user=cls.user,
@@ -511,7 +511,7 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
 
     def test_not_gated_for_matching_user(self):
         user = User.objects.create_user(email='basic@test.com')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         ctx = build_gating_context(user, self.article, 'article')
         self.assertFalse(ctx['is_gated'])
@@ -533,14 +533,14 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
 
     def test_gated_for_free_user(self):
         user = User.objects.create_user(email='free@test.com')
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         ctx = build_gating_context(user, self.article, 'article')
         self.assertTrue(ctx['is_gated'])
 
     def test_not_gated_for_staff_user(self):
         user = User.objects.create_user(email='staff@test.com')
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.is_staff = True
         user.save()
         ctx = build_gating_context(user, self.article, 'article')
@@ -548,7 +548,7 @@ class BuildGatingContextTest(TierSetupMixin, TestCase):
 
     def test_not_gated_for_superuser(self):
         user = User.objects.create_user(email='super@test.com')
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.is_superuser = True
         user.save()
         ctx = build_gating_context(user, self.article, 'article')
@@ -653,10 +653,10 @@ class BlogDetailAccessControlTest(TierSetupMixin, TestCase):
             required_level=LEVEL_MAIN,
         )
         cls.free_user = User.objects.create_user(email='free-blog@test.com')
-        cls.free_user.tier = cls.free_tier
+        set_membership(cls.free_user, tier=cls.free_tier)
         cls.free_user.save()
         cls.basic_user = User.objects.create_user(email='basic-blog@test.com')
-        cls.basic_user.tier = cls.basic_tier
+        set_membership(cls.basic_user, tier=cls.basic_tier)
         cls.basic_user.save()
 
     def test_anonymous_sees_gated_basic_article(self):
@@ -780,7 +780,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
             email='free-project@test.com', password='testpass',
             email_verified=True,
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.login(email=user.email, password='testpass')
 
@@ -797,7 +797,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         # Playwright test_project_showcase.py suite — this Django test is
         # now the sole authoritative coverage for basic-member project access.
         user = User.objects.create_user(email='basic@test.com', password='testpass')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/projects/gated-project')
@@ -816,7 +816,7 @@ class ProjectDetailAccessControlTest(TierSetupMixin, TestCase):
         user = User.objects.create_user(
             email='staff-proj@test.com', password='testpass',
         )
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.is_staff = True
         user.save()
         self.client.login(email='staff-proj@test.com', password='testpass')
@@ -860,7 +860,7 @@ class TutorialDetailAccessControlTest(TierSetupMixin, TestCase):
 
     def test_free_user_sees_gated_tutorial_upgrade_copy(self):
         user = User.objects.create_user(email='free-tutorial@test.com')
-        user.tier = self.free_tier
+        set_membership(user, tier=self.free_tier)
         user.save()
         self.client.force_login(user)
 
@@ -891,7 +891,7 @@ class FreeUnverifiedDetailGateTest(TierSetupMixin, TestCase):
             password='testpass',
             email_verified=False,
         )
-        self.user.tier = self.free_tier
+        set_membership(self.user, tier=self.free_tier)
         self.user.save()
         self.client.login(email='unverified-detail@example.com', password='testpass')
 
@@ -1212,7 +1212,7 @@ class AccessTemplateTagsTest(TierSetupMixin, TestCase):
     def test_can_access_content_tag_with_matching_user(self):
         from content.templatetags.access_tags import can_access_content
         user = User.objects.create_user(email='basic@test.com')
-        user.tier = self.basic_tier
+        set_membership(user, tier=self.basic_tier)
         user.save()
         self.assertTrue(can_access_content(user, self.basic_article))
 

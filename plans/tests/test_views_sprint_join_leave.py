@@ -9,21 +9,20 @@ from django.utils import timezone
 
 from payments.models import Tier
 from plans.models import Plan, Sprint, SprintEnrollment
+from tests.fixtures import set_membership
 
 User = get_user_model()
 
 
 def _premium_user(email):
     user = User.objects.create_user(email=email, password='pw')
-    user.tier = Tier.objects.get(slug='premium')
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug='premium'))
     return user
 
 
 def _free_user(email):
     user = User.objects.create_user(email=email, password='pw')
-    user.tier = Tier.objects.get(slug='free')
-    user.save(update_fields=['tier'])
+    set_membership(user, tier=Tier.objects.get(slug='free'))
     return user
 
 

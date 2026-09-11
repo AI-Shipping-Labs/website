@@ -222,7 +222,7 @@ class TestGuestFunnel1159:
             from accounts.models import User
 
             user = User.objects.get(email=email)
-            assert user.tier.slug == "free"
+            assert user.membership.tier.slug == "free"
             assert user.email_verified is False
 
     @pytest.mark.core

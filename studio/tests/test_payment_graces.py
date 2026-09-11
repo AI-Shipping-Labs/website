@@ -10,6 +10,7 @@ from accounts.models import TierOverride, User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.models import Tier
+from tests.fixtures import set_membership
 
 
 class PaymentGraceStudioTest(TestCase):
@@ -18,17 +19,18 @@ class PaymentGraceStudioTest(TestCase):
         cls.staff = User.objects.create_user(
             email="grace-staff@test.com", password="x", is_staff=True,
         )
-        cls.member = User.objects.create_user(
-            email="grace-studio-member@test.com",
+        cls.member = User.objects.create_user(email="grace-studio-member@test.com")
+        set_membership(
+            cls.member,
             tier=Tier.objects.get(slug="main"),
             stripe_customer_id="cus_studio_grace",
             subscription_id="sub_studio_grace",
         )
         now = timezone.now()
         cls.grace = Grace.objects.create(
-            user=cls.member, base_tier_at_start=cls.member.tier,
-            stripe_customer_id=cls.member.stripe_customer_id,
-            stripe_subscription_id=cls.member.subscription_id,
+            user=cls.member, base_tier_at_start=cls.member.membership.tier,
+            stripe_customer_id=cls.member.membership.stripe_customer_id,
+            stripe_subscription_id=cls.member.membership.subscription_id,
             stripe_invoice_id="in_studio_grace", livemode=False,
             source=Grace.SOURCE_WEBHOOK, interval="month", interval_count=1,
             grace_started_at=now, grace_expires_at=now + timedelta(hours=168),

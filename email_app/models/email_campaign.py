@@ -14,6 +14,7 @@ class EmailCampaign(models.Model):
         ('draft', 'Draft'),
         ('sending', 'Sending'),
         ('needs_attention', 'Needs attention'),
+        ('paused', 'Paused'),
         ('sent', 'Sent'),
     ]
 
@@ -46,8 +47,10 @@ class EmailCampaign(models.Model):
     # ALWAYS enforced in both modes -- never relaxed.
     AUDIENCE_VERIFICATION_VERIFIED_ONLY = 'verified_only'
     AUDIENCE_VERIFICATION_EVERYONE = 'everyone'
+    AUDIENCE_VERIFICATION_UNVERIFIED_ONLY = 'unverified_only'
     AUDIENCE_VERIFICATION_CHOICES = [
         (AUDIENCE_VERIFICATION_VERIFIED_ONLY, 'Verified only'),
+        (AUDIENCE_VERIFICATION_UNVERIFIED_ONLY, 'Unverified only'),
         (AUDIENCE_VERIFICATION_EVERYONE, 'Everyone (including unverified)'),
     ]
 
@@ -98,8 +101,8 @@ class EmailCampaign(models.Model):
         choices=AUDIENCE_VERIFICATION_CHOICES,
         default=AUDIENCE_VERIFICATION_VERIFIED_ONLY,
         help_text=(
-            'Whether to require email_verified=True. "everyone" drops the '
-            'verified-only filter; unsubscribed=False is always enforced.'
+            'Whether to require verified, unverified, or either verification '
+            'state. unsubscribed=False is always enforced.'
         ),
     )
     # Issue #1076: optional event-registrant audience. Null = the historical
@@ -166,8 +169,9 @@ class EmailCampaign(models.Model):
         - effective tier level >= target_min_level
           (base tier or active override)
         - unsubscribed = False (always enforced; never relaxed)
-        - email_verified = True UNLESS
-          ``audience_verification == 'everyone'`` (issue #692)
+        - email verification matches ``audience_verification``: verified,
+          unverified, or either for ``everyone``
+        - permanently bounced addresses are excluded from ``unverified_only``
         - if ``target_tags_any`` is non-empty: ``user.tags`` contains at
           least one of those tags.
         - if ``target_tags_none`` is non-empty: ``user.tags`` contains

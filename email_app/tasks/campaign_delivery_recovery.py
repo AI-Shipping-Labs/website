@@ -4,6 +4,7 @@ import ast
 import logging
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django_q.models import OrmQ, Schedule
 
@@ -136,6 +137,7 @@ def recover_campaign_deliveries():
     pending_by_campaign = {}
     for campaign_id, delivery_id in (
         CampaignDelivery.objects.filter(state=CampaignDelivery.State.PENDING)
+        .filter(Q(wave__isnull=True) | Q(wave__released_at__isnull=False))
         .order_by('campaign_id', 'recipient_user_pk', 'pk')
         .values_list('campaign_id', 'pk')
     ):
@@ -158,6 +160,8 @@ def recover_campaign_deliveries():
         CampaignDelivery.objects.filter(
             state=CampaignDelivery.State.FAILED,
             attempt_count__lt=max_attempts,
+        ).filter(
+            Q(wave__isnull=True) | Q(wave__released_at__isnull=False)
         ).order_by('campaign_id', 'recipient_user_pk', 'pk')
         .values_list('pk', flat=True)
     )

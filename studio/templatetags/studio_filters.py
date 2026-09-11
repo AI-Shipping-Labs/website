@@ -69,6 +69,7 @@ STATUS_BADGE_CLASSES = {
     'sending': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'dispatching': 'bg-blue-500/20 text-blue-700 dark:text-blue-300',
     'needs_attention': 'bg-red-500/20 text-red-700 dark:text-red-300',
+    'paused': 'bg-red-500/20 text-red-700 dark:text-red-300',
     'ambiguous': 'bg-red-500/20 text-red-700 dark:text-red-300',
     'sent': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'assumed_sent': 'bg-secondary text-muted-foreground',

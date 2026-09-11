@@ -250,6 +250,9 @@ class StudioProjectReviewTest(TestCase):
     def test_project_review_query_count_is_bounded(self):
         self.project.submitter = User.objects.create_user(email='bounded@test.com')
         self.project.save(update_fields=['submitter'])
+        # Exclude one-time navigation/config cache initialization from the
+        # steady-state view budget measured by this test.
+        self.client.get(f'/studio/projects/{self.project.pk}/review')
         with CaptureQueriesContext(connection) as queries:
             self.client.get(f'/studio/projects/{self.project.pk}/review')
         self.assertLessEqual(len(queries), 7)

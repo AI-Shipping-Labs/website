@@ -39,6 +39,7 @@ from email_app.services.campaign_recipients import (
     serialize_campaign_recipient,
     serialize_campaign_recipients,
 )
+from email_app.services.campaign_waves import campaign_wave_summary
 from events.models import Event
 
 READ_ONLY_FIELDS = {
@@ -69,6 +70,9 @@ VALID_AUDIENCE_VERIFICATIONS = {
 }
 
 _STATUS_ENUM = sorted(VALID_STATUSES)
+_AUDIENCE_VERIFICATION_ENUM = [
+    "verified_only", "unverified_only", "everyone",
+]
 
 _CAMPAIGN_EXAMPLE = {
     "id": 1,
@@ -126,7 +130,10 @@ AUDIENCE_FIELDS = {
                     "target_tags_any": {"type": "array", "items": {"type": "string"}},
                     "target_tags_none": {"type": "array", "items": {"type": "string"}},
                     "slack_filter": {"type": "string", "enum": ["any", "yes", "no"]},
-                    "audience_verification": {"type": "string", "enum": ["verified_only", "everyone"]},
+                    "audience_verification": {
+                        "type": "string",
+                        "enum": _AUDIENCE_VERIFICATION_ENUM,
+                    },
                     "target_event": {"type": ["integer", "null"]},
                 },
                 "example": {
@@ -372,7 +379,10 @@ def _apply_campaign_values(campaign, values):
                         "items": {"type": "string"},
                     },
                     "slack_filter": {"type": "string"},
-                    "audience_verification": {"type": "string"},
+                    "audience_verification": {
+                        "type": "string",
+                        "enum": _AUDIENCE_VERIFICATION_ENUM,
+                    },
                     "target_event": {
                         "type": "integer",
                         "nullable": True,
@@ -502,7 +512,10 @@ def campaigns_collection(request):
                         "items": {"type": "string"},
                     },
                     "slack_filter": {"type": "string"},
-                    "audience_verification": {"type": "string"},
+                    "audience_verification": {
+                        "type": "string",
+                        "enum": _AUDIENCE_VERIFICATION_ENUM,
+                    },
                     "target_event": {
                         "type": "integer",
                         "nullable": True,
@@ -654,6 +667,104 @@ def campaign_recipients(request, campaign_id):
             status=404,
         )
     return JsonResponse(serialize_campaign_recipients(campaign), status=200)
+
+
+def _serialize_wave_summary(summary):
+    payload = {**summary, "waves": []}
+    for wave in summary["waves"]:
+        payload["waves"].append({
+            **wave,
+            "released_at": isoformat_or_none(wave["released_at"]),
+            "monitoring_started_at": isoformat_or_none(
+                wave["monitoring_started_at"]
+            ),
+            "completed_at": isoformat_or_none(wave["completed_at"]),
+            "earliest_next_release": isoformat_or_none(
+                wave["earliest_next_release"]
+            ),
+        })
+    return payload
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Campaigns",
+    summary="Monitor re-permission campaign waves",
+    methods={
+        "GET": {
+            "description": (
+                "Returns read-only per-wave and cumulative delivery feedback. "
+                "Wave release remains a CSRF-protected Studio action."
+            ),
+            "responses": {
+                200: {
+                    "description": "Wave monitoring summary.",
+                    "example": {
+                        "campaign_id": 1,
+                        "waves": [{
+                            "id": 1,
+                            "number": 1,
+                            "state": "monitoring",
+                            "recipient_count": 100,
+                            "confirmed_sent": 99,
+                            "skipped": 1,
+                            "failed_ambiguous": 0,
+                            "bounces": 1,
+                            "bounce_rate": 1.0101,
+                            "complaints": 0,
+                            "complaint_rate": 0.0,
+                            "released_at": "2026-09-11T09:00:00+00:00",
+                            "monitoring_started_at": "2026-09-11T09:05:00+00:00",
+                            "completed_at": None,
+                            "earliest_next_release": "2026-09-12T09:05:00+00:00",
+                        }],
+                        "cumulative": {
+                            "confirmed_sent": 99,
+                            "skipped": 1,
+                            "failed_ambiguous": 0,
+                            "bounces": 1,
+                            "bounce_rate": 1.0101,
+                            "complaints": 0,
+                            "complaint_rate": 0.0,
+                        },
+                        "thresholds": {
+                            "observation_hours": 24,
+                            "bounce_stop_percent": 2.0,
+                            "complaint_stop_count": 1,
+                        },
+                        "can_release_next": False,
+                        "blocking_reason": "observation_window",
+                    },
+                },
+                401: {"description": "Missing or invalid staff token."},
+                404: {"description": "Campaign not found."},
+                409: {"description": "Campaign is not monitored."},
+            },
+        },
+    },
+)
+def campaign_waves(request, campaign_id):
+    """GET ``/api/campaigns/<id>/waves`` with no mutation route."""
+    campaign = EmailCampaign.objects.filter(pk=campaign_id).first()
+    if campaign is None:
+        return error_response(
+            "Campaign not found", "unknown_campaign", status=404,
+        )
+    if (
+        campaign.audience_verification
+        != EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+    ):
+        return error_response(
+            "Campaign does not use monitored waves.",
+            "not_monitored_campaign",
+            status=409,
+        )
+    return JsonResponse(
+        _serialize_wave_summary(campaign_wave_summary(campaign)),
+        status=200,
+    )
 
 
 def _load_campaign_delivery(campaign_id, delivery_id):

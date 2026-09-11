@@ -45,7 +45,7 @@ class EmailCampaignAdmin(admin.ModelAdmin):
 
     def get_readonly_fields(self, request, obj=None):
         """Make all fields readonly for sent/sending campaigns."""
-        if obj and obj.status in ('sending', 'needs_attention', 'sent'):
+        if obj and obj.status in ('sending', 'needs_attention', 'paused', 'sent'):
             return [
                 'subject', 'body', 'target_min_level',
                 'status', 'sent_at', 'sent_count', 'created_at',

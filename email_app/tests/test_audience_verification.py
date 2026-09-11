@@ -32,6 +32,7 @@ class AudienceVerificationFieldTest(TierSetupMixin, TestCase):
             EmailCampaign.AUDIENCE_VERIFICATION_CHOICES,
             [
                 ("verified_only", "Verified only"),
+                ("unverified_only", "Unverified only"),
                 ("everyone", "Everyone (including unverified)"),
             ],
         )

@@ -26,6 +26,14 @@ from email_app.services.campaign_recipients import (
     build_campaign_recipient_rows,
     campaign_recipient_mode,
 )
+from email_app.services.campaign_repermission import (
+    REPERMISSION_EMAIL_TYPE,
+    repermission_body,
+)
+from email_app.services.campaign_waves import (
+    campaign_wave_summary,
+    release_next_wave,
+)
 from email_app.services.email_service import EmailService, EmailServiceError
 from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
@@ -166,6 +174,13 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         state: campaign.deliveries.filter(state=state).count()
         for state, _label in CampaignDelivery.State.choices
     }
+    wave_summary = None
+    if (
+        campaign.audience_verification
+        == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+    ):
+        wave_summary = campaign_wave_summary(campaign)
+        campaign.refresh_from_db()
     return {
         "campaign": campaign,
         "recipient_count": (
@@ -198,6 +213,8 @@ def _build_campaign_detail_context(campaign, *, test_recipients="", test_recipie
         "ses_campaign_url": (
             f"{reverse('studio_ses_event_list')}?campaign={campaign.pk}"
         ),
+        "is_monitored_campaign": wave_summary is not None,
+        "wave_summary": wave_summary,
     }
 
 
@@ -605,9 +622,15 @@ def campaign_detail(request, campaign_id):
     # the operator sees is exactly what the recipient would get (minus
     # the personalized unsubscribe link).
     service = EmailService()
+    preview_body = (
+        repermission_body(campaign.body, preview=True)
+        if campaign.audience_verification
+        == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+        else campaign.body
+    )
     preview_html = service.render_markdown_email(
         campaign.subject,
-        campaign.body,
+        preview_body,
         unsubscribe_url=None,
         footer_note=(
             "Studio preview — the unsubscribe link will be personalized "
@@ -757,9 +780,51 @@ def campaign_test_send(request, campaign_id):
         unsubscribe_url = None
         footer_note = TEST_EMAIL_FOOTER_NOTE
 
+        is_monitored = (
+            campaign.audience_verification
+            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+        )
+        if is_monitored and user is None:
+            failed[recipient] = (
+                "Re-permission test sends require an existing controlled user."
+            )
+            continue
+
         if user is not None:
             unsubscribe_url = service._build_unsubscribe_url(user)
             footer_note = None
+
+        if is_monitored:
+            if (
+                not user.is_active
+                or user.unsubscribed
+                or user.email_verified
+                or user.bounce_state == User.BounceState.PERMANENT
+            ):
+                failed[recipient] = (
+                    "Re-permission test sends require an active subscribed user."
+                )
+                continue
+            prepared = service.prepare_rendered(
+                user,
+                subject,
+                repermission_body(campaign.body, user=user),
+                email_type=REPERMISSION_EMAIL_TYPE,
+                campaign_id=campaign.pk,
+            )
+            try:
+                service.send_prepared(prepared)
+            except EmailServiceError as exc:
+                failed[recipient] = str(exc)
+                logger.warning(
+                    "Failed to send campaign test email %s to %s",
+                    campaign.pk,
+                    recipient,
+                    exc_info=True,
+                )
+            else:
+                sent.append(recipient)
+            continue
 
         full_html = service.render_markdown_email(
             subject,
@@ -862,6 +927,12 @@ def campaign_send(request, campaign_id):
         result = claim_and_enqueue_campaign(
             campaign.pk,
             source='Studio campaign detail',
+            actor=(
+                request.user
+                if campaign.audience_verification
+                == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+                else None
+            ),
         )
     except Exception:
         logger.exception('Failed to claim and enqueue campaign %s', campaign.pk)
@@ -888,3 +959,31 @@ def campaign_send(request, campaign_id):
         f'Campaign "{campaign.subject}" queued for sending — watching it here.',
     )
     return redirect("studio_worker")
+
+
+@staff_required
+@require_POST
+def campaign_wave_release(request, campaign_id):
+    """Release one eligible monitored wave through a conflict-safe claim."""
+    campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
+    try:
+        result = release_next_wave(
+            campaign.pk,
+            actor=request.user,
+            source="Studio campaign wave release",
+        )
+    except Exception:
+        logger.exception("Failed to release campaign wave for %s", campaign.pk)
+        messages.error(request, "The next wave could not be released safely.")
+    else:
+        if result.released:
+            messages.success(
+                request,
+                f"Wave {result.wave.number} queued for monitored sending.",
+            )
+        else:
+            messages.error(
+                request,
+                f"The next wave is blocked: {result.blocking_reason.replace('_', ' ')}.",
+            )
+    return redirect("studio_campaign_detail", campaign_id=campaign.pk)

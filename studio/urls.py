@@ -71,6 +71,7 @@ from studio.views.campaigns import (
     campaign_recount,
     campaign_send,
     campaign_test_send,
+    campaign_wave_release,
 )
 from studio.views.certificates import certificate_revoke, certificate_unrevoke
 from studio.views.contacts_import import (
@@ -731,6 +732,11 @@ urlpatterns = [
         'campaigns/<int:campaign_id>/test-send',
         campaign_test_send,
         name='studio_campaign_test_send',
+    ),
+    path(
+        'campaigns/<int:campaign_id>/waves/release',
+        campaign_wave_release,
+        name='studio_campaign_wave_release',
     ),
 
     # UTM Campaigns

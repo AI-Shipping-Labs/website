@@ -12,7 +12,11 @@ from django.db import IntegrityError, transaction
 from django.db.models import Count, F, Q
 from django.utils import timezone
 
-from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
+from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
+from email_app.services.campaign_repermission import (
+    REPERMISSION_EMAIL_TYPE,
+    repermission_body,
+)
 from email_app.services.email_service import (
     UNSUBSCRIBED_AT_SEND,
     EmailService,
@@ -31,6 +35,8 @@ DEFAULT_MAX_DELIVERY_ATTEMPTS = 3
 # recoverable without a second automatic transport call.
 DELIVERY_CLAIM_SECONDS = 330
 INACTIVE_AT_SEND = 'inactive_at_send'
+VERIFIED_AT_SEND = 'verified_at_send'
+PERMANENT_BOUNCE_AT_SEND = 'permanent_bounce_at_send'
 
 
 def _get_batch_size():
@@ -78,7 +84,7 @@ def _chunk(items, size):
         yield items[index:index + size]
 
 
-def send_campaign(campaign_id, batch_size=None):
+def send_campaign(campaign_id, batch_size=None, released_by_id=None):
     """Atomically freeze the audience and create all one-off batch schedules."""
     from django_q.models import Schedule
 
@@ -129,10 +135,15 @@ def send_campaign(campaign_id, batch_size=None):
                 f"Campaign {campaign_id} has status '{campaign.status}', expected 'sending'"
             )
 
+        is_monitored = (
+            campaign.audience_verification
+            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+        )
+        user_ordering = ('date_joined', 'pk') if is_monitored else ('pk',)
         users = list(
             campaign.get_eligible_recipients()
-            .only('pk', 'email')
-            .order_by('pk')
+            .only('pk', 'email', 'date_joined')
+            .order_by(*user_ordering)
         )
         existing_logs = {
             log.user_id: log
@@ -141,9 +152,35 @@ def send_campaign(campaign_id, batch_size=None):
                 user_id__in=[user.pk for user in users],
             )
         }
+        wave_for_user = {}
+        waves = []
+        if is_monitored:
+            from email_app.services.campaign_waves import (
+                FOLLOWUP_WAVE_SIZE,
+                PILOT_WAVE_SIZE,
+            )
+
+            partitions = []
+            remaining = users
+            if remaining:
+                partitions.append(remaining[:PILOT_WAVE_SIZE])
+                remaining = remaining[PILOT_WAVE_SIZE:]
+            while remaining:
+                partitions.append(remaining[:FOLLOWUP_WAVE_SIZE])
+                remaining = remaining[FOLLOWUP_WAVE_SIZE:]
+            CampaignWave.objects.bulk_create([
+                CampaignWave(campaign=campaign, number=index)
+                for index in range(1, len(partitions) + 1)
+            ])
+            waves = list(campaign.waves.order_by('number'))
+            for wave, partition in zip(waves, partitions, strict=True):
+                for user in partition:
+                    wave_for_user[user.pk] = wave
+
         CampaignDelivery.objects.bulk_create([
             CampaignDelivery(
                 campaign=campaign,
+                wave=wave_for_user.get(user.pk),
                 user=user,
                 recipient_user_pk=user.pk,
                 recipient_email=user.email,
@@ -186,6 +223,24 @@ def send_campaign(campaign_id, batch_size=None):
                 'total': 0,
                 'batch_count': 0,
                 'status': 'sent',
+            }
+
+        if is_monitored:
+            from email_app.services.campaign_waves import release_initial_wave
+
+            campaign.save(update_fields=['audience_snapshotted_at'])
+            release_initial_wave(
+                waves[0],
+                actor_id=released_by_id,
+                source='campaign fan-out',
+                now=snapshot_time,
+            )
+            return {
+                'campaign_id': campaign_id,
+                'total': len(delivery_ids),
+                'batch_count': 1,
+                'wave_count': len(waves),
+                'status': 'sending',
             }
 
         chunks = list(_chunk(delivery_ids, batch_size))
@@ -294,6 +349,52 @@ def _claim_delivery(delivery_id, *, recipient_email):
     return token if updated == 1 else None
 
 
+def _claim_monitored_delivery(delivery_id, *, user_id, recipient_email):
+    """Re-check re-permission eligibility inside the durable claim boundary."""
+    User = get_user_model()
+    now = timezone.now()
+    token = uuid.uuid4()
+    with transaction.atomic():
+        user = User.objects.select_for_update().filter(pk=user_id).first()
+        delivery = CampaignDelivery.objects.select_for_update().filter(
+            pk=delivery_id,
+            state=CampaignDelivery.State.PENDING,
+        ).first()
+        if delivery is None:
+            return None, None
+        reason = None
+        if user is None:
+            reason = 'user_missing_at_send'
+        elif not user.is_active:
+            reason = INACTIVE_AT_SEND
+        elif user.unsubscribed:
+            reason = UNSUBSCRIBED_AT_SEND
+        elif user.email_verified:
+            reason = VERIFIED_AT_SEND
+        elif user.bounce_state == User.BounceState.PERMANENT:
+            reason = PERMANENT_BOUNCE_AT_SEND
+        if reason:
+            delivery.state = CampaignDelivery.State.SKIPPED
+            delivery.skip_reason = reason
+            delivery.completed_at = now
+            delivery.save(update_fields=[
+                'state', 'skip_reason', 'completed_at', 'updated_at',
+            ])
+            return None, reason
+        delivery.recipient_email = recipient_email
+        delivery.state = CampaignDelivery.State.DISPATCHING
+        delivery.claim_token = token
+        delivery.claimed_at = now
+        delivery.claim_expires_at = now + timedelta(seconds=DELIVERY_CLAIM_SECONDS)
+        delivery.attempt_count = F('attempt_count') + 1
+        delivery.completed_at = None
+        delivery.save(update_fields=[
+            'recipient_email', 'state', 'claim_token', 'claimed_at',
+            'claim_expires_at', 'attempt_count', 'completed_at', 'updated_at',
+        ])
+        return token, None
+
+
 def _mark_transport_outcome(delivery_id, claim_token, *, state, error):
     now = timezone.now()
     with transaction.atomic():
@@ -329,11 +430,17 @@ def _finalize_delivery_sent(delivery_id, claim_token, message_id):
             # Keep an integrity failure inside a savepoint so the outer
             # transaction remains usable for the defensive lookup.
             with transaction.atomic():
+                email_type = (
+                    REPERMISSION_EMAIL_TYPE
+                    if delivery.campaign.audience_verification
+                    == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+                    else 'campaign'
+                )
                 log = EmailLog.objects.create(
                     campaign=delivery.campaign,
                     user=delivery.user,
                     recipient_email=delivery.recipient_email,
-                    email_type='campaign',
+                    email_type=email_type,
                     subject=delivery.campaign.subject,
                     ses_message_id=message_id,
                 )
@@ -495,12 +602,48 @@ def send_campaign_batch(
                 skipped_count += 1
             continue
 
+        if (
+            campaign.audience_verification
+            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+        ):
+            if user.unsubscribed:
+                if _mark_pending_terminal(
+                    delivery_id,
+                    state=CampaignDelivery.State.SKIPPED,
+                    reason=UNSUBSCRIBED_AT_SEND,
+                ):
+                    skipped_count += 1
+                continue
+            if user.email_verified:
+                if _mark_pending_terminal(
+                    delivery_id,
+                    state=CampaignDelivery.State.SKIPPED,
+                    reason=VERIFIED_AT_SEND,
+                ):
+                    skipped_count += 1
+                continue
+            if user.bounce_state == User.BounceState.PERMANENT:
+                if _mark_pending_terminal(
+                    delivery_id,
+                    state=CampaignDelivery.State.SKIPPED,
+                    reason=PERMANENT_BOUNCE_AT_SEND,
+                ):
+                    skipped_count += 1
+                continue
+
         try:
+            monitored = (
+                campaign.audience_verification
+                == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+            )
             prepared = service.prepare_rendered(
                 user,
                 campaign.subject,
-                campaign.body,
-                email_type='campaign',
+                (
+                    repermission_body(campaign.body, user=user)
+                    if monitored else campaign.body
+                ),
+                email_type=(REPERMISSION_EMAIL_TYPE if monitored else 'campaign'),
                 campaign_id=campaign_id,
             )
         except ObjectDoesNotExist:
@@ -529,10 +672,20 @@ def send_campaign_batch(
                     skipped_count += 1
             continue
 
-        claim_token = _claim_delivery(
-            delivery_id,
-            recipient_email=prepared.to_email,
-        )
+        if monitored:
+            claim_token, eligibility_skip = _claim_monitored_delivery(
+                delivery_id,
+                user_id=delivery.recipient_user_pk,
+                recipient_email=prepared.to_email,
+            )
+            if eligibility_skip is not None:
+                skipped_count += 1
+                continue
+        else:
+            claim_token = _claim_delivery(
+                delivery_id,
+                recipient_email=prepared.to_email,
+            )
         if claim_token is None:
             continue
         try:
@@ -598,6 +751,15 @@ def send_campaign_batch(
 
 def refresh_campaign_status(campaign_id):
     """Derive aggregate status strictly from the durable delivery ledger."""
+    campaign = EmailCampaign.objects.only('audience_verification').get(pk=campaign_id)
+    if (
+        campaign.audience_verification
+        == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
+    ):
+        from email_app.services.campaign_waves import refresh_campaign_waves
+
+        refresh_campaign_waves(campaign_id)
+        return {}
     with transaction.atomic():
         campaign = EmailCampaign.objects.select_for_update().get(pk=campaign_id)
         if (

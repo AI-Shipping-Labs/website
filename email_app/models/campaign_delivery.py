@@ -23,6 +23,13 @@ class CampaignDelivery(models.Model):
         on_delete=models.CASCADE,
         related_name='deliveries',
     )
+    wave = models.ForeignKey(
+        'email_app.CampaignWave',
+        on_delete=models.SET_NULL,
+        related_name='deliveries',
+        null=True,
+        blank=True,
+    )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

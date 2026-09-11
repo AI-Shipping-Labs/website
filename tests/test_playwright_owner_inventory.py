@@ -1033,6 +1033,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_tampered_opt_in_link_fails_safely",
     })
 
+    issue_1594_owners = frozenset({
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_staff_targets_unverified_users_and_reviews_the_safety_policy",
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_staff_proves_the_controlled_consent_action_before_release",
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_staff_starts_only_the_pilot_and_repeat_submission_is_idempotent",
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_staff_releases_one_safe_followup_wave",
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_staff_is_stopped_by_unsafe_feedback_and_can_open_evidence",
+        "playwright_tests/test_campaign_repermission_1594.py::"
+        "test_late_consent_skips_the_future_wave_delivery",
+    })
+
     issue_1592_owners = frozenset({
         "playwright_tests/test_operator_comments_1592.py::"
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
@@ -1269,8 +1284,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             if guard is not None:
                 guard.release()
 
-        self.assertEqual(inventory.item_count, 2581)
-        self.assertEqual(len(inventory.owners), 2379)
+        self.assertEqual(inventory.item_count, 2587)
+        self.assertEqual(len(inventory.owners), 2385)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1295,6 +1310,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1591_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
+            | self.issue_1594_owners
             | self.issue_1592_owners
             | self.issue_1597_owners
             | self.issue_1539_owners
@@ -1336,6 +1352,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1591_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
+            | self.issue_1594_owners
             | self.issue_1592_owners
             | self.issue_1597_owners
             | self.issue_1542_owners

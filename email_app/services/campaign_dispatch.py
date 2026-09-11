@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from django.db import transaction
 from django.utils import timezone
 
-from email_app.models import CampaignDelivery, EmailCampaign
+from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign
 
 
 @dataclass(frozen=True)
@@ -19,7 +19,7 @@ class CampaignDeliveryConflict(Exception):
     pass
 
 
-def claim_and_enqueue_campaign(campaign_id, *, source):
+def claim_and_enqueue_campaign(campaign_id, *, source, actor=None):
     """Commit the campaign claim and ORM-broker enqueue together."""
     from jobs.tasks import async_task, build_task_name
 
@@ -32,9 +32,12 @@ def claim_and_enqueue_campaign(campaign_id, *, source):
         campaign.sent_count = 0
         campaign.sent_at = None
         campaign.save(update_fields=['status', 'sent_count', 'sent_at'])
+        task_kwargs = {"campaign_id": campaign.pk}
+        if actor is not None:
+            task_kwargs["released_by_id"] = actor.pk
         task_id = async_task(
             'email_app.tasks.send_campaign.send_campaign',
-            campaign_id=campaign.pk,
+            **task_kwargs,
             task_name=build_task_name(
                 'Send campaign',
                 f'#{campaign.pk} {campaign.subject}',
@@ -51,7 +54,7 @@ def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation
     with transaction.atomic():
         delivery = (
             CampaignDelivery.objects.select_for_update()
-            .select_related('campaign')
+            .select_related('campaign', 'wave')
             .get(pk=delivery_id)
         )
         if delivery.state not in {
@@ -76,6 +79,12 @@ def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation
             'completed_at', 'resolution', 'resolved_at', 'resolved_by',
             'last_error', 'updated_at',
         ])
+        if delivery.wave_id:
+            CampaignWave.objects.filter(pk=delivery.wave_id).update(
+                state=CampaignWave.State.SENDING,
+                monitoring_started_at=None,
+                completed_at=None,
+            )
         campaign = delivery.campaign
         campaign.status = 'sending'
         campaign.save(update_fields=['status'])

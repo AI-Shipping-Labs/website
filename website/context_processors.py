@@ -65,7 +65,16 @@ def _ga_member_tier_slug(request):
     if not getattr(user, 'is_authenticated', False):
         return ''
 
-    tier = Membership.for_user(user).tier
+    try:
+        membership = user._state.fields_cache['membership']
+    except KeyError:
+        try:
+            membership = Membership.objects.select_related('tier').get(user=user)
+        except Membership.DoesNotExist:
+            membership = Membership.for_user(user)
+        else:
+            user._state.fields_cache['membership'] = membership
+    tier = membership.tier
     slug = getattr(tier, 'slug', '') if tier is not None else ''
     return slug if isinstance(slug, str) else ''
 

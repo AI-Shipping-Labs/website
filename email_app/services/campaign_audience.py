@@ -24,7 +24,9 @@ def eligible_campaign_recipients(
         )
 
     verification_filter = {}
-    if audience_verification != "everyone":
+    if audience_verification == "unverified_only":
+        verification_filter["email_verified"] = False
+    elif audience_verification != "everyone":
         verification_filter["email_verified"] = True
     base_qs = (
         user_qs.filter(
@@ -34,6 +36,8 @@ def eligible_campaign_recipients(
         )
         .filter(effective_level_at_least_q(target_min_level))
     )
+    if audience_verification == "unverified_only":
+        base_qs = base_qs.exclude(bounce_state="permanent")
     if slack_filter == "yes":
         base_qs = base_qs.filter(slack_member=True)
     elif slack_filter == "no":

@@ -577,3 +577,26 @@ Multiline markdown with the placeholders above.
 Prereqs: None. It only seeds the campaign draft body.
 
 Test vs live: Safe to leave blank in tests and local dev.
+
+## Monitored re-permission campaigns
+
+Studio campaigns with the `Unverified only` audience use a fixed monitored
+release sequence. The Send action freezes the current eligible audience in
+oldest-account-first order, releases a pilot of at most 100 recipients, and
+keeps later waves of at most 250 unscheduled. Studio re-checks each recipient's
+active, subscribed, unverified, and permanent-bounce state immediately before
+transport; a changed recipient is recorded as skipped.
+
+After a wave finishes, wait for Studio's 24-hour observation gate. The next
+wave can be released only when there is at least one confirmed send, no failed
+or ambiguous delivery, a per-wave and cumulative bounce rate below 2%, and no
+complaint. A 2% bounce rate or any complaint pauses the campaign without an
+override. Use the campaign's Recipient ledger and SES events links to reconcile
+delivery evidence. Retry work restarts that wave's observation window.
+
+Before a production pilot, approve the rendered HTML and plain text using a
+controlled existing unverified account, verify its personalized confirmation
+link, and record sanitized audience counts. Production use is gated on #1595
+having an owner and scheduled suppression date. After the final wave clears
+monitoring, hand its campaign ID and completion timestamp to #1595; suppression
+must start no earlier than 30 days after that completion.

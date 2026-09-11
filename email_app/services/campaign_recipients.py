@@ -4,7 +4,7 @@ from django.db.models import Count
 
 from email_app.models import CampaignDelivery, EmailLog
 
-SENT_RECIPIENT_STATUSES = {"sending", "needs_attention", "sent"}
+SENT_RECIPIENT_STATUSES = {"sending", "needs_attention", "paused", "sent"}
 DELIVERY_COUNT_KEYS = (
     CampaignDelivery.State.PENDING,
     CampaignDelivery.State.DISPATCHING,

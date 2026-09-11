@@ -37,6 +37,7 @@
         {% else %}
         <p class="text-sm text-foreground mt-1">{{ campaign.get_target_min_level_display }}</p>
         {% endif %}
+        <p class="text-xs text-muted-foreground mt-1">{{ campaign.get_audience_verification_display }}</p>
       </div>
       <div>
         <p class="text-sm text-muted-foreground">Eligible Recipients</p>
@@ -104,11 +105,76 @@
     </div>
   </div>
 
+  {% if is_monitored_campaign %}
+  <div class="bg-card border border-border rounded-lg p-6" data-testid="campaign-repermission-monitoring">
+    <h2 class="text-lg font-semibold text-foreground">Re-permission monitoring</h2>
+    {% if not campaign.audience_snapshotted_at %}
+    <p class="text-sm text-muted-foreground mt-2" data-testid="campaign-repermission-policy">
+      This send starts with a pilot of at most 100 recipients. Later waves contain at most 250 and require 24 hours of observation, a bounce rate below 2%, zero complaints, at least one confirmed send, and no unresolved deliveries.
+    </p>
+    {% else %}
+    <p class="text-sm text-muted-foreground mt-2" data-testid="campaign-wave-gate">
+      Gate: {{ wave_summary.blocking_message }}
+      Cumulative: {{ wave_summary.cumulative.confirmed_sent }} confirmed sent,
+      {{ wave_summary.cumulative.bounces }} bounced ({{ wave_summary.cumulative.bounce_rate|floatformat:2 }}%),
+      {{ wave_summary.cumulative.complaints }} complained ({{ wave_summary.cumulative.complaint_rate|floatformat:2 }}%).
+    </p>
+    {% if wave_summary.can_release_next %}
+    <form method="post" action="{% url 'studio_campaign_wave_release' campaign_id=campaign.pk %}" class="mt-4" onsubmit="return confirm('Release the next monitored wave?');">
+      {% csrf_token %}
+      <button type="submit" class="{% studio_action_class 'async' %}" data-testid="release-next-wave">Release next wave</button>
+    </form>
+    {% endif %}
+    <div class="overflow-x-auto mt-4">
+      <table class="w-full text-sm" data-testid="campaign-waves-table">
+        <thead>
+          <tr class="border-b border-border text-left text-muted-foreground">
+            <th class="px-3 py-2 font-medium">Wave</th>
+            <th class="px-3 py-2 font-medium">State</th>
+            <th class="px-3 py-2 font-medium">Recipients</th>
+            <th class="px-3 py-2 font-medium">Sent</th>
+            <th class="px-3 py-2 font-medium">Skipped</th>
+            <th class="px-3 py-2 font-medium">Failed / ambiguous</th>
+            <th class="px-3 py-2 font-medium">Bounces</th>
+            <th class="px-3 py-2 font-medium">Complaints</th>
+            <th class="px-3 py-2 font-medium">Timing</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for wave in wave_summary.waves %}
+          <tr class="border-b border-border/60" data-testid="campaign-wave-row">
+            <td class="px-3 py-2 text-foreground">{{ wave.number }}</td>
+            <td class="px-3 py-2">{% studio_status_badge wave.state wave.state|title %}</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.recipient_count }}</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.confirmed_sent }}</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.skipped }}</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.failed_ambiguous }}</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.bounces }} ({{ wave.bounce_rate|floatformat:2 }}%)</td>
+            <td class="px-3 py-2 text-foreground">{{ wave.complaints }} ({{ wave.complaint_rate|floatformat:2 }}%)</td>
+            <td class="px-3 py-2 text-muted-foreground">
+              {% if wave.released_at %}Released {{ wave.released_at|operator_datetime }}{% else %}Not released{% endif %}
+              {% if wave.monitoring_started_at %}<br>Monitoring {{ wave.monitoring_started_at|operator_datetime }}{% endif %}
+              {% if wave.earliest_next_release %}<br>Earliest next {{ wave.earliest_next_release|operator_datetime }}{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="text-sm text-muted-foreground mt-4">
+      <a href="{{ recipients_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Recipient ledger</a>
+      &middot;
+      <a href="{{ ses_campaign_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">SES events</a>
+    </p>
+    {% endif %}
+  </div>
+  {% endif %}
+
   <!-- 2. Preview (rendered via EmailService.render_markdown_email, scoped to an iframe) -->
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-semibold text-foreground mb-4">Preview</h2>
     <p class="text-xs text-muted-foreground mb-2">
-      Rendered through the same pipeline as the real send. The unsubscribe link is personalized per recipient at send time.
+      Rendered through the same pipeline as the real send. The unsubscribe link is personalized per recipient at send time.{% if is_monitored_campaign %} The confirmation link shown in this preview is inert; test sends use a personalized 30-day link.{% endif %}
     </p>
     <iframe
       data-testid="campaign-preview-iframe"

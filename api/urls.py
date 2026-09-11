@@ -40,6 +40,7 @@ from api.views.campaigns import (
     campaign_recipient_count,
     campaign_recipient_retry,
     campaign_recipients,
+    campaign_waves,
     campaigns_collection,
 )
 from api.views.checkpoints import (
@@ -367,6 +368,11 @@ urlpatterns = [
         "campaigns/<int:campaign_id>/recipients",
         campaign_recipients,
         name="api_campaign_recipients",
+    ),
+    path(
+        "campaigns/<int:campaign_id>/waves",
+        campaign_waves,
+        name="api_campaign_waves",
     ),
     path(
         "campaigns/<int:campaign_id>/recipients/<int:delivery_id>/retry",

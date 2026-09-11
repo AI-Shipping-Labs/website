@@ -1527,6 +1527,7 @@
               "enum": [
                 "draft",
                 "needs_attention",
+                "paused",
                 "sending",
                 "sent"
               ],
@@ -1628,6 +1629,11 @@
               "schema": {
                 "properties": {
                   "audience_verification": {
+                    "enum": [
+                      "verified_only",
+                      "unverified_only",
+                      "everyone"
+                    ],
                     "type": "string"
                   },
                   "body": {
@@ -1748,6 +1754,7 @@
                   "audience_verification": {
                     "enum": [
                       "verified_only",
+                      "unverified_only",
                       "everyone"
                     ],
                     "type": "string"
@@ -1906,6 +1913,11 @@
               "schema": {
                 "properties": {
                   "audience_verification": {
+                    "enum": [
+                      "verified_only",
+                      "unverified_only",
+                      "everyone"
+                    ],
                     "type": "string"
                   },
                   "body": {
@@ -2209,6 +2221,81 @@
           }
         },
         "summary": "Retry a campaign recipient",
+        "tags": [
+          "Campaigns"
+        ]
+      }
+    },
+    "/api/campaigns/{campaign_id}/waves": {
+      "get": {
+        "description": "Returns read-only per-wave and cumulative delivery feedback. Wave release remains a CSRF-protected Studio action.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "campaign_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "blocking_reason": "observation_window",
+                  "campaign_id": 1,
+                  "can_release_next": false,
+                  "cumulative": {
+                    "bounce_rate": 1.0101,
+                    "bounces": 1,
+                    "complaint_rate": 0.0,
+                    "complaints": 0,
+                    "confirmed_sent": 99,
+                    "failed_ambiguous": 0,
+                    "skipped": 1
+                  },
+                  "thresholds": {
+                    "bounce_stop_percent": 2.0,
+                    "complaint_stop_count": 1,
+                    "observation_hours": 24
+                  },
+                  "waves": [
+                    {
+                      "bounce_rate": 1.0101,
+                      "bounces": 1,
+                      "complaint_rate": 0.0,
+                      "complaints": 0,
+                      "completed_at": null,
+                      "confirmed_sent": 99,
+                      "earliest_next_release": "2026-09-12T09:05:00+00:00",
+                      "failed_ambiguous": 0,
+                      "id": 1,
+                      "monitoring_started_at": "2026-09-11T09:05:00+00:00",
+                      "number": 1,
+                      "recipient_count": 100,
+                      "released_at": "2026-09-11T09:00:00+00:00",
+                      "skipped": 1,
+                      "state": "monitoring"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Wave monitoring summary."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "description": "Campaign not found."
+          },
+          "409": {
+            "description": "Campaign is not monitored."
+          }
+        },
+        "summary": "Monitor re-permission campaign waves",
         "tags": [
           "Campaigns"
         ]

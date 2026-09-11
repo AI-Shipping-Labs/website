@@ -72,7 +72,6 @@ from playwright_tests.worktree_guard import (
     current_xdist_worker_id,
 )
 from scripts.browser_journey_policy import register_browser_journey_policy
-from tests.fixtures import set_membership
 from website.test_database_guard import assert_playwright_database_is_safe
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
@@ -876,6 +875,7 @@ def create_user(
 
     from accounts.models import User
     from payments.models import Tier
+    from tests.fixtures import set_membership
 
     ensure_tiers()
     user, created = User.objects.get_or_create(

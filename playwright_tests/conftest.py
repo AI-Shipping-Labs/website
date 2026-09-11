@@ -528,29 +528,11 @@ def _start_django_server():
 
 
 @pytest.fixture(scope="session")
-def django_server(request):
-    """Provide the base URL for Playwright tests.
-
-    When ``PLAYWRIGHT_BASE_URL`` is unset (or points at a local host) this
-    starts the in-process Django dev server using pytest-django's test
-    database and yields ``http://127.0.0.1:<port>``, where the port is resolved
-    once per session (``PLAYWRIGHT_DJANGO_PORT`` if set, else an OS-assigned
-    free port). When ``PLAYWRIGHT_BASE_URL`` points at a remote host
-    (dev / prod), no local server is started, no port is allocated, and the
-    configured URL is yielded as-is — local-only and ``django_db`` tests have
-    already been skipped by the configured browser-journey policy selector.
-    """
-    base_url = _resolved_base_url()
-    if not _base_url_is_local(base_url):
-        yield base_url.rstrip("/")
-        return
-
-    # Local path: run the in-process Django server, using pytest-django's
-    # test DB. We request the django_db_setup + django_db_blocker fixtures
-    # lazily so the dev-suite run (which has no test DB) is never forced to
-    # build one.
-    request.getfixturevalue("django_db_setup")
-    django_db_blocker = request.getfixturevalue("django_db_blocker")
+def _local_django_server(request, django_db_setup, django_db_blocker):
+    """Start the local server only after pytest-django selects its test DB."""
+    # ``django_db_setup`` is an explicit fixture dependency. Its value is not
+    # used directly, but pytest must finish its setup before this body can run.
+    del django_db_setup
     with django_db_blocker.unblock():
         journal = DjangoRequestJournal()
         server_logger = logging.getLogger("django.server")
@@ -571,6 +553,23 @@ def django_server(request):
             ):
                 if hasattr(request.config, attribute):
                     delattr(request.config, attribute)
+
+
+@pytest.fixture(scope="session")
+def django_server(request):
+    """Provide a remote URL or the explicitly DB-dependent local server.
+
+    When ``PLAYWRIGHT_BASE_URL`` is unset (or points at a local host), the
+    local-only fixture starts the in-process Django server after pytest-django
+    selects its test database. When it points at a remote host (dev / prod), no
+    local database, port, or server fixture is requested.
+    """
+    base_url = _resolved_base_url()
+    if not _base_url_is_local(base_url):
+        yield base_url.rstrip("/")
+        return
+
+    yield request.getfixturevalue("_local_django_server")
 
 
 # ---------------------------------------------------------------------------

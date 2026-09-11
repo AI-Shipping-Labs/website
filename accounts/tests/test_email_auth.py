@@ -983,14 +983,20 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         with self.assertRaisesRegex(RuntimeError, "template bug"):
             _send_verification_email(self.user)
 
-    @patch("email_app.package_mail.package_send")
-    def test_send_verification_email_signs_return_path(self, package_send):
+    def test_send_verification_email_signs_return_path(self):
         from accounts.views.auth import _send_verification_email
+        from email_app import hooks
 
-        _send_verification_email(self.user, return_path="/blog/free-return-article")
+        delivery = _send_verification_email(
+            self.user, return_path="/blog/free-return-article"
+        )
 
-        context = package_send.call_args.kwargs["context"]
-        token = context["verify_url"].split("token=", 1)[1]
+        self.assertNotIn("verify_url", delivery.context_data)
+        resolved = hooks.resolve_auth_mail_context(
+            delivery=delivery,
+            context=dict(delivery.context_data),
+        )
+        token = resolved["verify_url"].split("token=", 1)[1]
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
@@ -998,14 +1004,20 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         )
         self.assertEqual(payload["return_path"], "/blog/free-return-article")
 
-    @patch("email_app.package_mail.package_send")
-    def test_send_verification_email_discards_unsafe_return_path(self, package_send):
+    def test_send_verification_email_discards_unsafe_return_path(self):
         from accounts.views.auth import _send_verification_email
+        from email_app import hooks
 
-        _send_verification_email(self.user, return_path="https://evil.example/phish")
+        delivery = _send_verification_email(
+            self.user, return_path="https://evil.example/phish"
+        )
 
-        context = package_send.call_args.kwargs["context"]
-        token = context["verify_url"].split("token=", 1)[1]
+        self.assertEqual(delivery.context_data.get("return_path"), "")
+        resolved = hooks.resolve_auth_mail_context(
+            delivery=delivery,
+            context=dict(delivery.context_data),
+        )
+        token = resolved["verify_url"].split("token=", 1)[1]
         payload = jwt.decode(
             token,
             settings.SECRET_KEY,
@@ -1037,19 +1049,24 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         with self.assertRaisesRegex(RuntimeError, "bad reset context"):
             _send_password_reset_email(self.user)
 
-    @patch("email_app.package_mail.package_send")
-    def test_send_password_reset_email_issues_secure_one_hour_token(self, package_send):
+    def test_send_password_reset_email_issues_secure_one_hour_token(self):
         from accounts.views.auth import _send_password_reset_email
+        from email_app import hooks
 
         started_at = datetime.datetime.now(datetime.timezone.utc)
         user = User.objects.create_user(
             email="reset-issuer@example.com",
             password="oldpass1234",
         )
-        _send_password_reset_email(user)
+        delivery = _send_password_reset_email(user)
 
-        context = package_send.call_args.kwargs["context"]
-        token = context["reset_url"].split("token=", 1)[1]
+        self.assertIsNotNone(delivery)
+        self.assertNotIn("reset_url", delivery.context_data)
+        resolved = hooks.resolve_auth_mail_context(
+            delivery=delivery,
+            context=dict(delivery.context_data),
+        )
+        token = resolved["reset_url"].split("token=", 1)[1]
         resolved_user, payload = resolve_password_reset_token(token)
         expires_at = datetime.datetime.fromtimestamp(
             payload["exp"],
@@ -1069,6 +1086,33 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
             expires_at,
             started_at + datetime.timedelta(hours=1, minutes=1),
         )
+
+    def test_resolver_leaves_other_purposes_untouched(self):
+        from types import SimpleNamespace
+
+        from email_app import hooks
+
+        resolved = hooks.resolve_auth_mail_context(
+            delivery=SimpleNamespace(purpose="free_welcome"),
+            context={"site_url": "https://example.com"},
+        )
+
+        self.assertEqual(resolved, {"site_url": "https://example.com"})
+
+    def test_resolver_skips_surrogate_recipients(self):
+        from types import SimpleNamespace
+
+        from email_app import hooks
+
+        resolved = hooks.resolve_auth_mail_context(
+            delivery=SimpleNamespace(
+                purpose="email_verification_signup",
+                recipient_user=None,
+            ),
+            context={"return_path": "/blog/free-return-article"},
+        )
+
+        self.assertNotIn("verify_url", resolved)
 
 
 # ── Password Reset API ───────────────────────────────────────────────

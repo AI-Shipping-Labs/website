@@ -475,6 +475,18 @@ def _start_django_server():
     # thread would raise SystemCheckError at startup and kill every E2E test.
     settings.SILENCED_SYSTEM_CHECKS = ["email_app.E001"]
 
+    # A1.2: package mail defers to the durable worker, so with the default
+    # django_q backend a deferred send never drains in a run that only starts
+    # the web server. Run jobs inline and install the same SES stub the unit
+    # runner uses, so verification and reset mail reach EmailLog.
+    settings.COMMUNITY_BASE = {
+        **settings.COMMUNITY_BASE,
+        "JOBS_BACKEND": "sync",
+    }
+    from email_app.testing import install_test_ses  # noqa: PLC0415
+
+    install_test_ses()
+
     assert_playwright_database_is_safe(connection.settings_dict)
 
     # Run migrations first (uses in-memory or file-based sqlite)

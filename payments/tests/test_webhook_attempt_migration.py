@@ -117,8 +117,14 @@ class MembershipBackfillMigrationTest(TransactionTestCase):
     def test_backfill_copies_every_user_and_reapplies_after_reverse(self):
         OldTier = self.old_apps.get_model("payments", "Tier")
         OldUser = self.old_apps.get_model("accounts", "User")
-        free = OldTier.objects.get(slug="free")
-        main = OldTier.objects.get(slug="main")
+        free, _ = OldTier.objects.get_or_create(
+            slug="free",
+            defaults={"name": "Free", "level": 0},
+        )
+        main, _ = OldTier.objects.get_or_create(
+            slug="main",
+            defaults={"name": "Main", "level": 20},
+        )
         period_end = timezone.now() + timedelta(days=30)
         paid = OldUser.objects.create(
             email="legacy-paid@example.com",

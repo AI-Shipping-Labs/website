@@ -22,9 +22,10 @@ positive port that exact port is used; otherwise (unset, empty, ``0``,
 negative, out of range, or non-integer) the OS assigns a free ephemeral port
 (``_pick_free_port()``). The same resolved port is used by ``runserver``, the
 startup probe, and the base URL the browser navigates to — they are equal by
-construction. This lets several worktrees run Playwright concurrently without
-colliding on a single fixed port. See ``_docs/testing-guidelines.md``
-("Running Playwright in isolation / parallel across worktrees").
+construction. This lets several worktrees use isolated ports. Aggregate
+browser/server load is separately bounded by the common-Git-directory capacity
+coordinator below. See ``_docs/testing-guidelines.md`` ("Running Playwright in
+isolation / parallel across worktrees").
 
 Local same-worktree guard: before local Playwright sessions can migrate the
 SQLite test database, start ``runserver``, seed fixtures, or launch Chromium,
@@ -43,6 +44,7 @@ Only the controller process claims the worktree guard; workers detect
 run together while a genuinely separate second invocation is still blocked.
 """
 
+import logging
 import os
 import socket
 import threading
@@ -55,6 +57,15 @@ from django.core.management import call_command
 from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
 from playwright.sync_api import sync_playwright
 
+from playwright_tests.local_capacity import (
+    CapacityAdmissionError,
+    CapacityConfigurationError,
+    LocalPlaywrightCapacity,
+)
+from playwright_tests.navigation_diagnostics import (
+    DjangoRequestJournal,
+    append_navigation_diagnostics,
+)
 from playwright_tests.worktree_guard import (
     PlaywrightWorktreeGuard,
     WorktreeGuardAlreadyHeld,
@@ -252,16 +263,71 @@ def _release_playwright_worktree_guard(config):
     delattr(config, "_playwright_worktree_guard")
 
 
+def _claim_playwright_local_capacity(config):
+    """Atomically claim the controller's complete local xdist width."""
+    if getattr(getattr(config, "option", None), "collectonly", False):
+        return None
+    if not _base_url_is_local(_resolved_base_url()):
+        return None
+    if current_xdist_worker_id() is not None:
+        return None
+    existing = getattr(config, "_playwright_local_capacity", None)
+    if existing is not None:
+        return existing
+
+    requested_slots = max(1, requested_xdist_worker_count(config))
+    try:
+        capacity = LocalPlaywrightCapacity.for_current_worktree(requested_slots)
+        capacity.acquire()
+    except (CapacityAdmissionError, CapacityConfigurationError) as exc:
+        _release_playwright_worktree_guard(config)
+        pytest.exit(str(exc), returncode=2)
+    except OSError as exc:
+        _release_playwright_worktree_guard(config)
+        pytest.exit(
+            "Playwright local capacity admission failed before test collection: "
+            f"unavailable ({type(exc).__name__}). Zero tests started.",
+            returncode=2,
+        )
+    config._playwright_local_capacity = capacity
+    return capacity
+
+
+def _release_playwright_local_capacity(config):
+    capacity = getattr(config, "_playwright_local_capacity", None)
+    if capacity is None:
+        return
+    capacity.release()
+    delattr(config, "_playwright_local_capacity")
+
+
+def _claim_local_playwright_admission(config):
+    """Fail fast on same-worktree reuse, then wait for aggregate capacity."""
+    _claim_playwright_worktree_guard(config)
+    _claim_playwright_local_capacity(config)
+
+
 def pytest_configure(config):
     _assert_pinned_port_is_not_parallel(config)
     register_browser_journey_policy(config)
+    _claim_local_playwright_admission(config)
+
+
+@pytest.hookimpl(optionalhook=True)
+def pytest_configure_node(node):
+    """Give xdist workers read-only capacity evidence for failure reports."""
+    capacity = getattr(node.config, "_playwright_local_capacity", None)
+    if capacity is not None:
+        node.workerinput["playwright_capacity"] = capacity.diagnostic_state()
 
 
 @pytest.hookimpl(hookwrapper=True, tryfirst=True)
 def pytest_runtest_makereport(item, call):
     """Keep policy authority fail-closed after removable plugin hooks."""
 
-    yield
+    outcome = yield
+    report = outcome.get_result()
+    append_navigation_diagnostics(report, item, call)
     import sys as runtime_sys
 
     authority_dispatch = runtime_sys.audit
@@ -277,11 +343,8 @@ def pytest_runtest_makereport(item, call):
     authority_dispatch("asl.browser_journey_policy.verify.v1", item.config)
 
 
-def pytest_sessionstart(session):
-    _claim_playwright_worktree_guard(session.config)
-
-
 def pytest_sessionfinish(session, exitstatus):
+    _release_playwright_local_capacity(session.config)
     _release_playwright_worktree_guard(session.config)
 
 
@@ -477,8 +540,25 @@ def django_server(request):
     request.getfixturevalue("django_db_setup")
     django_db_blocker = request.getfixturevalue("django_db_blocker")
     with django_db_blocker.unblock():
-        _start_django_server()
-        yield _local_base_url()
+        journal = DjangoRequestJournal()
+        server_logger = logging.getLogger("django.server")
+        server_logger.addHandler(journal)
+        request.config._playwright_request_journal = journal
+        base_url = _local_base_url()
+        request.config._playwright_django_server_base_url = base_url
+        try:
+            thread = _start_django_server()
+            request.config._playwright_django_server_thread = thread
+            yield base_url
+        finally:
+            server_logger.removeHandler(journal)
+            for attribute in (
+                "_playwright_request_journal",
+                "_playwright_django_server_base_url",
+                "_playwright_django_server_thread",
+            ):
+                if hasattr(request.config, attribute):
+                    delattr(request.config, attribute)
 
 
 # ---------------------------------------------------------------------------
@@ -495,13 +575,17 @@ def browser(request):
     """
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
-        yield browser
-        final_contexts, final_pages = _browser_resource_counts(browser)
-        request.config._playwright_final_browser_resources = (
-            final_contexts,
-            final_pages,
-        )
-        browser.close()
+        request.config._playwright_browser = browser
+        try:
+            yield browser
+        finally:
+            final_contexts, final_pages = _browser_resource_counts(browser)
+            request.config._playwright_final_browser_resources = (
+                final_contexts,
+                final_pages,
+            )
+            browser.close()
+            delattr(request.config, "_playwright_browser")
 
 
 def _browser_resource_snapshot(browser):

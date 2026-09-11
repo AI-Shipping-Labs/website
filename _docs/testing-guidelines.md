@@ -1626,10 +1626,11 @@ feature, the marker travels with the deletion. The marker IS the registry.
 
 ### Local concurrency guard
 
-The old machine-wide "run one Playwright suite at a time locally" constraint is
-resolved as of #885. See "Running Playwright in isolation / parallel across
-worktrees" below: the server fixture now picks a free OS-assigned port per
-session, so concurrent runs from separate worktrees no longer collide.
+Port and database isolation do not imply unlimited resource concurrency. Issue
+#885 lets separate worktrees bind independent ports and SQLite files, while
+#1605 bounds their aggregate Chromium, Django, and xdist load through a shared
+capacity coordinator. See "Running Playwright in isolation / parallel across
+worktrees" below.
 
 The remaining unsafe case is two separate local Playwright pytest invocations
 inside the same git worktree, because they share that checkout's
@@ -1643,11 +1644,14 @@ instructions.
 The pytest-xdist workers of a single `-n N` invocation are exempt (#1470): they
 are siblings of the claim their own controller already made, and each one owns a
 private `test_playwright_db_gwN.sqlite3` plus its own server port, so they have
-no shared state to protect.
+no shared state to protect. The controller separately claims exactly `N`
+capacity slots, or one slot for serial / `-n 0`; workers never duplicate that
+capacity claim.
 
 When `PLAYWRIGHT_BASE_URL` points at a non-local host such as
 `https://dev.aishippinglabs.com`, the suite does not start the local server or
 use the local SQLite test DB, so it does not claim the same-worktree guard.
+It also stays outside local capacity admission.
 
 ### Per-node browser ownership
 
@@ -1694,12 +1698,52 @@ hits, and the value baked into the base URL the browser navigates to — they ar
 equal by construction, so the bound port can never drift from the navigated
 port.
 
-Git worktrees already isolate the code checkout and the SQLite test database
-(each worktree's Playwright run uses its own `test_playwright_db.sqlite3`). With
-the dynamic port, the last shared resource is gone: multiple agents in separate
-worktrees can now run `make test-playwright` / `make test-playwright-core`
-SIMULTANEOUSLY without interfering. Each agent verifies its own work
-independently — there is no need to serialize on the port.
+Git worktrees isolate the code checkout and SQLite test database (each
+worktree's Playwright run uses its own `test_playwright_db.sqlite3`). Dynamic
+ports isolate the servers. CPU, memory, and Chromium renderer capacity remain
+shared host resources.
+
+The causal chain behind #1605 was:
+
+1. Each default local command requested the fixed `-n 4 --dist loadfile`
+   topology.
+2. Every xdist worker launched a complete Chromium process tree, Django server,
+   and SQLite database.
+3. The worktree lock prevented database collisions only within one checkout;
+   separate worktrees could start without an aggregate limit.
+4. Three ordinary role agents could therefore create 12 browser/server stacks
+   on the 12-core host, in addition to unrelated workloads.
+5. Django could generate and log HTTP 200 while a CPU-starved Chromium renderer
+   or Playwright control path failed to process `DOMContentLoaded` within the
+   unchanged 30-second navigation deadline.
+
+Local controller processes now coordinate below the repository's common Git
+directory. Independent repositories use different coordinators. The default
+budget is four slots. A default `-n 4` invocation atomically owns all four; a
+second waits without owning a partial lease. Two explicitly reduced `-n 2`
+invocations can overlap, while a further claimant waits. Serial and `-n 0`
+runs consume one slot. The coordinator never reduces an explicit width.
+
+Admission happens before xdist workers, migrations, fixture seeding, Django
+server startup, or Chromium launch. On Linux it also requires three consecutive
+five-second samples where `loadavg_1m + requested_slots <= logical_cpu_count`,
+available memory is at least `4 GiB + 1 GiB * requested_slots`, and memory
+pressure `full avg60` is at most 10 percent. An unavailable platform or `/proc`
+metric is reported as unavailable and repository capacity remains authoritative.
+
+While waiting, pytest prints requested width, total capacity, elapsed time,
+headroom failures, and sanitized PID/command/worktree details for live holders.
+The default bound is 7,200 seconds. On expiry, pytest exits non-zero before test
+collection with zero product tests started. `PLAYWRIGHT_LOCAL_CAPACITY` may set
+a consistent positive capacity from 1 through 64, and
+`PLAYWRIGHT_LOCAL_CAPACITY_WAIT_SECONDS` may shorten the bound for harness
+debugging. These local test-runner knobs do not use `IntegrationSetting`.
+
+Capacity leases are kernel-owned advisory locks. Normal completion, test
+failure, collection failure, and interrupt release them during pytest teardown;
+process death releases them in the OS. Slot JSON is diagnostic metadata only.
+Its PID and Linux process-start identity must still match before it is printed,
+so stale metadata or PID reuse cannot strand or misidentify the queue.
 
 Do not start two local Playwright pytest *invocations* inside the same worktree.
 If that happens, the second invocation fails before it can touch the SQLite test
@@ -1707,7 +1751,9 @@ database, showing the worktree path, current PID, holder details when available,
 and instructions to wait, stop the other run, or use a separate worktree. Normal
 pytest teardown releases the guard. If a pytest process is killed, the
 underlying advisory lock is released by the OS, so stale metadata in
-`.tmp/playwright-session.lock` does not permanently block the next run.
+`.tmp/playwright-session.lock` does not permanently block the next run. This
+same-worktree exclusion remains a fail-fast check and happens before the
+aggregate capacity wait.
 
 The pytest-xdist workers of ONE invocation are not "two invocations" and are
 allowed through — see the next section.
@@ -1717,7 +1763,19 @@ make test-playwright          # full active suite
 make test-playwright-core     # deploy-critical core subset
 ```
 
-Run those from each worktree concurrently as needed; no port flags required.
+Run those from separate worktrees as needed; the coordinator admits them when
+the complete requested width and host headroom are available.
+
+When a local `Page.goto` still reaches its existing timeout, pytest appends one
+structured diagnostic section to the original failed report. It includes the
+node and xdist worker, requested/granted capacity and wait, a credential/query
+redacted destination and wait state, CPU/load/memory/swap/pressure evidence,
+owned server thread state and base URL, a bounded independent `GET /ping`
+probe, browser connection/context/page counts, and a bounded per-worker ring of
+recent redacted Django request method/path/status records. Providers degrade to
+explicit `unavailable` fields and never hide the original traceback. The probe
+does not replay the destination. Diagnostics classify evidence only: timeouts,
+404/5xx responses, wrong destinations, and browser disconnects remain failures.
 
 ### Parallel Playwright with pytest-xdist (`PLAYWRIGHT_XDIST_WORKERS`)
 
@@ -1747,14 +1805,13 @@ instead of the intended `DELETE`. The current, slightly slower figures are the
 correct-configuration ones.
 
 `PLAYWRIGHT_XDIST_WORKERS` defaults to `4`, deliberately NOT `-n auto`. Each
-worker runs a full Chromium process tree plus its own in-process Django server,
-and several agents routinely run Playwright at once from separate worktrees on
-the same box; one worker per core would recreate the oversubscription that
-already produces spurious timeout reds (see `SETTLE_TIMEOUT_MS`, #903). Tune it
-per-invocation instead of editing the Makefile:
+worker runs a full Chromium process tree plus its own in-process Django server.
+One worker per core would recreate the oversubscription that produces spurious
+timeout reds. Tune it per invocation instead of editing the Makefile; the
+capacity coordinator grants the requested width atomically:
 
 ```bash
-PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box, go wider
+PLAYWRIGHT_LOCAL_CAPACITY=8 PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box, go wider
 PLAYWRIGHT_XDIST_WORKERS=0 make test-playwright-core   # serial, xdist disabled
 ```
 
@@ -1779,6 +1836,9 @@ What makes this safe:
   genuinely separate second invocation is still blocked exactly as before: its
   controller never has `PYTEST_XDIST_WORKER` set, hits the held lock, and exits
   non-zero before spawning any workers.
+- Capacity: only the controller claims the requested repository capacity from
+  the common Git directory. Xdist workers receive the grant metadata for
+  diagnostics and never claim slots themselves.
 
 ### `settings.TESTING` inside xdist workers
 
@@ -1854,9 +1914,11 @@ starts and no port is allocated at all.
 
 ### Supersedes the old constraint
 
-This SUPERSEDES the previous rule "don't run two Playwright suites at once from
-different worktrees." With per-session OS-assigned ports, concurrent
-worktree runs are supported and expected.
+This supersedes both the old global serialization rule and #885's later
+unconditional cross-worktree concurrency claim. Separate worktrees remain
+state-isolated, and aggregate execution is capacity-admitted. Reduced-width
+runs can overlap when their total fits the four-slot default; two default-width
+runs hand off serially.
 
 ## Live LLM-judge tests (`make test-judge`)
 

@@ -132,13 +132,15 @@ coverage:
 # test_playwright_db_gwN.sqlite3 file, so workers cannot contend on the DB.
 #
 # Default 4, deliberately NOT `-n auto` (= one worker per core, 12 here).
-# Each worker runs a Chromium process tree plus an in-process Django server,
-# and this box routinely runs several agents' Playwright suites at once from
-# separate worktrees; `-n auto` would multiply that into the oversubscription
-# that already produces spurious timeout reds (see SETTLE_TIMEOUT_MS in
+# Each worker runs a Chromium process tree plus an in-process Django server.
+# The common-Git-directory coordinator admits aggregate work across separate
+# worktrees; default-width runs queue when the four-slot budget is occupied.
+# `-n auto` would multiply that into the oversubscription that already
+# produces spurious timeout reds (see SETTLE_TIMEOUT_MS in
 # playwright_tests/conftest.py, #903). 4 matches the CI shard count and the
-# existing `make test-judge -n 4`. Tune without editing code:
-#   PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box
+# existing `make test-judge -n 4`. Tune without editing code (raise the shared
+# capacity when deliberately running a wider invocation):
+#   PLAYWRIGHT_LOCAL_CAPACITY=8 PLAYWRIGHT_XDIST_WORKERS=8 make test-playwright-core   # quiet box
 #   PLAYWRIGHT_XDIST_WORKERS=0 make test-playwright-core   # serial, no xdist
 #
 # --dist loadfile keeps every test from one module on one worker: module-level

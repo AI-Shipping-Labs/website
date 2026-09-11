@@ -6,9 +6,13 @@ placeholder course text or PII reaches an enrollee or a log line.
 """
 
 import json
+from copy import deepcopy
+from html.parser import HTMLParser
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
+import yaml
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -18,7 +22,7 @@ from community.services.slack import SlackAPIError
 from email_app.services.email_service import EmailService
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
-from integrations.services.maven import _welcome_context
+from integrations.services.maven import MavenResult, _welcome_context
 
 User = get_user_model()
 
@@ -26,6 +30,53 @@ WEBHOOK_URL = "/api/webhooks/maven"
 SECRET = "onboarding-1565-secret"
 # ``_invite_to_slack`` returns (step_status, note).
 SLACK_ADDED = (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
+
+# One explicit semantic mapping connects every eligible tier record to the
+# claim that represents it in the Maven welcome. Keeping the record identity in
+# the key makes additions, removals, or title changes in either Basic or Main a
+# contract change instead of silently accepting the old email copy.
+BENEFIT_CLAIM_BY_RECORD = {
+    ("basic", "Exclusive written content"): "all member content at Basic and Main level",
+    ("basic", "Workshop content"): "all member content at Basic and Main level",
+    ("main", "Community sprints"): "community sprints",
+    ("main", "Live events"): "live events",
+    ("main", "Private Slack community"): "private Slack community",
+    ("main", "Personalized onboarding plan"): "a personalized onboarding plan",
+    ("main", "Topic voting"): "topic voting",
+}
+
+
+class _ParagraphCollector(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.paragraphs = []
+        self._parts = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "p":
+            self._parts = []
+
+    def handle_endtag(self, tag):
+        if tag == "p" and self._parts is not None:
+            self.paragraphs.append(" ".join("".join(self._parts).split()))
+            self._parts = None
+
+    def handle_data(self, data):
+        if self._parts is not None:
+            self._parts.append(data)
+
+
+def _email_paragraphs(body):
+    parser = _ParagraphCollector()
+    parser.feed(body)
+    return parser.paragraphs
+
+
+def _tier_fixture():
+    fixture_path = (
+        Path(__file__).parents[2] / "content" / "tests" / "fixtures" / "tiers.yaml"
+    )
+    return yaml.safe_load(fixture_path.read_text(encoding="utf-8"))
 
 
 def _configure():
@@ -560,22 +611,114 @@ class MavenCourseChannelTest(MavenWebhookMixin):
         self.assertNotIn(" in .", body)
         self.assertNotIn("()", body)
 
+    def _assert_main_benefit_contract(self, paragraphs, tiers):
+        basic = next(tier for tier in tiers if tier["stripe_key"] == "basic")
+        main = next(tier for tier in tiers if tier["stripe_key"] == "main")
+        eligible_tiers = sorted((basic, main), key=lambda tier: tier["level"])
+        eligible_records = [
+            (tier["stripe_key"], benefit["title"])
+            for tier in eligible_tiers
+            for benefit in tier["benefits"]
+        ]
+        self.assertEqual(eligible_records, list(BENEFIT_CLAIM_BY_RECORD))
+
+        premium_only = [
+            benefit["title"]
+            for tier in tiers
+            if tier["level"] > main["level"]
+            for benefit in tier["benefits"]
+        ]
+
+        main_records = [
+            (main["stripe_key"], benefit["title"])
+            for benefit in main["benefits"]
+        ]
+        slack_record = next(
+            record for record in main_records if "slack" in record[1].lower()
+        )
+        sentence_claims = [
+            BENEFIT_CLAIM_BY_RECORD[record]
+            for record in main_records
+            if record != slack_record
+        ]
+        inherited_claims = {
+            BENEFIT_CLAIM_BY_RECORD[(basic["stripe_key"], benefit["title"])]
+            for benefit in basic["benefits"]
+        }
+        self.assertEqual(
+            inherited_claims,
+            {f"all member content at {basic['name']} and {main['name']} level"},
+        )
+        expected_main_claim = (
+            "Your enrollment also comes with a Main membership: "
+            + ", ".join(sentence_claims)
+            + f", and {inherited_claims.pop()}."
+        )
+
+        slack_claim = (
+            "All the course interaction happens in Slack. That's where the cohort is "
+            "— ask questions, share what you're building, and compare notes."
+        )
+        self.assertEqual(
+            BENEFIT_CLAIM_BY_RECORD[slack_record],
+            "private Slack community",
+        )
+        benefit_start = paragraphs.index(slack_claim)
+        post_benefit_boundary = next(
+            index
+            for index, paragraph in enumerate(paragraphs[benefit_start + 1 :], benefit_start + 1)
+            if paragraph.startswith("Why you're getting this email:")
+        )
+        self.assertEqual(
+            paragraphs[benefit_start:post_benefit_boundary],
+            [
+                slack_claim,
+                "Join the Slack community",
+                "After you join, we check Slack daily and add members with community "
+                "access to the community channels automatically.",
+                expected_main_claim,
+                "To get the personalized plan, fill in your onboarding form — it takes "
+                "a few minutes and tells us about your background and goals.",
+            ],
+        )
+
+        rendered_claims = " ".join(
+            paragraphs[benefit_start:post_benefit_boundary]
+        ).lower()
+        for title in premium_only:
+            self.assertNotIn(title.lower(), rendered_claims)
+
     def test_the_main_benefits_match_the_authoritative_tier_records(self):
-        """The listed benefits are the Main tier benefits (content tiers.yaml).
+        """The complete claim stays within Basic + Main's tiers.yaml benefits."""
+        body = self._render("benefits@example.com", "")
 
-        Issue #1593 rewrote the list from bullets into a single sentence, so
-        the assertion is case-insensitive: what matters is that every Main
-        benefit is still named, not how the sentence capitalizes it.
-        """
-        body = self._render("benefits@example.com", "").lower()
+        self._assert_main_benefit_contract(_email_paragraphs(body), _tier_fixture())
 
-        for benefit in (
-            "community sprints",
-            "live events",
-            "personalized onboarding plan",
-            "topic voting",
-        ):
-            self.assertIn(benefit, body)
+    def test_benefit_contract_rejects_unknown_claim_and_changed_basic_record(self):
+        paragraphs = _email_paragraphs(self._render("benefit-ratchet@example.com", ""))
+        boundary = next(
+            index
+            for index, paragraph in enumerate(paragraphs)
+            if paragraph.startswith("Why you're getting this email:")
+        )
+        paragraphs_with_unknown = list(paragraphs)
+        paragraphs_with_unknown.insert(
+            boundary,
+            "You also receive a Premium-only private coaching benefit.",
+        )
+        with self.assertRaises(AssertionError):
+            self._assert_main_benefit_contract(
+                paragraphs_with_unknown,
+                _tier_fixture(),
+            )
+
+        changed_tiers = deepcopy(_tier_fixture())
+        basic = next(
+            tier for tier in changed_tiers if tier["stripe_key"] == "basic"
+        )
+        basic["benefits"][0]["title"] = "Changed Basic entitlement"
+        with self.assertRaises(AssertionError):
+            self._assert_main_benefit_contract(paragraphs, changed_tiers)
 
 
 class ReplayCommandGuardTest(TestCase):
@@ -613,6 +756,39 @@ class ReplayCommandGuardTest(TestCase):
         self.assertIn("--cohort", str(ctx.exception))
         self.assertNotIn("--course", str(ctx.exception))
 
+    def test_confirmation_is_complete_before_dry_or_real_handler_runs(self):
+        body = {
+            "data": {
+                "event": "user_cohort.enrolled",
+                "email": "before-handler@example.com",
+                "course": "Before Handler Course",
+                "cohort": "Before Handler Cohort",
+            },
+        }
+        for dry_run in (False, True):
+            with self.subTest(dry_run=dry_run):
+                out = StringIO()
+
+                def assert_banner_before_handler(payload, *, dry_run):
+                    self.assertEqual(payload["email"], "before-handler@example.com")
+                    self.assertEqual(payload["course"], "Before Handler Course")
+                    self.assertEqual(payload["cohort"], "Before Handler Cohort")
+                    self.assertEqual(dry_run, dry_run_expected)
+                    self.assertIn("Recipient: before-handler@example.com\n", out.getvalue())
+                    self.assertIn("Course: Before Handler Course\n", out.getvalue())
+                    self.assertIn("Cohort: Before Handler Cohort\n", out.getvalue())
+                    return MavenResult(status="dry_run" if dry_run else "onboarded")
+
+                dry_run_expected = dry_run
+                args = ["--payload", json.dumps(body)]
+                if dry_run:
+                    args.append("--dry-run")
+                with patch(
+                    "integrations.management.commands.replay_maven_event.handle_maven_event",
+                    side_effect=assert_banner_before_handler,
+                ):
+                    call_command("replay_maven_event", *args, stdout=out)
+
     @patch(
         "community.services.staff_notifications.notify_maven_enrollment",
         return_value=True,
@@ -637,3 +813,44 @@ class ReplayCommandGuardTest(TestCase):
         self.assertIn("Course: Buildcamp", output)
         self.assertIn("Cohort: Cohort 1", output)
         self.assertLess(output.index("Recipient:"), output.index("Status:"))
+
+    @patch(
+        "community.services.staff_notifications.notify_maven_enrollment",
+        return_value=True,
+    )
+    @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
+    @patch.object(EmailService, "_send_ses", return_value="ses-message-id")
+    def test_enveloped_runs_print_the_values_the_handler_processes(
+        self, _send_ses, _notify,
+    ):
+        for envelope in ("data", "payload"):
+            with self.subTest(envelope=envelope):
+                email = f"replay-{envelope}@example.com"
+                course = f"{envelope.title()} Buildcamp"
+                cohort = f"{envelope.title()} Cohort"
+                body = {
+                    "event": "user_cohort.enrolled",
+                    envelope: {
+                        "email": email,
+                        "course": course,
+                        "cohort": cohort,
+                    },
+                }
+                out = StringIO()
+
+                call_command(
+                    "replay_maven_event",
+                    "--payload", json.dumps(body),
+                    stdout=out,
+                )
+
+                output = out.getvalue()
+                self.assertIn(f"Recipient: {email}\n", output)
+                self.assertIn(f"Course: {course}\n", output)
+                self.assertIn(f"Cohort: {cohort}\n", output)
+                self.assertNotIn("Recipient: (none)", output)
+                self.assertLess(output.index("Recipient:"), output.index("Status:"))
+
+                occurrence = MavenEnrollmentEvent.objects.get(user__email=email)
+                self.assertEqual(occurrence.course, course)
+                self.assertEqual(occurrence.cohort, cohort)

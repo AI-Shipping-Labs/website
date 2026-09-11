@@ -39,7 +39,11 @@ from integrations.services.maven import (
     EVENT_ENROLLED,
     EVENT_REMOVED,
     MavenTransientError,
+    _extract_cohort,
+    _extract_course,
+    _extract_email,
     handle_maven_event,
+    normalize_payload,
 )
 
 
@@ -71,15 +75,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        payload = self._build_payload(options)
+        payload = normalize_payload(self._build_payload(options))
         dry_run = options["dry_run"]
 
         self.stdout.write(
             self.style.WARNING("DRY RUN — no writes") if dry_run else "REAL RUN"
         )
-        self.stdout.write(f"Recipient: {payload.get('email') or '(none)'}")
-        self.stdout.write(f"Course: {payload.get('course') or '(none)'}")
-        self.stdout.write(f"Cohort: {payload.get('cohort') or '(none)'}")
+        self.stdout.write(f"Recipient: {_extract_email(payload) or '(none)'}")
+        self.stdout.write(f"Course: {_extract_course(payload) or '(none)'}")
+        self.stdout.write(f"Cohort: {_extract_cohort(payload) or '(none)'}")
         self.stdout.write(f"Payload: {json.dumps(payload)}")
 
         try:

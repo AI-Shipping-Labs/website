@@ -42,6 +42,14 @@ def _update_user(email, **fields):
     connection.close()
 
 
+def _update_membership(email, **fields):
+    from accounts.models import User
+    from tests.fixtures import set_membership
+
+    set_membership(User.objects.get(email=email), **fields)
+    connection.close()
+
+
 def _set_tags(email, tags):
     from accounts.models import User
     from accounts.utils.tags import set_tags
@@ -90,7 +98,9 @@ def test_users_spaced_search_survives_tier_chip(django_server, browser):
     _create_staff_user(staff_email)
     _clear_users_except(staff_email)
     _create_user("query-tier-member@test.com", tier_slug="main", first_name=SEARCH)
-    _update_user("query-tier-member@test.com", subscription_id="sub_query_tier")
+    _update_membership(
+        "query-tier-member@test.com", subscription_id="sub_query_tier",
+    )
 
     context, page = _open_staff_page(
         django_server,

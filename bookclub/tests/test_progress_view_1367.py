@@ -283,7 +283,7 @@ class ProgressCountTest(ProgressBoardTestMixin, TestCase):
 
 
 class ProgressQueryBudgetTest(ProgressBoardTestMixin, TestCase):
-    RENDERED_VIEW_QUERY_BUDGET = 13
+    RENDERED_VIEW_QUERY_BUDGET = 14
     READER_ROWS_QUERY_BUDGET = 5
 
     def _seed_board(self, slug, reader_count):

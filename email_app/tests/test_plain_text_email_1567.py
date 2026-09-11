@@ -157,6 +157,11 @@ class EmailPlainTextPreparationTest(TestCase):
         plain_text = mock_ses.call_args.kwargs['text_body']
         for url in urls.values():
             self.assertIn(url, plain_text)
+        self.assertIn(
+            'After you join, we check Slack daily and add members with '
+            'community access to the community channels automatically.',
+            plain_text,
+        )
         self.assertNotIn('{{', plain_text)
         self.assertNotIn('{%', plain_text)
 

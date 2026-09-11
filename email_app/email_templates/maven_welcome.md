@@ -16,6 +16,8 @@ questions, share what you're building, and compare notes{% if course_channel %} 
 
 [Join the Slack community]({{ slack_join_url }})
 
+After you join, we check Slack daily and add members with community access to the community channels automatically.
+
 Your enrollment also comes with a Main membership: community sprints,
 live events, a personalized onboarding plan, topic voting, and all member
 content at Basic and Main level.

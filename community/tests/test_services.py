@@ -785,50 +785,6 @@ class CommunityReactivateTaskTest(TestCase):
         self.assertEqual(call_user.pk, user.pk)
 
 
-class CommunityEmailMatcherTaskTest(TestCase):
-    """Scenario 9: Email matcher links a new Slack user.
-
-    Moved from playwright_tests/test_community_slack.py.
-    """
-
-    def setUp(self):
-        _ensure_tiers()
-        CommunityAuditLog.objects.all().delete()
-
-    def test_email_matcher_finds_and_links_user(self):
-        """Email matcher finds user in Slack, stores ID, adds to channels."""
-        from community.tasks.email_matcher import match_community_emails
-
-        user = _create_user("matcher-test@test.com", tier_slug="main")
-        user.slack_user_id = ""
-        user.save(update_fields=["slack_user_id"])
-
-        mock_service = MagicMock()
-        mock_service.lookup_user_by_email.return_value = "UMATCHED123"
-        mock_service.add_to_channels.return_value = [
-            {"channel": "C001", "ok": True},
-            {"channel": "C002", "ok": True},
-        ]
-
-        with patch(
-            "community.tasks.email_matcher.get_community_service",
-            return_value=mock_service,
-        ):
-            result = match_community_emails()
-
-        self.assertGreaterEqual(result["matched"], 1)
-
-        user.refresh_from_db()
-        self.assertEqual(user.slack_user_id, "UMATCHED123")
-
-        logs = CommunityAuditLog.objects.filter(user=user, action="link")
-        self.assertEqual(logs.count(), 1)
-        details = json.loads(logs.first().details)
-        self.assertEqual(details["slack_user_id"], "UMATCHED123")
-        self.assertEqual(details["source"], "email_matcher")
-        self.assertEqual(len(details["channels"]), 2)
-
-
 class SubscriptionDeletionRemovalTest(TestCase):
     """Scenario 11: Subscription deletion triggers community removal.
 

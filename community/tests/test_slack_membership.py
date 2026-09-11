@@ -10,6 +10,7 @@ Covers:
 """
 
 import json
+from datetime import UTC, datetime
 from unittest.mock import MagicMock, patch
 
 import requests
@@ -23,6 +24,8 @@ from community.tasks import slack_membership as task_module
 from community.tasks.slack_membership import (
     SLACK_MEMBERSHIP_CHUNK_SIZE,
     SLACK_MEMBERSHIP_SLEEP_SECONDS,
+    ChannelReconciliationResult,
+    check_user_slack_membership,
     refresh_slack_membership,
 )
 from payments.models import Tier
@@ -31,6 +34,151 @@ from payments.models import Tier
 def _tier(level):
     """Fetch one of the migration-seeded tier rows by level."""
     return Tier.objects.get(level=level)
+
+
+class SlackChannelReconciliationTest(TestCase):
+    def _user(self, level=20, **fields):
+        return User.objects.create_user(
+            email=fields.pop("email", "member@test.com"),
+            tier=_tier(level),
+            **fields,
+        )
+
+    def _service(self, results, *, outcome=("member", "U_FOUND")):
+        service = MagicMock()
+        service.channel_ids = ["C_ONE", "C_TWO"]
+        service.check_workspace_membership.return_value = outcome
+        service.lookup_user_profile_by_email.return_value = None
+        service.add_to_channels.return_value = results
+        return service
+
+    def test_complete_reconciliation_persists_member_and_audits_only_adds(self):
+        user = self._user(slack_user_id="U_STORED")
+        service = self._service([
+            {"channel": "C_ONE", "ok": True},
+            {"channel": "C_TWO", "ok": True, "already_in": True},
+        ])
+
+        result = check_user_slack_membership(
+            user, service=service, audit_source="api", actor_token="ops-token",
+        )
+
+        self.assertEqual(result.outcome, "member")
+        self.assertEqual(result.channels.as_dict(), {
+            "status": "complete",
+            "configured_count": 2,
+            "added_count": 1,
+            "already_present_count": 1,
+            "failed_count": 0,
+        })
+        service.add_to_channels.assert_called_once_with("U_STORED")
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+        self.assertEqual(user.slack_user_id, "U_STORED")
+        link = CommunityAuditLog.objects.get(user=user, action="link")
+        self.assertEqual(json.loads(link.details), {
+            "source": "api",
+            "result": "complete",
+            "configured_count": 2,
+            "added_count": 1,
+            "already_present_count": 1,
+            "failed_count": 0,
+            "subject_user_id": user.pk,
+            "actor_token": "ops-token",
+        })
+
+    def test_partial_and_failed_results_preserve_workspace_membership(self):
+        user = self._user()
+        service = self._service([
+            {"channel": "C_ONE", "ok": True},
+            {"channel": "C_TWO", "ok": False, "error": "not_allowed"},
+        ])
+
+        first = check_user_slack_membership(user, service=service)
+        self.assertEqual(first.channels.status, "partial")
+        self.assertEqual(first.channels.failed_count, 1)
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+
+        service.add_to_channels.side_effect = RuntimeError("private marker")
+        second = check_user_slack_membership(user, service=service)
+        self.assertEqual(second.channels.status, "failed")
+        self.assertEqual(second.channels.failed_count, 2)
+        user.refresh_from_db()
+        self.assertTrue(user.slack_member)
+
+    def test_all_already_present_is_complete_without_link_audit(self):
+        user = self._user(slack_member=True, slack_user_id="U_STORED")
+        service = self._service([
+            {"channel": "C_ONE", "ok": True, "already_in": True},
+            {"channel": "C_TWO", "ok": True, "already_in": True},
+        ])
+
+        result = check_user_slack_membership(user, service=service)
+
+        self.assertEqual(result.channels.status, "complete")
+        self.assertEqual(result.channels.already_present_count, 2)
+        self.assertFalse(
+            CommunityAuditLog.objects.filter(user=user, action="link").exists(),
+        )
+
+    def test_no_config_is_unavailable_and_does_not_call_provider(self):
+        user = self._user()
+        service = self._service([])
+        service.channel_ids = []
+
+        result = check_user_slack_membership(user, service=service)
+
+        self.assertEqual(result.channels, ChannelReconciliationResult(status="unavailable"))
+        service.add_to_channels.assert_not_called()
+
+    def test_execution_time_access_recheck_skips_free_member(self):
+        user = self._user(level=0)
+        service = self._service([])
+
+        result = check_user_slack_membership(user, service=service)
+
+        self.assertEqual(result.outcome, "member")
+        self.assertEqual(result.channels.status, "skipped")
+        self.assertEqual(result.channels.configured_count, 2)
+        service.add_to_channels.assert_not_called()
+
+    def test_unknown_and_not_member_never_add_channels(self):
+        user = self._user(slack_member=True, slack_user_id="U_STORED")
+        unknown = self._service([], outcome=("unknown", None))
+        before = user.slack_checked_at
+
+        result = check_user_slack_membership(user, service=unknown)
+        self.assertEqual(result.outcome, "unknown")
+        unknown.add_to_channels.assert_not_called()
+        user.refresh_from_db()
+        self.assertEqual(user.slack_checked_at, before)
+        self.assertTrue(user.slack_member)
+
+        not_member = self._service([], outcome=("not_member", None))
+        result = check_user_slack_membership(user, service=not_member)
+        self.assertEqual(result.outcome, "not_member")
+        not_member.add_to_channels.assert_not_called()
+
+    def test_repeated_reconciliation_delegates_idempotency_to_slack(self):
+        user = self._user(slack_member=True, slack_user_id="U_STORED")
+        service = self._service([
+            {"channel": "C_ONE", "ok": True},
+            {"channel": "C_TWO", "ok": True},
+        ])
+        first = check_user_slack_membership(user, service=service)
+        service.add_to_channels.return_value = [
+            {"channel": "C_ONE", "ok": True, "already_in": True},
+            {"channel": "C_TWO", "ok": True, "already_in": True},
+        ]
+        second = check_user_slack_membership(user, service=service)
+
+        self.assertEqual(first.channels.added_count, 2)
+        self.assertEqual(second.channels.already_present_count, 2)
+        self.assertEqual(service.add_to_channels.call_count, 2)
+        self.assertEqual(
+            CommunityAuditLog.objects.filter(user=user, action="link").count(), 1,
+        )
 
 
 @override_settings(SLACK_ENABLED=True, SLACK_BOT_TOKEN='xoxb-test')
@@ -52,6 +200,27 @@ class CheckWorkspaceMembershipTest(TestCase):
 
         result = self.service.check_workspace_membership('a@example.com')
         self.assertEqual(result, ('member', 'U999'))
+
+    @patch('community.services.slack.requests.post')
+    def test_provider_failure_log_redacts_input_and_untrusted_error(self, mock_post):
+        response = MagicMock()
+        response.status_code = 200
+        response.json.return_value = {
+            'ok': False,
+            'error': 'private@example.com U_PRIVATE C_PRIVATE',
+        }
+        mock_post.return_value = response
+
+        with self.assertLogs('community.services.slack', level='WARNING') as logs:
+            result = self.service.check_workspace_membership('subject@example.com')
+
+        self.assertEqual(result, ('unknown', None))
+        rendered = '\n'.join(logs.output)
+        self.assertIn('error_code=unknown_error', rendered)
+        for marker in (
+            'subject@example.com', 'private@example.com', 'U_PRIVATE', 'C_PRIVATE',
+        ):
+            self.assertNotIn(marker, rendered)
 
     @patch('community.services.slack.requests.post')
     def test_users_not_found_returns_not_member(self, mock_post):
@@ -143,7 +312,6 @@ class RefreshSlackMembershipTaskTest(TestCase):
         self.assertEqual(result['members'], 1)
         self.assertEqual(result['not_members'], 0)
         self.assertEqual(result['unknown'], 0)
-        self.assertEqual(result['transitions'], 1)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_not_member_outcome_sets_slack_member_false_and_timestamp(self, mock_get_service):
@@ -159,8 +327,6 @@ class RefreshSlackMembershipTaskTest(TestCase):
         self.assertFalse(user.slack_member)
         self.assertIsNotNone(user.slack_checked_at)
         self.assertEqual(result['not_members'], 1)
-        # First-ever check counts as a transition even if NULL -> False.
-        self.assertEqual(result['transitions'], 1)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_unknown_outcome_leaves_fields_unchanged(self, mock_get_service):
@@ -182,7 +348,6 @@ class RefreshSlackMembershipTaskTest(TestCase):
         self.assertEqual(user.slack_checked_at, original_ts)
         self.assertTrue(user.slack_member)
         self.assertEqual(result['unknown'], 1)
-        self.assertEqual(result['transitions'], 0)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_only_picks_null_or_stale_users(self, mock_get_service):
@@ -192,7 +357,7 @@ class RefreshSlackMembershipTaskTest(TestCase):
         recent.slack_member = True
         recent.save(update_fields=['slack_checked_at', 'slack_member'])
 
-        # Stale (>7d): should be checked.
+        # Stale (>1d): should be checked.
         stale = self._make_user('stale@test.com')
         stale.slack_checked_at = timezone.now() - timezone.timedelta(days=10)
         stale.slack_member = False
@@ -216,6 +381,64 @@ class RefreshSlackMembershipTaskTest(TestCase):
         self.assertEqual(called_emails[0], 'never@test.com')
         self.assertIn('stale@test.com', called_emails)
         self.assertNotIn('recent@test.com', called_emails)
+
+    @patch('community.tasks.slack_membership.timezone.now')
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_daily_cutoff_is_strict_and_nulls_keep_priority(
+        self, mock_get_service, mock_now,
+    ):
+        fixed = datetime(2026, 9, 11, 6, 0, tzinfo=UTC)
+        mock_now.return_value = fixed
+        never = self._make_user('a-never@test.com')
+        exactly = self._make_user('b-exact@test.com')
+        exactly.slack_checked_at = fixed - timezone.timedelta(days=1)
+        exactly.save(update_fields=['slack_checked_at'])
+        older = self._make_user('c-older@test.com')
+        older.slack_checked_at = fixed - timezone.timedelta(days=1, seconds=1)
+        older.save(update_fields=['slack_checked_at'])
+        service = MagicMock()
+        service.channel_ids = []
+        service.check_workspace_membership.return_value = ('not_member', None)
+        mock_get_service.return_value = service
+
+        refresh_slack_membership(sleep_seconds=0)
+
+        checked = [
+            call.args[0]
+            for call in service.check_workspace_membership.call_args_list
+        ]
+        self.assertEqual(checked, [never.email, older.email])
+        self.assertNotIn(exactly.email, checked)
+
+    @patch('community.tasks.slack_membership.get_community_service')
+    def test_summary_reports_only_aggregate_channel_counts(self, mock_get_service):
+        self._make_user('a-complete@test.com')
+        self._make_user('b-partial@test.com')
+        service = MagicMock()
+        service.channel_ids = ['C_ONE', 'C_TWO']
+        service.lookup_user_profile_by_email.return_value = None
+        service.check_workspace_membership.side_effect = [
+            ('member', 'U_ONE'), ('member', 'U_TWO'),
+        ]
+        service.add_to_channels.side_effect = [
+            [
+                {'channel': 'C_ONE', 'ok': True},
+                {'channel': 'C_TWO', 'ok': True, 'already_in': True},
+            ],
+            [
+                {'channel': 'C_ONE', 'ok': True},
+                {'channel': 'C_TWO', 'ok': False, 'error': 'not_allowed'},
+            ],
+        ]
+        mock_get_service.return_value = service
+
+        result = refresh_slack_membership(sleep_seconds=0)
+
+        self.assertEqual(result['channel_complete'], 1)
+        self.assertEqual(result['channel_partial'], 1)
+        self.assertEqual(result['channel_failed'], 0)
+        self.assertEqual(result['newly_added_channel_memberships'], 2)
+        self.assertNotIn('transitions', result)
 
     @patch('community.tasks.slack_membership.get_community_service')
     def test_batch_size_caps_run(self, mock_get_service):
@@ -352,7 +575,7 @@ class RefreshSlackMembershipTaskTest(TestCase):
         self.assertIsNone(user.slack_checked_at)
         self.assertEqual(result['unknown'], 1)
         self.assertIn(
-            'Unexpected error checking Slack membership for boom@test.com',
+            f'Unexpected Slack membership check error: user_id={user.pk}',
             logs.output[0],
         )
 

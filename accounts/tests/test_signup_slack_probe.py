@@ -185,7 +185,7 @@ class SignupSlackNameBackfillTest(TestCase):
         self.assertEqual(resp.status_code, 201)
         self.assertTrue(
             any(
-                'Slack profile lookup failed for flaky-profile@example.com' in line
+                'Slack profile lookup failed; skipping name backfill: user_id=' in line
                 for line in logs.output
             ),
             f'Expected profile-lookup WARNING in logs, got: {logs.output}',

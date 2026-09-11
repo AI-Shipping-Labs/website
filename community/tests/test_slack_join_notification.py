@@ -456,7 +456,7 @@ class RefreshSlackMembershipJoinTriggerTest(TestCase):
         user.refresh_from_db()
         self.assertTrue(user.slack_member)
         self.assertEqual(result["members"], 1)
-        self.assertIn("transitions", result)
+        self.assertEqual(result["channel_unavailable"], 1)
 
     def test_leave_then_rejoin_notifies_again(self):
         """A user flipped to non-member who rejoins notifies again."""

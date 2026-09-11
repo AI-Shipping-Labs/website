@@ -110,7 +110,7 @@ class TestWorkerTaskNames:
         _create_staff_user('admin@test.com')
         _create_task(
             'texas-texas-oscar-earth',
-            'community.tasks.email_matcher.match_community_emails',
+            'community.tasks.slack_membership.refresh_slack_membership',
         )
 
         context = _auth_context(browser, 'admin@test.com')
@@ -121,7 +121,7 @@ class TestWorkerTaskNames:
                 wait_until='domcontentloaded',
             )
             body = page.content()
-            assert 'community.tasks.email_matcher.match_community_emails' in body
+            assert 'community.tasks.slack_membership.refresh_slack_membership' in body
             assert 'texas-texas-oscar-earth' not in body
 
         connection.close()
@@ -152,7 +152,7 @@ class TestWorkerTaskNames:
         _create_staff_user('admin@test.com')
         task = _create_task(
             'red-single-oranges-cold',
-            'community.tasks.email_matcher.match_community_emails',
+            'community.tasks.slack_membership.refresh_slack_membership',
         )
 
         context = _auth_context(browser, 'admin@test.com')
@@ -165,7 +165,7 @@ class TestWorkerTaskNames:
             detail = page.content()
             # Humanized display name (func path) AND the raw codename are both
             # present, so nothing is hidden during debugging.
-            assert 'community.tasks.email_matcher.match_community_emails' in detail
+            assert 'community.tasks.slack_membership.refresh_slack_membership' in detail
             assert 'red-single-oranges-cold' in detail
 
         connection.close()

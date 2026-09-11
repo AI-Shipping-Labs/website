@@ -401,12 +401,12 @@ class WorkerDisplayNameTest(TestCase):
         now = timezone.now()
         _create_task(
             name='texas-texas-oscar-earth',
-            func='community.tasks.email_matcher.match_community_emails',
+            func='community.tasks.slack_membership.refresh_slack_membership',
             started=now, stopped=now, success=True,
         )
         response = self.client.get('/studio/worker/')
         self.assertContains(
-            response, 'community.tasks.email_matcher.match_community_emails'
+            response, 'community.tasks.slack_membership.refresh_slack_membership'
         )
         self.assertNotContains(response, 'texas-texas-oscar-earth')
 
@@ -448,13 +448,13 @@ class WorkerDisplayNameTest(TestCase):
         now = timezone.now()
         task = _create_task(
             name='texas-texas-oscar-earth',
-            func='community.tasks.email_matcher.match_community_emails',
+            func='community.tasks.slack_membership.refresh_slack_membership',
             started=now, stopped=now, success=True,
         )
         response = self.client.get(f'/studio/worker/task/{task.id}/')
         # Humanized display name is shown...
         self.assertContains(
-            response, 'community.tasks.email_matcher.match_community_emails'
+            response, 'community.tasks.slack_membership.refresh_slack_membership'
         )
         # ...and the raw Django-Q codename is still preserved for debugging.
         self.assertContains(response, 'texas-texas-oscar-earth')

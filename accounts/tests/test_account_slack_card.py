@@ -125,6 +125,11 @@ class AccountSlackJoinCtaTest(
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="slack-account-card"')
         self.assertContains(response, 'data-testid="slack-account-card-join"')
+        self.assertContains(
+            response,
+            'Already joined? We check Slack daily and add members with '
+            'community access to the community channels automatically.',
+        )
         self.assertContains(response, "Join our Slack community")
         # Issue #953: the CTA must point at the gated /community/slack
         # redirect, NEVER the raw invite URL — locked to the join anchor

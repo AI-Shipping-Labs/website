@@ -59,20 +59,20 @@ class HumanizeTaskNameTest(SimpleTestCase):
     def test_codename_falls_back_to_func_path(self):
         result = humanize_task_name(
             "texas-texas-oscar-earth",
-            "community.tasks.email_matcher.match_community_emails",
+            "community.tasks.slack_membership.refresh_slack_membership",
         )
         self.assertIn(
-            "community.tasks.email_matcher.match_community_emails", result
+            "community.tasks.slack_membership.refresh_slack_membership", result
         )
         self.assertNotIn("texas-texas-oscar-earth", result)
         self.assertIn(AUTO_NAMED_HINT, result)
 
     def test_empty_name_falls_back_to_func_path(self):
         result = humanize_task_name(
-            "", "community.tasks.email_matcher.match_community_emails"
+            "", "community.tasks.slack_membership.refresh_slack_membership"
         )
         self.assertIn(
-            "community.tasks.email_matcher.match_community_emails", result
+            "community.tasks.slack_membership.refresh_slack_membership", result
         )
         self.assertIn(AUTO_NAMED_HINT, result)
 

@@ -10,6 +10,8 @@ This is where members share projects, ask questions, and collaborate on AI build
 
 [Join the Slack Workspace]({{ site_url }}/community/slack)
 
+After you join, we check Slack daily and add members with community access to the community channels automatically.
+
 The best first step is to [fill in your onboarding form]({{ site_url }}/onboarding/) — it takes a few minutes and tells us about your background and goals so we can prepare a personalized plan for you.
 
 See you there!

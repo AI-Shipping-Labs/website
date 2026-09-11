@@ -651,33 +651,85 @@ def user_detail(request, email):
     return JsonResponse(serialize_user_state(user), status=200)
 
 
-@token_required
+@token_required(structured_errors=True)
 @csrf_exempt
-@require_methods("POST")
+@require_methods("POST", structured_errors=True)
 @openapi_spec(
     tag="Users",
     summary="Check one user Slack membership",
     methods={
         "POST": {
             "summary": "Check cached Slack membership now",
+            "description": (
+                "Resolve a primary email or alias to its canonical account, "
+                "refresh definite workspace state, and reconcile eligible "
+                "Main+ members with configured community channels. Partial "
+                "channel failure remains a definite HTTP 200 result."
+            ),
             "responses": {
-                200: {"description": "Definite member or not-member result."},
-                404: {"description": "Unknown email."},
-                503: {"description": "Slack membership unavailable."},
+                200: {
+                    "description": "Definite member or not-member result.",
+                    "example": {
+                        "email": "member@example.com",
+                        "outcome": "member",
+                        "slack_member": True,
+                        "slack_user_id": "U01234567",
+                        "slack_checked_at": "2026-09-11T06:00:00+00:00",
+                        "channel_reconciliation": {
+                            "status": "complete",
+                            "configured_count": 2,
+                            "added_count": 1,
+                            "already_present_count": 1,
+                            "failed_count": 0,
+                        },
+                    },
+                },
+                401: {
+                    "description": (
+                        "Missing or malformed credentials return "
+                        "authentication_required; unknown, inactive-owner, "
+                        "or non-staff-owner tokens return invalid_token."
+                    ),
+                    "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                    "example": {
+                        "error": "Authentication token required",
+                        "code": "authentication_required",
+                    },
+                },
+                404: {
+                    "description": "Unknown primary email or alias.",
+                    "example": {"error": "User not found", "code": "user_not_found"},
+                },
+                405: {
+                    "description": "Method not allowed after valid authentication.",
+                    "schema": {"$ref": "#/components/schemas/ErrorResponse"},
+                    "example": {
+                        "error": "Method not allowed",
+                        "code": "method_not_allowed",
+                    },
+                },
+                503: {
+                    "description": "Slack membership unavailable; no mutation made.",
+                    "example": {
+                        "error": "Slack membership could not be checked",
+                        "code": "slack_membership_unavailable",
+                    },
+                },
             },
         },
     },
 )
 def user_slack_membership_check(request, email):
     """Run the shared single-user Slack membership operation."""
-    user = find_user_by_primary_email(email)
+    user = _find_user_or_alias(email)
     if user is None:
         return user_not_found_response()
-    outcome = check_user_slack_membership(
+    result = check_user_slack_membership(
         user,
-        audit_source=f"api:{_actor_label(request)}",
+        audit_source="api",
+        actor_token=_actor_label(request),
     )
-    if outcome == "unknown":
+    if result.outcome == "unknown":
         return error_response(
             "Slack membership could not be checked",
             "slack_membership_unavailable",
@@ -687,7 +739,7 @@ def user_slack_membership_check(request, email):
     return JsonResponse(
         {
             "email": user.email,
-            "outcome": outcome,
+            "outcome": result.outcome,
             "slack_member": bool(user.slack_member),
             "slack_user_id": user.slack_user_id or "",
             "slack_checked_at": (
@@ -695,6 +747,7 @@ def user_slack_membership_check(request, email):
                 if user.slack_checked_at is not None
                 else None
             ),
+            "channel_reconciliation": result.channels.as_dict(),
         },
         status=200,
     )

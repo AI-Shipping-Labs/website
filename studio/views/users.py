@@ -1983,13 +1983,27 @@ def user_slack_id_set(request, user_id):
 def user_slack_membership_check(request, user_id):
     """Run one explicit Slack membership check for the selected user."""
     user = get_object_or_404(User, pk=user_id)
-    outcome = check_user_slack_membership(
+    result = check_user_slack_membership(
         user,
-        audit_source=f'studio:{request.user.email}',
+        audit_source='studio',
     )
-    if outcome == 'member':
-        messages.success(request, 'Slack membership checked: Member.')
-    elif outcome == 'not_member':
+    if result.outcome == 'member':
+        if result.channels.status == 'complete':
+            messages.success(
+                request,
+                'Slack membership checked: Member. Community channels are connected.',
+            )
+        elif result.channels.status == 'skipped':
+            messages.success(
+                request,
+                'Slack membership checked: Member. Community channels were not changed because this account does not have community access.',
+            )
+        else:
+            messages.warning(
+                request,
+                'Slack membership checked: Member, but community channels could not be fully connected. Check the Slack integration and try again.',
+            )
+    elif result.outcome == 'not_member':
         messages.success(request, 'Slack membership checked: Not in Slack.')
     else:
         messages.error(

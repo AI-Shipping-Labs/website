@@ -71,8 +71,10 @@ def _make_override(user_email, tier_slug, granted_by_email, days=30):
 
 def _set_stripe_customer(email, stripe_id):
     from accounts.models import User
+    from tests.fixtures import set_membership
 
-    User.objects.filter(email=email).update(stripe_customer_id=stripe_id)
+    user = User.objects.get(email=email)
+    set_membership(user, stripe_customer_id=stripe_id)
     connection.close()
 
 

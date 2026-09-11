@@ -232,8 +232,9 @@ class TestNonOverrideBadgesStayPlainSpans:
         _create_user('plain-free@test.com', tier_slug='free')
         # Stripe badge: paid user with a Stripe customer id, no override.
         paid = _create_user('plain-paid@test.com', tier_slug='basic')
-        from accounts.models import User
-        User.objects.filter(pk=paid.pk).update(
+        from tests.fixtures import set_membership
+        set_membership(
+            paid,
             stripe_customer_id='cus_test_568',
         )
         connection.close()

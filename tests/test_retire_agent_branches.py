@@ -1625,15 +1625,17 @@ class RepositoryImmutabilityAndProcessContractTest(SimpleTestCase):
             [
                 sys.executable,
                 "-c",
-                "import time; time.sleep(120)",
+                "import time; print('ready', flush=True); time.sleep(120)",
                 "worktree-agent-1260",
                 str(PROJECT_ROOT),
             ],
             cwd=PROJECT_ROOT,
-            stdout=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
+            text=True,
         )
         try:
+            self.assertEqual(sentinel.stdout.readline(), "ready\n")
             sentinel_before = self.process_identity(sentinel.pid)
             self.assertIsNotNone(sentinel_before)
             before_repository = self.snapshot_shared_repository()

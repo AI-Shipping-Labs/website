@@ -534,8 +534,11 @@ class PrivacyCompletionTemplateTest(TestCase):
         ciphertext = encrypt_recipient("recipient@test.com")
         self.assertNotIn("recipient@test.com", ciphertext)
         self.assertEqual(decrypt_recipient(ciphertext), "recipient@test.com")
+        tampered_character = "y" if ciphertext[25] == "x" else "x"
         with self.assertRaises(ImproperlyConfigured):
-            decrypt_recipient(f"{ciphertext[:25]}x{ciphertext[26:]}")
+            decrypt_recipient(
+                f"{ciphertext[:25]}{tampered_character}{ciphertext[26:]}"
+            )
 
     def test_template_is_transactional_editable_and_has_no_account_ctas(self):
         self.assertEqual(

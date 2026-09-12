@@ -49,7 +49,11 @@ from content.access import (
     can_access,
     get_required_tier_name,
 )
-from email_app.services.email_service import EmailService
+from email_app.services.email_rendering import (
+    render_html_email,
+    render_plain_text_email,
+    render_template_parts,
+)
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
@@ -182,9 +186,8 @@ def _render_series_email_parts(
     occurrences_list = '\n'.join(lines)
     registered_count = len(ordered)
 
-    email_service = EmailService()
     subject, body_markdown, body_html, footer_note = (
-        email_service._render_template_parts(
+        render_template_parts(
             template_name,
             user,
             {
@@ -209,12 +212,8 @@ def _render_series_email_parts(
             },
         )
     )
-    full_html = email_service.render_html_email(
-        subject, body_html, footer_note=footer_note,
-    )
-    plain_text = email_service.render_plain_text_email(
-        body_markdown, footer_note=footer_note,
-    )
+    full_html = render_html_email(subject, body_html, footer_note=footer_note)
+    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
     return subject, plain_text, full_html
 
 

@@ -1792,7 +1792,7 @@ class PaidWelcomeSESDestinationTest(TestCase):
         mock_client.send_email.return_value = {"MessageId": "ses-977"}
 
         with patch(
-            "email_app.services.email_service.boto3"
+            "email_app.services.ses_transport.boto3"
         ) as mock_boto3, patch(
             "community.services.staff_notifications.requests.post"
         ) as mock_slack:

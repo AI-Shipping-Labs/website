@@ -16,7 +16,11 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     get_sender_for_kind,
 )
-from email_app.services.email_service import EmailService
+from email_app.services.email_rendering import (
+    render_html_email,
+    render_plain_text_email,
+    render_template_parts,
+)
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
     generate_ics,
@@ -71,9 +75,8 @@ def send_registration_confirmation(registration):
 
     calendar_links = build_calendar_links(event)
     # Render the email template
-    email_service = EmailService()
     subject, body_markdown, body_html, footer_note = (
-        email_service._render_template_parts(
+        render_template_parts(
             'event_registration',
             user,
             {
@@ -96,12 +99,8 @@ def send_registration_confirmation(registration):
         )
     )
 
-    full_html = email_service.render_html_email(
-        subject, body_html, footer_note=footer_note,
-    )
-    plain_text = email_service.render_plain_text_email(
-        body_markdown, footer_note=footer_note,
-    )
+    full_html = render_html_email(subject, body_html, footer_note=footer_note)
+    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
 
     ics_content = generate_ics(
         event,
@@ -220,10 +219,10 @@ def _send_raw_email(
         str: SES message ID.
     """
     # Issue #509: kill-switch for tests / local dev. Mirrors the gate in
-    # EmailService._send_ses so neither boto3 client construction site can
-    # reach a real SES account when SES_ENABLED is False. Returns a
-    # recognisable synthetic message id so the caller's EmailLog row still
-    # records the attempt.
+    # email_app.services.ses_transport.send_ses_email so neither boto3
+    # client construction site can reach a real SES account when
+    # SES_ENABLED is False. Returns a recognisable synthetic message id so
+    # the caller's EmailLog row still records the attempt.
     if not getattr(settings, 'SES_ENABLED', False):
         logger.info(
             'SES disabled - skipping registration email to %s (subject=%s)',

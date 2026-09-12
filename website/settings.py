@@ -626,8 +626,9 @@ SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_TEST_ANNOUNCEMENTS_C
 # SES_ENABLED=true to enable transactional + campaign mail; every other
 # environment (local dev, CI, Playwright, manage.py test) defaults to off so
 # that no real emails are sent. Both code paths that build a boto3 SES client
-# (EmailService._send_ses and events.services.registration_email._send_raw_email)
-# short-circuit when this flag is False, returning a synthetic
+# (email_app.services.ses_transport.send_ses_email and
+# events.services.registration_email._send_raw_email) short-circuit when
+# this flag is False, returning a synthetic
 # ``ses-disabled-noop`` message id so EmailLog rows still record the attempt.
 # As a belt-and-suspenders defence we also blank the AWS access keys here so
 # that any future code path that slips past the gate cannot authenticate

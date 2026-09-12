@@ -1,15 +1,25 @@
-"""Explicit recap-ready delivery for event registrants (issue #1557)."""
+"""Explicit recap-ready delivery for event registrants (issue #1557).
+
+The email channel goes through ``community_base.mail`` (A1.2 slice 3): a
+durable ``EmailDelivery`` under the ``event-recap-ready:{event}:{user}``
+idempotency key, transported by the worker. ``sent`` therefore means the
+durable delivery exists; the provider outcome lands on the delivery and
+the ``EmailLog`` audit row is written from the delivery worker, keeping
+its event FK via the delivery's ``related`` relation. The in-app channel
+is unchanged.
+"""
 
 import logging
 from dataclasses import dataclass
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
 
 from email_app.models import EmailLog, SesEvent
-from email_app.services.email_service import EmailService
+from email_app.package_mail import send_package_mail
 from events.models import Event, EventRegistration
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.calendar_lifecycle import user_has_permanent_bounce
@@ -186,10 +196,17 @@ def _email_context(event, recap_url):
     }
 
 
-def _save_email_success(event, user, email_log):
-    """Attach the existing EmailLog and durable marker atomically."""
+def _save_email_success(event, user, email_log=None):
+    """Attach the legacy EmailLog (when present) and durable marker atomically.
+
+    ``email_log`` is only set on the pre-adoption repair path, where an
+    ``EmailLog`` row from the synchronous era is adopted into this event's
+    marker set. Package-path sends pass no log: the audit row is written
+    from the delivery worker with the event FK from the delivery's
+    ``related`` relation.
+    """
     with transaction.atomic():
-        if email_log.event_id != event.pk:
+        if email_log is not None and email_log.event_id != event.pk:
             email_log.event_id = event.pk
             email_log.save(update_fields=["event"])
         marker, created = EventReminderLog.objects.get_or_create(
@@ -229,6 +246,8 @@ def _deliver_email(event, user_id, recap_url):
     dedupe_key = _dedupe_key(event, user)
     existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
     if existing_log is not None:
+        # Pre-adoption row from the synchronous send era: adopt it
+        # into the marker set instead of sending a second recap email.
         try:
             _save_email_success(event, user, existing_log)
         except IntegrityError:
@@ -236,20 +255,13 @@ def _deliver_email(event, user_id, recap_url):
         return DeliveryState("already_sent", existing_log.pk)
 
     try:
-        email_log = EmailService().send(
+        delivery = send_package_mail(
             user,
             EMAIL_TYPE,
             _email_context(event, recap_url),
-            dedupe_key=dedupe_key,
+            idempotency_key=dedupe_key,
+            related=event,
         )
-        if email_log is None:
-            return DeliveryState("skipped_email_policy")
-        marker, created = _save_email_success(event, user, email_log)
-    except IntegrityError:
-        existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
-        if existing_log is not None:
-            return DeliveryState("already_sent", existing_log.pk)
-        raise
     except Exception as exc:
         logger.warning(
             "event_recap_ready_email_failed event_id=%s user_id=%s error=%s",
@@ -259,9 +271,19 @@ def _deliver_email(event, user_id, recap_url):
             exc_info=True,
         )
         return DeliveryState("failed")
+
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
+        return DeliveryState("skipped_email_policy")
+
+    try:
+        marker, created = _save_email_success(event, user)
+    except IntegrityError:
+        # A concurrent worker created the marker first; the durable
+        # delivery is shared, so this is the same send.
+        return DeliveryState("already_sent", delivery.pk)
     return DeliveryState(
         "sent" if created else "already_sent",
-        email_log.pk,
+        delivery.pk,
     )
 
 

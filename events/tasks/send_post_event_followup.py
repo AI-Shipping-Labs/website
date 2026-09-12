@@ -17,17 +17,20 @@ Three-function module modelled on
 
 3. ``send_post_event_followup_one(event_id, user_id)`` — per-user
    send. Dedups via ``EventReminderLog.get_or_create(event, user,
-   interval='followup')``, calls ``EmailService().send(user,
-   'post_event_followup', ctx)``, wraps the send in ``try / except``
-   so a single bad address never blocks the fan-out, same best-effort
-   guarantee as #706.
+   interval='followup')``, then records a durable ``EmailDelivery``
+   through ``email_app.package_mail.send_package_mail`` (A1.2 slice 3)
+   under the stable ``post_event_followup:{event}:{user}`` key, wrapped
+   in ``try / except`` so a local refusal never blocks the fan-out,
+   same best-effort guarantee as #706. SES transport outcomes land on
+   the delivery from the worker and the ``EmailLog`` audit row is
+   written there.
 
 Unsubscribed users still receive the follow-up — the message is
 transactional (the recipient registered for this event), same policy
 as ``event_reminder`` / ``event_rescheduled``. The
 ``post_event_followup`` template name is registered in
 ``email_app.services.email_classification.TRANSACTIONAL_EMAIL_TYPES``
-so ``EmailService.send`` does NOT short-circuit on
+so the package preference resolver does NOT suppress it on
 ``user.unsubscribed``.
 
 Feedback CTA wiring (issue #679 dependency, soft):
@@ -210,16 +213,24 @@ def send_post_event_followup_one(event_id, user_id):
     if feedback_url:
         context['feedback_url'] = feedback_url
 
-    # Lazy import to avoid pulling EmailService at module load.
-    from email_app.services.email_service import EmailService
+    # Lazy import to keep the worker's module load light.
+    from email_app.package_mail import send_package_mail
 
     try:
-        EmailService().send(user, 'post_event_followup', context)
+        send_package_mail(
+            user,
+            'post_event_followup',
+            context,
+            idempotency_key=f'post_event_followup:{event.pk}:{user.pk}',
+        )
     except Exception:
-        # Best-effort: a single bad address must NOT block subsequent
-        # per-user tasks in the fan-out. Same policy as #706.
+        # Best-effort: a local refusal (unknown purpose, invalid
+        # recipient, idempotency conflict) must NOT block subsequent
+        # per-user tasks in the fan-out. Same policy as #706. SES
+        # transport trouble does not raise here — the durable worker
+        # owns retries.
         logger.exception(
-            'Failed to send post_event_followup to %s for event %s',
+            'Failed to record post_event_followup delivery to %s for event %s',
             user.email, event.slug,
         )
         return {'status': 'errored', 'user_id': user_id}

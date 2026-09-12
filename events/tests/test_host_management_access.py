@@ -9,7 +9,7 @@ from django.utils import timezone
 from icalendar import Calendar
 
 from email_app.models import EmailLog
-from email_app.services.email_service import EmailService
+from email_app.services.email_rendering import render_template
 from events.models import Event, EventRegistration, HostInviteDelivery
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import maybe_register_host_as_attendee
@@ -274,7 +274,7 @@ class HostLifecycleCopyRenderingTest(TestCase):
         )
 
     def _render(self, template_name, context):
-        _subject, body_html = EmailService()._render_template(
+        _subject, body_html = render_template(
             template_name, self.user, context,
         )
         return body_html

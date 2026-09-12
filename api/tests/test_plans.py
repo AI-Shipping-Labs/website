@@ -3,11 +3,13 @@
 import datetime
 import json
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from accounts.models import Token
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     Checkpoint,
@@ -134,36 +136,49 @@ class PlansCreateTest(PlansApiTestBase):
         self.assertFalse(response.json()["ready_email"]["requested"])
 
     def test_create_plan_send_ready_email_true_sends_and_returns_result(self):
-        from unittest.mock import patch
-
-        with patch(
-            'email_app.services.email_service.EmailService._send_ses',
-            return_value='ses-1',
-        ):
-            response = self._post({
-                "user_email": "member@test.com",
-                "send_ready_email": True,
-            })
+        response = self._post({
+            "user_email": "member@test.com",
+            "send_ready_email": True,
+        })
 
         self.assertEqual(response.status_code, 201)
         body = response.json()
-        self.assertTrue(body["ready_email"]["requested"])
-        self.assertTrue(body["ready_email"]["sent"])
-        self.assertFalse(body["ready_email"]["failed"])
+        self.assertEqual(
+            body["ready_email"],
+            {
+                "requested": True,
+                "sent": True,
+                "skipped_already_sent": False,
+                "failed": False,
+                "error": "",
+            },
+        )
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)
         plan.refresh_from_db()
         self.assertIsNotNone(plan.shared_at)
-        self.assertEqual(PlanReadyEmailLog.objects.filter(plan=plan).count(), 1)
+        ready_log = PlanReadyEmailLog.objects.get(plan=plan)
+        delivery = EmailDelivery.objects.get(
+            recipient_user=self.member, purpose='plan_shared',
+        )
+        self.assertEqual(ready_log.email_delivery_id, delivery.pk)
+        self.assertIsNone(ready_log.email_log_id)
+        self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
         self.assertEqual(
             Notification.objects.filter(
                 user=self.member, notification_type='plan_shared',
             ).count(),
             1,
         )
-        self.assertEqual(
-            EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
-            1,
+        # The compatible `sent` result means queued; accepted-send history
+        # is written only after the worker transports the durable delivery.
+        self.assertFalse(
+            EmailLog.objects.filter(user=self.member, email_type='plan_shared').exists(),
         )
+        deliver_pending_mail()
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED)
+        email_log = EmailLog.objects.get(user=self.member, email_type='plan_shared')
+        self.assertEqual(email_log.dedupe_key, delivery.idempotency_key)
 
     def test_create_plan_rejects_non_boolean_send_ready_email(self):
         response = self._post({

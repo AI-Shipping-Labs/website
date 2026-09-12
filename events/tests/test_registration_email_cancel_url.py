@@ -131,7 +131,7 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
         # SES is disabled; the service short-circuits and returns the
         # synthetic message id. We still want the rendered HTML, so call
         # the template render path directly via the same service.
-        from email_app.services.email_service import EmailService
+        from email_app.services.email_rendering import render_template
         from events.services.calendar_links import build_calendar_links
         from events.services.cancel_token import generate_cancel_token
         from integrations.config import site_base_url
@@ -148,8 +148,7 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
         )
         calendar_links = build_calendar_links(self.event)
 
-        service = EmailService()
-        _subject, body_html = service._render_template(
+        _subject, body_html = render_template(
             'event_registration',
             self.user,
             {

@@ -1,7 +1,7 @@
 """Authoritative Studio account-deletion workflow coverage for #1556."""
 
 import json
-from unittest.mock import MagicMock, PropertyMock, patch
+from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError, ReadTimeoutError
 from django.contrib.auth import get_user_model
@@ -395,10 +395,8 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             endpoint_url="https://email.us-east-1.amazonaws.com",
         )
 
-        with patch.object(
-            EmailService,
-            "ses_client",
-            new_callable=PropertyMock,
+        with patch(
+            "email_app.services.ses_transport.build_ses_client",
             return_value=ses_client,
         ):
             response = self.confirm(request_log)
@@ -443,13 +441,11 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         )
 
         with self.assertLogs(
-            "email_app.services.email_service",
+            "email_app.services.ses_transport",
             level="ERROR",
         ) as captured_logs:
-            with patch.object(
-                EmailService,
-                "ses_client",
-                new_callable=PropertyMock,
+            with patch(
+                "email_app.services.ses_transport.build_ses_client",
                 return_value=ses_client,
             ):
                 response = self.confirm(request_log)

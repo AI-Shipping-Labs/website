@@ -1,4 +1,4 @@
-"""Email service for sending transactional emails via Amazon SES.
+"""Legacy email service for sending transactional emails via Amazon SES.
 
 Usage:
     from email_app.services import EmailService
@@ -6,44 +6,56 @@ Usage:
     service = EmailService()
     service.send(user, 'welcome', {'tier_name': 'Main'})
 
+This class is the transitional A1.2 surface: transactional sends move to
+``community_base.mail`` (via ``email_app.package_mail.send_package_mail``)
+one app per pull request, and the class shrinks to a DeprecationWarning
+shim in the final slice. The rendering and SES transport it used to own
+live in :mod:`email_app.services.email_rendering` and
+:mod:`email_app.services.ses_transport`; the methods below delegate so
+every remaining caller keeps its exact behavior until its own slice
+converts.
+
 Templates are stored as markdown files in email_app/email_templates/.
 Each template has YAML frontmatter with a subject line, and a markdown
 body that supports Django template variables.
 """
 
 import logging
-import re
 from dataclasses import dataclass
-from datetime import datetime
-from pathlib import Path
 
-import boto3
-import frontmatter
-from botocore.exceptions import BotoCoreError, ClientError
-from django.conf import settings
-from django.template import Context, Template
-from django.template.loader import render_to_string
-
-from accounts.services.timezones import format_user_datetime
-from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from accounts.utils.tokens import generate_user_action_token
-from content.utils.markdown import render_email_markdown, render_email_plain_text
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
-    WELCOME_EMAIL_TYPES,
     EmailClassificationError,
     classify_email_type,
-    get_sender_for_email_type,
 )
-from integrations.config import (
-    get_config,
-    site_base_url,
-    validate_email_config_value,
+from email_app.services.email_errors import (
+    EmailServiceError,
+    EmailTransportOutcomeUnknown,  # noqa: F401 (compatibility re-export)
 )
+from email_app.services.email_rendering import (
+    TEMPLATES_DIR,  # noqa: F401 (compatibility re-export)
+    load_template_source,
+    render_html_email,
+    render_markdown_email,
+    render_plain_text_email,
+    render_template_parts,
+    render_template_with_footer,
+)
+from email_app.services.ses_transport import (
+    DEFAULT_WELCOME_REPLY_TO_EMAIL,  # noqa: F401 (compatibility re-export)
+    WELCOME_REPLY_TO_KEY,  # noqa: F401 (compatibility re-export)
+    build_ses_client,
+    build_unsubscribe_headers,
+    normalize_cc,  # noqa: F401 (compatibility re-export)
+    send_ses_email,
+)
+from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
-TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "email_templates"
+# Old private name kept importable for existing callers and tests.
+_normalize_cc = normalize_cc
 
 # Issue #450: footer "verify your email" CTA shown to unverified recipients.
 # Default-on for every transactional + campaign email; this set names the
@@ -87,14 +99,6 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
 # email does not stay verifiable forever.
 VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
 
-# Issue #950: welcome emails (issue #937 sender set) carry a Reply-To pointing
-# at a monitored, team-forwarded inbox so a reply to a welcome reaches a human
-# instead of bouncing off the noreply/welcome send-only mailbox. The address is
-# editable from Studio via this IntegrationSetting key; an empty value omits the
-# Reply-To header entirely.
-WELCOME_REPLY_TO_KEY = "SES_WELCOME_REPLY_TO_EMAIL"
-DEFAULT_WELCOME_REPLY_TO_EMAIL = "welcome@aishippinglabs.com"
-
 UNSUBSCRIBED_AT_SEND = "unsubscribed_at_send"
 
 
@@ -126,34 +130,6 @@ class PreparedRenderedEmail:
     redact_transport_recipient: bool = False
 
 
-def _normalize_cc(cc):
-    """Normalize a ``cc`` argument into a list of non-empty email strings.
-
-    Accepts ``None``, a single string, or any iterable of strings.
-    Empty / whitespace-only entries are filtered out. Returns ``[]`` when
-    nothing usable remains — callers MUST check truthiness before
-    putting ``CcAddresses`` on the SES payload (SES rejects an empty
-    list with a validation error).
-    """
-    if not cc:
-        return []
-    if isinstance(cc, str):
-        cc = [cc]
-    return [c.strip() for c in cc if c and c.strip()]
-
-
-class EmailServiceError(Exception):
-    """Raised when email sending fails."""
-
-    pass
-
-
-class EmailTransportOutcomeUnknown(EmailServiceError):
-    """Raised when SES may have accepted a request before transport failed."""
-
-    pass
-
-
 class EmailService:
     """Service for sending transactional emails via Amazon SES v2.
 
@@ -169,12 +145,7 @@ class EmailService:
     def ses_client(self):
         """Lazy-initialize the SES v2 client."""
         if self._ses_client is None:
-            self._ses_client = boto3.client(
-                "sesv2",
-                region_name=get_config("AWS_SES_REGION", "us-east-1"),
-                aws_access_key_id=get_config("AWS_ACCESS_KEY_ID"),
-                aws_secret_access_key=get_config("AWS_SECRET_ACCESS_KEY"),
-            )
+            self._ses_client = build_ses_client()
         return self._ses_client
 
     def send(
@@ -389,15 +360,14 @@ class EmailService:
         if self._should_include_verify_footer(user, email_type):
             verify_email_url = self._build_verify_email_url(user)
 
-        body_html = render_email_markdown(body_markdown)
-        full_html = self.render_html_email(
+        full_html = render_markdown_email(
             subject,
-            body_html,
+            body_markdown,
             unsubscribe_url=unsubscribe_url,
             footer_note=footer_note,
             verify_email_url=verify_email_url,
         )
-        plain_text = self.render_plain_text_email(
+        plain_text = render_plain_text_email(
             body_markdown,
             footer_note=footer_note,
             verify_email_url=verify_email_url,
@@ -526,76 +496,15 @@ class EmailService:
         Raises:
             EmailServiceError: If no override or template file is found.
         """
-        subject, _body_markdown, body_html, footer_note = self._render_template_parts(
-            template_name,
-            user,
-            context,
-        )
-        return subject, body_html, footer_note
+        return render_template_with_footer(template_name, user, context)
 
     def _render_template_parts(self, template_name, user, context):
         """Resolve a named template once and return its Markdown and HTML bodies."""
-        subject_source, body_source, footer_note = self._load_template_source(
-            template_name,
-        )
-
-        # Build full context with defaults
-        full_context = {
-            # Issue #1591: the greeting must never be an email handle.
-            # Resolved here rather than as ``|default:"there"`` in the
-            # template files so operator overrides stored in the DB get
-            # the fix too, and so an empty value can never ship "Hi ,".
-            # Caller context still wins via ``full_context.update``.
-            "user_name": greeting_name(user) or GREETING_FALLBACK,
-            "user_email": user.email,
-            "site_url": site_base_url(),
-            "site_name": getattr(settings, "SITE_NAME", "AI Shipping Labs"),
-        }
-        full_context.update(context)
-
-        # Issue #666 guardrail: future email senders may forget to pre-format
-        # the event_datetime and pass a raw ``datetime`` instead. Convert
-        # any ``datetime`` value in the context to the recipient's timezone
-        # via the shared helper so the rendered body is correct regardless
-        # of caller hygiene. Strings are passed through unchanged so the
-        # existing pre-formatted callers keep working.
-        for key, value in list(full_context.items()):
-            if isinstance(value, datetime):
-                full_context[key] = format_user_datetime(value, user)
-
-        # Render subject as Django template
-        subject_template = Template(subject_source)
-        subject = subject_template.render(Context(full_context))
-
-        # Render body as Django template first (for variable substitution)
-        body_template = Template(body_source)
-        rendered_body = body_template.render(Context(full_context))
-
-        # Convert markdown to HTML through the canonical renderer (issue #989)
-        # so transactional email bodies parse identically to the website.
-        body_html = render_email_markdown(rendered_body)
-
-        return subject, rendered_body, body_html, footer_note
+        return render_template_parts(template_name, user, context)
 
     def _load_template_source(self, template_name):
         """Return ``(subject, body_markdown, footer_note)`` for a template."""
-        from email_app.models import EmailTemplateOverride
-
-        override = EmailTemplateOverride.objects.filter(
-            template_name=template_name,
-        ).first()
-        if override is not None:
-            return override.subject, override.body_markdown, override.footer_note
-
-        template_path = TEMPLATES_DIR / f"{template_name}.md"
-        if not template_path.exists():
-            raise EmailServiceError(
-                f"Email template not found: {template_name} "
-                f"(looked in {template_path})"
-            )
-
-        post = frontmatter.load(str(template_path))
-        return post.metadata.get("subject", template_name), post.content, ""
+        return load_template_source(template_name)
 
     def _build_unsubscribe_url(self, user):
         """Build a one-click unsubscribe URL for the user.
@@ -662,15 +571,12 @@ class EmailService:
         ``send`` decides per-recipient based on
         ``_should_include_verify_footer``.
         """
-        return render_to_string(
-            "email_app/base_email.html",
-            {
-                "subject": subject,
-                "body_html": body_html,
-                "unsubscribe_url": unsubscribe_url,
-                "footer_note": footer_note,
-                "verify_email_url": verify_email_url,
-            },
+        return render_html_email(
+            subject,
+            body_html,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
         )
 
     def render_markdown_email(
@@ -688,10 +594,9 @@ class EmailService:
         the Studio campaign preview and sent campaigns parse markdown exactly
         like the website (only mermaid + codehilite are disabled for email).
         """
-        body_html = render_email_markdown(body_markdown)
-        return self.render_html_email(
+        return render_markdown_email(
             subject,
-            body_html,
+            body_markdown,
             unsubscribe_url=unsubscribe_url,
             footer_note=footer_note,
             verify_email_url=verify_email_url,
@@ -706,38 +611,16 @@ class EmailService:
         verify_email_url=None,
     ):
         """Render resolved Markdown plus the same actions as the HTML footer."""
-        sections = [render_email_plain_text(body_markdown), 'AI Shipping Labs']
-        if footer_note:
-            sections.append(str(footer_note).strip())
-        if verify_email_url:
-            sections.append(
-                'Your email is not verified on our platform.\n'
-                f'Verify your email: {verify_email_url}'
-            )
-        if unsubscribe_url:
-            sections.append(f'Unsubscribe from all emails: {unsubscribe_url}')
-        return '\n\n'.join(section for section in sections if section).strip()
+        return render_plain_text_email(
+            body_markdown,
+            unsubscribe_url=unsubscribe_url,
+            footer_note=footer_note,
+            verify_email_url=verify_email_url,
+        )
 
     def _build_unsubscribe_headers(self, unsubscribe_url):
         """Build SES-compatible one-click unsubscribe headers."""
-        if not unsubscribe_url:
-            return []
-
-        header_value_parts = [f"<{unsubscribe_url}>"]
-        unsubscribe_mailto = get_config("SES_UNSUBSCRIBE_EMAIL", "").strip()
-        if unsubscribe_mailto:
-            header_value_parts.append(f"<mailto:{unsubscribe_mailto}>")
-
-        return [
-            {
-                "Name": "List-Unsubscribe",
-                "Value": ", ".join(header_value_parts),
-            },
-            {
-                "Name": "List-Unsubscribe-Post",
-                "Value": "List-Unsubscribe=One-Click",
-            },
-        ]
+        return build_unsubscribe_headers(unsubscribe_url)
 
     def _send_ses(
         self,
@@ -780,123 +663,14 @@ class EmailService:
         Raises:
             EmailServiceError: If SES API call fails.
         """
-        cc_list = _normalize_cc(cc)
-        bcc_list = _normalize_cc(bcc)
-
-        # Issue #509: kill-switch for tests / local dev. When SES_ENABLED is
-        # False the gate short-circuits BEFORE the boto3 client is built, so
-        # no real network call is made and production sender reputation is
-        # never touched. The synthetic message id is intentionally
-        # recognisable in EmailLog queries during incident response.
-        if not getattr(settings, "SES_ENABLED", False):
-            cc_label = f" cc={cc_list}" if cc_list else ""
-            bcc_label = f" bcc={bcc_list}" if bcc_list else ""
-            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
-            logger.info(
-                "SES disabled - skipping send to %s%s%s (subject=%s)",
-                recipient_label,
-                cc_label,
-                bcc_label,
-                subject,
-            )
-            # Local dev affordance: when DEBUG is on, print the email's
-            # action URLs to stdout so the developer can click through the
-            # verification / password-reset / event-registration flow
-            # without setting up real SES delivery.
-            if getattr(settings, "DEBUG", False):
-                urls = re.findall(r'href="(https?://[^"]+)"', html_body)
-                print(
-                    f"\n[email_app] SES disabled (local dev). "
-                    f"To: {recipient_label} | Subject: {subject}",
-                    flush=True,
-                )
-                for url in urls:
-                    print(f"  - {url}", flush=True)
-                print("", flush=True)
-            return "ses-disabled-noop"
-
-        from_email = get_sender_for_email_type(email_type)
-        content = {
-            "Simple": {
-                "Subject": {
-                    "Data": subject,
-                    "Charset": "UTF-8",
-                },
-                "Body": {
-                    "Text": {
-                        "Data": text_body,
-                        "Charset": "UTF-8",
-                    },
-                    "Html": {
-                        "Data": html_body,
-                        "Charset": "UTF-8",
-                    },
-                },
-            },
-        }
-        headers = self._build_unsubscribe_headers(unsubscribe_url)
-        if headers:
-            content["Simple"]["Headers"] = headers
-
-        destination = {"ToAddresses": [to_email]}
-        if cc_list:
-            destination["CcAddresses"] = cc_list
-        if bcc_list:
-            destination["BccAddresses"] = bcc_list
-        send_kwargs = {
-            "FromEmailAddress": from_email,
-            "Destination": destination,
-            "Content": content,
-        }
-
-        # Issue #950: route replies to welcome emails to a monitored inbox.
-        # Only welcome types get a Reply-To; an empty or malformed configured
-        # value omits the optional header so it cannot make SES reject the
-        # member's primary delivery.
-        if email_type in WELCOME_EMAIL_TYPES:
-            reply_to = validate_email_config_value(
-                WELCOME_REPLY_TO_KEY,
-                get_config(
-                    WELCOME_REPLY_TO_KEY,
-                    DEFAULT_WELCOME_REPLY_TO_EMAIL,
-                ),
-            )
-            if reply_to:
-                send_kwargs["ReplyToAddresses"] = [reply_to]
-
-        configuration_set_name = get_config("SES_CONFIGURATION_SET_NAME", "").strip()
-        if configuration_set_name:
-            send_kwargs["ConfigurationSetName"] = configuration_set_name
-
-        try:
-            response = self.ses_client.send_email(**send_kwargs)
-            return response.get("MessageId", "")
-        except ClientError as e:
-            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
-            if redact_recipient:
-                error_code = e.response.get("Error", {}).get("Code", "unknown")
-                logger.error(
-                    "SES rejected redacted recipient request error_code=%s",
-                    error_code,
-                )
-                raise EmailServiceError("SES privacy send failed") from None
-            logger.exception("Failed to send email via SES to %s", recipient_label)
-            raise EmailServiceError(f"SES send failed for {to_email}: {e}") from e
-        except BotoCoreError as e:
-            recipient_label = "[privacy-recipient]" if redact_recipient else to_email
-            if redact_recipient:
-                logger.error(
-                    "SES transport outcome is unknown for redacted recipient "
-                    "error_type=%s",
-                    type(e).__name__,
-                )
-                raise EmailTransportOutcomeUnknown(
-                    "SES privacy send outcome is unknown",
-                ) from None
-            logger.exception(
-                "SES transport outcome is unknown for %s",
-                recipient_label,
-            )
-            raise EmailTransportOutcomeUnknown(
-                f"SES send outcome is unknown for {to_email}: {e}",
-            ) from e
+        return send_ses_email(
+            to_email,
+            subject,
+            html_body,
+            text_body=text_body,
+            email_type=email_type,
+            unsubscribe_url=unsubscribe_url,
+            cc=cc,
+            bcc=bcc,
+            redact_recipient=redact_recipient,
+        )

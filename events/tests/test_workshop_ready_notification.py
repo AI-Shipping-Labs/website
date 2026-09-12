@@ -56,7 +56,7 @@ class WorkshopReadyServiceTest(TestCase):
         self.event.host_email = self.host_user.email
         self.event.save(update_fields=['host_email'])
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email')
     def test_sends_to_registrants_and_host_only(self, mock_send):
         mock_send.side_effect = ['ses-a', 'ses-b', 'ses-host']
 
@@ -88,7 +88,7 @@ class WorkshopReadyServiceTest(TestCase):
         self.assertIn('Workshop Ready Notes', plain_text)
         self.assertIn('/workshops/workshop-ready-event-workshop', plain_text)
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_host_already_registered_is_deduped(self, mock_send):
         EventRegistration.objects.create(event=self.event, user=self.host_user)
         host = Host.objects.create(
@@ -112,7 +112,7 @@ class WorkshopReadyServiceTest(TestCase):
         )
         self.assertEqual(mock_send.call_count, 3)
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_rerun_skips_existing_and_reaches_new_registrant(self, mock_send):
         notify_workshop_ready(self.event)
         new_user = User.objects.create_user(email='new@example.com')
@@ -132,7 +132,7 @@ class WorkshopReadyServiceTest(TestCase):
             1,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_unsubscribed_registrant_still_receives_transactional_email(self, mock_send):
         unsubscribed = User.objects.create_user(
             email='unsub@example.com',
@@ -147,7 +147,7 @@ class WorkshopReadyServiceTest(TestCase):
         )
         self.assertEqual(classify_email_type(EMAIL_TYPE), EMAIL_KIND_TRANSACTIONAL)
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_non_user_host_receives_email_only(self, mock_send):
         host = Host.objects.create(
             name='External Host',
@@ -173,7 +173,7 @@ class WorkshopReadyServiceTest(TestCase):
             any(item['email_only'] for item in result['results']),
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_inactive_host_user_is_skipped_not_email_only(self, mock_send):
         inactive = User.objects.create_user(
             email='inactive-host@example.com',
@@ -191,7 +191,7 @@ class WorkshopReadyServiceTest(TestCase):
             EmailLog.objects.filter(user=inactive).exists(),
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email')
     def test_recipient_failure_is_reported_and_rest_continue(self, mock_send):
         def send(to_email, *args, **kwargs):
             if to_email == 'b@example.com':
@@ -246,7 +246,7 @@ class WorkshopReadyStudioAndApiTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@example.com', password='pw')
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_studio_endpoint_sends_and_reports_counts(self, mock_send):
         response = self.client.post(
             f'/studio/events/{self.event.pk}/notify-workshop-ready',
@@ -269,7 +269,7 @@ class WorkshopReadyStudioAndApiTest(TestCase):
         self.assertContains(response, 'data-testid="notify-workshop-ready-button-disabled"')
         self.assertContains(response, 'A linked published workshop is required')
 
-    @patch('email_app.services.email_service.EmailService._send_ses', return_value='ses')
+    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
     def test_api_endpoint_success_and_error_cases(self, mock_send):
         auth = {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
 

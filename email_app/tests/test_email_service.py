@@ -339,7 +339,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         clear_config_cache()
 
     @override_settings(AWS_ACCESS_KEY_ID='', AWS_SECRET_ACCESS_KEY='', AWS_SES_REGION='us-east-1')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_ses_client_lazy_init(self, mock_boto3):
         mock_client = MagicMock()
         mock_boto3.client.return_value = mock_client
@@ -357,7 +357,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         )
         self.assertIs(client1, client2)
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_ses_client_uses_integration_settings(self, mock_boto3):
         IntegrationSetting.objects.create(
             key='AWS_SES_REGION',
@@ -390,7 +390,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             aws_secret_access_key='db-secret',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_calls_api(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
@@ -426,7 +426,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         )
         self.assertNotIn('Headers', call_kwargs['Content']['Simple'])
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_adds_unsubscribe_headers_when_url_provided(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'ses-real-id'}
@@ -456,7 +456,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             ],
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_adds_optional_mailto_unsubscribe_header(self, mock_boto3):
         IntegrationSetting.objects.create(
             key='SES_UNSUBSCRIBE_EMAIL',
@@ -485,7 +485,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             '<mailto:unsubscribe@aishippinglabs.com>',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_error_raises_exception(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.side_effect = ClientError(
@@ -500,7 +500,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_boto3.client.return_value = mock_client
 
         with (
-            self.assertLogs('email_app.services.email_service', level='ERROR') as logs,
+            self.assertLogs('email_app.services.ses_transport', level='ERROR') as logs,
             self.assertRaises(EmailServiceError) as ctx,
         ):
             self.service._send_ses(
@@ -509,7 +509,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertIn('Failed to send email via SES to to@example.com', logs.output[0])
         self.assertIn('SES send failed', str(ctx.exception))
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_unexpected_error_propagates(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.side_effect = RuntimeError('bad send kwargs')
@@ -521,7 +521,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             )
 
     @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='custom@example.com')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_uses_configured_transactional_from_email(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
@@ -538,7 +538,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'custom@example.com')
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_uses_integration_setting_transactional_from_email(self, mock_boto3):
         IntegrationSetting.objects.create(
             key='SES_TRANSACTIONAL_FROM_EMAIL',
@@ -563,7 +563,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertEqual(call_kwargs['FromEmailAddress'], 'sender@example.com')
 
     @override_settings(SES_PROMOTIONAL_FROM_EMAIL='promo@example.com')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_uses_configured_promotional_from_email(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
@@ -585,7 +585,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         SES_TRANSACTIONAL_FROM_EMAIL='',
         SES_PROMOTIONAL_FROM_EMAIL='',
     )
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_uses_legacy_from_email_fallback(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
@@ -602,7 +602,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['FromEmailAddress'], 'legacy@example.com')
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_email_passes_configuration_set_when_set(self, mock_boto3):
         IntegrationSetting.objects.create(
             key='SES_CONFIGURATION_SET_NAME',
@@ -622,7 +622,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertEqual(call_kwargs['ConfigurationSetName'], 'my-set')
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_email_omits_configuration_set_when_empty(self, mock_boto3):
         mock_client = MagicMock()
         mock_client.send_email.return_value = {'MessageId': 'id-123'}
@@ -637,7 +637,7 @@ class EmailServiceSESIntegrationTest(TestCase):
 
     # -- Issue #937: per-type welcome sender on the send chokepoint ---------
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_send_uses_welcome_from_address(self, mock_boto3):
         """A welcome-type send through the full send() path must hand SES
         the dedicated welcome@ From address."""
@@ -653,7 +653,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'welcome@aishippinglabs.com',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_password_reset_send_uses_noreply_from_address(self, mock_boto3):
         """A non-welcome transactional send is unchanged: noreply@."""
         mock_client = MagicMock()
@@ -672,7 +672,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'noreply@aishippinglabs.com',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_send_to_unsubscribed_user_still_sends(self, mock_boto3):
         """Delivery semantics preserved: an unsubscribed user is NOT skipped
         for a welcome send — SES is invoked and an EmailLog is returned."""
@@ -693,7 +693,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'welcome@aishippinglabs.com',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_promotional_send_to_unsubscribed_user_skipped(self, mock_boto3):
         """Regression control: an unsubscribed user IS skipped for a
         promotional send (SES not invoked, no EmailLog)."""
@@ -788,7 +788,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         mock_ses.assert_called_once()
         self.assertIsNone(mock_ses.call_args.kwargs['unsubscribe_url'])
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_send_has_no_unsubscribe_header(self, mock_boto3):
         """A welcome send is still transactional: no List-Unsubscribe header
         and no unsubscribe footer in the body."""
@@ -808,7 +808,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         self.assertNotIn('/api/unsubscribe?token=', html_body)
 
     @override_settings(SES_WELCOME_FROM_EMAIL='hello@aishippinglabs.com')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_send_honours_db_or_env_welcome_override(self, mock_boto3):
         """The welcome From address is resolved through get_config, so an
         override (env here) flows to the SES payload with no code change."""
@@ -833,7 +833,7 @@ class EmailServiceSESIntegrationTest(TestCase):
 
     # -- Issue #950: cofounder_welcome From regression --------------------
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_cofounder_welcome_sends_from_welcome_address(self, mock_boto3):
         """Regression (issue #950 part 1): a cofounder_welcome send resolves
         the SES From to welcome@ end-to-end, i.e. the email_type is actually
@@ -860,7 +860,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         )
 
     @override_settings(SES_FROM_EMAIL='noreply@aishippinglabs.com')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_cofounder_welcome_from_studio_override_beats_legacy_noreply(
         self, mock_boto3,
     ):
@@ -896,7 +896,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             'welcome@aishippinglabs.com',
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_cofounder_welcome_from_is_welcome_without_legacy_override(
         self, mock_boto3,
     ):
@@ -926,7 +926,7 @@ class EmailServiceSESIntegrationTest(TestCase):
 
     # -- Issue #950: Reply-To on welcome emails ---------------------------
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_send_sets_default_reply_to(self, mock_boto3):
         """A welcome send sets ReplyToAddresses to the monitored inbox
         default when SES_WELCOME_REPLY_TO_EMAIL is not overridden.
@@ -951,7 +951,7 @@ class EmailServiceSESIntegrationTest(TestCase):
             ['welcome@aishippinglabs.com'],
         )
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_reply_to_honours_db_override(self, mock_boto3):
         """An IntegrationSetting override changes the welcome Reply-To
         address without a code change.
@@ -978,8 +978,8 @@ class EmailServiceSESIntegrationTest(TestCase):
             ['team@aishippinglabs.com'],
         )
 
-    @patch('email_app.services.email_service.get_config')
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.get_config')
+    @patch('email_app.services.ses_transport.boto3')
     def test_welcome_reply_to_omitted_when_empty(self, mock_boto3, mock_get_config):
         """When the resolved SES_WELCOME_REPLY_TO_EMAIL is empty, the
         Reply-To header is omitted entirely (SES rejects an empty list).
@@ -1014,7 +1014,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         call_kwargs = mock_client.send_email.call_args[1]
         self.assertNotIn('ReplyToAddresses', call_kwargs)
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_non_welcome_send_has_no_reply_to(self, mock_boto3):
         """Non-welcome (e.g. password_reset) emails carry no Reply-To —
         the monitored-inbox routing is welcome-only.
@@ -1037,7 +1037,7 @@ class EmailServiceSESIntegrationTest(TestCase):
 
     # -- Issue #950: BCC plumbing -----------------------------------------
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_ses_bcc_lands_in_destination(self, mock_boto3):
         """A bcc passed to _send_ses builds Destination.BccAddresses and
         leaves CcAddresses absent."""
@@ -1064,7 +1064,7 @@ class EmailServiceSESIntegrationTest(TestCase):
         )
         self.assertNotIn('CcAddresses', destination)
 
-    @patch('email_app.services.email_service.boto3')
+    @patch('email_app.services.ses_transport.boto3')
     def test_send_threads_bcc_through_to_destination(self, mock_boto3):
         """EmailService.send(bcc=...) reaches the SES Destination."""
         clear_config_cache()

@@ -33,6 +33,11 @@ from accounts.services.timezones import (
     build_timezone_email_line,
     format_user_datetime,
 )
+from email_app.services.email_rendering import (
+    render_html_email,
+    render_plain_text_email,
+    render_template_parts,
+)
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
@@ -206,12 +211,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             'email_log_id': existing_log.pk,
         }
 
-    # Lazy import to avoid pulling the full EmailService at module load.
-    from email_app.services.email_service import EmailService
-
-    email_service = EmailService()
     subject, body_markdown, body_html, footer_note = (
-        email_service._render_template_parts(
+        render_template_parts(
             'event_rescheduled',
             user,
             {
@@ -239,12 +240,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         )
     )
 
-    full_html = email_service.render_html_email(
-        subject, body_html, footer_note=footer_note,
-    )
-    plain_text = email_service.render_plain_text_email(
-        body_markdown, footer_note=footer_note,
-    )
+    full_html = render_html_email(subject, body_html, footer_note=footer_note)
+    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
 
     # METHOD:REQUEST + bumped SEQUENCE so calendar clients overwrite the
     # original event entry instead of duplicating it. The SEQUENCE bump

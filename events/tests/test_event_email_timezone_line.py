@@ -20,7 +20,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from email_app.services.email_service import EmailService
+from email_app.services.email_rendering import render_template
 from events.models import Event, EventRegistration, EventSeries
 from events.services.registration_email import send_registration_confirmation
 from events.services.series_invite import send_series_registration_invite
@@ -290,7 +290,7 @@ class PostEventFollowupNoTimezoneLineTest(TestCase):
         )
 
     def test_followup_body_has_no_timezone_line(self):
-        _, body_html = EmailService()._render_template(
+        _, body_html = render_template(
             "post_event_followup",
             self.user,
             {

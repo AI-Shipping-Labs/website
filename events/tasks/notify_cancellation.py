@@ -9,7 +9,11 @@ from accounts.services.timezones import (
     build_timezone_email_line,
     format_user_datetime,
 )
-from email_app.services.email_service import EmailService
+from email_app.services.email_rendering import (
+    render_html_email,
+    render_plain_text_email,
+    render_template_parts,
+)
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
@@ -118,9 +122,8 @@ def send_cancellation_notice_one(event_id, user_id):
             'user_id': user_id,
             'email_log_id': existing_log.pk,
         }
-    email_service = EmailService()
     subject, body_markdown, body_html, footer_note = (
-        email_service._render_template_parts(
+        render_template_parts(
             'event_cancelled',
             user,
             {
@@ -132,12 +135,8 @@ def send_cancellation_notice_one(event_id, user_id):
             },
         )
     )
-    full_html = email_service.render_html_email(
-        subject, body_html, footer_note=footer_note,
-    )
-    plain_text = email_service.render_plain_text_email(
-        body_markdown, footer_note=footer_note,
-    )
+    full_html = render_html_email(subject, body_html, footer_note=footer_note)
+    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
     ics_content = generate_ics(
         event,
         method='CANCEL',

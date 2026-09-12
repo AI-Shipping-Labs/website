@@ -4,7 +4,7 @@ literal UTC when no preference is set.
 
 The send path goes through ``send_registration_confirmation`` with SES
 disabled so no network call is attempted; we capture the rendered HTML
-body off the EmailService directly to assert against. This exercises
+body off the shared rendering helpers directly to assert against. This exercises
 the production caller (not just the helper) so a regression at the
 caller site — e.g. someone reintroducing ``event.formatted_start()`` —
 is caught here.

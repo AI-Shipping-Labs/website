@@ -1,14 +1,15 @@
 """Staff API action for announcing an event recap (issue #1557)."""
 
 from datetime import timedelta
-from unittest.mock import ANY, patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from events.models import Event, EventRegistration
 from notifications.models import Notification
 
@@ -51,11 +52,7 @@ class EventRecapNotificationApiTest(TestCase):
     def _auth(self):
         return {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
 
-    @patch(
-        'events.services.event_recap_notification.EmailService._send_ses',
-        return_value='ses-api-recap',
-    )
-    def test_post_returns_delivery_summary_and_canonical_absolute_url(self, mock_send):
+    def test_post_returns_delivery_summary_and_canonical_absolute_url(self):
         response = self.client.post(
             f'/api/events/{self.event.slug}/notify-recap-ready',
             **self._auth(),
@@ -69,11 +66,17 @@ class EventRecapNotificationApiTest(TestCase):
         self.assertEqual(body['notified'], 1)
         self.assertEqual(body['results'][0]['user_id'], self.member.pk)
         self.assertEqual(body['results'][0]['email_status'], 'sent')
+        # A1.2 slice 3: the email channel records a durable delivery; the
+        # summary id is the delivery id until the worker writes the
+        # EmailLog audit row (which keeps the event FK).
+        delivery = EmailDelivery.objects.get(
+            purpose='event_recap_ready', recipient_user=self.member,
+        )
         self.assertEqual(
-            body['results'][0]['email_log_id'],
-            EmailLog.objects.get(
-                event=self.event, email_type='event_recap_ready',
-            ).pk,
+            body['results'][0]['email_log_id'], str(delivery.pk),
+        )
+        self.assertEqual(
+            delivery.context_data.get('recap_url'), body['recap_url'],
         )
         self.assertEqual(
             body['results'][0]['notification_id'],
@@ -81,15 +84,12 @@ class EventRecapNotificationApiTest(TestCase):
                 user=self.member, notification_type='event_recap',
             ).pk,
         )
-        mock_send.assert_called_once_with(
-            self.member.email,
-            'Recap ready: API Recap Event',
-            ANY,
-            text_body=ANY,
-            email_type='event_recap_ready',
-            unsubscribe_url=None,
-            cc=None,
-            bcc=None,
+        deliver_pending_mail()
+        self.assertEqual(
+            EmailLog.objects.get(
+                event=self.event, email_type='event_recap_ready',
+            ).dedupe_key,
+            delivery.idempotency_key,
         )
 
     def test_missing_recap_returns_stable_422_reason(self):

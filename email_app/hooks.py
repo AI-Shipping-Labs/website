@@ -158,14 +158,23 @@ def record_send(delivery, rendered, result):
     The package calls this from the worker after provider acceptance, so a
     recorded send now implies provider acceptance. Surrogate recipients
     (no saved user row, issue #703) still produce no Studio-visible row.
+
+    A delivery carrying an ``events.event`` relation (the recap-ready send,
+    A1.2 slice 3) keeps the event FK the recap flow attached to its
+    ``EmailLog`` rows before the adoption, so the Studio audit surface and
+    the event-scoped dedupe queries keep working.
     """
 
     from email_app.models import EmailLog  # noqa: PLC0415
 
     if delivery.recipient_user_id is None:
         return
+    event_id = None
+    if delivery.related_object_type == "events.event":
+        event_id = int(delivery.related_object_id)
     EmailLog.objects.create(
         user_id=delivery.recipient_user_id,
+        event_id=event_id,
         recipient_email=delivery.recipient_email,
         email_type=delivery.purpose,
         subject=rendered.subject,

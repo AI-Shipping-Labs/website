@@ -17,10 +17,12 @@ from community_base.mail import send as package_send
 from django.db import transaction
 from django.db.models import Model
 
-from email_app.services.email_classification import get_sender_for_email_type
+from email_app.services.email_classification import (
+    WELCOME_EMAIL_TYPES,
+    get_sender_for_email_type,
+)
 from email_app.services.email_service import (
     DEFAULT_WELCOME_REPLY_TO_EMAIL,
-    WELCOME_EMAIL_TYPES,
     WELCOME_REPLY_TO_KEY,
 )
 from integrations.config import (
@@ -38,6 +40,7 @@ def send_package_mail(
     cc=None,
     bcc=None,
     idempotency_key=None,
+    related=None,
 ):
     """Send one transactional mail through the package (A1.2).
 
@@ -45,6 +48,10 @@ def send_package_mail(
     preference resolver opted the recipient out — the old path returned
     ``None`` for the same case). SES transport outcomes land on the delivery
     from the worker; a transport failure no longer raises into the caller.
+    ``related`` takes a saved model instance and lands on the delivery as
+    its ``related_object_type``/``related_object_id`` pair; the site
+    recorder maps an ``events.event`` relation onto the ``EmailLog`` audit
+    row's event FK.
     """
 
     context = context or {}
@@ -79,4 +86,5 @@ def send_package_mail(
             user=user if isinstance(user, Model) and getattr(user, "pk", None) else None,
             sender=get_sender_for_email_type(template_name),
             extra=extra or None,
+            related=related,
         )

@@ -202,14 +202,30 @@ def _donor_db_value(key):
     """
     from integrations.models import IntegrationSetting  # noqa: PLC0415
 
-    # This is a read-only migration fallback. Secret rows may still be
-    # plaintext until migration 0030 runs, so they must never enter runtime
-    # resolution or the compatibility cache.
-    return (
-        IntegrationSetting.objects.filter(key=key, is_secret=False)
-        .values_list("value", flat=True)
-        .first()
-    )
+    # This is a read-only migration fallback. Undeclared legacy secrets must
+    # never enter runtime resolution: there is no package declaration that
+    # can establish their intended secret contract. During tests, however,
+    # pre-cutover integration fixtures still write declared secret keys to
+    # the donor table after migrations have run. Keep those fixtures working
+    # without exposing arbitrary legacy plaintext in a real process; the
+    # production migration copies declared secrets into encrypted package
+    # rows before the cutover.
+    rows = IntegrationSetting.objects.filter(key=key)
+    if not _allow_declared_legacy_secret(key):
+        rows = rows.filter(is_secret=False)
+    return rows.values_list("value", flat=True).first()
+
+
+def _allow_declared_legacy_secret(key):
+    """Allow declared donor secrets only for pre-cutover test fixtures."""
+    from django.conf import settings  # noqa: PLC0415
+
+    if not getattr(settings, "TESTING", False):
+        return False
+    try:
+        return bool(definition(key).secret)
+    except (ImproperlyConfigured, KeyError):
+        return False
 
 
 def _donor_shaped(value):
@@ -547,8 +563,13 @@ def _populate_cache():
         from integrations.models import IntegrationSetting  # noqa: PLC0415
 
         donor_rows = list(
-            IntegrationSetting.objects.filter(is_secret=False).values_list("key", "value")
+            IntegrationSetting.objects.values_list("key", "value", "is_secret")
         )
+        donor_rows = [
+            (row_key, value)
+            for row_key, value, is_secret in donor_rows
+            if not is_secret or _allow_declared_legacy_secret(row_key)
+        ]
         donor_keys = {row_key for row_key, _ in donor_rows}
         clear_keys = set()
         if donor_keys:

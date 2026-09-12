@@ -69,7 +69,21 @@
                     {% if setting.docs_url %}<a class="text-xs text-accent underline" href="{{ setting.docs_url|community_docs_url }}">Documentation</a>{% endif %}
                   </div>
                 {% endfor %}
-                <button class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" type="submit">Save {{ group.name }}</button>
+                <div class="flex flex-wrap justify-end gap-2">
+                  {% if group.name == "calendly" %}
+                    <a href="{% url 'studio_calendly_connect' %}"
+                       data-testid="calendly-connect-link"
+                       class="inline-flex items-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted">
+                      Connect Calendly
+                    </a>
+                    <button type="submit" formaction="{% url 'studio_calendly_sync' %}"
+                            formmethod="post" data-testid="calendly-sync-button"
+                            class="inline-flex items-center rounded-md border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+                      Verify subscription
+                    </button>
+                  {% endif %}
+                  <button class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" type="submit">Save {{ group.name }}</button>
+                </div>
               </form>
             </div>
           {% endfor %}

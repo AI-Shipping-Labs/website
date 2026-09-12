@@ -2,14 +2,15 @@
 
 import datetime
 import json
-from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     PLAN_READY_EMAIL_STATUS_SENT,
@@ -106,9 +107,7 @@ class PlanReadyEmailsApiTest(TestCase):
             0,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_send_and_second_send_are_idempotent(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_send_and_second_send_are_idempotent(self):
         first = Plan.objects.create(member=self.member, sprint=self.sprint)
         second = Plan.objects.create(member=self.other, sprint=self.sprint)
 
@@ -124,8 +123,11 @@ class PlanReadyEmailsApiTest(TestCase):
         self.assertEqual(repeat_body['sent_count'], 0)
         self.assertEqual(repeat_body['skipped_already_sent_count'], 2)
         self.assertEqual(PlanReadyEmailLog.objects.count(), 2)
+        deliver_pending_mail()
         self.assertEqual(EmailLog.objects.filter(email_type='plan_shared').count(), 2)
-        self.assertEqual(mock_ses.call_count, 2)
+        self.assertEqual(
+            EmailDelivery.objects.filter(purpose='plan_shared').count(), 2,
+        )
         for plan in (first, second):
             plan.refresh_from_db()
             self.assertIsNotNone(plan.shared_at)

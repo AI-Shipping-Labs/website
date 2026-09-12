@@ -1,7 +1,7 @@
 """
 Event reminder job: checks for events starting in ~24h and ~20 min,
 creates reminder notifications for registered users (deduplicated)
-and sends the templated email via EmailService.
+and queues the templated email through the package mail app.
 
 Called as a background job every 15 minutes via Django-Q2.
 """

@@ -907,6 +907,17 @@ class PlanReadyEmailLog(TimestampedModelMixin, models.Model):
         blank=True,
         related_name='+',
     )
+    # A1.2 slice 4: package-path sends carry the durable ``EmailDelivery``
+    # instead — the audit ``EmailLog`` row is only written by the delivery
+    # worker after provider acceptance, so it can no longer be linked
+    # synchronously. Legacy rows keep ``email_log``.
+    email_delivery = models.ForeignKey(
+        'cb_mail.EmailDelivery',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
     status = models.CharField(
         max_length=16,
         choices=PLAN_READY_EMAIL_STATUS_CHOICES,

@@ -244,15 +244,109 @@ def _resolve_followup_context(delivery, context):
         raise PermanentJobError(error.reason) from error
 
 
+def _related_plan(delivery):
+    """Load the delivery's ``plans.plan`` relation, ``None`` when absent."""
+
+    if delivery.related_object_type != "plans.plan":
+        return None
+    from plans.models import Plan  # noqa: PLC0415
+
+    return (
+        Plan.objects.select_related("sprint")
+        .filter(pk=delivery.related_object_id)
+        .first()
+    )
+
+
+def _resolve_event_reminder_context(delivery, context):
+    """Mint the whole event-reminder context from the Event and recipient.
+
+    A1.2 slice 4: the reminder email's links and its recipient-local time
+    never sit in the durable row. ``format_user_datetime`` needs the
+    recipient, so the worker formats the raw start datetime exactly as the
+    old synchronous renderer did at send time (issue #666 guardrail).
+    """
+
+    from accounts.services.timezones import (  # noqa: PLC0415
+        build_timezone_account_url,
+        build_timezone_email_line,
+        format_user_datetime,
+    )
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    event = _related_event(delivery)
+    if event is None:
+        raise PermanentJobError("event_reminder_event_missing")
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("event_reminder_user_missing")
+    base_url = site_base_url().rstrip("/")
+    context["event_title"] = event.title
+    context["event_datetime"] = format_user_datetime(
+        event.start_datetime, user,
+    )
+    context["event_url"] = f"{base_url}{event.get_join_url()}"
+    context["timezone_help"] = build_timezone_email_line(
+        user, build_timezone_account_url(base_url),
+    )
+
+
+def _resolve_workshop_announcement_context(delivery, context):
+    """Mint the whole workshop-announcement context from the Workshop.
+
+    The announcement body embeds the description, which may legitimately
+    contain links, so the producer persists only the relation (#1613) and
+    the worker rebuilds the exact scalar context the old synchronous send
+    passed to the template.
+    """
+
+    from notifications.services.notification_service import (  # noqa: PLC0415
+        _get_body,
+    )
+
+    if delivery.related_object_type != "content.workshop":
+        raise PermanentJobError("workshop_announcement_content_missing")
+    from content.models import Workshop  # noqa: PLC0415
+
+    workshop = (
+        Workshop.objects.filter(pk=delivery.related_object_id).first()
+    )
+    if workshop is None:
+        raise PermanentJobError("workshop_announcement_content_missing")
+    context["workshop_title"] = workshop.title
+    context["workshop_slug"] = workshop.slug
+    context["workshop_description"] = _get_body(workshop)
+    # The template prepends the render-only ``site_url``.
+    context["workshop_url"] = workshop.get_absolute_url()
+
+
+def _resolve_plan_shared_context(delivery, context):
+    """Mint the whole plan-shared context from the saved Plan."""
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    plan = _related_plan(delivery)
+    if plan is None:
+        raise PermanentJobError("plan_shared_plan_missing")
+    context["sprint_name"] = plan.sprint.name
+    context["plan_url"] = (
+        f"{site_base_url().rstrip('/')}"
+        f"{reverse('my_plan_detail', kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk})}"
+    )
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
     Auth sends (#1610 slices 1-2), the email-change confirm and notice,
-    the privacy deletion request, the recap and the post-event follow-up
-    persist only non-secret inputs and relations; this resolver builds
-    their URLs at delivery time so ``EmailDelivery.context_data`` never
-    retains a clickable link (issue #1613, enforced by the site guard in
-    ``email_app.services.context_guard``). Binding failures raise
+    the privacy deletion request, the recap, the post-event follow-up and
+    the notification sends (slice 4: event reminder, workshop announcement,
+    plan share) persist only non-secret inputs and relations; this resolver
+    builds their URLs at delivery time so ``EmailDelivery.context_data``
+    never retains a clickable link (issue #1613, enforced by the site guard
+    in ``email_app.services.context_guard``). Binding failures raise
     ``PermanentJobError`` — a stale relation must fail closed, not
     retry forever — and never name the token or URL. The resolver
     mutates only the in-memory copy the worker passes in; the stored
@@ -271,6 +365,12 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_recap_context(delivery, context)
     elif delivery.purpose == "post_event_followup":
         _resolve_followup_context(delivery, context)
+    elif delivery.purpose == "event_reminder":
+        _resolve_event_reminder_context(delivery, context)
+    elif delivery.purpose == "workshop_announcement":
+        _resolve_workshop_announcement_context(delivery, context)
+    elif delivery.purpose == "plan_shared":
+        _resolve_plan_shared_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
         "password_reset",

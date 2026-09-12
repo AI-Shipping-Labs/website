@@ -12,9 +12,11 @@ Usage:
 import logging
 from dataclasses import dataclass
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 
 from accounts.tier_audience import effective_level_at_least_q
+from email_app.package_mail import send_package_mail
 from notifications.models import Notification
 
 logger = logging.getLogger(__name__)
@@ -25,6 +27,10 @@ User = get_user_model()
 @dataclass
 class PlanSharedDelivery:
     notification: Notification
+    # A1.2 slice 4: carries the durable ``EmailDelivery`` (``None`` only
+    # when the send was refused locally) — same transitional naming as the
+    # recap summary's ``email_log_id``. The ``EmailLog`` audit row is
+    # written from the delivery worker after provider acceptance.
     email_log: object | None = None
     email_error: str = ''
 
@@ -82,8 +88,9 @@ CONTENT_TYPE_CONFIG = {
         'level_field': 'landing_required_level',
         'published_filter': {'status': 'published'},
         # Issue #655: workshop announcements fan out as a third channel
-        # via EmailService. Other content types stay bell+Slack-only
-        # until their own opt-out + audience story is designed.
+        # through the package mail app. Other content types stay
+        # bell+Slack-only until their own opt-out + audience story is
+        # designed.
         'email_template': 'workshop_announcement',
     },
 }
@@ -174,9 +181,9 @@ def get_email_eligible_users(content_type, content):
     bell channel) and applies the email-specific filters required for
     promotional sends (issue #655):
 
-    - ``unsubscribed=False`` -- ``EmailService`` would skip these anyway
-      for promotional kinds, but pre-filtering keeps the operator counter
-      accurate.
+    - ``unsubscribed=False`` -- the package preference resolver would
+      suppress these anyway for promotional kinds, but pre-filtering
+      keeps the operator counter accurate.
     - ``email_verified=True`` -- unverified addresses don't receive
       promotional mail (prevents bouncing on un-confirmed addresses).
     - ``email_preferences.get('workshop_emails', True) is not False`` --
@@ -219,42 +226,39 @@ def get_email_eligible_users(content_type, content):
 def _send_email_channel(email_template, content_type, content):
     """Fan out the workshop-style email channel and return the success count.
 
-    Builds the context dict once and iterates over
-    :func:`get_email_eligible_users`, calling ``EmailService().send`` per
-    user inside a try/except. A single failure logs a WARNING with the
-    user email and content slug, then continues to the next recipient so
-    one bad address does not block the rest of the announcement.
+    Iterates over :func:`get_email_eligible_users`, calling
+    ``send_package_mail`` per user inside a try/except. A single failure
+    logs a WARNING with the user email and content slug, then continues to
+    the next recipient so one bad address does not block the rest of the
+    announcement.
+
+    A1.2 slice 4: each recipient gets a durable ``EmailDelivery``; the
+    stored context stays empty (issue #1613) and the worker rebuilds the
+    template context from the delivery's ``content.workshop`` relation.
+    A suppressed delivery (promotional opt-out) is not counted, mirroring
+    the old ``None`` return; SES transport outcomes land on the delivery
+    from the worker.
     """
-    from email_app.services.email_service import EmailService
-
-    slug = getattr(content, 'slug', '')
-    workshop_url = (
-        content.get_absolute_url()
-        if hasattr(content, 'get_absolute_url') else ''
-    )
-    context = {
-        'workshop_title': content.title,
-        'workshop_slug': slug,
-        'workshop_description': _get_body(content),
-        'workshop_url': workshop_url,
-    }
-
-    service = EmailService()
     sent = 0
     for user in get_email_eligible_users(content_type, content):
         try:
-            log = service.send(user, email_template, context)
+            delivery = send_package_mail(
+                user,
+                email_template,
+                {},
+                related=content,
+            )
         except Exception:
             logger.warning(
                 'Failed to send "%s" email to %s for %s/%s',
-                email_template, user.email, content_type, slug,
+                email_template, user.email, content_type,
+                getattr(content, 'slug', ''),
                 exc_info=True,
             )
             continue
-        # EmailService.send returns None for skipped recipients (e.g.
-        # globally unsubscribed users for promotional mail). Don't count
-        # those as successful sends.
-        if log is not None:
+        # A suppressed delivery (promotional opt-out) mirrors the old
+        # skipped-recipient ``None`` return. Don't count it as a send.
+        if delivery.state != EmailDelivery.State.SUPPRESSED:
             sent += 1
     return sent
 
@@ -637,14 +641,22 @@ class NotificationService:
         """Create an event reminder notification + email if not already sent.
 
         Issue #706: in addition to the in-app bell, fan out an
-        ``event_reminder`` email via ``EmailService.send``. The
-        ``EventReminderLog`` row is the single dedup gate for both
-        channels — once a row exists for ``(event, user, interval)``,
-        neither the bell nor the email fires again. Persist the log
-        row and the ``Notification`` row BEFORE the email send so a
-        5xx from SES or a missing template does not roll back dedup
-        (the next 15-min tick would otherwise re-send the bell and
-        re-attempt the email).
+        ``event_reminder`` email. The ``EventReminderLog`` row is the
+        single dedup gate for both channels — once a row exists for
+        ``(event, user, interval)``, neither the bell nor the email fires
+        again. Persist the log row and the ``Notification`` row BEFORE the
+        email send so a refused send does not roll back dedup (the next
+        15-min tick would otherwise re-send the bell and re-attempt the
+        email).
+
+        A1.2 slice 4: the email is a durable ``EmailDelivery`` under the
+        ``event_reminder:{event}:{user}:{interval}`` key with the event as
+        the delivery's ``related`` relation, so the worker-written
+        ``EmailLog`` row keeps its event FK. The stored context stays
+        empty (issue #1613): the worker rebuilds the recipient-local time,
+        the join link and the timezone line from the saved event at
+        delivery time. A refused send raises only into this function's
+        logging — SES transport trouble retries from the worker.
 
         Args:
             event: Event model instance.
@@ -656,12 +668,6 @@ class NotificationService:
         Returns:
             Notification if created, None if already sent.
         """
-        from accounts.services.timezones import (
-            build_timezone_account_url,
-            build_timezone_email_line,
-        )
-        from email_app.services.email_service import EmailService
-        from integrations.config import site_base_url
         from notifications.models import EventReminderLog
 
         # Check for existing reminder
@@ -685,22 +691,12 @@ class NotificationService:
         # function — the dedup row is already persisted, so the next
         # tick would skip this user entirely. Log loudly for ops.
         try:
-            base_url = site_base_url()
-            event_url = f"{base_url}{event.get_join_url()}"  # #1082: id-canonical
-            EmailService().send(
+            send_package_mail(
                 user,
                 'event_reminder',
-                {
-                    'event_title': event.title,
-                    # Pass raw datetime — EmailService auto-formats via
-                    # ``format_user_datetime`` in the recipient's zone
-                    # (issue #666 guardrail).
-                    'event_datetime': event.start_datetime,
-                    'event_url': event_url,
-                    'timezone_help': build_timezone_email_line(
-                        user, build_timezone_account_url(base_url),
-                    ),
-                },
+                {},
+                idempotency_key=f'event_reminder:{event.pk}:{user.pk}:{interval}',
+                related=event,
             )
         except Exception:
             logger.exception(
@@ -717,20 +713,27 @@ class NotificationService:
         Issue #732. Modelled on :meth:`create_event_reminder` but with
         two deliberate differences:
 
-        1. No dedup row. Re-share is allowed — every call creates a
-           fresh ``Notification`` row and emits a fresh email log. The
-           operator pressed the button knowing they were re-firing
-           (the Studio button wraps a JS ``confirm()`` on re-share).
+        1. No dedup row and no idempotency key. Re-share is allowed —
+           every call creates a fresh ``Notification`` row and queues a
+           fresh delivery. The operator pressed the button knowing they
+           were re-firing (the Studio button wraps a JS ``confirm()`` on
+           re-share).
         2. The deep link targets the member-owned workspace
            (``my_plan_detail`` at ``/sprints/<slug>/plan/<id>``), NOT
            the cohort-board sibling (``member_plan_detail`` at
            ``/sprints/<slug>/plans/<id>``).
 
         Best-effort failure contract: persist the ``Notification`` row
-        BEFORE calling ``EmailService.send``. SES exceptions are
-        swallowed and logged via ``logger.exception`` so a 5xx from
-        SES does not unwind the bell row and does not propagate to the
-        caller (who has already saved ``Plan.shared_at``).
+        BEFORE queueing the email. A1.2 slice 4: the email is a durable
+        ``EmailDelivery`` with the plan as its ``related`` relation and an
+        empty stored context (issue #1613) — the worker rebuilds
+        ``sprint_name`` and the member-workspace link from the saved plan
+        at delivery time and writes the ``EmailLog`` audit row after
+        provider acceptance. Local refusals (unknown purpose, missing
+        relation) are swallowed and logged via ``logger.exception`` so
+        they do not unwind the bell row and do not propagate to the
+        caller (who has already saved ``Plan.shared_at``); SES transport
+        trouble retries from the worker.
 
         Args:
             plan: Plan model instance. Must have ``.member`` (the
@@ -742,21 +745,19 @@ class NotificationService:
                 with the rest of the sprint.
 
         Returns:
-            PlanSharedDelivery containing the created ``Notification`` and,
-            when SES succeeds, the created transactional ``EmailLog``.
+            PlanSharedDelivery containing the created ``Notification``
+            and, when the delivery was queued, the durable
+            ``EmailDelivery`` (``email_log`` field, transitional naming);
+            ``None`` plus ``email_error`` when the send was refused
+            locally.
         """
         from django.urls import reverse
-
-        from email_app.services.email_service import EmailService
-        from integrations.config import site_base_url
 
         sprint_name = plan.sprint.name
         plan_path = reverse(
             'my_plan_detail',
             kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
         )
-        base_url = site_base_url()
-        plan_url = f"{base_url}{plan_path}"
 
         title = f'Your plan for {sprint_name} is ready'
         body = (
@@ -775,15 +776,13 @@ class NotificationService:
         # Best-effort email send. Failures must NOT raise — the bell
         # row is already persisted so the operator's intent is captured
         # on both surfaces (in-app + the ``shared_at`` timestamp). Log
-        # loudly so ops can chase the SES failure.
+        # loudly so ops can chase the refusal.
         try:
-            email_log = EmailService().send(
+            delivery = send_package_mail(
                 plan.member,
                 'plan_shared',
-                {
-                    'sprint_name': sprint_name,
-                    'plan_url': plan_url,
-                },
+                {},
+                related=plan,
             )
         except Exception as exc:
             logger.exception(
@@ -795,6 +794,7 @@ class NotificationService:
             email_log = None
             email_error = str(exc)
         else:
+            email_log = delivery
             email_error = ''
 
         return PlanSharedDelivery(

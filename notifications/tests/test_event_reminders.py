@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from freezegun import freeze_time
 
+from email_app.testing import StubSESClient, deliver_pending_mail
 from events.models import Event, EventRegistration
 from events.services.host_registration import maybe_register_host_as_attendee
 from notifications.models import EventReminderLog, Notification
@@ -24,14 +25,14 @@ User = get_user_model()
 FROZEN_NOW = datetime(2026, 6, 15, 12, 0, 0, tzinfo=dt_tz.utc)
 
 
-@patch('email_app.services.email_service.EmailService._send_ses',
-       return_value='ses-msg-test')
 class CheckEventRemindersTest(TestCase):
     """Tests for the check_event_reminders background job.
 
     Every test freezes time to FROZEN_NOW so window calculations are exact.
-    The class-level ``_send_ses`` patch keeps the email path from talking
-    to SES — individual tests assert on EmailLog or on the mock as needed.
+    The test runner installs the stub SES client globally, so the package
+    path never talks to the network — individual tests drain pending
+    deliveries with ``deliver_pending_mail`` and assert on the EmailLog
+    rows or on the stub's captured sends.
     """
 
     def setUp(self):
@@ -44,7 +45,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_24h_reminder_for_registered_users(self, mock_slack, mock_ses):
+    def test_24h_reminder_for_registered_users(self, mock_slack):
         """Events starting in ~24h should get reminders for registered users."""
         event = Event.objects.create(
             title='24h Event', slug='event-24h',
@@ -64,7 +65,7 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_auto_registered_host_receives_24h_reminder(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """An auto-registered host flows through the normal reminder job."""
         event = Event.objects.create(
@@ -90,7 +91,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_20m_reminder_for_registered_users(self, mock_slack, mock_ses):
+    def test_20m_reminder_for_registered_users(self, mock_slack):
         """Events starting in ~20 min should get reminders for registered users."""
         event = Event.objects.create(
             title='20m Event', slug='event-20m',
@@ -108,7 +109,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_24h_bodies_are_formatted_per_recipient_across_date_boundary(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Each bell body uses its recipient's zone, including DST/date shifts."""
         self.user.preferred_timezone = 'Europe/Berlin'
@@ -158,9 +159,18 @@ class CheckEventRemindersTest(TestCase):
                 self.assertEqual(notification.notification_type, 'event_reminder')
                 self.assertEqual(notification.url, event.get_absolute_url())
 
-        self.assertEqual(mock_ses.call_count, 2)
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 2)
         rendered_by_email = {
-            call.args[0]: call.args[2] for call in mock_ses.call_args_list
+            call['Destination']['ToAddresses'][0]:
+                call['Content']['Simple']['Body']['Html']['Data']
+            for call in stub.calls
         }
         self.assertIn(
             'March 30, 2026, 01:30 Europe/Berlin',
@@ -173,7 +183,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_20m_body_uses_recipient_timezone_without_formatted_start(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Starting-soon bells use the same recipient-local time contract."""
         self.user.preferred_timezone = 'Europe/Berlin'
@@ -206,14 +216,22 @@ class CheckEventRemindersTest(TestCase):
         )
         self.assertEqual(notification.notification_type, 'event_reminder')
         self.assertEqual(notification.url, event.get_absolute_url())
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
         self.assertIn(
             'August 10, 2026, 17:00 Europe/Berlin',
-            mock_ses.call_args.args[2],
+            stub.calls[0]['Content']['Simple']['Body']['Html']['Data'],
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_24h_body_uses_utc_for_missing_or_invalid_timezone(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Empty and invalid saved preferences fall back to explicit UTC."""
         self.user.preferred_timezone = ''
@@ -248,7 +266,7 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_auto_registered_host_and_attendee_get_one_20m_reminder_each(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Host auto-registration must not double-remind the host."""
         event = Event.objects.create(
@@ -291,7 +309,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_old_1h_window_no_longer_fires(self, mock_slack, mock_ses):
+    def test_old_1h_window_no_longer_fires(self, mock_slack):
         """Issue #706: events at +1h must NOT trigger a reminder anymore."""
         event = Event.objects.create(
             title='1h Event', slug='event-1h',
@@ -307,7 +325,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_no_reminder_for_unregistered_users(self, mock_slack, mock_ses):
+    def test_no_reminder_for_unregistered_users(self, mock_slack):
         """Users who have not registered should not get reminders."""
         Event.objects.create(
             title='Event No Reg', slug='event-no-reg',
@@ -322,7 +340,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_no_reminder_for_draft_events(self, mock_slack, mock_ses):
+    def test_no_reminder_for_draft_events(self, mock_slack):
         """Draft events should not trigger reminders."""
         event = Event.objects.create(
             title='Draft Event', slug='event-draft',
@@ -337,7 +355,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_deduplication_no_double_reminders(self, mock_slack, mock_ses):
+    def test_deduplication_no_double_reminders(self, mock_slack):
         """Running the job twice should not create duplicate reminders."""
         self.user.preferred_timezone = 'Europe/Berlin'
         self.user.save(update_fields=['preferred_timezone'])
@@ -371,7 +389,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_outside_window_gets_no_reminder(self, mock_slack, mock_ses):
+    def test_event_outside_window_gets_no_reminder(self, mock_slack):
         """Events not in the 24h or 20-min window should not get reminders."""
         # Event in 12 hours - outside both windows
         event = Event.objects.create(
@@ -387,7 +405,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_24h_reminder_posts_to_slack(self, mock_slack, mock_ses):
+    def test_24h_reminder_posts_to_slack(self, mock_slack):
         """24h reminders should post to Slack."""
         event = Event.objects.create(
             title='Slack Event', slug='event-slack',
@@ -409,7 +427,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_24h_channel_post_fires_once_across_two_cron_ticks(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Issue #887 regression: the 24h channel announcement window
         (23h45m-24h15m) is 30 min wide, so an event ~24h out matches on
@@ -451,7 +469,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_24h_channel_post_skipped_when_guard_row_exists(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """A pre-existing 24h_slack guard row (e.g. from an earlier tick
         in a prior process) suppresses the channel post entirely."""
@@ -473,7 +491,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_20m_reminder_does_not_post_to_slack(self, mock_slack, mock_ses):
+    def test_20m_reminder_does_not_post_to_slack(self, mock_slack):
         """20-min reminders should NOT post to Slack (per spec: avoid noise)."""
         event = Event.objects.create(
             title='20m Event No Slack', slug='event-20m-no-slack',
@@ -488,7 +506,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_at_edge_of_24h_window_start(self, mock_slack, mock_ses):
+    def test_event_at_edge_of_24h_window_start(self, mock_slack):
         """Event at exactly 23h45m from now is inside the 24h window."""
         event = Event.objects.create(
             title='Edge Start', slug='event-edge-start',
@@ -503,7 +521,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_just_outside_24h_window(self, mock_slack, mock_ses):
+    def test_event_just_outside_24h_window(self, mock_slack):
         """Event at 23h44m from now is outside the 24h window."""
         event = Event.objects.create(
             title='Outside Window', slug='event-outside',
@@ -518,7 +536,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_at_edge_of_20m_window_end(self, mock_slack, mock_ses):
+    def test_event_at_edge_of_20m_window_end(self, mock_slack):
         """Event at exactly 30m from now is inside the 20-min window.
 
         Issue #1001: the window was widened from 25m to 30m (15 min wide,
@@ -537,7 +555,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_at_edge_of_20m_window_start(self, mock_slack, mock_ses):
+    def test_event_at_edge_of_20m_window_start(self, mock_slack):
         """Event at exactly 15m from now is inside the 20-min window."""
         event = Event.objects.create(
             title='20m Edge Start', slug='event-20m-edge-start',
@@ -552,7 +570,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_just_outside_20m_window_end(self, mock_slack, mock_ses):
+    def test_event_just_outside_20m_window_end(self, mock_slack):
         """Event at 31m from now is outside the (widened) 20-min window."""
         event = Event.objects.create(
             title='20m Outside End', slug='event-20m-outside-end',
@@ -567,7 +585,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_event_just_outside_20m_window_start(self, mock_slack, mock_ses):
+    def test_event_just_outside_20m_window_start(self, mock_slack):
         """Event at 14m from now is outside the 20-min window."""
         event = Event.objects.create(
             title='20m Outside Start', slug='event-20m-outside-start',
@@ -587,7 +605,7 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_24h_window_sends_email_to_each_registered_user(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """24h reminder must create bell + EmailLog for every registration."""
         from email_app.models import EmailLog
@@ -603,6 +621,7 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         self.assertEqual(Notification.objects.count(), 2)
+        deliver_pending_mail()
         emails = EmailLog.objects.filter(email_type='event_reminder')
         self.assertEqual(emails.count(), 2)
         self.assertEqual(
@@ -613,7 +632,7 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_20m_window_sends_email_to_each_registered_user(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """20-min reminder must create bell + EmailLog for every registration."""
         from email_app.models import EmailLog
@@ -628,6 +647,7 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         self.assertEqual(Notification.objects.count(), 1)
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_reminder').count(),
             1,
@@ -635,7 +655,7 @@ class CheckEventRemindersTest(TestCase):
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_email_dedup_across_runs(self, mock_slack, mock_ses):
+    def test_email_dedup_across_runs(self, mock_slack):
         """Running the job twice in the same window creates exactly one
         Notification, one EmailLog, and one EventReminderLog row per
         (event, user, interval)."""
@@ -655,6 +675,7 @@ class CheckEventRemindersTest(TestCase):
         self.assertEqual(
             EventReminderLog.objects.filter(interval='24h').count(), 1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_reminder').count(),
             1,
@@ -663,13 +684,12 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_email_failure_does_not_block_bell_or_dedup(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
-        """If EmailService.send raises, the Notification + EventReminderLog
+        """If the package send is refused, the Notification + EventReminderLog
         rows persist and create_event_reminder still returns the Notification.
         The next run must NOT re-attempt (dedup row is the gate)."""
         from email_app.models import EmailLog
-        from email_app.services.email_service import EmailService
 
         event = Event.objects.create(
             title='SES Down Event', slug='ses-down-event',
@@ -678,8 +698,9 @@ class CheckEventRemindersTest(TestCase):
         )
         EventRegistration.objects.create(event=event, user=self.user)
 
-        with patch.object(
-            EmailService, 'send', side_effect=Exception('SES down'),
+        with patch(
+            'notifications.services.notification_service.send_package_mail',
+            side_effect=Exception('SES down'),
         ), self.assertLogs(
             'notifications.services.notification_service', level='ERROR',
         ) as logs:
@@ -703,8 +724,9 @@ class CheckEventRemindersTest(TestCase):
         )
 
         # A second tick inside the same window must dedupe — no retry.
-        with patch.object(
-            EmailService, 'send', side_effect=Exception('SES down'),
+        with patch(
+            'notifications.services.notification_service.send_package_mail',
+            side_effect=Exception('SES down'),
         ):
             check_event_reminders()
         self.assertEqual(Notification.objects.count(), 1)
@@ -715,7 +737,7 @@ class CheckEventRemindersTest(TestCase):
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_email_body_renders_join_url_as_event_url(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """The email body has a single CTA: ``event_url`` points to the
         id-canonical ``/events/<id>/<slug>/join`` redirect (#1082, prefixed
@@ -732,9 +754,15 @@ class CheckEventRemindersTest(TestCase):
 
         check_event_reminders()
 
-        # mock_ses is called once: positional args (to_email, subject, html_body)
-        self.assertEqual(mock_ses.call_count, 1)
-        html_body = mock_ses.call_args[0][2]
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
 
         base = site_base_url()
         # Single CTA: event_url is the platform-side join redirect.
@@ -748,7 +776,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_email_body_renders_event_datetime_in_user_timezone(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Two users with different timezones must see their own offset
         in the rendered body (issue #666 guardrail still active)."""
@@ -773,9 +801,18 @@ class CheckEventRemindersTest(TestCase):
         with freeze_time(start - timedelta(minutes=20)):
             check_event_reminders()
 
-        self.assertEqual(mock_ses.call_count, 2)
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 2)
         rendered_by_email = {
-            call.args[0]: call.args[2] for call in mock_ses.call_args_list
+            call['Destination']['ToAddresses'][0]:
+                call['Content']['Simple']['Body']['Html']['Data']
+            for call in stub.calls
         }
         self.assertIn(
             '18:00 Europe/Berlin',
@@ -788,7 +825,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_reminder_carries_timezone_line_utc_fallback(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Issue #963: a UTC-fallback recipient's reminder body carries the
         prominent "Set your timezone" line and the account timezone link."""
@@ -810,8 +847,15 @@ class CheckEventRemindersTest(TestCase):
             event, self.user, '24h', 'Reminder', 'Soon',
         )
 
-        self.assertEqual(mock_ses.call_count, 1)
-        html_body = mock_ses.call_args[0][2]
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
         base = site_base_url()
         self.assertIn('Set your timezone', html_body)
         self.assertIn(
@@ -820,7 +864,7 @@ class CheckEventRemindersTest(TestCase):
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_reminder_carries_timezone_line_zoned(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """Issue #963: a zoned recipient's reminder body carries the quieter
         "Change your timezone" line, not the UTC-fallback variant."""
@@ -841,15 +885,22 @@ class CheckEventRemindersTest(TestCase):
             event, self.user, '24h', 'Reminder', 'Soon',
         )
 
-        self.assertEqual(mock_ses.call_count, 1)
-        html_body = mock_ses.call_args[0][2]
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
         self.assertIn('Change your timezone', html_body)
         self.assertNotIn('Set your timezone', html_body)
 
     @freeze_time(FROZEN_NOW)
     @patch('notifications.services.slack_announcements.post_slack_announcement')
     def test_unsubscribed_user_still_receives_event_reminder(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """event_reminder is transactional — unsubscribed users still get it."""
         from email_app.models import EmailLog
@@ -867,6 +918,7 @@ class CheckEventRemindersTest(TestCase):
         check_event_reminders()
 
         self.assertEqual(Notification.objects.filter(user=self.user).count(), 1)
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.user, email_type='event_reminder',
@@ -875,8 +927,6 @@ class CheckEventRemindersTest(TestCase):
         )
 
 
-@patch('email_app.services.email_service.EmailService._send_ses',
-       return_value='ses-msg-test')
 @patch('notifications.services.slack_announcements.post_slack_announcement')
 class OffMinuteCadenceTest(TestCase):
     """Issue #1001: at the restored ``*/15`` cadence AND a 20m window widened
@@ -932,7 +982,7 @@ class OffMinuteCadenceTest(TestCase):
         # covered by at least one */15 tick.
         return self._tick_in_window(start, lead_min=15, lead_max=30)
 
-    def test_20m_reminder_fires_for_off_minute_starts(self, mock_slack, mock_ses):
+    def test_20m_reminder_fires_for_off_minute_starts(self, mock_slack):
         """Events starting at off-minutes spanning all four */15 tick buckets
         each get exactly one 20m reminder when the */15 tick lands inside the
         15-30 min window.
@@ -984,7 +1034,7 @@ class OffMinuteCadenceTest(TestCase):
                     1,
                 )
 
-    def test_24h_reminder_fires_for_off_minute_starts(self, mock_slack, mock_ses):
+    def test_24h_reminder_fires_for_off_minute_starts(self, mock_slack):
         """Events starting 24h out at :07 and :30 each get exactly one 24h
         reminder — minutes the hourly :00 tick's 24h window would skip."""
         from email_app.models import EmailLog
@@ -1011,6 +1061,7 @@ class OffMinuteCadenceTest(TestCase):
                 )
                 # Exactly one new reminder email was sent this iteration.
                 sent_so_far += 1
+                deliver_pending_mail()
                 self.assertEqual(
                     EmailLog.objects.filter(
                         user=self.user, email_type='event_reminder',
@@ -1018,7 +1069,7 @@ class OffMinuteCadenceTest(TestCase):
                     sent_so_far,
                 )
 
-    def test_user_receives_both_reminders_each_once(self, mock_slack, mock_ses):
+    def test_user_receives_both_reminders_each_once(self, mock_slack):
         """For one off-minute event a registered user gets BOTH the 24h and
         the 20m reminder, each exactly once: two EventReminderLog rows, two
         notifications, two emails — evaluated across the two distinct ticks."""
@@ -1036,6 +1087,7 @@ class OffMinuteCadenceTest(TestCase):
             check_event_reminders()
         with freeze_time(self._tick_20m(start)):
             check_event_reminders()
+        deliver_pending_mail()
 
         self.assertEqual(
             set(
@@ -1059,7 +1111,7 @@ class OffMinuteCadenceTest(TestCase):
         )
 
     def test_no_duplicate_across_two_consecutive_overlapping_ticks(
-        self, mock_slack, mock_ses,
+        self, mock_slack,
     ):
         """An event whose start is covered by TWO consecutive */15 ticks'
         windows still yields exactly one 24h and one 20m reminder per user

@@ -188,14 +188,6 @@ def _user_has_complaint(user):
     )
 
 
-def _email_context(event, recap_url):
-    return {
-        "event_title": event.title,
-        "recap_url": recap_url,
-        "event_url": f"{site_base_url().rstrip('/')}{event.get_absolute_url()}",
-    }
-
-
 def _save_email_success(event, user, email_log=None):
     """Attach the legacy EmailLog (when present) and durable marker atomically.
 
@@ -258,7 +250,9 @@ def _deliver_email(event, user_id, recap_url):
         delivery = send_package_mail(
             user,
             EMAIL_TYPE,
-            _email_context(event, recap_url),
+            # Issue #1613: the worker rebuilds title and every link from
+            # the saved event; the durable context stays empty.
+            {},
             idempotency_key=dedupe_key,
             related=event,
         )

@@ -55,19 +55,13 @@ Generic-fallback summary copy:
 import logging
 
 from django.contrib.auth import get_user_model
-from django.urls import NoReverseMatch, reverse
 
 from events.models import Event, EventRegistration
-from integrations.config import site_base_url
+from events.services.post_event_mail import recording_url_for
 
 logger = logging.getLogger(__name__)
 
 INTERVAL_FOLLOWUP = 'followup'
-
-_FALLBACK_SUMMARY_TEMPLATE = (
-    "Thanks for joining us at {event_title}. The recording is now "
-    "available below."
-)
 
 
 def enqueue_post_event_followup(event_id):
@@ -172,7 +166,7 @@ def send_post_event_followup_one(event_id, user_id):
     if not created:
         return {'status': 'skipped', 'reason': 'already_sent', 'user_id': user_id}
 
-    recording_url = event.recording_s3_url or event.recording_url
+    recording_url = recording_url_for(event)
     if not recording_url:
         # Defensive: the cron's gate should have already filtered
         # events without a recording URL. If we somehow reach this
@@ -186,42 +180,19 @@ def send_post_event_followup_one(event_id, user_id):
         )
         return {'status': 'skipped', 'reason': 'no_recording_url', 'user_id': user_id}
 
-    event_summary = event.post_event_summary or _FALLBACK_SUMMARY_TEMPLATE.format(
-        event_title=event.title,
-    )
-
-    site_url = site_base_url()
-    event_url = f'{site_url}{event.get_absolute_url()}'
-
-    context = {
-        'event_title': event.title,
-        'event_summary': event_summary,
-        'recording_url': recording_url,
-        'event_url': event_url,
-    }
-
-    # Issue #1458: link the real recap when one is published. Only fall back
-    # to the "notes are still being put together" line when there is nothing
-    # to link — before this the placeholder was unconditional, so every
-    # follow-up promised notes that never arrived.
-    if event.recap_is_published:
-        context['recap_url'] = f'{site_url}{event.get_recap_url()}'
-    else:
-        context['notes_placeholder'] = True
-
-    feedback_url = _build_feedback_url(event)
-    if feedback_url:
-        context['feedback_url'] = feedback_url
-
-    # Lazy import to keep the worker's module load light.
+    # Issue #1613: the delivery persists no render data at all — the
+    # worker rebuilds title, summary and every link from the saved
+    # Event at delivery time, so no URL (including the raw S3
+    # recording URL) sits in the durable row.
     from email_app.package_mail import send_package_mail
 
     try:
         send_package_mail(
             user,
             'post_event_followup',
-            context,
+            {},
             idempotency_key=f'post_event_followup:{event.pk}:{user.pk}',
+            related=event,
         )
     except Exception:
         # Best-effort: a local refusal (unknown purpose, invalid
@@ -240,28 +211,3 @@ def send_post_event_followup_one(event_id, user_id):
         user.email, event.title,
     )
     return {'status': 'sent', 'user_id': user_id}
-
-
-def _build_feedback_url(event):
-    """Return the public feedback submit URL or ``None`` when unavailable.
-
-    The CTA is wired conditionally on issue #679 having shipped:
-
-    - ``events.EventFeedback`` model must be importable.
-    - ``reverse('event_feedback_submit', kwargs={'slug': event.slug})``
-      must resolve.
-
-    When either condition is unmet we return ``None`` and the
-    template's ``{% if feedback_url %}`` block stays empty.
-    """
-    try:
-        from events.models import EventFeedback  # noqa: F401
-    except ImportError:
-        return None
-
-    try:
-        path = reverse('event_feedback_submit', kwargs={'slug': event.slug})
-    except NoReverseMatch:
-        return None
-
-    return f'{site_base_url()}{path}'

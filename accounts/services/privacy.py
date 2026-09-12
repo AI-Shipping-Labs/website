@@ -19,7 +19,6 @@ from django.apps import apps
 from django.core.mail import send_mail
 from django.db import transaction
 from django.db.models import Q
-from django.urls import reverse
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
@@ -327,19 +326,15 @@ def request_account_deletion(user, request_context=None):
                 requested_at=request_log.requested_at,
             )
 
-        studio_member_url = (
-            f"{site_base_url().rstrip('/')}"
-            f"{reverse('studio_user_detail', kwargs={'user_id': locked_user.pk})}"
-            "#privacy-deletion-request"
-        )
         dedupe_key = f"account-deletion-request:{request_log.pk}"
         context = {
+            # Issue #1613: studio_member_url is minted in the delivery
+            # worker from the request's user; only scalars are stored.
             "login_email": locked_user.email,
             "support_id": locked_user.pk,
             "request_time_utc": request_log.requested_at.astimezone(
                 datetime_timezone.utc,
             ).strftime("%Y-%m-%d %H:%M:%S UTC"),
-            "studio_member_url": studio_member_url,
             "privacy_email": team_email,
         }
 

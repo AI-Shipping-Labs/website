@@ -75,9 +75,9 @@ class EventRecapNotificationApiTest(TestCase):
         self.assertEqual(
             body['results'][0]['email_log_id'], str(delivery.pk),
         )
-        self.assertEqual(
-            delivery.context_data.get('recap_url'), body['recap_url'],
-        )
+        # Issue #1613: the durable context stores no URL; the worker
+        # mints the recap link from the related event.
+        self.assertEqual(delivery.context_data, {})
         self.assertEqual(
             body['results'][0]['notification_id'],
             Notification.objects.get(

@@ -91,9 +91,9 @@ class EventRecapNotificationServiceTest(TestCase):
                 delivery.idempotency_key,
                 f'event-recap-ready:{self.event.pk}:{delivery.recipient_user_id}',
             )
-            self.assertEqual(
-                delivery.context_data.get('recap_url'), recap_url,
-            )
+            # Issue #1613: no URL is stored; the worker mints the links
+            # from the related event at delivery time.
+            self.assertEqual(delivery.context_data, {})
         self.assertEqual(
             Notification.objects.filter(
                 notification_type='event_recap', url=recap_url,
@@ -133,6 +133,32 @@ class EventRecapNotificationServiceTest(TestCase):
             {log.dedupe_key for log in email_logs},
             {d.idempotency_key for d in deliveries},
         )
+
+    def test_worker_mints_recap_links_from_related_event(self):
+        """Issue #1613: the stored context is empty; the rendered email
+        still carries the recap and event links after the drain."""
+
+        notify_recap_ready(self.event)
+        deliveries = list(EmailDelivery.objects.all())
+        self.assertEqual(len(deliveries), 2)
+        self.assertTrue(all(d.context_data == {} for d in deliveries))
+
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 2)
+        recap_url = absolute_recap_url(self.event)
+        event_url = f'https://aishippinglabs.com{self.event.get_absolute_url()}'
+        for call in stub.calls:
+            html = call['Content']['Simple']['Body']['Html']['Data']
+            self.assertIn(f'href="{recap_url}"', html)
+            self.assertIn(event_url, html)
 
     def test_complaint_suppresses_email_but_not_in_app(self):
         complaint_user = User.objects.create_user(

@@ -1,7 +1,7 @@
 """Configuration helper for integration settings (community_base shim).
 
 Issue #1584 moved integration settings storage into the
-``community_base.config`` package (package tag v0.3.0). This module keeps
+``community_base.config`` package (package tag v0.3.5). This module keeps
 the historical ``integrations.config`` import path and the exact donor
 resolution semantics, backed by package storage:
 
@@ -26,27 +26,31 @@ Cross-process invalidation
 
 The donor published a short stamp into ``caches['django_q']`` and memoized
 stamp reads through ``integrations.shared_cache`` (local TTL <= 5s). That
-donor stamp channel is preserved verbatim: the stamp lives in the shared
-``caches['django_q']`` DatabaseCache under the donor's
-``integration_settings_stamp`` key, read through the donor's
-``integrations.shared_cache`` memo (local TTL <= 5s), so another process's
-save becomes visible here no later than the TTL bound. Each process records the stamp it saw when it last read
+donor stamp channel stays watched (shared ``caches['django_q']``
+DatabaseCache under ``integration_settings_stamp``, read through the
+donor's ``integrations.shared_cache`` memo, local TTL <= 5s), and the
+package service's own stamp joins it after the step-5 cutover, so a save
+through either channel becomes visible here no later than the TTL bound. Each process records the stamp it saw when it last read
 the DB; ``get_config()`` re-reads the stamp on every call and, if it
 changed, repopulates the in-process cache from the DB. A warm request
 therefore pays at most one stamp GET, not one GET per ``get_config()``
 call, and zero ``cb_config`` queries when nothing has changed.
 
-Transitional dual read (steps 1-4): the Studio save path still writes the
-donor ``IntegrationSetting`` table until its step-5 cutover, so the
-database layer reads the donor store FIRST and the package store second.
-The migration-time copy in ``cb_config`` is therefore never allowed to
-shadow a newer donor edit, and keys written only by the package still
-resolve. Step 6 removes the donor leg.
+Transitional dual read: since the step-5 cutover every writer (Studio
+groups, import, the operator API) goes through the package service, so the
+database layer reads the package store FIRST and keeps the donor
+``IntegrationSetting`` store as a read-only fallback for rows nothing has
+rewritten yet. A package row therefore always wins over its stale donor
+twin, and donor-only keys still resolve. Step 6 removes the donor leg
+with the table itself. Package-decoded values are re-stringified to the
+donor's raw-string shape (``true``/``false``, decimal integers) so every
+consumer contract survives the cutover unchanged.
 
 The stamp is intentionally opaque (a random uuid hex). We never compare
 the value, only "is it the same string we recorded last time".
 """
 
+import json
 import logging
 import os
 import sys
@@ -184,8 +188,9 @@ def _decode_stored_value(key, item, stored):
             return None
     if value is None:
         return None
-    if not isinstance(value, str):
-        value = str(value)
+    # The package service stores coerced values (JSON booleans become real
+    # bools, integers ints); the donor contract is raw lowercase strings.
+    value = _donor_shaped(value)
     return value or None
 
 
@@ -197,38 +202,98 @@ def _donor_db_value(key):
     """
     from integrations.models import IntegrationSetting  # noqa: PLC0415
 
+    # This is a read-only migration fallback. Secret rows may still be
+    # plaintext until migration 0030 runs, so they must never enter runtime
+    # resolution or the compatibility cache.
     return (
-        IntegrationSetting.objects.filter(key=key)
+        IntegrationSetting.objects.filter(key=key, is_secret=False)
         .values_list("value", flat=True)
         .first()
     )
 
 
-def _read_db_value(key):
-    """Return the stored value for ``key`` as a raw string, or None.
+def _donor_shaped(value):
+    """Re-stringify a decoded package value into the donor's raw shape.
 
-    Donor store first (the operationally freshest writes while the Studio
-    save path is uncut), then the package store with its decrypted read.
-    Keys the package registry does not declare have no package storage
-    layer (``definition()`` raises ImproperlyConfigured for them) and
-    resolve through the donor store, settings, and env only. Database
-    errors propagate to the caller, which handles them with the donor's
-    log-and-fall-through set.
+    The donor contract is raw strings: booleans arrive as ``'true'`` /
+    ``'false'`` and integers as decimal strings. The package service stores
+    the coerced Python values, so a package-written row is converted back
+    before it reaches any consumer.
     """
-    donor_value = _donor_db_value(key)
-    if donor_value is not None:
-        return donor_value
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, int):
+        return str(value)
+    if isinstance(value, list):
+        # A list-type key: the donor stored the comma-joined raw string the
+        # Studio form submitted.
+        return ",".join(str(item) for item in value)
+    if isinstance(value, dict):
+        return json.dumps(value, sort_keys=True)
+    return value
 
+
+def _package_db_value(key):
+    """Return the decrypted, donor-shaped package value for ``key``, or None."""
     from community_base.config.models import Setting  # noqa: PLC0415
 
     try:
         item = definition(key)
-    except ImproperlyConfigured:
+    except (ImproperlyConfigured, KeyError):
+        # The package registry raises KeyError for an undeclared key; the
+        # donor contract is that such keys resolve through settings/env.
         return None
     stored = Setting.objects.filter(key=key).values_list("value", flat=True).first()
     if stored is None:
         return None
-    return _decode_stored_value(key, item, stored)
+    return _donor_shaped(_decode_stored_value(key, item, stored))
+
+
+def _donor_fallback_suppressed(key):
+    """Return whether package state intentionally masks the donor row.
+
+    A deleted package row is otherwise indistinguishable from a key that has
+    never migrated.  The package change log records an explicit clear with a
+    null ``new_value``; that tombstone keeps an old donor value from being
+    resurrected while retaining the donor as a read-only migration fallback.
+    """
+    try:
+        from community_base.config.models import Setting, SettingChange  # noqa: PLC0415
+
+        if Setting.objects.filter(key=key).exists():
+            return True
+        change = (
+            SettingChange.objects.filter(setting_key=key)
+            .order_by("-created_at", "-pk")
+            .first()
+        )
+        return change is not None and change.new_value is None
+    except _DB_CONFIG_EXCEPTIONS:
+        # During a rolling deploy the audit table may not be available yet;
+        # retain the donor read fallback until the package schema is ready.
+        return False
+
+
+def _read_db_value(key):
+    """Return the stored value for ``key`` as a raw string, or None.
+
+    Package store first — every writer has gone through the package
+    service since the step-5 cutover, so a package row is authoritative
+    over its stale donor twin — then the donor store as a read-only
+    fallback for rows nothing has rewritten. Keys the package registry
+    does not declare have no package storage layer (``definition()``
+    raises ImproperlyConfigured for them) and resolve through the donor
+    store, settings, and env only. Database errors propagate to the
+    caller, which handles them with the donor's log-and-fall-through set.
+    """
+    package_value = _package_db_value(key)
+    if package_value is not None:
+        return package_value
+
+    donor_value = _donor_db_value(key)
+    if donor_value is not None and not _donor_fallback_suppressed(key):
+        return donor_value
+    return None
 
 
 def _db_configured(key):
@@ -240,20 +305,14 @@ def _db_configured(key):
     on empty string). The decrypted plaintext never leaves this helper —
     :func:`resolve_source` only ever returns the layer name.
     """
+    package_value = _package_db_value(key)
+    if package_value is not None:
+        return bool(package_value)
+
     donor_value = _donor_db_value(key)
-    if donor_value is not None:
+    if donor_value is not None and not _donor_fallback_suppressed(key):
         return bool(donor_value)
-
-    from community_base.config.models import Setting  # noqa: PLC0415
-
-    try:
-        item = definition(key)
-    except ImproperlyConfigured:
-        return False
-    stored = Setting.objects.filter(key=key).values_list("value", flat=True).first()
-    if stored is None:
-        return False
-    return bool(_decode_stored_value(key, item, stored))
+    return False
 
 
 def _get_config_uncached(key, default="", *, use_settings=True):
@@ -425,21 +484,38 @@ def is_enabled(key):
 
 
 def _read_stamp():
-    """Return the published cross-process stamp, or None if unavailable.
+    """Return both published stamps, or None when neither is readable.
 
-    The stamp lives in the shared ``django_q`` DatabaseCache under the
-    donor's key. Wrapped in a try/except so a missing cache backend or
-    table during boot/tests does not crash callers — when the stamp can't
-    be read we treat it as "no change" and let the in-process cache stand.
+    Since the step-5 cutover the package service publishes into the
+    default cache under its ``STAMP_KEY`` on every Studio/API save; the
+    donor channel (``django_q`` under ``integration_settings_stamp``) is
+    still watched so any surviving pre-cutover writer invalidates too.
+    Each tuple entry is None when its channel never published; the outer
+    None means both channels were unreadable, which the caller treats as
+    "no change" and lets the in-process cache stand.
     """
+    package_stamp = None
+    donor_stamp = None
     try:
-        return get_shared_cache(_STAMP_CACHE_KEY)
+        from community_base.config.service import STAMP_KEY  # noqa: PLC0415
+        from django.core.cache import cache  # noqa: PLC0415
+
+        package_stamp = cache.get(STAMP_KEY)
+    except _CACHE_STAMP_EXCEPTIONS:
+        logger.debug(
+            "Unable to read the package config stamp",
+            exc_info=True,
+        )
+    try:
+        donor_stamp = get_shared_cache(_STAMP_CACHE_KEY)
     except _CACHE_STAMP_EXCEPTIONS:
         logger.debug(
             "Unable to read integration settings cache stamp",
             exc_info=True,
         )
+    if package_stamp is None and donor_stamp is None:
         return None
+    return (package_stamp, donor_stamp)
 
 
 def _populate_cache():
@@ -460,18 +536,39 @@ def _populate_cache():
         for row_key, stored in Setting.objects.values_list("key", "value"):
             try:
                 item = definition(row_key)
-            except ImproperlyConfigured:
+            except (ImproperlyConfigured, KeyError):
                 continue
             value = _decode_stored_value(row_key, item, stored)
             if value:
                 values[row_key] = value
-        # Donor rows overlay the package copy: while the Studio save path
-        # is uncut its rows are the fresher writes (see the module
+        # Donor rows fill only the gaps: the package rows are authoritative
+        # since every writer moved to the package service (see the module
         # docstring's transitional dual read).
         from integrations.models import IntegrationSetting  # noqa: PLC0415
 
-        for row_key, value in IntegrationSetting.objects.values_list("key", "value"):
-            if value:
+        donor_rows = list(
+            IntegrationSetting.objects.filter(is_secret=False).values_list("key", "value")
+        )
+        donor_keys = {row_key for row_key, _ in donor_rows}
+        clear_keys = set()
+        if donor_keys:
+            from community_base.config.models import SettingChange  # noqa: PLC0415
+
+            seen = set()
+            changes = SettingChange.objects.filter(
+                setting_key__in=donor_keys,
+            ).order_by("-created_at", "-pk").values_list("setting_key", "new_value")
+            for row_key, new_value in changes:
+                if row_key in seen:
+                    continue
+                seen.add(row_key)
+                if new_value is None:
+                    clear_keys.add(row_key)
+        package_keys = set(
+            Setting.objects.values_list("key", flat=True)
+        )
+        for row_key, value in donor_rows:
+            if value and row_key not in values and row_key not in package_keys and row_key not in clear_keys:
                 values[row_key] = value
         _cache = values
         _cache_populated = True
@@ -511,12 +608,44 @@ def reset_local_config_cache():
     runtime.reset()
 
 
+def set_package_override(key, value, actor_ref, reason=""):
+    """Persist an override in package storage.
+
+    The legacy ``IntegrationSetting`` table is intentionally read-only during
+    the one-release transition. In particular, mirroring a package secret
+    there would put plaintext credentials back into the database. Existing
+    donor rows remain available only for non-secret read fallback until the
+    second migration removes that table.
+    """
+    from community_base.config.service import set as package_set  # noqa: PLC0415
+
+    return package_set(key, value, actor_ref=actor_ref, reason=reason)
+
+
+def delete_package_override(key) -> bool:
+    """Delete a package override without mutating the donor table.
+
+    This helper is retained for import callers using the former format. The
+    donor table is a read-only migration source, so clearing a package value
+    never writes to it. If no package row exists, the package service returns
+    ``False`` and the unmigrated donor fallback remains unchanged.
+    """
+    from community_base.config.service import unset as package_unset  # noqa: PLC0415
+
+    package_deleted = package_unset(
+        key,
+        actor_ref="settings-import",
+        reason="Cleared package settings override",
+    )
+    reset_local_config_cache()
+    return bool(package_deleted)
+
+
 def clear_config_cache():
     """Clear the in-process cache and publish a fresh cross-process stamp.
 
-    Called by ``studio.views.settings.settings_save_group`` after a
-    successful upsert/delete on integration settings. The donor channel is
-    kept: a fresh stamp is published into the shared ``django_q`` cache;
+    Called after a successful package settings save/delete. The donor channel
+    is kept: a fresh stamp is published into the shared ``django_q`` cache;
     other processes notice it on their next ``get_config()`` and
     repopulate.
     """

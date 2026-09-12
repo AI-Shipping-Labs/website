@@ -51,9 +51,44 @@ fallbacks used when no DB override exists.
 1. Visit `{SITE_BASE_URL}/studio/`.
 2. First-time on a fresh DB: open an SSH tunnel to the bastion and run `uv run python manage.py createsuperuser` against the remote database. The bastion-tunnel and `DATABASE_URL` recipe is in `_docs/setup.md` — see "Database access" and "Creating admin users".
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
-4. Open `{SITE_BASE_URL}/studio/settings/`. Every integration group from `INTEGRATION_GROUPS` is rendered there with a status badge (`configured`, `partial`, `not_configured`).
+4. Open `{SITE_BASE_URL}/studio/settings/`. The package `community_base.config` view renders every declared integration group and shows each setting's source (`db`, `environment`, `django_settings`, or `default`).
 
-Test: visit `/studio/settings/` and confirm 17 integration groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers).
+Test: visit `/studio/settings/` and confirm the declared groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers). Save one non-secret value and confirm its source changes to `db`.
+
+Runtime settings are stored in the package `cb_config.Setting` table after the A0.2 migration. Secret values use the package Fernet format and are never displayed or exported in plaintext. The compatibility resolver in `integrations.config` still reads donor `IntegrationSetting` rows that have not been rewritten; this is a read-only fallback and package rows always win. The donor table remains read-only until the second A0.2 pull request.
+
+The operator API uses the package routes under `/api/v1/settings`, `/api/v1/settings/<key>`, `/api/v1/settings/import`, and `/api/v1/settings/export`. It requires a `community_base.api.models.APIKey` and a `Bearer` authorization header. The `asl integrations` commands use this endpoint automatically.
+
+The first A0.2 pull request covers the package kernel and declarations, the
+reader/API/CLI cutover, the compatibility shim, and the safe encrypted data
+migration. Removing the donor `IntegrationSetting` table and shim, and
+rewriting remaining donor-backed test and Playwright fixtures, are deferred to
+the second pull request after the development deployment and database
+rehearsal. The deferred fixtures remain part of the current compatibility
+contract; full Playwright validation is separately awaiting runner capacity.
+
+### A0.2 settings migration rehearsal
+
+Before deploying the cutover, run the migration against a disposable development database and record the donor and package row counts. The migration is an atomic, insert-only copy, so a rerun must keep the same package count and must not replace a package-side edit. Record the counts before and after the rerun, then verify one non-secret and one secret value through the package resolver without printing either value:
+
+```bash
+uv run python manage.py shell -c 'from integrations.models import IntegrationSetting; from community_base.config.models import Setting; print({"donor": IntegrationSetting.objects.count(), "package": Setting.objects.count()})'  # BEFORE
+uv run python manage.py migrate
+uv run python manage.py shell -c 'from integrations.models import IntegrationSetting; from community_base.config.models import Setting; print({"donor": IntegrationSetting.objects.count(), "package": Setting.objects.count()})'  # AFTER FIRST MIGRATION
+uv run python manage.py migrate  # RERUN; this must be idempotent
+uv run python manage.py shell -c 'from integrations.models import IntegrationSetting; from community_base.config.models import Setting; print({"donor": IntegrationSetting.objects.count(), "package": Setting.objects.count()})'  # AFTER RERUN
+uv run python manage.py test integrations.tests.test_settings_data_migration --parallel 4
+```
+
+Save the `BEFORE` count output and compare it with `AFTER RERUN`. Require equal package and donor counts, then run this copy-paste-safe resolver check; it prints booleans only and never prints the synthetic secret:
+
+```bash
+uv run python manage.py shell -c 'from community_base.config.models import Setting; from community_base.config.service import export, get, set; secret="a0-2-rehearsal-synthetic-secret"; set("STRIPE_SECRET_KEY", secret, actor_ref="rehearsal", reason="A0.2 migration rehearsal"); set("STRIPE_CUSTOMER_PORTAL_URL", "https://rehearsal.example/portal", actor_ref="rehearsal", reason="A0.2 migration rehearsal"); stored=Setting.objects.get(key="STRIPE_SECRET_KEY").value; checks={"secret_equal": get("STRIPE_SECRET_KEY") == secret, "secret_encrypted": isinstance(stored, str) and stored.startswith("fernet:v1:"), "secret_redacted": export()["STRIPE_SECRET_KEY"] == "[REDACTED]", "nonsecret_equal": get("STRIPE_CUSTOMER_PORTAL_URL") == "https://rehearsal.example/portal"}; assert all(checks.values()), checks; print(checks)'
+```
+
+For a populated dev database, verify that every donor key has a package row. A clear must leave a `cb_config.SettingChange` row with `new_value` set to `null`, so the compatibility resolver uses the env/default layer instead of resurrecting the donor value.
+
+Not run here, needs: development database copy. The rehearsal above requires a populated development database; local SQLite evidence is not a production copy and must not be reported as one.
 
 ## 3. OAuth login providers
 
@@ -450,7 +485,7 @@ After affirmative analytics consent, UTM and organic-referrer attribution are ca
 - `Studio > Notifications` (`/studio/notifications/`) — recent notification log (Slack, email, push).
 - `Studio > Settings` (`/studio/settings/`) — every group's status badge. A "partial" badge means some keys are set and others aren't.
 - Server logs — depends on hosting. ECS: CloudWatch log group for the service. Local: stdout from `runserver`.
-- DB inspection — `IntegrationSetting` table holds Studio-saved values (encrypted secrets are still readable by Django; treat the table as sensitive).
+- DB inspection — `cb_config.Setting` holds package-managed values (secret rows are encrypted; treat the table as sensitive). During the one-release transition, `IntegrationSetting` is retained as a read-only compatibility fallback.
 
 ## Future updates
 

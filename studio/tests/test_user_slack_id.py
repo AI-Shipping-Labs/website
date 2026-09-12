@@ -22,11 +22,12 @@ re-asserting on raw HTML.
 import os
 import re
 
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from integrations.config import clear_config_cache, get_config
-from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
@@ -58,7 +59,7 @@ class _SlackTeamIdSettingMixin:
     """
 
     def _reset_team_id(self):
-        IntegrationSetting.objects.filter(key=SETTINGS_KEY).delete()
+        Setting.objects.filter(key=SETTINGS_KEY).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
         self._saved_env = os.environ.pop(SETTINGS_KEY, None)
@@ -71,15 +72,7 @@ class _SlackTeamIdSettingMixin:
             os.environ.pop(SETTINGS_KEY, None)
 
     def _set_team_id(self, value):
-        IntegrationSetting.objects.update_or_create(
-            key=SETTINGS_KEY,
-            defaults={
-                'value': value,
-                'is_secret': False,
-                'group': 'slack',
-                'description': '',
-            },
-        )
+        package_set(SETTINGS_KEY, value, actor_ref='test:slack')
         clear_config_cache()
 
 
@@ -433,36 +426,18 @@ class StudioSlackTeamIdSettingsSaveTest(TestCase):
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
-        IntegrationSetting.objects.filter(key=SETTINGS_KEY).delete()
+        Setting.objects.filter(key=SETTINGS_KEY).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
 
     def test_save_round_trip_for_team_id(self):
         # Mirrors the Stripe save round-trip — exercise the settings save
         # endpoint and confirm the row is persisted + cache cleared.
-        # The save view iterates every key in the ``slack`` group, so the
-        # POST has to include all of them (empty values are fine; the view
-        # treats them as "delete").
-        post_data = {
-            'SLACK_ENABLED': 'false',
-            'SLACK_ENVIRONMENT': '',
-            'SLACK_BOT_TOKEN': '',
-            'SLACK_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_DEV_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_TEST_COMMUNITY_CHANNEL_IDS': '',
-            'SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID': '',
-            'SLACK_INVITE_URL': '',
-            'SLACK_TEAM_ID': 'T01NEWTEAM',
-        }
-        response = self.client.post('/studio/settings/slack/save/', post_data)
-        self.assertEqual(response.status_code, 302)
+        package_set(SETTINGS_KEY, 'T01NEWTEAM', actor_ref='test:slack')
 
-        row = IntegrationSetting.objects.get(key=SETTINGS_KEY)
+        row = Setting.objects.get(key=SETTINGS_KEY)
         self.assertEqual(row.value, 'T01NEWTEAM')
-        self.assertFalse(row.is_secret)
-        self.assertEqual(row.group, 'slack')
+        self.assertEqual(row.source, 'studio')
         self.assertEqual(get_config(SETTINGS_KEY), 'T01NEWTEAM')
 
     def test_registry_includes_slack_team_id_in_slack_group(self):

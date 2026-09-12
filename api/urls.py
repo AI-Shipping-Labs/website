@@ -103,7 +103,6 @@ from api.views.instructors import (
     instructors_collection,
     instructors_reconcile,
 )
-from api.views.integration_settings import integration_settings
 from api.views.interview_notes import (
     interview_note_detail,
     interview_notes_create,
@@ -553,14 +552,6 @@ urlpatterns = [
         "integrations/maven/occurrences/<int:occurrence_id>/steps/<str:step>/retry",
         maven_occurrence_step_retry,
         name="api_maven_occurrence_step_retry",
-    ),
-    # ---- Integration settings (issues #633, #640) ---------------------
-    # GET lists registered keys with metadata + source enum but never the
-    # value itself; POST mutates rows; everything else returns 405.
-    path(
-        "integrations/settings",
-        integration_settings,
-        name="api_integration_settings",
     ),
     # ---- Plan-sprints ingest / backfill trigger (issue #904) ----------
     # Staff-token POST that enqueues the same capture + parse + auto-apply

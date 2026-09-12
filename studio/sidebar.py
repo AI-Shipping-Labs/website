@@ -524,6 +524,15 @@ ROUTES_WITHOUT_SIDEBAR_HOME = frozenset({
     'studio_user_search',
     'studio_impersonate',
     'studio_stop_impersonate',
+    # Package-owned settings/API-key forms render their own shell and do not
+    # expose a donor sidebar destination. The established settings dashboard
+    # above remains the navigable Studio home.
+    'community_base_settings',
+    'community_base_settings_save_group',
+    'community_base_settings_export',
+    'community_base_settings_import',
+    'community_base_api_keys',
+    'community_base_api_key_revoke',
 })
 
 

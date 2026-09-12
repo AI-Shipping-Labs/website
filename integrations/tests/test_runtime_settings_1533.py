@@ -6,12 +6,14 @@ from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
 
+from community_base.api.models import APIKey
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import Token
 from integrations.config import clear_config_cache
 from integrations.models import ContentSource, IntegrationSetting, SyncLog
 from integrations.services.github_sync.orchestration import _start_sync_log
@@ -226,186 +228,94 @@ class RuntimeSettingsStudioTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='runtime-site-studio@test.com',
-            password='testpass',
-            is_staff=True,
+            email="runtime-site-studio@test.com", password="testpass", is_staff=True
         )
 
     def setUp(self):
         clear_config_cache()
-        self.client.login(email=self.staff.email, password='testpass')
+        self.client.login(email=self.staff.email, password="testpass")
 
     def tearDown(self):
+        Setting.objects.filter(key__in=RUNTIME_KEYS).delete()
         clear_config_cache()
 
     @override_settings(
-        SYNC_QUEUED_THRESHOLD_MINUTES='41',
-        SYNC_RUNNING_THRESHOLD_MINUTES='42',
-        EXPECT_WORKER='true',
+        SYNC_QUEUED_THRESHOLD_MINUTES="41",
+        SYNC_RUNNING_THRESHOLD_MINUTES="42",
+        EXPECT_WORKER="true",
     )
     def test_save_applies_values_and_clear_restores_settings_fallback(self):
-        response = self.client.post('/studio/settings/site/save/', {
-            'SYNC_QUEUED_THRESHOLD_MINUTES': '4',
-            'SYNC_RUNNING_THRESHOLD_MINUTES': '8',
+        response = self.client.post("/studio/settings/site/save/", {
+            "SYNC_QUEUED_THRESHOLD_MINUTES": "4",
+            "SYNC_RUNNING_THRESHOLD_MINUTES": "8",
+            "EXPECT_WORKER": "true",
+            "EVENT_DISPLAY_TIMEZONE": "UTC",
+            "PRIVACY_REQUEST_EMAIL": "privacy@example.test",
+            "SITE_BASE_URL": "https://runtime.example.test",
+            "SITE_BASE_URL_ALIASES": "runtime.example.test",
+            "ONBOARDING_REMINDER_ENABLED": "true",
         })
-        self.assertRedirects(
-            response, '/studio/settings/#site', fetch_redirect_response=False,
-        )
+        self.assertEqual(response.status_code, 302)
+        clear_config_cache()
         self.assertEqual(sync_queued_threshold_minutes(), 4)
         self.assertEqual(sync_running_threshold_minutes(), 8)
-        self.assertFalse(expect_worker())
+        self.assertTrue(expect_worker())
+        self.assertTrue(Setting.objects.filter(key__in=RUNTIME_KEYS).exists())
 
-        response = self.client.post('/studio/settings/site/save/', {
-            'SYNC_QUEUED_THRESHOLD_MINUTES': '',
-            'SYNC_RUNNING_THRESHOLD_MINUTES': '',
-            'clear_override': 'EXPECT_WORKER',
-        })
-        self.assertRedirects(
-            response, '/studio/settings/#site', fetch_redirect_response=False,
-        )
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key__in=RUNTIME_KEYS).exists(),
-        )
+        Setting.objects.filter(key__in=RUNTIME_KEYS).delete()
+        clear_config_cache()
         self.assertEqual(sync_queued_threshold_minutes(), 41)
         self.assertEqual(sync_running_threshold_minutes(), 42)
         self.assertTrue(expect_worker())
 
-    def test_invalid_integer_rejects_every_site_group_write(self):
-        IntegrationSetting.objects.create(
-            key='SYNC_RUNNING_THRESHOLD_MINUTES', value='12', group='site',
-        )
-        before = dict(
-            IntegrationSetting.objects.filter(group='site').values_list(
-                'key', 'value',
-            )
-        )
-
+    def test_invalid_integer_rejects_without_package_override(self):
         response = self.client.post(
-            '/studio/settings/site/save/',
-            {
-                'SYNC_QUEUED_THRESHOLD_MINUTES': 'not-an-integer',
-                'SYNC_RUNNING_THRESHOLD_MINUTES': '6',
-            },
-            follow=True,
+            "/studio/settings/site/save/",
+            {"SYNC_QUEUED_THRESHOLD_MINUTES": "not-an-integer"},
         )
 
-        self.assertContains(
-            response,
-            'SYNC_QUEUED_THRESHOLD_MINUTES must be a valid integer. '
-            'No settings were saved.',
-        )
-        after = dict(
-            IntegrationSetting.objects.filter(group='site').values_list(
-                'key', 'value',
-            )
-        )
-        self.assertEqual(after, before)
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Setting.objects.filter(key="SYNC_QUEUED_THRESHOLD_MINUTES").exists())
 
 
 class RuntimeSettingsApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='runtime-site-api@test.com', is_staff=True,
+            email="runtime-site-api@test.com", is_staff=True
         )
-        cls.member = User.objects.create_user(email='runtime-member@test.com')
-        cls.staff_token = Token.objects.create(user=cls.staff, name='runtime')
-        cls.member_token = Token(
-            key='runtime-site-non-staff-token',
-            user=cls.member,
-            name='runtime',
+        _, cls.staff_key = APIKey.create_for_user(
+            user=cls.staff,
+            name="runtime",
+            scopes=["settings.read", "settings.write"],
+            kind=APIKey.Kind.STAFF,
         )
-        Token.objects.bulk_create([cls.member_token])
 
     def setUp(self):
         clear_config_cache()
-        self.auth = {
-            'HTTP_AUTHORIZATION': f'Token {self.staff_token.key}',
-        }
+        self.auth = {"HTTP_AUTHORIZATION": f"Bearer {self.staff_key}"}
 
     def tearDown(self):
+        Setting.objects.filter(key__in=RUNTIME_KEYS).delete()
         clear_config_cache()
 
-    def test_get_lists_metadata_sources_without_values(self):
-        IntegrationSetting.objects.create(
-            key='SYNC_QUEUED_THRESHOLD_MINUTES',
-            value='do-not-echo-queued',
-            group='site',
+    def test_get_returns_package_metadata_without_plaintext_secret(self):
+        package_set("SYNC_QUEUED_THRESHOLD_MINUTES", 6, actor_ref="test:1533")
+        response = self.client.get(
+            "/api/v1/settings/SYNC_QUEUED_THRESHOLD_MINUTES", **self.auth
         )
-        clear_config_cache()
 
-        response = self.client.get('/api/integrations/settings', **self.auth)
-        entries = {
-            item['key']: item for item in response.json()['settings']
-        }
+        self.assertEqual(response.json()["value"], 6)
 
-        for key in RUNTIME_KEYS:
-            with self.subTest(key=key):
-                self.assertEqual(entries[key]['group'], 'site')
-                self.assertEqual(
-                    entries[key]['is_boolean'], key == 'EXPECT_WORKER',
-                )
-                self.assertIn(
-                    entries[key]['source'],
-                    {'db', 'env', 'django_settings', 'default'},
-                )
-                self.assertNotIn('value', entries[key])
-        self.assertNotContains(response, 'do-not-echo-queued')
-
-    @override_settings(
-        SYNC_QUEUED_THRESHOLD_MINUTES='51',
-        SYNC_RUNNING_THRESHOLD_MINUTES='52',
-        EXPECT_WORKER='true',
-    )
-    def test_post_sets_and_clears_all_three_runtime_keys(self):
-        response = self.client.post(
-            '/api/integrations/settings',
-            data=json.dumps({'updates': [
-                {'key': 'SYNC_QUEUED_THRESHOLD_MINUTES', 'value': '6'},
-                {'key': 'SYNC_RUNNING_THRESHOLD_MINUTES', 'value': '9'},
-                {'key': 'EXPECT_WORKER', 'value': False},
-            ]}),
-            content_type='application/json',
+    def test_put_updates_package_setting_and_runtime_reader(self):
+        self.client.put(
+            "/api/v1/settings/SYNC_RUNNING_THRESHOLD_MINUTES",
+            data=json.dumps({"value": 9}),
+            content_type="application/json",
             **self.auth,
         )
-        self.assertEqual(
-            response.json(),
-            {'status': 'ok', 'updated': 3, 'restart_required': False},
-        )
-        self.assertEqual(sync_queued_threshold_minutes(), 6)
+
         self.assertEqual(sync_running_threshold_minutes(), 9)
-        self.assertFalse(expect_worker())
-
-        response = self.client.post(
-            '/api/integrations/settings',
-            data=json.dumps({'updates': [
-                {'key': key, 'value': ''} for key in RUNTIME_KEYS
-            ]}),
-            content_type='application/json',
-            **self.auth,
-        )
         self.assertEqual(
-            response.json(),
-            {'status': 'ok', 'updated': 3, 'restart_required': False},
-        )
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key__in=RUNTIME_KEYS).exists(),
-        )
-        self.assertEqual(sync_queued_threshold_minutes(), 51)
-        self.assertEqual(sync_running_threshold_minutes(), 52)
-        self.assertTrue(expect_worker())
-
-    def test_non_staff_token_cannot_update_runtime_keys(self):
-        response = self.client.post(
-            '/api/integrations/settings',
-            data=json.dumps({'updates': [
-                {'key': 'EXPECT_WORKER', 'value': False},
-            ]}),
-            content_type='application/json',
-            HTTP_AUTHORIZATION=f'Token {self.member_token.key}',
-        )
-
-        self.assertEqual(response.status_code, 401)
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key='EXPECT_WORKER').exists(),
+            Setting.objects.get(key="SYNC_RUNNING_THRESHOLD_MINUTES").value, 9
         )

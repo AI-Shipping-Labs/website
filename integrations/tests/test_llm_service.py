@@ -21,10 +21,10 @@ from anthropic import (
     InternalServerError,
     RateLimitError,
 )
+from community_base.config.service import set as package_set
 from django.test import TestCase, override_settings
 
 from integrations.config import clear_config_cache, get_config
-from integrations.models import IntegrationSetting
 from integrations.services import llm
 from integrations.services.llm import CancellationToken, LLMError, LLMResult
 
@@ -36,15 +36,7 @@ SLEEP_PATCH = 'integrations.services.llm.backends.time.sleep'
 
 
 def _set_setting(key, value, *, is_secret=False):
-    IntegrationSetting.objects.update_or_create(
-        key=key,
-        defaults={
-            'value': value,
-            'is_secret': is_secret,
-            'group': 'llm',
-            'description': '',
-        },
-    )
+    package_set(key, value, actor_ref='test:llm', reason='test override')
     clear_config_cache()
 
 
@@ -148,9 +140,12 @@ class ConfigResolutionTest(_LLMCacheCleanupMixin, TestCase):
         self.assertEqual(mock_cls.call_args.kwargs['max_retries'], 2)
 
     def test_invalid_and_negative_retry_overrides_remain_safe(self):
+        from django.core.exceptions import ValidationError
+
         from integrations.services.llm.backends import _resolve_max_retries
 
-        _set_setting('LLM_MAX_RETRIES', 'not-a-number')
+        with self.assertRaises(ValidationError):
+            _set_setting('LLM_MAX_RETRIES', 'not-a-number')
         self.assertEqual(_resolve_max_retries(), 6)
         _set_setting('LLM_MAX_RETRIES', '-4')
         self.assertEqual(_resolve_max_retries(), 0)

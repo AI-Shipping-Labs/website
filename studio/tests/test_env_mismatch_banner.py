@@ -681,9 +681,8 @@ class EnvMismatchOverrideTest(TestCase):
         ],
     )
     def test_clearing_override_via_save_revives_env_value(self):
-        # Mirrors the Studio empty-string flow at
-        # studio/views/settings.py: saving an empty value deletes the
-        # row, which must restore env-only behaviour.
+        # Mirrors the package settings empty-string flow: saving an empty
+        # value deletes the row, which must restore env-only behaviour.
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',
             value='https://configured.example.com',

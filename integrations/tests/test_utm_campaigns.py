@@ -1,11 +1,12 @@
 """Tests for UtmCampaign and UtmCampaignLink models."""
 
+from community_base.config.service import set as package_set
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase, override_settings
 
 from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting, UtmCampaign, UtmCampaignLink
+from integrations.models import UtmCampaign, UtmCampaignLink
 
 
 class UtmCampaignModelTest(TestCase):
@@ -54,6 +55,12 @@ class UtmCampaignLinkModelTest(TestCase):
             default_utm_source='newsletter',
             default_utm_medium='email',
         )
+
+    def setUp(self):
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
 
     def test_utm_content_validator_rejects_dash(self):
         link = UtmCampaignLink(
@@ -189,11 +196,7 @@ class UtmCampaignLinkSiteBaseUrlOverrideTest(TestCase):
 
     @override_settings(SITE_BASE_URL='https://env.example.com')
     def test_db_override_used_instead_of_settings(self):
-        IntegrationSetting.objects.create(
-            key='SITE_BASE_URL',
-            value='https://override.example.com',
-            group='site',
-        )
+        package_set('SITE_BASE_URL', 'https://override.example.com', actor_ref='test:utm')
         clear_config_cache()
         link = UtmCampaignLink.objects.create(
             campaign=self.campaign,

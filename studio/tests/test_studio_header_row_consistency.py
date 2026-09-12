@@ -10,6 +10,7 @@ from django.test import SimpleTestCase, tag
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 STUDIO_TEMPLATES = REPO_ROOT / 'templates' / 'studio'
+PACKAGE_SETTINGS_TEMPLATE = REPO_ROOT / 'templates' / 'community_base' / 'config' / 'settings.html'
 
 # Issue #1434 baseline, derived from origin/main 5589a718. Values are the
 # current number of header blocks in each non-conforming full page. This is a
@@ -544,10 +545,7 @@ class StudioHeaderConsistencyTest(SimpleTestCase):
         self.assertIn('data-testid="content-sources-download"', sync)
         self.assertIn('disabled', sync)
 
-        settings = _source('settings/dashboard.html')
-        settings_header_end = HEADER_BLOCK.search(settings).end()
-        self.assertGreater(settings.index('data-testid="settings-import-card"'), settings_header_end)
-        self.assertIn('enctype="multipart/form-data"', settings)
-        self.assertIn('data-testid="settings-upload"', settings)
-        self.assertIn('data-testid="settings-download"', settings)
-        self.assertIn('disabled', settings)
+        settings = PACKAGE_SETTINGS_TEMPLATE.read_text()
+        self.assertIn('data-community-settings', settings)
+        self.assertIn('community_base_settings_import', settings)
+        self.assertIn('community_base_settings_export', settings)

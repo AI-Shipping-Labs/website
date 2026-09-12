@@ -15,6 +15,8 @@ from datetime import timezone as dt_timezone
 from urllib.parse import urlparse
 
 import stripe
+from community_base.config.models import Setting
+from community_base.config.service import get as package_get
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
@@ -79,19 +81,14 @@ def _validated_team_email():
     # policy is stricter: an explicitly blank operator setting disables the
     # team delivery and must surface as a configuration error rather than
     # silently falling back to a different recipient.
-    from integrations.models import IntegrationSetting
-
-    configured = IntegrationSetting.objects.filter(
-        key="PAYMENT_FAILURE_TEAM_EMAIL",
-    ).values_list("value", flat=True).first()
-    value = str(
-        configured
-        if configured is not None
-        else get_config(
+    if Setting.objects.filter(key="PAYMENT_FAILURE_TEAM_EMAIL").exists():
+        configured = package_get("PAYMENT_FAILURE_TEAM_EMAIL", "")
+    else:
+        configured = get_config(
             "PAYMENT_FAILURE_TEAM_EMAIL",
             "team@aishippinglabs.com",
         )
-    ).strip().lower()
+    value = str(configured or "").strip().lower()
     try:
         validate_email(value)
     except ValidationError:

@@ -15,6 +15,7 @@ Covers:
 from unittest.mock import MagicMock, patch
 
 from botocore.exceptions import ClientError
+from community_base.config.service import set as package_set
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
@@ -359,23 +360,9 @@ class EmailServiceSESIntegrationTest(TestCase):
 
     @patch('email_app.services.email_service.boto3')
     def test_ses_client_uses_integration_settings(self, mock_boto3):
-        IntegrationSetting.objects.create(
-            key='AWS_SES_REGION',
-            value='eu-west-1',
-            group='ses',
-        )
-        IntegrationSetting.objects.create(
-            key='AWS_ACCESS_KEY_ID',
-            value='db-key',
-            group='ses',
-            is_secret=True,
-        )
-        IntegrationSetting.objects.create(
-            key='AWS_SECRET_ACCESS_KEY',
-            value='db-secret',
-            group='ses',
-            is_secret=True,
-        )
+        package_set('AWS_SES_REGION', 'eu-west-1', actor_ref='test:email')
+        package_set('AWS_ACCESS_KEY_ID', 'db-key', actor_ref='test:email')
+        package_set('AWS_SECRET_ACCESS_KEY', 'db-secret', actor_ref='test:email')
         clear_config_cache()
 
         mock_client = MagicMock()

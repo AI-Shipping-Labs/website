@@ -1,6 +1,8 @@
 import os
+import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
@@ -23,10 +25,8 @@ WORKER_RUNNING_TASK = "arn:aws:ecs:eu-west-1:123:task/worker-ready"
 PROD_WEB_SERVICE = "ai-shipping-labs-prod"
 PROD_WORKER_SERVICE = "ai-shipping-labs-worker-prod"
 
-ISOLATED_HARNESS_ENV_PREFIXES = ("FAKE_",)
+ISOLATED_HARNESS_ENV_PREFIXES = ("FAKE_", "DEPLOY_")
 ISOLATED_HARNESS_ENV_KEYS = {
-    "DEPLOY_GRACE_MAX_ATTEMPTS",
-    "DEPLOY_GRACE_SLEEP_SECONDS",
     "PREDEPLOY_MIGRATE_CHECK_ENABLED",
     "READINESS_PYTHON_BIN",
 }
@@ -258,6 +258,10 @@ if len(sys.argv) >= 3 and sys.argv[1] == "-c" and "time.monotonic" in sys.argv[2
         count = 0
     with open(count_file, "w") as fh:
         fh.write(str(count + 1))
+    clock_log = os.environ.get("FAKE_CLOCK_LOG")
+    if clock_log:
+        with open(clock_log, "a") as fh:
+            fh.write(os.path.basename(sys.argv[0]) + "\n")
     start = int(os.environ.get("FAKE_MONOTONIC_START", "0"))
     step = int(os.environ.get("FAKE_MONOTONIC_STEP", "0"))
     print(start + count * step)
@@ -288,6 +292,22 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         path.write_text(script.replace("__PYTHON__", sys.executable))
         path.chmod(0o755)
 
+    def _copy_deploy_harness(self, tmpdir):
+        """Run deploy_dev from a private directory for generated task files.
+
+        ``deploy_dev.sh`` changes into its own directory and historically
+        wrote ``<service>-<tag>.json`` there. Parallel test workers therefore
+        shared those files even though their fake commands and logs were
+        otherwise private. Copying the three files that form the deploy
+        harness keeps the subprocess contract intact while giving every
+        invocation an independent working directory.
+        """
+        deploy_dir = Path(tmpdir) / "deploy"
+        deploy_dir.mkdir()
+        for name in ("deploy_dev.sh", "readiness_poll.sh", "update_task_def.py"):
+            shutil.copy2(DEPLOY_SCRIPT_PATH.parent / name, deploy_dir / name)
+        return deploy_dir / "deploy_dev.sh"
+
     def _run_deploy(
         self,
         tmpdir,
@@ -300,7 +320,9 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         poll_seconds=0,
         max_attempts=150,
         required_matches=3,
+        monotonic_start=0,
         monotonic_step=0,
+        readiness_python_bin=None,
         primary_task_def=NEW_TASK_DEF,
         desired_count="1",
         running_count="1",
@@ -323,6 +345,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         predeploy_enabled=False,
     ):
         tmpdir = Path(tmpdir)
+        deploy_script_path = self._copy_deploy_harness(tmpdir)
         bindir = tmpdir / "bin"
         bindir.mkdir()
         self._write_executable(bindir / "aws", FAKE_AWS)
@@ -336,6 +359,7 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         curl_log = tmpdir / "curl_calls.log"
         curl_count = tmpdir / "curl_count.txt"
         clock_count = tmpdir / "clock_count.txt"
+        clock_log = tmpdir / "clock.log"
         sleep_log = tmpdir / "sleep.log"
         timeout_log = tmpdir / "timeout.log"
 
@@ -347,10 +371,12 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "FAKE_CURL_LOG": str(curl_log),
             "FAKE_CURL_COUNT_FILE": str(curl_count),
             "FAKE_CLOCK_COUNT_FILE": str(clock_count),
+            "FAKE_CLOCK_LOG": str(clock_log),
             "FAKE_SLEEP_LOG": str(sleep_log),
             "FAKE_TIMEOUT_LOG": str(timeout_log),
             "FAKE_SERVICES_STABLE_EXIT": services_stable_exit,
             "FAKE_CURL_RESPONSES": ",".join(responses or [tag, tag, tag]),
+            "FAKE_MONOTONIC_START": str(monotonic_start),
             "FAKE_MONOTONIC_STEP": str(monotonic_step),
             "FAKE_PRIMARY_TASK_DEF": primary_task_def,
             "FAKE_DESIRED_COUNT": desired_count,
@@ -394,9 +420,11 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             )
         if predeploy_enabled:
             env["PREDEPLOY_MIGRATE_CHECK_ENABLED"] = "true"
+        if readiness_python_bin is not None:
+            env["READINESS_PYTHON_BIN"] = readiness_python_bin
 
         result = subprocess.run(
-            ["bash", str(DEPLOY_SCRIPT_PATH), tag, deploy_env],
+            ["bash", str(deploy_script_path), tag, deploy_env],
             env=env,
             capture_output=True,
             text=True,
@@ -408,6 +436,8 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "aws_calls": aws_log.read_text() if aws_log.exists() else "",
             "curl_calls": curl_log.read_text() if curl_log.exists() else "",
             "curl_attempts": int(curl_count.read_text()) if curl_count.exists() else 0,
+            "clock_attempts": int(clock_count.read_text()) if clock_count.exists() else 0,
+            "clock_sources": clock_log.read_text().splitlines() if clock_log.exists() else [],
             "sleep_calls": sleep_log.read_text().splitlines() if sleep_log.exists() else [],
             "timeout_calls": timeout_log.read_text().splitlines() if timeout_log.exists() else [],
         }
@@ -422,7 +452,9 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         poll_seconds="0",
         max_attempts="150",
         required_matches="3",
+        monotonic_start=0,
         monotonic_step=0,
+        readiness_python_bin=None,
     ):
         tmpdir = Path(tmpdir)
         bindir = tmpdir / "bin"
@@ -430,11 +462,13 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self._write_executable(bindir / "aws", FAKE_AWS)
         self._write_executable(bindir / "curl", FAKE_CURL)
         self._write_executable(bindir / "python3", FAKE_PYTHON)
+        self._write_executable(bindir / "python", FAKE_PYTHON)
         self._write_executable(bindir / "sleep", FAKE_SLEEP)
 
         aws_log = tmpdir / "aws_calls.log"
         curl_count = tmpdir / "curl_count.txt"
         clock_count = tmpdir / "clock_count.txt"
+        clock_log = tmpdir / "clock.log"
         sleep_log = tmpdir / "sleep.log"
         action = yaml.safe_load(WAKE_ACTION_PATH.read_text())
 
@@ -445,8 +479,10 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "FAKE_AWS_LOG": str(aws_log),
             "FAKE_CURL_COUNT_FILE": str(curl_count),
             "FAKE_CLOCK_COUNT_FILE": str(clock_count),
+            "FAKE_CLOCK_LOG": str(clock_log),
             "FAKE_SLEEP_LOG": str(sleep_log),
             "FAKE_CURL_RESPONSES": ",".join(responses),
+            "FAKE_MONOTONIC_START": str(monotonic_start),
             "FAKE_MONOTONIC_STEP": str(monotonic_step),
             "GITHUB_ACTION_PATH": str(WAKE_ACTION_PATH.parent),
             "AWS_REGION": "eu-west-1",
@@ -460,6 +496,8 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "MAX_ATTEMPTS": str(max_attempts),
             "REQUIRED_CONSECUTIVE": str(required_matches),
         })
+        if readiness_python_bin is not None:
+            env["READINESS_PYTHON_BIN"] = readiness_python_bin
         result = subprocess.run(
             ["bash", "-c", action["runs"]["steps"][0]["run"]],
             env=env,
@@ -471,6 +509,8 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
             "result": result,
             "aws_calls": aws_log.read_text() if aws_log.exists() else "",
             "curl_attempts": int(curl_count.read_text()) if curl_count.exists() else 0,
+            "clock_attempts": int(clock_count.read_text()) if clock_count.exists() else 0,
+            "clock_sources": clock_log.read_text().splitlines() if clock_log.exists() else [],
             "sleep_calls": sleep_log.read_text().splitlines() if sleep_log.exists() else [],
         }
 
@@ -515,6 +555,114 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
                     f"{aws_calls}"
                 ),
             )
+
+    def test_parallel_deploy_invocations_isolate_files_and_controls(self):
+        """Concurrent callers with the same tag must not share deploy files."""
+        tag = "parallel-shared-tag"
+        ambient_env = {
+            "FAKE_CURL_RESPONSES": "ambient-response",
+            "FAKE_MONOTONIC_START": "9000",
+            "DEPLOY_GRACE_TIMEOUT_SECONDS": "1",
+            "DEPLOY_GRACE_ATTEMPTS": "1",
+            "READINESS_PYTHON_BIN": "missing-readiness-bin",
+            "PREDEPLOY_MIGRATE_CHECK_ENABLED": "true",
+        }
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with patch.dict(os.environ, ambient_env):
+            with (
+                TemporaryDirectory(dir=SCRATCH_ROOT) as first_tmpdir,
+                TemporaryDirectory(dir=SCRATCH_ROOT) as second_tmpdir,
+                ThreadPoolExecutor(max_workers=2) as executor,
+            ):
+                first_future = executor.submit(
+                    self._run_deploy,
+                    first_tmpdir,
+                    tag=tag,
+                    responses=[tag, tag],
+                    timeout_seconds=41,
+                    max_attempts=2,
+                    required_matches=2,
+                    monotonic_start=100,
+                    readiness_python_bin="python",
+                )
+                second_future = executor.submit(
+                    self._run_deploy,
+                    second_tmpdir,
+                    tag=tag,
+                    responses=["stale-response", tag, tag],
+                    timeout_seconds=53,
+                    max_attempts=3,
+                    required_matches=2,
+                    monotonic_start=700,
+                    readiness_python_bin="python3",
+                )
+                first = first_future.result()
+                second = second_future.result()
+
+                self.assertEqual(first["result"].returncode, 0, first["result"].stdout)
+                self.assertEqual(second["result"].returncode, 0, second["result"].stdout)
+                self.assertEqual(first["curl_attempts"], 2)
+                self.assertEqual(second["curl_attempts"], 3)
+                self.assertEqual(first["clock_sources"], ["python"] * first["clock_attempts"])
+                self.assertEqual(second["clock_sources"], ["python3"] * second["clock_attempts"])
+                self.assertIn("at most 41s", first["result"].stdout)
+                self.assertIn("at most 53s", second["result"].stdout)
+                self.assertIn("consecutive=2/2", first["result"].stdout)
+                self.assertIn("consecutive=2/2", second["result"].stdout)
+                self.assertEqual(list(Path(first_tmpdir, "deploy").glob("*.json")), [])
+                self.assertEqual(list(Path(second_tmpdir, "deploy").glob("*.json")), [])
+
+    def test_parallel_wake_action_invocations_isolate_fake_clock_and_controls(self):
+        """Concurrent wake actions must use each invocation's fake settings."""
+        tag = "parallel-wake-tag"
+        ambient_env = {
+            "FAKE_CURL_RESPONSES": "ambient-response",
+            "FAKE_MONOTONIC_START": "9000",
+            "DEPLOY_GRACE_REQUIRED_MATCHES": "99",
+            "READINESS_PYTHON_BIN": "missing-readiness-bin",
+        }
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with patch.dict(os.environ, ambient_env):
+            with (
+                TemporaryDirectory(dir=SCRATCH_ROOT) as first_tmpdir,
+                TemporaryDirectory(dir=SCRATCH_ROOT) as second_tmpdir,
+                ThreadPoolExecutor(max_workers=2) as executor,
+            ):
+                first_future = executor.submit(
+                    self._run_wake_action,
+                    first_tmpdir,
+                    responses=[tag, tag],
+                    expected_text=tag,
+                    timeout_seconds="61",
+                    max_attempts="2",
+                    required_matches="2",
+                    monotonic_start=200,
+                    readiness_python_bin="python",
+                )
+                second_future = executor.submit(
+                    self._run_wake_action,
+                    second_tmpdir,
+                    responses=["stale-response", tag, tag],
+                    expected_text=tag,
+                    timeout_seconds="73",
+                    max_attempts="3",
+                    required_matches="2",
+                    monotonic_start=800,
+                    readiness_python_bin="python3",
+                )
+                first = first_future.result()
+                second = second_future.result()
+
+                self.assertEqual(first["result"].returncode, 0, first["result"].stdout)
+                self.assertEqual(second["result"].returncode, 0, second["result"].stdout)
+                self.assertEqual(first["curl_attempts"], 2)
+                self.assertEqual(second["curl_attempts"], 3)
+                self.assertEqual(first["clock_sources"], ["python"] * first["clock_attempts"])
+                self.assertEqual(second["clock_sources"], ["python3"] * second["clock_attempts"])
+                self.assertIn("at most 61s", first["result"].stdout)
+                self.assertIn("at most 73s", second["result"].stdout)
+                self.assertIn("consecutive=2/2", first["result"].stdout)
+                self.assertIn("consecutive=2/2", second["result"].stdout)
 
     def test_waiter_timeout_requires_stable_tag_and_healthy_new_revision(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)

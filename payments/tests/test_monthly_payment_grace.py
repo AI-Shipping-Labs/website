@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
+from community_base.config.service import set as package_set
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -29,7 +30,6 @@ from accounts.models import TierOverride, User
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
-from integrations.models import IntegrationSetting
 from payments.models import Membership, Tier
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
@@ -450,11 +450,7 @@ class ConfigurationAndCopyTest(GraceBase):
 
     @override_settings(SES_ENABLED=False, DEBUG=False)
     def test_explicit_blank_team_recipient_records_error_and_keeps_member_path(self):
-        IntegrationSetting.objects.create(
-            key="PAYMENT_FAILURE_TEAM_EMAIL",
-            value="",
-            group="stripe",
-        )
+        package_set("PAYMENT_FAILURE_TEAM_EMAIL", "", actor_ref="test:payment-grace")
         self.make_user()
         with patch.object(service, "_audit"):
             grace, _ = service.start_grace_from_failure(

@@ -1,17 +1,17 @@
-"""Build and apply Studio settings export/import payloads (issue #323).
+"""Compatibility serialization for the retired Studio transfer endpoints.
 
-Two pure functions wrapped around ``IntegrationSetting`` and ``SocialApp``:
+Two pure functions wrapping package settings and ``SocialApp``:
 
-- ``build_export()`` — snapshot every known integration key + auth provider
-  row in plaintext, returned as a JSON-serialisable dict with
-  ``format_version: 1``.
+- ``build_export()`` — snapshot package-owned settings and auth providers.
 - ``apply_import(payload)`` — upsert each entry from a previously-exported
   document. Unknown keys / providers are skipped (not rejected) so an export
   from a slightly-different schema version still bootstraps the bulk of a
   fresh environment.
 
-The endpoints in ``studio/views/settings.py`` are thin shells around these
-functions so the logic is straightforward to unit-test without a request.
+The active settings page uses ``community_base.config.service`` directly.
+These helpers remain for callers migrating from the old format; they never
+read the legacy ``IntegrationSetting`` table and package service redaction is
+preserved for secrets.
 """
 
 from __future__ import annotations
@@ -20,9 +20,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 from allauth.socialaccount.models import SocialApp
+from community_base.kernel.redaction import REDACTED
 from django.contrib.sites.models import Site
 
-from integrations.models import IntegrationSetting
+from integrations.config import set_package_override
 from integrations.settings_registry import INTEGRATION_GROUPS
 from studio.services.auth_settings import (
     PROVIDER_META,
@@ -48,17 +49,16 @@ def _known_integration_keys() -> dict[str, dict]:
 def build_export() -> dict:
     """Return the JSON-serialisable settings snapshot.
 
-    Includes every ``IntegrationSetting`` row whose key is registered in
-    ``INTEGRATION_GROUPS`` and every ``SocialApp`` row whose ``provider`` is
-    in ``SUPPORTED_PROVIDERS``. Values are plaintext.
+    Includes every package-registered setting and every ``SocialApp`` row
+    whose ``provider`` is in ``SUPPORTED_PROVIDERS``. Package redaction is
+    preserved for secret values.
     """
-    known_keys = _known_integration_keys()
+    from community_base.config.service import export as package_export
 
-    integration_rows = (
-        IntegrationSetting.objects.filter(key__in=known_keys.keys())
-        .order_by('key')
-        .values_list('key', 'value')
-    )
+    # Package export is the sole source for runtime settings. It returns the
+    # package's ``REDACTED`` marker for secret definitions, so credentials can
+    # never be copied into a downloadable payload.
+    integration_rows = sorted(package_export().items())
     integration_settings = [
         {'key': key, 'value': value} for key, value in integration_rows
     ]
@@ -72,7 +72,10 @@ def build_export() -> dict:
             'provider': provider,
             'name': app.name or PROVIDER_META[provider]['name'],
             'client_id': app.client_id or '',
-            'secret': app.secret or '',
+            # OAuth credentials are outside community-base's settings table,
+            # but this retired compatibility serializer must still obey the
+            # same no-plaintext-export contract.
+            'secret': REDACTED,
         })
 
     exported_at = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
@@ -154,18 +157,34 @@ def apply_import(payload: dict) -> ImportResult:
         meta = known_keys[key]
         if meta.get('requires_restart', False):
             result.restart_required = True
-        _, created = IntegrationSetting.objects.update_or_create(
-            key=key,
-            defaults={
-                'value': value if value is not None else '',
-                'is_secret': meta.get('is_secret', False),
-                'group': meta['group'],
-                'description': meta.get('description', ''),
-            },
-        )
+        normalized_value = value if value is not None else ''
+        if normalized_value == REDACTED:
+            # Redacted secrets are placeholders in an export, not a request
+            # to overwrite or clear the destination credential.
+            continue
+        # Empty entries are a valid way to clear an optional setting in an
+        # export. Package integer coercion intentionally rejects ``None`` and
+        # empty strings, so leave no override in that case.
+        if normalized_value == '':
+            from integrations.config import delete_package_override
+
+            created = False
+            updated = delete_package_override(key)
+        else:
+            from community_base.config.models import Setting
+
+            existed = Setting.objects.filter(key=key).exists()
+            set_package_override(
+                key,
+                normalized_value,
+                actor_ref='settings-import',
+                reason='Imported Studio settings',
+            )
+            created = not existed
+            updated = existed
         if created:
             result.integration_created += 1
-        else:
+        elif updated:
             result.integration_updated += 1
 
     site = Site.objects.get_current()
@@ -180,12 +199,18 @@ def apply_import(payload: dict) -> ImportResult:
             continue
         meta = PROVIDER_META[provider]
         name = entry.get('name') or meta['name']
+        secret = entry.get('secret', '') or ''
+        if secret == REDACTED:
+            # A redacted export must preserve an existing credential. A new
+            # provider gets an empty secret and can be completed in Studio.
+            existing = SocialApp.objects.filter(provider=provider).first()
+            secret = existing.secret if existing else ''
         app, created = SocialApp.objects.update_or_create(
             provider=provider,
             defaults={
                 'name': name,
                 'client_id': entry.get('client_id', '') or '',
-                'secret': entry.get('secret', '') or '',
+                'secret': secret,
             },
         )
         app.sites.add(site)

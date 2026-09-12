@@ -1,3 +1,4 @@
+from community_base.api.registry import urlpatterns as community_api_urlpatterns
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
@@ -35,6 +36,10 @@ urlpatterns = [
     path('api/', include(auth_api_urlpatterns)),
     path('api/', include(email_api_urlpatterns)),
     path('api/', include(notification_api_urlpatterns)),
+    # Package-owned operator API. The registry is populated by the package
+    # apps during django.setup(); mount it under its documented versioned
+    # prefix after app initialization and before the legacy /api surface.
+    path('api/v1/', include((community_api_urlpatterns(), 'community_base_api'))),
     path('api/', include('api.urls')),
     path('member-api/', include('member_api.urls')),
     path('', include(notification_page_urlpatterns)),

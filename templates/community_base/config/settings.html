@@ -1,0 +1,225 @@
+{% extends "studio/base.html" %}
+{% load community_settings %}
+
+{% block title %}Studio - Runtime settings | {{ site_name }}{% endblock %}
+
+{% block studio_content %}
+<div class="space-y-6" data-community-settings>
+  <header>
+    <h1 class="text-2xl font-semibold text-foreground">Runtime settings</h1>
+    <p class="mt-1 text-sm text-muted-foreground">
+      Package managed settings. Values are resolved at runtime without a deploy.
+    </p>
+  </header>
+
+  <div class="sticky top-0 z-20 space-y-2 border-y border-border bg-background/95 py-3 backdrop-blur">
+    <label for="settings-key-filter" class="block text-sm font-medium text-foreground">Filter settings</label>
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <input id="settings-key-filter" type="search" autocomplete="off"
+             placeholder="Search by key, description, or section"
+             data-settings-filter
+             class="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">
+      <button type="button" data-settings-filter-clear
+              class="hidden shrink-0 rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">Clear</button>
+    </div>
+    <p class="text-xs text-muted-foreground" data-settings-filter-status aria-live="polite"></p>
+  </div>
+
+  <nav class="mb-6" aria-label="Settings sections" data-testid="settings-section-nav">
+    <div class="flex gap-2 overflow-x-auto" role="tablist" aria-label="Settings sections">
+      {% for section in settings_sections %}
+        <a href="#{{ section.id }}" id="settings-section-tab-{{ section.id }}" role="tab" aria-controls="{{ section.id }}" aria-selected="false" data-section-nav-item="{{ section.id }}" class="inline-flex whitespace-nowrap rounded-md border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground focus:outline-none focus:ring-2 focus:ring-accent">{{ section.label }}</a>
+      {% endfor %}
+    </div>
+  </nav>
+
+  <div class="space-y-12" data-settings-sections>
+    {% for section in settings_sections %}
+      <section id="{{ section.id }}" class="scroll-mt-32" role="tabpanel" aria-labelledby="settings-section-tab-{{ section.id }}" data-settings-section="{{ section.id }}" data-settings-search-text="{{ section.label }} {{ section.id }} {{ section.description }}" tabindex="-1">
+        <div class="mb-4 border-b border-border pb-3">
+          <h2 class="text-xl font-semibold text-foreground">{{ section.label }}</h2>
+          <p class="mt-1 text-sm text-muted-foreground">{{ section.description }}</p>
+        </div>
+        <div class="space-y-6">
+          {% for provider in section.auth_providers %}
+            <div id="auth-{{ provider.provider }}" data-settings-card data-settings-card-type="auth" data-settings-card-search-text="{{ provider.label }} {{ provider.name }} {{ provider.provider }}" class="rounded-lg border border-border bg-card p-4">
+              <form method="post" action="{% url 'studio_settings_save_auth' provider.provider %}">
+                {% csrf_token %}
+                <div class="flex items-center justify-between gap-3"><h3 class="font-medium text-foreground">{{ provider.label }}</h3><span class="text-xs text-muted-foreground">{% if provider.is_configured %}Configured{% else %}Not configured{% endif %}</span></div>
+                <p class="mt-1 text-xs text-muted-foreground">Callback: {{ provider.callback_url }}</p>
+                <label class="mt-3 block text-sm text-foreground">Client ID<input class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2" name="client_id" value="{{ provider.client_id }}"></label>
+                <label class="mt-3 block text-sm text-foreground">Client secret<input class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2" name="client_secret" type="password" autocomplete="new-password"></label>
+                <button class="mt-3 rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" type="submit">Save {{ provider.name }}</button>
+              </form>
+            </div>
+          {% endfor %}
+          {% for group in section.groups %}
+            <div class="rounded-xl border border-border bg-card p-5" id="integration-{{ group.name }}" data-settings-card data-settings-card-type="integration" data-settings-section="{% if group.name == 'auth' %}auth-integration{% else %}{{ group.name }}{% endif %}" data-settings-card-search-text="{{ group.name }} {{ group.name|title }}">
+              <h3 class="text-lg font-semibold text-foreground" id="group-{{ group.name }}">{{ group.name }}</h3>
+              {% if group.name == "observability" %}<p class="mt-1 text-xs text-muted-foreground" data-settings-restart-hint>Logfire changes apply after restarting the web and worker processes.</p>{% endif %}
+              <form class="mt-4 space-y-5" method="post" action="{% url 'community_base_settings_save_group' group.name %}">
+                {% csrf_token %}
+                <input type="hidden" name="settings_section" value="{{ section.id }}">
+                {% for setting in group.settings %}
+                  <div class="space-y-1" data-settings-field data-field-key="{{ setting.key }}" data-settings-field-search-text="{{ setting.key }} {{ setting.label }} {{ setting.description }}">
+                    <div class="flex items-center justify-between gap-3"><label class="text-sm font-medium text-foreground" for="id_{{ setting.key }}">{{ setting.label }}</label><span class="rounded-full border border-border px-2 py-0.5 text-xs text-muted-foreground" data-source-badge="{% if setting.source == 'environment' %}env{% else %}{{ setting.source }}{% endif %}" data-settings-source="{{ setting.key }}">Source: {{ setting.source }}</span>{% if setting|setting_requires_restart %}<span class="rounded-full border border-amber-500/40 px-2 py-0.5 text-xs text-amber-300" data-settings-restart="{{ setting.key }}">Restart required</span>{% endif %}</div>
+                    {% if setting.secret %}<input class="w-full rounded-md border border-border bg-background px-3 py-2" id="id_{{ setting.key }}" name="{{ setting.key }}" type="password" autocomplete="new-password">{% elif setting.value_type == "bool" %}<input id="id_{{ setting.key }}" name="{{ setting.key }}" type="checkbox"{% if setting.value %} checked{% endif %}>{% elif setting.multiline or setting.value_type == "json" or setting.value_type == "list" %}<textarea class="w-full rounded-md border border-border bg-background px-3 py-2" id="id_{{ setting.key }}" name="{{ setting.key }}">{{ setting.display_value }}</textarea>{% else %}<input class="w-full rounded-md border border-border bg-background px-3 py-2" id="id_{{ setting.key }}" name="{{ setting.key }}" value="{{ setting.display_value }}"{% if setting.is_email %} type="email"{% endif %}>{% endif %}
+                    {% if setting.source == "db" %}<button type="button" data-clear-override="{{ setting.key }}" aria-label="Clear override for {{ setting.key }}" onclick="clearOverride(this, '{{ setting.key }}')" class="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">Clear</button>{% endif %}
+                    <p class="text-xs text-muted-foreground">{{ setting.description }}</p>
+                    {% if setting.docs_url %}<a class="text-xs text-accent underline" href="{{ setting.docs_url|community_docs_url }}">Documentation</a>{% endif %}
+                  </div>
+                {% endfor %}
+                <button class="rounded-md bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" type="submit">Save {{ group.name }}</button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      </section>
+    {% empty %}
+      <p class="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">No runtime settings have been declared.</p>
+    {% endfor %}
+  </div>
+
+  <div class="hidden rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground" data-settings-filter-empty role="status">No settings match your filter. Clear the filter to return to the active section.</div>
+
+  <section class="rounded-xl border border-border bg-card p-5" aria-labelledby="settings-transfer">
+    <h2 class="text-lg font-semibold text-foreground" id="settings-transfer">Import and export</h2>
+    <p class="mt-3"><a class="text-sm text-accent underline" href="{% url 'community_base_settings_export' %}">Export JSON</a></p>
+    <form class="mt-4 space-y-3" method="post" action="{% url 'community_base_settings_import' %}">
+      {% csrf_token %}
+      {{ import_form.as_p }}
+      <button class="rounded-md border border-border px-4 py-2 text-sm font-medium" type="submit">Import JSON</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+<script>
+(function () {
+  function sections() {
+    return Array.prototype.slice.call(
+      document.querySelectorAll('[data-settings-sections] > [data-settings-section]')
+    );
+  }
+
+  function defaultSection() {
+    var first = sections()[0];
+    return first ? first.getAttribute('data-settings-section') : 'auth';
+  }
+
+  function sectionFromHash() {
+    var hash = window.location.hash.substring(1);
+    if (!hash) return defaultSection();
+    var target = document.getElementById(hash);
+    var section = target && target.closest('[data-settings-sections] > [data-settings-section]');
+    if (section) {
+      return section.getAttribute('data-settings-section');
+    }
+    return defaultSection();
+  }
+
+  function updateNavigation(active) {
+    document.querySelectorAll('[data-section-nav-item]').forEach(function (link) {
+      var selected = link.getAttribute('data-section-nav-item') === active;
+      link.setAttribute('aria-current', selected ? 'page' : 'false');
+      link.setAttribute('aria-selected', selected ? 'true' : 'false');
+      link.classList.toggle('bg-muted', selected);
+      link.classList.toggle('text-foreground', selected);
+      link.classList.toggle('text-muted-foreground', !selected);
+    });
+  }
+
+  function setActiveSection(active) {
+    sections().forEach(function (section) {
+      section.hidden = section.getAttribute('data-settings-section') !== active;
+      if (!section.hidden) {
+        section.querySelectorAll('[data-settings-card], [data-settings-field]').forEach(function (item) {
+          item.hidden = false;
+        });
+      }
+    });
+    var empty = document.querySelector('[data-settings-filter-empty]');
+    if (empty) empty.classList.add('hidden');
+    var status = document.querySelector('[data-settings-filter-status]');
+    if (status) status.textContent = '';
+    updateNavigation(active);
+  }
+
+  window.clearOverride = function (button, key) {
+    var form = button.closest('form');
+    if (!form) return;
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'clear_override';
+    input.value = key;
+    form.appendChild(input);
+    form.submit();
+  };
+
+  function applyFilter() {
+    var input = document.querySelector('[data-settings-filter]');
+    if (!input) return;
+    var query = input.value.trim().toLowerCase();
+    var clear = document.querySelector('[data-settings-filter-clear]');
+    var empty = document.querySelector('[data-settings-filter-empty]');
+    if (clear) clear.classList.toggle('hidden', !query);
+
+    if (!query) {
+      setActiveSection(sectionFromHash());
+      return;
+    }
+
+    var matchingSections = 0;
+    sections().forEach(function (section) {
+      var fields = section.querySelectorAll('[data-settings-field]');
+      var sectionText = (section.dataset.settingsSearchText || '').toLowerCase();
+      var sectionMatches = sectionText.indexOf(query) !== -1;
+      var cards = section.querySelectorAll('[data-settings-card]');
+      var sectionHasMatches = false;
+      cards.forEach(function (card) {
+        var cardText = (card.dataset.settingsCardSearchText || '').toLowerCase();
+        var cardMatches = cardText.indexOf(query) !== -1;
+        var visibleFields = 0;
+        card.querySelectorAll('[data-settings-field]').forEach(function (field) {
+          var fieldText = (field.dataset.settingsFieldSearchText || '').toLowerCase();
+          var fieldMatches = fieldText.indexOf(query) !== -1;
+          field.hidden = !(sectionMatches || cardMatches || fieldMatches);
+          if (!field.hidden) visibleFields += 1;
+        });
+        var hasFields = card.querySelectorAll('[data-settings-field]').length > 0;
+        var visible = sectionMatches || cardMatches || (hasFields && visibleFields > 0);
+        card.hidden = !visible;
+        if (visible) sectionHasMatches = true;
+      });
+      section.hidden = !sectionHasMatches;
+      if (sectionHasMatches) matchingSections += 1;
+    });
+    if (empty) empty.classList.toggle('hidden', matchingSections > 0);
+    updateNavigation(matchingSections ? sectionFromHash() : '');
+  }
+
+  window.addEventListener('hashchange', function () {
+    var input = document.querySelector('[data-settings-filter]');
+    if (input && input.value.trim()) input.value = '';
+    setActiveSection(sectionFromHash());
+  });
+
+  document.addEventListener('DOMContentLoaded', function () {
+    var input = document.querySelector('[data-settings-filter]');
+    if (!input) return;
+    input.addEventListener('input', applyFilter);
+    var clear = document.querySelector('[data-settings-filter-clear]');
+    if (clear) {
+      clear.addEventListener('click', function () {
+        input.value = '';
+        input.focus();
+        applyFilter();
+      });
+    }
+    setActiveSection(sectionFromHash());
+  });
+})();
+</script>
+{% endblock %}

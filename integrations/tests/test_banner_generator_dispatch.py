@@ -10,12 +10,13 @@ import os
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.test import TestCase
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Article, Course, Download, Project, Workshop
 from events.models import Event, EventSeries
-from integrations.models import IntegrationSetting
 from integrations.services.banner_generator import BannerGeneratorError
 from integrations.services.banner_generator.dispatch import (
     enqueue_force,
@@ -61,10 +62,7 @@ class _BannerGeneratorCacheCleanupMixin:
 
 
 def _set_setting(key, value):
-    IntegrationSetting.objects.update_or_create(
-        key=key,
-        defaults={'value': value, 'is_secret': False, 'group': 'banner_generator', 'description': ''},
-    )
+    package_set(key, value, actor_ref='test:banner-generator')
 
 
 def _configure_banner_generator():
@@ -235,7 +233,7 @@ class EnqueueIfMissingTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     @patch(DISPATCH_PATCH)
     def test_skips_when_banner_generator_not_configured(self, mock_async):
-        IntegrationSetting.objects.filter(
+        Setting.objects.filter(
             key='BANNER_GENERATOR_FUNCTION_URL',
         ).delete()
         from integrations.config import clear_config_cache
@@ -378,7 +376,7 @@ class EnqueueForceTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     @patch(DISPATCH_PATCH)
     def test_skips_when_not_configured(self, mock_async):
-        IntegrationSetting.objects.filter(
+        Setting.objects.filter(
             key='BANNER_GENERATOR_AUTH_TOKEN',
         ).delete()
         from integrations.config import clear_config_cache
@@ -434,7 +432,7 @@ class S3KeyTest(_BannerGeneratorCacheCleanupMixin, TestCase):
 
     def test_cdn_url_empty_when_cdn_base_unset(self):
         from django.test import override_settings
-        IntegrationSetting.objects.filter(key='CONTENT_CDN_BASE').delete()
+        Setting.objects.filter(key='CONTENT_CDN_BASE').delete()
         from integrations.config import clear_config_cache
         clear_config_cache()
         # The default Django setting falls back to a non-empty value
@@ -468,22 +466,8 @@ class DeleteGeneratedBannerObjectTest(_BannerGeneratorCacheCleanupMixin, TestCas
 
     @patch('integrations.services.banner_generator.tasks.boto3.client')
     def test_uses_configured_s3_credentials_when_present(self, mock_client):
-        IntegrationSetting.objects.update_or_create(
-            key='AWS_ACCESS_KEY_ID',
-            defaults={
-                'value': 'AKIA_TEST',
-                'group': 'aws',
-                'is_secret': True,
-            },
-        )
-        IntegrationSetting.objects.update_or_create(
-            key='AWS_SECRET_ACCESS_KEY',
-            defaults={
-                'value': 'SECRET_TEST',
-                'group': 'aws',
-                'is_secret': True,
-            },
-        )
+        package_set('AWS_ACCESS_KEY_ID', 'AKIA_TEST', actor_ref='test:banner-generator')
+        package_set('AWS_SECRET_ACCESS_KEY', 'SECRET_TEST', actor_ref='test:banner-generator')
         from integrations.config import clear_config_cache
         clear_config_cache()
 
@@ -518,7 +502,7 @@ class DeleteGeneratedBannerObjectTest(_BannerGeneratorCacheCleanupMixin, TestCas
 
     @patch('integrations.services.banner_generator.tasks.boto3.client')
     def test_missing_bucket_config_logs_warning_and_skips_delete(self, mock_client):
-        IntegrationSetting.objects.filter(key='AWS_S3_CONTENT_BUCKET').delete()
+        Setting.objects.filter(key='AWS_S3_CONTENT_BUCKET').delete()
         from integrations.config import clear_config_cache
         clear_config_cache()
         from django.test import override_settings

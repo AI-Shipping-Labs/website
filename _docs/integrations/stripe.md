@@ -52,7 +52,7 @@ failure.
 1. In the Stripe Dashboard, click "Roll key" on the secret key row.
    Stripe shows the new `sk_..._...` once. Copy it.
 2. Update this setting via Studio (Integration settings > Stripe >
-   `STRIPE_SECRET_KEY`) or via `POST /api/integrations/settings`.
+   `STRIPE_SECRET_KEY`) or via `PUT /api/v1/settings/<key>`.
 3. Between the moment Stripe issues the new key and the moment you save
    it here, outbound Stripe API calls fail with `invalid_api_key`.
    In-progress browser sessions on the Stripe Checkout page already
@@ -153,7 +153,7 @@ Rotation: Safe to rotate.
 1. In the Stripe Dashboard, click "Roll secret" on the endpoint.
 2. Stripe shows a new `whsec_...`. Copy it.
 3. Update this setting via Studio (Integration settings > Stripe >
-   `STRIPE_WEBHOOK_SECRET`) or via `POST /api/integrations/settings`.
+   `STRIPE_WEBHOOK_SECRET`) or via `PUT /api/v1/settings/<key>`.
 4. During the window between Stripe showing the new secret and you
    saving it here, webhook signature checks fail and Stripe will retry.
    Total outage window is typically 10-30 seconds if you move quickly.

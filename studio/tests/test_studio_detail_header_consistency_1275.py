@@ -46,8 +46,6 @@ SECTION_ONLY = (
     "sync/_sync_repo_card.html",
     "tier_overrides.html",
     "imports/list.html",
-    "settings/_integration_card.html",
-    "settings/_auth_card.html",
     "users/list.html",
 )
 
@@ -97,7 +95,7 @@ class StudioDetailHeaderInventoryTest(SimpleTestCase):
 
     def test_inventory_is_exactly_thirty_primary_and_thirty_seven_unique(self):
         self.assertEqual(len(PRIMARY), 30)
-        self.assertEqual(len(set(PRIMARY) | set(SECTION_ONLY)), 37)
+        self.assertEqual(len(set(PRIMARY) | set(SECTION_ONLY)), 35)
         for relative in (*PRIMARY, *SECTION_ONLY):
             self.assertTrue((TEMPLATES / relative).is_file(), relative)
 
@@ -237,8 +235,6 @@ class StudioDetailHeaderInventoryTest(SimpleTestCase):
             "sync/_sync_repo_card.html": ("repo.repo_name", "Sync now"),
             "tier_overrides.html": ("Active overrides", "active-overrides-count"),
             "imports/list.html": ("Scheduled imports", "studio_import_schedule_toggle"),
-            "settings/_integration_card.html": ("group.label", "Configured"),
-            "settings/_auth_card.html": ("provider.label", "Configured"),
             "users/list.html": (
                 "Membership breakdown",
                 "Active Stripe subscription vs. override grant",

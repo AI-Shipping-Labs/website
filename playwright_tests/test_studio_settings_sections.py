@@ -1,7 +1,6 @@
 """Playwright coverage for Studio settings section navigation and filtering."""
 
 import os
-import re
 
 import pytest
 from playwright.sync_api import expect
@@ -23,28 +22,46 @@ pytestmark = pytest.mark.local_only
 
 
 def _seed_settings():
-    from integrations.models import IntegrationSetting
+    from community_base.config.models import Setting
+    from community_base.config.registry import groups
+    from community_base.config.service import set as package_set
 
-    IntegrationSetting.objects.all().delete()
-    IntegrationSetting.objects.create(
-        key="SLACK_BOT_TOKEN",
-        value="xoxb-existing",
-        is_secret=True,
-        group="slack",
-    )
-    IntegrationSetting.objects.create(
-        key="SLACK_ENVIRONMENT",
-        value="production",
-        is_secret=False,
-        group="slack",
-    )
+    slack_definitions = groups()["slack"]
+    Setting.objects.filter(key__in={item.key for item in slack_definitions}).delete()
+    package_set("SLACK_BOT_TOKEN", "xoxb-existing", actor_ref="test:1287")
+    for item in slack_definitions:
+        if item.secret or item.optional:
+            continue
+        if item.value_type == "bool":
+            value = False
+        elif item.key.endswith("_URL"):
+            value = f"https://example.com/{item.key.lower()}"
+        else:
+            value = f"test-{item.key.lower()}"
+        if item.key == "SLACK_ENVIRONMENT":
+            value = "production"
+        package_set(item.key, value, actor_ref="test:1287")
+    for key, value in {
+        "STRIPE_CUSTOMER_PORTAL_URL": "https://example.com/portal",
+        "STRIPE_SECRET_KEY": "sk_section_existing",
+        "STRIPE_DASHBOARD_ACCOUNT_ID": "acct_section_existing",
+        "STRIPE_WEBHOOK_SECRET": "whsec_section_existing",
+    }.items():
+        package_set(key, value, actor_ref="test:1287")
     connection.close()
 
 
 def _read_integration_values():
-    from integrations.models import IntegrationSetting
+    from community_base.config.models import Setting
+    from community_base.config.service import get as package_get
+    from community_base.config.service import runtime
 
-    values = dict(IntegrationSetting.objects.values_list("key", "value"))
+    connection.close()
+    runtime.reset()
+    values = {
+        key: package_get(key)
+        for key in Setting.objects.values_list("key", flat=True)
+    }
     connection.close()
     return values
 
@@ -137,7 +154,7 @@ class TestStudioSettingsSections:
         page.wait_for_load_state("domcontentloaded")
 
         body_text = page.locator("body").inner_text()
-        assert re.search(r"Saved \d+ settings in Stripe\.", body_text)
+        assert "Saved stripe settings." in body_text
         assert page.locator('[data-settings-section="payments"]').is_visible()
         assert page.locator("#integration-stripe").is_visible()
         assert page.locator("#integration-slack").is_hidden()

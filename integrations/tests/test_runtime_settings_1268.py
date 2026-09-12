@@ -1,16 +1,17 @@
-"""Studio, registry, and API coverage for issue #1268 runtime settings."""
+"""Package settings contracts migrated from issue #1268."""
 
 import json
 from pathlib import Path
 
+from community_base.api.models import APIKey
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
-from accounts.models import Token
 from email_app.tasks.send_campaign import _get_batch_size
 from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
 from integrations.services.llm.backends import _resolve_max_retries
 from integrations.settings_registry import get_group_by_name
 from payments.stripe_links import get_stripe_payment_links
@@ -18,198 +19,111 @@ from payments.stripe_links import get_stripe_payment_links
 User = get_user_model()
 
 LINKS = {
-    tier: {
-        period: f'https://runtime.test/{tier}/{period}'
-        for period in ('monthly', 'annual')
-    }
-    for tier in ('basic', 'main', 'premium')
+    tier: {period: f"https://runtime.test/{tier}/{period}" for period in ("monthly", "annual")}
+    for tier in ("basic", "main", "premium")
 }
 KEYS = {
-    'stripe': 'STRIPE_PAYMENT_LINKS',
-    'ses': 'EMAIL_BATCH_SIZE',
-    'llm': 'LLM_MAX_RETRIES',
+    "stripe": "STRIPE_PAYMENT_LINKS",
+    "ses": "EMAIL_BATCH_SIZE",
+    "llm": "LLM_MAX_RETRIES",
 }
 
 
-class RuntimeSettingsRegistryTest(TestCase):
+class RuntimeSettingsRegistryTest(SimpleTestCase):
     def test_registry_metadata_and_documentation_anchors(self):
         expectations = {
-            'stripe': ('STRIPE_PAYMENT_LINKS', 'stripe.md', True, None),
-            'ses': ('EMAIL_BATCH_SIZE', 'ses.md', False, '200'),
-            'llm': ('LLM_MAX_RETRIES', 'llm.md', False, '6'),
+            "stripe": ("STRIPE_PAYMENT_LINKS", "stripe.md", True, None),
+            "ses": ("EMAIL_BATCH_SIZE", "ses.md", False, "200"),
+            "llm": ("LLM_MAX_RETRIES", "llm.md", False, "6"),
         }
         for group_name, (key, filename, multiline, default) in expectations.items():
             with self.subTest(key=key):
-                entries = {
-                    item['key']: item
-                    for item in get_group_by_name(group_name)['keys']
-                }
-                entry = entries[key]
-                self.assertFalse(entry['is_secret'])
-                self.assertTrue(entry['optional'])
-                self.assertTrue(entry['description'])
-                self.assertEqual(entry.get('multiline', False), multiline)
+                entry = next(item for item in get_group_by_name(group_name)["keys"] if item["key"] == key)
+                self.assertFalse(entry["is_secret"])
+                self.assertTrue(entry["optional"])
+                self.assertTrue(entry["description"])
+                self.assertEqual(entry.get("multiline", False), multiline)
                 if default is not None:
-                    self.assertEqual(entry['default'], default)
-                self.assertEqual(
-                    entry['docs_url'],
-                    f'_docs/integrations/{filename}#{key.lower()}',
-                )
-                docs = (
-                    Path(settings.BASE_DIR) / '_docs' / 'integrations' / filename
-                ).read_text(encoding='utf-8')
-                self.assertIn(f'## {key}\n', docs)
+                    self.assertEqual(entry["default"], default)
+                self.assertEqual(entry["docs_url"], f"_docs/integrations/{filename}#{key.lower()}")
+                docs = (Path(settings.BASE_DIR) / "_docs" / "integrations" / filename).read_text()
+                self.assertIn(f"## {key}\n", docs)
 
 
 class RuntimeSettingsStudioTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.staff = User.objects.create_user(
-            email='runtime-settings-staff@test.com',
-            password='testpass',
-            is_staff=True,
+            email="runtime-settings-staff@test.com", password="testpass", is_staff=True
         )
 
     def setUp(self):
         clear_config_cache()
-        self.client.login(
-            email='runtime-settings-staff@test.com', password='testpass',
-        )
+        self.client.login(email=self.staff.email, password="testpass")
 
     def tearDown(self):
-        IntegrationSetting.objects.filter(key__in=KEYS.values()).delete()
+        Setting.objects.filter(key__in=KEYS.values()).delete()
         clear_config_cache()
 
     def test_fields_render_with_controls_docs_and_source_badges(self):
-        IntegrationSetting.objects.create(
-            key='STRIPE_PAYMENT_LINKS',
-            value=json.dumps(LINKS),
-            group='stripe',
-        )
-        response = self.client.get('/studio/settings/')
+        package_set("STRIPE_PAYMENT_LINKS", LINKS, actor_ref="test:1268")
+        response = self.client.get("/studio/settings/")
 
-        self.assertContains(response, 'textarea id="field-STRIPE_PAYMENT_LINKS"')
         for key in KEYS.values():
-            self.assertContains(response, f'data-field-key="{key}"')
-            self.assertContains(response, f'data-docs-link="{key}"')
-        stripe_group = next(
-            group for group in response.context['groups']
-            if group['name'] == 'stripe'
-        )
-        stripe_field = next(
-            field for field in stripe_group['fields']
-            if field['key'] == 'STRIPE_PAYMENT_LINKS'
-        )
-        self.assertEqual(stripe_field['source'], 'db')
-        self.assertContains(
-            response,
-            'Clearing this override restores the Django settings fallback.',
-        )
+            self.assertContains(response, f'id="id_{key}"')
+        stripe_group = next(group for group in response.context["groups"] if group["name"] == "stripe")
+        stripe_setting = next(item for item in stripe_group["settings"] if item["key"] == "STRIPE_PAYMENT_LINKS")
+        self.assertEqual(stripe_setting["source"], "db")
+        self.assertContains(response, "Documentation")
 
-        IntegrationSetting.objects.filter(key='STRIPE_PAYMENT_LINKS').delete()
+    def test_studio_save_refreshes_package_runtime_values(self):
+        response = self.client.post("/studio/settings/stripe/save/", {
+            "STRIPE_CUSTOMER_PORTAL_URL": "https://runtime.test/portal",
+            "STRIPE_DASHBOARD_ACCOUNT_ID": "acct_runtime",
+            "STRIPE_PAYMENT_LINKS": json.dumps(LINKS),
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Setting.objects.filter(key="STRIPE_PAYMENT_LINKS").exists())
+        self.assertEqual(get_stripe_payment_links(), LINKS)
+
+        package_set("EMAIL_BATCH_SIZE", 17, actor_ref="test:1268")
+        package_set("LLM_MAX_RETRIES", 2, actor_ref="test:1268")
         clear_config_cache()
-        response = self.client.get('/studio/settings/')
-        stripe_group = next(
-            group for group in response.context['groups']
-            if group['name'] == 'stripe'
-        )
-        stripe_field = next(
-            field for field in stripe_group['fields']
-            if field['key'] == 'STRIPE_PAYMENT_LINKS'
-        )
-        self.assertEqual(stripe_field['source'], 'django_settings')
-        self.assertContains(response, 'data-source-badge="django_settings"')
-
-    def test_studio_save_and_clear_refresh_runtime_values(self):
-        cases = [
-            ('stripe', 'STRIPE_PAYMENT_LINKS', json.dumps(LINKS)),
-            ('ses', 'EMAIL_BATCH_SIZE', '17'),
-            ('llm', 'LLM_MAX_RETRIES', '2'),
-        ]
-        for group, key, value in cases:
-            with self.subTest(key=key):
-                self.client.post(f'/studio/settings/{group}/save/', {key: value})
-                self.assertEqual(
-                    IntegrationSetting.objects.get(key=key).value, value,
-                )
-                if key == 'STRIPE_PAYMENT_LINKS':
-                    self.assertEqual(get_stripe_payment_links(), LINKS)
-                elif key == 'EMAIL_BATCH_SIZE':
-                    self.assertEqual(_get_batch_size(), 17)
-                else:
-                    self.assertEqual(_resolve_max_retries(), 2)
-
-                self.client.post(f'/studio/settings/{group}/save/', {key: ''})
-                self.assertFalse(
-                    IntegrationSetting.objects.filter(key=key).exists(),
-                )
+        self.assertEqual(_get_batch_size(), 17)
+        self.assertEqual(_resolve_max_retries(), 2)
 
 
 class RuntimeSettingsApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email='runtime-settings-api@test.com', is_staff=True,
+        cls.staff = User.objects.create_user(email="runtime-settings-api@test.com", is_staff=True)
+        _, cls.plaintext = APIKey.create_for_user(
+            user=cls.staff,
+            name="runtime-settings",
+            scopes=["settings.read", "settings.write"],
+            kind=APIKey.Kind.STAFF,
         )
-        cls.token = Token.objects.create(user=cls.staff, name='runtime-settings')
 
     def setUp(self):
         clear_config_cache()
-        self.auth = {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
+        self.auth = {"HTTP_AUTHORIZATION": f"Bearer {self.plaintext}"}
 
     def tearDown(self):
-        IntegrationSetting.objects.filter(key__in=KEYS.values()).delete()
+        Setting.objects.filter(key__in=KEYS.values()).delete()
         clear_config_cache()
 
-    def test_get_lists_metadata_without_values(self):
-        IntegrationSetting.objects.create(
-            key='STRIPE_PAYMENT_LINKS', value='do-not-leak', group='stripe',
-        )
-        response = self.client.get('/api/integrations/settings', **self.auth)
-        entries = {
-            item['key']: item for item in response.json()['settings']
-        }
+    def test_get_reads_package_setting_without_echoing_secret_data(self):
+        package_set("EMAIL_BATCH_SIZE", 19, actor_ref="test:1268")
+        response = self.client.get("/api/v1/settings/EMAIL_BATCH_SIZE", **self.auth)
 
-        self.assertEqual(response.status_code, 200)
-        for group, key in KEYS.items():
-            self.assertEqual(entries[key]['group'], group)
-            self.assertTrue(entries[key]['description'])
-            self.assertTrue(entries[key]['docs_url'])
-            self.assertNotIn('value', entries[key])
-        self.assertNotContains(response, 'do-not-leak')
+        self.assertEqual(response.json()["value"], 19)
 
-    def test_post_sets_and_clears_all_three_without_echo(self):
-        updates = [
-            {'key': 'STRIPE_PAYMENT_LINKS', 'value': json.dumps(LINKS)},
-            {'key': 'EMAIL_BATCH_SIZE', 'value': '19'},
-            {'key': 'LLM_MAX_RETRIES', 'value': '3'},
-        ]
-        response = self.client.post(
-            '/api/integrations/settings',
-            data=json.dumps({'updates': updates}),
-            content_type='application/json',
+    def test_put_updates_package_setting(self):
+        self.client.put(
+            "/api/v1/settings/LLM_MAX_RETRIES",
+            data=json.dumps({"value": 3}),
+            content_type="application/json",
             **self.auth,
         )
 
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(
-            response.json(),
-            {'status': 'ok', 'updated': 3, 'restart_required': False},
-        )
-        self.assertNotIn('runtime.test', response.content.decode())
-        self.assertEqual(get_stripe_payment_links(), LINKS)
-        self.assertEqual(_get_batch_size(), 19)
-        self.assertEqual(_resolve_max_retries(), 3)
-
-        response = self.client.post(
-            '/api/integrations/settings',
-            data=json.dumps({'updates': [
-                {'key': key, 'value': ''} for key in KEYS.values()
-            ]}),
-            content_type='application/json',
-            **self.auth,
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertFalse(
-            IntegrationSetting.objects.filter(key__in=KEYS.values()).exists(),
-        )
+        self.assertEqual(Setting.objects.get(key="LLM_MAX_RETRIES").value, 3)

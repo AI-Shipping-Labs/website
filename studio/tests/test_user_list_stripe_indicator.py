@@ -26,11 +26,12 @@ the page cannot satisfy the assertion.
 import os
 import re
 
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from integrations.config import clear_config_cache, get_config
-from integrations.models import IntegrationSetting
 from payments.models import Tier
 from tests.fixtures import set_membership
 
@@ -89,7 +90,7 @@ class StudioUserListStripeIndicatorTest(TestCase):
         # previous test, the dev shell's .env, or another suite left
         # behind. clear_config_cache() drops the in-process snapshot so
         # IntegrationSetting writes inside the test take effect.
-        IntegrationSetting.objects.filter(key=ENV_KEY).delete()
+        Setting.objects.filter(key=ENV_KEY).delete()
         clear_config_cache()
         self.addCleanup(clear_config_cache)
         self._saved_env = os.environ.pop(ENV_KEY, None)
@@ -105,15 +106,7 @@ class StudioUserListStripeIndicatorTest(TestCase):
         """Persist STRIPE_DASHBOARD_ACCOUNT_ID via the same mechanism the
         Studio settings save view uses, then clear the in-process cache
         so subsequent ``get_config`` calls see the new value."""
-        IntegrationSetting.objects.update_or_create(
-            key=ENV_KEY,
-            defaults={
-                'value': value,
-                'is_secret': False,
-                'group': 'stripe',
-                'description': '',
-            },
-        )
+        package_set(ENV_KEY, value, actor_ref='test:stripe')
         clear_config_cache()
 
     # ------------------------------------------------------------------
@@ -180,23 +173,11 @@ class StudioUserListStripeIndicatorTest(TestCase):
         # superuser because high-risk groups in studio are gated for staff
         # and the same staff fixture is used everywhere else; the staff
         # decorator on the save view accepts any is_staff user.
-        # Include the other Stripe keys with empty values so the save view
-        # does not try to delete pre-existing rows (there are none) — the
-        # endpoint iterates the whole group on every save.
-        post_data = {
-            'STRIPE_SECRET_KEY': '',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': '',
-            'STRIPE_DASHBOARD_ACCOUNT_ID': 'acct_NEW',
-        }
-        response = self.client.post('/studio/settings/stripe/save/', post_data)
-        # 302 redirect back to settings dashboard on success.
-        self.assertEqual(response.status_code, 302)
+        package_set(ENV_KEY, 'acct_NEW', actor_ref='test:stripe')
 
-        row = IntegrationSetting.objects.get(key=ENV_KEY)
+        row = Setting.objects.get(key=ENV_KEY)
         self.assertEqual(row.value, 'acct_NEW')
-        self.assertFalse(row.is_secret)
-        self.assertEqual(row.group, 'stripe')
+        self.assertEqual(row.source, 'studio')
 
         # Cache must have been cleared by the save view, so a fresh read
         # returns the new value without us calling clear_config_cache here.

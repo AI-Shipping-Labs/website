@@ -1,11 +1,13 @@
 from datetime import timedelta
 from unittest.mock import patch
 
+from community_base.config.models import Setting
+from community_base.config.service import get as package_get
+from community_base.config.service import set as package_set
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
 from integrations.services.calendly_api import (
     CalendlyAPIError,
     refresh_access_token,
@@ -36,9 +38,7 @@ class CalendlyAPITest(TestCase):
             'CALENDLY_OAUTH_CLIENT_ID': 'client',
             'CALENDLY_OAUTH_CLIENT_SECRET': 'secret',
         }.items():
-            IntegrationSetting.objects.create(
-                key=key, value=value, group='calendly', is_secret='TOKEN' in key,
-            )
+            package_set(key, value, actor_ref='test:calendly')
         clear_config_cache()
 
     def tearDown(self):
@@ -52,7 +52,7 @@ class CalendlyAPITest(TestCase):
         })
         self.assertEqual(refresh_access_token(), 'new-access')
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_REFRESH_TOKEN').value,
+            package_get('CALENDLY_REFRESH_TOKEN'),
             'new-refresh',
         )
 
@@ -63,7 +63,7 @@ class CalendlyAPITest(TestCase):
         })
         self.assertEqual(refresh_access_token(), 'new-access')
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_REFRESH_TOKEN').value,
+            package_get('CALENDLY_REFRESH_TOKEN'),
             'old-refresh',
         )
 
@@ -74,11 +74,11 @@ class CalendlyAPITest(TestCase):
                 require_new_refresh_token=True,
             )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_ACCESS_TOKEN').value,
+            package_get('CALENDLY_ACCESS_TOKEN'),
             'old-access',
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_REFRESH_TOKEN').value,
+            package_get('CALENDLY_REFRESH_TOKEN'),
             'old-refresh',
         )
 
@@ -88,9 +88,9 @@ class CalendlyAPITest(TestCase):
             'access_token': 'next-access', 'refresh_token': 'next-refresh',
             'expires_in': 7200,
         })
-        original = IntegrationSetting.objects.select_for_update
+        original = Setting.objects.select_for_update
         with patch.object(
-            IntegrationSetting.objects, 'select_for_update', wraps=original,
+            Setting.objects, 'select_for_update', wraps=original,
         ) as lock:
             refresh_access_token()
         self.assertGreaterEqual(lock.call_count, 1)
@@ -100,7 +100,7 @@ class CalendlyAPITest(TestCase):
         post.return_value = Response(401, {'error': 'invalid_grant'})
         with self.assertRaises(CalendlyAPIError):
             refresh_access_token()
-        self.assertFalse(IntegrationSetting.objects.filter(
+        self.assertFalse(Setting.objects.filter(
             key='CALENDLY_ACCESS_TOKEN',
         ).exists())
 

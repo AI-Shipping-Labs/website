@@ -71,7 +71,7 @@ Rotation: Safe to rotate.
    transition window.
 2. Update both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` via
    Studio (Integration settings > Email (SES)) or via
-   `POST /api/integrations/settings`.
+   `PUT /api/v1/settings/<key>`.
 3. Once the platform is using the new pair, delete the old key from
    the same IAM console screen.
 4. Window of impact: between the moment you start the rotation and the
@@ -92,7 +92,7 @@ https://console.aws.amazon.com/ses/home#/account
 
 Purpose: AWS secret key paired with `AWS_ACCESS_KEY_ID`. Used by
 boto3 to sign every SES (and S3) request. The platform stores it as
-a secret-marked `IntegrationSetting`, so it is masked in Studio after
+the package secret store, so it is masked in Studio after
 saving.
 
 Without it: Same failure mode as a missing `AWS_ACCESS_KEY_ID` — boto3

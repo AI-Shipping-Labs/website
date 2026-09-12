@@ -96,7 +96,7 @@ assertions stay clean; this is the issue #532 testing kill-switch.)
 
 Where to find it: Studio > Settings > Integration Settings > S3
 Content Images > `S3_ENABLED`, or
-`GET /api/integrations/settings` (search for the `s3_content` group).
+`GET /api/v1/settings/<key>` (search for the `s3_content` group).
 Toggle it on and save. No redeploy needed.
 
 Prereqs:

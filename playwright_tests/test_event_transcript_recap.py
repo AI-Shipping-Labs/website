@@ -84,7 +84,14 @@ class TestStudioTranscriptPanel:
     ):
         _clear_events()
         create_staff_user('admin@test.com')
-        event = _create_past_event('transcript-studio-stored')
+        archive_url = (
+            'https://private-recordings.s3.eu-central-1.amazonaws.com/'
+            'recordings/2026/transcript-studio-stored.vtt'
+        )
+        event = _create_past_event(
+            'transcript-studio-stored',
+            transcript_s3_url=archive_url,
+        )
 
         context = auth_context(browser, 'admin@test.com')
         page = context.new_page()
@@ -97,6 +104,50 @@ class TestStudioTranscriptPanel:
         status = page.get_by_test_id('transcript-status')
         expect(status).to_be_visible()
         expect(status).to_contain_text('Transcript stored')
+
+        preview = page.get_by_test_id('studio-transcript-preview')
+        summary = preview.locator('summary')
+        expect(preview).not_to_have_attribute('open', '')
+
+        # Reach the disclosure through the same keyboard sequence an operator
+        # uses so :focus-visible, not programmatic focus, drives the ring.
+        for _ in range(100):
+            page.keyboard.press('Tab')
+            if summary.evaluate('(node) => node === document.activeElement'):
+                break
+        else:
+            pytest.fail('Preview transcript was not reachable by keyboard')
+        expect(summary).to_be_focused()
+        assert summary.evaluate('(node) => node.matches(":focus-visible")')
+        focus_style = summary.evaluate(
+            '(node) => ({'
+            'outlineStyle: getComputedStyle(node).outlineStyle, '
+            'boxShadow: getComputedStyle(node).boxShadow'
+            '})'
+        )
+        assert (
+            focus_style['outlineStyle'] != 'none'
+            or focus_style['boxShadow'] != 'none'
+        )
+        summary.press('Enter')
+        expect(preview).to_have_attribute('open', '')
+        body = page.get_by_test_id('studio-transcript-body')
+        expect(body).to_have_text('A stored transcript of the call.')
+        body_style = body.evaluate(
+            '(node) => ({'
+            'overflowY: getComputedStyle(node).overflowY, '
+            'maxHeight: getComputedStyle(node).maxHeight'
+            '})'
+        )
+        assert body_style['overflowY'] == 'auto'
+        assert body_style['maxHeight'].endswith('px')
+        assert float(body_style['maxHeight'][:-2]) > 0
+        expect(page.get_by_text(archive_url, exact=True)).to_have_count(0)
+        expect(
+            page.get_by_text('https://zoom.us/rec/download/e2e.vtt', exact=True),
+        ).to_have_count(0)
+        summary.press('Enter')
+        expect(preview).not_to_have_attribute('open', '')
 
         notes = page.get_by_test_id('event-recap-notes')
         expect(notes).to_be_visible()
@@ -116,29 +167,57 @@ class TestStudioTranscriptPanel:
 
         _clear_events()
         create_staff_user('admin@test.com')
-        event = _create_past_event(
-            'transcript-studio-unavailable',
-            transcript_text='',
-            transcript_url='',
-            transcript_unavailable_at=tz.now(),
-            recap_notes='',
-        )
+        events = [
+            (
+                _create_past_event(
+                    'transcript-studio-unavailable',
+                    transcript_text='',
+                    transcript_url='',
+                    transcript_unavailable_at=tz.now(),
+                    recap_notes='',
+                ),
+                'Transcript unavailable',
+            ),
+            (
+                _create_past_event(
+                    'transcript-studio-waiting',
+                    transcript_text='',
+                    transcript_url='https://zoom.us/rec/download/waiting.vtt',
+                    recap_notes='',
+                ),
+                'Transcript URL captured',
+            ),
+            (
+                _create_past_event(
+                    'transcript-studio-absent',
+                    transcript_text='',
+                    transcript_url='',
+                    recap_notes='',
+                ),
+                'No transcript captured yet',
+            ),
+        ]
 
         context = auth_context(browser, 'admin@test.com')
         page = context.new_page()
-        page.goto(
-            f'{django_server}/studio/events/{event.pk}/edit',
-            wait_until='domcontentloaded',
-        )
-        _dismiss_analytics_prompt(page)
+        for event, expected_status in events:
+            page.goto(
+                f'{django_server}/studio/events/{event.pk}/edit',
+                wait_until='domcontentloaded',
+            )
+            _dismiss_analytics_prompt(page)
 
-        status = page.get_by_test_id('transcript-status')
-        expect(status).to_contain_text('Transcript unavailable')
-        expect(
-            page.get_by_test_id('recap-draft-status'),
-        ).to_contain_text('No recap draft yet')
-        # The sync action stays available as the explicit recovery path.
-        expect(page.get_by_test_id('sync-transcript-button')).to_be_visible()
+            expect(page.get_by_test_id('transcript-status')).to_contain_text(
+                expected_status,
+            )
+            expect(
+                page.get_by_test_id('recap-draft-status'),
+            ).to_contain_text('No recap draft yet')
+            expect(
+                page.get_by_test_id('studio-transcript-preview'),
+            ).to_have_count(0)
+            # The sync action stays available as the explicit recovery path.
+            expect(page.get_by_test_id('sync-transcript-button')).to_be_visible()
         context.close()
 
 
@@ -149,12 +228,17 @@ class TestPublicRecapAfterAutoDraft:
         self, django_server, browser,
     ):
         _clear_events()
+        archive_url = (
+            'https://private-recordings.s3.eu-central-1.amazonaws.com/'
+            'recordings/2026/transcript-public-recap.vtt'
+        )
         event = _create_past_event(
             'transcript-public-recap',
             recording_s3_url=(
                 'https://private-recordings.s3.amazonaws.com/recordings/'
                 '2026/transcript-public-recap.mp4'
             ),
+            transcript_s3_url=archive_url,
         )
 
         page = browser.new_page()
@@ -170,6 +254,10 @@ class TestPublicRecapAfterAutoDraft:
         ).to_be_visible()
         expect(page.get_by_test_id('sync-transcript-button')).to_have_count(0)
         expect(page.locator('a[href^="/studio/"]')).to_have_count(0)
+        expect(page.get_by_text(archive_url, exact=True)).to_have_count(0)
+        expect(
+            page.get_by_text('https://zoom.us/rec/download/e2e.vtt', exact=True),
+        ).to_have_count(0)
         page.close()
 
     @browser_journey

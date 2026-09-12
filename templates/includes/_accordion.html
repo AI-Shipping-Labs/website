@@ -17,6 +17,7 @@ Parameters
 summary: text shown in the summary line (required).
 testid: optional data-testid for the outer <details>.
 body_template: optional path to a template to render inside the body.
+body_testid: optional data-testid propagated to supporting body templates.
 body: optional raw HTML/text (rendered with |safe) for simple bodies.
 body_class: optional Tailwind classes for the body wrapper. Default
     `mt-1 px-4 pb-4`. Pass blank to omit padding entirely (e.g. when
@@ -35,7 +36,7 @@ Notes
 <details class="rounded-lg border border-border bg-card{% if details_extra_class %} {{ details_extra_class }}{% endif %}"
          {% if testid %}data-testid="{{ testid }}"{% endif %}
          {% if open %}open{% endif %}>
-  <summary class="cursor-pointer list-none flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-base font-medium text-foreground hover:text-accent transition-colors min-h-[44px] rounded-lg">
+  <summary class="cursor-pointer list-none flex items-center gap-3 px-3 py-2.5 sm:px-4 sm:py-3 text-base font-medium text-foreground hover:text-accent transition-colors min-h-[44px] rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2">
     <span class="flex-1">{{ summary }}</span>
     <i data-lucide="chevron-down" class="accordion-chevron h-5 w-5 sm:h-4 sm:w-4 transition-transform duration-200 flex-shrink-0"></i>
   </summary>

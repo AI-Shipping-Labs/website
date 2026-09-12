@@ -2,4 +2,5 @@
 Body partial for the workshop/event recording transcript accordion.
 Rendered inside `templates/includes/_accordion.html` via `body_template`.
 Expects `transcript_text` in the parent context (propagated by `{% include %}`).
-{% endcomment %}<div class="max-h-96 overflow-y-auto whitespace-pre-wrap text-sm text-muted-foreground">{{ transcript_text }}</div>
+Accepts optional `body_testid` for a consumer-owned body selector.
+{% endcomment %}<div class="max-h-96 overflow-y-auto whitespace-pre-wrap text-sm text-muted-foreground"{% if body_testid %} data-testid="{{ body_testid }}"{% endif %}>{{ transcript_text }}</div>

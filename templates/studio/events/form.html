@@ -727,6 +727,9 @@
         No transcript captured yet.
       {% endif %}
     </p>
+    {% if event.transcript_text %}
+      {% include "includes/_accordion.html" with summary="Preview transcript" testid="studio-transcript-preview" body_template="events/_recording_transcript_body.html" body_testid="studio-transcript-body" transcript_text=event.transcript_text details_extra_class="mb-3" %}
+    {% endif %}
     <p class="text-xs text-muted-foreground mb-3" data-testid="recap-draft-status">
       {% if event.recap_notes %}Recap draft present in recap notes.{% else %}No recap draft yet.{% endif %}
     </p>

@@ -5610,6 +5610,7 @@
                       ],
                       "timezone": "Europe/Berlin",
                       "title": "Office Hours: May 5",
+                      "transcript_s3_url": "",
                       "transcript_status": "none",
                       "transcript_text": "",
                       "transcript_url": "",
@@ -5881,6 +5882,7 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_s3_url": "",
                   "transcript_status": "none",
                   "transcript_text": "",
                   "transcript_url": "",
@@ -6181,6 +6183,7 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_s3_url": "",
                   "transcript_status": "none",
                   "transcript_text": "",
                   "transcript_url": "",
@@ -6433,6 +6436,7 @@
                   ],
                   "timezone": "Europe/Berlin",
                   "title": "Office Hours: May 5",
+                  "transcript_s3_url": "",
                   "transcript_status": "none",
                   "transcript_text": "",
                   "transcript_url": "",
@@ -6874,7 +6878,7 @@
     },
     "/api/events/{slug}/sync-transcript": {
       "post": {
-        "description": "Operator recovery path for the transcript pipeline (issue #1597). Re-lists the meeting's recordings via the Zoom API to pick up a transcript VTT (and MP4 download URL) the webhook missed, then re-enqueues the transcript task, which downloads and parses the VTT, stores transcript_text, and chains the LLM recap draft (written to recap_notes only when recap_notes is empty). This endpoint is never gated by RECORDING_TRANSCRIPT_INGEST_ENABLED \u2014 it exists so a transcript can be backfilled by hand with automation off. Optional body {\"redraft\": true} regenerates the recap draft even when recap_notes is non-empty (explicit opt-in; 422 llm_not_configured when the LLM provider is missing). Allowed for synced GitHub events: the transcript and recap draft are operational state, not content owned by the source repo.",
+        "description": "Operator recovery path for the transcript pipeline (issue #1597). Re-lists the meeting's recordings via the Zoom API to pick up a transcript VTT (and MP4 download URL) the webhook missed, then re-enqueues the transcript task, which archives the raw VTT, stores transcript_text and transcript_s3_url, and chains the LLM recap draft (written to recap_notes only when recap_notes is empty). This endpoint is never gated by RECORDING_TRANSCRIPT_INGEST_ENABLED \u2014 it exists so a transcript can be backfilled by hand with automation off. Optional body {\"redraft\": true} regenerates the recap draft even when recap_notes is non-empty (explicit opt-in; 422 llm_not_configured when the LLM provider is missing). Allowed for synced GitHub events: the transcript and recap draft are operational state, not content owned by the source repo.",
         "parameters": [
           {
             "in": "path",

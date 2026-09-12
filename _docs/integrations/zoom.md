@@ -448,6 +448,25 @@ This toggle never gates the explicit operator recovery path — see
 `POST /api/events/<slug>/sync-transcript` below — so a transcript can
 always be backfilled by hand with automation off.
 
+### Private VTT archive and recovery
+
+Each downloaded Zoom VTT is stored as exact bytes in the private recordings
+bucket at `recordings/{year}/{slug}.vtt` with content type
+`text/vtt; charset=utf-8`. `Event.transcript_s3_url` stores the canonical
+object locator; it is read-only in the staff event API and is never rendered
+on public or member pages. The parsed `Event.transcript_text` remains the
+source for Studio preview and recap drafting.
+
+Use `process_event_transcripts --slug SLUG` or `--all-missing` to preview
+historical incomplete rows. The command is a side-effect-free dry run unless
+`--commit` is supplied; commit mode uses the same Zoom refresh, recording
+upload lease, and transcript task as webhook and Studio recovery.
+
+The schema migration is additive, so older application versions ignore the
+new column. Reversing the migration removes only the stored locator: it does
+not delete VTT objects, parsed transcript text, or recap notes. Inventory any
+orphaned `.vtt` objects before a schema rollback if they must later be removed.
+
 ### `RECORDING_RECAP_AUTO_DRAFT_ENABLED`
 
 Studio settings key (S3 Recordings group), default `true`. When on, a

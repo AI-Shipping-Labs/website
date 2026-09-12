@@ -46,6 +46,7 @@ class StudioTranscriptPanelTest(TestCase):
         self.assertContains(response, 'data-testid="transcript-status"')
         self.assertContains(response, 'No recap draft yet.')
         self.assertContains(response, 'data-testid="sync-transcript-button"')
+        self.assertNotContains(response, 'data-testid="studio-transcript-preview"')
 
     def test_panel_shows_stored_status_and_recap_presence(self):
         Event.objects.filter(pk=self.event.pk).update(
@@ -55,6 +56,9 @@ class StudioTranscriptPanelTest(TestCase):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         self.assertContains(response, 'Transcript stored (')
         self.assertContains(response, 'Recap draft present in recap notes.')
+        self.assertContains(response, 'data-testid="studio-transcript-preview"')
+        self.assertContains(response, 'data-testid="studio-transcript-body"')
+        self.assertContains(response, 'A stored transcript body.')
         # The drafted markdown is editable in the existing recap notes box.
         self.assertContains(response, '## Drafted recap')
 
@@ -68,6 +72,7 @@ class StudioTranscriptPanelTest(TestCase):
             'Transcript unavailable — Zoom has no transcript for this '
             'meeting.',
         )
+        self.assertNotContains(response, 'data-testid="studio-transcript-preview"')
 
     def test_panel_shows_waiting_status(self):
         Event.objects.filter(pk=self.event.pk).update(
@@ -78,6 +83,7 @@ class StudioTranscriptPanelTest(TestCase):
             response,
             'Transcript URL captured — download pending or retrying.',
         )
+        self.assertNotContains(response, 'data-testid="studio-transcript-preview"')
 
 
 class StudioSyncTranscriptActionTest(TestCase):

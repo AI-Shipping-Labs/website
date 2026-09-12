@@ -9,7 +9,8 @@ Flow:
    the WEBVTT header, cue numbers, timestamps and inline tags; collapse
    the consecutive duplicate caption lines Zoom's rolling captions
    produce).
-3. Store the parsed text on ``Event.transcript_text``.
+3. Archive the exact VTT bytes in the private recordings bucket and store
+   both ``Event.transcript_text`` and ``Event.transcript_s3_url``.
 4. Chain the recap auto-draft when its gates allow (issue #1597).
 
 Retry model: Zoom can deliver ``recording.completed`` before the VTT is
@@ -19,14 +20,20 @@ nothing counts as a not-ready attempt (recorded on
 django-q2 retries with backoff. When ``TRANSCRIPT_MAX_ATTEMPTS`` is
 reached the event is marked unavailable instead — the terminal
 no-transcript state — and recap drafting is skipped. The task is
-idempotent: a stored transcript short-circuits straight to the recap
-step, so webhook replays and django-q2 retries are safe.
+idempotent: a transcript with both durable forms short-circuits straight
+to the recap step, so webhook replays and django-q2 retries are safe.
 """
 
 import logging
 import re
 
 import requests
+
+from jobs.tasks.recordings_s3 import (
+    build_transcript_s3_key,
+    get_recordings_s3_config,
+    upload_transcript_vtt,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +50,14 @@ class TranscriptNotReady(Exception):
     """Raised when the VTT is not (yet) available; django-q2 retries."""
 
 
+class TranscriptArchiveNotReady(Exception):
+    """Raised when existing text cannot yet be paired with its raw archive."""
+
+
+class TranscriptArchiveError(Exception):
+    """Raised with a bounded message when private VTT archival fails."""
+
+
 def parse_vtt_to_text(raw):
     """Parse a WebVTT document into readable plain text.
 
@@ -54,6 +69,9 @@ def parse_vtt_to_text(raw):
     first-seen order otherwise. Blank lines and cue boundaries vanish, so
     the result is one caption line per line of text.
     """
+    if isinstance(raw, bytes):
+        raw = raw.decode('utf-8-sig', errors='replace')
+
     lines = []
     in_note = False
     for raw_line in raw.splitlines():
@@ -102,14 +120,31 @@ def _build_authenticated_download_url(download_url):
 
 
 def _download_vtt(download_url):
-    """Fetch the VTT document and return it as text. Raises on HTTP errors."""
+    """Fetch the VTT document and return its exact bytes."""
     response = requests.get(
         _build_authenticated_download_url(download_url),
         timeout=TRANSCRIPT_HTTP_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
-    response.encoding = response.encoding or 'utf-8'
-    return response.text
+    return response.content
+
+
+def _archive_vtt(event, raw_vtt):
+    """Store the raw VTT at its deterministic private recordings key."""
+    config = get_recordings_s3_config()
+    if not config.bucket:
+        raise TranscriptArchiveError('Recordings S3 bucket is not configured')
+    raw_bytes = raw_vtt if isinstance(raw_vtt, bytes) else raw_vtt.encode('utf-8')
+    try:
+        return upload_transcript_vtt(
+            raw_bytes,
+            config,
+            build_transcript_s3_key(event),
+        )
+    except Exception:
+        raise TranscriptArchiveError(
+            f'VTT archival failed for event {event.id}',
+        ) from None
 
 
 def _handle_not_ready(event, reason):
@@ -176,7 +211,7 @@ def transcribe_recording(event_id, redraft=False):
         logger.error('Event %s not found, skipping transcript capture', event_id)
         return {'status': 'error', 'message': f'Event {event_id} not found'}
 
-    if event.transcript_text:
+    if event.transcript_text and event.transcript_s3_url:
         logger.info(
             'Transcript already stored for event "%s" (id=%s)',
             event.title, event.id,
@@ -200,11 +235,19 @@ def transcribe_recording(event_id, redraft=False):
 
     # Step 2: fetch + parse, or run the retry/terminal machinery.
     if not event.transcript_url:
+        if event.transcript_text:
+            raise TranscriptArchiveNotReady(
+                f'VTT archive source not ready for event {event.id}',
+            )
         return _handle_not_ready(event, 'no_transcript_url')
 
     try:
         raw_vtt = _download_vtt(event.transcript_url)
     except requests.RequestException as exc:
+        if event.transcript_text:
+            raise TranscriptArchiveNotReady(
+                f'VTT archive source not ready for event {event.id}',
+            ) from None
         status_code = getattr(exc.response, 'status_code', None)
         reason = (
             f'download_failed_{status_code}'
@@ -213,15 +256,33 @@ def transcribe_recording(event_id, redraft=False):
         )
         return _handle_not_ready(event, reason)
 
-    transcript_text = parse_vtt_to_text(raw_vtt)
-    if not transcript_text:
+    parsed_vtt_text = parse_vtt_to_text(raw_vtt)
+    if not parsed_vtt_text:
+        if event.transcript_text:
+            raise TranscriptArchiveNotReady(
+                f'VTT archive source not ready for event {event.id}',
+            )
         # A parse that yields nothing cannot be fixed by storing it; count
         # it as a not-ready attempt so the retry budget still applies.
         return _handle_not_ready(event, 'empty_parse')
+    transcript_text = event.transcript_text or parsed_vtt_text
 
-    event.transcript_text = transcript_text
-    event.transcript_fetch_attempts = 0
-    event.save(update_fields=['transcript_text', 'transcript_fetch_attempts', 'updated_at'])
+    # Keep #1597's parsed text durable even if the new archive write fails.
+    # A retry then fills only the missing archive without replacing the text.
+    text_update_fields = []
+    if not event.transcript_text:
+        event.transcript_text = transcript_text
+        text_update_fields.append('transcript_text')
+    if event.transcript_fetch_attempts:
+        event.transcript_fetch_attempts = 0
+        text_update_fields.append('transcript_fetch_attempts')
+    if text_update_fields:
+        text_update_fields.append('updated_at')
+        event.save(update_fields=text_update_fields)
+
+    if not event.transcript_s3_url:
+        event.transcript_s3_url = _archive_vtt(event, raw_vtt)
+        event.save(update_fields=['transcript_s3_url', 'updated_at'])
     logger.info(
         'Stored %d characters of transcript text for event "%s" (id=%s)',
         len(transcript_text), event.title, event.id,

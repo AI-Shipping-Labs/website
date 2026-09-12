@@ -379,6 +379,35 @@ class CapacityConfigurationTests(SimpleTestCase):
                 )
             )
 
+    def test_collect_only_claims_neither_worktree_guard_nor_capacity(self):
+        class WorktreeGuardShouldNotBeUsed:
+            @classmethod
+            def for_current_worktree(cls):
+                raise AssertionError("collect-only must not claim the worktree guard")
+
+        class CapacityShouldNotBeUsed:
+            @classmethod
+            def for_current_worktree(cls, requested_slots):
+                raise AssertionError(
+                    f"collect-only must not claim {requested_slots} capacity slots"
+                )
+
+        config = SimpleNamespace(
+            option=SimpleNamespace(numprocesses=4, collectonly=True)
+        )
+        with (
+            mock.patch.object(
+                conftest, "PlaywrightWorktreeGuard", WorktreeGuardShouldNotBeUsed
+            ),
+            mock.patch.object(
+                conftest, "LocalPlaywrightCapacity", CapacityShouldNotBeUsed
+            ),
+        ):
+            conftest._claim_local_playwright_admission(config)
+
+        self.assertFalse(hasattr(config, "_playwright_worktree_guard"))
+        self.assertFalse(hasattr(config, "_playwright_local_capacity"))
+
     def test_same_worktree_guard_is_claimed_before_capacity_wait(self):
         events = []
         with (

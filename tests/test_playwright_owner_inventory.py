@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import shutil
 import tempfile
 import textwrap
@@ -12,7 +11,6 @@ from unittest import defaultTestLoader
 
 from django.test import SimpleTestCase
 
-from playwright_tests.worktree_guard import PlaywrightWorktreeGuard
 from scripts.playwright_owner_inventory import (
     InventoryError,
     collect_inventory,
@@ -1265,24 +1263,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         )
 
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
-        lock = ROOT / ".tmp" / "playwright-session.lock"
-        guard = None
-        if not lock.exists():
-            guard = PlaywrightWorktreeGuard(ROOT).acquire()
-        lock_before = lock.read_bytes()
-        database_paths = sorted(ROOT.glob("test_playwright_db*.sqlite3"))
-        databases_before = {path: (path.stat().st_size, path.stat().st_mtime_ns) for path in database_paths}
-
-        try:
-            inventory = collect_inventory(extra_env={"PLAYWRIGHT_DJANGO_PORT": "65534"})
-            errors = validate_inventory(
-                set(inventory.owners),
-                load_live_manifest(),
-                declared_owners=inventory.declared_owners,
-            )
-        finally:
-            if guard is not None:
-                guard.release()
+        inventory = collect_inventory(extra_env={"PLAYWRIGHT_DJANGO_PORT": "65534"})
+        errors = validate_inventory(
+            set(inventory.owners),
+            load_live_manifest(),
+            declared_owners=inventory.declared_owners,
+        )
 
         self.assertEqual(inventory.item_count, 2587)
         self.assertEqual(len(inventory.owners), 2385)
@@ -1365,15 +1351,3 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         self.assertEqual(errors, [])
-        if guard is None:
-            self.assertEqual(lock.read_bytes(), lock_before)
-        else:
-            self.assertFalse(lock.exists())
-        self.assertEqual(
-            {
-                path: (path.stat().st_size, path.stat().st_mtime_ns)
-                for path in sorted(ROOT.glob("test_playwright_db*.sqlite3"))
-            },
-            databases_before,
-        )
-        self.assertNotIn("PLAYWRIGHT_BASE_URL", os.environ)

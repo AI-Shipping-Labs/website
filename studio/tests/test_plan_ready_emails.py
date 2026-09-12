@@ -1,13 +1,13 @@
 """Studio bulk plan-ready email action tests (issue #1055)."""
 
 import datetime
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     PLAN_READY_EMAIL_STATUS_FAILED,
@@ -114,9 +114,7 @@ class StudioPlanReadyEmailTest(TestCase):
         self.assertContains(response, 'Failed')
         self.assertContains(response, 'SES timeout')
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_post_sends_eligible_and_redirects_with_summary(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_post_sends_eligible_and_redirects_with_summary(self):
         eligible = Plan.objects.create(member=self.member, sprint=self.sprint)
         sent = Plan.objects.create(member=self.other, sprint=self.sprint)
         PlanReadyEmailLog.objects.create(
@@ -137,6 +135,7 @@ class StudioPlanReadyEmailTest(TestCase):
         )
         eligible.refresh_from_db()
         self.assertIsNotNone(eligible.shared_at)
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=eligible.member,

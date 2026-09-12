@@ -8,12 +8,12 @@ do not duplicate it here.
 """
 
 import datetime
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import Plan, PlanReadyEmailLog, Sprint, SprintEnrollment
 
@@ -229,10 +229,7 @@ class SprintAddMemberSubmitTest(TestCase):
             msg=f'Expected skipped-email flash, got {flash_texts!r}',
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_post_checked_ready_email_sends_and_logs(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
-
+    def test_post_checked_ready_email_sends_and_logs(self):
         response = self.client.post(
             f'/studio/sprints/{self.sprint.pk}/add-member',
             {
@@ -253,6 +250,7 @@ class SprintAddMemberSubmitTest(TestCase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
             1,

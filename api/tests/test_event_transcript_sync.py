@@ -52,6 +52,10 @@ class EventTranscriptSyncApiTest(TestCase):
     def test_get_includes_transcript_fields_and_derived_status(self):
         Event.objects.filter(pk=self.event.pk).update(
             transcript_text='A stored transcript.',
+            transcript_s3_url=(
+                'https://private-recordings.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-api-event.vtt'
+            ),
         )
         response = self.client.get(
             f'/api/events/{self.event.slug}',
@@ -63,7 +67,32 @@ class EventTranscriptSyncApiTest(TestCase):
             'https://zoom.us/rec/download/api.vtt',
         )
         self.assertEqual(body['transcript_text'], 'A stored transcript.')
+        self.assertEqual(
+            body['transcript_s3_url'],
+            'https://private-recordings.s3.eu-central-1.amazonaws.com/'
+            'recordings/2026/transcript-api-event.vtt',
+        )
         self.assertEqual(body['transcript_status'], 'stored')
+
+    def test_archive_url_is_read_only(self):
+        Event.objects.filter(pk=self.event.pk).update(
+            origin='api',
+            source_repo='',
+            source_path='',
+        )
+        response = self.client.patch(
+            f'/api/events/{self.event.slug}',
+            data=json.dumps({
+                'transcript_s3_url': 'https://attacker.example/raw.vtt',
+            }),
+            content_type='application/json',
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()['code'], 'read_only_field')
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.transcript_s3_url, '')
 
     def test_get_reports_unavailable_after_terminal_marker(self):
         Event.objects.filter(pk=self.event.pk).update(
@@ -134,6 +163,10 @@ class EventTranscriptSyncApiTest(TestCase):
     def test_sync_noop_when_transcript_already_stored(self, mock_q_async):
         Event.objects.filter(pk=self.event.pk).update(
             transcript_text='Already stored.',
+            transcript_s3_url=(
+                'https://private-recordings.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-api-event.vtt'
+            ),
         )
         response = self.client.post(
             f'/api/events/{self.event.slug}/sync-transcript',
@@ -146,6 +179,44 @@ class EventTranscriptSyncApiTest(TestCase):
         self.assertIsNone(body['task_id'])
         self.assertEqual(body['transcript_status'], 'stored')
         mock_q_async.assert_not_called()
+
+    @patch(
+        'api.views.events.refresh_transcript_from_zoom',
+        return_value={'refreshed': True, 'transcript_url': False},
+    )
+    @patch('jobs.tasks.helpers.q_async_task', return_value='archive-task')
+    def test_sync_recovers_text_only_row_without_clobbering_durable_content(
+        self, mock_q_async, mock_refresh,
+    ):
+        Event.objects.filter(pk=self.event.pk).update(
+            transcript_text='Keep the durable transcript.',
+            transcript_s3_url='',
+            recap_notes='Keep the operator recap.',
+        )
+
+        response = self.client.post(
+            f'/api/events/{self.event.slug}/sync-transcript',
+            data=json.dumps({}),
+            content_type='application/json',
+            **self._auth(),
+        )
+
+        body = response.json()
+        self.assertTrue(body['transcript_queued'])
+        self.assertEqual(body['task_id'], 'archive-task')
+        self.assertEqual(mock_refresh.call_count, 1)
+        self.assertEqual(mock_q_async.call_count, 1)
+        self.assertEqual(
+            mock_q_async.call_args.args[0],
+            'jobs.tasks.recording_transcript.transcribe_recording',
+        )
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.transcript_text,
+            'Keep the durable transcript.',
+        )
+        self.assertEqual(self.event.recap_notes, 'Keep the operator recap.')
+        self.assertEqual(self.event.transcript_s3_url, '')
 
     @patch('jobs.tasks.helpers.q_async_task')
     def test_sync_backfills_missed_vtt_via_zoom_relist(self, mock_q_async):

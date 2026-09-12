@@ -105,6 +105,7 @@ READ_ONLY_FIELDS = {
     "source_path",
     "source_commit",
     "content_id",
+    "transcript_s3_url",
 }
 
 WRITABLE_FIELDS = {
@@ -251,6 +252,7 @@ _EVENT_EXAMPLE = {
     "recording_upload_status": "idle",
     "transcript_url": "",
     "transcript_text": "",
+    "transcript_s3_url": "",
     "transcript_status": "none",
     "timestamps": [
         {
@@ -359,6 +361,7 @@ def serialize_event(event):
         # derived: stored / waiting / unavailable / none.
         "transcript_url": event.transcript_url or "",
         "transcript_text": event.transcript_text or "",
+        "transcript_s3_url": event.transcript_s3_url or "",
         "transcript_status": transcript_status(event),
         "timestamps": event.timestamps or [],
         "materials": event.materials or [],
@@ -1937,8 +1940,9 @@ def event_notify_recap_ready(request, slug):
                 "#1597). Re-lists the meeting's recordings via the Zoom API "
                 "to pick up a transcript VTT (and MP4 download URL) the "
                 "webhook missed, then re-enqueues the transcript task, "
-                "which downloads and parses the VTT, stores transcript_text, "
-                "and chains the LLM recap draft (written to recap_notes only "
+                "which archives the raw VTT, stores transcript_text and "
+                "transcript_s3_url, and chains the LLM recap draft (written "
+                "to recap_notes only "
                 "when recap_notes is empty). This endpoint is never gated by "
                 "RECORDING_TRANSCRIPT_INGEST_ENABLED — it exists so a "
                 "transcript can be backfilled by hand with automation off. "
@@ -2100,7 +2104,7 @@ def event_sync_transcript(request, slug):
     task_id = None
     recap_queued = None
     needs_transcript = (
-        not event.transcript_text
+        (not event.transcript_text or not event.transcript_s3_url)
         and event.transcript_unavailable_at is None
     )
     if needs_transcript or redraft:

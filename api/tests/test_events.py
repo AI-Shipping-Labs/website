@@ -211,6 +211,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "recording_upload_status",
                 "transcript_url",
                 "transcript_text",
+                "transcript_s3_url",
                 "transcript_status",
                 "timestamps",
                 "materials",
@@ -672,7 +673,14 @@ class EventsCreateTest(EventsApiTestBase):
 
     def test_create_rejects_read_only_source_fields(self):
         before = Event.objects.count()
-        for field in ("origin", "source_repo", "source_path", "source_commit", "content_id"):
+        for field in (
+            "origin",
+            "source_repo",
+            "source_path",
+            "source_commit",
+            "content_id",
+            "transcript_s3_url",
+        ):
             with self.subTest(field=field):
                 payload = {
                     "title": f"Read Only {field}",

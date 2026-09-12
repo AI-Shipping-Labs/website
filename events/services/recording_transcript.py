@@ -132,8 +132,8 @@ def refresh_transcript_from_zoom(event):
     an idle recording pipeline. Writes:
 
     - ``transcript_url``: the ``audio_transcript`` download URL, refreshed
-      whenever Zoom reports one and the text is not stored yet (freshly
-      signed URLs beat stale ones). A URL arriving for an event marked
+      whenever Zoom reports one and text or its raw archive is missing
+      (freshly signed URLs beat stale ones). A URL arriving for an event marked
       unavailable also clears that marker and the attempt counter.
     - ``recording_zoom_download_url`` + upload enqueue: only when the event
       has no S3 recording and no stored download URL, mirroring the
@@ -162,7 +162,11 @@ def refresh_transcript_from_zoom(event):
     refreshed = {'refreshed': True, 'transcript_url': False,
                  'recording_download_url': False, 'upload_queued': False}
 
-    if transcript_url and not event.transcript_text:
+    # Text-only rows from #1597 still need the source URL so the raw VTT can
+    # be archived without replacing their durable parsed text.
+    if transcript_url and (
+        not event.transcript_text or not event.transcript_s3_url
+    ):
         if transcript_url != event.transcript_url:
             event.transcript_url = transcript_url
             update_fields.append('transcript_url')

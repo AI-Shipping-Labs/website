@@ -9,6 +9,7 @@ from integrations.config import get_config
 
 DEFAULT_RECORDINGS_REGION = 'eu-central-1'
 RECORDING_CONTENT_TYPE = 'video/mp4'
+TRANSCRIPT_CONTENT_TYPE = 'text/vtt; charset=utf-8'
 
 
 @dataclass(frozen=True)
@@ -45,6 +46,10 @@ def build_recording_s3_key(event):
     return f'recordings/{event.start_datetime.year}/{event.slug}.mp4'
 
 
+def build_transcript_s3_key(event):
+    return f'recordings/{event.start_datetime.year}/{event.slug}.vtt'
+
+
 def build_recording_s3_url(bucket, region, key):
     return f'https://{bucket}.s3.{region}.amazonaws.com/{key}'
 
@@ -59,6 +64,18 @@ def upload_recording_mp4(file_path, config, key):
         ExtraArgs={
             'ContentType': RECORDING_CONTENT_TYPE,
         },
+    )
+    return build_recording_s3_url(config.bucket, config.region, key)
+
+
+def upload_transcript_vtt(raw_vtt, config, key):
+    """Upload exact VTT bytes to the private recordings bucket."""
+    s3_client = get_recordings_s3_client(config)
+    s3_client.put_object(
+        Bucket=config.bucket,
+        Key=key,
+        Body=raw_vtt,
+        ContentType=TRANSCRIPT_CONTENT_TYPE,
     )
     return build_recording_s3_url(config.bucket, config.region, key)
 

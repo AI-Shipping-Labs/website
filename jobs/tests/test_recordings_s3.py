@@ -13,9 +13,11 @@ from jobs.tasks.recordings_s3 import (
     build_recording_presigned_url,
     build_recording_s3_key,
     build_recording_s3_url,
+    build_transcript_s3_key,
     extract_s3_key,
     get_recordings_s3_config,
     upload_recording_mp4,
+    upload_transcript_vtt,
 )
 
 
@@ -85,6 +87,44 @@ class RecordingsS3HelperTest(TestCase):
             'video/mp4',
         )
         mock_s3.upload_fileobj.assert_not_called()
+
+    @patch('jobs.tasks.recordings_s3.boto3.client')
+    def test_transcript_upload_preserves_bytes_and_stays_private(
+        self, mock_boto_client,
+    ):
+        event = Event.objects.create(
+            title='Transcript archive',
+            slug='transcript-archive',
+            start_datetime=timezone.datetime(
+                2026, 4, 1, tzinfo=datetime_timezone.utc,
+            ),
+        )
+        config = RecordingsS3Config(
+            bucket='helper-bucket',
+            region='eu-central-1',
+            access_key_id='key',
+            secret_access_key='secret',
+        )
+        raw_vtt = b'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nExact bytes.\n'
+        mock_s3 = MagicMock()
+        mock_boto_client.return_value = mock_s3
+
+        key = build_transcript_s3_key(event)
+        url = upload_transcript_vtt(raw_vtt, config, key)
+
+        self.assertEqual(key, 'recordings/2026/transcript-archive.vtt')
+        self.assertEqual(
+            url,
+            'https://helper-bucket.s3.eu-central-1.amazonaws.com/'
+            'recordings/2026/transcript-archive.vtt',
+        )
+        mock_s3.put_object.assert_called_once_with(
+            Bucket='helper-bucket',
+            Key='recordings/2026/transcript-archive.vtt',
+            Body=raw_vtt,
+            ContentType='text/vtt; charset=utf-8',
+        )
+        self.assertNotIn('ACL', mock_s3.put_object.call_args.kwargs)
 
     @patch('jobs.tasks.recordings_s3.get_recordings_s3_client')
     def test_presigned_url_targets_correct_key_and_ttl(self, mock_get_client):

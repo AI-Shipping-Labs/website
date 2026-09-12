@@ -114,11 +114,41 @@ class ParseVttToTextTest(TestCase):
         )
         self.assertEqual(parse_vtt_to_text(raw), 'Hello world')
 
+    @patch('jobs.tasks.recording_transcript.requests.get')
+    @patch(
+        'integrations.services.zoom.get_access_token',
+        return_value='test-access-token',
+    )
+    def test_download_returns_exact_response_bytes(self, mock_token, mock_get):
+        from jobs.tasks.recording_transcript import _download_vtt
+
+        raw_vtt = b'WEBVTT\r\n\r\n\xffexact provider bytes\r\n'
+        response = MagicMock(content=raw_vtt)
+        mock_get.return_value = response
+
+        result = _download_vtt('https://zoom.example/download/raw.vtt')
+
+        self.assertEqual(result, raw_vtt)
+        response.raise_for_status.assert_called_once_with()
+        mock_get.assert_called_once_with(
+            'https://zoom.example/download/raw.vtt?access_token=test-access-token',
+            timeout=60,
+        )
+
 
 class TranscribeRecordingTest(TestCase):
     def setUp(self):
         clear_config_cache()
         self.addCleanup(clear_config_cache)
+        archive_patcher = patch(
+            'jobs.tasks.recording_transcript._archive_vtt',
+            return_value=(
+                'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-workshop.vtt'
+            ),
+        )
+        self.archive = archive_patcher.start()
+        self.addCleanup(archive_patcher.stop)
         self.event = _make_event(
             transcript_url='https://zoom.us/rec/download/transcript.vtt',
         )
@@ -139,6 +169,12 @@ class TranscribeRecordingTest(TestCase):
         self.assertGreater(result['characters'], 0)
         self.event.refresh_from_db()
         self.assertIn('Second topic: deploying with uv.', self.event.transcript_text)
+        self.assertEqual(
+            self.event.transcript_s3_url,
+            'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/'
+            'recordings/2026/transcript-workshop.vtt',
+        )
+        self.archive.assert_called_once_with(self.event, SAMPLE_VTT)
         self.assertEqual(self.event.transcript_fetch_attempts, 0)
         # LLM disabled: transcript stored, recap skipped with reason.
         self.assertEqual(
@@ -334,6 +370,10 @@ class TranscribeRecordingTest(TestCase):
 
         Event.objects.filter(pk=self.event.pk).update(
             transcript_text='A stored transcript.',
+            transcript_s3_url=(
+                'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-workshop.vtt'
+            ),
             recap_notes='Operator-authored notes',
         )
         mock_q_async.return_value = 'redraft-task'
@@ -347,6 +387,130 @@ class TranscribeRecordingTest(TestCase):
             if call[0][0] == 'jobs.tasks.recap_draft.draft_event_recap'
         )
         self.assertEqual(recap_call[0][2], True)
+
+    @patch('integrations.services.llm.is_enabled', return_value=False)
+    @patch(
+        'jobs.tasks.recording_transcript._download_vtt',
+        return_value=b'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nArchive me.\n',
+    )
+    def test_text_only_legacy_row_fills_archive_without_replacing_text(
+        self, mock_download, mock_llm_enabled,
+    ):
+        from jobs.tasks.recording_transcript import transcribe_recording
+
+        Event.objects.filter(pk=self.event.pk).update(
+            transcript_text='Keep the already parsed transcript.',
+            recap_notes='Operator-authored recap.',
+        )
+
+        result = transcribe_recording(self.event.pk)
+
+        self.assertEqual(result['status'], 'ok')
+        self.event.refresh_from_db()
+        self.assertEqual(
+            self.event.transcript_text,
+            'Keep the already parsed transcript.',
+        )
+        self.assertEqual(self.event.recap_notes, 'Operator-authored recap.')
+        self.assertTrue(self.event.transcript_s3_url.endswith('.vtt'))
+        self.assertEqual(self.archive.call_count, 1)
+        archive_event, archive_bytes = self.archive.call_args.args
+        self.assertEqual(archive_event.pk, self.event.pk)
+        self.assertIn(b'Archive me.', archive_bytes)
+
+    @patch('integrations.services.llm.is_enabled', return_value=False)
+    @patch(
+        'jobs.tasks.recording_transcript._download_vtt',
+        return_value=b'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nArchive me.\n',
+    )
+    def test_archive_failure_preserves_existing_text_and_recap(
+        self, mock_download, mock_llm_enabled,
+    ):
+        from jobs.tasks.recording_transcript import (
+            TranscriptArchiveError,
+            transcribe_recording,
+        )
+
+        Event.objects.filter(pk=self.event.pk).update(
+            transcript_text='Keep this transcript.',
+            recap_notes='Keep this recap.',
+        )
+        self.archive.side_effect = TranscriptArchiveError('bounded failure')
+
+        with self.assertRaisesMessage(TranscriptArchiveError, 'bounded failure'):
+            transcribe_recording(self.event.pk)
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.transcript_text, 'Keep this transcript.')
+        self.assertEqual(self.event.recap_notes, 'Keep this recap.')
+        self.assertEqual(self.event.transcript_s3_url, '')
+        self.assertIsNone(self.event.transcript_unavailable_at)
+
+    @patch(
+        'jobs.tasks.recording_transcript._download_vtt',
+        return_value=b'WEBVTT\n\n00:00:01.000 --> 00:00:02.000\nKeep parsed text.\n',
+    )
+    def test_archive_failure_keeps_newly_parsed_text_for_retry(self, mock_download):
+        from jobs.tasks.recording_transcript import (
+            TranscriptArchiveError,
+            transcribe_recording,
+        )
+
+        self.archive.side_effect = TranscriptArchiveError('bounded failure')
+
+        with self.assertRaisesMessage(TranscriptArchiveError, 'bounded failure'):
+            transcribe_recording(self.event.pk)
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.transcript_text, 'Keep parsed text.')
+        self.assertEqual(self.event.transcript_s3_url, '')
+        self.assertIsNone(self.event.transcript_unavailable_at)
+
+    @patch(
+        'jobs.tasks.recording_transcript._download_vtt',
+        return_value=b'WEBVTT\n\n',
+    )
+    def test_text_only_row_rejects_unusable_archive_source(self, mock_download):
+        from jobs.tasks.recording_transcript import (
+            TranscriptArchiveNotReady,
+            transcribe_recording,
+        )
+
+        Event.objects.filter(pk=self.event.pk).update(
+            transcript_text='Keep this transcript.',
+            recap_notes='Keep this recap.',
+        )
+
+        with self.assertRaisesMessage(
+            TranscriptArchiveNotReady,
+            'VTT archive source not ready',
+        ):
+            transcribe_recording(self.event.pk)
+
+        self.event.refresh_from_db()
+        self.assertEqual(self.event.transcript_text, 'Keep this transcript.')
+        self.assertEqual(self.event.recap_notes, 'Keep this recap.')
+        self.assertEqual(self.event.transcript_s3_url, '')
+        self.assertIsNone(self.event.transcript_unavailable_at)
+        self.archive.assert_not_called()
+
+    @patch('jobs.tasks.recording_transcript._download_vtt')
+    def test_complete_row_skips_zoom_and_s3(self, mock_download):
+        from jobs.tasks.recording_transcript import transcribe_recording
+
+        Event.objects.filter(pk=self.event.pk).update(
+            transcript_text='Already complete.',
+            transcript_s3_url=(
+                'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-workshop.vtt'
+            ),
+        )
+
+        result = transcribe_recording(self.event.pk)
+
+        self.assertEqual(result['status'], 'already_stored')
+        mock_download.assert_not_called()
+        self.archive.assert_not_called()
 
 
 class RecapDraftTaskTest(TestCase):

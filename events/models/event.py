@@ -287,6 +287,14 @@ class Event(
         blank=True, default='',
         help_text='Plain-text transcript content for display and search.',
     )
+    transcript_s3_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default='',
+        db_default='',
+        editable=False,
+        help_text='Private S3 object URL for the archived raw VTT transcript.',
+    )
     # Issue #1597: how many times the transcript task has tried to fetch the
     # VTT without success. Drives the retry-vs-terminal decision: once
     # TRANSCRIPT_MAX_ATTEMPTS is reached without a parsable VTT the event is

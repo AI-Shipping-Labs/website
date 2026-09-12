@@ -142,6 +142,41 @@ class RegistrationCarryTest(TestCase):
 
 
 class ContentCarryTest(TestCase):
+    def test_transcript_archive_fills_empty_without_clobbering_existing(self):
+        incoming_url = 'https://bucket.example/recordings/2026/incoming.vtt'
+        canonical = _make_studio_event(transcript_s3_url='')
+        duplicate = _make_github_event(transcript_s3_url=incoming_url)
+
+        fill_plan = merge_duplicate_events(
+            canonical, duplicate, actor_label="t", dry_run=False,
+        )
+
+        canonical.refresh_from_db()
+        self.assertEqual(canonical.transcript_s3_url, incoming_url)
+        self.assertIn('transcript_s3_url', fill_plan.fields_filled)
+
+        canonical_url = 'https://bucket.example/recordings/2026/canonical.vtt'
+        canonical = _make_studio_event(
+            slug='may20-studio',
+            title='May 20 Workshop',
+            start_datetime=MAY19_STUDIO + dt.timedelta(days=1),
+            transcript_s3_url=canonical_url,
+        )
+        duplicate = _make_github_event(
+            slug='may20-github',
+            title='May 20 Workshop',
+            start_datetime=MAY19 + dt.timedelta(days=1),
+            transcript_s3_url=incoming_url,
+        )
+
+        preserve_plan = merge_duplicate_events(
+            canonical, duplicate, actor_label="t", dry_run=False,
+        )
+
+        canonical.refresh_from_db()
+        self.assertEqual(canonical.transcript_s3_url, canonical_url)
+        self.assertNotIn('transcript_s3_url', preserve_plan.fields_filled)
+
     def test_recording_fills_empty_canonical_field(self):
         canonical = _make_studio_event(recording_url="")
         duplicate = _make_github_event(

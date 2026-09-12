@@ -62,6 +62,7 @@ _CARRY_FIELDS = (
     "recording_embed_url",
     "transcript_url",
     "transcript_text",
+    "transcript_s3_url",
     "timestamps",
     "materials",
     "cover_image_url",

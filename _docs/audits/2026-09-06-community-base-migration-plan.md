@@ -38,15 +38,17 @@ specific reason. Public design continues to use AISL's indexed partials and
 
 ## Research snapshot and release boundary
 
-AISL donor reviewed: `baa8ea28056bad854a4f7a74dc44e42febf6823b`.
-Package reviewed: `49c3a7ca13452fd2580db098c6da3ed0094b8fd0`.
+AISL donor reviewed: `8392ac8bf55e2209d5e5d7e9d76d50a66133a929` (main, 2026-09-12).
+Package reviewed: `647c8b340c1ea2b0aedb5a0bb438e53d106f066d` (main, 2026-09-12).
 Refresh both SHAs at every compatibility checkpoint; these are research inputs,
 not approved production schema snapshots.
 
-Latest adoption-safe release observed in canonical status: `v0.3.0` (C2.4).
-Identity/community capabilities are on main with provisional migrations. Events
-C4.1d was merged through community-base PR 110 (orchestrator update after the
-research snapshot; 814 package tests). C4.2, C5.1 and C5.2 remain pending.
+Latest adoption-safe release observed in canonical status: `v0.3.5` (2026-09-12,
+merged as `739aa28`, package PR #207); point releases v0.3.1 through v0.3.5 add
+no domain subpackages. Identity, community, events, curriculum (C5.1a-d) and
+coursework (C5.2a-e) capabilities are merged on package main through C4.2
+(community-base PR 113) with provisional kept-label migrations, untagged until
+donor compatibility passes.
 C3.7 and C4.3 donor compatibility remain pending. A successful package test or
 presence of a source directory does not make a domain app installable in AISL.
 Never pin main, an agent branch, local editable source, provisional v0.4/v0.5,
@@ -68,6 +70,18 @@ Execution order:
 7. AISL uses django_q and ses_local until R6.1 records D13: at least four
    consecutive weeks of DTC production traffic with no P1 attributable to Relay
    and green Relay status contract throughout. Only then execute AISL Phase 6.
+
+## Integration progress - 2026-09-12
+
+Dated snapshot of the adoption rollout. Community-base `docs/plan/STATUS.md`
+(https://github.com/DataTalksClub/community-base/blob/main/docs/plan/STATUS.md)
+is authoritative for live status across all four repositories.
+
+- Done: A0.1 (merged `2d567da3`), A0.3 (#1582), A1.1 (merged `b8d0eb80`).
+- In progress: A0.2 (#1584), A1.2 (#1610), A2.1 (#1615), A2.3 (#1617).
+- Accepted pending human checks: A3.1 (#1579), merged at `0b1c7eff`;
+  development deploy green; human checks AC13 and AC14 open.
+- Waiting: A2.2, A3.2, the A3.3 freeze and later phases; gates unchanged.
 
 ## Verified source map
 

@@ -48,7 +48,6 @@ from accounts.utils.tokens import (
     load_password_reset_payload,
     password_reset_proof_matches,
 )
-from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +205,6 @@ def _send_verification_email(user, return_path=None):
         resolver opted the recipient out); ``None`` on a local failure.
     """
     safe_return_path = sanitize_verification_return_path(return_path, default="")
-    site_url = site_base_url()
     ttl_days = resolve_unverified_ttl_days()
 
     from community_base.mail.service import MailError
@@ -218,8 +216,10 @@ def _send_verification_email(user, return_path=None):
             user,
             "email_verification_signup",
             {
+                # Issue #1613: the worker injects ``site_url`` and mints
+                # the verify link at delivery time; only non-secret
+                # render inputs are stored.
                 "return_path": safe_return_path,
-                "site_url": site_url,
                 "ttl_days": ttl_days,
             },
         )

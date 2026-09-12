@@ -315,14 +315,16 @@ class FeedbackUrlWiringTest(TestCase):
     def test_feedback_url_present_when_dependency_satisfied(self):
         """Issue #680 / #679 wiring: when the import succeeds AND the
         URL resolves, the CTA renders. We simulate the #679 surface by
-        monkey-patching both probes used by ``_build_feedback_url``."""
+        monkey-patching the worker-side feedback probe (issue #1613 moved
+        the builder to events.services.post_event_mail)."""
         with patch(
-            'events.tasks.send_post_event_followup._build_feedback_url',
+            'events.services.post_event_mail.feedback_url_for',
             return_value='https://example.test/events/recap-feedback/feedback',
         ):
             send_post_event_followup_one(self.event.pk, self.user.pk)
-
-        sent_html = _drain_and_get_sent_html()
+            # The worker mints the context at drain time (issue #1613),
+            # so the probe stays patched through the drain.
+            sent_html = _drain_and_get_sent_html()
         self.assertIn('Leave feedback', sent_html)
         self.assertIn(
             'https://example.test/events/recap-feedback/feedback',

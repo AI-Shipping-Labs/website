@@ -7,6 +7,7 @@ import secrets
 from dataclasses import dataclass
 from datetime import timedelta
 
+from django.core import signing
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
@@ -17,9 +18,9 @@ from accounts.gating import is_newsletter_only_user
 from accounts.models import EmailAlias, EmailChangeRequest, User
 from accounts.services.email_resolution import normalize_email
 from email_app.package_mail import send_package_mail
-from integrations.config import site_base_url
 
 EMAIL_CHANGE_TOKEN_BYTES = 32
+EMAIL_CHANGE_TOKEN_SALT = "accounts.services.email_change.confirm"
 EMAIL_CHANGE_EXPIRY_HOURS = 24
 EMAIL_CHANGE_REQUEST_THROTTLE_SECONDS = 60
 EMAIL_CHANGE_CONFIRM_TEMPLATE = "account_email_change_confirm"
@@ -81,6 +82,23 @@ def hash_email_change_token(token):
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def derive_email_change_token(request_obj):
+    """Re-derive the confirm bearer from the saved request identity.
+
+    An HMAC over the request pk under a signing-salt namespace (Django's
+    ``Signer`` keys it with ``SECRET_KEY`` plus the salt), so only
+    application code with the server secret can reproduce the token and
+    a bare request id is worthless. The action-scoped salt keeps this
+    token from substituting for verification, reset, or unsubscribe
+    tokens. ``token_hash`` stores the SHA-256 of exactly this string, so
+    the unchanged digest lookup at confirmation time accepts both legacy
+    random tokens and derived ones (issue #1613).
+    """
+
+    signer = signing.Signer(salt=EMAIL_CHANGE_TOKEN_SALT)
+    return signer.signature(f"email-change-confirm:{request_obj.pk}")
+
+
 def active_email_change_request_for_user(user):
     return (
         EmailChangeRequest.objects
@@ -139,35 +157,32 @@ def _enforce_throttle(user, new_email):
         raise EmailChangeThrottleError()
 
 
-def _build_confirm_url(token):
-    return f"{site_base_url()}/account/change-email/confirm?token={token}"
-
-
-def _send_confirm_email(user, request_obj, token):
-    # The confirm URL carries the bearer token and cannot be re-minted in
-    # the delivery worker (only its hash is persisted), so it travels in
-    # the delivery context. Keyed per request so a retried request row
-    # never double-sends.
+def _send_confirm_email(user, request_obj):
+    # The confirm URL is minted in the delivery worker (issue #1613): the
+    # durable context carries only non-secret render inputs and the
+    # request row rides along via ``related`` so the worker can validate
+    # the bindings and re-derive the link. Keyed per request so a retried
+    # request row never double-sends.
     send_package_mail(
         user,
         EMAIL_CHANGE_CONFIRM_TEMPLATE,
         {
             "old_email": request_obj.old_email,
             "new_email": request_obj.new_email,
-            "confirm_url": _build_confirm_url(token),
             "expiry_hours": EMAIL_CHANGE_EXPIRY_HOURS,
         },
         recipient_email=request_obj.new_email,
         idempotency_key=f"email-change-confirm:{request_obj.pk}",
+        related=request_obj,
     )
 
 
 def request_email_change(user, raw_new_email, current_password=None, *, send=True):
     """Create a latest pending email-change request and send its link.
 
-    Returns ``(EmailChangeRequest, plaintext_token)``. The token is returned so
-    tests and immediate callers can build the email link; only its hash is
-    persisted.
+    Returns ``(EmailChangeRequest, token)``. The token is re-derived from
+    the saved row (issue #1613), so tests and immediate callers can build
+    the email link; only its SHA-256 digest is persisted.
     """
     if is_newsletter_only_user(user):
         raise EmailChangeValidationError()
@@ -177,9 +192,6 @@ def request_email_change(user, raw_new_email, current_password=None, *, send=Tru
     _enforce_throttle(user, new_email)
 
     now = timezone.now()
-    token = secrets.token_urlsafe(EMAIL_CHANGE_TOKEN_BYTES)
-    token_hash = hash_email_change_token(token)
-
     with transaction.atomic():
         (
             EmailChangeRequest.objects
@@ -194,14 +206,22 @@ def request_email_change(user, raw_new_email, current_password=None, *, send=Tru
             user=user,
             old_email=normalize_email(user.email),
             new_email=new_email,
-            token_hash=token_hash,
+            # Unique placeholder for the not-null unique digest column;
+            # replaced by the derived token's digest below, inside the
+            # same transaction. The placeholder value is never a token.
+            token_hash=hash_email_change_token(
+                secrets.token_urlsafe(EMAIL_CHANGE_TOKEN_BYTES),
+            ),
             expires_at=now + timedelta(hours=EMAIL_CHANGE_EXPIRY_HOURS),
             last_sent_at=now,
         )
+        token = derive_email_change_token(request_obj)
+        request_obj.token_hash = hash_email_change_token(token)
+        request_obj.save(update_fields=["token_hash"])
 
     if send:
         try:
-            _send_confirm_email(user, request_obj, token)
+            _send_confirm_email(user, request_obj)
         except Exception:
             # Only local refusals raise now (A1.2): SES transport outcomes
             # land on the durable delivery from the worker, leaving the
@@ -276,13 +296,14 @@ def _ensure_former_email_alias(user, old_email):
 
 
 def _send_old_email_notice(user, *, old_email, new_email, request_obj):
+    # ``account_url`` is minted in the worker (issue #1613); the notice
+    # context carries only the address pair.
     send_package_mail(
         user,
         EMAIL_CHANGED_NOTICE_TEMPLATE,
         {
             "old_email": old_email,
             "new_email": new_email,
-            "account_url": f"{site_base_url()}/account/",
         },
         recipient_email=old_email,
         idempotency_key=f"email-change-notice:{request_obj.pk}",

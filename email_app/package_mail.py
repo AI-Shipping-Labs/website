@@ -17,6 +17,7 @@ from community_base.mail import send as package_send
 from django.db import transaction
 from django.db.models import Model
 
+from email_app.services.context_guard import ensure_no_rendered_urls
 from email_app.services.email_classification import (
     WELCOME_EMAIL_TYPES,
     get_sender_for_email_type,
@@ -55,6 +56,9 @@ def send_package_mail(
     """
 
     context = context or {}
+    # Issue #1613: nothing durable may exist yet when the guard fires, so
+    # a URL-bearing context is refused before any row or job is created.
+    ensure_no_rendered_urls(template_name, context)
     to_email = (recipient_email or getattr(user, "email", "") or "").strip()
     key = idempotency_key or f"{template_name}:{uuid4().hex}"
 

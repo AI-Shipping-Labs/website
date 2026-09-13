@@ -52,6 +52,10 @@ urlpatterns = [
     path('', include('voting.urls')),
     path('', include('comments.urls')),
     path('', include('email_app.urls')),
+    # A6.2: the package's signed Relay callback ingress plus the Relay-owned
+    # recipient link routes (tracking pixels, clicks, bridge unsubscribe).
+    # email_app stays mounted first so it keeps serving its own links.
+    path('', include('community_base.mail.urls')),
     path('', include('plans.urls')),
     path('', include('bookclub.urls')),
     path('', include('community.urls')),

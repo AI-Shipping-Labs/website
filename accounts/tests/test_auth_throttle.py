@@ -8,6 +8,7 @@ import json
 import time
 from unittest.mock import patch
 
+from community_base.jobs.models import JobIntent
 from django.core.cache import cache, caches
 from django.test import RequestFactory, TestCase, override_settings, tag
 
@@ -640,8 +641,14 @@ class AuthThrottleScopeIsolationViewTest(AuthThrottleTestMixin, TestCase):
         )
         self.assertEqual(subscribe.json()["status"], "ok")
         self.assertIn("account", subscribe.json()["message"].lower())
-        self.assertEqual(mock_send.call_count, 1)
-        self.assertEqual(mock_send.call_args[0][0].email, "fresh-sub@example.com")
+        # A6.2: the subscribe verification hands off to Relay instead of
+        # a site-sent email.
+        self.assertEqual(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).count(),
+            1,
+        )
         self.assertTrue(
             User.objects.filter(email="fresh-sub@example.com").exists()
         )

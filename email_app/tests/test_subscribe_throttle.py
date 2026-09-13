@@ -3,6 +3,7 @@
 import json
 from unittest.mock import patch
 
+from community_base.jobs.models import JobIntent
 from django.test import TestCase, tag
 
 from accounts.models import User
@@ -78,8 +79,7 @@ class SubscribeAuthThrottleTest(TestCase):
         mock_send.assert_not_called()
         self.assertFalse(User.objects.filter(email="two@example.com").exists())
 
-    @patch("email_app.views.newsletter._send_subscribe_verification_email")
-    def test_subscribe_email_limit_returns_429_not_generic_200(self, mock_send):
+    def test_subscribe_email_limit_returns_429_not_generic_200(self):
         _set_mail_limits(ip_limit=8, email_limit=1)
         first = self._post({"email": "repeat@example.com"})
         self.assertEqual(first.json()["status"], "ok")
@@ -91,19 +91,29 @@ class SubscribeAuthThrottleTest(TestCase):
         self.assertEqual(blocked.status_code, 429)
         self.assertEqual(blocked.json(), THROTTLED_JSON)
         self.assertNotIn("account", json.dumps(blocked.json()).lower())
-        self.assertEqual(mock_send.call_count, 1)
+        # A6.2: the one allowed subscribe handed off to Relay's double
+        # opt-in flow instead of a site-sent email.
+        self.assertEqual(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).count(),
+            1,
+        )
 
-    @patch("email_app.views.newsletter._send_subscribe_verification_email")
-    def test_subscribe_under_limit_keeps_generic_200(self, mock_send):
+    def test_subscribe_under_limit_keeps_generic_200(self):
         _set_mail_limits(ip_limit=8, email_limit=3)
         response = self._post({"email": "ok@example.com"})
         self.assertEqual(response.json()["status"], "ok")
         self.assertIn("account", response.json()["message"].lower())
-        self.assertEqual(mock_send.call_count, 1)
-        self.assertEqual(mock_send.call_args[0][0].email, "ok@example.com")
+        intent = JobIntent.objects.get(
+            handler="email_app.relay_sync.request_contact_verification"
+        )
+        self.assertEqual(
+            intent.payload["user_id"],
+            User.objects.get(email="ok@example.com").pk,
+        )
 
-    @patch("email_app.views.newsletter._send_subscribe_verification_email")
-    def test_invalid_email_and_json_do_not_consume_bucket(self, mock_send):
+    def test_invalid_email_and_json_do_not_consume_bucket(self):
         _set_mail_limits(ip_limit=1, email_limit=1)
         invalid_email = self._post({"email": "not-an-email"})
         self.assertEqual(invalid_email.status_code, 400)
@@ -116,7 +126,11 @@ class SubscribeAuthThrottleTest(TestCase):
         ok = self._post({"email": "first-valid@example.com"})
         self.assertEqual(ok.json()["status"], "ok")
         self.assertIn(SUBSCRIBE_OK_SNIPPET, ok.json()["message"].lower())
-        self.assertEqual(mock_send.call_count, 1)
+        # Only the valid subscribe reached the Relay handoff.
+        intent = JobIntent.objects.get(
+            handler="email_app.relay_sync.request_contact_verification"
+        )
         self.assertEqual(
-            mock_send.call_args[0][0].email, "first-valid@example.com"
+            intent.payload["user_id"],
+            User.objects.get(email="first-valid@example.com").pk,
         )

@@ -770,5 +770,11 @@ COMMUNITY_BASE = {
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
     'MAIL_TEMPLATE_OVERRIDE_LOADER': 'email_app.hooks.template_override_loader',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
+    # A6.2: the Relay contacts/subscriptions mirror. BASE_URL/API_KEY point
+    # at the Relay tenant serving the AISL audience; WEBHOOK_SECRET verifies
+    # the signed callback ingress mounted from community_base.mail.urls.
+    'RELAY_BASE_URL': os.getenv('RELAY_BASE_URL', ''),
+    'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
+    'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
 }

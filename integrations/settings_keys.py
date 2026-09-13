@@ -1846,6 +1846,7 @@ LOGFIRE_ENABLED = declare(
     value_type="bool",
     default="false",
     secret=False,
+    requires_restart=True,
     docs_url="_docs/integrations/observability.md#logfire_enabled",
 )
 LOGFIRE_TOKEN = declare(
@@ -1856,6 +1857,7 @@ LOGFIRE_TOKEN = declare(
     value_type="str",
     default="",
     secret=True,
+    requires_restart=True,
     docs_url="_docs/integrations/observability.md#logfire_token",
 )
 LOGFIRE_ENVIRONMENT = declare(
@@ -1867,6 +1869,7 @@ LOGFIRE_ENVIRONMENT = declare(
     default="production",
     secret=False,
     optional=True,
+    requires_restart=True,
     docs_url="_docs/integrations/observability.md#logfire_environment",
 )
 

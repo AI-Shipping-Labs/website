@@ -8,6 +8,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Article, Course, Download, Workshop
+from email_app.testing import deliver_pending_mail
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
@@ -399,11 +400,10 @@ class NotificationServiceNotifyTest(TestCase):
 class NotificationServiceWorkshopEmailTest(TestCase):
     """Tests for the workshop email channel (issue #655).
 
-    The channel reuses ``EmailService.send`` so we stub ``_send_ses`` and
-    let the real ``EmailLog`` rows land in the database. That gives us
-    accurate behaviour for the per-user skip path (globally unsubscribed
-    promotional recipients return ``None`` from ``send``) without making
-    real SES API calls.
+    A1.2 slice 4: the channel queues durable ``EmailDelivery`` rows
+    through ``send_package_mail``; tests drain them with
+    :func:`email_app.testing.deliver_pending_mail` and assert on the
+    worker-written ``EmailLog`` rows, without making real SES API calls.
     """
 
     def setUp(self):
@@ -452,15 +452,15 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    @patch('email_app.services.email_service.EmailService._send_ses',
-           return_value='ses-msg-001')
     def test_notify_workshop_returns_notified_and_emailed_counts(
-        self, mock_ses, mock_slack,
+        self, mock_slack,
     ):
         result = NotificationService.notify('workshop', self.workshop.pk)
 
         self.assertEqual(result, {'notified': 3, 'emailed': 3})
         from email_app.models import EmailLog
+
+        deliver_pending_mail()
 
         self.assertEqual(
             EmailLog.objects.filter(
@@ -470,10 +470,8 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    @patch('email_app.services.email_service.EmailService._send_ses',
-           return_value='ses-msg-002')
     def test_notify_workshop_excludes_users_who_opted_out_of_workshop_emails(
-        self, mock_ses, mock_slack,
+        self, mock_slack,
     ):
         self.user2.email_preferences = {'workshop_emails': False}
         self.user2.save(update_fields=['email_preferences'])
@@ -483,7 +481,10 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         self.assertEqual(result['notified'], 3)
         self.assertEqual(result['emailed'], 2)
 
+        from community_base.mail.models import EmailDelivery
+
         from email_app.models import EmailLog
+        deliver_pending_mail()
         emailed_users = set(
             EmailLog.objects.filter(
                 email_type='workshop_announcement',
@@ -491,12 +492,16 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
         self.assertNotIn('user2@example.com', emailed_users)
         self.assertEqual(emailed_users, {'user1@example.com', 'user3@example.com'})
+        # Pre-filter + preference suppression leave user2 no delivery.
+        self.assertFalse(
+            EmailDelivery.objects.filter(
+                recipient_email='user2@example.com',
+            ).exists(),
+        )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    @patch('email_app.services.email_service.EmailService._send_ses',
-           return_value='ses-msg-003')
     def test_notify_workshop_excludes_globally_unsubscribed_users_from_email(
-        self, mock_ses, mock_slack,
+        self, mock_slack,
     ):
         self.user2.unsubscribed = True
         self.user2.save(update_fields=['unsubscribed'])
@@ -520,10 +525,8 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         self.assertNotIn('user2@example.com', emailed_users)
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    @patch('email_app.services.email_service.EmailService._send_ses',
-           return_value='ses-msg-004')
     def test_notify_workshop_excludes_unverified_users_from_email(
-        self, mock_ses, mock_slack,
+        self, mock_slack,
     ):
         self.user2.email_verified = False
         self.user2.save(update_fields=['email_verified'])
@@ -538,6 +541,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
 
         from email_app.models import EmailLog
+        deliver_pending_mail()
         self.assertFalse(
             EmailLog.objects.filter(
                 user=self.user2,
@@ -549,22 +553,25 @@ class NotificationServiceWorkshopEmailTest(TestCase):
     def test_notify_workshop_email_send_failure_does_not_stop_loop(
         self, mock_slack,
     ):
-        """A raise from one EmailService.send call must not halt the
-        loop -- the other two users still get their email and
-        ``emailed`` reports the two successful sends."""
-        from email_app.services.email_service import EmailService
+        """A local refusal for one recipient must not halt the fan-out --
+        the other two users still get their durable delivery and
+        ``emailed`` reports the two queued sends. SES transport trouble
+        itself retries from the worker and never raises here."""
+        import email_app.testing
+        from notifications.services import notification_service as ns
 
-        original_send = EmailService.send
+        original_send = ns.send_package_mail
 
-        def flaky_send(self, user, template_name, context=None):
+        def flaky_send(user, template_name, context=None, **kwargs):
             if user.email == 'user2@example.com':
-                raise RuntimeError('Simulated SES outage for user2')
-            return original_send(self, user, template_name, context)
+                raise RuntimeError('Simulated local refusal for user2')
+            return original_send(user, template_name, context, **kwargs)
 
-        with patch(
-            'email_app.services.email_service.EmailService._send_ses',
-            return_value='ses-msg-005',
-        ), patch.object(EmailService, 'send', flaky_send), self.assertLogs(
+        with patch.object(
+            email_app.testing, 'deliver_pending_mail',
+        ), patch.object(
+            ns, 'send_package_mail', flaky_send,
+        ), self.assertLogs(
             'notifications.services.notification_service',
             level='WARNING',
         ) as logs:
@@ -578,29 +585,46 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    def test_notify_workshop_email_context_includes_title_description_and_deep_link(
+    def test_notify_workshop_worker_mints_title_description_and_deep_link(
         self, mock_slack,
     ):
-        from email_app.services.email_service import EmailService
+        """Issue #1613: the durable context stays empty; the worker
+        rebuilds the announcement context from the delivery's workshop
+        relation, so the rendered body still carries the title, the
+        description and the deep link."""
+        from community_base.mail.models import EmailDelivery
 
-        captured = []
+        from email_app.testing import StubSESClient
+        from integrations.config import site_base_url
 
-        def capture_send(self, user, template_name, context=None):
-            captured.append((user, template_name, context))
-            return None  # Skip actual rendering / EmailLog write.
+        NotificationService.notify('workshop', self.workshop.pk)
 
-        with patch.object(EmailService, 'send', capture_send):
-            NotificationService.notify('workshop', self.workshop.pk)
-
-        self.assertEqual(len(captured), 3)
-        for _user, template_name, context in captured:
-            self.assertEqual(template_name, 'workshop_announcement')
-            self.assertEqual(context['workshop_title'], 'Build a RAG App')
-            self.assertEqual(context['workshop_slug'], 'build-a-rag-app')
-            self.assertIn('Hands-on workshop', context['workshop_description'])
+        deliveries = list(EmailDelivery.objects.all())
+        self.assertEqual(len(deliveries), 3)
+        for delivery in deliveries:
+            self.assertEqual(delivery.context_data, {})
             self.assertEqual(
-                context['workshop_url'],
-                '/workshops/build-a-rag-app',
+                delivery.related_object_type, 'content.workshop',
+            )
+            self.assertEqual(
+                delivery.related_object_id, str(self.workshop.pk),
+            )
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+
+        self.assertEqual(len(stub.calls), 3)
+        for call in stub.calls:
+            html = call['Content']['Simple']['Body']['Html']['Data']
+            self.assertIn('Build a RAG App', html)
+            self.assertIn('Hands-on workshop', html)
+            self.assertIn(
+                f'href="{site_base_url()}/workshops/build-a-rag-app"',
+                html,
             )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
@@ -610,7 +634,6 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         """Article / course / event / recording / download / poll send
         zero emails and report ``emailed=0`` (issue #655)."""
         from email_app.models import EmailLog
-        from email_app.services.email_service import EmailService
 
         article = Article.objects.create(
             title='Article', slug='article',
@@ -638,7 +661,9 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
         poll = Poll.objects.create(title='Poll', status='open')
 
-        with patch.object(EmailService, 'send') as mock_send:
+        with patch(
+            'notifications.services.notification_service.send_package_mail',
+        ) as mock_send:
             for content_type, pk in [
                 ('article', article.pk),
                 ('course', course.pk),
@@ -702,10 +727,8 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         )
 
     @patch('notifications.services.slack_announcements.post_slack_announcement')
-    @patch('email_app.services.email_service.EmailService._send_ses',
-           return_value='ses-msg-default')
     def test_email_preferences_workshop_emails_default_true(
-        self, mock_ses, mock_slack,
+        self, mock_slack,
     ):
         """A brand-new user with empty ``email_preferences`` is treated as
         opted-in and lands in the email audience."""

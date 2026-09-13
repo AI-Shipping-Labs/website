@@ -8,6 +8,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import Plan, PlanReadyEmailLog, Sprint
 
@@ -112,11 +113,7 @@ class PlanShareViewTest(TestCase):
             for m in response.context['messages']
         ))
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_first_share_sets_timestamp_and_creates_bell_and_email(
-        self, mock_ses,
-    ):
-        mock_ses.return_value = 'msg-1'
+    def test_first_share_sets_timestamp_and_creates_bell_and_email(self):
         self.client.login(email='staff@test.com', password='pw')
 
         response = self._post('ready')
@@ -132,6 +129,7 @@ class PlanShareViewTest(TestCase):
             user=self.member, notification_type='plan_shared',
         )
         self.assertEqual(bell_qs.count(), 1)
+        deliver_pending_mail()
         log_qs = EmailLog.objects.filter(
             user=self.member, email_type='plan_shared',
         )
@@ -154,9 +152,7 @@ class PlanShareViewTest(TestCase):
             f'/studio/plans/{self.plan.pk}/edit/',
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_replayed_ready_intent_does_not_duplicate_delivery(self, mock_ses):
-        mock_ses.return_value = 'msg-1'
+    def test_replayed_ready_intent_does_not_duplicate_delivery(self):
         self.client.login(email='staff@test.com', password='pw')
         self._post('ready')
         self.plan.refresh_from_db()
@@ -172,6 +168,7 @@ class PlanShareViewTest(TestCase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='plan_shared').count(), 1,
         )
@@ -199,10 +196,8 @@ class PlanShareViewTest(TestCase):
             for m in response.context['messages']
         ))
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_reshare_creates_second_bell_and_second_email(self, mock_ses):
+    def test_reshare_creates_second_bell_and_second_email(self):
         """Operator-driven re-share fires both legs again. NOT a no-op."""
-        mock_ses.return_value = 'msg-1'
         self.client.login(email='staff@test.com', password='pw')
 
         # First share.
@@ -225,6 +220,7 @@ class PlanShareViewTest(TestCase):
             user=self.member, notification_type='plan_shared',
         )
         self.assertEqual(bell_qs.count(), 2)
+        deliver_pending_mail()
         log_qs = EmailLog.objects.filter(
             user=self.member, email_type='plan_shared',
         )
@@ -282,9 +278,9 @@ class PlanShareViewTest(TestCase):
         response = self._post('reshare', follow=True)
 
         messages = [str(m) for m in response.context['messages']]
-        self.assertTrue(any('email failed to send' in m for m in messages))
+        self.assertTrue(any('could not be queued' in m for m in messages))
         self.assertFalse(any(
-            'A new bell notification and email' in m for m in messages
+            'queued for delivery' in m for m in messages
         ))
 
     @patch(

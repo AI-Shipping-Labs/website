@@ -19,13 +19,34 @@ pytestmark = [
 
 
 def test_staff_rotates_payment_links_without_a_deploy(django_server, browser):
+    from community_base.config.models import Setting
+    from community_base.config.service import set as package_set
     from django.conf import settings
     from django.db import connection
 
     from content.models import SiteConfig
-    from integrations.models import IntegrationSetting
 
-    IntegrationSetting.objects.filter(key='STRIPE_PAYMENT_LINKS').delete()
+    Setting.objects.filter(
+        key__in=(
+            'STRIPE_PAYMENT_LINKS',
+            'STRIPE_CUSTOMER_PORTAL_URL',
+            'STRIPE_DASHBOARD_ACCOUNT_ID',
+            'STRIPE_SECRET_KEY',
+            'STRIPE_WEBHOOK_SECRET',
+        ),
+    ).delete()
+    package_set(
+        'STRIPE_CUSTOMER_PORTAL_URL',
+        'https://runtime.test/portal',
+        actor_ref='test:1268',
+    )
+    package_set(
+        'STRIPE_DASHBOARD_ACCOUNT_ID',
+        'acct_runtime',
+        actor_ref='test:1268',
+    )
+    package_set('STRIPE_SECRET_KEY', 'sk_runtime', actor_ref='test:1268')
+    package_set('STRIPE_WEBHOOK_SECRET', 'whsec_runtime', actor_ref='test:1268')
     tiers_path = (
         Path(settings.BASE_DIR) / 'content' / 'tests' / 'fixtures' / 'tiers.yaml'
     )
@@ -83,5 +104,5 @@ def test_staff_rotates_payment_links_without_a_deploy(django_server, browser):
     assert restored_cta.get_attribute('href') != links['main']['annual']
 
     staff_context.close()
-    IntegrationSetting.objects.filter(key='STRIPE_PAYMENT_LINKS').delete()
+    Setting.objects.filter(key='STRIPE_PAYMENT_LINKS').delete()
     connection.close()

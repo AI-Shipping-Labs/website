@@ -341,3 +341,152 @@ class DirectPackageSendContractTest(TestCase):
                     ):
                         offenders.append(relative)
         self.assertEqual(offenders, [])
+
+
+@tag("core")
+@override_settings(SES_ENABLED=False)
+class NotificationWorkerMintTest(TestCase):
+    """A1.2 slice 4: the notification sends (event reminder, workshop
+    announcement, plan share) persist an empty durable context and the
+    worker rebuilds every text field, the recipient-local time and every
+    link from the delivery's ``related`` relation (issue #1613)."""
+
+    def setUp(self):
+        cache.clear()
+        self.user = User.objects.create_user(
+            email="notify-worker@test.com",
+            password="CorrectPass123!",
+            email_verified=True,
+        )
+
+    def _send(self, purpose, related, **kwargs):
+        from email_app.package_mail import send_package_mail
+
+        return send_package_mail(
+            self.user,
+            purpose,
+            {},
+            related=related,
+            **kwargs,
+        )
+
+    def test_event_reminder_worker_mints_context_from_related_event(self):
+        from datetime import datetime
+        from datetime import timezone as dt_timezone
+
+        from events.models import Event
+        from integrations.config import site_base_url
+
+        self.user.preferred_timezone = "Europe/Berlin"
+        self.user.save(update_fields=["preferred_timezone"])
+        start = datetime(2026, 6, 16, 16, 0, 0, tzinfo=dt_timezone.utc)
+        event = Event.objects.create(
+            title="Reminder Mint Event",
+            slug="reminder-mint-event",
+            start_datetime=start,
+            status="upcoming",
+        )
+        delivery = self._send(
+            "event_reminder",
+            event,
+            idempotency_key=f"event_reminder:{event.pk}:{self.user.pk}:24h",
+        )
+
+        self.assertEqual(delivery.context_data, {})
+        self.assertEqual(delivery.related_object_type, "events.event")
+        self.assertEqual(delivery.related_object_id, str(event.pk))
+
+        (html,) = _drain([delivery])
+        self.assertIn("Reminder Mint Event", html)
+        self.assertIn("June 16, 2026, 18:00 Europe/Berlin", html)
+        self.assertIn(
+            f'href="{site_base_url()}{event.get_join_url()}"', html,
+        )
+        self.assertIn("Change your timezone", html)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.context_data, {})
+
+    def test_workshop_announcement_worker_mints_context_from_related_workshop(
+        self,
+    ):
+        from datetime import date
+
+        from content.models import Workshop
+        from integrations.config import site_base_url
+
+        workshop = Workshop.objects.create(
+            title="Mint Workshop", slug="mint-workshop",
+            date=date(2026, 1, 1), status="published",
+            description="Hands-on minting",
+            landing_required_level=0,
+        )
+        delivery = self._send("workshop_announcement", workshop)
+
+        self.assertEqual(delivery.context_data, {})
+        self.assertEqual(delivery.related_object_type, "content.workshop")
+
+        (html,) = _drain([delivery])
+        self.assertIn("Mint Workshop", html)
+        self.assertIn("Hands-on minting", html)
+        self.assertIn(
+            f'href="{site_base_url()}/workshops/mint-workshop"', html,
+        )
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.context_data, {})
+
+    def test_plan_shared_worker_mints_context_from_related_plan(self):
+        import datetime as dt
+
+        from django.urls import reverse
+
+        from integrations.config import site_base_url
+        from plans.models import Plan, Sprint
+
+        sprint = Sprint.objects.create(
+            name="Mint Sprint", slug="mint-sprint",
+            start_date=dt.date(2026, 5, 1),
+        )
+        plan = Plan.objects.create(member=self.user, sprint=sprint)
+        delivery = self._send("plan_shared", plan)
+
+        self.assertEqual(delivery.context_data, {})
+        self.assertEqual(delivery.related_object_type, "plans.plan")
+
+        (html,) = _drain([delivery])
+        expected_url = (
+            f"{site_base_url()}"
+            f"{reverse('my_plan_detail', kwargs={'sprint_slug': 'mint-sprint', 'plan_id': plan.pk})}"
+        )
+        self.assertIn("Mint Sprint", html)
+        self.assertIn(f'href="{expected_url}"', html)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.context_data, {})
+
+    def test_missing_relations_fail_closed_without_transport(self):
+        cases = [
+            ("event_reminder", "events.event"),
+            ("workshop_announcement", "content.workshop"),
+            ("plan_shared", "plans.plan"),
+        ]
+        for purpose, related_type in cases:
+            with self.subTest(purpose=purpose):
+                delivery = EmailDelivery.objects.create(
+                    purpose=purpose,
+                    template_key=purpose,
+                    recipient_email=self.user.email,
+                    recipient_user=self.user,
+                    context_hash="0" * 64,
+                    context_data={},
+                    idempotency_key=f"{purpose}:orphan",
+                    related_object_type=related_type,
+                    related_object_id="999999",
+                )
+                stub = StubSESClient()
+                with patch(
+                    "community_base.mail.backends.ses_local.configured_client",
+                    return_value=stub,
+                ):
+                    with self.assertRaises(Exception):
+                        deliver_job(
+                            None, {"delivery_id": str(delivery.id)},
+                        )

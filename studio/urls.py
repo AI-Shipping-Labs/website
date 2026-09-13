@@ -1,3 +1,4 @@
+from community_base.config import views as package_settings_views
 from django.urls import include, path
 
 from studio.views.announcement import announcement_banner_edit
@@ -14,6 +15,7 @@ from studio.views.articles import (
     article_regenerate_preview_token,
 )
 from studio.views.assistant import assistant
+from studio.views.auth_settings import settings_save_auth_provider
 from studio.views.banner_regenerate import (
     studio_article_regenerate_banner,
     studio_course_regenerate_banner,
@@ -200,6 +202,7 @@ from studio.views.notifications import (
     workshop_announce_slack,
     workshop_notify,
 )
+from studio.views.package_settings import settings_save_group
 from studio.views.peer_reviews import (
     peer_review_extend_deadline,
     peer_review_form_batch,
@@ -260,13 +263,6 @@ from studio.views.questionnaires import (
 from studio.views.recordings import recording_edit, recording_list
 from studio.views.redirects import redirect_create, redirect_delete, redirect_edit, redirect_list, redirect_toggle
 from studio.views.ses_events import ses_event_detail, ses_event_list
-from studio.views.settings import (
-    settings_dashboard,
-    settings_export,
-    settings_import,
-    settings_save_auth_provider,
-    settings_save_group,
-)
 from studio.views.signup_analytics import signup_analytics_dashboard
 from studio.views.sprints import (
     sprint_accountability_add,
@@ -1453,23 +1449,51 @@ urlpatterns = [
     path('redirects/<int:redirect_id>/delete', redirect_delete, name='studio_redirect_delete'),
     path('redirects/<int:redirect_id>/toggle', redirect_toggle, name='studio_redirect_toggle'),
 
-    # Settings
-    path('settings/', settings_dashboard, name='studio_settings'),
-    # Export / import (issue #323) registered BEFORE the generic
-    # ``<group_name>/save/`` route so the literal ``export/`` and
-    # ``import/`` prefixes aren't swallowed by the str converter.
-    path('settings/export/', settings_export, name='studio_settings_export'),
-    path('settings/import/', settings_import, name='studio_settings_import'),
-    # Auth provider save URL is registered BEFORE the generic
-    # ``<group_name>/save/`` route so the literal ``auth/`` prefix isn't
-    # swallowed by the str converter (it would otherwise treat ``auth``
-    # as the integration group name).
+    # Package API key management and runtime settings are mounted directly in
+    # Studio. The package owns the view, forms, encryption, audit trail, and
+    # import/export behavior; the site only preserves established URL names.
+    path('', include('community_base.api.urls')),
+    path('settings/', package_settings_views.settings_list, name='studio_settings'),
+    path(
+        'settings/',
+        package_settings_views.settings_list,
+        name='community_base_settings',
+    ),
     path(
         'settings/auth/<str:provider>/save/',
         settings_save_auth_provider,
         name='studio_settings_save_auth',
     ),
-    path('settings/<str:group_name>/save/', settings_save_group, name='studio_settings_save'),
+    path(
+        'settings/export/',
+        package_settings_views.settings_export,
+        name='studio_settings_export',
+    ),
+    path(
+        'settings/export/',
+        package_settings_views.settings_export,
+        name='community_base_settings_export',
+    ),
+    path(
+        'settings/import/',
+        package_settings_views.settings_import,
+        name='studio_settings_import',
+    ),
+    path(
+        'settings/import/',
+        package_settings_views.settings_import,
+        name='community_base_settings_import',
+    ),
+    path(
+        'settings/<str:group>/save/',
+        settings_save_group,
+        name='studio_settings_save',
+    ),
+    path(
+        'settings/<str:group>/save/',
+        settings_save_group,
+        name='community_base_settings_save_group',
+    ),
 
     # Worker Status
     path('worker/', worker_status, name='studio_worker'),

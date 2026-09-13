@@ -419,17 +419,11 @@ class PlanCreateTest(TestCase):
         )
 
     def test_plan_create_checked_ready_email_sends_and_logs(self):
-        from unittest.mock import patch
-
-        with patch(
-            'email_app.services.email_service.EmailService._send_ses',
-            return_value='ses-1',
-        ):
-            response = self.client.post('/studio/plans/new', {
-                'member': str(self.member.pk),
-                'sprint': str(self.sprint.pk),
-                'send_ready_email': 'on',
-            }, follow=True)
+        response = self.client.post('/studio/plans/new', {
+            'member': str(self.member.pk),
+            'sprint': str(self.sprint.pk),
+            'send_ready_email': 'on',
+        }, follow=True)
 
         plan = Plan.objects.get(member=self.member, sprint=self.sprint)
         self.assertRedirects(response, f'/studio/plans/{plan.pk}/')
@@ -438,13 +432,16 @@ class PlanCreateTest(TestCase):
         log = PlanReadyEmailLog.objects.get(plan=plan)
         self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
         self.assertEqual(log.notification.notification_type, 'plan_shared')
-        self.assertEqual(log.email_log.email_type, 'plan_shared')
+        self.assertIsNotNone(log.email_delivery)
         self.assertEqual(
             Notification.objects.filter(
                 user=self.member, notification_type='plan_shared',
             ).count(),
             1,
         )
+        from email_app.testing import deliver_pending_mail
+
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(user=self.member, email_type='plan_shared').count(),
             1,
@@ -459,7 +456,7 @@ class PlanCreateTest(TestCase):
         from unittest.mock import patch
 
         with patch(
-            'email_app.services.email_service.EmailService._send_ses',
+            'notifications.services.notification_service.send_package_mail',
             side_effect=RuntimeError('SES down'),
         ):
             response = self.client.post('/studio/plans/new', {

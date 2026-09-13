@@ -9,6 +9,7 @@ from django.test import TestCase, tag
 
 from accounts.models import Token
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import Plan, Sprint
 
@@ -65,11 +66,9 @@ class PlansApiShareTestBase(TestCase):
 
 @tag('core')
 class PlanSharePatchTest(PlansApiShareTestBase):
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_patch_shared_at_clamps_to_server_now_and_fires(self, mock_ses):
+    def test_patch_shared_at_clamps_to_server_now_and_fires(self):
         """A client-supplied ISO ts is IGNORED — server clamps to now().
         Bell + email both fire."""
-        mock_ses.return_value = 'msg-1'
         before = Plan.objects.get(pk=self.plan.pk).shared_at
         self.assertIsNone(before)
 
@@ -89,6 +88,7 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.member, email_type='plan_shared',
@@ -150,12 +150,10 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             0,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_patch_shared_at_reshare_fires_again(self, mock_ses):
+    def test_patch_shared_at_reshare_fires_again(self):
         """API PATCH re-share path mirrors the Studio button: a second
         non-null PATCH after the first one creates a second bell and a
         second email log."""
-        mock_ses.return_value = 'msg-1'
         self._patch({'shared_at': '2026-05-20T10:00:00Z'})
         self._patch({'shared_at': '2026-05-21T10:00:00Z'})
 
@@ -165,6 +163,7 @@ class PlanSharePatchTest(PlansApiShareTestBase):
             ).count(),
             2,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.member, email_type='plan_shared',

@@ -471,3 +471,62 @@ def studio_env_mismatch_context(request):
 
     payload = _build_env_mismatch_payload(request)
     return {'env_mismatch': payload}
+
+
+def package_settings_context(request):
+    """Expose OAuth card data to the package-owned Studio settings page.
+
+    ``community_base.config.views.settings_list`` intentionally owns its
+    context contract. This narrowly scoped processor supplies the site's
+    separate ``SocialApp`` controls without wrapping or replacing that view.
+    """
+    if not (request.path or '').startswith('/studio/settings'):
+        return {}
+
+    from community_base.config.views import _group_context  # noqa: PLC0415
+
+    from studio.services.auth_settings import get_all_auth_providers  # noqa: PLC0415
+
+    base_url = site_base_url()
+    auth_providers = get_all_auth_providers(base_url, settings.SOCIALACCOUNT_PROVIDERS)
+    groups = _group_context()
+    section_definitions = (
+        ('auth', 'Auth', 'OAuth providers users see on the login page.', {'auth'}),
+        ('payments', 'Payments', 'Billing and checkout integrations.', {'stripe'}),
+        ('content', 'Content', 'Content sync, video, and live-session service credentials.', {'github', 'zoom', 'calendly'}),
+        ('content_tools', 'Content Tools', 'Operator-side helpers that augment synced content.', {'banner_generator'}),
+        ('messaging', 'Messaging', 'Email, notifications, and community messaging integrations.', {'ses', 'slack', 'maven', 'triggers'}),
+        ('storage', 'Storage', 'Buckets and storage locations for generated and gated assets.', {'s3_recordings', 's3_content', 's3_downloads'}),
+        ('site', 'Site', 'Platform-level URL and display settings.', {'site'}),
+        ('analytics', 'Analytics', 'Visitor analytics integrations.', {'analytics'}),
+        ('ai', 'AI', 'Large-language-model provider settings.', {'llm'}),
+        ('observability', 'Observability', 'Production logging and tracing settings.', {'observability'}),
+    )
+    sections = []
+    mapped_groups = set()
+    for section_id, label, description, group_names in section_definitions:
+        section_groups = [group for group in groups if group['name'] in group_names]
+        mapped_groups.update(group['name'] for group in section_groups)
+        providers = auth_providers if section_id == 'auth' else []
+        if section_groups or providers:
+            sections.append({
+                'id': section_id,
+                'label': label,
+                'description': description,
+                'groups': section_groups,
+                'auth_providers': providers,
+            })
+    other_groups = [group for group in groups if group['name'] not in mapped_groups]
+    if other_groups:
+        sections.append({
+            'id': 'other',
+            'label': 'Other',
+            'description': 'Settings that are not yet mapped to a primary section.',
+            'groups': other_groups,
+            'auth_providers': [],
+        })
+    return {
+        'auth_providers': auth_providers,
+        'settings_sections': sections,
+        'site_base_url': base_url,
+    }

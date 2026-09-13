@@ -57,7 +57,10 @@ window.YT = {
     host.replaceWith(iframe);
     var player = {
       getIframe: function() { return iframe; },
-      seekTo: function() {}
+      seekCalls: [],
+      seekTo: function(seconds, allowSeekAhead) {
+        this.seekCalls.push([seconds, allowSeekAhead]);
+      }
     };
     if (config.events && config.events.onReady) {
       config.events.onReady({target: player});
@@ -963,6 +966,17 @@ class TestChaptersDisclosureExpandSeekCollapse:
             required_level=0,
         )
 
+        errors = []
+        page.on("pageerror", lambda exc: errors.append(str(exc)))
+        page.route(
+            "https://www.youtube.com/iframe_api",
+            lambda route: route.fulfill(
+                status=200,
+                content_type="application/javascript",
+                body=YOUTUBE_IFRAME_API_STUB,
+            ),
+        )
+
         # Workshop video page is the canonical recording surface (issue #426).
         # Issue #915: bare-slug URLs no longer redirect — use url_key.
         from content.models import Workshop
@@ -972,9 +986,12 @@ class TestChaptersDisclosureExpandSeekCollapse:
             wait_until="domcontentloaded",
         )
 
-        # Video embed is visible
-        yt_player = page.locator('[id^="yt-player-"]')
-        assert yt_player.count() >= 1
+        # Exercise the application's initialization callback before seeking.
+        # The API replaces the host element with its accessible iframe.
+        page.wait_for_function(
+            "() => Boolean(window._ytPlayers && window._ytPlayers.chapdemo01)"
+        )
+        expect(page.get_by_title("YouTube video player", exact=True)).to_be_visible()
 
         # Chapters disclosure renders, collapsed (no `open` attribute)
         chapters = page.locator('details[data-testid="video-chapters"]')
@@ -984,10 +1001,7 @@ class TestChaptersDisclosureExpandSeekCollapse:
             is False
         )
 
-        # Summary line shows "Chapters (5)" -- the visible text is
-        # uppercased via the `uppercase` Tailwind class but the underlying
-        # source text is "Chapters (5)".  Assert against the source text
-        # via textContent so the test matches the literal markup.
+        # Summary line shows the number of available chapters.
         summary = chapters.locator("summary")
         summary_source = summary.first.evaluate("el => el.textContent.trim()")
         assert "Chapters (5)" in summary_source
@@ -1011,24 +1025,17 @@ class TestChaptersDisclosureExpandSeekCollapse:
         # All 5 chapter rows are present and labelled correctly
         chapter_buttons = chapters.locator(".video-timestamp")
         assert chapter_buttons.count() == 5
-        rows_text = chapters.first.inner_text()
-        assert "[00:00]" in rows_text
-        assert "Welcome" in rows_text
-        assert "[01:00]" in rows_text
-        assert "Setup" in rows_text
+        expect(chapter_buttons).to_contain_text(
+            ["Welcome", "Setup", "Build", "Test", "Wrap up"]
+        )
+        for chapter_button in chapter_buttons.all():
+            expect(chapter_button).to_be_visible()
 
-        # Step: click the first chapter row -- existing seek handler
-        # should be wired up unchanged.  We assert via data attributes
-        # and a clean click that no console errors fire.
-        first_btn = chapter_buttons.first
-        assert first_btn.get_attribute("data-time-seconds") == "0"
-        assert first_btn.get_attribute("data-source") == "youtube"
-        assert first_btn.get_attribute("data-video-id") == "chapdemo01"
-
-        errors = []
-        page.on("pageerror", lambda exc: errors.append(str(exc)))
-        first_btn.click()
-        assert errors == []
+        # A nonzero seek recorded by the initialized player proves the
+        # application's chapter click handler actually reached the API.
+        assert page.evaluate("window._ytPlayers.chapdemo01.seekCalls") == []
+        chapters.get_by_role("button", name="[01:00] Setup", exact=True).click()
+        assert page.evaluate("window._ytPlayers.chapdemo01.seekCalls") == [[60, True]]
 
         # Step: click summary again to collapse
         summary.first.click()
@@ -1040,7 +1047,9 @@ class TestChaptersDisclosureExpandSeekCollapse:
             chapters.first.evaluate("el => el.hasAttribute('open')")
             is False
         )
-        assert first_chapter_btn.is_visible() is False
+        for chapter_button in chapter_buttons.all():
+            expect(chapter_button).to_be_hidden()
+        assert errors == []
 
 
 @pytest.mark.django_db(transaction=True)

@@ -1,4 +1,4 @@
-from community_base.api.registry import urlpatterns as community_base_api_urlpatterns
+from community_base.api.registry import urlpatterns as community_api_urlpatterns
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
@@ -36,6 +36,10 @@ urlpatterns = [
     path('api/', include(auth_api_urlpatterns)),
     path('api/', include(email_api_urlpatterns)),
     path('api/', include(notification_api_urlpatterns)),
+    # Package-owned operator API. The registry is populated by the package
+    # apps during django.setup(); mount it under its documented versioned
+    # prefix after app initialization and before the legacy /api surface.
+    path('api/v1/', include((community_api_urlpatterns(), 'community_base_api'))),
     path('api/', include('api.urls')),
     path('member-api/', include('member_api.urls')),
     path('', include(notification_page_urlpatterns)),
@@ -48,16 +52,14 @@ urlpatterns = [
     path('', include('voting.urls')),
     path('', include('comments.urls')),
     path('', include('email_app.urls')),
+    # A6.2: the package's signed Relay callback ingress plus the Relay-owned
+    # recipient link routes (tracking pixels, clicks, bridge unsubscribe).
+    # email_app stays mounted first so it keeps serving its own links.
+    path('', include('community_base.mail.urls')),
     path('', include('plans.urls')),
     path('', include('bookclub.urls')),
     path('', include('community.urls')),
-    # A2.3: package API registry (content-sync routes, Bearer scopes) under /api/v1/.
-    path('api/v1/', include(community_base_api_urlpatterns())),
-    # A2.3: package API registry (content-sync routes, Bearer scopes) under /api/v1/.
-    path('api/v1/', include(community_base_api_urlpatterns())),
     path('studio/', include('studio.urls')),
-    # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
-    path('studio/', include('community_base.content_sync.studio_urls')),
     # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
     path('studio/', include('community_base.content_sync.studio_urls')),
     path('', include('triggers.urls')),

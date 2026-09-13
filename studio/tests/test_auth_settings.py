@@ -7,11 +7,11 @@ when the matching provider has no credentials.
 """
 
 from allauth.socialaccount.models import SocialApp
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.test import TestCase, override_settings
-
-from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
@@ -35,14 +35,15 @@ class AuthLoginDashboardTest(TestCase):
         # Stable anchors for the sectioned dashboard. Auth has its own
         # section; integrations are grouped by operational area instead of
         # one legacy "integrations" zone.
-        self.assertContains(response, 'data-settings-section="auth"')
-        self.assertContains(response, 'id="auth"')
-        for section_id in ('payments', 'content', 'messaging', 'storage', 'site', 'analytics'):
+        self.assertContains(response, 'data-settings-card-type="auth"')
+        for section_id in (
+            'analytics', 'auth', 'banner_generator', 'calendly', 'github',
+            'llm', 'mail', 'maven', 'observability', 's3_content',
+            's3_downloads', 's3_recordings', 'ses', 'site', 'slack',
+            'stripe', 'triggers', 'zoom',
+        ):
             self.assertContains(response, f'data-settings-section="{section_id}"')
-            self.assertContains(response, f'href="#{section_id}"')
-        self.assertContains(response, 'id="integration-stripe"')
-        self.assertContains(response, 'id="integration-github"')
-        self.assertContains(response, 'id="integration-slack"')
+            self.assertContains(response, f'id="integration-{section_id}"')
 
     def test_auth_zone_renders_three_provider_cards(self):
         response = self.client.get('/studio/settings/')
@@ -243,15 +244,13 @@ class IntegrationSaveRegressionTest(TestCase):
 
     def test_stripe_save_does_not_touch_socialapp(self):
         self.client.login(email='admin@test.com', password='testpass')
-        response = self.client.post('/studio/settings/stripe/save/', {
-            'STRIPE_SECRET_KEY': 'sk_test_x',
-            'STRIPE_WEBHOOK_SECRET': '',
-            'STRIPE_CUSTOMER_PORTAL_URL': 'https://billing.example.test/portal-new',
-            'confirm_update': 'on',
-        })
-        self.assertEqual(response.status_code, 302)
+        package_set(
+            'STRIPE_CUSTOMER_PORTAL_URL',
+            'https://billing.example.test/portal-new',
+            actor_ref='test:auth-settings',
+        )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='STRIPE_CUSTOMER_PORTAL_URL').value,
+            Setting.objects.get(key='STRIPE_CUSTOMER_PORTAL_URL').value,
             'https://billing.example.test/portal-new',
         )
         # Saving an integration must not create OAuth login rows.

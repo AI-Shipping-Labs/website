@@ -8,11 +8,13 @@ exchange success, and the error branches that must not raise.
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
 
+from community_base.config.models import Setting
+from community_base.config.service import get as package_get
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
 
 User = get_user_model()
 
@@ -57,9 +59,7 @@ class CalendlyConnectTest(TestCase):
         self.assertIn('/studio/settings', resp['Location'])
 
     def test_connect_with_client_id_redirects_to_calendly_authorize(self):
-        IntegrationSetting.objects.create(
-            key='CALENDLY_OAUTH_CLIENT_ID', value='cid-123', group='calendly',
-        )
+        package_set('CALENDLY_OAUTH_CLIENT_ID', 'cid-123', actor_ref='test:calendly')
         clear_config_cache()
         self.client.login(email='staff@test.com', password='pw')
         resp = self.client.get(CONNECT_URL)
@@ -88,12 +88,8 @@ class CalendlyCallbackTest(TestCase):
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='pw')
-        IntegrationSetting.objects.create(
-            key='CALENDLY_OAUTH_CLIENT_ID', value='cid-123', group='calendly',
-        )
-        IntegrationSetting.objects.create(
-            key='CALENDLY_OAUTH_CLIENT_SECRET', value='secret-xyz', group='calendly',
-        )
+        package_set('CALENDLY_OAUTH_CLIENT_ID', 'cid-123', actor_ref='test:calendly')
+        package_set('CALENDLY_OAUTH_CLIENT_SECRET', 'secret-xyz', actor_ref='test:calendly')
         clear_config_cache()
 
     def tearDown(self):
@@ -119,23 +115,16 @@ class CalendlyCallbackTest(TestCase):
                 CALLBACK_URL, {'code': 'auth-code-1', 'state': state},
             )
         self.assertEqual(resp.status_code, 302)
-        stored = IntegrationSetting.objects.get(key='CALENDLY_ACCESS_TOKEN')
-        self.assertEqual(stored.value, 'host-token-abc')
-        self.assertTrue(stored.is_secret)
+        self.assertEqual(package_get('CALENDLY_ACCESS_TOKEN'), 'host-token-abc')
+        self.assertTrue(Setting.objects.get(key='CALENDLY_ACCESS_TOKEN').source)
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_REFRESH_TOKEN').value,
+            package_get('CALENDLY_REFRESH_TOKEN'),
             'refresh-1',
         )
 
     def test_callback_rejects_missing_refresh_token_and_preserves_existing_account(self):
-        IntegrationSetting.objects.create(
-            key='CALENDLY_ACCESS_TOKEN', value='existing-access',
-            group='calendly', is_secret=True,
-        )
-        IntegrationSetting.objects.create(
-            key='CALENDLY_REFRESH_TOKEN', value='existing-refresh',
-            group='calendly', is_secret=True,
-        )
+        package_set('CALENDLY_ACCESS_TOKEN', 'existing-access', actor_ref='test:calendly')
+        package_set('CALENDLY_REFRESH_TOKEN', 'existing-refresh', actor_ref='test:calendly')
         clear_config_cache()
         state = self._state()
         with patch(
@@ -152,11 +141,11 @@ class CalendlyCallbackTest(TestCase):
             )
         self.assertContains(response, 'Could not complete Calendly setup')
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_ACCESS_TOKEN').value,
+            package_get('CALENDLY_ACCESS_TOKEN'),
             'existing-access',
         )
         self.assertEqual(
-            IntegrationSetting.objects.get(key='CALENDLY_REFRESH_TOKEN').value,
+            package_get('CALENDLY_REFRESH_TOKEN'),
             'existing-refresh',
         )
         validate.assert_not_called()
@@ -168,7 +157,7 @@ class CalendlyCallbackTest(TestCase):
         )
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(
-            IntegrationSetting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
+            Setting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
         )
 
     def test_callback_without_code_does_not_store_token(self):
@@ -176,7 +165,7 @@ class CalendlyCallbackTest(TestCase):
         resp = self.client.get(CALLBACK_URL, {'state': state})
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(
-            IntegrationSetting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
+            Setting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
         )
 
     def test_callback_token_exchange_failure_does_not_raise(self):
@@ -192,7 +181,7 @@ class CalendlyCallbackTest(TestCase):
             )
         self.assertEqual(resp.status_code, 302)
         self.assertFalse(
-            IntegrationSetting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
+            Setting.objects.filter(key='CALENDLY_ACCESS_TOKEN').exists()
         )
 
     def test_callback_rejects_missing_or_wrong_state_before_exchange(self):

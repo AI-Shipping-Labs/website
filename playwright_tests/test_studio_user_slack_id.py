@@ -452,8 +452,8 @@ class TestStudioUserSlackId:
         )
         team_id_input.fill("T01TEAM123")
         # Saving a settings group POSTs and the server replies with a
-        # redirect to ``/studio/settings/#<section>`` (studio/views/settings.py
-        # _section redirect). ``el.form.submit()`` fires a native navigation;
+        # redirect to ``/studio/settings/#<section>`` (the package settings
+        # view's section redirect). ``el.form.submit()`` fires a native navigation;
         # waiting only on ``domcontentloaded`` here can resolve against the
         # already-loaded document while the POST->redirect chain is still in
         # flight, so the *next* ``goto`` races it and Playwright aborts with

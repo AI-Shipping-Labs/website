@@ -413,7 +413,7 @@ exist as API endpoints. The settings metadata endpoint is:
 
 ```bash
 curl -sS -H "Authorization: Token $API_SHIPPING_LABS_API_TOKEN" \
-  https://aishippinglabs.com/api/integrations/settings
+  https://aishippinglabs.com/api/v1/settings/<key>
 ```
 
 ECS inspection is separate from application data. The local `.env` may

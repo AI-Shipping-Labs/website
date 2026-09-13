@@ -188,7 +188,7 @@ Rotation: Safe to rotate.
 1. In the Marketplace app, click "Regenerate" next to the client secret.
    Zoom shows the new value once. Copy it.
 2. Update this setting via Studio (Integration settings > Zoom >
-   `ZOOM_CLIENT_SECRET`) or via `POST /api/integrations/settings`.
+   `ZOOM_CLIENT_SECRET`) or via `PUT /api/v1/settings/<key>`.
 3. Restart every web and worker process, or wait up to 60 minutes for every
    process-local cached token to expire.
 4. Window of impact: between the moment Zoom regenerates the secret and
@@ -289,7 +289,7 @@ Rotation: Safe to rotate.
 1. In the Marketplace app, click "Regenerate" next to the secret token.
    Zoom shows the new value once. Copy it.
 2. Update this setting via Studio (Integration settings > Zoom >
-   `ZOOM_WEBHOOK_SECRET_TOKEN`) or via `POST /api/integrations/settings`.
+   `ZOOM_WEBHOOK_SECRET_TOKEN`) or via `PUT /api/v1/settings/<key>`.
 3. Window of impact: between the moment Zoom regenerates the secret
    and you save it here, signature validation fails and webhooks return
    400. Zoom retries failed deliveries automatically, so transient

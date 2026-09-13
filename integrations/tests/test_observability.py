@@ -11,13 +11,13 @@ import importlib
 import os
 from unittest.mock import patch
 
+from community_base.config.service import set as package_set
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from integrations.apps import IntegrationsConfig
 from integrations.config import clear_config_cache, reset_local_config_cache
-from integrations.models import IntegrationSetting
 from integrations.services import observability
 from integrations.services.observability import (
     init_logfire,
@@ -258,7 +258,7 @@ class LogfireAppStartupTest(ResetsObservabilityState, SimpleTestCase):
         with patch.dict(os.environ, {}, clear=True), \
                 patch.object(django_apps, 'ready', False), \
                 patch.object(observability, 'get_config') as get_config, \
-                patch.object(IntegrationSetting, 'objects') as objects, \
+                patch('community_base.config.models.Setting.objects') as objects, \
                 patch(
                     'integrations.shared_cache.get_shared_cache',
                 ) as get_shared_cache, patch(
@@ -275,22 +275,9 @@ class LogfireAppStartupTest(ResetsObservabilityState, SimpleTestCase):
 class LogfireRuntimeConfigTest(ResetsObservabilityState, TestCase):
 
     def _set_runtime_config(self, *, enabled='true', token=FAKE_TOKEN):
-        IntegrationSetting.objects.update_or_create(
-            key='LOGFIRE_ENABLED',
-            defaults={'value': enabled, 'group': 'observability'},
-        )
-        IntegrationSetting.objects.update_or_create(
-            key='LOGFIRE_TOKEN',
-            defaults={
-                'value': token,
-                'is_secret': True,
-                'group': 'observability',
-            },
-        )
-        IntegrationSetting.objects.update_or_create(
-            key='LOGFIRE_ENVIRONMENT',
-            defaults={'value': 'production', 'group': 'observability'},
-        )
+        package_set('LOGFIRE_ENABLED', enabled, actor_ref='test:observability')
+        package_set('LOGFIRE_TOKEN', token, actor_ref='test:observability')
+        package_set('LOGFIRE_ENVIRONMENT', 'production', actor_ref='test:observability')
         clear_config_cache()
 
     @override_settings(
@@ -300,24 +287,9 @@ class LogfireRuntimeConfigTest(ResetsObservabilityState, TestCase):
         LOGFIRE_ENVIRONMENT='production',
     )
     def test_db_only_values_apply_in_post_setup_runtime_pass(self):
-        IntegrationSetting.objects.bulk_create([
-            IntegrationSetting(
-                key='LOGFIRE_TOKEN',
-                value=FAKE_TOKEN,
-                is_secret=True,
-                group='observability',
-            ),
-            IntegrationSetting(
-                key='LOGFIRE_ENABLED',
-                value='true',
-                group='observability',
-            ),
-            IntegrationSetting(
-                key='LOGFIRE_ENVIRONMENT',
-                value='studio-stage',
-                group='observability',
-            ),
-        ])
+        package_set('LOGFIRE_TOKEN', FAKE_TOKEN, actor_ref='test:observability')
+        package_set('LOGFIRE_ENABLED', 'true', actor_ref='test:observability')
+        package_set('LOGFIRE_ENVIRONMENT', 'studio-stage', actor_ref='test:observability')
         import logfire
 
         with patch.dict(os.environ, {}, clear=True), \

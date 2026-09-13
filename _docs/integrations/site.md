@@ -29,8 +29,8 @@ needs to generate a full link rather than a relative path:
   (`website/context_processors.py:168`) compares this URL to the
   request host.
 
-Resolution order: DB-stored `IntegrationSetting` > environment
-variable `SITE_BASE_URL` > Django setting `SITE_BASE_URL` (defaults
+Resolution order: package `cb_config.Setting` > read-only legacy fallback >
+environment variable `SITE_BASE_URL` > Django setting `SITE_BASE_URL` (defaults
 to `https://aishippinglabs.com`).
 
 Without it: Falls back to the Django settings default. If that

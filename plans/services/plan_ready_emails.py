@@ -111,7 +111,7 @@ def send_plan_ready_email_for_plan(plan, *, actor):
                 swallow_email_errors=False,
             )
             if delivery.email_log is None:
-                raise RuntimeError('plan_shared email was not logged')
+                raise RuntimeError('plan_shared delivery was not queued')
     except Exception as exc:
         logger.exception(
             'Failed to send individual plan-ready email to %s for plan %s',
@@ -199,7 +199,7 @@ def send_plan_ready_emails(*, sprint, actor, dry_run=False):
                     swallow_email_errors=False,
                 )
                 if delivery.email_log is None:
-                    raise RuntimeError('plan_shared email was not logged')
+                    raise RuntimeError('plan_shared delivery was not queued')
         except Exception as exc:
             logger.exception(
                 'Failed to send bulk plan-ready email to %s for plan %s',
@@ -400,10 +400,15 @@ def _mark_plan_send_sent(plan, log, delivery):
         shared_at=sent_at,
         updated_at=sent_at,
     )
+    # A1.2 slice 4: ``delivery.email_log`` carries the durable
+    # ``EmailDelivery`` (transitional naming), never an ``EmailLog`` —
+    # that row is written from the delivery worker after provider
+    # acceptance, so the audit FK can no longer be filled synchronously.
+    # The delivery FK keeps the operator-resolvable link to the send.
     PlanReadyEmailLog.objects.filter(pk=log.pk).update(
         status=PLAN_READY_EMAIL_STATUS_SENT,
         notification=delivery.notification,
-        email_log=delivery.email_log,
+        email_delivery=delivery.email_log,
         sent_at=sent_at,
         last_error='',
         updated_at=sent_at,

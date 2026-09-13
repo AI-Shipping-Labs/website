@@ -11,7 +11,7 @@ uv run asl --help
 
 ## Auth
 
-Staff token resolved from: `ASL_API_TOKEN` env var -> `API_SHIPPING_LABS_API_TOKEN` in `.env` -> prompt.
+The credential is resolved from `ASL_API_TOKEN` env var -> `API_SHIPPING_LABS_API_TOKEN` in `.env` -> prompt. Existing `/api` commands send the legacy `Token` header. The `integrations` commands use the package `/api/v1/settings` routes and send the same credential as a `Bearer` API key; create a `community_base` staff key with the required `settings.read` and `settings.write` scopes for those commands.
 Override base URL with `ASL_BASE_URL` (default `https://aishippinglabs.com`).
 
 ## Usage
@@ -218,7 +218,7 @@ without moving that policy into the CLI.
 
 ```bash
 uv run asl raw GET /api/events -p status=upcoming
-uv run asl raw POST /api/integrations/settings --data '{"updates":[...]}'
+uv run asl raw POST /api/v1/settings/import --data '{"settings":{"SITE_BASE_URL":"https://aishippinglabs.com"}}'
 ```
 
 ## Command groups

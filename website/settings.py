@@ -262,6 +262,7 @@ TEMPLATES = [
                 'website.context_processors.impersonation_context',
                 'website.context_processors.announcement_banner_context',
                 'website.context_processors.studio_env_mismatch_context',
+                'website.context_processors.package_settings_context',
                 'accounts.context_processors.unverified_email_banner',
                 'accounts.context_processors.newsletter_only_user',
                 'accounts.context_processors.timezone_backfill',
@@ -390,13 +391,14 @@ SITE_NAME = 'AI Shipping Labs'
 # (unsubscribe links, calendar invites, password resets, OAuth redirect
 # URIs, share URLs, OG / canonical meta tags, Slack announcement links,
 # UTM campaign destinations). Resolution order at runtime (via
-# ``integrations.config.site_base_url()``): IntegrationSetting row in
-# the DB (Studio > Settings > Site) > ``settings.SITE_BASE_URL`` (the
-# env var snapshot) > literal default.
+# ``integrations.config.site_base_url()``): package ``cb_config.Setting`` row
+# in the DB (Studio > Settings > Site) > ``settings.SITE_BASE_URL`` (the env
+# var snapshot) > literal default. The shim temporarily falls back to a
+# legacy ``IntegrationSetting`` row during the A0.2 rolling migration.
 #
 # IMPORTANT: this assignment intentionally does NOT call ``get_config``.
-# In production, ``get_config`` triggers a DatabaseCache GET + an
-# ``IntegrationSetting.objects.values_list`` query against RDS at
+# In production, ``get_config`` triggers a DatabaseCache GET + package
+# setting query against RDS at
 # settings-import time. That cost (~1-3s per process) was paid four
 # times during a cold start — once for each ``manage.py`` subprocess in
 # the old entrypoint plus the gunicorn parent. We now resolve this from
@@ -645,8 +647,8 @@ if not SES_ENABLED:
     AWS_SECRET_ACCESS_KEY = ''
 
 # S3 content-image uploads (issues #532, #1068, #1131)
-# S3_ENABLED is a registered IntegrationSetting in
-# integrations/settings_registry.py (s3_content group), resolved at runtime
+# S3_ENABLED is a registered package configuration key declared by
+# integrations/settings_keys.py (s3_content group), resolved at runtime
 # via ``integrations.config.s3_content_upload_enabled()`` (DB override ->
 # settings -> env -> default 'true'). Since #1131 it is default-ON so a
 # missing/drifted env var in the prod worker container can no longer silently
@@ -771,5 +773,11 @@ COMMUNITY_BASE = {
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
     'MAIL_TEMPLATE_OVERRIDE_LOADER': 'email_app.hooks.template_override_loader',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
+    # A6.2: the Relay contacts/subscriptions mirror. BASE_URL/API_KEY point
+    # at the Relay tenant serving the AISL audience; WEBHOOK_SECRET verifies
+    # the signed callback ingress mounted from community_base.mail.urls.
+    'RELAY_BASE_URL': os.getenv('RELAY_BASE_URL', ''),
+    'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
+    'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
 }

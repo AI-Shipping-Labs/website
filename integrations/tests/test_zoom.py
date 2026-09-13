@@ -17,6 +17,8 @@ from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
 from unittest.mock import MagicMock, patch
 
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -50,9 +52,7 @@ class _ZoomSecretIsolationMixin:
     def setUp(self):
         super().setUp()
         from integrations.config import clear_config_cache
-        from integrations.models import IntegrationSetting
-
-        IntegrationSetting.objects.filter(key__in=(
+        Setting.objects.filter(key__in=(
             'ZOOM_WEBHOOK_SECRET_TOKEN',
             'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
         )).delete()
@@ -1244,14 +1244,7 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
     def test_url_validation_uses_studio_secret_for_signature_and_hmac(self):
         from integrations.config import clear_config_cache
 
-        IntegrationSetting.objects.update_or_create(
-            key='ZOOM_WEBHOOK_SECRET_TOKEN',
-            defaults={
-                'value': 'studio-secret',
-                'group': 'zoom',
-                'is_secret': True,
-            },
-        )
+        package_set('ZOOM_WEBHOOK_SECRET_TOKEN', 'studio-secret', actor_ref='test:zoom')
         clear_config_cache()
 
         payload = {
@@ -1286,14 +1279,7 @@ class ZoomWebhookUrlValidationTest(_ZoomSecretIsolationMixin, TestCase):
     def test_url_validation_rejects_stale_settings_secret_after_rotation(self):
         from integrations.config import clear_config_cache
 
-        IntegrationSetting.objects.update_or_create(
-            key='ZOOM_WEBHOOK_SECRET_TOKEN',
-            defaults={
-                'value': 'studio-secret',
-                'group': 'zoom',
-                'is_secret': True,
-            },
-        )
+        package_set('ZOOM_WEBHOOK_SECRET_TOKEN', 'studio-secret', actor_ref='test:zoom')
         clear_config_cache()
 
         payload = {

@@ -70,30 +70,37 @@ def _toggle(page, section):
 
 
 def _seed_stripe_settings():
-    from integrations.models import IntegrationSetting
+    from community_base.config.models import Setting
+    from community_base.config.service import set as package_set
 
-    IntegrationSetting.objects.filter(group="stripe").delete()
-    IntegrationSetting.objects.create(
-        key="STRIPE_CUSTOMER_PORTAL_URL",
-        value="https://example.com/old-portal",
-        group="stripe",
-        is_secret=False,
+    Setting.objects.filter(
+        key__in=(
+            "STRIPE_CUSTOMER_PORTAL_URL",
+            "STRIPE_SECRET_KEY",
+            "STRIPE_DASHBOARD_ACCOUNT_ID",
+            "STRIPE_WEBHOOK_SECRET",
+        )
+    ).delete()
+    package_set(
+        "STRIPE_CUSTOMER_PORTAL_URL",
+        "https://example.com/old-portal",
+        actor_ref="test:1287",
     )
-    IntegrationSetting.objects.create(
-        key="STRIPE_SECRET_KEY",
-        value="sk_old_1287",
-        group="stripe",
-        is_secret=True,
-    )
+    package_set("STRIPE_SECRET_KEY", "sk_old_1287", actor_ref="test:1287")
+    package_set("STRIPE_DASHBOARD_ACCOUNT_ID", "acct_old_1287", actor_ref="test:1287")
+    package_set("STRIPE_WEBHOOK_SECRET", "whsec_old_1287", actor_ref="test:1287")
     connection.close()
 
 
 def _integration_values(*keys):
-    from integrations.models import IntegrationSetting
+    from community_base.config.models import Setting
+    from community_base.config.service import get as package_get
+    from community_base.config.service import runtime
 
-    result = dict(
-        IntegrationSetting.objects.filter(key__in=keys).values_list("key", "value")
-    )
+    connection.close()
+    runtime.reset()
+    stored_keys = set(Setting.objects.filter(key__in=keys).values_list("key", flat=True))
+    result = {key: package_get(key) for key in stored_keys}
     connection.close()
     return result
 
@@ -250,7 +257,7 @@ def test_invalid_stripe_save_is_atomic_then_valid_save_succeeds(django_server, b
     stripe.locator('input[name="STRIPE_SECRET_KEY"]').fill("sk_changed_1287")
     stripe.locator('button[type="submit"]').click()
     page.wait_for_load_state("domcontentloaded")
-    assert re.search(r"Saved \d+ settings in Stripe\.", page.locator("body").inner_text())
+    assert "Saved stripe settings." in page.locator("body").inner_text()
     context.close()
 
 

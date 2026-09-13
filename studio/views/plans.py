@@ -581,13 +581,13 @@ def _reshare_plan_and_flash(request, plan):
         messages.warning(
             request,
             f'Re-shared plan with {email} and created the bell '
-            'notification, but the email failed to send.',
+            'notification, but the email could not be queued.',
         )
         return
     messages.success(
         request,
-        f'Re-shared plan with {email}. A new bell notification and email '
-        'were sent.',
+        f'Re-shared plan with {email}. A new bell notification was '
+        'created and the email was queued for delivery.',
     )
 
 

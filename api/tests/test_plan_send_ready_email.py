@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     PLAN_READY_EMAIL_STATUS_FAILED,
@@ -117,10 +118,7 @@ class PlanSendReadyEmailApiTest(TestCase):
         self.assertFalse(mock_ses.called)
         self._no_side_effects()
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_live_send_creates_exactly_one_bell_email_and_log(self, mock_ses):
-        mock_ses.return_value = 'msg-1'
-
+    def test_live_send_creates_exactly_one_bell_email_and_log(self):
         response = self._post()
 
         self.assertEqual(response.status_code, 200)
@@ -137,6 +135,7 @@ class PlanSendReadyEmailApiTest(TestCase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.member, email_type='plan_shared',
@@ -147,11 +146,7 @@ class PlanSendReadyEmailApiTest(TestCase):
             plan=self.plan,
         ).count(), 1)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_repeat_call_reports_already_sent_and_preserves_shared_at(
-        self, mock_ses,
-    ):
-        mock_ses.return_value = 'msg-1'
+    def test_repeat_call_reports_already_sent_and_preserves_shared_at(self):
         first = self._post().json()
 
         second = self._post().json()
@@ -159,6 +154,7 @@ class PlanSendReadyEmailApiTest(TestCase):
         self.assertEqual(second['ready_email']['status'], 'already_sent')
         self.assertFalse(second['ready_email']['sent'])
         self.assertEqual(second['shared_at'], first['shared_at'])
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='plan_shared').count(), 1,
         )
@@ -184,7 +180,9 @@ class PlanSendReadyEmailApiTest(TestCase):
         self.assertEqual(self.plan.shared_at, shared_at)
         self.assertEqual(Notification.objects.count(), 0)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch(
+        'notifications.services.notification_service.send_package_mail',
+    )
     def test_failed_delivery_reports_retryable_and_leaves_plan_unshared(
         self, mock_ses,
     ):

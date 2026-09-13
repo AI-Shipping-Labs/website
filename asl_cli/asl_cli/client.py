@@ -39,7 +39,6 @@ class Client:
         self._token = resolve_staff_token()
         self._http = httpx.Client(
             base_url=self.base_url,
-            headers={"Authorization": f"Token {self._token}"},
             timeout=30.0,
             follow_redirects=True,
         )
@@ -59,8 +58,16 @@ class Client:
         if path != "/" and path.endswith("/"):
             path = path.rstrip("/")
 
+        request_headers = {"Authorization": f"Token {self._token}"}
+        # community-base operator endpoints use bearer API keys. Keep the
+        # legacy Token header for the site's existing /api compatibility
+        # routes until those routes migrate in their owning issues.
+        if path.lstrip("/").startswith("api/v1/"):
+            request_headers["Authorization"] = f"Bearer {self._token}"
+        if headers:
+            request_headers.update(headers)
         response = self._http.request(
-            method, path, params=params, json=json_body, headers=headers,
+            method, path, params=params, json=json_body, headers=request_headers,
         )
 
         if response.status_code >= 400:

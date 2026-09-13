@@ -25,7 +25,7 @@ def raw(method, path, data, params, raw_output, fmt):
 
       asl raw GET /api/events
       asl raw GET /api/users -p email=someone@example.com
-      asl raw POST /api/integrations/settings --data '{"updates":[...]}'
+      asl raw POST /api/v1/settings/import --data '{"settings":{...}}'
     """
     query = {}
     for p in params:

@@ -1,86 +1,49 @@
-"""Tests for the Studio banner_generator settings surface (issue #788).
+"""Package-owned banner generator settings coverage."""
 
-Confirms:
-
-- ``/studio/settings/`` exposes the new ``Content Tools`` section.
-- The ``banner_generator`` group renders both fields.
-- POSTing to the save endpoint upserts both IntegrationSetting rows and
-  clears the config cache.
-"""
-
+from community_base.config.models import Setting
+from community_base.config.service import set as package_set
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import TestCase
 
 from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
+from integrations.services.banner_generator import is_enabled
 
 User = get_user_model()
 
 
 class SettingsDashboardBannerGeneratorTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email="banner-staff@test.com", password="testpass", is_staff=True
+        )
+        cls.member = User.objects.create_user(email="banner-member@test.com", password="testpass")
 
     def setUp(self):
         clear_config_cache()
-        self.addCleanup(clear_config_cache)
-        self.client = Client()
-        self.staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.normal = User.objects.create_user(
-            email='user@test.com', password='testpass',
-        )
 
-    def test_anonymous_redirects_to_login(self):
-        response = self.client.get('/studio/settings/')
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('/accounts/login/', response.url)
+    def tearDown(self):
+        Setting.objects.filter(key__startswith="BANNER_GENERATOR_").delete()
+        clear_config_cache()
 
-    def test_non_staff_user_gets_403(self):
-        self.client.login(email='user@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        self.assertEqual(response.status_code, 403)
+    def test_anonymous_redirects_and_non_staff_is_forbidden(self):
+        self.assertEqual(self.client.get("/studio/settings/").status_code, 302)
+        self.client.login(email=self.member.email, password="testpass")
+        self.assertEqual(self.client.get("/studio/settings/").status_code, 403)
 
-    def test_staff_sees_content_tools_section(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        response = self.client.get('/studio/settings/')
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Content Tools')
-        self.assertContains(response, 'BANNER_GENERATOR_FUNCTION_URL')
-        self.assertContains(response, 'BANNER_GENERATOR_AUTH_TOKEN')
+    def test_staff_sees_package_group_and_fields(self):
+        self.client.login(email=self.staff.email, password="testpass")
+        response = self.client.get("/studio/settings/")
 
-    def test_save_upserts_both_keys(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        response = self.client.post(
-            '/studio/settings/banner_generator/save/',
-            {
-                'BANNER_GENERATOR_FUNCTION_URL': 'https://lambda.example.com/render',
-                'BANNER_GENERATOR_AUTH_TOKEN': 'token-zzz',
-            },
-        )
-        self.assertEqual(response.status_code, 302)
-        self.assertIn('content_tools', response.url)
-        self.assertEqual(
-            IntegrationSetting.objects.get(
-                key='BANNER_GENERATOR_FUNCTION_URL',
-            ).value,
-            'https://lambda.example.com/render',
-        )
-        self.assertEqual(
-            IntegrationSetting.objects.get(
-                key='BANNER_GENERATOR_AUTH_TOKEN',
-            ).value,
-            'token-zzz',
-        )
+        self.assertContains(response, "banner_generator")
+        self.assertContains(response, "BANNER_GENERATOR_FUNCTION_URL")
+        self.assertContains(response, "BANNER_GENERATOR_AUTH_TOKEN")
 
-    def test_save_clears_config_cache(self):
-        self.client.login(email='staff@test.com', password='testpass')
-        self.client.post(
-            '/studio/settings/banner_generator/save/',
-            {
-                'BANNER_GENERATOR_FUNCTION_URL': 'https://lambda.example.com/render',
-                'BANNER_GENERATOR_AUTH_TOKEN': 'token-zzz',
-            },
-        )
-        # is_enabled() must see the saved values without a process restart.
-        from integrations.services.banner_generator import is_enabled
+    def test_package_values_drive_runtime_feature(self):
+        package_set("BANNER_GENERATOR_FUNCTION_URL", "https://lambda.example.test/render", actor_ref="test:1584")
+        package_set("BANNER_GENERATOR_AUTH_TOKEN", "token-zzz", actor_ref="test:1584")
+        clear_config_cache()
+
         self.assertTrue(is_enabled())
+        self.assertEqual(Setting.objects.get(key="BANNER_GENERATOR_FUNCTION_URL").value, "https://lambda.example.test/render")
+        self.assertFalse(Setting.objects.filter(key="BANNER_GENERATOR_AUTH_TOKEN", value="token-zzz").exists())

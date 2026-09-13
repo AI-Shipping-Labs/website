@@ -3,11 +3,13 @@
 import datetime
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     PLAN_READY_EMAIL_STATUS_FAILED,
@@ -51,11 +53,11 @@ class RunPlanReadyActionTest(TestCase):
 
     def test_dry_run_reports_eligible_without_any_write(self):
         with patch(
-            'email_app.services.email_service.EmailService._send_ses',
-        ) as mock_ses:
+            'notifications.services.notification_service.send_package_mail',
+        ) as mock_send:
             result = self._run(dry_run=True)
 
-        self.assertFalse(mock_ses.called)
+        self.assertFalse(mock_send.called)
         self.assertEqual(result['plan_id'], self.plan.pk)
         self.assertEqual(result['member_id'], self.member.pk)
         self.assertEqual(result['member_email'], 'member@test.com')
@@ -74,10 +76,7 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(Notification.objects.count(), 0)
         self.assertEqual(EmailLog.objects.count(), 0)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_first_live_call_sends_once_and_stamps_shared_at(self, mock_ses):
-        mock_ses.return_value = 'msg-1'
-
+    def test_first_live_call_sends_once_and_stamps_shared_at(self):
         result = self._run()
 
         ready = result['ready_email']
@@ -98,6 +97,7 @@ class RunPlanReadyActionTest(TestCase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=self.member, email_type='plan_shared',
@@ -106,12 +106,11 @@ class RunPlanReadyActionTest(TestCase):
         )
         log = PlanReadyEmailLog.objects.get(plan=self.plan)
         self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_SENT)
+        self.assertIsNotNone(log.email_delivery)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
     def test_repeat_after_success_reports_already_sent_without_duplicates(
-        self, mock_ses,
+        self,
     ):
-        mock_ses.return_value = 'msg-1'
         first = self._run()
         first_shared_at = first['shared_at']
 
@@ -129,12 +128,12 @@ class RunPlanReadyActionTest(TestCase):
             ).count(),
             1,
         )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='plan_shared').count(), 1,
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_historically_shared_plan_reports_already_shared(self, mock_ses):
+    def test_historically_shared_plan_reports_already_shared(self):
         shared_at = timezone.now()
         self.plan.shared_at = shared_at
         self.plan.save(update_fields=['shared_at'])
@@ -145,7 +144,7 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(ready['status'], 'already_shared')
         self.assertTrue(ready['skipped_already_shared'])
         self.assertFalse(ready['sent'])
-        self.assertFalse(mock_ses.called)
+        self.assertEqual(EmailDelivery.objects.count(), 0)
         self.plan.refresh_from_db()
         self.assertEqual(self.plan.shared_at, shared_at)
         self.assertEqual(PlanReadyEmailLog.objects.count(), 0)
@@ -160,12 +159,12 @@ class RunPlanReadyActionTest(TestCase):
         )
 
         with patch(
-            'email_app.services.email_service.EmailService._send_ses',
-        ) as mock_ses:
+            'notifications.services.notification_service.send_package_mail',
+        ) as mock_send:
             result = self._run()
 
         self.assertEqual(result['ready_email']['status'], 'in_progress')
-        self.assertFalse(mock_ses.called)
+        self.assertFalse(mock_send.called)
         self.plan.refresh_from_db()
         self.assertIsNone(self.plan.shared_at)
 
@@ -191,10 +190,7 @@ class RunPlanReadyActionTest(TestCase):
         log = PlanReadyEmailLog.objects.get(plan=self.plan)
         self.assertEqual(log.status, PLAN_READY_EMAIL_STATUS_FAILED)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_retry_after_failure_completes_only_the_requested_plan(
-        self, mock_ses,
-    ):
+    def test_retry_after_failure_completes_only_the_requested_plan(self):
         sibling = Plan.objects.create(member=self.other, sprint=self.sprint)
         PlanReadyEmailLog.objects.create(
             plan=self.plan,
@@ -203,7 +199,6 @@ class RunPlanReadyActionTest(TestCase):
             status=PLAN_READY_EMAIL_STATUS_FAILED,
             last_error='ses exploded',
         )
-        mock_ses.return_value = 'msg-1'
 
         result = self._run()
 
@@ -242,6 +237,7 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(ready['status'], 'already_sent')
         self.assertTrue(ready['dry_run'])
         self.assertFalse(ready['requested'])
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='plan_shared').count(), 1,
         )

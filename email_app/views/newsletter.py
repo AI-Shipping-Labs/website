@@ -7,6 +7,7 @@ import logging
 import jwt
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.utils import timezone
@@ -19,6 +20,7 @@ from accounts.services.auth_throttle import SCOPE_SUBSCRIBE, consume_auth_thrott
 from accounts.services.user_creation import create_user_conflict_safe
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
+from email_app import relay_sync
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -176,9 +178,20 @@ def subscribe_api(request):
     if created or not user.email_verified:
         # A collision loser follows the same resend semantics as the sequential
         # existing-user path. Never extend the winner's original purge window.
-        _send_subscribe_verification_email(
-            user, redirect_to=redirect_to or None
-        )
+        if redirect_to:
+            # Lead magnet delivery keeps the site-sent template: Relay's
+            # verification flow has no download-link concept, so moving it
+            # there is not possible without a product change (recorded in
+            # the A6.2 pull request).
+            _send_subscribe_verification_email(
+                user, redirect_to=redirect_to or None
+            )
+        else:
+            # A6.2 step 4: the double opt-in message moves to Relay. Relay
+            # sends the confirm mail and owns the link; the token lands back
+            # on /subscribe/confirm, which mirrors the verified state.
+            with transaction.atomic():
+                relay_sync.dispatch_request_verification(user.pk)
 
     return JsonResponse(
         {
@@ -278,7 +291,11 @@ def unsubscribe_api(request):
         preferences["newsletter"] = False
         user.unsubscribed = True
         user.email_preferences = preferences
-        user.save(update_fields=["unsubscribed", "email_preferences"])
+        with transaction.atomic():
+            user.save(update_fields=["unsubscribed", "email_preferences"])
+            # A6.2 step 2: the opt-out reaches Relay through a job handler
+            # after commit; the network call never runs inside the request.
+            relay_sync.dispatch_unsubscribe(user.pk)
 
     if request.method == "POST":
         return HttpResponse("Unsubscribed", content_type="text/plain")
@@ -355,14 +372,16 @@ def verify_and_subscribe_api(request):
     # applies to accounts that never confirmed. Clearing it here matches
     # ``verify_email_api``.
     user.verification_expires_at = None
-    user.save(
-        update_fields=[
-            "email_preferences",
-            "unsubscribed",
-            "email_verified",
-            "verification_expires_at",
-        ]
-    )
+    with transaction.atomic():
+        user.save(
+            update_fields=[
+                "email_preferences",
+                "unsubscribed",
+                "email_verified",
+                "verification_expires_at",
+            ]
+        )
+        relay_sync.dispatch_contact_sync(user.pk)
 
     message = (
         "Your email is verified and you're subscribed to the AI Shipping Labs "
@@ -443,7 +462,9 @@ def maven_email_opt_out(request):
     preferences = dict(user.email_preferences or {})
     preferences["maven_emails"] = False
     user.email_preferences = preferences
-    user.save(update_fields=["email_preferences"])
+    with transaction.atomic():
+        user.save(update_fields=["email_preferences"])
+        relay_sync.dispatch_contact_sync(user.pk)
     message = "Maven course emails are off. Your course and community access are unchanged. You can turn them on again from Account."
     if request.method == "POST":
         return HttpResponse(message, content_type="text/plain")
@@ -457,4 +478,64 @@ def subscribe_page(request):
         request,
         "email_app/subscribe.html",
         {"hide_footer_newsletter": True},
+    )
+
+
+def subscribe_confirm_page(request):
+    """Land Relay's double opt-in confirm link (A6.2 step 4).
+
+    Relay builds the confirm URL from its SUBSCRIPTION_CONFIRM_BASE_URL
+    setting, which must point at this page in the development environment.
+    The token is exchanged immediately and the verified state is mirrored
+    onto the signup created by ``subscribe_api``. Like every subscribe
+    surface, the page never names whether an address exists.
+    """
+    token = request.GET.get("token", "")
+    if not token:
+        return _opt_in_failure(request, "This confirm link is incomplete.")
+    outcome, user_id = relay_sync.confirm_subscription(token)
+    if outcome == "confirmed":
+        message = (
+            "Your email is confirmed and you're subscribed to the AI Shipping "
+            "Labs newsletter — community news, new workshops, and events. You "
+            "can unsubscribe at any time."
+        )
+        if request.method == "POST":
+            return HttpResponse(message, content_type="text/plain")
+        context = {
+            "success": True,
+            "result_heading": "You're subscribed",
+            "message": message,
+        }
+        if user_id:
+            # Consent that is hard to withdraw is not really consent: offer
+            # the no-login unsubscribe link, same as verify-and-subscribe.
+            context["unsubscribe_url"] = (
+                "/api/unsubscribe?token="
+                f'{generate_user_action_token(user_id, "unsubscribe")}'
+            )
+        return render(request, "email_app/unsubscribe_result.html", context)
+    if outcome == "unavailable":
+        message = (
+            "We couldn't reach the mailing service to confirm your "
+            "subscription. The link stays valid — please try again in a moment."
+        )
+        status = 503
+    elif outcome == "unknown_user":
+        message = (
+            "This confirm link is valid, but its signup was removed because "
+            "it was never confirmed in time. Please subscribe again."
+        )
+        status = 410
+    else:
+        return _opt_in_failure(
+            request, "This subscribe link is invalid or has expired."
+        )
+    if request.method == "POST":
+        return HttpResponse(message, status=status, content_type="text/plain")
+    return render(
+        request,
+        "email_app/unsubscribe_result.html",
+        {"success": False, "message": message},
+        status=status,
     )

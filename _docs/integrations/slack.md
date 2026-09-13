@@ -138,7 +138,7 @@ Rotation: Safe to rotate, but requires a re-install in some cases.
    scope change a reinstall is mandatory; if the reinstall issues a new
    token, the `SLACK_BOT_TOKEN` update in the next step is also required.
 2. Update this setting via Studio (Integration settings > Slack >
-   `SLACK_BOT_TOKEN`) or via `POST /api/integrations/settings`.
+   `SLACK_BOT_TOKEN`) or via `PUT /api/v1/settings/<key>`.
 3. Window of impact: until the new value is saved, all bot API calls
    fail with `invalid_auth`. Posts queued while the token is bad simply
    error and are dropped — Slack does not retain a server-side queue
@@ -556,7 +556,7 @@ Rotation: Safe and easy.
 1. Slack > workspace admin > "Invitations" > revoke the old link.
 2. Create a new link with the desired expiry / max uses.
 3. Update this setting via Studio (Integration settings > Slack >
-   `SLACK_INVITE_URL`) or via `POST /api/integrations/settings`.
+   `SLACK_INVITE_URL`) or via `PUT /api/v1/settings/<key>`.
 4. Old links stop working at the moment you revoke — users who click a
    revoked link see Slack's "invite expired" page.
 
@@ -594,7 +594,7 @@ Purpose: Link to the `#book-club` channel shown to members on Book Club
 surfaces (`/books/<slug>` and the pages built in the epic #1353). A
 workspace deep link (e.g.
 `https://<workspace>.slack.com/archives/<channel_id>`) or any join URL.
-Read through the IntegrationSetting framework via
+Read through the package settings resolver via
 `bookclub.config.get_book_club_slack_url()` (`get_config`), never a
 hardcoded `#` anchor or raw setting.
 

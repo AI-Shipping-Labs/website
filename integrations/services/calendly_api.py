@@ -3,6 +3,10 @@
 from datetime import timedelta
 
 import requests
+from community_base.config.models import Setting
+from community_base.config.service import get as package_get
+from community_base.config.service import runtime as package_runtime
+from community_base.config.service import set as package_set
 from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -17,7 +21,6 @@ from community.calendly_config import (
     get_calendly_refresh_token,
 )
 from integrations.config import clear_config_cache, site_base_url
-from integrations.models import IntegrationSetting
 
 API_BASE = 'https://api.calendly.com'
 WEBHOOK_CALLBACK_PATH = '/api/webhooks/calendly'
@@ -36,12 +39,12 @@ class CalendlyAPIError(RuntimeError):
 
 
 def _upsert_setting(key, value, *, secret=False):
-    IntegrationSetting.objects.update_or_create(
-        key=key,
-        defaults={
-            'value': str(value or ''), 'is_secret': secret, 'group': 'calendly',
-            'description': f'Calendly managed value for {key}.',
-        },
+    package_set(
+        key,
+        str(value or ''),
+        actor_ref='calendly-oauth',
+        reason=f'Updated Calendly OAuth value for {key}.',
+        source='oauth',
     )
 
 
@@ -58,16 +61,10 @@ def store_token_response(data, *, require_new_refresh_token=False):
     if not access_token:
         raise CalendlyAPIError('Calendly token response omitted access_token')
     # Lock all existing token rows so two refreshes cannot reuse one token.
-    token_rows = list(IntegrationSetting.objects.select_for_update().filter(
+    list(Setting.objects.select_for_update().filter(
         key__in=[value[0] for value in TOKEN_KEYS.values()],
     ))
-    existing_refresh_token = next(
-        (
-            row.value for row in token_rows
-            if row.key == 'CALENDLY_REFRESH_TOKEN'
-        ),
-        '',
-    )
+    existing_refresh_token = package_get('CALENDLY_REFRESH_TOKEN', '')
     returned_refresh_token = str(data.get('refresh_token') or '').strip()
     if require_new_refresh_token and not returned_refresh_token:
         raise CalendlyAPIError('Calendly token response omitted refresh_token')
@@ -92,9 +89,11 @@ def store_token_response(data, *, require_new_refresh_token=False):
 
 
 def clear_oauth_tokens():
-    IntegrationSetting.objects.filter(
+    Setting.objects.filter(
         key__in=[value[0] for value in TOKEN_KEYS.values()],
     ).delete()
+    package_runtime.reset()
+    package_runtime.publish()
     clear_config_cache()
 
 
@@ -111,7 +110,7 @@ def refresh_access_token():
     # single-use, so reading/calling/rotating must be one locked critical section.
     failure_status = None
     with transaction.atomic():
-        IntegrationSetting.objects.select_for_update().filter(
+        Setting.objects.select_for_update().filter(
             key='CALENDLY_ACCESS_TOKEN',
         ).first()
         clear_config_cache()

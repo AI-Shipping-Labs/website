@@ -38,17 +38,24 @@ specific reason. Public design continues to use AISL's indexed partials and
 
 ## Research snapshot and release boundary
 
-AISL donor reviewed: `8392ac8bf55e2209d5e5d7e9d76d50a66133a929` (main, 2026-09-12).
-Package reviewed: `647c8b340c1ea2b0aedb5a0bb438e53d106f066d` (main, 2026-09-12).
+AISL donor reviewed: `928f9b3f59afa92188ed8c6fde8e005f6687a524` (main, 2026-09-13).
+Package reviewed: `6fe8c58584de683a1a0339ed072e51cf9e90e12a` (main, 2026-09-13).
 Refresh both SHAs at every compatibility checkpoint; these are research inputs,
 not approved production schema snapshots.
 
-Latest adoption-safe release observed in canonical status: `v0.3.5` (2026-09-12,
-merged as `739aa28`, package PR #207); point releases v0.3.1 through v0.3.5 add
-no domain subpackages. Identity, community, events, curriculum (C5.1a-d) and
-coursework (C5.2a-e) capabilities are merged on package main through C4.2
-(community-base PR 113) with provisional kept-label migrations, untagged until
-donor compatibility passes.
+Published releases as of 2026-09-13 span two lines. The maintenance line `v0.3.6`,
+`v0.3.7` and `v0.3.9` (verified tag commits `a4d26323` and `00b624e1` for v0.3.6
+and v0.3.9) carries Studio nested destination groups with `STUDIO_EXTRA_CSS` and
+the C6.2 and C6.2a Relay clients; `git ls-tree` at those tags shows no domain
+directories under `community_base/`, so they remain the adoption-safe pins. The
+main-line release `v0.3.8` (tag commit `6fe8c585`) additionally contains the
+identity, community, events, curriculum (C5.1a-d) and coursework (C5.2a-e)
+subpackages, and its domain migrations carry the provisional naming
+(`0001_provisional_initial.py` and siblings) while C3.7 and C4.3 are open.
+Tagging a release containing provisional migrations is forbidden by the shared
+plan rules; the observation is recorded for the plan owner, and no site may
+adopt those subapps until donor compatibility passes and C5.3 v0.6.0 is
+published.
 C3.7 and C4.3 donor compatibility remain pending. A successful package test or
 presence of a source directory does not make a domain app installable in AISL.
 Never pin main, an agent branch, local editable source, provisional v0.4/v0.5,
@@ -71,17 +78,34 @@ Execution order:
    consecutive weeks of DTC production traffic with no P1 attributable to Relay
    and green Relay status contract throughout. Only then execute AISL Phase 6.
 
-## Integration progress - 2026-09-12
+## Integration progress - 2026-09-13
 
 Dated snapshot of the adoption rollout. Community-base `docs/plan/STATUS.md`
 (https://github.com/DataTalksClub/community-base/blob/main/docs/plan/STATUS.md)
 is authoritative for live status across all four repositories.
 
-- Done: A0.1 (merged `2d567da3`), A0.3 (#1582), A1.1 (merged `b8d0eb80`).
-- In progress: A0.2 (#1584), A1.2 (#1610), A2.1 (#1615), A2.3 (#1617).
+- Done: A0.1 (merged `2d567da3`), A0.3 (#1582), A1.1 (merged `b8d0eb80`),
+  A0.2 (#1584, closed 2026-09-13 with PM acceptance; Deploy Dev run 34699777409
+  green at head `1638e419`).
+- A1.2 (#1610) closed 2026-09-12 with the development deploy green; the canonical
+  final check is unmet on main `928f9b3f` (live `EmailService()` constructors
+  remain across bookclub, community, plans, payments, integrations, studio,
+  content, accounts and email_app). Remainder #1629 tracks the remaining app
+  groups, one slice per app group like the merged #1610 slices; campaign
+  transport stays exempt until Phase 6 (A6.3) retires it.
+- In progress: A2.3 (#1617; per-content-family parity recorded against the
+  package engine, retained tests being re-pointed) and A6.2 (#1625; claimed
+  2026-09-12, worktree `agent-1625`, contacts and preferences through the C6.2
+  Relay clients; verified against development Relay; real-Relay conformance is
+  `Not run here, needs: R6.1`).
+- Ready to resume: A2.1 (#1615). v0.3.6 shipped the nested destination groups and
+  `STUDIO_EXTRA_CSS` the lane waited for; recreate the lane from a released tag;
+  the old worktree stays abandoned.
 - Accepted pending human checks: A3.1 (#1579), merged at `0b1c7eff`;
   development deploy green; human checks AC13 and AC14 open.
-- Waiting: A2.2, A3.2, the A3.3 freeze and later phases; gates unchanged.
+- Waiting: A2.2, A3.2, the A3.3 freeze and later phases; R6.1 and D13 gates
+  unchanged. Scheduled Playwright full suite is red on main (#1627, run
+  34702214759 at `1638e419`); the A6.2 child carries the next pin bump per P15.
 
 ## Verified source map
 

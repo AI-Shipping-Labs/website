@@ -38,8 +38,8 @@ specific reason. Public design continues to use AISL's indexed partials and
 
 ## Research snapshot and release boundary
 
-AISL donor reviewed: `928f9b3f59afa92188ed8c6fde8e005f6687a524` (main, 2026-09-13).
-Package reviewed: `6fe8c58584de683a1a0339ed072e51cf9e90e12a` (main, 2026-09-13).
+AISL donor reviewed: `5f836acd0ef720feba24ccac98ec04656ccced9e` (main, 2026-09-13).
+Package reviewed: `ca3b4d7aad4c345ee406b77bc24ea480aa69a36a` (main, 2026-09-13).
 Refresh both SHAs at every compatibility checkpoint; these are research inputs,
 not approved production schema snapshots.
 
@@ -86,26 +86,31 @@ is authoritative for live status across all four repositories.
 
 - Done: A0.1 (merged `2d567da3`), A0.3 (#1582), A1.1 (merged `b8d0eb80`),
   A0.2 (#1584, closed 2026-09-13 with PM acceptance; Deploy Dev run 34699777409
-  green at head `1638e419`).
+  green at head `1638e419`), A6.2 (#1625, closed 2026-09-13; contacts and
+  preferences merged as `cc8c900d`, subscriber browser contracts adapted to
+  Relay double opt-in merged as `5f836acd`; dev deploy green on run 34735978832
+  attempt 2; real-Relay conformance is `Not run here, needs: R6.1`).
 - A1.2 (#1610) closed 2026-09-12 with the development deploy green; the canonical
-  final check is unmet on main `928f9b3f` (live `EmailService()` constructors
+  final check is unmet on main `5f836acd` (live `EmailService()` constructors
   remain across bookclub, community, plans, payments, integrations, studio,
-  content, accounts and email_app). Remainder #1629 tracks the remaining app
-  groups, one slice per app group like the merged #1610 slices; campaign
-  transport stays exempt until Phase 6 (A6.3) retires it.
+  content, accounts and email_app). Remainder #1629 is sliced, one child per app
+  group like the merged #1610 slices; slice 1 (community and bookclub
+  notification mail) is in flight in worktree `a12-slice1-community-bookclub`
+  from main `5f836acd`; campaign transport stays exempt until Phase 6 (A6.3)
+  retires it.
 - In progress: A2.3 (#1617; per-content-family parity recorded against the
-  package engine, retained tests being re-pointed) and A6.2 (#1625; claimed
-  2026-09-12, worktree `agent-1625`, contacts and preferences through the C6.2
-  Relay clients; verified against development Relay; real-Relay conformance is
-  `Not run here, needs: R6.1`).
-- Ready to resume: A2.1 (#1615). v0.3.6 shipped the nested destination groups and
-  `STUDIO_EXTRA_CSS` the lane waited for; recreate the lane from a released tag;
-  the old worktree stays abandoned.
+  package engine, retained tests being re-pointed) and A2.1 (#1615; the
+  implementation lane is recreated fresh from main `5f836acd` in worktree
+  `a21-studio-shell`, and the old `agent-1615` worktrees stay abandoned; the
+  lane's first step verifies nested destination groups with restricted-destination
+  filtering, `studio_routes --check` coverage and the `STUDIO_EXTRA_CSS` hook in
+  the installed v0.3.9 copy before any shell file is deleted).
 - Accepted pending human checks: A3.1 (#1579), merged at `0b1c7eff`;
   development deploy green; human checks AC13 and AC14 open.
 - Waiting: A2.2, A3.2, the A3.3 freeze and later phases; R6.1 and D13 gates
   unchanged. Scheduled Playwright full suite is red on main (#1627, run
-  34702214759 at `1638e419`); the A6.2 child carries the next pin bump per P15.
+  34702214759 at `1638e419`). AISL main pins `community-base[django_q]` v0.3.9
+  from the maintenance line, the pin bump that rode the A6.2 child per P15.
 
 ## Verified source map
 

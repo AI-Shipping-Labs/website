@@ -354,6 +354,7 @@ class BuildLookupSurfacesParseErrorsTest(TestCase):
         }
 
         with checkout_scope(self.temp_dir):
+            with checkout_scope(self.temp_dir):
             _build_course_unit_lookup(self.course_dir, stats=stats)
 
         broken = [
@@ -378,6 +379,7 @@ class BuildLookupSurfacesParseErrorsTest(TestCase):
         }
 
         with checkout_scope(self.temp_dir):
+            with checkout_scope(self.temp_dir):
             _build_course_unit_lookup(self.course_dir, stats=stats)
 
         broken = [

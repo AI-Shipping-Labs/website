@@ -22,7 +22,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from integrations.models import ContentSource, SyncLog
+from community_base.content_sync.models import ContentSource, SyncLog
 from studio.views.sync import (
     WATCHDOG_QUEUED_ERROR,
     WATCHDOG_RUNNING_ERROR,
@@ -59,20 +59,17 @@ class SyncTriggerSetsQueuedStateTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_trigger_sets_source_status_to_queued(self, mock_async):
+    def test_trigger_sets_source_status_to_queued(self):
         self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.source.refresh_from_db()
         self.assertEqual(self.source.last_sync_status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_trigger_creates_queued_synclog(self, mock_async):
+    def test_trigger_creates_queued_synclog(self):
         self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         log = SyncLog.objects.get(source=self.source)
         self.assertEqual(log.status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_trigger_overwrites_stale_running_status(self, mock_async):
+    def test_trigger_overwrites_stale_running_status(self):
         """Previous worker death left the source at 'running'. Clicking
         Sync now must visibly move it to 'queued' so the operator sees
         their click took effect.
@@ -83,8 +80,11 @@ class SyncTriggerSetsQueuedStateTest(TestCase):
         self.source.refresh_from_db()
         self.assertEqual(self.source.last_sync_status, 'queued')
 
-    @patch('django_q.tasks.async_task', side_effect=Exception('queue error'))
-    def test_trigger_does_not_set_queued_when_enqueue_fails(self, mock_async):
+    @patch(
+        'integrations.services.content_sync_queue.package_queue_source_sync',
+        side_effect=Exception('queue error'),
+    )
+    def test_trigger_does_not_set_queued_when_enqueue_fails(self, mock_queue):
         """If the enqueue itself raises, we must NOT lie about the row
         being queued — there's nothing in the queue.
         """
@@ -113,8 +113,7 @@ class SyncRepoTriggerSetsQueuedStateTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_repo_trigger_sets_queued_for_source(self, mock_async):
+    def test_repo_trigger_sets_queued_for_source(self):
         """Issue #310: one ContentSource per repo. The trigger marks the
         single source queued."""
         source = ContentSource.objects.create(
@@ -124,8 +123,7 @@ class SyncRepoTriggerSetsQueuedStateTest(TestCase):
         source.refresh_from_db()
         self.assertEqual(source.last_sync_status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_repo_trigger_creates_queued_synclog(self, mock_async):
+    def test_repo_trigger_creates_queued_synclog(self):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
@@ -134,8 +132,7 @@ class SyncRepoTriggerSetsQueuedStateTest(TestCase):
             SyncLog.objects.filter(source=source, status='queued').count(), 1,
         )
 
-    @patch('django_q.tasks.async_task')
-    def test_repo_trigger_queued_row_carries_batch_id(self, mock_async):
+    def test_repo_trigger_queued_row_carries_batch_id(self):
         ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
@@ -157,28 +154,26 @@ class SyncAllSetsQueuedStateTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_sync_all_sets_queued_for_all_sources(self, mock_async):
+    def test_sync_all_sets_queued_for_all_sources(self):
         a = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
+            slug='blog', repo_name='AI-Shipping-Labs/blog',
         )
         b = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+        )
         self.client.post('/studio/sync/all/')
         a.refresh_from_db()
         b.refresh_from_db()
         self.assertEqual(a.last_sync_status, 'queued')
         self.assertEqual(b.last_sync_status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_sync_all_creates_one_queued_synclog_per_source(self, mock_async):
+    def test_sync_all_creates_one_queued_synclog_per_source(self):
         a = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/blog',
+            slug='blog', repo_name='AI-Shipping-Labs/blog',
         )
         b = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-            )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+        )
         self.client.post('/studio/sync/all/')
         self.assertEqual(
             SyncLog.objects.filter(source=a, status='queued').count(), 1,
@@ -194,9 +189,11 @@ class SyncAllSetsQueuedStateTest(TestCase):
 
 
 class WorkerQueuedToRunningTransitionTest(TestCase):
-    """Issue #274: when the worker picks up a task that the trigger view
-    already enqueued at status='queued', it must UPDATE that row to
-    'running' rather than create a duplicate.
+    """A2.3: the trigger view writes a queued marker row and the package
+    engine writes its own running/terminal row for the worker run; the
+    stale marker is cleaned up by the watchdog (10 minutes). These tests
+    pin the worker side of that contract: the run row carries the real
+    outcome and the source status moves past 'queued'.
     """
 
     @classmethod
@@ -223,19 +220,21 @@ class WorkerQueuedToRunningTransitionTest(TestCase):
             import shutil
             shutil.rmtree(d, ignore_errors=True)
 
-    def test_worker_updates_existing_queued_row(self):
-        queued = SyncLog.objects.create(source=self.source, status='queued')
-        log = self._run_worker()
-        # Same row, same PK — worker did NOT create a new SyncLog.
-        self.assertEqual(log.pk, queued.pk)
-
-    def test_worker_does_not_create_duplicate_synclog(self):
+    def test_worker_run_row_is_terminal_not_queued(self):
         SyncLog.objects.create(source=self.source, status='queued')
+        log = self._run_worker()
+        # The worker's row records the real run outcome.
+        self.assertNotEqual(log.status, 'queued')
+
+    def test_worker_run_leaves_marker_cleanup_to_the_watchdog(self):
+        queued = SyncLog.objects.create(source=self.source, status='queued')
         self._run_worker()
-        # Exactly one SyncLog total for this source: the original queued
-        # one (now in some terminal state).
+        # The queued marker row is kept for audit and flipped by the
+        # watchdog once it ages past the threshold; the run row is separate.
+        queued.refresh_from_db()
+        self.assertEqual(queued.status, 'queued')
         self.assertEqual(
-            SyncLog.objects.filter(source=self.source).count(), 1,
+            SyncLog.objects.filter(source=self.source).count(), 2,
         )
 
     def test_worker_creates_synclog_when_no_queued_row_exists(self):
@@ -259,18 +258,13 @@ class WorkerQueuedToRunningTransitionTest(TestCase):
         # 'queued' — the worker promoted it past that.
         self.assertNotEqual(self.source.last_sync_status, 'queued')
 
-    def test_worker_carries_batch_id_when_queued_row_lacks_one(self):
-        """A direct ``async_task(..., batch_id=X)`` call (without going
-        through the trigger view) lands at the worker with a batch_id.
-        If we picked up an old queued row without one, propagate.
+    def test_worker_run_carries_batch_id(self):
+        """A worker run given a batch_id records it on its own run row.
         """
         import uuid as _uuid
-        queued = SyncLog.objects.create(source=self.source, status='queued')
-        self.assertIsNone(queued.batch_id)
         bid = _uuid.uuid4()
-        self._run_worker(batch_id=bid)
-        queued.refresh_from_db()
-        self.assertEqual(queued.batch_id, bid)
+        log = self._run_worker(batch_id=bid)
+        self.assertEqual(log.batch_id, bid)
 
 
 # ============================================================================
@@ -596,8 +590,9 @@ class DashboardRendersQueuedPillTest(TestCase):
 
 
 class QueuedToRunningToSuccessFlowTest(TestCase):
-    """End-to-end: trigger creates queued; worker promotes to running and
-    then to success — all on the SAME SyncLog row (no duplicates).
+    """End-to-end: the trigger writes the queued marker row; the worker
+    run records its own row and drives the source status to a terminal
+    state. The stale marker is watchdog cleanup, not worker state.
     """
 
     @classmethod
@@ -613,9 +608,8 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_full_state_machine_no_duplicate_synclog(self, mock_async):
-        # Step 1: operator clicks Sync now → queued.
+    def test_full_state_machine_marker_plus_run_row(self):
+        # Step 1: operator clicks Sync now → queued marker row.
         self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertEqual(
             SyncLog.objects.filter(source=self.source).count(), 1,
@@ -623,7 +617,7 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
         queued_log = SyncLog.objects.get(source=self.source)
         self.assertEqual(queued_log.status, 'queued')
 
-        # Step 2: worker picks up → running, same row updated in place.
+        # Step 2: worker picks up → its own running/terminal row.
         import shutil
         import tempfile
 
@@ -634,12 +628,14 @@ class QueuedToRunningToSuccessFlowTest(TestCase):
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
 
-        # Same row.
-        self.assertEqual(log.pk, queued_log.pk)
-        # Still only one SyncLog row total — no duplicate.
-        self.assertEqual(
-            SyncLog.objects.filter(source=self.source).count(), 1,
-        )
-        # And the row is no longer queued or running — terminal state.
-        log.refresh_from_db()
+        # The worker row is not the marker and is terminal.
+        self.assertNotEqual(log.pk, queued_log.pk)
         self.assertNotIn(log.status, ('queued', 'running'))
+        # Two rows total: the queued marker plus the run row.
+        self.assertEqual(
+            SyncLog.objects.filter(source=self.source).count(), 2,
+        )
+        # And the source status is no longer queued — the worker moved it
+        # past the marker state.
+        self.source.refresh_from_db()
+        self.assertNotEqual(self.source.last_sync_status, 'queued')

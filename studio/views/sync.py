@@ -85,8 +85,16 @@ def _source_commit_url(source):
 
 
 def _mark_source_queued(source, batch_id=None):
-    """Compatibility wrapper; queue-state implementation lives in the service."""
-    return content_sync_queue._mark_source_queued(source, batch_id=batch_id)
+    """Compatibility wrapper; queue-state implementation lives in the service.
+
+    Callers may still hold a legacy ``integrations.ContentSource`` row; the
+    package queue state must be written against the package row it mirrors
+    to (shared primary key).
+    """
+    package_source = content_sync_queue._package_source(source)
+    return content_sync_queue._mark_source_queued(
+        package_source, batch_id=batch_id,
+    )
 
 
 # Error messages used by the watchdog when it auto-fails a stuck SyncLog.

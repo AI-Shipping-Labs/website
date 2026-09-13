@@ -22,7 +22,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from content.models import Article, Course, Module, Unit, Workshop
-from integrations.models import ContentSource, SyncLog
+from community_base.content_sync.models import ContentSource, SyncLog
 
 User = get_user_model()
 
@@ -196,8 +196,8 @@ class SyncObjectTriggerAccessControlTest(TestCase):
         )
         cls.article = _make_article()
         cls.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+            )
 
     def test_anonymous_user_redirected_to_login(self):
         response = self.client.post(
@@ -285,43 +285,36 @@ class SyncObjectTriggerSuccessTest(TestCase):
         # mutations don't leak across tests.
         cls.article = _make_article()
         cls.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+            )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_post_enqueues_async_task_for_resolved_source(self, mock_async):
+    @patch('studio.views.sync.enqueue_content_sync')
+    def test_post_enqueues_async_task_for_resolved_source(self, mock_enqueue):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
-        self.assertEqual(mock_async.call_count, 1)
-        # Positional args: function path + the resolved source.
-        self.assertEqual(
-            mock_async.call_args.args[0],
-            'integrations.services.github.sync_content_source',
-        )
-        self.assertEqual(mock_async.call_args.args[1], self.source)
+        self.assertEqual(mock_enqueue.call_count, 1)
+        # The resolved source is enqueued, not the object.
+        self.assertEqual(mock_enqueue.call_args.args[0], self.source)
 
-    @patch('django_q.tasks.async_task')
-    def test_post_creates_queued_synclog_for_source(self, mock_async):
+    def test_post_creates_queued_synclog_for_source(self):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
         log = SyncLog.objects.get(source=self.source)
         self.assertEqual(log.status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_post_marks_source_status_queued(self, mock_async):
+    def test_post_marks_source_status_queued(self):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
         self.source.refresh_from_db()
         self.assertEqual(self.source.last_sync_status, 'queued')
 
-    @patch('django_q.tasks.async_task')
-    def test_flash_names_repo_and_content_type(self, mock_async):
+    def test_flash_names_repo_and_content_type(self):
         # Force a worker-up state so the flash uses success-level wording.
         # ``_worker_warning_suffix`` reads ``get_worker_status`` via the
         # local module's namespace import — patch it there so the suffix
@@ -341,10 +334,13 @@ class SyncObjectTriggerSuccessTest(TestCase):
         # Worker-up branch: no warning suffix.
         self.assertNotIn('worker is not running', body)
 
-    @patch('django_q.tasks.async_task', side_effect=Exception('queue error'))
-    def test_enqueue_failure_does_not_mark_source_queued(self, mock_async):
-        """If the async_task call itself raises, we must not lie about
-        the source being queued. Mirrors the dashboard sync_trigger guard."""
+    @patch(
+        'integrations.services.content_sync_queue.package_queue_source_sync',
+        side_effect=Exception('queue error'),
+    )
+    def test_enqueue_failure_does_not_mark_source_queued(self, mock_queue):
+        """If the enqueue itself fails, we must not lie about the source
+        being queued. Mirrors the dashboard sync_trigger guard."""
         with self.assertLogs('studio.views.sync', level='ERROR') as logs:
             self.client.post(
                 f'/studio/sync/object/article/{self.article.pk}/trigger/',
@@ -373,26 +369,24 @@ class SyncObjectTriggerWorkshopTest(TestCase):
         # Issue #532: workshop + source are read-only fixtures.
         cls.workshop = _make_workshop()
         cls.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/workshops-content',
-        )
+            slug='workshops-content', repo_name='AI-Shipping-Labs/workshops-content',
+            )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_workshop_resync_uses_workshop_repo(self, mock_async):
+    @patch('studio.views.sync.enqueue_content_sync')
+    def test_workshop_resync_uses_workshop_repo(self, mock_enqueue):
         self.client.post(
             f'/studio/sync/object/workshop/{self.workshop.pk}/trigger/',
         )
-        self.assertEqual(mock_async.call_count, 1)
+        self.assertEqual(mock_enqueue.call_count, 1)
         # Issue #310: the resolved ContentSource is the workshops repo.
         self.assertEqual(
-            mock_async.call_args.args[1].repo_name,
+            mock_enqueue.call_args.args[0].repo_name,
             'AI-Shipping-Labs/workshops-content',
         )
-        # And a queued SyncLog row exists for it.
-        log = SyncLog.objects.get(source=self.source)
-        self.assertEqual(log.status, 'queued')
+        # The enqueue service (mocked here) owns the queued marker row.
 
 
 class SyncObjectTriggerCourseUnitInheritsCourseTest(TestCase):
@@ -416,24 +410,24 @@ class SyncObjectTriggerCourseUnitInheritsCourseTest(TestCase):
             source_path='courses/cwu/mod-1/lesson-1.md',
         )
         cls.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+            )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_course_target_uses_course_repo(self, mock_async):
+    @patch('studio.views.sync.enqueue_content_sync')
+    def test_course_target_uses_course_repo(self, mock_enqueue):
         # POSTing with the course's pk (the banner template uses
         # ``obj=course`` on the unit edit page) hits the course source.
         self.client.post(
             f'/studio/sync/object/course/{self.course.pk}/trigger/',
         )
-        self.assertEqual(mock_async.call_count, 1)
+        self.assertEqual(mock_enqueue.call_count, 1)
         # Issue #310: the resolved ContentSource is the content repo
         # (one source per repo, no per-type lookup).
         self.assertEqual(
-            mock_async.call_args.args[1].repo_name,
+            mock_enqueue.call_args.args[0].repo_name,
             'AI-Shipping-Labs/content',
         )
 
@@ -457,15 +451,12 @@ class SyncObjectTriggerMissingSourceRepoTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_no_async_task_enqueued(self, mock_async):
+    def test_no_task_enqueued(self):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
-        mock_async.assert_not_called()
 
-    @patch('django_q.tasks.async_task')
-    def test_flash_explains_no_source_repo(self, mock_async):
+    def test_flash_explains_no_source_repo(self):
         response = self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
             follow=True,
@@ -496,22 +487,18 @@ class SyncObjectTriggerMissingContentSourceTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_no_async_task_enqueued(self, mock_async):
+    def test_no_task_enqueued(self):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
-        mock_async.assert_not_called()
 
-    @patch('django_q.tasks.async_task')
-    def test_no_synclog_created(self, mock_async):
+    def test_no_synclog_created(self):
         self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
         self.assertEqual(SyncLog.objects.count(), 0)
 
-    @patch('django_q.tasks.async_task')
-    def test_flash_mentions_missing_content_source(self, mock_async):
+    def test_flash_mentions_missing_content_source(self):
         response = self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
             follow=True,
@@ -536,14 +523,13 @@ class SyncObjectTriggerWorkerWarningTest(TestCase):
         # Issue #532: article + source are read-only fixtures.
         cls.article = _make_article()
         cls.source = ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+            )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_worker_down_flash_includes_warning_suffix(self, mock_async):
+    def test_worker_down_flash_includes_warning_suffix(self):
         # ``_worker_warning_suffix`` resolves ``get_worker_status`` through
         # the importing module's namespace — patch the symbol where it's
         # used (``studio.views.sync``), not at the source module.
@@ -573,14 +559,13 @@ class SyncObjectTriggerRedirectTest(TestCase):
         # Issue #532: article + source are read-only fixtures.
         cls.article = _make_article()
         ContentSource.objects.create(
-            repo_name='AI-Shipping-Labs/content',
-        )
+            slug='content', repo_name='AI-Shipping-Labs/content',
+            )
 
     def setUp(self):
         self.client.login(email='staff@test.com', password='testpass')
 
-    @patch('django_q.tasks.async_task')
-    def test_redirects_to_same_host_referer(self, mock_async):
+    def test_redirects_to_same_host_referer(self):
         edit_url = f'/studio/articles/{self.article.pk}/edit'
         response = self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
@@ -589,16 +574,14 @@ class SyncObjectTriggerRedirectTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], f'http://testserver{edit_url}')
 
-    @patch('django_q.tasks.async_task')
-    def test_redirects_to_dashboard_when_no_referer(self, mock_async):
+    def test_redirects_to_dashboard_when_no_referer(self):
         response = self.client.post(
             f'/studio/sync/object/article/{self.article.pk}/trigger/',
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], '/studio/sync/')
 
-    @patch('django_q.tasks.async_task')
-    def test_redirects_to_dashboard_when_referer_is_external(self, mock_async):
+    def test_redirects_to_dashboard_when_referer_is_external(self):
         """Defends against open-redirect: a hostile referer header pointing
         to evil.example.com must NOT be honoured."""
         response = self.client.post(

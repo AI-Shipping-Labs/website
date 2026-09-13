@@ -15,7 +15,8 @@ from django.utils import timezone
 
 from content.models import Workshop, WorkshopPage
 from events.models import Event
-from integrations.models import ContentSource, SyncLog
+from community_base.content_sync.models import SyncLog
+from integrations.models import ContentSource
 from jobs.tasks import build_task_name
 
 User = get_user_model()
@@ -638,8 +639,9 @@ class StudioWorkshopResyncTest(TestCase):
             ),
         )
 
-        # _mark_source_queued created a SyncLog row for the source.
-        log = SyncLog.objects.get(source=source)
+        # _mark_source_queued created a queued marker row for the source
+        # in the package SyncLog table (A2.3).
+        log = SyncLog.objects.get(source_id=source.pk)
         self.assertEqual(log.status, 'queued')
 
     def test_only_workshop_sources_are_synced(self):

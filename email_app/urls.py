@@ -3,6 +3,7 @@ from django.urls import path
 from email_app.views.newsletter import (
     maven_email_opt_out,
     subscribe_api,
+    subscribe_confirm_page,
     subscribe_page,
     unsubscribe_api,
     verify_and_subscribe_api,
@@ -21,4 +22,7 @@ api_urlpatterns = [
 # Page endpoints (mounted at root in project urls.py)
 urlpatterns = [
     path('subscribe', subscribe_page, name='subscribe_page'),
+    # A6.2 step 4: Relay's double opt-in confirm URL lands here. Relay's
+    # SUBSCRIPTION_CONFIRM_BASE_URL must point at this page.
+    path('subscribe/confirm', subscribe_confirm_page, name='subscribe_confirm'),
 ]

@@ -19,6 +19,7 @@ import json
 from unittest.mock import patch
 
 import jwt
+from community_base.jobs.models import JobIntent
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
@@ -56,10 +57,15 @@ class SubscribeAPITest(TestCase):
         self.assertFalse(user.email_verified)
         self.assertFalse(user.unsubscribed)
 
-        # Verification email should be sent
-        mock_send.assert_called_once()
-        call_args = mock_send.call_args
-        self.assertEqual(call_args[0][0].email, "new@example.com")
+        # A6.2 step 4: the verification message moves to Relay. The site
+        # keeps intake and user creation and dispatches the verification
+        # request through a durable job instead of sending site mail.
+        mock_send.assert_not_called()
+        self.assertTrue(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).exists()
+        )
 
     @patch("email_app.views.newsletter._send_subscribe_verification_email")
     def test_subscribe_existing_email_returns_200(self, mock_send):
@@ -109,7 +115,14 @@ class SubscribeAPITest(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        mock_send.assert_called_once_with(user, redirect_to=None)
+        # A6.2 step 4: the resend goes through Relay's verification flow.
+        mock_send.assert_not_called()
+        self.assertTrue(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).exists()
+        )
+        self.assertIsNotNone(user.pk)
 
     def test_subscribe_missing_email_returns_400(self):
         response = self.client.post(
@@ -160,25 +173,21 @@ class SubscribeEmailDeliveryTest(TestCase):
     """Test that subscribe API actually triggers verification email delivery."""
 
     @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
-    def test_subscribe_new_email_sends_verification_via_ses(self, mock_ses):
-        """New subscriber triggers a verification email through SES."""
+    def test_subscribe_new_email_dispatches_relay_not_ses(self, mock_ses):
+        """A6.2 step 4: new subscribers get Relay's verification message."""
         response = self.client.post(
             "/api/subscribe",
             data=json.dumps({"email": "delivery-test@example.com"}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
 
-        # SES should have been called with the subscriber's email
-        mock_ses.assert_called_once()
-        recipient_email = mock_ses.call_args[0][0]
-        self.assertEqual(recipient_email, "delivery-test@example.com")
-
-        # Subject should relate to verification
-        subject = mock_ses.call_args[0][1]
+        # The site no longer sends the verification mail itself.
+        mock_ses.assert_not_called()
         self.assertTrue(
-            "verify" in subject.lower() or "confirm" in subject.lower(),
-            f"Expected verification-related subject, got: {subject}",
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).exists()
         )
 
     @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
@@ -933,12 +942,13 @@ class EmailVerificationTemplateCopyTest(TestCase):
         return_value="ses-513-1",
     )
     def test_subscribe_render_uses_subscription_framing(self, mock_ses):
-        resp = self.client.post(
-            "/api/subscribe",
-            data=json.dumps({"email": "render-sub@example.com"}),
-            content_type="application/json",
-        )
-        self.assertEqual(resp.status_code, 200)
+        # A6.2 step 4: /api/subscribe hands the message to Relay's double
+        # opt-in flow. The site template and its #767 copy contract stay
+        # asserted at the helper level until A6.3 retires the template.
+        from email_app.views import newsletter as newsletter_view
+
+        user = User.objects.create_user(email="render-sub@example.com")
+        newsletter_view._send_subscribe_verification_email(user)
 
         mock_ses.assert_called_once()
         self.assertEqual(mock_ses.call_args[0][0], "render-sub@example.com")

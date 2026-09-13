@@ -1,9 +1,10 @@
 """Dispatch tests for the per-flow verification email split (issue #767).
 
-The signup view must dispatch ``email_verification_signup`` and the
-newsletter-subscribe view must dispatch ``email_verification_subscribe``.
-Verified by capturing the ``EmailService.send`` call (template_name is
-the second positional arg).
+The signup view must dispatch ``email_verification_signup`` through the
+package mail app. Since A6.2 the newsletter-subscribe view hands its
+verification message to Relay's double opt-in flow instead of sending
+the ``email_verification_subscribe`` template itself; the lead-magnet
+variant is the only subscribe path that still sends site mail.
 """
 
 import json
@@ -58,77 +59,51 @@ class SignupPathDispatchesSignupVerificationTemplate(TestCase):
 @override_settings(
     PASSWORD_HASHERS=["django.contrib.auth.hashers.MD5PasswordHasher"],
 )
-class SubscribePathDispatchesSubscribeVerificationTemplate(TestCase):
-    """``POST /api/subscribe`` must dispatch the subscribe-flow template."""
+class SubscribePathDispatchesRelayVerification(TestCase):
+    """``POST /api/subscribe`` must dispatch Relay's double opt-in (A6.2)."""
 
     @patch("email_app.services.email_service.EmailService.send")
-    def test_subscribe_api_dispatches_email_verification_subscribe(
-        self, mock_send,
-    ):
-        from email_app.models import EmailLog
-
-        def _fake_send(user, template_name, context=None):
-            return EmailLog.objects.create(
-                user=user,
-                email_type=template_name,
-                ses_message_id="ses-test-subscribe",
-            )
-
-        mock_send.side_effect = _fake_send
+    def test_subscribe_api_dispatches_relay_verification(self, mock_send):
+        from community_base.jobs.models import JobIntent
 
         resp = self.client.post(
             "/api/subscribe",
             data=json.dumps({"email": "subscribe-dispatch@example.com"}),
             content_type="application/json",
         )
-        # The subscribe endpoint returns 200 on success.
-        self.assertEqual(resp.status_code, 200)
+        # The subscribe endpoint answers with the generic ok payload.
+        self.assertEqual(resp.json()["status"], "ok")
 
-        slugs = _captured_template_names(mock_send)
-        self.assertIn("email_verification_subscribe", slugs)
-        # The legacy slug must not be used on the subscribe path.
-        self.assertNotIn("email_verification", slugs)
-        # And the subscribe path must not accidentally pick the signup slug.
-        self.assertNotIn("email_verification_signup", slugs)
+        # A6.2 step 4: the verification message moves to Relay; the site
+        # records the handoff as a durable job intent.
+        self.assertTrue(
+            JobIntent.objects.filter(
+                handler="email_app.relay_sync.request_contact_verification"
+            ).exists()
+        )
+        # No site template is dispatched on this path anymore.
+        self.assertEqual(_captured_template_names(mock_send), [])
 
     @patch("email_app.services.email_service.EmailService.send")
-    def test_subscribe_creates_emaillog_row_with_subscribe_slug(
-        self, mock_send,
-    ):
+    def test_subscribe_creates_durable_verification_intent(self, mock_send):
         # Pair test that asserts at the persistence layer too — the
-        # EmailLog row is the source of truth the reminder cron later
-        # reads to pick the per-flow reminder template.
-        from email_app.models import EmailLog
-
-        def _fake_send(user, template_name, context=None):
-            return EmailLog.objects.create(
-                user=user,
-                email_type=template_name,
-                ses_message_id="ses-test-subscribe-log",
-            )
-
-        mock_send.side_effect = _fake_send
+        # durable JobIntent is the source of truth the jobs runner later
+        # drains into Relay's request-verification endpoint.
+        from community_base.jobs.models import JobIntent
 
         resp = self.client.post(
             "/api/subscribe",
             data=json.dumps({"email": "subscribe-log@example.com"}),
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["status"], "ok")
+
+        from email_app.models import EmailLog
 
         user = User.objects.get(email="subscribe-log@example.com")
-        self.assertTrue(
-            EmailLog.objects.filter(
-                user=user,
-                email_type="email_verification_subscribe",
-            ).exists()
+        intent = JobIntent.objects.get(
+            handler="email_app.relay_sync.request_contact_verification"
         )
-        self.assertFalse(
-            EmailLog.objects.filter(
-                user=user,
-                email_type__in=[
-                    "email_verification",
-                    "email_verification_signup",
-                ],
-            ).exists()
-        )
+        self.assertEqual(intent.payload["user_id"], user.pk)
+        # No EmailLog row: the site no longer renders or sends this mail.
+        self.assertFalse(EmailLog.objects.filter(user=user).exists())

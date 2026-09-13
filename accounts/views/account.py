@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db import transaction
 from django.db.models import Q
 from django.db.models.functions import Now
 from django.http import (
@@ -681,6 +682,13 @@ def email_preferences_view(request):
         response["bookclub_emails"] = bookclub_emails
 
     user.save(update_fields=update_fields)
+
+    # A6.2 step 2: the preference change reaches Relay through a durable
+    # job after commit; the network call never runs inside the request.
+    from email_app import relay_sync
+
+    with transaction.atomic():
+        relay_sync.dispatch_contact_sync(user.pk)
 
     return JsonResponse(response)
 

@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack
 from unittest.mock import patch
 
+from community_base.jobs.models import JobIntent
 from django.db import IntegrityError, close_old_connections, connection
 from django.test import Client, TestCase, TransactionTestCase, override_settings, tag
 from django.utils import timezone
@@ -143,7 +144,13 @@ class UserCreationCollisionTest(TestCase):
 
         self.assertContains(response, SUBSCRIBE_SUCCESS, status_code=200)
         self.assertEqual(User.objects.filter(email__iexact=winner.email).count(), 1)
-        send.assert_called_once_with(winner, redirect_to=None)
+        # A6.2: the resend for the unverified winner goes through Relay's
+        # verification flow instead of a site-sent email.
+        intent = JobIntent.objects.get(
+            handler="email_app.relay_sync.request_contact_verification"
+        )
+        self.assertEqual(intent.payload["user_id"], winner.pk)
+        send.assert_not_called()
         winner.refresh_from_db()
         self.assertTrue(winner.check_password("winner-secret-1234"))
         self.assertEqual(winner.signup_source, SIGNUP_SOURCE_SIGNUP)

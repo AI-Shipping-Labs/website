@@ -1,7 +1,6 @@
 """Runtime Site-setting coverage for issue #1533."""
 
 import json
-import uuid
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -14,7 +13,6 @@ from django.utils import timezone
 from accounts.models import Token
 from integrations.config import clear_config_cache
 from integrations.models import ContentSource, IntegrationSetting, SyncLog
-from integrations.services.github_sync.orchestration import _start_sync_log
 from integrations.settings_registry import (
     SETTING_VALUE_TYPES,
     get_group_by_name,
@@ -165,22 +163,9 @@ class RuntimeSyncCallerTest(TestCase):
             'Worker did not report completion within 8 minutes',
         )
 
-    @override_settings(SYNC_QUEUED_THRESHOLD_MINUTES='2')
-    def test_worker_claims_log_inside_db_configured_queued_window(self):
-        source = ContentSource.objects.create(repo_name='example/reused-log')
-        queued_log = SyncLog.objects.create(source=source, status='queued')
-        SyncLog.objects.filter(pk=queued_log.pk).update(
-            started_at=timezone.now() - timedelta(minutes=7),
-        )
-        IntegrationSetting.objects.create(
-            key='SYNC_QUEUED_THRESHOLD_MINUTES', value='10', group='site',
-        )
-        clear_config_cache()
-
-        claimed_log = _start_sync_log(source, batch_id=uuid.uuid4())
-
-        self.assertEqual(claimed_log.pk, queued_log.pk)
-        self.assertEqual(claimed_log.status, 'running')
+# The queued-marker claiming test (#1533) was removed with the legacy engine:
+# the package orchestration writes its own running row and the watchdog above
+# fails markers that no worker picked up within the configured window.
 
 
 class ExpectWorkerRuntimeTest(TestCase):

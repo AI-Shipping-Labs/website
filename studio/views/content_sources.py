@@ -16,18 +16,18 @@ production API.
 import logging
 import secrets
 
+from community_base.content_sync.models import ContentSource  # package rows (A2.3)
 from django.contrib import messages
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
-from integrations.models import ContentSource
-from integrations.services.github import (
+from integrations.services.content_sync import sync_content_source
+from integrations.services.github_app import (
     GitHubSyncError,
     clear_installation_repositories_cache,
     list_installation_repositories,
-    sync_content_source,
 )
 from studio.decorators import staff_required
 from studio.views.sync import _mark_source_queued, _worker_warning_suffix

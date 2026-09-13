@@ -13,6 +13,12 @@ class IntegrationsConfig(AppConfig):
         # imports this module too once the config app is installed.
         from integrations import settings_keys  # noqa: F401
 
+        # A2.3 compatibility facade: legacy sync rows mirror into the
+        # package tables (see integrations/legacy_mirror.py).
+        from integrations.legacy_mirror import register_mirror
+
+        register_mirror()
+
         # Initialize Pydantic Logfire observability exactly once at startup,
         # behind the prod-only gate (issue #813). init_logfire() returns
         # immediately when the gate is closed (tests, evals, live judge, or

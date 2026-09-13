@@ -12,6 +12,7 @@ from collections import OrderedDict
 from datetime import timedelta
 from uuid import UUID
 
+from community_base.content_sync.models import SyncLog  # package rows (A2.3)
 from django.core.paginator import Paginator
 from django.db.models import Case, Count, F, IntegerField, Max, Min, Q, Value, When, Window
 from django.db.models.functions import Coalesce
@@ -19,7 +20,17 @@ from django.db.models.functions.window import RowNumber
 from django.urls import reverse
 from django.utils import timezone
 
-from integrations.models import SyncLog
+
+def _tiers_compat(log):
+    """A2.3: tiers counters live in the namespaced warnings entry."""
+    for entry in (getattr(log, 'warnings', None) or []):
+        if isinstance(entry, dict) and 'asl_compat' in entry:
+            compat = entry['asl_compat']
+            return {
+                'synced': compat.get('tiers_synced', False),
+                'count': compat.get('tiers_count', 0),
+            }
+    return {}
 
 SYNC_STALE_AFTER_DAYS = 7
 SYNC_HISTORY_STATUSES = ('queued', 'running', 'failed', 'partial', 'success', 'skipped')
@@ -311,8 +322,11 @@ def compact_summary(logs, *, include_errors=False, resolve_targets=False):
             'deleted': sum(log.items_deleted for log in logs),
         },
         'tiers': {
-            'synced': any(log.tiers_synced for log in logs),
-            'count': max((log.tiers_count for log in logs), default=0),
+            'synced': any(_tiers_compat(log).get('synced') for log in logs),
+            'count': max(
+                (_tiers_compat(log).get('count', 0) for log in logs),
+                default=0,
+            ),
         },
         'errors_total': errors['total_count'],
         'errors_unique': errors['unique_count'],

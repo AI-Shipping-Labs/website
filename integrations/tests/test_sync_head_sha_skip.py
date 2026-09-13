@@ -6,6 +6,11 @@ before paying the cost of a full clone + file walk we run
 ``ContentSource.last_synced_commit``. If they match (and the previous sync
 ended in ``success``), we write a ``skipped`` SyncLog and return.
 
+Ported to the package engine (A2.3): the cheap remote-HEAD check now
+lives in ``community_base.content_sync.orchestration`` and resolves HEAD
+through the package ``GitHubClient`` (``resolve_commit``). The site suite
+keeps the skip-contract tests against the public entry points.
+
 The repo-level skip differs from issue #225's per-item change detection:
 #225 still does the full clone + file walk and only short-circuits the
 ``update_or_create`` call per file; this issue avoids the clone + walk
@@ -24,11 +29,9 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
+from community_base.content_sync.github import checkout_repository
 from integrations.models import ContentSource, SyncLog
-from integrations.services.github import (
-    fetch_remote_head_sha,
-    sync_content_source,
-)
+from integrations.services.github import sync_content_source
 
 
 def _write_md(filepath, frontmatter_dict, body=''):
@@ -47,71 +50,6 @@ def _write_md(filepath, frontmatter_dict, body=''):
     lines.append(body)
     with open(filepath, 'w') as f:
         f.write('\n'.join(lines))
-
-
-# ---------------------------------------------------------------------------
-# fetch_remote_head_sha
-# ---------------------------------------------------------------------------
-
-
-class FetchRemoteHeadShaTest(TestCase):
-    """``git ls-remote`` wrapper. Mocked subprocess so no network is needed."""
-
-    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_returns_sha_for_public_repo(self, mock_run):
-        mock_run.return_value = mock.Mock(
-            returncode=0,
-            stdout='1234567890abcdef1234567890abcdef12345678\tHEAD\n',
-            stderr='',
-        )
-        sha = fetch_remote_head_sha('owner/repo', is_private=False)
-        self.assertEqual(sha, '1234567890abcdef1234567890abcdef12345678')
-        # No GitHub App token call for public repos — the URL is
-        # https://github.com/... rather than https://x-access-token:...
-        cmd = mock_run.call_args[0][0]
-        self.assertEqual(cmd[0], 'git')
-        self.assertEqual(cmd[1], 'ls-remote')
-        self.assertEqual(cmd[3], 'HEAD')
-        self.assertEqual(cmd[2], 'https://github.com/owner/repo.git')
-
-    @mock.patch('integrations.services.github_sync.repo.generate_github_app_token')
-    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_uses_app_token_for_private_repos(self, mock_run, mock_token):
-        mock_token.return_value = 'ghs_secret'
-        mock_run.return_value = mock.Mock(
-            returncode=0,
-            stdout='abcdef0123456789abcdef0123456789abcdef01\tHEAD\n',
-            stderr='',
-        )
-        sha = fetch_remote_head_sha('owner/private-repo', is_private=True)
-        self.assertEqual(sha, 'abcdef0123456789abcdef0123456789abcdef01')
-        mock_token.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        self.assertIn('x-access-token:ghs_secret', cmd[2])
-
-    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_returns_none_when_ls_remote_fails(self, mock_run):
-        # Network blip / repo not found. Caller falls through to a real sync.
-        mock_run.return_value = mock.Mock(
-            returncode=128, stdout='', stderr='fatal: repository not found',
-        )
-        self.assertIsNone(fetch_remote_head_sha('owner/repo'))
-
-    @mock.patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_returns_none_when_output_is_garbage(self, mock_run):
-        # ls-remote should always emit a 40-char SHA, but be defensive.
-        mock_run.return_value = mock.Mock(
-            returncode=0, stdout='not-a-sha\tHEAD\n', stderr='',
-        )
-        self.assertIsNone(fetch_remote_head_sha('owner/repo'))
-
-    @mock.patch('integrations.services.github_sync.repo.generate_github_app_token')
-    def test_returns_none_when_app_token_missing(self, mock_token):
-        from integrations.services.github import GitHubSyncError
-        mock_token.side_effect = GitHubSyncError('no creds')
-        self.assertIsNone(
-            fetch_remote_head_sha('owner/repo', is_private=True),
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +74,9 @@ class SyncSkipFirstSyncTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
     def test_first_sync_does_not_skip(self, mock_fetch):
         # last_synced_commit is empty so the skip path must be bypassed
         # without even consulting fetch_remote_head_sha.
@@ -158,45 +98,43 @@ class SyncSkipSameShaTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
+    @mock.patch('community_base.content_sync.github.checkout_repository')
+    @mock.patch('community_base.content_sync.orchestration.release_source_lock')
     def test_skip_when_head_matches(
-        self, mock_clone, mock_fetch, mock_release, mock_acquire,
+        self, mock_release, mock_clone, mock_fetch,
     ):
-        mock_acquire.return_value = True
         mock_fetch.return_value = 'a' * 40
 
         log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'skipped')
         self.assertEqual(log.commit_sha, 'a' * 40)
-        # No clone, no file walk.
+        # No checkout, no file walk.
         mock_clone.assert_not_called()
         # Lock was released even on the skip path.
-        mock_release.assert_called_once_with(self.source)
+        mock_release.assert_called_once()
         # Only one SyncLog row was written (the skip log) — no separate
         # ``running`` row was leaked.
         self.assertEqual(SyncLog.objects.filter(source=self.source).count(), 1)
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    def test_skip_log_records_skipped_status_and_reason(
-        self, mock_fetch, mock_release, mock_acquire,
-    ):
-        mock_acquire.return_value = True
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
+    def test_skip_log_records_skipped_status_and_reason(self, mock_fetch):
         mock_fetch.return_value = 'a' * 40
         log = sync_content_source(self.source)
         self.assertEqual(log.status, 'skipped')
-        self.assertEqual(len(log.errors), 1)
-        self.assertIn('HEAD unchanged', log.errors[0]['error'])
+        self.assertFalse(log.errors)
+        self.assertEqual(
+            log.warnings, ['Repository commit was already synchronized'],
+        )
 
         # Source state reflects the skip.
         self.source.refresh_from_db()
         self.assertEqual(self.source.last_sync_status, 'skipped')
-        self.assertIn('HEAD unchanged', self.source.last_sync_log)
         # last_synced_commit is unchanged (we already had it).
         self.assertEqual(self.source.last_synced_commit, 'a' * 40)
 
@@ -229,16 +167,18 @@ class SyncSkipNewShaTest(TestCase):
         self.assertEqual(log.status, 'success')
         self.assertEqual(log.items_created, 1)
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
+    @mock.patch(
+        'community_base.content_sync.github.checkout_repository',
+        side_effect=RuntimeError('short-circuit'),
+    )
     def test_queued_source_with_new_sha_runs_normally(
-        self, mock_clone, mock_fetch, mock_acquire,
+        self, mock_clone, mock_fetch,
     ):
         """Issue #556: queued pickup must not turn a new HEAD into a skip."""
-        mock_acquire.return_value = True
         mock_fetch.return_value = 'b' * 40
-        mock_clone.side_effect = RuntimeError('short-circuit')
         self.source.last_sync_status = 'queued'
         self.source.save(update_fields=['last_sync_status'])
         SyncLog.objects.create(
@@ -249,11 +189,9 @@ class SyncSkipNewShaTest(TestCase):
         )
         SyncLog.objects.create(source=self.source, status='queued')
 
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            log = sync_content_source(self.source)
+        log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'failed')
-        self.assertIn('Sync failed for owner/blog-235-new-sha', logs.output[0])
         mock_fetch.assert_called_once()
         mock_clone.assert_called_once()
 
@@ -277,7 +215,9 @@ class SyncSkipForceTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
     def test_force_bypasses_skip_check(self, mock_fetch):
         # If the skip check fired we'd see ``status=skipped`` and 0 items.
         # ``force=True`` must run the sync instead.
@@ -300,21 +240,22 @@ class SyncSkipPreviousFailureTest(TestCase):
             last_sync_status='failed',
         )
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
-    def test_retry_after_failure_bypasses_skip(
-        self, mock_clone, mock_fetch, mock_acquire,
-    ):
-        mock_acquire.return_value = True
-        # We don't even consult ls-remote when the previous status wasn't
-        # ``success`` — there's no point asking, we already know we want
-        # to run.
-        mock_clone.side_effect = RuntimeError('boom')  # short-circuit
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            sync_content_source(self.source)
-        self.assertIn('Sync failed for owner/blog-235-failed', logs.output[0])
-        mock_fetch.assert_not_called()
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
+    @mock.patch(
+        'community_base.content_sync.github.checkout_repository',
+        side_effect=RuntimeError('boom'),
+    )
+    def test_retry_after_failure_bypasses_skip(self, mock_clone, mock_fetch):
+        # A non-success last status never takes the skip path. The package
+        # engine resolves HEAD before consulting the status, so the remote
+        # is consulted once; the failing checkout marks the run failed.
+        log = sync_content_source(self.source)
+
+        self.assertEqual(log.status, 'failed')
+        mock_fetch.assert_called_once()
+        mock_clone.assert_called_once()
 
 
 class SyncSkipHeadFetchFailureTest(TestCase):
@@ -327,22 +268,17 @@ class SyncSkipHeadFetchFailureTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
-    def test_runs_sync_when_head_fetch_returns_none(
-        self, mock_clone, mock_fetch, mock_acquire,
-    ):
-        mock_acquire.return_value = True
-        mock_fetch.return_value = None  # ls-remote failed
-        # We expect clone_or_pull_repo to be invoked even though
-        # last_synced_commit is set — the failure to fetch HEAD must NOT
-        # cause us to silently mark the sync as skipped.
-        mock_clone.side_effect = RuntimeError('short-circuit')
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            sync_content_source(self.source)
-        self.assertIn('Sync failed for owner/blog-235-fetchfail', logs.output[0])
-        mock_clone.assert_called_once()
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+        side_effect=RuntimeError('ls-remote failed'),
+    )
+    def test_head_fetch_failure_is_failed_not_skipped(self, mock_fetch):
+        # A HEAD resolution failure must never be recorded as a skip.
+        log = sync_content_source(self.source)
+
+        self.assertEqual(log.status, 'failed')
+        self.assertNotEqual(log.status, 'skipped')
+        mock_fetch.assert_called_once()
 
 
 class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
@@ -355,25 +291,21 @@ class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
             last_sync_status='success',
         )
 
-    @mock.patch('integrations.services.github_sync.orchestration.acquire_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.release_sync_lock')
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
-    @mock.patch('integrations.services.github_sync.orchestration.clone_or_pull_repo')
-    def test_failure_keeps_last_good_sha(
-        self, mock_clone, mock_fetch, mock_release, mock_acquire,
-    ):
-        mock_acquire.return_value = True
-        # Pretend a new commit landed; force=False but this works because
-        # fetch returns the new sha so the skip path is bypassed and we
-        # try to clone... and the clone fails.
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
+    @mock.patch(
+        'community_base.content_sync.github.checkout_repository',
+        side_effect=RuntimeError('clone failed'),
+    )
+    def test_failure_keeps_last_good_sha(self, mock_clone, mock_fetch):
+        # Pretend a new commit landed: fetch returns the new sha so the
+        # skip path is bypassed and the checkout fails.
         mock_fetch.return_value = 'b' * 40
-        mock_clone.side_effect = RuntimeError('clone failed')
 
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            log = sync_content_source(self.source)
+        log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'failed')
-        self.assertIn('Sync failed for owner/blog-235-keep-sha', logs.output[0])
         self.source.refresh_from_db()
         # Still the old SHA — the failure must not overwrite it.
         self.assertEqual(self.source.last_synced_commit, 'a' * 40)
@@ -452,7 +384,9 @@ class SyncFromDiskWithoutGitTest(TestCase):
     def tearDown(self):
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
-    @mock.patch('integrations.services.github_sync.orchestration.fetch_remote_head_sha')
+    @mock.patch(
+        'community_base.content_sync.github.GitHubClient.resolve_commit',
+    )
     def test_from_disk_never_consults_remote(self, mock_fetch):
         log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(log.status, 'success')
@@ -487,7 +421,10 @@ class WebhookForcesSyncTest(TestCase):
     def _push_payload(self):
         return {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': self.source.repo_name},
+            'repository': {
+                'full_name': self.source.repo_name,
+                'default_branch': 'main',
+            },
         }
 
     def _signature(self, body):
@@ -498,25 +435,21 @@ class WebhookForcesSyncTest(TestCase):
         ).hexdigest()
         return f'sha256={digest}'
 
-    @mock.patch('integrations.views.github_webhook.sync_content_source')
-    def test_webhook_passes_force_true(self, mock_sync):
-        # ImportError path: django_q absent, runs sync inline. We patch
-        # sync_content_source itself so we can inspect the kwargs.
+    @mock.patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_default_branch_push_queues_sync(self, mock_queue):
+        # Package webhook: a push to the default branch queues exactly one
+        # engine run; the engine itself decides skip vs full sync.
         body = json.dumps(self._push_payload())
-        with mock.patch.dict(
-            'sys.modules', {'django_q.tasks': None},
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=body,
-                content_type='application/json',
-                HTTP_X_HUB_SIGNATURE_256=self._signature(body),
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 200)
-        mock_sync.assert_called_once()
-        kwargs = mock_sync.call_args.kwargs
-        self.assertTrue(kwargs.get('force'))
+        response = self.client.post(
+            '/api/webhooks/github',
+            data=body,
+            content_type='application/json',
+            HTTP_X_HUB_SIGNATURE_256=self._signature(body),
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-235-1',
+        )
+        self.assertEqual(response.status_code, 202)
+        mock_queue.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -538,37 +471,33 @@ class StudioForceResyncFlagTest(TestCase):
             repo_name='owner/repo-235-force-flag',
         )
 
-    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.enqueue_content_sync')
     def test_per_source_trigger_forwards_force(self, mock_sync):
-        with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
-            response = self.client.post(
-                f'/studio/sync/{self.source.pk}/trigger/',
-                {'force': '1'},
-            )
+        response = self.client.post(
+            f'/studio/sync/{self.source.pk}/trigger/',
+            {'force': '1'},
+        )
         self.assertEqual(response.status_code, 302)
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.enqueue_content_sync')
     def test_per_source_trigger_default_is_not_forced(self, mock_sync):
-        with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
-            self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
+        self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertFalse(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.enqueue_content_syncs')
     def test_repo_trigger_forwards_force(self, mock_sync):
-        with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
-            self.client.post(
-                f'/studio/sync/{self.source.repo_name}/trigger-repo/',
-                {'force': '1'},
-            )
+        self.client.post(
+            f'/studio/sync/{self.source.repo_name}/trigger-repo/',
+            {'force': '1'},
+        )
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.sync_content_source')
+    @mock.patch('integrations.services.content_sync_queue.enqueue_content_syncs')
     def test_sync_all_forwards_force(self, mock_sync):
-        with mock.patch.dict('sys.modules', {'django_q.tasks': None}):
-            self.client.post('/studio/sync/all/', {'force': '1'})
+        self.client.post('/studio/sync/all/', {'force': '1'})
         mock_sync.assert_called()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 

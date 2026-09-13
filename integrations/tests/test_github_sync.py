@@ -19,6 +19,7 @@ import json
 import os
 import sys
 import tempfile
+import uuid
 from datetime import date
 from unittest.mock import ANY, MagicMock, patch
 
@@ -46,13 +47,15 @@ from events.models import Event
 from integrations.admin.content_source import ContentSourceAdmin
 from integrations.config import clear_config_cache
 from integrations.models import ContentSource, IntegrationSetting, SyncLog, WebhookLog
-from integrations.services.github import (
-    GitHubSyncError,
-    find_content_source,
-    rewrite_image_urls,
-    sync_content_source,
-    validate_webhook_signature,
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+    SyncLog as PackageSyncLog,
+    WebhookLog as PackageWebhookLog,
 )
+from community_base.content_sync.webhooks import _valid_signature
+from content.sync_parsers.common import GitHubSyncError
+from content.sync_parsers.media import rewrite_image_urls
+from integrations.services.github import sync_content_source
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 User = get_user_model()
@@ -336,25 +339,25 @@ class GitHubWebhookSignatureTest(TestCase):
         request = MagicMock()
         request.headers = {'X-Hub-Signature-256': sig}
         request.body = body
-        self.assertTrue(validate_webhook_signature(request, TEST_WEBHOOK_SECRET))
+        self.assertTrue(_valid_signature(request, TEST_WEBHOOK_SECRET, request.body))
 
     def test_invalid_signature(self):
         request = MagicMock()
         request.headers = {'X-Hub-Signature-256': 'sha256=invalidsig'}
         request.body = b'{"action":"push"}'
-        self.assertFalse(validate_webhook_signature(request, TEST_WEBHOOK_SECRET))
+        self.assertFalse(_valid_signature(request, TEST_WEBHOOK_SECRET, request.body))
 
     def test_missing_signature_header(self):
         request = MagicMock()
         request.headers = {}
         request.body = b'{}'
-        self.assertFalse(validate_webhook_signature(request, TEST_WEBHOOK_SECRET))
+        self.assertFalse(_valid_signature(request, TEST_WEBHOOK_SECRET, request.body))
 
     def test_empty_secret(self):
         request = MagicMock()
         request.headers = {'X-Hub-Signature-256': 'sha256=abc'}
         request.body = b'{}'
-        self.assertFalse(validate_webhook_signature(request, ''))
+        self.assertFalse(_valid_signature(request, '', request.body))
 
     def test_tampered_body(self):
         body = b'{"action":"push"}'
@@ -362,7 +365,7 @@ class GitHubWebhookSignatureTest(TestCase):
         request = MagicMock()
         request.headers = {'X-Hub-Signature-256': sig}
         request.body = b'{"action":"tampered"}'
-        self.assertFalse(validate_webhook_signature(request, TEST_WEBHOOK_SECRET))
+        self.assertFalse(_valid_signature(request, TEST_WEBHOOK_SECRET, request.body))
 
 
 # ===========================================================================
@@ -374,10 +377,14 @@ class FindContentSourceTest(TestCase):
     """Test finding content sources by repo name."""
 
     def test_find_existing_source(self):
+        # The legacy find_content_source helper is gone; webhook source
+        # resolution is a package ContentSource lookup by repo_name.
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
-        found = find_content_source('AI-Shipping-Labs/content')
+        found = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/content',
+        )
         self.assertEqual(found.pk, source.pk)
 
     def test_find_returns_single_source_per_repo(self):
@@ -385,12 +392,16 @@ class FindContentSourceTest(TestCase):
         source = ContentSource.objects.create(
             repo_name='AI-Shipping-Labs/content',
         )
-        found = find_content_source('AI-Shipping-Labs/content')
+        found = PackageContentSource.objects.filter(
+            repo_name='AI-Shipping-Labs/content',
+        ).first()
         self.assertIsNotNone(found)
         self.assertEqual(found.pk, source.pk)
 
     def test_find_nonexistent_source(self):
-        found = find_content_source('nonexistent/repo')
+        found = PackageContentSource.objects.filter(
+            repo_name='nonexistent/repo',
+        ).first()
         self.assertIsNone(found)
 
 
@@ -461,7 +472,7 @@ class ImageURLRewriteTest(TestCase):
 
 @tag('core')
 class GitHubWebhookEndpointTest(TestCase):
-    """Test POST /api/webhooks/github endpoint."""
+    """POST /api/webhooks/github through the mounted package webhook view."""
 
     def setUp(self):
         self.client = Client()
@@ -480,150 +491,133 @@ class GitHubWebhookEndpointTest(TestCase):
             content_type='application/json',
             HTTP_X_HUB_SIGNATURE_256=sig,
             HTTP_X_GITHUB_EVENT=event_type,
+            HTTP_X_GITHUB_DELIVERY='delivery-' + str(uuid.uuid4()),
         )
 
-    def _assert_no_webhook_side_effects(self, mock_async=None, mock_sync=None):
-        self.source.refresh_from_db()
-        self.assertFalse(WebhookLog.objects.filter(service='github').exists())
-        self.assertFalse(SyncLog.objects.filter(source=self.source).exists())
-        self.assertIsNone(self.source.last_webhook_at)
-        self.assertFalse(self.source.sync_requested)
-        self.assertIsNone(self.source.last_sync_status)
-        if mock_async is not None:
-            mock_async.assert_not_called()
-        if mock_sync is not None:
-            mock_sync.assert_not_called()
+    def _assert_no_webhook_side_effects(self, mock_queue=None):
+        self.assertFalse(PackageWebhookLog.objects.filter(
+            service='github',
+        ).exists())
+        self.assertFalse(PackageSyncLog.objects.filter(
+            source_id=self.source.pk,
+        ).exists())
+        if mock_queue is not None:
+            mock_queue.assert_not_called()
 
-    def test_valid_push_webhook_to_main_returns_200_and_queues_sync(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_valid_push_webhook_to_main_returns_202_and_queues_sync(
+        self, mock_queue,
+    ):
         payload = {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
         }
-        with (
-            patch('django_q.tasks.async_task', return_value='task-id') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self._post_webhook(payload)
-        self.assertEqual(response.status_code, 200)
-        data = response.json()
-        self.assertEqual(data['status'], 'ok')
-        self.source.refresh_from_db()
-        self.assertIsNotNone(self.source.last_webhook_at)
-        self.assertEqual(self.source.last_sync_status, 'queued')
-        self.assertTrue(
-            SyncLog.objects.filter(source=self.source, status='queued').exists()
-        )
-        webhook_log = WebhookLog.objects.get(service='github')
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['message'], 'Sync queued')
+        mock_queue.assert_called_once()
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertIsNotNone(package_source.last_webhook_at)
+        webhook_log = PackageWebhookLog.objects.get(service='github')
         self.assertEqual(webhook_log.event_type, 'push')
         self.assertTrue(webhook_log.processed)
-        mock_async.assert_called_once()
-        self.assertEqual(
-            mock_async.call_args.args[0],
-            'integrations.services.github.sync_content_source',
-        )
-        self.assertEqual(mock_async.call_args.args[1].pk, self.source.pk)
-        self.assertTrue(mock_async.call_args.kwargs['force'])
-        mock_sync.assert_not_called()
 
-    def test_valid_push_webhook_to_master_queues_sync(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_valid_push_webhook_to_master_queues_sync(self, mock_queue):
         payload = {
             'ref': 'refs/heads/master',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'master',
+            },
         }
-        with patch('django_q.tasks.async_task', return_value='task-id'):
-            response = self._post_webhook(payload)
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 202)
+        mock_queue.assert_called_once()
 
-        self.assertEqual(response.status_code, 200)
-        self.source.refresh_from_db()
-        self.assertIsNotNone(self.source.last_webhook_at)
-        self.assertTrue(
-            SyncLog.objects.filter(source=self.source, status='queued').exists()
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_invalid_signature_returns_401(self, mock_queue):
+        payload = {
+            'ref': 'refs/heads/main',
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
+        }
+        response = self.client.post(
+            '/api/webhooks/github',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_X_HUB_SIGNATURE_256='sha256=invalidsig',
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-invalid-sig',
         )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['message'], 'Invalid signature')
+        self._assert_no_webhook_side_effects(mock_queue)
 
-    def test_invalid_signature_returns_400(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_missing_signature_returns_401_without_side_effects(
+        self, mock_queue,
+    ):
         payload = {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
-        }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=json.dumps(payload),
-                content_type='application/json',
-                HTTP_X_HUB_SIGNATURE_256='sha256=invalidsig',
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 400)
-        data = response.json()
-        self.assertEqual(data['error'], 'Invalid webhook signature')
-        self._assert_no_webhook_side_effects(mock_async, mock_sync)
-
-    def test_missing_signature_returns_400_without_side_effects(self):
-        payload = {
-            'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
-        }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=json.dumps(payload),
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['error'], 'Invalid webhook signature')
-        self._assert_no_webhook_side_effects(mock_async, mock_sync)
-
-    def test_tampered_signature_returns_400_without_side_effects(self):
-        signed_body = json.dumps({
-            'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
-        })
-        tampered_payload = {
-            'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
-            'tampered': True,
-        }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=json.dumps(tampered_payload),
-                content_type='application/json',
-                HTTP_X_HUB_SIGNATURE_256=make_github_signature(signed_body),
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json()['error'], 'Invalid webhook signature')
-        self._assert_no_webhook_side_effects(mock_async, mock_sync)
-
-    def test_unknown_repo_returns_404(self):
-        payload = {
-            'ref': 'refs/heads/main',
-            'repository': {'full_name': 'unknown-org/unknown-repo'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
         }
         response = self.client.post(
             '/api/webhooks/github',
             data=json.dumps(payload),
             content_type='application/json',
             HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-missing-sig',
         )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['message'], 'Invalid signature')
+        self._assert_no_webhook_side_effects(mock_queue)
+
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_tampered_signature_returns_401_without_side_effects(
+        self, mock_queue,
+    ):
+        signed_body = json.dumps({
+            'ref': 'refs/heads/main',
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
+        })
+        tampered_payload = {
+            'ref': 'refs/heads/main',
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
+            'tampered': True,
+        }
+        response = self.client.post(
+            '/api/webhooks/github',
+            data=json.dumps(tampered_payload),
+            content_type='application/json',
+            HTTP_X_HUB_SIGNATURE_256=make_github_signature(signed_body),
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-tampered',
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['message'], 'Invalid signature')
+        self._assert_no_webhook_side_effects(mock_queue)
+
+    def test_unknown_repo_returns_404(self):
+        payload = {
+            'ref': 'refs/heads/main',
+            'repository': {'full_name': 'unknown-org/unknown-repo'},
+        }
+        response = self._post_webhook(payload, secret=TEST_WEBHOOK_SECRET)
         self.assertEqual(response.status_code, 404)
 
     def test_invalid_json_returns_400(self):
@@ -642,108 +636,79 @@ class GitHubWebhookEndpointTest(TestCase):
             data=body,
             content_type='application/json',
             HTTP_X_HUB_SIGNATURE_256=sig,
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-missing-repo',
         )
         self.assertEqual(response.status_code, 400)
 
-    def test_non_main_branch_push_not_synced(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_non_main_branch_push_not_synced(self, mock_queue):
         payload = {
             'ref': 'refs/heads/feature-branch',
             'repository': {'full_name': 'AI-Shipping-Labs/blog'},
         }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self._post_webhook(payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(WebhookLog.objects.filter(service='github').count(), 1)
-        self.assertFalse(SyncLog.objects.filter(source=self.source).exists())
-        self.source.refresh_from_db()
-        self.assertIsNone(self.source.last_webhook_at)
-        mock_async.assert_not_called()
-        mock_sync.assert_not_called()
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['message'], 'Delivery accepted')
+        self.assertEqual(
+            PackageWebhookLog.objects.filter(service='github').count(), 1,
+        )
+        mock_queue.assert_not_called()
 
     def test_get_not_allowed(self):
         response = self.client.get('/api/webhooks/github')
         self.assertEqual(response.status_code, 405)
 
-    def test_csrf_exempt(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_csrf_exempt(self, mock_queue):
         payload = {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
         }
-        with patch('integrations.views.github_webhook.sync_content_source'):
-            response = self._post_webhook(payload)
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()['status'], 'ok')
-        self.assertTrue(
-            SyncLog.objects.filter(source=self.source, status='queued').exists()
-        )
+        response = self._post_webhook(payload)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(response.json()['message'], 'Sync queued')
+        mock_queue.assert_called_once()
 
     def test_webhook_logged(self):
         payload = {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
         }
-        with patch('django_q.tasks.async_task', return_value='task-id'):
-            self._post_webhook(payload)
-        log = WebhookLog.objects.filter(service='github').first()
+        self._post_webhook(payload)
+        log = PackageWebhookLog.objects.filter(service='github').first()
         self.assertIsNotNone(log)
         self.assertEqual(log.event_type, 'push')
 
-    def test_blank_webhook_secret_returns_400_without_side_effects(self):
+    @patch('community_base.content_sync.webhooks.queue_source_sync')
+    def test_blank_webhook_secret_returns_401_without_side_effects(
+        self, mock_queue,
+    ):
         self.source.webhook_secret = ''
         self.source.save()
         payload = {
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
+            'repository': {
+                'full_name': 'AI-Shipping-Labs/blog',
+                'default_branch': 'main',
+            },
         }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=json.dumps(payload),
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json()['error'],
-            'Webhook secret is not configured',
+        response = self.client.post(
+            '/api/webhooks/github',
+            data=json.dumps(payload),
+            content_type='application/json',
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-blank-secret',
         )
-        self._assert_no_webhook_side_effects(mock_async, mock_sync)
-
-    def test_whitespace_webhook_secret_returns_400_without_side_effects(self):
-        self.source.webhook_secret = '   '
-        self.source.save()
-        payload = {
-            'ref': 'refs/heads/main',
-            'repository': {'full_name': 'AI-Shipping-Labs/blog'},
-        }
-        with (
-            patch('django_q.tasks.async_task') as mock_async,
-            patch(
-                'integrations.views.github_webhook.sync_content_source',
-            ) as mock_sync,
-        ):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=json.dumps(payload),
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-            )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(
-            response.json()['error'],
-            'Webhook secret is not configured',
-        )
-        self._assert_no_webhook_side_effects(mock_async, mock_sync)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()['message'], 'Invalid signature')
+        self._assert_no_webhook_side_effects(mock_queue)
 
 
 # ===========================================================================
@@ -2324,12 +2289,14 @@ class SyncFailureTest(TestCase):
         try:
             with open(os.path.join(temp_dir, 'a.md'), 'w') as f:
                 f.write('---\ntitle: x\n---\n')
-            with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-                sync_content_source(source, repo_dir=temp_dir)
-            self.assertIn('Sync failed for test/fail', logs.output[0])
-            source.refresh_from_db()
-            self.assertEqual(source.last_sync_status, 'failed')
-            self.assertIn('failed', source.last_sync_log.lower())
+            log = sync_content_source(source, repo_dir=temp_dir)
+            self.assertEqual(log.status, 'failed')
+            self.assertTrue(
+                any('max_files=0' in str(e.get('error', '')) for e in log.errors),
+            )
+            package_source = PackageContentSource.objects.get(pk=source.pk)
+            self.assertEqual(package_source.last_sync_status, 'failed')
+            self.assertIn('failed', (package_source.last_sync_log or '').lower())
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -2355,12 +2322,12 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_INSTALLATION_ID='',
     )
     @patch(
-        'integrations.services.github_sync.client'
+        'integrations.services.github_app'
         '._fetch_github_app_private_key_from_secrets_manager',
         return_value='',
     )
     def test_missing_credentials_raises_error(self, _mock_secrets):
-        from integrations.services.github import generate_github_app_token
+        from integrations.services.github_app import generate_github_app_token
         with self.assertRaises(GitHubSyncError) as ctx:
             generate_github_app_token()
         self.assertIn('not configured', str(ctx.exception))
@@ -2370,10 +2337,10 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='fake-key',
         GITHUB_APP_INSTALLATION_ID='67890',
     )
-    @patch('integrations.services.github_sync.client.jwt.encode')
-    @patch('integrations.services.github_sync.client.requests.post')
+    @patch('integrations.services.github_app.jwt.encode')
+    @patch('integrations.services.github_app.requests.post')
     def test_successful_token_generation(self, mock_post, mock_jwt):
-        from integrations.services.github import generate_github_app_token
+        from integrations.services.github_app import generate_github_app_token
 
         mock_jwt.return_value = 'fake-jwt-token'
         mock_response = MagicMock()
@@ -2394,16 +2361,16 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_INSTALLATION_ID='67890',
     )
     @patch(
-        'integrations.services.github_sync.client'
+        'integrations.services.github_app'
         '._fetch_github_app_private_key_from_secrets_manager',
         return_value='fake-key',
     )
-    @patch('integrations.services.github_sync.client.jwt.encode')
-    @patch('integrations.services.github_sync.client.requests.post')
+    @patch('integrations.services.github_app.jwt.encode')
+    @patch('integrations.services.github_app.requests.post')
     def test_uses_configured_secrets_manager_path(
         self, mock_post, mock_jwt, mock_fetch_secret,
     ):
-        from integrations.services.github import generate_github_app_token
+        from integrations.services.github_app import generate_github_app_token
 
         IntegrationSetting.objects.create(
             key='GITHUB_APP_PRIVATE_KEY_SECRET_ID',
@@ -2430,7 +2397,7 @@ class GitHubAppAuthTest(TestCase):
         )
 
     def test_worker_secret_manager_fetch_bypasses_success_cache(self):
-        from integrations.services.github_sync import client as github_client
+        from integrations.services import github_app as github_client
 
         github_client._secrets_manager_pem_cache = {}
         secret_client = MagicMock()
@@ -2463,10 +2430,10 @@ class GitHubAppAuthTest(TestCase):
         GITHUB_APP_PRIVATE_KEY='fake-key',
         GITHUB_APP_INSTALLATION_ID='67890',
     )
-    @patch('integrations.services.github_sync.client.jwt.encode')
-    @patch('integrations.services.github_sync.client.requests.post')
+    @patch('integrations.services.github_app.jwt.encode')
+    @patch('integrations.services.github_app.requests.post')
     def test_failed_token_generation(self, mock_post, mock_jwt):
-        from integrations.services.github import generate_github_app_token
+        from integrations.services.github_app import generate_github_app_token
 
         mock_jwt.return_value = 'fake-jwt-token'
         mock_response = MagicMock()
@@ -2558,7 +2525,11 @@ class RetiredAdminSyncRoutesTest(TestCase):
 
 
 class SeedContentSourcesCommandTest(TestCase):
-    """Test the seed_content_sources management command."""
+    """Test the seed_content_sources management command.
+
+    Seeding writes package ContentSource rows; assertions read the package
+    table (the legacy table is rollback-only).
+    """
 
     def test_seeds_default_sources(self):
         from io import StringIO
@@ -2571,7 +2542,7 @@ class SeedContentSourcesCommandTest(TestCase):
         call_command('seed_content_sources', stdout=StringIO())
         for source_data in DEFAULT_SOURCES:
             self.assertTrue(
-                ContentSource.objects.filter(
+                PackageContentSource.objects.filter(
                     repo_name=source_data['repo_name'],
                 ).exists(),
                 f"Missing seeded source: {source_data['repo_name']}",
@@ -2582,9 +2553,9 @@ class SeedContentSourcesCommandTest(TestCase):
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        count_after_first = ContentSource.objects.count()
+        count_after_first = PackageContentSource.objects.count()
         call_command('seed_content_sources', stdout=StringIO())
-        count_after_second = ContentSource.objects.count()
+        count_after_second = PackageContentSource.objects.count()
         self.assertEqual(count_after_first, count_after_second)
 
     def test_seed_creates_expected_repos(self):
@@ -2592,7 +2563,9 @@ class SeedContentSourcesCommandTest(TestCase):
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        repos = set(ContentSource.objects.values_list('repo_name', flat=True))
+        repos = set(
+            PackageContentSource.objects.values_list('repo_name', flat=True)
+        )
         expected = {
             'AI-Shipping-Labs/content',
             'AI-Shipping-Labs/python-course',
@@ -2606,7 +2579,7 @@ class SeedContentSourcesCommandTest(TestCase):
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        for source in ContentSource.objects.all():
+        for source in PackageContentSource.objects.all():
             self.assertTrue(
                 source.is_private,
                 f"Expected {source.repo_name} to be marked private",
@@ -2618,7 +2591,7 @@ class SeedContentSourcesCommandTest(TestCase):
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(ContentSource.objects.count(), 3)
+        self.assertEqual(PackageContentSource.objects.count(), 3)
 
 
 # ===========================================================================
@@ -2713,7 +2686,7 @@ class S3ImageUploadTest(TestCase):
 
     @override_settings(AWS_S3_CONTENT_BUCKET='')
     def test_skips_when_bucket_not_configured(self):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
         result = upload_images_to_s3(self.temp_dir, self.source)
         self.assertEqual(result, {'uploaded': 0, 'skipped': 0, 'errors': []})
 
@@ -2723,9 +2696,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_uploads_new_image(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2762,9 +2735,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_skips_when_etag_matches(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2790,9 +2763,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_uploads_when_etag_differs(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2830,9 +2803,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_ignores_non_image_files(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         # Create a non-image file
         with open(os.path.join(self.temp_dir, 'article.md'), 'w') as f:
@@ -2857,9 +2830,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_upload_error_recorded(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2880,9 +2853,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_expected_client_creation_error_recorded(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_boto_client.side_effect = NoCredentialsError()
 
@@ -2900,9 +2873,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_expected_list_error_logs_and_uploads_with_empty_etag_index(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2947,9 +2920,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_unexpected_client_type_error_propagates(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_boto_client.side_effect = TypeError('bad client argument')
 
@@ -2962,9 +2935,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_unexpected_list_type_error_propagates(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -2981,9 +2954,9 @@ class S3ImageUploadTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_unexpected_upload_type_error_propagates(self, mock_boto_client):
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -3029,10 +3002,10 @@ class S3KillSwitchTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_no_boto3_client_constructed_when_disabled(self, mock_boto_client):
         """upload_images_to_s3 must not call boto3.client when S3_ENABLED=False."""
-        from integrations.services.github import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
 
         result = upload_images_to_s3(self.temp_dir, self.source)
 
@@ -3049,7 +3022,7 @@ class S3KillSwitchTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_orchestration_pipeline_does_not_hit_s3_when_disabled(
         self, mock_boto_client,
     ):
@@ -3060,7 +3033,7 @@ class S3KillSwitchTest(TestCase):
         exercises the public callsite to make sure no future refactor adds
         a second boto3 construction site that bypasses the gate.
         """
-        from integrations.services.github_sync.media import upload_images_to_s3
+        from content.sync_parsers.media import upload_images_to_s3
         upload_images_to_s3(self.temp_dir, self.source)
         mock_boto_client.assert_not_called()
 

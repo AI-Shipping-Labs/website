@@ -28,10 +28,10 @@ from django.test import TestCase
 
 from content.models import Course, Unit
 from integrations.models import ContentSource
-from integrations.services.github import (
-    _build_course_unit_lookup,
-    sync_content_source,
-)
+from community_base.content_sync.checkout import ImmutableCheckout
+from content.sync_parsers.checkout_view import activate_view, view_for
+from content.sync_parsers.families.courses import _build_course_unit_lookup
+from integrations.services.github import sync_content_source
 
 
 class _LookupFixtureBase(TestCase):
@@ -67,6 +67,16 @@ class _LookupFixtureBase(TestCase):
             ) + extras + '---\nBody.\n',
         )
 
+    def _lookup(self, course_dir, *args, **kwargs):
+        """Run the lookup against a checkout snapshot like the engine does."""
+        with ImmutableCheckout(self.temp_dir) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                snap_course = os.path.join(
+                    view.root, os.path.relpath(course_dir, self.temp_dir),
+                )
+                return _build_course_unit_lookup(snap_course, *args, **kwargs)
+
 
 class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
     """Files matched by ignore globs must NOT appear in the lookup."""
@@ -83,7 +93,7 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
             content_id='22222222-2222-2222-2222-222222222222',
         )
 
-        lookup = _build_course_unit_lookup(
+        lookup = self._lookup(
             self.course_dir,
             course_ignore_patterns=['**/plan.md'],
         )
@@ -115,7 +125,7 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
             content_id='11111111-1111-1111-1111-111111111111',
         )
 
-        lookup = _build_course_unit_lookup(
+        lookup = self._lookup(
             self.course_dir,
             course_ignore_patterns=['drafts/**'],
         )
@@ -143,7 +153,7 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
             content_id='11111111-1111-1111-1111-111111111111',
         )
 
-        lookup = _build_course_unit_lookup(
+        lookup = self._lookup(
             self.course_dir,
             course_ignore_patterns=['drafts'],
         )
@@ -167,7 +177,7 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
             content_id='44444444-4444-4444-4444-444444444444',
         )
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
 
         self.assertIn('01-intro.md', lookup['fundamentals'])
         self.assertNotIn('snippet.template.md', lookup['fundamentals'])
@@ -196,7 +206,7 @@ class BuildCourseUnitLookupContentIdTest(_LookupFixtureBase):
             ),
         )
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
 
         self.assertIn('01-intro.md', lookup['fundamentals'])
         self.assertNotIn('02-orphan.md', lookup['fundamentals'])
@@ -214,7 +224,7 @@ class BuildCourseUnitLookupContentIdTest(_LookupFixtureBase):
             content_id='11111111-1111-1111-1111-111111111111',
         )
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
 
         self.assertEqual(
             lookup['fundamentals']['README.md'], '__module_overview__',
@@ -235,7 +245,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
         self._write_module('01-fundamentals')
         self._write('01-fundamentals/README.md', '# Hi\n\nText.\n')
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
         self.assertEqual(
             lookup['fundamentals']['README.md'], '__module_overview__',
         )
@@ -248,7 +258,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
             content_id='22222222-2222-2222-2222-222222222222',
         )
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
         # ``02-setup.md`` -> slug ``setup`` via derive_slug, matching what
         # _sync_module_units writes to ``Unit.slug``.
         self.assertEqual(lookup['fundamentals']['02-setup.md'], 'setup')
@@ -261,7 +271,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
             extras='slug: "custom-setup"\n',
         )
 
-        lookup = _build_course_unit_lookup(self.course_dir)
+        lookup = self._lookup(self.course_dir)
         self.assertEqual(
             lookup['fundamentals']['02-setup.md'], 'custom-setup',
         )

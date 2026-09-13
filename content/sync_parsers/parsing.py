@@ -7,12 +7,12 @@ import uuid
 import frontmatter
 import yaml
 
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
     checkout_is_file,
     checkout_read_text,
 )
-from integrations.services.github_sync.common import REQUIRED_FIELDS, logger
-from integrations.services.github_sync.media import rewrite_image_urls
+from content.sync_parsers.common import REQUIRED_FIELDS, logger
+from content.sync_parsers.media import rewrite_image_urls
 
 
 def _extract_readme_title(body, fallback):

@@ -9,7 +9,7 @@ from django.db import DatabaseError
 from django.test import TestCase
 
 from content.models import SiteConfig
-from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
+from content.sync_parsers.families.tiers import _sync_tiers_yaml
 from payments.models import Tier
 
 
@@ -97,7 +97,7 @@ tiers:
         self._write_tiers_yaml('[]')
 
         with patch(
-            'integrations.services.github_sync.dispatchers.tiers.checkout_read_text',
+            'content.sync_parsers.families.tiers.checkout_read_text',
             side_effect=OSError('cannot read'),
         ):
             result = _sync_tiers_yaml(self.temp_dir.name)

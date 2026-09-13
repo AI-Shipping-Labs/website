@@ -186,6 +186,9 @@ INSTALLED_APPS = [
     'community_base.studio',
     'community_base.jobs',
     'community_base.mail',
+    # A2.3: the package content sync engine is the only synchronization
+    # engine; site parsers register from content.apps.ContentConfig.ready.
+    'community_base.content_sync',
     'community',
     'notifications',
     'plans.apps.PlansConfig',

@@ -12,11 +12,8 @@ Covers:
 from django.test import Client, SimpleTestCase, TestCase
 
 from content.models import Course, Module, Unit
-from integrations.services.github import (
-    REQUIRED_FIELDS,
-    derive_slug,
-    extract_sort_order,
-)
+from content.sync_parsers.common import REQUIRED_FIELDS
+from content.sync_parsers.repo_util import derive_slug, extract_sort_order
 
 
 class ExtractSortOrderTest(SimpleTestCase):

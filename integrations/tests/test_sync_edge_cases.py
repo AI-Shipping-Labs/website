@@ -36,13 +36,15 @@ from content.models import (
     UserCourseProgress,
 )
 from integrations.models import ContentSource, SyncLog
-from integrations.services.github import (
+from community_base.content_sync.orchestration import (
+    acquire_source_lock,
+    release_source_lock,
+)
+from content.sync_parsers.parsing import (
     _compute_content_hash,
     _validate_frontmatter,
-    acquire_sync_lock,
-    release_sync_lock,
-    sync_content_source,
 )
+from integrations.services.github import sync_content_source
 
 User = get_user_model()
 
@@ -224,7 +226,7 @@ class S3FailureNoAbortTest(_ArticleSyncTestBase):
     """Test that S3 upload failures do not abort content sync."""
 
     @override_settings(AWS_S3_CONTENT_BUCKET='test-bucket')
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_s3_error_does_not_abort_sync(self, mock_upload):
         """S3 upload error should not prevent content sync."""
         mock_upload.return_value = {
@@ -270,7 +272,7 @@ class ConcurrentSyncSkipTest(TestCase):
         )
 
         # Second lock should fail
-        acquired = acquire_sync_lock(source)
+        acquired = acquire_source_lock(source)
         self.assertFalse(acquired)
 
 
@@ -326,12 +328,8 @@ class SkipPathStaleSourceTest(TestCase):
         self.assertIsNotNone(sync_log)
         self.assertEqual(sync_log.status, 'skipped')
         self.assertEqual(sync_log.source_id, source.pk)
-        self.assertTrue(
-            any(
-                'already in progress' in str(e.get('error', ''))
-                for e in sync_log.errors
-            ),
-        )
+        entries = [str(e) for e in list(sync_log.errors) + list(sync_log.warnings)]
+        self.assertTrue(any('already running' in e for e in entries))
 
 
 # ===========================================================================
@@ -351,7 +349,7 @@ class StaleLockReclaimTest(TestCase):
             sync_locked_at=timezone.now() - timedelta(minutes=15),
         )
 
-        acquired = acquire_sync_lock(source)
+        acquired = acquire_source_lock(source)
         self.assertTrue(acquired)
 
 
@@ -377,9 +375,13 @@ class WebhookFloodTest(TestCase):
             source.sync_requested = True
             source.save(update_fields=['sync_requested'])
 
-        # When sync completes, release_sync_lock returns True
-        follow_up = release_sync_lock(source)
-        self.assertTrue(follow_up)
+        # When sync completes, release clears the flags and queues the follow-up
+        with patch(
+            'community_base.content_sync.queue.queue_source_sync',
+        ) as queue_sync:
+            release_source_lock(source, follow_up_key=source.pk)
+
+        queue_sync.assert_called_once()
 
         # After release, the flag and lock are cleared
         source.refresh_from_db()
@@ -394,8 +396,12 @@ class WebhookFloodTest(TestCase):
             sync_requested=False,
         )
 
-        follow_up = release_sync_lock(source)
-        self.assertFalse(follow_up)
+        with patch(
+            'community_base.content_sync.queue.queue_source_sync',
+        ) as queue_sync:
+            release_source_lock(source, follow_up_key=source.pk)
+
+        queue_sync.assert_not_called()
 
 
 # ===========================================================================
@@ -453,7 +459,7 @@ class FrontmatterValidationTest(_ArticleSyncTestBase):
         """Slug is derived from filename when missing from frontmatter.
         Articles, courses, recordings, projects, and downloads should
         not require slug in REQUIRED_FIELDS."""
-        from integrations.services.github import REQUIRED_FIELDS
+        from content.sync_parsers.common import REQUIRED_FIELDS
         for content_type in ['article', 'course', 'recording', 'project', 'download']:
             self.assertNotIn(
                 'slug', REQUIRED_FIELDS.get(content_type, []),
@@ -669,13 +675,11 @@ class MaxFilesLimitTest(_ArticleSyncTestBase):
                 'date': '2026-01-01',
             }, f'Body {i}.')
 
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
 
         self.assertEqual(sync_log.status, 'failed')
-        self.assertIn('Sync failed for test-org/blog', logs.output[0])
         self.assertTrue(
-            any('more than 5 content files' in str(e.get('error', ''))
+            any('max_files=5' in str(e.get('error', ''))
                 for e in sync_log.errors),
         )
         # No articles should have been created
@@ -802,27 +806,6 @@ class WebhookDeduplicationTest(TestCase):
 # ===========================================================================
 # Clone timeout configuration test
 # ===========================================================================
-
-
-class CloneTimeoutConfigTest(TestCase):
-    """Test that clone timeout is configurable."""
-
-    @override_settings(GITHUB_SYNC_CLONE_TIMEOUT=60)
-    @patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_clone_uses_configured_timeout(self, mock_run):
-        from integrations.services.github import clone_or_pull_repo
-
-        mock_run.return_value = MagicMock(returncode=0, stdout='abc123\n', stderr='')
-
-        temp_dir = tempfile.mkdtemp()
-        try:
-            clone_or_pull_repo('test-org/blog', temp_dir)
-            # First call is the clone, check timeout
-            call_args = mock_run.call_args_list[0]
-            self.assertEqual(call_args.kwargs.get('timeout'), 60)
-        finally:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # ===========================================================================

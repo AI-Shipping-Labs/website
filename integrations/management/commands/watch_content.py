@@ -17,10 +17,10 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
+from content.sync_parsers.checkout_view import checkout_is_dir
+from content.sync_parsers.families.tiers import _sync_tiers_yaml_from_checkout
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
-from integrations.services.github_sync.checkout import checkout_is_dir
-from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
 
 # File extensions that should trigger a sync
 CONTENT_EXTENSIONS = {'.md', '.yaml', '.yml'}
@@ -104,10 +104,19 @@ class DebouncedSyncer:
             self._sync_content_source(target)
 
     def _sync_tiers(self):
-        """Sync tiers.yaml through the same dispatcher production uses."""
+        """Sync tiers.yaml through the same parser production uses."""
         self.stdout.write(self.style.NOTICE('Syncing tiers.yaml...'))
         try:
-            result = _sync_tiers_yaml(self.repo_dir)
+            from community_base.content_sync.checkout import ImmutableCheckout
+
+            from content.sync_parsers.checkout_view import (
+                CheckoutView,
+                activate_view,
+            )
+
+            with ImmutableCheckout(self.repo_dir) as checkout:
+                with activate_view(CheckoutView(checkout)):
+                    result = _sync_tiers_yaml_from_checkout(self.repo_dir)
             if not result['synced']:
                 self.stderr.write('tiers.yaml not found, skipping.')
                 return

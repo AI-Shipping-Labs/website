@@ -4,46 +4,47 @@ import os
 import re
 import uuid
 
-from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.base import FamilyParser
+from content.sync_parsers.checkout_view import (
     checkout_is_file,
     checkout_listdir,
     raise_if_checkout_error,
 )
-from integrations.services.github_sync.common import logger
-from integrations.services.github_sync.dispatchers.courses import (
+from content.sync_parsers.common import logger
+from content.sync_parsers.families.courses import (
     _build_workshop_page_lookup,
     _parse_access_value,
     _resolve_workshop_landing_copy,
 )
-from integrations.services.github_sync.dispatchers.events import (
+from content.sync_parsers.families.events import (
     _build_synced_event_content_defaults,
     _normalize_title_for_match,
     _upsert_synced_event_content,
 )
-from integrations.services.github_sync.dispatchers.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
-from integrations.services.github_sync.dispatchers.instructors import (
+from content.sync_parsers.families.hosts import _attach_hosts_to_event, _resolve_hosts_for_event_yaml
+from content.sync_parsers.families.instructors import (
     _attach_instructors_to_workshop,
     _resolve_instructors_for_yaml,
 )
-from integrations.services.github_sync.lifecycle import (
+from content.sync_parsers.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
     upsert_synced_object,
 )
-from integrations.services.github_sync.media import (
+from content.sync_parsers.media import (
     _check_broken_image_refs,
     rewrite_cover_image_url,
     rewrite_image_urls,
 )
-from integrations.services.github_sync.parsing import (
+from content.sync_parsers.parsing import (
     _check_slug_collision,
     _derive_workshop_page_content_id,
     _parse_markdown_file,
     _parse_yaml_file,
     _validate_frontmatter,
 )
-from integrations.services.github_sync.repo import derive_slug, extract_sort_order
+from content.sync_parsers.repo_util import derive_slug, extract_sort_order
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
 
 def _coerce_workshop_date(value):
@@ -204,6 +205,44 @@ def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
     )
 
 
+class WorkshopsParser(FamilyParser):
+    content_type = 'workshops'
+    state_name = 'workshops'
+
+    def iter_items(self, run):
+        for workshop_dir in run.classification().workshop_dirs:
+            rel_dir = os.path.relpath(workshop_dir, run.repo_dir)
+            yield rel_dir, {'rel_path': rel_dir, 'workshop_dir': workshop_dir}
+
+    def process(self, run, payload):
+        state = self._state(run)
+        stats = self.item_stats()
+        _sync_single_workshop(
+            payload['workshop_dir'], run.repo_dir, run.source, run.commit_sha,
+            stats, state.seen, state.failed,
+            known_images=run.known_images(),
+            cross_workshop_lookup=run.cross_workshop_lookup(),
+            workshops_repo_name=_resolve_workshops_repo_name_for(run),
+        )
+        action = self.absorb(run, stats)
+        return action, None
+
+    def cleanup(self, run):
+        state = self._state(run)
+        stats = self.item_stats()
+        deleted = _cleanup_stale_workshops_for_source(
+            run.source, state.seen, state.failed, stats,
+        )
+        self.absorb(run, stats)
+        return deleted
+
+
+def _resolve_workshops_repo_name_for(run):
+    from content.sync_parsers.families.classify import resolve_workshops_repo_name
+
+    return resolve_workshops_repo_name(run.source)
+
+
 def _cleanup_stale_workshops_for_source(source, seen_slugs, failed_slugs, stats):
     from content.models import Workshop
 
@@ -211,7 +250,7 @@ def _cleanup_stale_workshops_for_source(source, seen_slugs, failed_slugs, stats)
         source_repo=source.repo_name,
         status='published',
     ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
-    cleanup_stale_synced_objects(
+    return cleanup_stale_synced_objects(
         stale,
         stats=stats,
         detail=lambda ws, action: {

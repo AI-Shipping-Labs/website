@@ -72,6 +72,13 @@ class ContentSource(models.Model):
         default=1000,
         help_text="Safety limit on number of content files to process per sync.",
     )
+    content_sync_slug = models.CharField(
+        max_length=100, blank=True, default='', db_default='', db_index=True,
+        help_text=(
+            "A2.3 rollback mapping: the package ContentSource.slug this row "
+            "was copied to (written by the data migration)."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

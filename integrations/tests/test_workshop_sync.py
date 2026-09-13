@@ -339,7 +339,7 @@ class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
         self.assertIsNone(Workshop.objects.get(slug='demo').event_id)
 
     def test_resync_unlinks_legacy_generated_empty_event(self):
-        from integrations.services.github_sync.dispatchers.workshops import (
+        from content.sync_parsers.families.workshops import (
             _derive_workshop_event_content_id,
         )
 

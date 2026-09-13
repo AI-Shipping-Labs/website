@@ -36,7 +36,7 @@ from integrations.config import (
     s3_content_upload_enabled,
 )
 from integrations.models import ContentSource, IntegrationSetting
-from integrations.services.github_sync.media import upload_images_to_s3
+from content.sync_parsers.media import upload_images_to_s3
 from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
 
 
@@ -244,7 +244,7 @@ class UploadImagesToS3DisabledErrorTest(TestCase):
         # With S3_ENABLED=True and TESTING=False, the gate passes but
         # AWS_S3_CONTENT_BUCKET is not configured, so we get the bucket
         # not-configured skip (clean no-op, no s3_disabled error).
-        with patch('integrations.services.github_sync.media.boto3.client') as mock:
+        with patch('content.sync_parsers.media.boto3.client') as mock:
             result = upload_images_to_s3(self.temp_dir, self.source)
         mock.assert_not_called()
         self.assertEqual(result, {'uploaded': 0, 'skipped': 0, 'errors': []})
@@ -265,7 +265,7 @@ class UploadImagesToS3DisabledErrorTest(TestCase):
 
         IntegrationSetting.objects.filter(key='S3_ENABLED').delete()
         clear_config_cache()
-        with patch('integrations.services.github_sync.media.boto3.client') as mock:
+        with patch('content.sync_parsers.media.boto3.client') as mock:
             result = upload_images_to_s3(self.temp_dir, self.source)
         mock.assert_not_called()
         self.assertEqual(result, {'uploaded': 0, 'skipped': 0, 'errors': []})

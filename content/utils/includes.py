@@ -3,7 +3,7 @@ import re
 
 from django.template import Context, Engine
 
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
     active_checkout,
     checkout_is_file,
     checkout_read_text,

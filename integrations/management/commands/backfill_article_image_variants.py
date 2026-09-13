@@ -1,20 +1,21 @@
 """Backfill responsive variants for repository-controlled Article images."""
 
 import os
-import shutil
-import tempfile
+from contextlib import ExitStack
 
+from community_base.content_sync.checkout import ImmutableCheckout
+from community_base.content_sync.github import checkout_repository
 from django.core.management.base import BaseCommand, CommandError
 
 from content.models import Article
+from content.sync_parsers.checkout_view import (
+    CheckoutView,
+    activate_view,
+    checkout_is_file,
+)
+from content.sync_parsers.parsing import _parse_markdown_file
 from integrations.models import ContentSource
 from integrations.services.article_images import build_article_image_manifest
-from integrations.services.github_sync.checkout import (
-    checkout_is_file,
-    checkout_session,
-)
-from integrations.services.github_sync.parsing import _parse_markdown_file
-from integrations.services.github_sync.repo import clone_or_pull_repo
 
 
 class Command(BaseCommand):
@@ -68,17 +69,20 @@ class Command(BaseCommand):
             self.stderr.write(self.style.WARNING(f"{totals['failed']} image(s) failed; other articles continued."))
 
     def _process_source(self, source, options, totals):
-        temp_dir = None
-        repo_dir = options["repo_dir"]
-        try:
-            if repo_dir:
-                repo_dir = os.path.abspath(repo_dir)
+        # The repository arrives through the package checkout boundary:
+        # an ImmutableCheckout snapshot of --repo-dir, or a package
+        # GitHubClient download for the configured source. All reads go
+        # through the checkout view helpers.
+        with ExitStack() as stack:
+            if options["repo_dir"]:
+                checkout = stack.enter_context(
+                    ImmutableCheckout(os.path.abspath(options["repo_dir"]))
+                )
             else:
-                temp_dir = tempfile.mkdtemp(prefix="article-image-backfill-")
-                clone_or_pull_repo(source.repo_name, temp_dir, source.is_private)
-                repo_dir = temp_dir
-
-            with checkout_session(repo_dir, preload=True):
+                checkout = stack.enter_context(checkout_repository(source))
+            view = CheckoutView(checkout)
+            repo_dir = view.root
+            with activate_view(view):
                 articles = Article.objects.filter(source_repo=source.repo_name)
                 if options["article"]:
                     articles = articles.filter(slug__in=options["article"])
@@ -124,6 +128,3 @@ class Command(BaseCommand):
                     except (OSError, ValueError) as exc:
                         totals["failed"] += 1
                         self.stderr.write(f"WARN {article.slug}: {exc}")
-        finally:
-            if temp_dir:
-                shutil.rmtree(temp_dir, ignore_errors=True)

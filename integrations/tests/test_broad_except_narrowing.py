@@ -3,10 +3,10 @@
 This file pins the "log and swallow" behavior we explicitly preserved
 when narrowing ``except Exception`` clauses in:
 
-- ``integrations/services/github_sync/client.py``
-- ``integrations/services/github_sync/orchestration.py``
-- ``integrations/services/github_sync/dispatchers/events.py``
-- ``integrations/services/github_sync/dispatchers/courses.py``
+- ``integrations/services/github_app.py`` (was ``github_sync/client.py``)
+- ``content/sync_parsers/families/classify.py`` (was ``github_sync/orchestration.py``)
+- ``content/sync_parsers/families/events.py``
+- ``content/sync_parsers/families/courses.py``
 
 Each test raises a specific exception type that the narrowed catch
 must still swallow without propagating to the caller. If a future
@@ -21,15 +21,15 @@ from unittest.mock import patch
 from django.db import OperationalError
 from django.test import TestCase, tag
 
-from integrations.services.github_sync.client import (
+from integrations.services.github_app import (
     _fetch_github_app_private_key_from_secrets_manager,
 )
-from integrations.services.github_sync.dispatchers.courses import (
+from content.sync_parsers.families.courses import (
     _resolve_course_description,
 )
-from integrations.services.github_sync.orchestration import (
-    _build_cross_workshop_lookup,
-    _resolve_workshops_repo_name,
+from content.sync_parsers.families.classify import (
+    build_cross_workshop_lookup as _build_cross_workshop_lookup,
+    resolve_workshops_repo_name as _resolve_workshops_repo_name,
 )
 
 
@@ -58,7 +58,7 @@ class SecretsManagerNarrowedCatchTest(TestCase):
         )
         with fake_boto3, \
              patch(
-                 'integrations.services.github_sync.client.logger',
+                 'integrations.services.github_app.logger',
              ) as mock_logger:
             result = _fetch_github_app_private_key_from_secrets_manager(
                 'unit-test-secret', 'eu-west-1',
@@ -79,8 +79,8 @@ class WorkshopsRepoNameDatabaseErrorNarrowedCatchTest(TestCase):
 
     def test_operational_error_falls_through_to_default(self):
         with patch(
-            'integrations.services.github_sync.orchestration.'
-            'ContentSource.objects.filter',
+            'content.sync_parsers.families.classify.'
+            'PackageContentSource.objects.filter',
             side_effect=OperationalError('database is locked'),
         ):
             result = _resolve_workshops_repo_name(source=None)
@@ -150,7 +150,7 @@ class CourseReadmeNarrowedCatchTest(TestCase):
                 f.write('---\n: : not yaml\n---\n# Hello\n')
 
             with patch(
-                'integrations.services.github_sync.dispatchers.courses.logger',
+                'content.sync_parsers.families.courses.logger',
             ) as mock_logger:
                 result = _resolve_course_description(
                     {},  # course_data with no 'description' key

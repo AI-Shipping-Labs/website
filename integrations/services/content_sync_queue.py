@@ -1,10 +1,18 @@
-"""Shared enqueue service for GitHub content sync tasks."""
+"""Shared enqueue service for GitHub content sync tasks (A2.3).
+
+Queues through the package durable dispatcher
+(``cb_content_sync.sync_source`` via ``dispatch_after_commit``) and writes
+the queued marker row into the package ``SyncLog`` table so operator
+surfaces keep showing the queued state. No second engine exists.
+"""
 
 from dataclasses import dataclass
 
-from integrations.models import SyncLog
-from integrations.services.github import sync_content_source
-from jobs.tasks.names import build_task_name
+from django.db import transaction
+
+from community_base.content_sync.models import ContentSource as PackageContentSource
+from community_base.content_sync.models import SyncLog
+from community_base.content_sync.queue import queue_source_sync as package_queue_source_sync
 
 SYNC_TASK_PATH = 'integrations.services.github.sync_content_source'
 
@@ -23,48 +31,28 @@ class ContentSyncQueueResult:
     task_id: object = None
 
 
-def _mark_source_queued(source, batch_id=None):
+def _package_source(source):
+    """Resolve a legacy or package source row to the package row.
+
+    The P6 migration preserves primary keys, so a pk lookup covers both
+    the legacy ``integrations.ContentSource`` rows and package rows.
+    """
+    if isinstance(source, PackageContentSource):
+        return source
+    return PackageContentSource.objects.get(pk=source.pk)
+
+
+def _mark_source_queued(package_source, batch_id=None):
     """Create the queued SyncLog row and mark the source as queued."""
-    previous_status = source.last_sync_status
     queued_log = SyncLog.objects.create(
-        source=source,
+        source=package_source,
         batch_id=batch_id,
         status='queued',
     )
-    source.last_sync_status = 'queued'
-    source.save(update_fields=['last_sync_status', 'updated_at'])
-    return previous_status, queued_log
-
-
-def _clear_queued_state(source, previous_status, queued_log):
-    """Undo a queued marker when enqueueing fails before a worker can run."""
-    queued_log.delete()
-    source.last_sync_status = previous_status
-    source.save(update_fields=['last_sync_status', 'updated_at'])
-
-
-def _content_sync_task_name(source, task_source):
-    return build_task_name(
-        'Sync content source',
-        source.repo_name,
-        task_source,
+    PackageContentSource.objects.filter(pk=package_source.pk).update(
+        last_sync_status='queued',
     )
-
-
-def _enqueue_async_task(source, batch_id=None, force=False, task_name=None):
-    """Import django-q lazily so missing django-q can fall back inline."""
-    from django_q.tasks import async_task
-
-    kwargs = {
-        'force': force,
-        'task_name': task_name or _content_sync_task_name(
-            source,
-            'content sync queue',
-        ),
-    }
-    if batch_id is not None:
-        kwargs['batch_id'] = batch_id
-    return async_task(SYNC_TASK_PATH, source, **kwargs)
+    return queued_log
 
 
 def enqueue_content_sync(
@@ -75,51 +63,53 @@ def enqueue_content_sync(
     task_name=None,
     task_source='content sync queue',
 ):
-    """Queue one content source sync, falling back inline when django-q is absent."""
-    queued_marker = None
-    if mark_queued:
-        queued_marker = _mark_source_queued(source, batch_id=batch_id)
+    """Queue one content source sync through the package durable dispatcher.
+
+    ``task_name`` and ``task_source`` are accepted for signature
+    compatibility with legacy callers; the package dispatcher owns task
+    naming and deduplication.
+    """
+    del task_name, task_source
 
     try:
-        task_id = _enqueue_async_task(
-            source,
-            batch_id=batch_id,
-            force=force,
-            task_name=task_name or _content_sync_task_name(source, task_source),
-        )
-    except ImportError:
-        if queued_marker is not None:
-            _clear_queued_state(source, *queued_marker)
-        try:
-            sync_content_source(source, batch_id=batch_id, force=force)
-        except Exception as exc:
-            return ContentSyncQueueResult(
-                ok=False,
-                queued=False,
-                ran_inline=True,
-                source=source,
-                batch_id=batch_id,
-                message=f'Sync failed for {source.repo_name}: {exc}',
-                error=str(exc),
-            )
-        return ContentSyncQueueResult(
-            ok=True,
-            queued=False,
-            ran_inline=True,
-            source=source,
-            batch_id=batch_id,
-            message=f'Sync completed for {source.repo_name}',
-        )
-    except Exception as exc:
-        if queued_marker is not None:
-            _clear_queued_state(source, *queued_marker)
+        package_source = _package_source(source)
+    except PackageContentSource.DoesNotExist as exc:
         return ContentSyncQueueResult(
             ok=False,
             queued=False,
             ran_inline=False,
             source=source,
             batch_id=batch_id,
-            message=f'Sync failed for {source.repo_name}: {exc}',
+            message=f'No package content source row for {source.repo_name}',
+            error=str(exc),
+        )
+
+    queued_marker = None
+    try:
+        with transaction.atomic():
+            if mark_queued:
+                queued_marker = _mark_source_queued(
+                    package_source, batch_id=batch_id,
+                )
+            key = (
+                f'queue:{queued_marker.pk}'
+                if queued_marker is not None
+                else 'queue:inline'
+            )
+            intent, _created = package_queue_source_sync(
+                package_source,
+                key=key,
+                batch_id=batch_id,
+                force=force,
+            )
+    except Exception as exc:
+        return ContentSyncQueueResult(
+            ok=False,
+            queued=False,
+            ran_inline=False,
+            source=source,
+            batch_id=batch_id,
+            message=f'Sync queue failed for {source.repo_name}: {exc}',
             error=str(exc),
         )
 
@@ -130,7 +120,7 @@ def enqueue_content_sync(
         source=source,
         batch_id=batch_id,
         message=f'Sync queued for {source.repo_name}',
-        task_id=task_id,
+        task_id=intent.pk if intent is not None else None,
     )
 
 

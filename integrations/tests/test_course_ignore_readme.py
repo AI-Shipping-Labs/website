@@ -23,13 +23,12 @@ from django.test import SimpleTestCase, TestCase
 
 from content.models import Course, Module, Unit
 from integrations.models import ContentSource
-from integrations.services.github import (
+from content.sync_parsers.parsing import (
     _derive_readme_content_id,
     _extract_readme_title,
-    _matches_ignore_patterns,
-    sync_content_source,
 )
-from integrations.services.github_sync import repo as github_repo
+from content.sync_parsers.repo_util import _matches_ignore_patterns
+from integrations.services.github import sync_content_source
 
 
 class MatchesIgnorePatternsTest(SimpleTestCase):

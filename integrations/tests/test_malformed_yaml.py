@@ -21,11 +21,9 @@ from django.test import TestCase
 
 from content.models import Course, CuratedLink, Module
 from integrations.models import ContentSource
-from integrations.services.github import (
-    _build_course_unit_lookup,
-    _parse_yaml_file,
-    sync_content_source,
-)
+from content.sync_parsers.families.courses import _build_course_unit_lookup
+from content.sync_parsers.parsing import _parse_yaml_file
+from integrations.services.github import sync_content_source
 
 # ============================================================================
 # Scenario: Malformed course.yaml during sync

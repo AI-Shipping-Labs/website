@@ -22,8 +22,8 @@ from content.access import (
     LEVEL_REGISTERED,
 )
 from content.models import Course, Unit
-from integrations.services.github_sync.common import GitHubSyncError
-from integrations.services.github_sync.dispatchers.courses import (
+from content.sync_parsers.common import GitHubSyncError
+from content.sync_parsers.families.courses import (
     _parse_access_value,
 )
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo

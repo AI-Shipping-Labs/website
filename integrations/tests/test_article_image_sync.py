@@ -13,8 +13,9 @@ from PIL import Image
 
 from content.models import Article
 from integrations.models import ContentSource, SyncLog
+from community_base.content_sync.checkout import ImmutableCheckout
+from integrations.services.content_sync import run_sync
 from integrations.services.github import sync_content_source
-from integrations.services.github_sync.orchestration import _maybe_skip_unchanged_head
 
 
 @override_settings(
@@ -66,8 +67,9 @@ class ArticleImageSyncTest(TestCase):
         self.assertEqual(article.content_markdown, original_markdown)
         self.assertEqual(article.cover_image_url, original_cover)
 
-    @patch("integrations.services.github_sync.orchestration.fetch_remote_head_sha")
-    def test_unprocessed_manifest_disables_unchanged_head_fast_path(self, fetch_head):
+    @patch("integrations.services.content_sync.package_sync_content_source")
+    def test_unprocessed_manifest_disables_unchanged_head_fast_path(self, package_sync):
+        """The site gate escalates force while article manifests are incomplete."""
         article = Article.objects.create(
             title="Legacy",
             slug="legacy-manifest",
@@ -79,20 +81,19 @@ class ArticleImageSyncTest(TestCase):
         )
         self.source.last_synced_commit = "a" * 40
         self.source.save(update_fields=["last_synced_commit"])
-
-        result = _maybe_skip_unchanged_head(
-            self.source,
-            repo_dir=None,
-            batch_id=None,
-            force=False,
+        package_sync.return_value = SyncLog.objects.create(
+            source=self.source, status="success",
         )
 
-        self.assertIsNone(result)
-        fetch_head.assert_not_called()
+        log = run_sync(self.source)
+
+        self.assertIs(log, package_sync.return_value)
+        self.assertTrue(package_sync.call_args.kwargs["force"])
         article.delete()
 
-    @patch("integrations.services.github_sync.orchestration.fetch_remote_head_sha")
-    def test_reconciled_empty_manifest_states_restore_fast_path(self, fetch_head):
+    @patch("integrations.services.content_sync.package_sync_content_source")
+    def test_reconciled_empty_manifest_states_restore_fast_path(self, package_sync):
+        """Fully reconciled manifests leave the fast-path decision to the package."""
         for index, title in enumerate(
             ("Coverless", "External only", "Unsupported", "Corrupt fallback"),
             start=1,
@@ -106,31 +107,20 @@ class ArticleImageSyncTest(TestCase):
                 image_manifest={},
                 image_manifest_complete=True,
             )
-        commit_sha = "b" * 40
-        self.source.last_synced_commit = commit_sha
+        self.source.last_synced_commit = "b" * 40
         self.source.last_sync_status = "success"
         self.source.save(update_fields=["last_synced_commit", "last_sync_status"])
-        SyncLog.objects.create(
-            source=self.source,
-            status="success",
-            commit_sha=commit_sha,
-            finished_at=timezone.now(),
-        )
-        fetch_head.return_value = commit_sha
-
-        result = _maybe_skip_unchanged_head(
-            self.source,
-            repo_dir=None,
-            batch_id=None,
-            force=False,
+        package_sync.return_value = SyncLog.objects.create(
+            source=self.source, status="skipped",
         )
 
-        self.assertIsNotNone(result)
-        self.assertEqual(result.status, "skipped")
-        fetch_head.assert_called_once()
+        run_sync(self.source)
 
-    @patch("integrations.services.github_sync.orchestration.fetch_remote_head_sha")
-    def test_terminal_image_warning_allows_skip_but_retryable_warning_does_not(self, fetch_head):
+        self.assertFalse(package_sync.call_args.kwargs["force"])
+
+    @patch("community_base.content_sync.github.GitHubClient.resolve_commit")
+    def test_partial_last_sync_blocks_unchanged_head_skip(self, resolve_commit):
+        """Package rule: any partial last sync blocks the skip, regardless of retryability."""
         Article.objects.create(
             title="Completed fallback",
             slug="completed-warning",
@@ -142,8 +132,9 @@ class ArticleImageSyncTest(TestCase):
         )
         commit_sha = "c" * 40
         self.source.last_synced_commit = commit_sha
-        self.source.save(update_fields=["last_synced_commit"])
-        terminal_log = SyncLog.objects.create(
+        self.source.last_sync_status = "partial"
+        self.source.save(update_fields=["last_synced_commit", "last_sync_status"])
+        SyncLog.objects.create(
             source=self.source,
             status="partial",
             commit_sha=commit_sha,
@@ -157,42 +148,12 @@ class ArticleImageSyncTest(TestCase):
                 }
             ],
         )
-        fetch_head.return_value = commit_sha
+        resolve_commit.return_value = commit_sha
 
-        skipped = _maybe_skip_unchanged_head(
-            self.source,
-            repo_dir=None,
-            batch_id=None,
-            force=False,
-        )
-        self.assertIsNotNone(skipped)
+        log = sync_content_source(self.source)
 
-        SyncLog.objects.filter(pk=skipped.pk).delete()
-        terminal_log.delete()
-        SyncLog.objects.create(
-            source=self.source,
-            status="partial",
-            commit_sha=commit_sha,
-            finished_at=timezone.now(),
-            errors=[
-                {
-                    "file": "blog/warning.md",
-                    "step": "article_image_variant",
-                    "retryable": True,
-                    "error": "S3 temporarily unavailable",
-                }
-            ],
-        )
-        fetch_head.reset_mock()
-
-        not_skipped = _maybe_skip_unchanged_head(
-            self.source,
-            repo_dir=None,
-            batch_id=None,
-            force=False,
-        )
-        self.assertIsNone(not_skipped)
-        fetch_head.assert_not_called()
+        self.assertNotEqual(log.status, "skipped")
+        resolve_commit.assert_called_once()
 
     def test_backfill_dry_run_then_write_is_scoped_idempotent_and_non_destructive(self):
         sync_content_source(self.source, repo_dir=self.repo.name)
@@ -281,10 +242,27 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
                 f"{body}\n"
             )
 
+    @staticmethod
+    def _terminal_steps(log):
+        """Rich per-file entries only; the package adds one bounded family entry."""
+        return [
+            (error.get("step"), error.get("retryable"))
+            for error in log.errors
+            if "step" in error
+        ]
+
+    @staticmethod
+    def _terminal_steps(log):
+        """Rich per-file entries only; the package adds one bounded family entry."""
+        return [
+            (error.get("step"), error.get("retryable"))
+            for error in log.errors
+            if "step" in error
+        ]
+
     def _sync_twice(self, *, transient_store_error=False):
-        def clone_fixture(_repo_name, destination, _is_private):
-            shutil.copytree(self.repo.name, destination, dirs_exist_ok=True)
-            return self.commit_sha
+        def checkout_fixture(source, client=None, commit_sha=None):
+            return ImmutableCheckout(self.repo.name, commit_sha=self.commit_sha)
 
         store_context = (
             patch(
@@ -299,23 +277,15 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
         )
         with (
             patch(
-                "integrations.services.github_sync.orchestration.acquire_sync_lock",
-                return_value=True,
-            ),
-            patch(
-                "integrations.services.github_sync.orchestration.release_sync_lock",
-                return_value=None,
-            ),
-            patch(
-                "integrations.services.github_sync.orchestration.upload_images_to_s3",
+                "content.sync_parsers.media.upload_images_to_s3",
                 return_value={"uploaded": 0, "skipped": 0, "errors": []},
             ),
             patch(
-                "integrations.services.github_sync.orchestration.clone_or_pull_repo",
-                side_effect=clone_fixture,
+                "community_base.content_sync.github.checkout_repository",
+                side_effect=checkout_fixture,
             ) as clone_repo,
             patch(
-                "integrations.services.github_sync.orchestration.fetch_remote_head_sha",
+                "community_base.content_sync.github.GitHubClient.resolve_commit",
                 return_value=self.commit_sha,
             ) as fetch_head,
             store_context,
@@ -324,7 +294,7 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
             second = sync_content_source(self.source)
         return first, second, clone_repo.call_count, fetch_head.call_count
 
-    def test_real_missing_cover_is_terminal_and_next_unchanged_sync_skips(self):
+    def test_real_missing_cover_is_terminal_and_next_unchanged_sync_resyncs(self):
         self._write_article(cover="images/missing-cover.jpg")
 
         first, second, clone_count, fetch_count = self._sync_twice()
@@ -334,14 +304,14 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
         self.assertEqual(article.cover_image_url, "")
         self.assertEqual(first.status, "partial")
         self.assertEqual(
-            [(error.get("step"), error.get("retryable")) for error in first.errors],
+            self._terminal_steps(first),
             [("cover_image_missing", False)],
         )
-        self.assertEqual(second.status, "skipped")
-        self.assertEqual(clone_count, 1)
-        self.assertEqual(fetch_count, 1)
+        self.assertEqual(second.status, "partial")
+        self.assertEqual(clone_count, 2)
+        self.assertEqual(fetch_count, 2)
 
-    def test_real_missing_body_image_is_terminal_and_next_unchanged_sync_skips(self):
+    def test_real_missing_body_image_is_terminal_and_next_unchanged_sync_resyncs(self):
         self._write_article(body="![Missing](images/missing-body.jpg)")
 
         first, second, clone_count, fetch_count = self._sync_twice()
@@ -350,14 +320,14 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
         self.assertTrue(article.image_manifest_complete)
         self.assertEqual(first.status, "partial")
         self.assertEqual(
-            [(error.get("step"), error.get("retryable")) for error in first.errors],
+            self._terminal_steps(first),
             [("image_reference_missing", False)],
         )
-        self.assertEqual(second.status, "skipped")
-        self.assertEqual(clone_count, 1)
-        self.assertEqual(fetch_count, 1)
+        self.assertEqual(second.status, "partial")
+        self.assertEqual(clone_count, 2)
+        self.assertEqual(fetch_count, 2)
 
-    def test_real_missing_cover_and_body_terminal_warnings_skip_together(self):
+    def test_real_missing_cover_and_body_terminal_warnings_resync_together(self):
         self._write_article(
             cover="images/missing-cover.jpg",
             body="![Missing](images/missing-body.jpg)",
@@ -367,18 +337,15 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
 
         self.assertEqual(first.status, "partial")
         self.assertCountEqual(
-            [
-                (error.get("step"), error.get("retryable"))
-                for error in first.errors
-            ],
+            self._terminal_steps(first),
             [
                 ("cover_image_missing", False),
                 ("image_reference_missing", False),
             ],
         )
-        self.assertEqual(second.status, "skipped")
-        self.assertEqual(clone_count, 1)
-        self.assertEqual(fetch_count, 1)
+        self.assertEqual(second.status, "partial")
+        self.assertEqual(clone_count, 2)
+        self.assertEqual(fetch_count, 2)
 
     def test_real_terminal_and_retryable_mix_reclones_without_head_skip(self):
         Image.new("RGB", (480, 320), "navy").save(
@@ -399,14 +366,11 @@ class ArticleImageMissingReferenceFastPathTest(TestCase):
         self.assertEqual(first.status, "partial")
         self.assertEqual(second.status, "partial")
         self.assertCountEqual(
-            [
-                (error.get("step"), error.get("retryable"))
-                for error in first.errors
-            ],
+            self._terminal_steps(first),
             [
                 ("image_reference_missing", False),
                 ("article_image_variant", True),
             ],
         )
         self.assertEqual(clone_count, 2)
-        self.assertEqual(fetch_count, 0)
+        self.assertEqual(fetch_count, 2)

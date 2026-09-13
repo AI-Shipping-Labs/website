@@ -1,3 +1,4 @@
+from community_base.api.registry import urlpatterns as community_base_api_urlpatterns
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
@@ -50,7 +51,15 @@ urlpatterns = [
     path('', include('plans.urls')),
     path('', include('bookclub.urls')),
     path('', include('community.urls')),
+    # A2.3: package API registry (content-sync routes, Bearer scopes) under /api/v1/.
+    path('api/v1/', include(community_base_api_urlpatterns())),
+    # A2.3: package API registry (content-sync routes, Bearer scopes) under /api/v1/.
+    path('api/v1/', include(community_base_api_urlpatterns())),
     path('studio/', include('studio.urls')),
+    # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
+    path('studio/', include('community_base.content_sync.studio_urls')),
+    # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
+    path('studio/', include('community_base.content_sync.studio_urls')),
     path('', include('triggers.urls')),
     path('studio/triggers/', include('triggers.studio_urls')),
 ]

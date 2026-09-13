@@ -12,8 +12,8 @@ from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase, tag
 
-from integrations.models import ContentSource, SyncLog
-from integrations.services.github import (
+from community_base.content_sync.models import ContentSource, SyncLog
+from integrations.services.github_app import (
     INSTALLATION_REPOS_CACHE_KEY,
     GitHubSyncError,
 )
@@ -215,7 +215,7 @@ class ContentSourceCreateViewTest(TestCase):
 
         self.assertEqual(response.redirect_chain[-1], ('/studio/sync/', 302))
         source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
-        self.assertIsNone(source.last_sync_status)
+        self.assertEqual(source.last_sync_status, '')
         self.assertFalse(SyncLog.objects.filter(source=source).exists())
         self.assertIn(
             'Could not queue initial sync for AI-Shipping-Labs/blog',

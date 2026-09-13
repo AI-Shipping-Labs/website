@@ -21,6 +21,7 @@ from unittest.mock import patch
 from django.db import OperationalError
 from django.test import TestCase, tag
 
+from content.sync_parsers.checkout_view import checkout_scope
 from content.sync_parsers.families.classify import (
     build_cross_workshop_lookup as _build_cross_workshop_lookup,
 )
@@ -113,9 +114,10 @@ class CrossWorkshopLookupParseFailureNarrowedCatchTest(TestCase):
                 f.write('- not\n- a\n- mapping\n')
 
             errors = []
-            lookup = _build_cross_workshop_lookup(
-                [workshop_dir], repo_dir, errors=errors,
-            )
+            with checkout_scope(repo_dir):
+                lookup = _build_cross_workshop_lookup(
+                    [workshop_dir], repo_dir, errors=errors,
+                )
         # Bad workshop.yaml -> entry skipped silently; no crash.
         self.assertEqual(lookup, {})
 
@@ -126,9 +128,10 @@ class CrossWorkshopLookupParseFailureNarrowedCatchTest(TestCase):
             # No workshop.yaml at all -> ``open`` raises FileNotFoundError
             # (a subclass of OSError) inside ``_parse_yaml_file``.
             errors = []
-            lookup = _build_cross_workshop_lookup(
-                [workshop_dir], repo_dir, errors=errors,
-            )
+            with checkout_scope(repo_dir):
+                lookup = _build_cross_workshop_lookup(
+                    [workshop_dir], repo_dir, errors=errors,
+                )
         self.assertEqual(lookup, {})
 
 
@@ -154,11 +157,12 @@ class CourseReadmeNarrowedCatchTest(TestCase):
             with patch(
                 'content.sync_parsers.families.courses.logger',
             ) as mock_logger:
-                result = _resolve_course_description(
-                    {},  # course_data with no 'description' key
-                    course_dir,
-                    [],  # course_ignore_patterns
-                )
+                with checkout_scope(course_dir):
+                    result = _resolve_course_description(
+                        {},  # course_data with no 'description' key
+                        course_dir,
+                        [],  # course_ignore_patterns
+                    )
 
         self.assertEqual(result, '')
         mock_logger.warning.assert_called_once()

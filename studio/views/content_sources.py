@@ -23,6 +23,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
+from integrations.legacy_mirror import derive_slug
 from integrations.services.content_sync import sync_content_source
 from integrations.services.github_app import (
     GitHubSyncError,
@@ -216,6 +217,7 @@ def content_source_create(request):
         webhook_secret = secrets.token_urlsafe(32)
 
     source = ContentSource.objects.create(
+        slug=derive_slug(repo_name),
         repo_name=repo_name,
         webhook_secret=webhook_secret,
         is_private=match['private'],

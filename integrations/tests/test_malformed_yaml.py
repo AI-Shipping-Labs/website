@@ -20,6 +20,7 @@ import uuid
 from django.test import TestCase
 
 from content.models import Course, CuratedLink, Module
+from content.sync_parsers.checkout_view import checkout_scope
 from content.sync_parsers.families.courses import _build_course_unit_lookup
 from content.sync_parsers.parsing import _parse_yaml_file
 from integrations.models import ContentSource
@@ -200,8 +201,9 @@ class YamlListNotDictTest(TestCase):
         with open(path, 'w') as f:
             f.write('- a\n- b\n')
 
-        with self.assertRaises(ValueError) as ctx:
-            _parse_yaml_file(path)
+        with checkout_scope(self.temp_dir):
+            with self.assertRaises(ValueError) as ctx:
+                _parse_yaml_file(path)
 
         message = str(ctx.exception)
         self.assertIn('Invalid YAML', message)
@@ -213,8 +215,9 @@ class YamlListNotDictTest(TestCase):
         with open(path, 'w') as f:
             f.write('justastring\n')
 
-        with self.assertRaises(ValueError) as ctx:
-            _parse_yaml_file(path)
+        with checkout_scope(self.temp_dir):
+            with self.assertRaises(ValueError) as ctx:
+                _parse_yaml_file(path)
 
         message = str(ctx.exception)
         self.assertIn('expected a mapping', message)
@@ -224,13 +227,15 @@ class YamlListNotDictTest(TestCase):
         path = os.path.join(self.temp_dir, 'blank.yaml')
         with open(path, 'w') as f:
             f.write('')
-        self.assertEqual(_parse_yaml_file(path), {})
+        with checkout_scope(self.temp_dir):
+            self.assertEqual(_parse_yaml_file(path), {})
 
     def test_parse_yaml_file_returns_dict_for_mapping(self):
         path = os.path.join(self.temp_dir, 'good.yaml')
         with open(path, 'w') as f:
             f.write('title: hello\nsort: 1\n')
-        self.assertEqual(_parse_yaml_file(path), {'title': 'hello', 'sort': 1})
+        with checkout_scope(self.temp_dir):
+            self.assertEqual(_parse_yaml_file(path), {'title': 'hello', 'sort': 1})
 
 
 class CourseYamlListBubblesAsErrorTest(TestCase):
@@ -348,7 +353,8 @@ class BuildLookupSurfacesParseErrorsTest(TestCase):
             'errors': [], 'items_detail': [],
         }
 
-        _build_course_unit_lookup(self.course_dir, stats=stats)
+        with checkout_scope(self.temp_dir):
+            _build_course_unit_lookup(self.course_dir, stats=stats)
 
         broken = [
             e for e in stats['errors']
@@ -371,7 +377,8 @@ class BuildLookupSurfacesParseErrorsTest(TestCase):
             'errors': [], 'items_detail': [],
         }
 
-        _build_course_unit_lookup(self.course_dir, stats=stats)
+        with checkout_scope(self.temp_dir):
+            _build_course_unit_lookup(self.course_dir, stats=stats)
 
         broken = [
             e for e in stats['errors']
@@ -391,6 +398,7 @@ class BuildLookupSurfacesParseErrorsTest(TestCase):
             'integrations.services.github', level='WARNING',
         ) as cm:
             # Must not raise; ``stats=None`` means warnings only.
-            _build_course_unit_lookup(self.course_dir)
+            with checkout_scope(self.temp_dir):
+                _build_course_unit_lookup(self.course_dir)
         joined = '\n'.join(cm.output)
         self.assertIn('module.yaml', joined)

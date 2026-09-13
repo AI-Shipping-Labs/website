@@ -154,6 +154,15 @@ class CheckoutView:
 
     def snapshot(self, path: str, *, max_bytes: int | None = None) -> bytes:
         rel_path = self.relative(path)
+        kind = self.kind(rel_path)
+        if kind is None:
+            # Legacy contract: reading an absent file raises an OSError
+            # (FileNotFoundError) so the parser families' narrowed
+            # ``except (ValueError, OSError)`` guards keep working on the
+            # immutable checkout.
+            raise FileNotFoundError(rel_path)
+        if kind == 'directory':
+            raise IsADirectoryError(rel_path)
         try:
             payload = self.checkout.read_bytes(rel_path)
         except CheckoutError as exc:

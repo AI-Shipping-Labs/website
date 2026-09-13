@@ -27,6 +27,9 @@ from community_base.content_sync.orchestration import (
     acquire_source_lock,
     release_source_lock,
 )
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -355,6 +358,7 @@ class PackageRowStaleSourceGuardTest(TestCase):
         from community_base.content_sync.models import (
             ContentSource as PackageContentSource,
         )
+
         from integrations.services.content_sync import _source_row_deleted
 
         self.assertFalse(
@@ -375,6 +379,7 @@ class PackageRowStaleSourceGuardTest(TestCase):
         from community_base.content_sync.models import (
             ContentSource as PackageContentSource,
         )
+
         from integrations.services.content_sync import _source_row_deleted
 
         package_source = PackageContentSource.objects.create(
@@ -427,7 +432,8 @@ class WebhookFloodTest(TestCase):
         """Given a source with sync_locked_at set (sync running),
         when 5 webhooks set sync_requested,
         then when the running sync completes, it returns True for follow-up."""
-        source = ContentSource.objects.create(
+        source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             sync_locked_at=timezone.now(),
         )
@@ -452,7 +458,8 @@ class WebhookFloodTest(TestCase):
 
     def test_no_follow_up_when_not_requested(self):
         """When no follow-up was requested, release returns False."""
-        source = ContentSource.objects.create(
+        source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             sync_locked_at=timezone.now(),
             sync_requested=False,
@@ -804,10 +811,16 @@ class UnitContentHashTest(TestCase):
 
 
 class WebhookDeduplicationTest(TestCase):
-    """Test webhook handler dedup logic."""
+    """Test the package webhook handler wiring at the legacy URL.
+
+    A2.3: one package handler (``community_base.content_sync.webhooks``)
+    serves POST /api/webhooks/github. Source state lives in the package
+    rows; sync dispatch goes through the package queue, never inline.
+    """
 
     def setUp(self):
-        self.source = ContentSource.objects.create(
+        self.source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             webhook_secret='test-secret',
         )
@@ -819,50 +832,53 @@ class WebhookDeduplicationTest(TestCase):
         ).hexdigest()
         return f'sha256={sig}'
 
+    def _post_push(self, payload):
+        return self.client.post(
+            '/api/webhooks/github',
+            data=payload,
+            content_type='application/json',
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-1',
+            HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
+        )
+
     def test_webhook_updates_last_webhook_at(self):
         """last_webhook_at is updated on every webhook received."""
         payload = json.dumps({
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'test-org/blog'},
+            'repository': {
+                'full_name': 'test-org/blog',
+                'default_branch': 'main',
+            },
         }).encode()
 
-        with patch('integrations.views.github_webhook.sync_content_source'):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=payload,
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-                HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
-            )
+        with patch(
+            'community_base.content_sync.webhooks.queue_source_sync',
+        ) as queue_sync:
+            response = self._post_push(payload)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
+        queue_sync.assert_called_once()
         self.source.refresh_from_db()
         self.assertIsNotNone(self.source.last_webhook_at)
 
-    def test_webhook_sets_sync_requested_when_locked(self):
-        """If sync is running, webhook sets sync_requested flag."""
-        self.source.sync_locked_at = timezone.now()
-        self.source.save()
-
+    def test_webhook_queues_through_package_queue_when_unlocked(self):
+        """A valid push queues the sync via the package queue."""
         payload = json.dumps({
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'test-org/blog'},
+            'repository': {
+                'full_name': 'test-org/blog',
+                'default_branch': 'main',
+            },
         }).encode()
 
-        with patch('integrations.views.github_webhook.sync_content_source') as mock_sync:
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=payload,
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-                HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
-            )
+        with patch(
+            'community_base.content_sync.webhooks.queue_source_sync',
+        ) as queue_sync:
+            response = self._post_push(payload)
 
-        self.assertEqual(response.status_code, 200)
-        self.source.refresh_from_db()
-        self.assertTrue(self.source.sync_requested)
-        # sync_content_source should NOT have been called
-        mock_sync.assert_not_called()
+        self.assertEqual(response.status_code, 202)
+        queue_sync.assert_called_once()
 
 
 # ===========================================================================

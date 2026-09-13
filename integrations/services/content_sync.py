@@ -13,6 +13,8 @@ the single site-side wrapper every legacy caller goes through:
   durable dispatcher.
 """
 
+import re
+
 from community_base.content_sync.models import (
     ContentSource as PackageContentSource,
 )
@@ -36,6 +38,36 @@ def _source_row_deleted(source):
     if isinstance(source, PackageContentSource):
         return not PackageContentSource.objects.filter(pk=source.pk).exists()
     return not ContentSource.objects.filter(pk=source.pk).exists()
+
+
+def _normalize_checkout_refusals(log):
+    """Rewrite package checkout-construction refusals to the legacy shape.
+
+    The package ImmutableCheckout refuses symlinked/non-regular repo
+    entries before any parser runs and records one bounded
+    ``{'error': ...}`` entry. Legacy operator surfaces key on the rich
+    ``{'file', 'kind', 'step', 'filesystem_boundary'}`` shape, so the
+    wrapper rewrites those entries. Returns the rich entries it inserted.
+    """
+    pattern = re.compile(r'^(?P<what>Symlink|Non-regular file) is not allowed: (?P<rel>.+)$')
+    rich = []
+    kept = []
+    for entry in (log.errors or []):
+        message = str(entry.get('error', '')) if isinstance(entry, dict) else ''
+        match = pattern.match(message)
+        if match and isinstance(entry, dict) and 'file' not in entry:
+            rich.append({
+                'file': match.group('rel'),
+                'error': message,
+                'kind': 'symlink' if match.group('what') == 'Symlink' else 'non_regular_file',
+                'step': 'filesystem_boundary',
+                'filesystem_boundary': True,
+            })
+            continue
+        kept.append(entry)
+    if rich:
+        log.errors = rich + kept
+    return rich
 
 
 def run_sync(source, repo_dir=None, batch_id=None, force=False):
@@ -102,7 +134,10 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
         run_state.set_errors_collector(None)
         run_state.set_extras_collector(None)
 
+    boundary_refusals = _normalize_checkout_refusals(log)
     changed_fields = []
+    if boundary_refusals:
+        changed_fields.append('errors')
     if collected_errors:
         # Rich per-file entries replace the bounded package entry of the
         # same family so operator surfaces keep the legacy {'file', ...}

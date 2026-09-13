@@ -10,6 +10,7 @@ from django.core.management.base import BaseCommand, CommandError
 from content.models import Article
 from content.sync_parsers.checkout_view import (
     CheckoutView,
+    ContentCheckoutError,
     activate_view,
     checkout_is_file,
 )
@@ -75,8 +76,19 @@ class Command(BaseCommand):
         # through the checkout view helpers.
         with ExitStack() as stack:
             if options["repo_dir"]:
+                repo_root = os.path.abspath(options["repo_dir"])
+                if os.path.islink(repo_root.rstrip(os.sep)) or os.path.islink(
+                    options["repo_dir"]
+                ):
+                    # The package checkout would refuse this with its own
+                    # error; raise the site boundary error first so the
+                    # refusal names the symlink kind without disclosing the
+                    # symlink target.
+                    raise ContentCheckoutError(
+                        '<checkout-root>', 'symlink_root',
+                    )
                 checkout = stack.enter_context(
-                    ImmutableCheckout(os.path.abspath(options["repo_dir"]))
+                    ImmutableCheckout(repo_root)
                 )
             else:
                 checkout = stack.enter_context(checkout_repository(source))

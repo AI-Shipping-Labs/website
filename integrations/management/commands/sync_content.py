@@ -75,7 +75,6 @@ class _DiskSnapshot:
                         dirs.remove(name)
         self.removed_symlinks = removed
         return removed
-        return removed
 
     def __exit__(self, exc_type, exc, traceback):
         if self.created_worktree and self.temp_dir:
@@ -148,10 +147,11 @@ class Command(BaseCommand):
         total_updated = 0
         has_errors = False
 
-        with _DiskSnapshot(from_disk or '.') as repo_dir:
-            if from_disk and getattr(repo_dir, 'removed_symlinks', 0):
+        disk_snapshot = _DiskSnapshot(from_disk or '.')
+        with disk_snapshot as repo_dir:
+            if from_disk and disk_snapshot.removed_symlinks:
                 self.stdout.write(
-                    f'  (snapshot: skipped {repo_dir.removed_symlinks} '
+                    f'  (snapshot: skipped {disk_snapshot.removed_symlinks} '
                     f'symlink(s); content sync never followed them)'
                 )
             for source in sources:

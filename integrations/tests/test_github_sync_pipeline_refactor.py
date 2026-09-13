@@ -1,13 +1,13 @@
 """Characterization tests for the GitHub sync pipeline refactor (#603)."""
 
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.test import TestCase
 
 from content.models import Course
-from integrations.models import ContentSource
-from integrations.services.github import sync_content_source
-from community_base.content_sync.checkout import ImmutableCheckout
 from content.sync_parsers.checkout_view import activate_view, view_for
 from content.sync_parsers.families.classify import RepoFileClassifier
+from integrations.models import ContentSource
+from integrations.services.github import sync_content_source
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 

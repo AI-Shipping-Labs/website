@@ -6,11 +6,11 @@ from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
-from community_base.content_sync.checkout import ImmutableCheckout
 from content.models import Article, Workshop
 from content.sync_parsers.checkout_view import activate_view, view_for
 from content.sync_parsers.families.articles import _sync_article

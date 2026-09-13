@@ -36,9 +36,9 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from content.models import Article, CuratedLink, Unit
+from content.sync_parsers.parsing import _defaults_differ
 from events.models import Event
 from integrations.models import ContentSource
-from content.sync_parsers.parsing import _defaults_differ
 from integrations.services.github import sync_content_source
 from integrations.tests.sync_fixtures import write_markdown_file, write_yaml_file
 

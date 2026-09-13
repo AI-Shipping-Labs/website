@@ -22,12 +22,12 @@ import uuid
 from django.test import SimpleTestCase, TestCase
 
 from content.models import Course, Module, Unit
-from integrations.models import ContentSource
 from content.sync_parsers.parsing import (
     _derive_readme_content_id,
     _extract_readme_title,
 )
 from content.sync_parsers.repo_util import _matches_ignore_patterns
+from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
 
@@ -131,16 +131,17 @@ class DeriveReadmeContentIdTest(SimpleTestCase):
 
 
 class GitHubSyncHelperOwnershipTest(SimpleTestCase):
-    def test_parsing_helpers_are_not_exposed_by_repo_module(self):
+    def test_parsing_helpers_are_not_exposed_by_package_parser_registry(self):
         helper_names = (
             '_extract_readme_title',
             '_derive_readme_content_id',
             '_derive_workshop_page_content_id',
         )
+        from community_base.content_sync import parsers as package_parsers
 
         for helper_name in helper_names:
             with self.subTest(helper_name=helper_name):
-                self.assertNotIn(helper_name, vars(github_repo))
+                self.assertNotIn(helper_name, vars(package_parsers))
 
 
 class _CourseSyncFixtureBase(TestCase):

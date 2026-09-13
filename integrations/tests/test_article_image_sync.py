@@ -1,11 +1,11 @@
 import os
-import shutil
 import tempfile
 from contextlib import nullcontext
 from datetime import date
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -13,7 +13,6 @@ from PIL import Image
 
 from content.models import Article
 from integrations.models import ContentSource, SyncLog
-from community_base.content_sync.checkout import ImmutableCheckout
 from integrations.services.content_sync import run_sync
 from integrations.services.github import sync_content_source
 

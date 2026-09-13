@@ -12,22 +12,17 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from community_base.content_sync.checkout import (
+    CheckoutError,
+    ImmutableCheckout,
+    git_commit_sha,
+)
 from django.conf import settings
 from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from PIL import Image
 
 from content.models import Article, SiteConfig
-from integrations.config import clear_config_cache
-from integrations.management.commands.watch_content import DebouncedSyncer
-from integrations.models import ContentSource
-from integrations.services.article_images import build_article_image_manifest
-from integrations.services.github import sync_content_source
-from community_base.content_sync.checkout import (
-    CheckoutError,
-    ImmutableCheckout,
-    git_commit_sha,
-)
 from content.sync_parsers.checkout_view import (
     MAX_IMAGE_SNAPSHOT_BYTES,
     CheckoutView,
@@ -37,6 +32,11 @@ from content.sync_parsers.checkout_view import (
 )
 from content.sync_parsers.families.tiers import _sync_tiers_yaml
 from content.sync_parsers.media import upload_images_to_s3
+from integrations.config import clear_config_cache
+from integrations.management.commands.watch_content import DebouncedSyncer
+from integrations.models import ContentSource
+from integrations.services.article_images import build_article_image_manifest
+from integrations.services.github import sync_content_source
 
 
 class _Style:

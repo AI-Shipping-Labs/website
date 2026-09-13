@@ -16,11 +16,11 @@ stale cleanup) the accumulated errors are raised once as
 single bounded error entry and a ``partial`` sync status.
 """
 
-from content.sync_parsers.checkout_view import ContentCheckoutError
 from community_base.content_sync.orchestration import UpsertResult
 from community_base.content_sync.parsers import SourceItem, register_parser
 
 from content.sync_parsers import run_state
+from content.sync_parsers.checkout_view import ContentCheckoutError
 
 
 class FamilyPartialError(Exception):

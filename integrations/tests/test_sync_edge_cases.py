@@ -21,8 +21,12 @@ import os
 import tempfile
 import uuid
 from datetime import date, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from community_base.content_sync.orchestration import (
+    acquire_source_lock,
+    release_source_lock,
+)
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -35,15 +39,11 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from integrations.models import ContentSource, SyncLog
-from community_base.content_sync.orchestration import (
-    acquire_source_lock,
-    release_source_lock,
-)
 from content.sync_parsers.parsing import (
     _compute_content_hash,
     _validate_frontmatter,
 )
+from integrations.models import ContentSource, SyncLog
 from integrations.services.github import sync_content_source
 
 User = get_user_model()
@@ -330,6 +330,68 @@ class SkipPathStaleSourceTest(TestCase):
         self.assertEqual(sync_log.source_id, source.pk)
         entries = [str(e) for e in list(sync_log.errors) + list(sync_log.warnings)]
         self.assertTrue(any('already running' in e for e in entries))
+
+
+# ===========================================================================
+# Scenario (A2.3 fresh database): package-row sources sync without legacy rows
+# ===========================================================================
+
+
+class PackageRowStaleSourceGuardTest(TestCase):
+    """The #221 stale-source guard must follow the instance's own table.
+
+    ``seed_content_sources`` writes package ``ContentSource`` rows only, so
+    on a fresh database the legacy ``integrations.ContentSource`` table is
+    empty. Checking package rows against the legacy table made
+    ``run_sync`` return ``None`` for every live source and crashed
+    ``sync_content --from-disk`` with ``AttributeError: 'NoneType' object
+    has no attribute 'items_created'``.
+    """
+
+    def test_package_row_not_vetoed_by_empty_legacy_table(self):
+        """Given only a package ContentSource row (fresh DB, legacy empty),
+        when the stale-source guard evaluates the package row,
+        then it reports the row as present."""
+        from community_base.content_sync.models import (
+            ContentSource as PackageContentSource,
+        )
+        from integrations.services.content_sync import _source_row_deleted
+
+        self.assertFalse(
+            ContentSource.objects.filter(
+                repo_name='test-org/fresh'
+            ).exists(),
+            'precondition: the legacy table must be empty for this repo',
+        )
+        package_source = PackageContentSource.objects.create(
+            repo_name='test-org/fresh',
+        )
+        self.assertFalse(_source_row_deleted(package_source))
+
+    def test_deleted_package_row_is_reported_stale(self):
+        """Given a package instance whose package row was deleted,
+        when the stale-source guard evaluates it,
+        then it reports the row as gone so run_sync returns None."""
+        from community_base.content_sync.models import (
+            ContentSource as PackageContentSource,
+        )
+        from integrations.services.content_sync import _source_row_deleted
+
+        package_source = PackageContentSource.objects.create(
+            repo_name='test-org/deleted',
+        )
+        PackageContentSource.objects.filter(pk=package_source.pk).delete()
+        self.assertTrue(_source_row_deleted(package_source))
+
+    def test_deleted_legacy_row_is_still_reported_stale(self):
+        """Given a legacy instance whose legacy row was deleted (#221 race),
+        when the stale-source guard evaluates it,
+        then it reports the row as gone."""
+        from integrations.services.content_sync import _source_row_deleted
+
+        source = ContentSource.objects.create(repo_name='test-org/legacy')
+        ContentSource.objects.filter(pk=source.pk).delete()
+        self.assertTrue(_source_row_deleted(source))
 
 
 # ===========================================================================

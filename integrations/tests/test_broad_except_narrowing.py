@@ -21,15 +21,17 @@ from unittest.mock import patch
 from django.db import OperationalError
 from django.test import TestCase, tag
 
-from integrations.services.github_app import (
-    _fetch_github_app_private_key_from_secrets_manager,
+from content.sync_parsers.families.classify import (
+    build_cross_workshop_lookup as _build_cross_workshop_lookup,
+)
+from content.sync_parsers.families.classify import (
+    resolve_workshops_repo_name as _resolve_workshops_repo_name,
 )
 from content.sync_parsers.families.courses import (
     _resolve_course_description,
 )
-from content.sync_parsers.families.classify import (
-    build_cross_workshop_lookup as _build_cross_workshop_lookup,
-    resolve_workshops_repo_name as _resolve_workshops_repo_name,
+from integrations.services.github_app import (
+    _fetch_github_app_private_key_from_secrets_manager,
 )
 
 

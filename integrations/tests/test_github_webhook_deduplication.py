@@ -12,9 +12,9 @@ import hashlib
 import json
 from unittest import mock
 
+from community_base.content_sync.models import WebhookLog as PackageWebhookLog
 from django.test import TestCase, tag
 
-from community_base.content_sync.models import WebhookLog as PackageWebhookLog
 from integrations.models import ContentSource, WebhookLog
 
 WEBHOOK_SECRET = 'dedup-github-webhook-secret'

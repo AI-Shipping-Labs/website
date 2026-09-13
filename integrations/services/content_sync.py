@@ -13,10 +13,29 @@ the single site-side wrapper every legacy caller goes through:
   durable dispatcher.
 """
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from community_base.content_sync.orchestration import (
     sync_content_source as package_sync_content_source,
 )
+
 from integrations.models import ContentSource
+
+
+def _source_row_deleted(source):
+    """Whether the persisted row behind ``source`` disappeared (issue #221).
+
+    A persisted worker task can wake up after its source row was deleted;
+    treat the sync as best-effort instead of raising. The check follows the
+    instance's own table: package-row callers (``sync_content --from-disk``
+    on a fresh database seeds package rows only) must not be vetoed by the
+    empty legacy table, while legacy instances keep the legacy-table check
+    that #221 shipped with.
+    """
+    if isinstance(source, PackageContentSource):
+        return not PackageContentSource.objects.filter(pk=source.pk).exists()
+    return not ContentSource.objects.filter(pk=source.pk).exists()
 
 
 def run_sync(source, repo_dir=None, batch_id=None, force=False):
@@ -30,7 +49,7 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
     """
     force = force or _manifest_reconciliation_pending(source, repo_dir)
 
-    if source.pk and not ContentSource.objects.filter(pk=source.pk).exists():
+    if source.pk and _source_row_deleted(source):
         # Issue #221: a persisted worker task can wake up after its source
         # row was deleted. Treat the sync as best-effort instead of raising.
         return None

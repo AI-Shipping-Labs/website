@@ -25,6 +25,16 @@ from unittest.mock import ANY, MagicMock, patch
 
 from boto3.exceptions import S3UploadFailedError
 from botocore.exceptions import ClientError, NoCredentialsError
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.models import (
+    SyncLog as PackageSyncLog,
+)
+from community_base.content_sync.models import (
+    WebhookLog as PackageWebhookLog,
+)
+from community_base.content_sync.webhooks import _valid_signature
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -43,18 +53,12 @@ from content.models import (
     Unit,
     Workshop,
 )
+from content.sync_parsers.common import GitHubSyncError
+from content.sync_parsers.media import rewrite_image_urls
 from events.models import Event
 from integrations.admin.content_source import ContentSourceAdmin
 from integrations.config import clear_config_cache
-from integrations.models import ContentSource, IntegrationSetting, SyncLog, WebhookLog
-from community_base.content_sync.models import (
-    ContentSource as PackageContentSource,
-    SyncLog as PackageSyncLog,
-    WebhookLog as PackageWebhookLog,
-)
-from community_base.content_sync.webhooks import _valid_signature
-from content.sync_parsers.common import GitHubSyncError
-from content.sync_parsers.media import rewrite_image_urls
+from integrations.models import ContentSource, IntegrationSetting, SyncLog
 from integrations.services.github import sync_content_source
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 

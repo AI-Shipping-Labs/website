@@ -20,9 +20,9 @@ import uuid
 from django.test import TestCase
 
 from content.models import Course, CuratedLink, Module
-from integrations.models import ContentSource
 from content.sync_parsers.families.courses import _build_course_unit_lookup
 from content.sync_parsers.parsing import _parse_yaml_file
+from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
 # ============================================================================

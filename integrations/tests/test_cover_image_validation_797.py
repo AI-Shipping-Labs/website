@@ -21,12 +21,12 @@ from botocore.exceptions import ClientError
 from django.test import TestCase, override_settings
 
 from content.models import Workshop
-from integrations.config import clear_config_cache
-from integrations.models import ContentSource
 from content.sync_parsers.media import (
     rewrite_cover_image_url,
     upload_images_to_s3,
 )
+from integrations.config import clear_config_cache
+from integrations.models import ContentSource
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 

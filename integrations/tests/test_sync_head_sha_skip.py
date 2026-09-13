@@ -29,7 +29,6 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from community_base.content_sync.github import checkout_repository
 from integrations.models import ContentSource, SyncLog
 from integrations.services.github import sync_content_source
 

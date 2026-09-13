@@ -1,11 +1,11 @@
 import uuid
 from datetime import date, timedelta
 
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Article, Course, Workshop
-from community_base.content_sync.models import ContentSource, SyncLog
 from integrations.services.sync_observability import (
     logical_history_page,
     logical_status,

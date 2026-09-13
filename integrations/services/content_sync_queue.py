@@ -8,11 +8,10 @@ surfaces keep showing the queued state. No second engine exists.
 
 from dataclasses import dataclass
 
-from django.db import transaction
-
 from community_base.content_sync.models import ContentSource as PackageContentSource
 from community_base.content_sync.models import SyncLog
 from community_base.content_sync.queue import queue_source_sync as package_queue_source_sync
+from django.db import transaction
 
 SYNC_TASK_PATH = 'integrations.services.github.sync_content_source'
 

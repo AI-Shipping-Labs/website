@@ -30,13 +30,13 @@ import tempfile
 
 from django.test import TestCase, override_settings
 
+from content.sync_parsers.media import upload_images_to_s3
 from integrations.config import (
     _get_config_uncached,
     clear_config_cache,
     s3_content_upload_enabled,
 )
 from integrations.models import ContentSource, IntegrationSetting
-from content.sync_parsers.media import upload_images_to_s3
 from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
 
 

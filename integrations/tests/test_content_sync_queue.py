@@ -10,9 +10,9 @@ by the package now, so those legacy contract tests were retired with the
 import uuid
 from unittest.mock import patch
 
+from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.test import TestCase
 
-from community_base.content_sync.models import SyncLog as PackageSyncLog
 from integrations.models import ContentSource
 from integrations.services.content_sync_queue import (
     enqueue_content_sync,

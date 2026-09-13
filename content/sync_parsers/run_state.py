@@ -46,17 +46,6 @@ def set_errors_collector(fn):
     _COLLECTOR.fn_errors = fn
 
 
-def emit_errors(family, errors):
-    """Publish one family's rich per-file errors to the collector."""
-    fn = getattr(_COLLECTOR, 'fn_errors', None)
-    if fn is not None and errors:
-        fn(family, list(errors))
-
-
-def set_errors_collector(fn):
-    _COLLECTOR.fn_errors = fn
-
-
 def emit_extras(extras):
     """Publish run-level extras (tiers counters) to the collector."""
     fn = getattr(_COLLECTOR, 'fn_extras', None)

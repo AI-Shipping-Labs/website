@@ -24,13 +24,13 @@ import os
 import shutil
 import tempfile
 
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.test import TestCase
 
 from content.models import Course, Unit
-from integrations.models import ContentSource
-from community_base.content_sync.checkout import ImmutableCheckout
 from content.sync_parsers.checkout_view import activate_view, view_for
 from content.sync_parsers.families.courses import _build_course_unit_lookup
+from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
 

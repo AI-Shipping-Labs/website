@@ -14,8 +14,8 @@ from django.test import TestCase, override_settings
 from PIL import Image
 
 from content.models import Article, Course, Project
-from integrations.models import ContentSource
 from content.sync_parsers.media import rewrite_cover_image_url
+from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
 

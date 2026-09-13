@@ -7,9 +7,8 @@ against the synthetic checkout view root.
 
 import os
 
-from django.db import DatabaseError
-
 from community_base.content_sync.models import ContentSource as PackageContentSource
+from django.db import DatabaseError
 
 from content.sync_parsers.checkout_view import (
     checkout_is_file,

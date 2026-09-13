@@ -121,11 +121,14 @@ class TestSubscribeAutoCreatesAccount:
         delta = user.verification_expires_at - timezone.now()
         assert datetime.timedelta(days=6) < delta < datetime.timedelta(days=8)
 
-        from email_app.models import EmailLog
-        log = EmailLog.objects.filter(
-            user=user, email_type='email_verification_subscribe',
-        )
-        assert log.count() == 1
+        # A6.2: the verification send moved to Relay's double opt-in
+        # flow, so the site records a durable job intent here instead
+        # of writing an EmailLog row.
+        from community_base.jobs.models import JobIntent
+        assert JobIntent.objects.filter(
+            handler='email_app.relay_sync.request_contact_verification',
+            payload__user_id=user.pk,
+        ).exists()
 
     def test_returning_subscriber_keeps_single_row_and_original_expiry(
         self, django_server, page,
@@ -158,12 +161,13 @@ class TestSubscribeAutoCreatesAccount:
         rows[0].refresh_from_db()
         assert rows[0].verification_expires_at == original_expiry
 
-        # A second verification email is recorded (re-sent on resubmit).
-        from email_app.models import EmailLog
-        log_count = EmailLog.objects.filter(
-            user=rows[0], email_type='email_verification_subscribe',
-        ).count()
-        assert log_count >= 1
+        # A6.2: resubscribing re-requests Relay's double opt-in — a new
+        # durable job intent — instead of re-sending a site EmailLog.
+        from community_base.jobs.models import JobIntent
+        assert JobIntent.objects.filter(
+            handler='email_app.relay_sync.request_contact_verification',
+            payload__user_id=rows[0].pk,
+        ).exists()
 
 
 @pytest.mark.django_db(transaction=True)

@@ -1,15 +1,16 @@
-"""Playwright coverage for the all-optional group badge fix (issue #938).
+"""Playwright coverage for the Studio settings source badges (#938, #1584, #1627).
 
-A Studio settings group whose keys are all ``optional`` used to render a
-green "Configured" badge by vacuous truth even with nothing set. These
-scenarios assert the corrected behavior on the ``analytics`` and
-``calendly`` groups, and that a group with required keys (``zoom``) is
-unaffected — including that all-optional groups never render the
-nonsensical "Partial (x/0)" badge.
+Issue #938 stopped all-optional groups from rendering a green "Configured"
+badge by vacuous truth. The #1584 cutover then moved the dashboard onto the
+community-base package views, which dropped group-level status badges
+entirely in favour of per-key source badges (``data-source-badge`` with
+``db`` / ``env`` / ``default``). These scenarios pin the per-key contract
+that replaced the group badge: unset keys read ``default`` and the card
+never claims "Configured", a saved override flips the key to ``db``, and
+package-store values win over environment values.
 """
 
 import os
-import re
 
 import pytest
 
@@ -29,15 +30,31 @@ pytestmark = pytest.mark.local_only
 
 
 def _clear_settings():
+    """Drop every stored override in both stores for a deterministic start."""
+    from community_base.config.models import Setting
+
     from integrations.models import IntegrationSetting
 
     IntegrationSetting.objects.all().delete()
+    Setting.objects.all().delete()
     connection.close()
 
 
-def _badge_text(card):
-    """Group header badge is the first span in the card."""
-    return card.locator("span").first.inner_text().strip()
+def _field_badge(card, key):
+    """Per-key source badge inside one group card."""
+    return card.locator(f'[data-field-key="{key}"] [data-source-badge]')
+
+
+def _claims_configured(card):
+    """True when the card renders a standalone "Configured" badge."""
+    return card.locator("span:text-is('Configured')").count() > 0
+
+
+def _open_settings(page, django_server, section):
+    page.goto(
+        f"{django_server}/studio/settings/#{section}",
+        wait_until="domcontentloaded",
+    )
 
 
 @pytest.mark.django_db(transaction=True)
@@ -48,17 +65,18 @@ class TestStudioSettingsAllOptionalBadge:
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
 
-        page.goto(
-            f"{django_server}/studio/settings/#analytics",
-            wait_until="domcontentloaded",
-        )
+        _open_settings(page, django_server, "analytics")
         card = page.locator("#integration-analytics")
         assert card.is_visible()
-        # Group badge reads "Not configured", not "Configured".
-        assert _badge_text(card) == "Not configured"
-        # The GA field's per-key source badge reads "Source: not set".
-        ga_row = card.locator('[data-field-key="GOOGLE_ANALYTICS_ID"]')
-        assert ga_row.locator('[data-source-badge="none"]').count() == 1
+        # Nothing stored: the GA key reads its registry default and no
+        # "Configured" claim renders anywhere in the card (#938).
+        assert (
+            _field_badge(card, "GOOGLE_ANALYTICS_ID").get_attribute(
+                "data-source-badge"
+            )
+            == "default"
+        )
+        assert not _claims_configured(card)
 
     def test_saving_ga_id_flips_badge_to_configured(self, django_server, browser):
         _clear_settings()
@@ -66,56 +84,47 @@ class TestStudioSettingsAllOptionalBadge:
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
 
-        page.goto(
-            f"{django_server}/studio/settings/#analytics",
-            wait_until="domcontentloaded",
-        )
+        _open_settings(page, django_server, "analytics")
         card = page.locator("#integration-analytics")
-        assert _badge_text(card) == "Not configured"
-
         card.locator('input[name="GOOGLE_ANALYTICS_ID"]').fill("G-ABC123XYZ")
         card.locator('button[type="submit"]').click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert re.search(
-            r"Saved \d+ settings in Analytics\.",
-            page.locator("body").inner_text(),
-        )
-
-        page.goto(
-            f"{django_server}/studio/settings/#analytics",
-            wait_until="domcontentloaded",
+        # The package save view reports the group in lowercase.
+        assert (
+            "Saved analytics settings."
+            in page.locator("body").inner_text()
         )
         card = page.locator("#integration-analytics")
-        assert _badge_text(card) == "Configured"
-        # The GA field now sources its value from the database.
-        ga_row = card.locator('[data-field-key="GOOGLE_ANALYTICS_ID"]')
-        assert ga_row.locator('[data-source-badge="db"]').count() == 1
+        # The stored override flips the GA key's badge to the db source.
+        assert (
+            _field_badge(card, "GOOGLE_ANALYTICS_ID").get_attribute(
+                "data-source-badge"
+            )
+            == "db"
+        )
 
-    def test_default_only_retention_does_not_look_configured(
-        self, django_server, browser,
-    ):
+    def test_default_only_retention_does_not_look_configured(self, django_server, browser):
         _clear_settings()
         _create_staff_user("admin@test.com")
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
 
-        page.goto(
-            f"{django_server}/studio/settings/#analytics",
-            wait_until="domcontentloaded",
-        )
+        _open_settings(page, django_server, "analytics")
         card = page.locator("#integration-analytics")
         retention_row = card.locator(
             '[data-field-key="USER_ACTIVITY_RETENTION_DAYS"]'
         )
-        # The retention value comes from the registry default (365).
-        assert retention_row.locator('[data-source-badge="default"]').count() == 1
+        # The retention value comes from the registry default (365) and its
+        # badge says so; a default alone must not look configured.
+        assert (
+            retention_row.locator('[data-source-badge="default"]').count() == 1
+        )
         retention_input = retention_row.locator(
             'input[name="USER_ACTIVITY_RETENTION_DAYS"]'
         )
         assert retention_input.input_value() == "365"
-        # A default alone must not make the group look configured.
-        assert _badge_text(card) == "Not configured"
+        assert not _claims_configured(card)
 
     def test_calendly_unset_shows_not_configured(self, django_server, browser):
         _clear_settings()
@@ -123,46 +132,43 @@ class TestStudioSettingsAllOptionalBadge:
         context = _auth_context(browser, "admin@test.com")
         page = context.new_page()
 
-        page.goto(
-            f"{django_server}/studio/settings/#calendly",
-            wait_until="domcontentloaded",
-        )
+        # The calendly group lives in the "content" section of the
+        # sectioned dashboard; the section id is the anchor that works.
+        _open_settings(page, django_server, "content")
         card = page.locator("#integration-calendly")
         assert card.is_visible()
-        assert _badge_text(card) == "Not configured"
+        assert not _claims_configured(card)
 
     def test_required_key_group_zoom_unaffected(self, django_server, browser):
-        # A required-key group (Zoom) must keep rendering green "Configured"
-        # when every required key is set -- the #938 all-optional fix must
-        # not regress groups that have required keys.
-        #
-        # We assert only the DB-backed "Configured" state here because it is
-        # env-independent (DB rows win over env in `_build_group_context`).
-        # The "Partial (x/y)" rendering and the "never x/0" guarantee are
-        # asserted authoritatively at the unit layer, which can clear the
-        # ZOOM_* env vars the live Playwright server cannot:
-        #   integrations.tests.test_settings.SettingsDashboardViewTest
-        #     .test_dashboard_shows_status_partial            (Partial path)
-        #     .test_all_optional_group_never_partial          (never x/0)
+        # Keys stored through the package service (the post-cutover
+        # override store) must surface as the db source even when an
+        # environment variable for the same key exists.
+        from community_base.config import service
+
         _clear_settings()
-        _create_staff_user("admin@test.com")
-        context = _auth_context(browser, "admin@test.com")
-        page = context.new_page()
-
-        from integrations.models import IntegrationSetting
-
         for key in (
             "ZOOM_CLIENT_ID",
             "ZOOM_CLIENT_SECRET",
             "ZOOM_ACCOUNT_ID",
             "ZOOM_WEBHOOK_SECRET_TOKEN",
         ):
-            IntegrationSetting.objects.create(key=key, value="val", group="zoom")
+            service.set(key, "val", actor_ref="test", reason="playwright seed")
         connection.close()
 
-        page.goto(
-            f"{django_server}/studio/settings/#zoom",
-            wait_until="domcontentloaded",
-        )
+        _create_staff_user("admin@test.com")
+        context = _auth_context(browser, "admin@test.com")
+        page = context.new_page()
+
+        _open_settings(page, django_server, "content")
         card = page.locator("#integration-zoom")
-        assert _badge_text(card) == "Configured"
+        assert card.is_visible()
+        for key in (
+            "ZOOM_CLIENT_ID",
+            "ZOOM_CLIENT_SECRET",
+            "ZOOM_ACCOUNT_ID",
+            "ZOOM_WEBHOOK_SECRET_TOKEN",
+        ):
+            assert (
+                _field_badge(card, key).get_attribute("data-source-badge")
+                == "db"
+            )

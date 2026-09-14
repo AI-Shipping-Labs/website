@@ -202,7 +202,7 @@ from studio.views.notifications import (
     workshop_announce_slack,
     workshop_notify,
 )
-from studio.views.package_settings import settings_save_group
+from studio.views.package_settings import settings_import, settings_save_group
 from studio.views.peer_reviews import (
     peer_review_extend_deadline,
     peer_review_form_batch,
@@ -1476,12 +1476,12 @@ urlpatterns = [
     ),
     path(
         'settings/import/',
-        package_settings_views.settings_import,
+        settings_import,
         name='studio_settings_import',
     ),
     path(
         'settings/import/',
-        package_settings_views.settings_import,
+        settings_import,
         name='community_base_settings_import',
     ),
     path(

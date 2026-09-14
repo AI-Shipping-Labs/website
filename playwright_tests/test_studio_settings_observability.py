@@ -7,7 +7,6 @@ integration doc anchor on GitHub.
 """
 
 import os
-import re
 from pathlib import Path
 
 import pytest
@@ -30,44 +29,58 @@ from django.db import connection
 pytestmark = pytest.mark.local_only
 
 FAKE_TOKEN = "pylf_fake_playwright_token"
-RESTART_HINT = (
-    "Takes effect on the next web and worker process start. "
-    "Saving does not reconfigure this process."
-)
-RESTART_MESSAGE = (
-    "Observability changes apply after you restart the web and worker processes."
-)
+RESTART_MESSAGE = "Restart the application for these settings to take effect."
+RESTART_HINT = "Logfire changes apply after restarting the web and worker processes."
 SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1539")
 
 
 def _clear_settings():
+    """Drop observability/site overrides in both stores for a clean start.
+
+    Since the #1584 cutover the dashboard renders from the package store,
+    so stale package rows leak between tests unless they are cleared too.
+    """
+    from community_base.config.models import Setting
+
     from integrations.models import IntegrationSetting
 
     IntegrationSetting.objects.all().delete()
+    Setting.objects.filter(
+        key__in=[
+            "LOGFIRE_ENABLED",
+            "LOGFIRE_TOKEN",
+            "LOGFIRE_ENVIRONMENT",
+            "SITE_BASE_URL",
+        ],
+    ).delete()
     connection.close()
 
 
 def _seed_observability(*, enabled=True):
-    from integrations.models import IntegrationSetting
+    """Seed the observability keys through the package override store.
 
-    IntegrationSetting.objects.update_or_create(
-        key="LOGFIRE_ENABLED",
-        defaults={
-            "value": "true" if enabled else "false",
-            "group": "observability",
-        },
+    Since the #1584 cutover the settings UI reads the package store, so
+    donor-table rows no longer feed the rendered form values.
+    """
+    from community_base.config import service
+
+    service.set(
+        "LOGFIRE_ENABLED",
+        enabled,
+        actor_ref="test",
+        reason="playwright seed",
     )
-    IntegrationSetting.objects.update_or_create(
-        key="LOGFIRE_TOKEN",
-        defaults={
-            "value": FAKE_TOKEN,
-            "is_secret": True,
-            "group": "observability",
-        },
+    service.set(
+        "LOGFIRE_TOKEN",
+        FAKE_TOKEN,
+        actor_ref="test",
+        reason="playwright seed",
     )
-    IntegrationSetting.objects.update_or_create(
-        key="LOGFIRE_ENVIRONMENT",
-        defaults={"value": "production", "group": "observability"},
+    service.set(
+        "LOGFIRE_ENVIRONMENT",
+        "production",
+        actor_ref="test",
+        reason="playwright seed",
     )
     connection.close()
 
@@ -104,18 +117,21 @@ class TestStudioSettingsObservability:
         ):
             field = card.locator(f'[data-field-key="{key}"]')
             assert field.count() == 1
+            # The package dashboard renders one per-key restart badge
+            # (data-settings-restart) plus a group-level hint paragraph.
             assert field.locator(
-                f'[data-requires-restart-badge="{key}"]'
+                f'[data-settings-restart="{key}"]'
             ).inner_text() == "Restart required"
-            assert field.locator(
-                f'[data-requires-restart-hint="{key}"]'
-            ).inner_text() == RESTART_HINT
+
+        assert card.locator("[data-settings-restart-hint]").inner_text() == (
+            RESTART_HINT
+        )
 
         site_field = page.locator(
             '#integration-site [data-field-key="SITE_BASE_URL"]'
         )
         assert site_field.count() == 1
-        assert site_field.locator('[data-requires-restart-badge]').count() == 0
+        assert site_field.locator('[data-settings-restart]').count() == 0
 
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         card.screenshot(path=SCREENSHOT_DIR / "restart-badges-before-save.png")
@@ -142,9 +158,9 @@ class TestStudioSettingsObservability:
         card.locator('button[type="submit"]').click()
         page.wait_for_load_state("domcontentloaded")
 
-        assert re.search(
-            r"Saved \d+ settings in Observability\.",
-            page.locator("body").inner_text(),
+        assert (
+            "Saved observability settings."
+            in page.locator("body").inner_text()
         )
         assert RESTART_MESSAGE in page.locator("body").inner_text()
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
@@ -164,7 +180,7 @@ class TestStudioSettingsObservability:
         )
         assert token_input.get_attribute("type") == "password"
         assert page.locator(
-            "#integration-observability [data-requires-restart-badge]"
+            "#integration-observability [data-settings-restart]"
         ).count() == 3
 
     @browser_journey
@@ -189,7 +205,7 @@ class TestStudioSettingsObservability:
         page.wait_for_load_state("domcontentloaded")
 
         body_text = page.locator("body").inner_text()
-        assert "Saved 3 settings in Observability." in body_text
+        assert "Saved observability settings." in body_text
         assert RESTART_MESSAGE in body_text
         assert "already stopped" not in body_text.lower()
         assert not page.locator(
@@ -217,7 +233,7 @@ class TestStudioSettingsObservability:
         page.wait_for_load_state("domcontentloaded")
 
         body_text = page.locator("body").inner_text()
-        assert re.search(r"Saved \d+ settings in Site\.", body_text)
+        assert "Saved site settings." in body_text
         assert RESTART_MESSAGE not in body_text
 
     @browser_journey

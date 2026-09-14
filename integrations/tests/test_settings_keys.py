@@ -17,6 +17,43 @@ from integrations.settings_registry import INTEGRATION_GROUPS, SETTING_VALUE_TYP
 
 FIXTURE = Path(__file__).parent / "fixtures" / "donor_settings_inventory_2026-09-08.json"
 
+# Site-declared optional additions (issue #1627): keys this repo marks
+# ``optional=True`` beyond the donor snapshot. The donor UI accepted a
+# blank submit for every key (blank meant unset), but the package form
+# only allows blanks for keys declared optional, so blankable
+# display/fallback keys are declared optional even though the donor
+# badge metadata counted them as required.
+SITE_OPTIONAL_ADDITIONS = frozenset({
+    "AWS_S3_CONTENT_BUCKET",
+    "AWS_S3_CONTENT_REGION",
+    "AWS_S3_DOWNLOADS_BUCKET",
+    "AWS_S3_RECORDINGS_BUCKET",
+    "AWS_S3_RECORDINGS_REGION",
+    "AWS_SES_REGION",
+    "BANNER_GENERATOR_FUNCTION_URL",
+    "CONTENT_CDN_BASE",
+    "EVENT_DISPLAY_TIMEZONE",
+    "GITHUB_APP_ID",
+    "GITHUB_APP_INSTALLATION_ID",
+    "SES_CONFIGURATION_SET_NAME",
+    "SES_PROMOTIONAL_FROM_EMAIL",
+    "SES_TRANSACTIONAL_FROM_EMAIL",
+    "SES_WELCOME_FROM_EMAIL",
+    "SITE_BASE_URL",
+    "SITE_BASE_URL_ALIASES",
+    "SLACK_ANNOUNCEMENTS_CHANNEL_ID",
+    "SLACK_COMMUNITY_CHANNEL_IDS",
+    "SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID",
+    "SLACK_DEV_COMMUNITY_CHANNEL_IDS",
+    "SLACK_ENVIRONMENT",
+    "SLACK_INVITE_URL",
+    "SLACK_TEAM_ID",
+    "SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID",
+    "SLACK_TEST_COMMUNITY_CHANNEL_IDS",
+    "STRIPE_CUSTOMER_PORTAL_URL",
+    "STRIPE_DASHBOARD_ACCOUNT_ID",
+})
+
 
 def _normalize(groups):
     """Annotate donor value types and drop empty-string defaults.
@@ -24,7 +61,9 @@ def _normalize(groups):
     The donor snapshot was captured from the pre-annotation list literal,
     so the legacy ``SETTING_VALUE_TYPES`` pass is replayed here; the
     derived view has already been through it. Empty-string defaults are
-    dropped so donor-absent and donor-``''`` agree.
+    dropped so donor-absent and donor-``''`` agree. The site optional
+    addendum is folded in so the comparison proves the declared optional
+    set is exactly donor-optional plus the documented additions.
     """
     normalized = []
     for group in groups:
@@ -34,6 +73,8 @@ def _normalize(groups):
             value_type = SETTING_VALUE_TYPES.get(cleaned["key"])
             if value_type:
                 cleaned["value_type"] = value_type
+            if cleaned["key"] in SITE_OPTIONAL_ADDITIONS:
+                cleaned["optional"] = True
             keys.append(cleaned)
         normalized.append({"name": group["name"], "label": group["label"], "keys": keys})
     return normalized
@@ -101,3 +142,21 @@ class PackageMappingTest(SimpleTestCase):
 
         for declared in definitions():
             self.assertTrue(declared.docs_url, declared.key)
+
+
+class SiteOptionalAdditionsTest(SimpleTestCase):
+    def test_additions_are_disjoint_from_donor_optional(self):
+        donor = json.loads(FIXTURE.read_text())
+        donor_optional = {
+            key_def["key"]
+            for group in donor
+            for key_def in group["keys"]
+            if key_def.get("optional")
+        }
+        self.assertFalse(SITE_OPTIONAL_ADDITIONS & donor_optional)
+
+    def test_additions_are_declared_optional(self):
+        from integrations import settings_keys
+
+        for key in SITE_OPTIONAL_ADDITIONS:
+            self.assertTrue(getattr(settings_keys, key).optional, key)

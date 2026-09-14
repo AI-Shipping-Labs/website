@@ -9,6 +9,8 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.shortcuts import redirect
 
+from integrations.config import clear_config_cache
+
 
 @staff_required
 def settings_save_group(request, group):
@@ -22,6 +24,7 @@ def settings_save_group(request, group):
             actor_ref=f"user:{request.user.pk}",
             reason=f"Cleared Studio group {group}",
         ):
+            clear_config_cache()
             messages.success(
                 request,
                 f"Cleared override for {clear_key} — now using env/default.",
@@ -43,7 +46,25 @@ def settings_save_group(request, group):
                 section = request.POST.get("settings_section") or group
                 return redirect(f"/studio/settings/#{section}")
     response = package_views.settings_save_group(request, group)
+    if request.method == "POST":
+        # The package view publishes only the package stamp channel; the
+        # site's donor-fallback cache in integrations.config stamps
+        # independently and would keep serving pre-save values (issue
+        # #1627: saved SITE_BASE_URL overrides never cleared the env
+        # mismatch banner).
+        clear_config_cache()
     section = request.POST.get("settings_section")
     if response.status_code in {301, 302, 303, 307, 308} and section:
         return redirect(f"/studio/settings/#{section}")
+    return response
+
+
+@staff_required
+def settings_import(request):
+    """Delegate package imports and refresh the site's fallback cache."""
+    response = package_views.settings_import(request)
+    if request.method == "POST":
+        # Same reason as the group save: imported values must be visible
+        # to integrations.config readers without a process restart.
+        clear_config_cache()
     return response

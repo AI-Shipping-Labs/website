@@ -378,6 +378,7 @@ STRIPE_CUSTOMER_PORTAL_URL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/stripe.md#stripe_customer_portal_url",
+    optional=True,
 )
 STRIPE_DASHBOARD_ACCOUNT_ID = declare(
     key="STRIPE_DASHBOARD_ACCOUNT_ID",
@@ -388,6 +389,7 @@ STRIPE_DASHBOARD_ACCOUNT_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/stripe.md#stripe_dashboard_account_id",
+    optional=True,
 )
 STRIPE_WEBHOOK_EXPECTED_URL = declare(
     key="STRIPE_WEBHOOK_EXPECTED_URL",
@@ -595,6 +597,7 @@ AWS_SES_REGION = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/ses.md#aws_ses_region",
+    optional=True,
 )
 SES_TRANSACTIONAL_FROM_EMAIL = declare(
     key="SES_TRANSACTIONAL_FROM_EMAIL",
@@ -605,6 +608,7 @@ SES_TRANSACTIONAL_FROM_EMAIL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/ses.md#ses_transactional_from_email",
+    optional=True,
 )
 SES_PROMOTIONAL_FROM_EMAIL = declare(
     key="SES_PROMOTIONAL_FROM_EMAIL",
@@ -615,6 +619,7 @@ SES_PROMOTIONAL_FROM_EMAIL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/ses.md#ses_promotional_from_email",
+    optional=True,
 )
 SES_WELCOME_FROM_EMAIL = declare(
     key="SES_WELCOME_FROM_EMAIL",
@@ -625,6 +630,7 @@ SES_WELCOME_FROM_EMAIL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/ses.md#ses_welcome_from_email",
+    optional=True,
 )
 SES_WELCOME_REPLY_TO_EMAIL = declare(
     key="SES_WELCOME_REPLY_TO_EMAIL",
@@ -647,6 +653,7 @@ SES_CONFIGURATION_SET_NAME = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/ses.md#ses_configuration_set_name",
+    optional=True,
 )
 SES_WEBHOOK_VALIDATION_ENABLED = declare(
     key="SES_WEBHOOK_VALIDATION_ENABLED",
@@ -746,6 +753,7 @@ AWS_S3_RECORDINGS_BUCKET = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_recordings.md#aws_s3_recordings_bucket",
+    optional=True,
 )
 AWS_S3_RECORDINGS_REGION = declare(
     key="AWS_S3_RECORDINGS_REGION",
@@ -756,6 +764,7 @@ AWS_S3_RECORDINGS_REGION = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_recordings.md#aws_s3_recordings_region",
+    optional=True,
 )
 RECORDING_PRESIGNED_URL_TTL_SECONDS = declare(
     key="RECORDING_PRESIGNED_URL_TTL_SECONDS",
@@ -809,6 +818,7 @@ AWS_S3_CONTENT_BUCKET = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_content.md#aws_s3_content_bucket",
+    optional=True,
 )
 AWS_S3_CONTENT_REGION = declare(
     key="AWS_S3_CONTENT_REGION",
@@ -819,6 +829,7 @@ AWS_S3_CONTENT_REGION = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_content.md#aws_s3_content_region",
+    optional=True,
 )
 CONTENT_CDN_BASE = declare(
     key="CONTENT_CDN_BASE",
@@ -829,6 +840,7 @@ CONTENT_CDN_BASE = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_content.md#content_cdn_base",
+    optional=True,
 )
 S3_ENABLED = declare(
     key="S3_ENABLED",
@@ -851,6 +863,7 @@ AWS_S3_DOWNLOADS_BUCKET = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/s3_downloads.md#aws_s3_downloads_bucket",
+    optional=True,
 )
 AWS_S3_DOWNLOADS_REGION = declare(
     key="AWS_S3_DOWNLOADS_REGION",
@@ -1018,6 +1031,7 @@ GITHUB_APP_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/github.md#github_app_id",
+    optional=True,
 )
 GITHUB_APP_INSTALLATION_ID = declare(
     key="GITHUB_APP_INSTALLATION_ID",
@@ -1028,6 +1042,7 @@ GITHUB_APP_INSTALLATION_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/github.md#github_app_installation_id",
+    optional=True,
 )
 GITHUB_APP_PRIVATE_KEY_SECRET_ID = declare(
     key="GITHUB_APP_PRIVATE_KEY_SECRET_ID",
@@ -1083,6 +1098,7 @@ SLACK_ENVIRONMENT = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_environment",
+    optional=True,
 )
 SLACK_BOT_TOKEN = declare(
     key="SLACK_BOT_TOKEN",
@@ -1103,6 +1119,7 @@ SLACK_COMMUNITY_CHANNEL_IDS = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_community_channel_ids",
+    optional=True,
 )
 SLACK_ANNOUNCEMENTS_CHANNEL_ID = declare(
     key="SLACK_ANNOUNCEMENTS_CHANNEL_ID",
@@ -1113,6 +1130,7 @@ SLACK_ANNOUNCEMENTS_CHANNEL_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_announcements_channel_id",
+    optional=True,
 )
 STAFF_SIGNUP_NOTIFY_CHANNEL_ID = declare(
     key="STAFF_SIGNUP_NOTIFY_CHANNEL_ID",
@@ -1145,6 +1163,7 @@ SLACK_DEV_COMMUNITY_CHANNEL_IDS = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_dev_community_channel_ids",
+    optional=True,
 )
 SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID = declare(
     key="SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID",
@@ -1155,6 +1174,7 @@ SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_dev_announcements_channel_id",
+    optional=True,
 )
 SLACK_TEST_COMMUNITY_CHANNEL_IDS = declare(
     key="SLACK_TEST_COMMUNITY_CHANNEL_IDS",
@@ -1165,6 +1185,7 @@ SLACK_TEST_COMMUNITY_CHANNEL_IDS = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_test_community_channel_ids",
+    optional=True,
 )
 SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = declare(
     key="SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID",
@@ -1175,6 +1196,7 @@ SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_test_announcements_channel_id",
+    optional=True,
 )
 SLACK_PLAN_SPRINTS_CHANNEL_ID = declare(
     key="SLACK_PLAN_SPRINTS_CHANNEL_ID",
@@ -1306,6 +1328,7 @@ SLACK_INVITE_URL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_invite_url",
+    optional=True,
 )
 SLACK_TEAM_ID = declare(
     key="SLACK_TEAM_ID",
@@ -1316,6 +1339,7 @@ SLACK_TEAM_ID = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/slack.md#slack_team_id",
+    optional=True,
 )
 BOOK_CLUB_SLACK_URL = declare(
     key="BOOK_CLUB_SLACK_URL",
@@ -1339,6 +1363,7 @@ SITE_BASE_URL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/site.md#site_base_url",
+    optional=True,
 )
 SITE_BASE_URL_ALIASES = declare(
     key="SITE_BASE_URL_ALIASES",
@@ -1350,6 +1375,7 @@ SITE_BASE_URL_ALIASES = declare(
     secret=False,
     multiline=True,
     docs_url="_docs/integrations/site.md#site_base_url_aliases",
+    optional=True,
 )
 EVENT_DISPLAY_TIMEZONE = declare(
     key="EVENT_DISPLAY_TIMEZONE",
@@ -1360,6 +1386,7 @@ EVENT_DISPLAY_TIMEZONE = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/site.md#event_display_timezone",
+    optional=True,
 )
 
 SYNC_QUEUED_THRESHOLD_MINUTES = declare(
@@ -1666,6 +1693,7 @@ BANNER_GENERATOR_FUNCTION_URL = declare(
     default="",
     secret=False,
     docs_url="_docs/integrations/banner_generator.md#banner_generator_function_url",
+    optional=True,
 )
 BANNER_GENERATOR_AUTH_TOKEN = declare(
     key="BANNER_GENERATOR_AUTH_TOKEN",

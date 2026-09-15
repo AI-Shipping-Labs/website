@@ -21,13 +21,13 @@
   <div class="flex flex-col sm:flex-row gap-3">
     <div class="flex-1">
       <label class="block text-xs font-medium text-foreground mb-1" for="cohort-start">Start date</label>
-      <input id="cohort-start" type="date" name="start_date" value="{{ cohort.start_date|date:'Y-m-d' }}" required
+      <input id="cohort-start" type="date" name="start_date" value="{{ cohort.start_date|form_date_value }}" required
              class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
              data-testid="cohort-edit-start-date">
     </div>
     <div class="flex-1">
       <label class="block text-xs font-medium text-foreground mb-1" for="cohort-end">End date</label>
-      <input id="cohort-end" type="date" name="end_date" value="{{ cohort.end_date|date:'Y-m-d' }}" required
+      <input id="cohort-end" type="date" name="end_date" value="{{ cohort.end_date|form_date_value }}" required
              class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
              data-testid="cohort-edit-end-date">
     </div>

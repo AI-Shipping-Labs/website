@@ -547,6 +547,48 @@ class ConfigurationAndCopyTest(GraceBase):
         service.process_due_deliveries(grace_ids=[grace.pk], initial_only=True)
         self.assertEqual(EmailLog.objects.count(), 2)
 
+    def test_grace_idempotency_key_is_package_safe_and_stable(self):
+        """The digest key fits the package grammar and dedupes per recipient.
+
+        The legacy EmailLog key held the raw email address; the package
+        idempotency grammar rejects ``@``/``+``, so the recipient folds
+        into a stable digest while the key stays unique per grace, kind
+        and recipient.
+        """
+        import re
+
+        from community_base.mail.service import IDEMPOTENCY_PATTERN
+
+        grace = self.create_grace()
+        member = Delivery(
+            grace=grace,
+            kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient="Grace+tag@Example.com",
+        )
+        other = Delivery(
+            grace=grace,
+            kind=Delivery.KIND_REMINDER_MEMBER,
+            recipient="Grace+tag@Example.com",
+        )
+        member_key = service._grace_idempotency_key(member)
+        self.assertTrue(IDEMPOTENCY_PATTERN.fullmatch(member_key))
+        self.assertTrue(
+            re.fullmatch(
+                r"monthly-payment-grace:[0-9a-f-]+:failure_member:"
+                r"[0-9a-f]{16}",
+                member_key,
+            ),
+            member_key,
+        )
+        self.assertEqual(
+            member_key,
+            service._grace_idempotency_key(member),
+        )
+        self.assertNotEqual(
+            member_key,
+            service._grace_idempotency_key(other),
+        )
+
     @override_settings(
         SES_ENABLED=False,
         DEBUG=False,

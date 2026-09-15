@@ -15,6 +15,7 @@ from community_base.jobs.runner import PermanentJobError
 from community_base.mail.service import MailError
 from django.utils import timezone
 
+from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     EmailClassificationError,
@@ -258,6 +259,16 @@ def _related_plan(delivery):
     )
 
 
+def _related_sprint(delivery):
+    """Load the delivery's ``plans.sprint`` relation, ``None`` when absent."""
+
+    if delivery.related_object_type != "plans.sprint":
+        return None
+    from plans.models import Sprint  # noqa: PLC0415
+
+    return Sprint.objects.filter(pk=delivery.related_object_id).first()
+
+
 def _resolve_event_reminder_context(delivery, context):
     """Mint the whole event-reminder context from the Event and recipient.
 
@@ -451,16 +462,220 @@ def _resolve_bookclub_summary_context(delivery, context):
     context["summary_url"] = f"{site_base_url().rstrip('/')}{summary_path}"
 
 
+# A1.2 slice 2: plans and payments member mail. Every producer persists a
+# scalar-only context plus the natural relation (#1613): the worker reloads
+# the relation and re-mints each absolute URL with the exact expression the
+# old synchronous send used. A missing relation fails closed — a stale
+# Sprint/Plan/Grace/Course must never deliver a broken link.
+
+
+def _member_greeting(delivery, context):
+    """Restore the legacy renderer's greeting for slice-2 member mail.
+
+    The legacy synchronous renderer resolved ``user_name`` with the issue
+    #1591 rule (``greeting_name`` — never an email handle, ``there`` when
+    nameless); the package's built-in display name has neither property.
+    Context values win over the render defaults, so slice-2 resolvers
+    inject the old value without touching the stored context semantics.
+    """
+
+    context["user_name"] = (
+        greeting_name(delivery.recipient_user) or GREETING_FALLBACK
+    )
+
+
+def _resolve_sprint_end_recap_context(delivery, context):
+    """Mint the recap's plan, feedback and next-action links."""
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+    from plans.models import Plan, Sprint  # noqa: PLC0415
+    from questionnaires.models import Response  # noqa: PLC0415
+
+    plan = _related_plan(delivery)
+    if plan is None:
+        raise PermanentJobError("sprint_end_recap_plan_missing")
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+    context["plan_url"] = (
+        f"{base_url}"
+        f"{reverse('my_plan_detail', kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk})}"
+    )
+    feedback_response_id = str(context.get("feedback_response_id") or "").strip()
+    if feedback_response_id.isdigit():
+        feedback_response = Response.objects.filter(
+            pk=feedback_response_id,
+        ).first()
+        if feedback_response is None:
+            raise PermanentJobError("sprint_end_recap_feedback_missing")
+        context["feedback_url"] = (
+            f"{base_url}"
+            f"{reverse('sprint_feedback_fill', kwargs={'sprint_slug': plan.sprint.slug, 'response_id': feedback_response.pk})}"
+        )
+    kind = str(context.get("next_action_kind") or "")
+    if kind:
+        next_sprint_id = str(context.get("next_action_sprint_id") or "").strip()
+        next_sprint = (
+            Sprint.objects.filter(pk=next_sprint_id).first()
+            if next_sprint_id.isdigit()
+            else None
+        )
+        if next_sprint is None:
+            raise PermanentJobError("sprint_end_recap_next_action_missing")
+        if kind == "carry_over":
+            next_plan_id = str(context.get("next_action_plan_id") or "").strip()
+            next_plan = (
+                Plan.objects.filter(pk=next_plan_id).first()
+                if next_plan_id.isdigit()
+                else None
+            )
+            if next_plan is None:
+                raise PermanentJobError("sprint_end_recap_next_action_missing")
+            next_path = reverse(
+                "my_plan_detail",
+                kwargs={"sprint_slug": next_sprint.slug, "plan_id": next_plan.pk},
+            )
+        elif kind == "prepare_plan":
+            next_path = reverse(
+                "cohort_board", kwargs={"sprint_slug": next_sprint.slug},
+            )
+        elif kind == "join_next":
+            next_path = reverse(
+                "sprint_detail", kwargs={"sprint_slug": next_sprint.slug},
+            )
+        else:
+            raise PermanentJobError("sprint_end_recap_next_action_missing")
+        context["next_action_url"] = f"{base_url}{next_path}"
+
+
+def _resolve_sprint_partner_intro_context(delivery, context):
+    """Re-add the board link and each partner's Slack profile link."""
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from community.services.slack_links import (  # noqa: PLC0415
+        build_slack_profile_url,
+    )
+    from integrations.config import get_config, site_base_url  # noqa: PLC0415
+
+    sprint = _related_sprint(delivery)
+    if sprint is None:
+        raise PermanentJobError("sprint_partner_intro_sprint_missing")
+    base_url = site_base_url().rstrip("/")
+    context["board_url"] = (
+        f"{base_url}{reverse('cohort_board', kwargs={'sprint_slug': sprint.slug})}"
+    )
+    slack_team_id = (get_config("SLACK_TEAM_ID", "") or "").strip()
+    for partner in context.get("partners") or []:
+        partner["slack_profile_url"] = build_slack_profile_url(
+            str(partner.get("slack_user_id") or "").strip(),
+            slack_team_id,
+        )
+
+
+def _resolve_sprint_cadence_context(delivery, context):
+    """Mint the cadence plan link (with its week anchor when stored)."""
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+    from plans.models import Week  # noqa: PLC0415
+
+    plan = _related_plan(delivery)
+    if plan is None:
+        raise PermanentJobError("sprint_cadence_plan_missing")
+    _member_greeting(delivery, context)
+    path = reverse(
+        "my_plan_detail",
+        kwargs={"sprint_slug": plan.sprint.slug, "plan_id": plan.pk},
+    )
+    week_id = str(context.get("week_id") or "").strip()
+    if week_id:
+        week = Week.objects.filter(pk=week_id, plan_id=plan.pk).first()
+        if week is None:
+            raise PermanentJobError("sprint_cadence_week_missing")
+        path = f"{path}#week-{week.pk}"
+    context["plan_url"] = f"{site_base_url().rstrip('/')}{path}"
+
+
+_GRACE_MAIL_PURPOSES = frozenset({
+    "payment_grace_failure_member",
+    "payment_grace_failure_team",
+    "payment_grace_reminder_member",
+    "payment_grace_expired_member",
+})
+
+
+def _resolve_payment_grace_context(delivery, context):
+    """Mint the grace mail's portal and Studio links from the Grace row.
+
+    ``recovery_url`` reads the portal configuration at delivery time — the
+    same read the synchronous send made, so an unsafe or missing portal
+    still renders the template's reply-instead fallback. ``user_email``
+    pins the member's address because the package defaults it to the
+    delivery recipient, which is the team mailbox for the failure-team
+    send, while the template documents the member.
+    """
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+    from payments.models import MonthlyPaymentGrace  # noqa: PLC0415
+    from payments.services.monthly_payment_grace import (  # noqa: PLC0415
+        safe_portal_url,
+    )
+
+    grace = None
+    if delivery.related_object_type == "payments.monthlypaymentgrace":
+        grace = MonthlyPaymentGrace.objects.filter(
+            pk=delivery.related_object_id,
+        ).first()
+    if grace is None:
+        raise PermanentJobError("payment_grace_record_missing")
+    _member_greeting(delivery, context)
+    context["user_email"] = grace.user.email
+    context["recovery_url"] = safe_portal_url()
+    base_url = site_base_url().rstrip("/")
+    context["studio_member_url"] = f"{base_url}/studio/users/{grace.user_id}/"
+    context["studio_report_url"] = (
+        f"{base_url}/studio/payments/subscription-reconciliation/"
+        "?filter=payment_grace"
+    )
+
+
+def _resolve_checkout_payment_failed_context(delivery, context):
+    """Mint the checkout retry link from the Course relation."""
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    _member_greeting(delivery, context)
+    if delivery.related_object_type == "content.course":
+        from content.models import Course  # noqa: PLC0415
+
+        course = Course.objects.filter(
+            pk=delivery.related_object_id,
+        ).first()
+        if course is None:
+            raise PermanentJobError("checkout_payment_failed_course_missing")
+        retry_path = course.get_absolute_url()
+    else:
+        retry_path = "/membership"
+    context["retry_url"] = f"{site_base_url().rstrip('/')}{retry_path}"
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
     Auth sends (#1610 slices 1-2), the email-change confirm and notice,
-    the privacy deletion request, the recap, the post-event follow-up and
-    the notification sends (slice 4: event reminder, workshop announcement,
-    plan share) persist only non-secret inputs and relations; this resolver
-    builds their URLs at delivery time so ``EmailDelivery.context_data``
-    never retains a clickable link (issue #1613, enforced by the site guard
-    in ``email_app.services.context_guard``). Binding failures raise
+    the privacy deletion request, the recap, the post-event follow-up, the
+    notification sends (slice 4: event reminder, workshop announcement,
+    plan share), the staff heads-ups and the bookclub summaries (slice 1),
+    and the plans and payments member mail (slice 2: sprint-end recap,
+    partner intro, cadence week notes, the four payment-grace templates
+    and checkout failure) persist only non-secret inputs and relations;
+    this resolver builds their URLs at delivery time so
+    ``EmailDelivery.context_data`` never retains a clickable link (issue
+    #1613, enforced by the site guard in
+    ``email_app.services.context_guard``). Binding failures raise
     ``PermanentJobError`` — a stale relation must fail closed, not
     retry forever — and never name the token or URL. The resolver
     mutates only the in-memory copy the worker passes in; the stored
@@ -489,6 +704,16 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_staff_notification_context(delivery, context)
     elif delivery.purpose in ("bookclub_book_summary", "bookclub_chapter_summary"):
         _resolve_bookclub_summary_context(delivery, context)
+    elif delivery.purpose == "sprint_end_recap":
+        _resolve_sprint_end_recap_context(delivery, context)
+    elif delivery.purpose == "sprint_partner_intro":
+        _resolve_sprint_partner_intro_context(delivery, context)
+    elif delivery.purpose in ("sprint_week_start", "sprint_week_note_prompt"):
+        _resolve_sprint_cadence_context(delivery, context)
+    elif delivery.purpose in _GRACE_MAIL_PURPOSES:
+        _resolve_payment_grace_context(delivery, context)
+    elif delivery.purpose == "checkout_payment_failed":
+        _resolve_checkout_payment_failed_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
         "password_reset",

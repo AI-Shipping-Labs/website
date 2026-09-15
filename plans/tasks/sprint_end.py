@@ -2,14 +2,15 @@
 
 import logging
 
+from community_base.mail.models import EmailDelivery
 from django.db import IntegrityError, transaction
 from django.db.models import Exists, OuterRef
 from django.urls import reverse
 from django.utils import timezone
 
 from content.access import get_user_level
-from email_app.services.email_service import EmailService
-from integrations.config import is_enabled, site_base_url
+from email_app.package_mail import send_package_mail
+from integrations.config import is_enabled
 from notifications.models import Notification
 from plans.models import (
     SPRINT_END_DELIVERY_STATUS_EMAIL_FAILED,
@@ -215,11 +216,18 @@ def _deliver_plan_recap(plan, *, today):
         notification_type='sprint_recap',
     )
 
-    email_log = None
+    # A1.2 slice 2: the recap goes through the durable package delivery.
+    # The stored context carries scalars only (#1613); the worker resolver
+    # mints the plan, feedback and next-action links at delivery time.
+    # ``sent`` means the durable delivery exists — the SES outcome and the
+    # ``EmailLog`` audit row land from the worker. A suppressed delivery
+    # keeps the legacy not-logged error mapping (the preference resolver
+    # never suppresses this transactional purpose in practice).
+    email_delivery = None
     status = SPRINT_END_DELIVERY_STATUS_SENT
     last_error = ''
     try:
-        email_log = EmailService().send(
+        package_delivery = send_package_mail(
             plan.member,
             EMAIL_TEMPLATE,
             _email_context(
@@ -227,9 +235,11 @@ def _deliver_plan_recap(plan, *, today):
                 feedback_response=feedback_response,
                 next_action=next_action,
             ),
+            related=plan,
         )
-        if email_log is None:
+        if package_delivery.state == EmailDelivery.State.SUPPRESSED:
             raise RuntimeError('sprint_end_recap email was not logged')
+        email_delivery = package_delivery
     except Exception as exc:
         logger.exception(
             'Failed to send sprint_end_recap email to %s for plan %s',
@@ -244,7 +254,7 @@ def _deliver_plan_recap(plan, *, today):
     SprintEndDeliveryLog.objects.filter(pk=log.pk).update(
         plan=plan,
         notification=notification,
-        email_log=email_log,
+        email_delivery=email_delivery,
         feedback_response=feedback_response,
         next_sprint=next_sprint,
         status=status,
@@ -289,30 +299,17 @@ def _notification_url(plan, feedback_response):
     )
 
 
-def _absolute(path):
-    return f'{site_base_url()}{path}'
-
-
 def _feedback_context(feedback_response, sprint):
     if feedback_response is None:
         return {
             'has_feedback': False,
-            'feedback_url': '',
             'feedback_cta_label': '',
             'feedback_copy': '',
         }
 
-    path = reverse(
-        'sprint_feedback_fill',
-        kwargs={
-            'sprint_slug': sprint.slug,
-            'response_id': feedback_response.pk,
-        },
-    )
     submitted = feedback_response.status == 'submitted'
     return {
         'has_feedback': True,
-        'feedback_url': _absolute(path),
         'feedback_cta_label': (
             'View your feedback' if submitted else 'Share sprint feedback'
         ),
@@ -326,10 +323,13 @@ def _feedback_context(feedback_response, sprint):
 
 
 def _email_context(*, plan, feedback_response, next_action):
-    plan_path = reverse(
-        'my_plan_detail',
-        kwargs={'sprint_slug': plan.sprint.slug, 'plan_id': plan.pk},
-    )
+    """Durable send context: scalar inputs only (issues #1613, #1629).
+
+    The plan link is re-minted by the worker resolver from the attached
+    ``plans.plan`` relation; the feedback and next-action links come from
+    the stored scalar ids (response, next sprint, carry-over plan) with
+    the exact ``reverse()`` expressions the synchronous send used.
+    """
     context = {
         'sprint_name': plan.sprint.name,
         'completed_count': plan.progress_done,
@@ -338,19 +338,24 @@ def _email_context(*, plan, feedback_response, next_action):
             done=plan.progress_done,
             total=plan.progress_total,
         ),
-        'plan_url': _absolute(plan_path),
         'has_next_action': next_action is not None,
         'next_action_url': '',
         'next_action_label': '',
         'next_action_copy': '',
     }
     context.update(_feedback_context(feedback_response, plan.sprint))
+    if feedback_response is not None:
+        context['feedback_response_id'] = feedback_response.pk
 
     if next_action is not None:
         context.update({
-            'next_action_url': _absolute(next_action['url']),
             'next_action_label': next_action['label'],
             'next_action_copy': next_action['description'],
+            'next_action_kind': next_action['kind'],
+            'next_action_sprint_id': next_action['next_sprint'].pk,
+            'next_action_plan_id': (
+                next_action['plan'].pk if next_action['plan'] else ''
+            ),
         })
     return context
 

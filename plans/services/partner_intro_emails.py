@@ -2,14 +2,14 @@
 
 import logging
 
+from community_base.mail.models import EmailDelivery
 from django.db import IntegrityError, transaction
-from django.urls import reverse
 from django.utils import timezone
 
 from accounts.utils.display import GREETING_FALLBACK, display_name, greeting_name
 from community.services.slack_links import build_slack_profile_url
-from email_app.services.email_service import EmailService
-from integrations.config import get_config, site_base_url
+from email_app.package_mail import send_package_mail
+from integrations.config import get_config
 from plans.models import (
     PARTNER_INTRO_EMAIL_STATUS_FAILED,
     PARTNER_INTRO_EMAIL_STATUS_SENDING,
@@ -125,12 +125,19 @@ def send_partner_intro_emails(*, sprint, actor, dry_run=False):
             continue
 
         try:
-            email_log = EmailService().send(
+            # A1.2 slice 2: the intro goes through the durable package
+            # delivery with the sprint attached as the worker's relation.
+            # ``sent`` means the durable delivery exists — the SES outcome
+            # and the ``EmailLog`` audit row land from the worker, so SES
+            # transport trouble no longer fails the fan-out. A suppressed
+            # delivery keeps the legacy not-logged error mapping.
+            package_delivery = send_package_mail(
                 member,
                 TEMPLATE_NAME,
                 _email_context(sprint=sprint, member=member, row=row),
+                related=sprint,
             )
-            if email_log is None:
+            if package_delivery.state == EmailDelivery.State.SUPPRESSED:
                 raise RuntimeError('sprint_partner_intro email was not logged')
         except Exception as exc:
             logger.exception(
@@ -145,7 +152,7 @@ def send_partner_intro_emails(*, sprint, actor, dry_run=False):
             summary['failed_count'] += 1
             continue
 
-        sent_at = _mark_send_sent(log, email_log)
+        sent_at = _mark_send_sent(log, package_delivery)
         sent = dict(row)
         sent['sent_at'] = sent_at.isoformat()
         summary['sent'].append(sent)
@@ -329,7 +336,15 @@ def _slack_identity(user, slack_user_id):
 
 
 def _email_context(*, sprint, member, row):
-    board_path = reverse('cohort_board', kwargs={'sprint_slug': sprint.slug})
+    """Durable send context: scalar inputs only (issues #1613, #1629).
+
+    The board link is re-minted by the worker resolver from the attached
+    ``plans.sprint`` relation; each partner's Slack profile link is re-minted
+    from the stored ``slack_user_id`` scalar plus the ``SLACK_TEAM_ID``
+    configuration read at delivery time. The ``member_name`` greeting keeps
+    the issue #1591 rule — a real name or "there", never the email handle —
+    and persisting it as a scalar is fine.
+    """
     return {
         'sprint_name': sprint.name,
         'sprint_slug': sprint.slug,
@@ -340,8 +355,14 @@ def _email_context(*, sprint, member, row):
         # handle fallback is the right behaviour.
         'member_name': greeting_name(member) or GREETING_FALLBACK,
         'partner_count': len(row['partners']),
-        'partners': row['partners'],
-        'board_url': f'{site_base_url()}{board_path}',
+        'partners': [
+            {
+                key: value
+                for key, value in partner.items()
+                if key != 'slack_profile_url'
+            }
+            for partner in row['partners']
+        ],
     }
 
 
@@ -390,11 +411,14 @@ def _mark_send_failed(log, exc):
     )
 
 
-def _mark_send_sent(log, email_log):
+def _mark_send_sent(log, package_delivery):
+    # A1.2 slice 2: ``email_delivery`` carries the durable ``EmailDelivery``;
+    # the audit row lands from the worker after provider acceptance, so a
+    # ``sent`` partner-intro log row means the durable delivery exists.
     sent_at = timezone.now()
     SprintPartnerIntroEmailLog.objects.filter(pk=log.pk).update(
         status=PARTNER_INTRO_EMAIL_STATUS_SENT,
-        email_log=email_log,
+        email_delivery=package_delivery,
         sent_at=sent_at,
         last_error='',
         updated_at=sent_at,

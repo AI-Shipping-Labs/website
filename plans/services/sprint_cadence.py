@@ -6,13 +6,13 @@ import logging
 from dataclasses import dataclass
 from datetime import timedelta
 
+from community_base.mail.models import EmailDelivery
 from django.db import IntegrityError, transaction
 from django.db.models import Prefetch
 from django.urls import reverse
 from django.utils import timezone
 
-from email_app.services.email_service import EmailService
-from integrations.config import site_base_url
+from email_app.package_mail import send_package_mail
 from notifications.models import Notification
 from plans.models import (
     SPRINT_CADENCE_KIND_SLACK_PROGRESS,
@@ -55,10 +55,6 @@ def _member_plan_path(plan, week=None, *, progress_event=None):
     elif week is not None:
         path = f'{path}#week-{week.pk}'
     return path
-
-
-def _member_plan_url(plan, week=None):
-    return f'{site_base_url()}{_member_plan_path(plan, week)}'
 
 
 def _email_allowed(user):
@@ -132,31 +128,48 @@ def _create_log_once(*, kind, plan, week=None, progress_event=None,
         return None
 
 
-def _finalize_log(log, *, notification, email_log=None, status=None,
+def _finalize_log(log, *, notification, email_delivery=None, status=None,
                   last_error=''):
     log.notification = notification
-    log.email_log = email_log
+    log.email_delivery = email_delivery
     log.status = status or SPRINT_CADENCE_STATUS_SENT
     log.last_error = last_error
     log.sent_at = timezone.now()
     log.save(update_fields=[
-        'notification', 'email_log', 'status', 'last_error', 'sent_at',
+        'notification', 'email_delivery', 'status', 'last_error', 'sent_at',
         'updated_at',
     ])
 
 
-def _send_cadence_email(log, *, template_name, context):
+def _send_cadence_email(log, *, template_name, context, plan):
+    """Queue one cadence mail through the durable package delivery.
+
+    Returns ``(delivery, error)``. A suppressed delivery maps to the old
+    declined-send outcome (silent skip: no link, no error, status SENT) —
+    the site-level ``_email_allowed`` gate below already skips the same
+    recipients, so this path only fires if the package preference resolver
+    opts the recipient out. Send-time exceptions (guard refusal, DB) are
+    logged and reported as the log's ``last_error``; SES transport trouble
+    is the worker's concern and never fails the fan-out.
+    """
     if not _email_allowed(log.member):
         return None, ''
     try:
-        email_log = EmailService().send(log.member, template_name, context)
+        delivery = send_package_mail(
+            log.member,
+            template_name,
+            context,
+            related=plan,
+        )
     except Exception as exc:  # noqa: BLE001 - log and continue per issue.
         logger.warning(
             'Sprint cadence email failed for log %s: %s', log.pk, exc,
             exc_info=True,
         )
         return None, str(exc)
-    return email_log, ''
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
+        return None, ''
+    return delivery, ''
 
 
 def _deliver_week_start(plan, week, weeks):
@@ -198,12 +211,16 @@ def _deliver_week_start(plan, week, weeks):
         ),
         'previous_week_number': previous.week_number if previous else '',
         'needs_previous_week_note': previous is not None,
-        'plan_url': _member_plan_url(plan, week),
+        # Issues #1613/#1629: the plan link is re-minted by the worker
+        # resolver from the attached ``plans.plan`` relation plus the
+        # stored week scalar (anchor).
+        'week_id': week.pk,
     }
-    email_log, error = _send_cadence_email(
+    delivery, error = _send_cadence_email(
         log,
         template_name='sprint_week_start',
         context=context,
+        plan=plan,
     )
     status = (
         SPRINT_CADENCE_STATUS_EMAIL_FAILED
@@ -212,7 +229,7 @@ def _deliver_week_start(plan, week, weeks):
     _finalize_log(
         log,
         notification=notification,
-        email_log=email_log,
+        email_delivery=delivery,
         status=status,
         last_error=error,
     )
@@ -245,12 +262,14 @@ def _deliver_week_note_prompt(plan, week):
         'sprint_name': plan.sprint.name,
         'week_number': week.week_number,
         'week_theme': _week_theme(week),
-        'plan_url': _member_plan_url(plan, week),
+        # Issues #1613/#1629: see _deliver_week_start.
+        'week_id': week.pk,
     }
-    email_log, error = _send_cadence_email(
+    delivery, error = _send_cadence_email(
         log,
         template_name='sprint_week_note_prompt',
         context=context,
+        plan=plan,
     )
     status = (
         SPRINT_CADENCE_STATUS_EMAIL_FAILED
@@ -259,7 +278,7 @@ def _deliver_week_note_prompt(plan, week):
     _finalize_log(
         log,
         notification=notification,
-        email_log=email_log,
+        email_delivery=delivery,
         status=status,
         last_error=error,
     )
@@ -309,7 +328,7 @@ def send_sprint_cadence_notifications(*, today=None):
                     summary = CadenceSummary(
                         week_start_created=summary.week_start_created + 1,
                         week_note_prompt_created=summary.week_note_prompt_created,
-                        emails_sent=summary.emails_sent + int(log.email_log_id is not None),
+                        emails_sent=summary.emails_sent + int(log.email_delivery_id is not None),
                         emails_failed=(
                             summary.emails_failed
                             + int(log.status == SPRINT_CADENCE_STATUS_EMAIL_FAILED)
@@ -323,7 +342,7 @@ def send_sprint_cadence_notifications(*, today=None):
                         week_note_prompt_created=(
                             summary.week_note_prompt_created + 1
                         ),
-                        emails_sent=summary.emails_sent + int(log.email_log_id is not None),
+                        emails_sent=summary.emails_sent + int(log.email_delivery_id is not None),
                         emails_failed=(
                             summary.emails_failed
                             + int(log.status == SPRINT_CADENCE_STATUS_EMAIL_FAILED)

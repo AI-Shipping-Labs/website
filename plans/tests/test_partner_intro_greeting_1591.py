@@ -6,17 +6,19 @@ label -- a card-style label, where the email handle is the right fallback.
 """
 
 import datetime
+from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
-from email_app.services.email_service import EmailService
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import assign_accountability_partners
 from plans.services.partner_intro_emails import (
     _audience_data,
     _build_rows,
     _email_context,
+    send_partner_intro_emails,
 )
 
 User = get_user_model()
@@ -84,11 +86,36 @@ class PartnerIntroGreetingTest(TestCase):
             ['p.artner'],
         )
 
+    @override_settings(SITE_BASE_URL='https://example.test')
     def test_rendered_body_greets_hi_there_and_still_lists_the_partner(self):
-        _row, context = self._context_for(self.member)
+        """The worker-rendered body carries the #1591 greeting rule.
 
-        _subject, body = EmailService()._render_template(
-            'sprint_partner_intro', self.member, context,
+        The greeting is persisted as a scalar on the durable delivery and
+        rendered by the package worker, so this fails if either side
+        regresses to the email handle or drops the fallback.
+        """
+        _row, _context = self._context_for(self.member)
+
+        send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
+        from community_base.mail.jobs import deliver as deliver_job
+
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            for delivery in EmailDelivery.objects.filter(
+                state=EmailDelivery.State.PENDING,
+            ):
+                deliver_job(None, {'delivery_id': str(delivery.id)})
+        body = next(
+            call['Content']['Simple']['Body']['Html']['Data']
+            for call in stub.calls
+            if call['Destination']['ToAddresses'] == [
+                'nameless.member@test.com',
+            ]
         )
 
         self.assertIn('Hi there,', body)

@@ -1000,18 +1000,23 @@ def _resolve_checkout_failure(session_data, fulfillment):
 
 
 def _send_checkout_failure_email(*, user, session_id, course=None):
-    from email_app.services import EmailService
-    from integrations.config import site_base_url
+    from email_app.package_mail import send_package_mail
 
-    retry_path = course.get_absolute_url() if course is not None else "/membership"
-    return EmailService().send(
+    # A1.2 slice 2: the failure mail goes through the durable package
+    # delivery. Issues #1613/#1629: the retry link is re-minted by the
+    # worker resolver from the attached Course relation (or the
+    # /membership fallback when no course was resolved); the stored
+    # context keeps the scalar label only. The idempotency key carries
+    # the old EmailLog dedupe key byte-identical: one mail per Stripe
+    # session, and a replayed send returns the existing delivery.
+    return send_package_mail(
         user,
         "checkout_payment_failed",
         {
-            "retry_url": f"{site_base_url().rstrip('/')}{retry_path}",
             "purchase_label": course.title if course is not None else "membership",
         },
-        dedupe_key=f"checkout-payment-failed:{session_id}",
+        idempotency_key=f"checkout-payment-failed:{session_id}",
+        related=course,
     )
 
 
@@ -1135,11 +1140,12 @@ def handle_checkout_async_payment_failed(session_data, event_context=None):
         resolved_user = locked.user
 
     if resolved_user is not None:
-        # Serialize the check/send/log sequence by business key. EmailLog's
-        # unique dedupe key prevents retries after success; this row lock also
-        # prevents two first deliveries from reaching SES concurrently before
-        # either log exists. A transport exception rolls back only this small
-        # email transaction, leaving payment_failed durable and retryable.
+        # Serialize the check/queue sequence by business key. The delivery's
+        # idempotency key (checkout-payment-failed:{session_id}) dedupes
+        # replays onto one durable delivery; this row lock also prevents two
+        # first sends from queueing concurrently before either row exists.
+        # The provider send happens from the delivery worker (A1.2 slice 2),
+        # so a SES failure no longer rolls anything back here.
         with transaction.atomic():
             locked = CheckoutFulfillment.objects.select_for_update().get(
                 pk=fulfillment.pk,

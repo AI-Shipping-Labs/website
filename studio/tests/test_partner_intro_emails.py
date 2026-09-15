@@ -1,12 +1,18 @@
-"""Studio tests for sprint partner intro emails (#1124)."""
+"""Studio tests for sprint partner intro emails (#1124).
+
+Since A1.2 slice 2 the send queues durable ``EmailDelivery`` rows and the
+provider send happens from the delivery worker, so the send test drains
+pending deliveries before asserting on the audit rows.
+"""
 
 import datetime
-from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from email_app.models import EmailLog
+from email_app.testing import deliver_pending_mail
 from plans.models import (
     Plan,
     Sprint,
@@ -116,9 +122,7 @@ class StudioPartnerIntroEmailTest(TestCase):
         self.assertContains(response, 'Missing Slack profile links')
         self.assertNotContains(response, 'data-testid="partner-intro-email-button" disabled')
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_post_sends_eligible_and_redirects_with_summary(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_post_sends_eligible_and_redirects_with_summary(self):
         self._ready_pair()
         self._login_staff()
 
@@ -130,6 +134,15 @@ class StudioPartnerIntroEmailTest(TestCase):
             any('2 sent, 0 skipped, 0 failed' in message for message in messages),
         )
         self.assertEqual(SprintPartnerIntroEmailLog.objects.count(), 2)
+        # One durable delivery per member; the worker drain writes the
+        # audit rows.
+        self.assertEqual(
+            EmailDelivery.objects.filter(
+                purpose='sprint_partner_intro',
+            ).count(),
+            2,
+        )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(email_type='sprint_partner_intro').count(),
             2,

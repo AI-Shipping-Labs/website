@@ -1,8 +1,15 @@
-"""Tests for sprint partner intro email service (#1124)."""
+"""Tests for sprint partner intro email service (#1124).
+
+Since A1.2 slice 2 the intro queues durable ``EmailDelivery`` rows and the
+provider send happens from the delivery worker, so tests drain pending
+deliveries with :func:`email_app.testing.deliver_pending_mail` and assert
+on the stubbed SES calls.
+"""
 
 import datetime
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 
@@ -142,9 +149,7 @@ class PartnerIntroEmailServiceTest(TestCase):
         )
 
     @override_settings(SLACK_TEAM_ID='TTEAM', SITE_BASE_URL='https://example.test')
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_send_records_snapshot_and_renders_slack_identity_and_link(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_send_records_snapshot_and_renders_slack_identity_and_link(self):
         alice, bob = self._ready_pair(
             bob_kwargs={
                 'first_name': 'Bob',
@@ -159,13 +164,26 @@ class PartnerIntroEmailServiceTest(TestCase):
         log = SprintPartnerIntroEmailLog.objects.get(sprint=self.sprint, member=alice)
         self.assertEqual(log.status, PARTNER_INTRO_EMAIL_STATUS_SENT)
         self.assertEqual(log.triggered_by, self.staff)
-        self.assertEqual(log.email_log.email_type, 'sprint_partner_intro')
+        # The audit EmailLog row only lands from the delivery worker; the
+        # log links the durable delivery instead.
+        self.assertIsNone(log.email_log)
+        self.assertEqual(log.email_delivery.related_object_type, 'plans.sprint')
+        self.assertEqual(
+            str(log.email_delivery.related_object_id), str(self.sprint.pk),
+        )
+        self.assertNotIn(
+            'slack_profile_url', log.email_delivery.context_data['partners'][0],
+        )
         self.assertEqual(log.partner_snapshot[0]['slack_identity'], 'Bobby Slack')
         self.assertEqual(
             log.partner_snapshot[0]['slack_profile_url'],
             'https://app.slack.com/client/TTEAM/UBOB',
         )
-        html = mock_ses.call_args_list[0].args[2]
+
+        htmls = self._drain_and_collect()
+        self.assertEqual(len(htmls), 2)
+        html = htmls['alice@test.com']
+        self.assertIn('Hi there,', html)
         self.assertIn('Bobby Slack', html)
         self.assertIn('https://app.slack.com/client/TTEAM/UBOB', html)
         self.assertIn('https://example.test/sprints/may-sprint/board', html)
@@ -175,10 +193,34 @@ class PartnerIntroEmailServiceTest(TestCase):
             1,
         )
 
+    def _drain_and_collect(self):
+        """Drain every pending delivery with a local stub.
+
+        Returns ``{recipient_email: body_html}`` — delivery ids are
+        UUIDs, so callers must key on the recipient, never list order.
+        """
+
+        from community_base.mail.jobs import deliver as deliver_job
+
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            for delivery in EmailDelivery.objects.filter(
+                state=EmailDelivery.State.PENDING,
+            ).order_by('recipient_email'):
+                deliver_job(None, {'delivery_id': str(delivery.id)})
+        return {
+            call['Destination']['ToAddresses'][0]:
+                call['Content']['Simple']['Body']['Html']['Data']
+            for call in stub.calls
+        }
+
     @override_settings(SLACK_TEAM_ID='')
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_missing_slack_profile_link_is_warning_not_blocker(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_missing_slack_profile_link_is_warning_not_blocker(self):
         alice, bob = self._ready_pair(bob_kwargs={'slack_user_id': 'UBOB'})
 
         preview = preview_partner_intro_emails(self.sprint)
@@ -192,30 +234,28 @@ class PartnerIntroEmailServiceTest(TestCase):
         self.assertEqual(alice_row['partners'][0]['slack_identity'], 'UBOB')
         self.assertEqual(alice_row['partners'][0]['slack_profile_url'], '')
         self.assertEqual(sent['sent_count'], 2)
-        html = mock_ses.call_args_list[0].args[2]
+        html = self._drain_and_collect()['alice@test.com']
         self.assertIn('Slack: UBOB', html)
         self.assertIn('Slack profile link unavailable', html)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_second_send_skips_successful_logs(self, mock_ses):
-        mock_ses.return_value = 'ses-1'
+    def test_second_send_skips_successful_logs(self):
         self._ready_pair()
 
         first = send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
+        self._drain_and_collect()
         second = send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
 
         self.assertEqual(first['sent_count'], 2)
         self.assertEqual(second['sent_count'], 0)
         self.assertEqual(second['skipped_already_sent_count'], 2)
         self.assertEqual(SprintPartnerIntroEmailLog.objects.count(), 2)
+        self.assertEqual(EmailDelivery.objects.count(), 2)
         self.assertEqual(
             EmailLog.objects.filter(email_type='sprint_partner_intro').count(),
             2,
         )
-        self.assertEqual(mock_ses.call_count, 2)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_failed_log_is_retryable_and_sent_log_is_skipped(self, mock_ses):
+    def test_failed_log_is_retryable_and_sent_log_is_skipped(self):
         alice, bob = self._ready_pair()
         SprintPartnerIntroEmailLog.objects.create(
             sprint=self.sprint,
@@ -228,13 +268,19 @@ class PartnerIntroEmailServiceTest(TestCase):
             member=bob,
             status=PARTNER_INTRO_EMAIL_STATUS_SENT,
         )
-        mock_ses.return_value = 'ses-retry'
 
         summary = send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
 
         self.assertEqual(summary['sent_count'], 1)
         self.assertEqual(summary['skipped_already_sent_count'], 1)
-        self.assertEqual(mock_ses.call_count, 1)
+        # Only the retryable member gets a fresh durable delivery; the
+        # already-sent one is skipped before any send.
+        self.assertEqual(
+            EmailDelivery.objects.values_list(
+                'recipient_email', flat=True,
+            ).get(),
+            'alice@test.com',
+        )
         self.assertEqual(
             SprintPartnerIntroEmailLog.objects.get(member=alice).status,
             PARTNER_INTRO_EMAIL_STATUS_SENT,
@@ -242,4 +288,10 @@ class PartnerIntroEmailServiceTest(TestCase):
         self.assertEqual(
             SprintPartnerIntroEmailLog.objects.get(member=bob).status,
             PARTNER_INTRO_EMAIL_STATUS_SENT,
+        )
+        self.assertEqual(
+            SprintPartnerIntroEmailLog.objects.get(
+                member=bob,
+            ).email_delivery,
+            None,
         )

@@ -22,7 +22,8 @@ import time
 from typing import NamedTuple
 
 import requests
-from botocore.exceptions import BotoCoreError, ClientError
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 
 from community.models import CommunityAuditLog
 from community.services.base import CommunityService
@@ -30,8 +31,7 @@ from community.slack_config import (
     get_slack_community_channel_ids,
     get_slack_plan_sprints_user_token,
 )
-from email_app.services import EmailService
-from email_app.services.email_service import EmailServiceError
+from email_app.package_mail import send_package_mail
 from integrations.config import get_config, is_enabled
 
 logger = logging.getLogger(__name__)
@@ -775,36 +775,43 @@ class SlackCommunityService(CommunityService):
                 )
 
     def _send_invite_email(self, user):
-        """Send the Slack workspace invite email through SES.
+        """Send the Slack workspace invite email through the package mail app.
 
         Issue #1565: this used to call ``django.core.mail.send_mail`` with
         ``fail_silently=True``. ``EMAIL_BACKEND`` is unset, so that resolved
         to SMTP on ``localhost:25``, which is refused in ECS — every invite
         email the platform believed it had sent was silently discarded. It
-        now goes through :class:`EmailService` (SES) using the existing
+        then moved to SES and, since the A1.2 slice-1
+        migration, goes through the durable package delivery
+        (``email_app.package_mail.send_package_mail``) using the existing
         ``community_invite`` template, which already carries the gated
-        ``/community/slack`` link (issue #953) and the onboarding CTA.
+        ``/community/slack`` link (issue #953) and the onboarding CTA. The
+        stored context stays empty: the worker injects ``site_url`` and the
+        recipient display name at delivery time.
 
         Never raises into ``invite()`` / ``reactivate()`` / the checkout
-        hook: a delivery failure is logged and reported as ``False`` so the
-        caller can record an honest audit status.
+        hook: a local refusal (unknown purpose, invalid recipient,
+        idempotency conflict) is logged and reported as ``email_failed``;
+        SES transport trouble retries from the durable worker and no longer
+        surfaces here.
 
         Args:
             user: User model instance.
 
         Returns:
-            tuple[str, str]: ``INVITE_EMAIL_SENT`` only when the email was
-            actually handed to SES, ``INVITE_EMAIL_FAILED`` with the
-            exception class when the send raised, or
-            ``INVITE_EMAIL_SKIPPED`` when delivery policy declined the send
-            before it reached SES. A policy skip is not a failure: nothing
-            broke, and recording it as one would manufacture the inverse
-            false positive to the one this method exists to prevent.
+            tuple[str, str]: ``INVITE_EMAIL_SENT`` when the durable
+            delivery was queued — ``sent`` means the delivery exists, with
+            the SES outcome and the ``EmailLog`` audit row landing from the
+            worker — ``INVITE_EMAIL_FAILED`` with the exception class when
+            the send was refused locally, or ``INVITE_EMAIL_SKIPPED`` when
+            the preference resolver suppressed the delivery. A policy skip
+            is not a failure: nothing broke, and recording it as one would
+            manufacture the inverse false positive to the one this method
+            exists to prevent.
         """
         try:
-            # ``site_url`` / ``user_name`` are injected by EmailService.
-            sent = EmailService().send(user, "community_invite", {})
-        except (EmailServiceError, BotoCoreError, ClientError) as exc:
+            delivery = send_package_mail(user, "community_invite", {})
+        except MailError as exc:
             logger.error(
                 "Slack invite email action=deliver outcome=failed user_id=%s "
                 "error_class=%s",
@@ -812,7 +819,7 @@ class SlackCommunityService(CommunityService):
                 exc.__class__.__name__,
             )
             return INVITE_EMAIL_FAILED, exc.__class__.__name__
-        if sent is None:
+        if delivery.state == EmailDelivery.State.SUPPRESSED:
             logger.info(
                 "Slack invite email action=deliver outcome=skipped user_id=%s "
                 "reason=delivery_policy",

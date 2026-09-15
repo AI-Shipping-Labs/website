@@ -11,6 +11,12 @@ every paid checkout (Basic+):
 The helper is invoked from ``handle_checkout_completed``; the tests
 exercise both the helper directly (unit-style) and the end-to-end path
 through the webhook handler.
+
+Since A1.2 slice 1 every email channel records a durable
+``EmailDelivery`` and the provider send happens from the delivery
+worker, so tests that need provider-visible output drain pending
+deliveries with :func:`email_app.testing.deliver_pending_mail` (and a
+stubbed ``ses_local`` client when they assert on the SES calls).
 """
 
 from decimal import Decimal
@@ -21,6 +27,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from content.models import Course, CourseAccess
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments import services as payment_services
 from payments.models import Tier
 from payments.services import handle_checkout_completed as _handle_checkout_completed
@@ -528,12 +535,11 @@ class NotifyPaidSignupEndToEndTest(TestCase):
 
         # Two email paths ran: welcome and staff notification.
         # PAYMENT_NOTIFICATION_EMAIL was empty so the legacy ping is
-        # skipped. SES is disabled in tests so EmailService routes
-        # through django.core.mail when wired up — but the actual SES
-        # path is patched off in the test settings via SES_ENABLED=False
-        # which short-circuits before any send_email call. To verify
-        # real sends, check the EmailLog rows the service writes on
-        # the success path.
+        # skipped. The provider send happens in the durable worker, so
+        # drain the pending deliveries before asserting on the EmailLog
+        # rows the worker writes after provider acceptance.
+        deliver_pending_mail()
+
         from email_app.models import EmailLog
 
         # Issue #847: a Basic (level 10) checkout routes to the
@@ -755,11 +761,11 @@ class NotifyPaidSignupEndToEndTest(TestCase):
             self.assertEqual(mock_slack.call_count, 1)
 
         # Exactly one welcome EmailLog row, even after the replay. The
-        # staff signup email is sent to a SimpleNamespace surrogate so
-        # it never writes an EmailLog row — Slack call count above is
-        # the authoritative signal that the helper only ran once.
-        # Issue #847: a Basic checkout routes to basic_welcome, and the
-        # replay must not produce a second welcome of ANY tier.
+        # staff heads-up is a durable no-user delivery — the worker
+        # writes no EmailLog row for it — so the welcome count is the
+        # authoritative signal that the helper only ran once. The rows
+        # land from the delivery worker, so drain it first.
+        deliver_pending_mail()
         from email_app.models import EmailLog
         self.assertEqual(
             EmailLog.objects.filter(email_type="basic_welcome").count(),
@@ -811,7 +817,7 @@ class CofounderWelcomeTemplateContextTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             staff_notifications.notify_paid_signup(
                 user=user,
@@ -993,8 +999,8 @@ class TierWelcomeRoutingTest(TestCase):
 
     def _send_for(self, tier, email):
         """Drive ``notify_paid_signup`` for ``tier`` with all staff/Slack
-        paths off, capturing the slug passed to ``EmailService.send`` for
-        the user-facing welcome (the first send call).
+        paths off, capturing the slug passed to ``send_package_mail`` for
+        the user-facing welcome (the only durable send in this setup).
         """
         from community.services import staff_notifications
 
@@ -1003,7 +1009,7 @@ class TierWelcomeRoutingTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             staff_notifications.notify_paid_signup(
                 user=user,
@@ -1046,7 +1052,7 @@ class TierWelcomeRoutingTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send, patch(
             "community.services.staff_notifications.logger"
         ) as mock_logger:
@@ -1182,7 +1188,7 @@ class StaffSignupNotificationBodyTest(TestCase):
         ), patch(
             "community.services.staff_notifications.requests.post"
         ) as mock_slack, patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             mock_slack.return_value.json.return_value = {"ok": True}
             mock_slack.return_value.status_code = 200
@@ -1197,10 +1203,13 @@ class StaffSignupNotificationBodyTest(TestCase):
                 billing_period="monthly",
             )
 
-        # Two EmailService.send calls: welcome + staff_signup_notification.
+        # Two durable sends: the member welcome + the staff heads-up.
         self.assertEqual(mock_send.call_count, 2)
-        staff_call = mock_send.call_args_list[1]
-        self.assertEqual(staff_call.args[1], "staff_signup_notification")
+        staff_call = next(
+            call for call in mock_send.call_args_list
+            if call.args[1] == "staff_signup_notification"
+        )
+        self.assertEqual(staff_call.kwargs["recipient_email"], "f@test.com")
         staff_ctx = staff_call.args[2]
         for key in (
             "paid_user_email",
@@ -1210,12 +1219,13 @@ class StaffSignupNotificationBodyTest(TestCase):
             "was_new_user_label",
             "amount_label",
             "stripe_customer_id",
-            "stripe_customer_url",
             "stripe_session_id",
             "first_touch_utm_source",
             "first_touch_utm_campaign",
             "signup_timestamp",
-            "studio_user_url",
+            # Subject member id: the worker resolver re-mints the Studio
+            # profile link from it at delivery time (issue #1613).
+            "user_id",
         ):
             self.assertIn(key, staff_ctx, f"missing {key} from staff ctx")
         self.assertEqual(staff_ctx["paid_user_email"], "fields@test.com")
@@ -1225,11 +1235,14 @@ class StaffSignupNotificationBodyTest(TestCase):
         self.assertIn("20", staff_ctx["amount_label"])
         self.assertIn("monthly", staff_ctx["amount_label"])
         self.assertEqual(staff_ctx["stripe_customer_id"], "cus_FIELDS")
-        self.assertIn("cus_FIELDS", staff_ctx["stripe_customer_url"])
         self.assertEqual(staff_ctx["stripe_session_id"], "cs_FIELDS")
         self.assertEqual(staff_ctx["first_touch_utm_source"], "google")
         self.assertEqual(staff_ctx["first_touch_utm_campaign"], "ai_eng_jan")
-        self.assertIn(f"/studio/users/{user.pk}/", staff_ctx["studio_user_url"])
+        # The durable context carries scalar inputs only (#1613): the
+        # Studio and Stripe dashboard links must NOT be stored — the
+        # worker resolver mints them at delivery time.
+        self.assertNotIn("studio_user_url", staff_ctx)
+        self.assertNotIn("stripe_customer_url", staff_ctx)
 
         # Slack body carries the same fields. Interval renders as the
         # human label (issue #952), not the raw billing_period token.
@@ -1367,7 +1380,7 @@ class StaffSignupNotificationBodyTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             staff_notifications.notify_paid_signup(
                 user=user,
@@ -1739,11 +1752,11 @@ class PaidWelcomeSESDestinationTest(TestCase):
     """Paid-signup welcomes visibly address only the member.
 
     Drives the real ``notify_paid_signup`` / ``_send_cofounder_welcome`` ->
-    ``EmailService`` path with a mocked SES (``boto3``) client so we can
+    package mail path with a stubbed ``ses_local`` client so we can
     assert on the SES ``Destination`` / ``FromEmailAddress`` /
-    ``ReplyToAddresses`` the service actually builds. Config is set through
-    real ``IntegrationSetting`` rows so the helper AND the email
-    classification layer resolve from one consistent source.
+    ``ReplyToAddresses`` the durable worker actually builds. Config is
+    set through real ``IntegrationSetting`` rows so the helper AND the
+    email classification layer resolve from one consistent source.
     """
 
     STAFF_EMAIL = "team@aishippinglabs.com"
@@ -1773,30 +1786,28 @@ class PaidWelcomeSESDestinationTest(TestCase):
         )
 
     def _run_welcome(self, *, tier=None, is_returning=False):
-        """Run notify_paid_signup with a mocked SES client; return the
-        ``send_email`` call kwargs of the (A) member welcome send.
+        """Run notify_paid_signup with a stubbed package SES transport;
+        return the ``send_email`` call kwargs of every send the durable
+        worker pushed out.
 
-        Slack + the staff heads-up email also fire; we patch Slack off and
-        let the staff email run through the same mocked SES client. The
-        welcome send is the one whose ``Destination['ToAddresses']`` is the
-        member, which is how we pick it out of the captured calls.
+        Slack + the staff heads-up email also fire; the staff heads-up
+        goes through the same durable worker and the same stubbed client.
+        The welcome send is the one whose ``Destination['ToAddresses']``
+        is the member, which is how we pick it out of the captured calls.
         """
-        from unittest.mock import MagicMock
-
         from community.services import staff_notifications
         from integrations.config import clear_config_cache
 
         clear_config_cache()
 
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {"MessageId": "ses-977"}
+        stub_client = StubSESClient(message_id="ses-977")
 
         with patch(
-            "email_app.services.ses_transport.boto3"
-        ) as mock_boto3, patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub_client,
+        ), patch(
             "community.services.staff_notifications.requests.post"
         ) as mock_slack:
-            mock_boto3.client.return_value = mock_client
             mock_slack.return_value.json.return_value = {"ok": True}
             mock_slack.return_value.status_code = 200
 
@@ -1811,7 +1822,11 @@ class PaidWelcomeSESDestinationTest(TestCase):
                 is_returning=is_returning,
             )
 
-        return [c.kwargs for c in mock_client.send_email.call_args_list]
+            # The provider send happens in the durable worker; drain the
+            # pending deliveries so the SES calls are captured.
+            deliver_pending_mail()
+
+        return list(stub_client.calls)
 
     def _welcome_call(self, calls):
         """Pick the member welcome send (To == the member's email)."""
@@ -1974,6 +1989,12 @@ class PaidWelcomeSESDestinationTest(TestCase):
         # And that heads-up does NOT carry the welcome on CC/BCC.
         self.assertNotIn("CcAddresses", staff_sends[0]["Destination"])
         self.assertNotIn("BccAddresses", staff_sends[0]["Destination"])
+        # The stored context is scalar-only (#1613); the worker resolver
+        # mints the Studio profile link from the stored user_id, so the
+        # delivered heads-up still carries the deep-link and customer id.
+        staff_html = staff_sends[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
+        self.assertIn(f"/studio/users/{self.user.pk}/", staff_html)
+        self.assertIn("cus_977", staff_html)
 
     # -- Scenario 5: welcome failure does not break heads-up ----------
     def test_welcome_failure_does_not_block_staff_email_or_slack(self):
@@ -2033,8 +2054,8 @@ class ReturningMemberWelcomeRoutingTest(TestCase):
 
     def _welcome_slug_for(self, tier, *, is_returning, email):
         """Drive ``notify_paid_signup`` with all staff/Slack paths off and
-        return the slug passed to ``EmailService.send`` for the welcome
-        (the first send call).
+        return the slug passed to ``send_package_mail`` for the welcome
+        (the only durable send in this setup).
         """
         from community.services import staff_notifications
 
@@ -2043,7 +2064,7 @@ class ReturningMemberWelcomeRoutingTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             staff_notifications.notify_paid_signup(
                 user=user,
@@ -2089,7 +2110,7 @@ class ReturningMemberWelcomeRoutingTest(TestCase):
             "community.services.staff_notifications.get_config",
             return_value="",
         ), patch(
-            "email_app.services.email_service.EmailService.send"
+            "community.services.staff_notifications.send_package_mail"
         ) as mock_send:
             staff_notifications.notify_paid_signup(
                 user=user,
@@ -2277,6 +2298,8 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
             side_effect=self._cfg_quiet,
         ):
             handle_checkout_completed(self._session_for(user, tier_slug=tier_slug))
+        # The welcome EmailLog rows land from the durable worker.
+        deliver_pending_mail()
 
     def test_returning_churned_member_gets_welcome_back_kir_case(self):
         from email_app.models import EmailLog
@@ -2323,6 +2346,7 @@ class ReturningMemberWebhookEndToEndTest(TestCase):
             side_effect=self._cfg_quiet,
         ):
             handle_checkout_completed(session)
+        deliver_pending_mail()
 
         user = User.objects.get(email="brandnew@test.com")
         self.assertEqual(

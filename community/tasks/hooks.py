@@ -78,8 +78,8 @@ def _send_invite_email_only(action, user):
     """
     # Local import to limit blast radius if community.services.slack ever
     # grows a dependency that pulls community.tasks back in. The email
-    # helper only renders and sends the community_invite template through
-    # EmailService, so the bot_token="" / channel_ids=[] constructor args
+    # helper only queues the community_invite template through the package
+    # mail boundary, so the bot_token="" / channel_ids=[] constructor args
     # are inert.
     from community.services.slack import (  # noqa: PLC0415
         INVITE_EMAIL_SENT,

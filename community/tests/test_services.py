@@ -12,9 +12,12 @@ All Slack API calls are mocked. Tests verify:
 """
 
 import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import requests
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
@@ -32,9 +35,17 @@ from community.services.slack import (
     SlackAPIError,
     SlackCommunityService,
 )
-from email_app.services.email_service import EmailServiceError
 from payments.models import Tier
 from tests.fixtures import set_membership
+
+
+def _invite_delivery(state):
+    """A ``send_package_mail`` result stub with the given durable state.
+
+    The service only reads ``delivery.state``: non-suppressed counts as
+    queued ("sent"), suppressed is the policy opt-out ("skipped").
+    """
+    return SimpleNamespace(state=state)
 
 MOCK_CHANNELS = ["C001", "C002"]
 PII_EMAIL = "private-member@example.com"
@@ -161,23 +172,31 @@ class SlackLoggingPrivacyTest(TestCase):
         )
 
         email_cases = (
-            (INVITE_EMAIL_SENT, object(), None),
-            (INVITE_EMAIL_SKIPPED, None, None),
+            (
+                INVITE_EMAIL_SENT,
+                _invite_delivery(EmailDelivery.State.PENDING),
+                None,
+            ),
+            (
+                INVITE_EMAIL_SKIPPED,
+                _invite_delivery(EmailDelivery.State.SUPPRESSED),
+                None,
+            ),
             (
                 INVITE_EMAIL_FAILED,
                 None,
-                EmailServiceError(PII_PROVIDER_MESSAGE),
+                MailError(PII_PROVIDER_MESSAGE),
             ),
         )
-        for outcome, return_value, side_effect in email_cases:
+        for outcome, delivery_stub, side_effect in email_cases:
             with self.subTest(outcome=outcome):
                 self._set_slack_user_id("")
                 with (
                     patch.object(self.service, "lookup_user_by_email", return_value=None),
-                    patch("community.services.slack.EmailService") as email_service,
+                    patch("community.services.slack.send_package_mail") as mock_send,
                 ):
-                    email_service.return_value.send.return_value = return_value
-                    email_service.return_value.send.side_effect = side_effect
+                    mock_send.return_value = delivery_stub
+                    mock_send.side_effect = side_effect
                     with self.assertLogs(
                         "community.services.slack", level="INFO"
                     ) as logs:
@@ -186,7 +205,7 @@ class SlackLoggingPrivacyTest(TestCase):
                 self._assert_safe(logs.output, action="invite", outcome=outcome)
                 if outcome == INVITE_EMAIL_FAILED:
                     self.assertIn(
-                        "error_class=EmailServiceError",
+                        "error_class=MailError",
                         "\n".join(logs.output),
                     )
 
@@ -231,23 +250,31 @@ class SlackLoggingPrivacyTest(TestCase):
         self._assert_safe(logs.output, action="reactivate", outcome="completed")
 
         email_cases = (
-            (INVITE_EMAIL_SENT, object(), None),
-            (INVITE_EMAIL_SKIPPED, None, None),
+            (
+                INVITE_EMAIL_SENT,
+                _invite_delivery(EmailDelivery.State.PENDING),
+                None,
+            ),
+            (
+                INVITE_EMAIL_SKIPPED,
+                _invite_delivery(EmailDelivery.State.SUPPRESSED),
+                None,
+            ),
             (
                 INVITE_EMAIL_FAILED,
                 None,
-                EmailServiceError(PII_PROVIDER_MESSAGE),
+                MailError(PII_PROVIDER_MESSAGE),
             ),
         )
-        for outcome, return_value, side_effect in email_cases:
+        for outcome, delivery_stub, side_effect in email_cases:
             with self.subTest(outcome=outcome):
                 self._set_slack_user_id("")
                 with (
                     patch.object(self.service, "lookup_user_by_email", return_value=None),
-                    patch("community.services.slack.EmailService") as email_service,
+                    patch("community.services.slack.send_package_mail") as mock_send,
                 ):
-                    email_service.return_value.send.return_value = return_value
-                    email_service.return_value.send.side_effect = side_effect
+                    mock_send.return_value = delivery_stub
+                    mock_send.side_effect = side_effect
                     with self.assertLogs(
                         "community.services.slack", level="INFO"
                     ) as logs:
@@ -255,7 +282,7 @@ class SlackLoggingPrivacyTest(TestCase):
                 self._assert_safe(logs.output, action="reactivate", outcome=outcome)
                 if outcome == INVITE_EMAIL_FAILED:
                     self.assertIn(
-                        "error_class=EmailServiceError",
+                        "error_class=MailError",
                         "\n".join(logs.output),
                     )
 
@@ -527,7 +554,7 @@ class InviteServiceTest(TestCase):
         details = json.loads(log.details)
         self.assertEqual(details["slack_user_id"], "U789")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_invite_lookup_by_email(self, mock_post, mock_email_service):
         """If no slack_user_id, looks up by email and adds."""
@@ -566,15 +593,16 @@ class InviteServiceTest(TestCase):
         self.assertEqual(log.action, "invite")
 
         # No email should be sent
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_invite_not_found_sends_email(self, mock_post, mock_email_service):
         """If user not found in Slack, sends the community_invite email.
 
-        Issue #1565: this goes through EmailService/SES, not the unbound
-        ``send_mail`` SMTP backend that silently dropped every invite.
+        Issue #1565: this goes through the durable package mail (SES), not
+        the unbound ``send_mail`` SMTP backend that silently dropped every
+        invite.
         """
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -583,7 +611,7 @@ class InviteServiceTest(TestCase):
 
         result = self.service.invite(self.user)
 
-        mock_email_service.return_value.send.assert_called_once_with(
+        mock_email_service.assert_called_once_with(
             self.user, "community_invite", {},
         )
         self.assertEqual(result.outcome, INVITE_EMAIL_SENT)
@@ -593,7 +621,7 @@ class InviteServiceTest(TestCase):
         details = json.loads(log.details)
         self.assertEqual(details["status"], "email_sent")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_invite_records_email_failed_when_send_raises(
         self, mock_post, mock_email_service,
@@ -603,20 +631,20 @@ class InviteServiceTest(TestCase):
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
         mock_post.return_value = mock_response
-        mock_email_service.return_value.send.side_effect = EmailServiceError("ses down")
+        mock_email_service.side_effect = MailError("ses down")
 
         with self.assertLogs("community.services.slack", level="ERROR") as logs:
             result = self.service.invite(self.user)
 
         self.assertEqual(result.outcome, INVITE_EMAIL_FAILED)
-        self.assertTrue(any("EmailServiceError" in line for line in logs.output))
+        self.assertTrue(any("MailError" in line for line in logs.output))
 
         log = CommunityAuditLog.objects.get(user=self.user)
         details = json.loads(log.details)
         self.assertEqual(details["status"], "email_failed")
         self.assertEqual(details["reason"], "slack_user_not_found")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.SlackCommunityService._api_call")
     def test_invite_reports_failure_when_no_channel_add_succeeds(
         self, mock_api, mock_email_service,
@@ -642,7 +670,7 @@ class InviteServiceTest(TestCase):
         for channel in MOCK_CHANNELS:
             self.assertIn(channel, result.detail)
         self.assertIn("not_in_channel", result.detail)
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
 
         details = json.loads(
             CommunityAuditLog.objects.get(user=self.user, action="invite").details
@@ -672,7 +700,7 @@ class InviteServiceTest(TestCase):
         )
         self.assertEqual(details["status"], "added_to_channels")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_policy_suppressed_send_is_skipped_not_failed(
         self, mock_post, mock_email_service,
@@ -682,7 +710,9 @@ class InviteServiceTest(TestCase):
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
         mock_post.return_value = mock_response
-        mock_email_service.return_value.send.return_value = None
+        mock_email_service.return_value = _invite_delivery(
+            EmailDelivery.State.SUPPRESSED,
+        )
 
         result = self.service.invite(self.user)
 
@@ -692,7 +722,7 @@ class InviteServiceTest(TestCase):
         )
         self.assertEqual(details["status"], "email_skipped")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_invite_can_suppress_the_generic_invite_email(
         self, mock_post, mock_email_service,
@@ -705,7 +735,7 @@ class InviteServiceTest(TestCase):
 
         result = self.service.invite(self.user, send_invite_email=False)
 
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
         self.assertEqual(result.outcome, INVITE_EMAIL_SUPPRESSED)
         log = CommunityAuditLog.objects.get(user=self.user)
         self.assertEqual(json.loads(log.details)["status"], "email_suppressed")
@@ -787,7 +817,7 @@ class ReactivateServiceTest(TestCase):
         log = CommunityAuditLog.objects.get(user=self.user)
         self.assertEqual(log.action, "reactivate")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_reactivate_without_slack_id_sends_email(
         self, mock_post, mock_email_service,
@@ -800,7 +830,7 @@ class ReactivateServiceTest(TestCase):
 
         self.service.reactivate(self.user)
 
-        mock_email_service.return_value.send.assert_called_once_with(
+        mock_email_service.assert_called_once_with(
             self.user, "community_invite", {},
         )
         log = CommunityAuditLog.objects.get(user=self.user)
@@ -808,7 +838,7 @@ class ReactivateServiceTest(TestCase):
         details = json.loads(log.details)
         self.assertEqual(details["status"], "email_sent")
 
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     @patch("community.services.slack.requests.post")
     def test_reactivate_records_email_failed_when_send_raises(
         self, mock_post, mock_email_service,
@@ -818,7 +848,7 @@ class ReactivateServiceTest(TestCase):
         mock_response.status_code = 200
         mock_response.json.return_value = {"ok": False, "error": "users_not_found"}
         mock_post.return_value = mock_response
-        mock_email_service.return_value.send.side_effect = EmailServiceError("ses down")
+        mock_email_service.side_effect = MailError("ses down")
 
         with self.assertLogs("community.services.slack", level="ERROR"):
             self.service.reactivate(self.user)
@@ -935,12 +965,12 @@ class CommunityInviteTaskTest(TestCase):
                 method="users.lookupByEmail",
                 error_code="users_not_found",
             )
-            with patch("community.services.slack.EmailService") as mock_email:
+            with patch("community.services.slack.send_package_mail") as mock_email:
                 service = SlackCommunityService(
                     bot_token="xoxb-test", channel_ids=["C001"],
                 )
                 service.invite(user)
-                mock_email.return_value.send.assert_called_once_with(
+                mock_email.assert_called_once_with(
                     user, "community_invite", {},
                 )
 

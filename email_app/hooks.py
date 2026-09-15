@@ -337,6 +337,120 @@ def _resolve_plan_shared_context(delivery, context):
     )
 
 
+# A1.2 slice 1: the four internal staff heads-ups. Each stores scalar
+# inputs only (#1613) — the subject member's id under a per-purpose key,
+# and for the paid-signup note the raw Stripe object ids.
+_STAFF_NOTIFICATION_PURPOSES = frozenset({
+    "staff_signup_notification",
+    "maven_enrollment_notification",
+    "maven_cohort_removal_notification",
+    "slack_join_notification",
+})
+
+# Stripe object ids always carry their resource prefix; the stored
+# scalars substitute "—" when an id is absent, so the prefix check is
+# what separates a mintable dashboard link from plain copyable text.
+_STRIPE_ID_PREFIXES = ("cus_", "pi_", "sub_")
+
+
+def _staff_subject_user_id(context):
+    """The subject member's pk from the per-purpose scalar key, if real."""
+
+    for key in ("user_id", "enrolled_user_id", "removed_user_id"):
+        text = str(context.get(key) or "").strip()
+        if text.isdigit():
+            return text
+    return None
+
+
+def _resolve_staff_notification_context(delivery, context):
+    """Mint the staff heads-ups' Studio and Stripe dashboard links.
+
+    A1.2 slice 1: the four internal notification purposes persist scalar
+    inputs only (#1613) and the worker re-mints the exact links the old
+    synchronous send built from the same inputs. A missing subject id or
+    Stripe object id degrades exactly as the old builders did — the
+    template renders the bare id (or nothing) — so this resolver raises
+    no binding error for these best-effort internal notes.
+    """
+
+    from integrations.config import get_config, site_base_url  # noqa: PLC0415
+
+    base_url = site_base_url().rstrip("/")
+    user_id = _staff_subject_user_id(context)
+    if user_id:
+        context["studio_user_url"] = f"{base_url}/studio/users/{user_id}/"
+    occurrence_id = str(context.get("occurrence_id") or "").strip()
+    if occurrence_id.isdigit():
+        context["studio_occurrence_url"] = (
+            f"{base_url}/studio/maven-events/{occurrence_id}/"
+        )
+
+    from community.services.staff_notifications import _dashboard_url  # noqa: PLC0415
+
+    account_id = (get_config("STRIPE_DASHBOARD_ACCOUNT_ID", "") or "").strip()
+    for scalar_key, resource, url_key in (
+        ("stripe_customer_id", "customers", "stripe_customer_url"),
+        ("stripe_payment_intent_id", "payments", "stripe_payment_url"),
+        ("stripe_subscription_id", "subscriptions", "stripe_subscription_url"),
+    ):
+        object_id = str(context.get(scalar_key) or "").strip()
+        if object_id.startswith(_STRIPE_ID_PREFIXES):
+            context[url_key] = _dashboard_url(account_id, resource, object_id)
+
+
+def _resolve_bookclub_summary_context(delivery, context):
+    """Rebuild the bookclub summary context from the related model.
+
+    A1.2 slice 1: a summary excerpt may legitimately contain links, so —
+    like the workshop announcement — the producer persists only the
+    ``Book``/``Chapter`` relation and the worker rebuilds the exact
+    scalar context the old synchronous send passed to the template.
+    """
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    kind = delivery.related_object_type
+    if kind == "bookclub.chapter":
+        from bookclub.models import Chapter  # noqa: PLC0415
+        from bookclub.summaries import summary_excerpt  # noqa: PLC0415
+
+        chapter = (
+            Chapter.objects.filter(pk=delivery.related_object_id)
+            .select_related("book")
+            .first()
+        )
+        if chapter is None:
+            raise PermanentJobError("bookclub_summary_content_missing")
+        book = chapter.book
+        context["chapter_number"] = chapter.number
+        context["chapter_title"] = chapter.title
+        context["summary_line"] = summary_excerpt(chapter.summary) or (
+            f'Read the summary for "{chapter.title}."'
+        )
+        summary_path = reverse(
+            "bookclub_chapter_detail",
+            kwargs={"slug": book.slug, "number": chapter.number},
+        ) + "#summary"
+    elif kind == "bookclub.book":
+        from bookclub.models import Book  # noqa: PLC0415
+        from bookclub.summaries import summary_excerpt  # noqa: PLC0415
+
+        book = Book.objects.filter(pk=delivery.related_object_id).first()
+        if book is None:
+            raise PermanentJobError("bookclub_summary_content_missing")
+        context["summary_line"] = summary_excerpt(book.summary) or (
+            f'The full summary for "{book.title}" is ready.'
+        )
+        summary_path = reverse("bookclub_book_summary", kwargs={"slug": book.slug})
+    else:
+        raise PermanentJobError("bookclub_summary_content_missing")
+    context["book_title"] = book.title
+    context["summary_url"] = f"{site_base_url().rstrip('/')}{summary_path}"
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
@@ -371,6 +485,10 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_workshop_announcement_context(delivery, context)
     elif delivery.purpose == "plan_shared":
         _resolve_plan_shared_context(delivery, context)
+    elif delivery.purpose in _STAFF_NOTIFICATION_PURPOSES:
+        _resolve_staff_notification_context(delivery, context)
+    elif delivery.purpose in ("bookclub_book_summary", "bookclub_chapter_summary"):
+        _resolve_bookclub_summary_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
         "password_reset",

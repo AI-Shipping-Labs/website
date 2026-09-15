@@ -9,13 +9,15 @@ honest audit status for the shared, non-Maven callers.
 
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 from django.test import TestCase, override_settings
 
 from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.staff_notifications import _build_removal_context
 from community.tasks.hooks import community_invite_task
-from email_app.services.email_service import EmailService, EmailServiceError
+from email_app.testing import StubSESClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from payments.models import Tier
@@ -44,17 +46,25 @@ class PaidCheckoutInviteEmailTest(TestCase):
         "community.services.slack.SlackCommunityService.lookup_user_by_email",
         return_value=None,
     )
-    @patch.object(EmailService, "_send_ses", return_value="ses-message-id")
     def test_invite_task_sends_community_invite_with_the_gated_link(
-        self, send_ses, _lookup,
+        self, _lookup,
     ):
-        with self.assertLogs("community.services.slack", level="INFO") as logs:
-            community_invite_task(self.user.pk)
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            with self.assertLogs("community.services.slack", level="INFO") as logs:
+                community_invite_task(self.user.pk)
+            deliver_pending_mail()
 
-        self.assertEqual(send_ses.call_count, 1)
-        self.assertEqual(send_ses.call_args.kwargs["email_type"], "community_invite")
-        self.assertEqual(send_ses.call_args.args[0], "paid@example.com")
-        html = send_ses.call_args.args[2]
+        # The durable delivery exists for the member and the provider send
+        # (worker-rendered) carries the gated /community/slack link, not
+        # the raw join URL.
+        delivery = EmailDelivery.objects.get(purpose="community_invite")
+        self.assertEqual(delivery.recipient_email, "paid@example.com")
+        self.assertEqual(len(stub.calls), 1)
+        html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertIn("https://aishippinglabs.com/community/slack", html)
         self.assertNotIn("https://join.slack.com/test", html)
 
@@ -71,10 +81,9 @@ class PaidCheckoutInviteEmailTest(TestCase):
         "community.services.slack.SlackCommunityService.lookup_user_by_email",
         return_value=None,
     )
-    @patch.object(
-        EmailService,
-        "send",
-        side_effect=EmailServiceError("SES rejected paid@example.com U_PRIVATE"),
+    @patch(
+        "community.services.slack.send_package_mail",
+        side_effect=MailError("SES rejected paid@example.com U_PRIVATE"),
     )
     def test_a_failed_send_is_logged_and_audited_as_email_failed(
         self, _send, _lookup,
@@ -83,7 +92,7 @@ class PaidCheckoutInviteEmailTest(TestCase):
             community_invite_task(self.user.pk)
 
         rendered_logs = "\n".join(logs.output)
-        self.assertIn("error_class=EmailServiceError", rendered_logs)
+        self.assertIn("error_class=MailError", rendered_logs)
         self.assertIn(f"user_id={self.user.pk}", rendered_logs)
         self.assertNotIn(self.user.email, rendered_logs)
         self.assertNotIn("U_PRIVATE", rendered_logs)

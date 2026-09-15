@@ -434,16 +434,16 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     def test_invite_task_sends_email_when_slack_disabled_and_invite_url_set(
         self, mock_email_service, mock_post, mock_get_service
     ):
         community_invite_task(self.user.pk)
 
-        # Issue #1565: the fallback now delivers through EmailService/SES
-        # with the existing community_invite template, instead of the
+        # Issue #1565: the fallback now queues the community_invite template
+        # through the durable package mail (SES), instead of the
         # unconfigured SMTP backend that silently dropped every invite.
-        mock_email_service.return_value.send.assert_called_once_with(
+        mock_email_service.assert_called_once_with(
             self.user, "community_invite", {},
         )
 
@@ -465,14 +465,14 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     def test_invite_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
         self, mock_email_service, mock_post, mock_get_service
     ):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_invite_task(self.user.pk)
 
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
@@ -505,13 +505,13 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     def test_reactivate_task_sends_email_when_slack_disabled_and_invite_url_set(
         self, mock_email_service, mock_post, mock_get_service
     ):
         community_reactivate_task(self.user.pk)
 
-        mock_email_service.return_value.send.assert_called_once_with(
+        mock_email_service.assert_called_once_with(
             self.user, "community_invite", {},
         )
 
@@ -533,14 +533,14 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     def test_reactivate_task_skips_cleanly_when_slack_disabled_and_invite_url_empty(
         self, mock_email_service, mock_post, mock_get_service
     ):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_reactivate_task(self.user.pk)
 
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())
@@ -555,7 +555,7 @@ class HookTasksInviteEmailFallbackTest(TestCase):
     )
     @patch("community.tasks.hooks.get_community_service")
     @patch("community.services.slack.requests.post")
-    @patch("community.services.slack.EmailService")
+    @patch("community.services.slack.send_package_mail")
     def test_remove_task_skip_behavior_unchanged_when_slack_disabled(
         self, mock_email_service, mock_post, mock_get_service
     ):
@@ -565,7 +565,7 @@ class HookTasksInviteEmailFallbackTest(TestCase):
         with self.assertLogs("community.tasks.hooks", level="WARNING") as logs:
             community_remove_task(self.user.pk)
 
-        mock_email_service.return_value.send.assert_not_called()
+        mock_email_service.assert_not_called()
         mock_post.assert_not_called()
         mock_get_service.assert_not_called()
         self.assertFalse(CommunityAuditLog.objects.filter(user=self.user).exists())

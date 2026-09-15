@@ -18,14 +18,24 @@ caller relies on the existing ``WebhookEvent`` short-circuit at the
 dispatch layer (``payments/services/signatures.py``) — a replayed
 ``checkout.session.completed`` event ID never reaches this helper a
 second time, so this module does not add a second guard.
+
+A1.2 slice 1: every email here goes through the durable package delivery
+(``email_app.package_mail.send_package_mail``) instead of the legacy
+in-process sender. The stored context carries scalar inputs only — the
+Studio and Stripe dashboard links are minted at delivery time by the
+worker resolver (``email_app.hooks.resolve_auth_mail_context``, issue
+#1613). The staff mailbox keeps its surrogate semantics: no ``User`` row
+is created, no ``EmailLog`` audit row is written, and ``sent`` means the
+durable delivery exists — the SES outcome and the member welcome's audit
+row land from the worker.
 """
 
 import logging
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 import requests
 
+from email_app.package_mail import send_package_mail
 from integrations.config import (
     get_config,
     is_enabled,
@@ -47,6 +57,34 @@ _AMOUNT_PENDING = "Amount pending — see Stripe"
 
 # How many recent activity rows to inline in the staff heads-up email.
 _ACTIVITY_LIMIT = 5
+
+# URL-bearing context keys the shared context builders produce for the
+# Slack posts. They never enter a durable ``EmailDelivery`` context
+# (issue #1613): the worker resolver
+# (``email_app.hooks.resolve_auth_mail_context``) mints them at delivery
+# time from the stored scalar inputs (user ids, raw Stripe ids and the
+# dashboard account id).
+_DURABLE_CONTEXT_URL_KEYS = frozenset({
+    "studio_user_url",
+    "studio_occurrence_url",
+    "stripe_customer_url",
+    "stripe_payment_url",
+    "stripe_subscription_url",
+})
+
+
+def _durable_email_context(ctx):
+    """Strip the URL-bearing keys so the durable context passes the #1613 guard.
+
+    The shared context keeps every URL field because the Slack posts render
+    them; only the durable email copy drops them. The worker resolver
+    rebuilds identical values at delivery time.
+    """
+    return {
+        key: value
+        for key, value in ctx.items()
+        if key not in _DURABLE_CONTEXT_URL_KEYS
+    }
 
 
 def notify_paid_signup(
@@ -147,7 +185,7 @@ def notify_paid_signup(
             bcc=staff_email or None,
         )
     except Exception:
-        # Broad catch by design: any failure inside EmailService /
+        # Broad catch by design: any failure inside the package mail send /
         # template rendering / SES must not block the staff heads-up or
         # bubble out to the webhook caller. The user has already paid.
         logger.exception(
@@ -331,22 +369,26 @@ def _build_maven_enrollment_context(
         "tier_name": tier.name,
         "tier_slug": tier.slug,
         "entitlement_expiry": entitlement_expiry.isoformat(),
+        "occurrence_id": str(occurrence_id),
         "studio_user_url": f"{base_url}/studio/users/{user.pk}/",
         "studio_occurrence_url": f"{base_url}/studio/maven-events/{occurrence_id}/",
     }
 
 
 def _send_staff_maven_enrollment_notification(staff_email, ctx):
-    from email_app.services import EmailService
+    """Queue the durable Maven enrollment heads-up to the staff mailbox.
 
-    staff_recipient = SimpleNamespace(
-        email=staff_email,
-        first_name="",
-        email_verified=True,
-        unsubscribed=False,
-        pk=0,
+    The staff mailbox is an internal pipe with no ``User`` row: the
+    delivery goes out with no recipient user (so the worker writes no
+    ``EmailLog`` audit row, as before) and a scalar-only stored context —
+    the worker resolver mints the two Studio links at delivery time.
+    """
+    send_package_mail(
+        None,
+        "maven_enrollment_notification",
+        _durable_email_context(ctx),
+        recipient_email=staff_email,
     )
-    EmailService().send(staff_recipient, "maven_enrollment_notification", ctx)
 
 
 def _post_slack_maven_enrollment_notification(channel_id, ctx):
@@ -408,17 +450,17 @@ def _build_removal_context(user, cohort, course, email):
 
 
 def _send_staff_removal_notification(staff_email, ctx):
-    """Send the structured internal removal email to staff."""
-    from email_app.services import EmailService
+    """Queue the durable internal removal email to the staff mailbox.
 
-    staff_recipient = SimpleNamespace(
-        email=staff_email,
-        first_name="",
-        email_verified=True,
-        unsubscribed=False,
-        pk=0,
+    Same surrogate-staff semantics as the other heads-ups: no ``User``
+    row, no ``EmailLog`` audit row, scalar-only stored context.
+    """
+    send_package_mail(
+        None,
+        "maven_cohort_removal_notification",
+        _durable_email_context(ctx),
+        recipient_email=staff_email,
     )
-    EmailService().send(staff_recipient, "maven_cohort_removal_notification", ctx)
 
 
 def _post_slack_removal_notification(channel_id, ctx):
@@ -590,22 +632,19 @@ def _build_slack_join_context(user):
 
 
 def _send_slack_join_notification(staff_email, ctx):
-    """Send the structured internal Slack-join email to staff.
+    """Queue the durable internal Slack-join email to the staff mailbox.
 
-    Uses the same ``SimpleNamespace`` staff-recipient surrogate as
-    ``_send_staff_signup_notification`` (the staff mailbox is an internal
-    pipe, not a real ``User`` row).
+    Same surrogate-staff semantics as ``_send_staff_signup_notification``
+    (the staff mailbox is an internal pipe, not a real ``User`` row). The
+    stored context keeps the scalars; the worker resolver mints the Studio
+    profile link at delivery time.
     """
-    from email_app.services import EmailService
-
-    staff_recipient = SimpleNamespace(
-        email=staff_email,
-        first_name="",
-        email_verified=True,
-        unsubscribed=False,
-        pk=0,
+    send_package_mail(
+        None,
+        "slack_join_notification",
+        _durable_email_context(ctx),
+        recipient_email=staff_email,
     )
-    EmailService().send(staff_recipient, "slack_join_notification", ctx)
 
 
 def _post_slack_join_notification(channel_id, ctx):
@@ -764,6 +803,9 @@ def _build_signup_context(
         "paid_user_email": user.email,
         "paid_user_first_name": _or_dash(user.first_name),
         "first_name_raw": user.first_name or "",
+        # Subject member id: the worker resolver re-mints
+        # ``studio_user_url`` from it at delivery time (issue #1613).
+        "user_id": user.pk,
         # Tier
         "tier_slug": tier_slug or _DASH,
         "tier_name": tier_name or _DASH,
@@ -835,7 +877,8 @@ def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False, bcc=None):
     welcome is addressed visibly only to the member; when configured, staff
     gets one hidden BCC copy of that exact welcome. The separate structured
     internal heads-up email and Slack post still run independently. The
-    EmailLog write is unchanged.
+    ``EmailLog`` audit row is written from the durable worker after the
+    provider accepts the message, exactly as the synchronous path wrote it.
 
     Issue #976: when ``is_returning`` is ``True`` (a churned member is
     re-subscribing) the member receives the shared ``welcome_back``
@@ -843,8 +886,6 @@ def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False, bcc=None):
     a "welcome back" message rather than a first-time onboarding email.
     Defaults ``False`` so existing callers keep the tier welcome.
     """
-    from email_app.services import EmailService
-
     if is_returning:
         template_slug = "welcome_back"
     else:
@@ -853,34 +894,23 @@ def _send_cofounder_welcome(user, tier, ctx, *, is_returning=False, bcc=None):
         "user_first_name": ctx["first_name_raw"],
         "current_sprint_status_paragraph": _current_sprint_paragraph(),
     }
-    EmailService().send(user, template_slug, welcome_ctx, bcc=bcc)
+    send_package_mail(user, template_slug, welcome_ctx, bcc=bcc)
 
 
 def _send_staff_signup_notification(staff_email, ctx):
-    """Send (B1) — the structured internal email to staff.
+    """Queue (B1) — the structured internal email to staff.
 
-    Uses a ``SimpleNamespace`` recipient surrogate because
-    ``EmailService.send`` needs a user-shaped object for personalisation
-    defaults (``user.email``, ``user.first_name``, ``user.unsubscribed``,
-    ``user.email_verified``). The staff mailbox is an internal pipe, not
-    a real ``User`` row — we don't want to create a fake DB row, and the
-    refactor of ``EmailService.send`` to drop the user requirement is
-    out of scope for this issue.
+    Same surrogate-staff semantics as the other heads-ups: no ``User``
+    row, no ``EmailLog`` audit row, scalar-only stored context — the
+    worker resolver mints the Studio and Stripe dashboard links at
+    delivery time from the stored ids.
     """
-    from email_app.services import EmailService
-
-    staff_recipient = SimpleNamespace(
-        email=staff_email,
-        first_name="",
-        email_verified=True,
-        unsubscribed=False,
-        # ``pk`` is touched by the unsubscribe URL builder when sending
-        # promotional mail. This template is transactional so that path
-        # is unreachable, but the attribute being present keeps the
-        # surrogate compatible with any future helper that reads it.
-        pk=0,
+    send_package_mail(
+        None,
+        "staff_signup_notification",
+        _durable_email_context(ctx),
+        recipient_email=staff_email,
     )
-    EmailService().send(staff_recipient, "staff_signup_notification", ctx)
 
 
 def _post_slack_signup_notification(channel_id, ctx):

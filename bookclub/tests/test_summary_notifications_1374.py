@@ -13,6 +13,7 @@ Dates derive from ``timezone`` helpers so nothing date-rots.
 import json
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
@@ -27,6 +28,7 @@ from bookclub.summary_notifications import (
     notify_summary_published,
 )
 from content.access import LEVEL_MAIN
+from email_app.testing import StubSESClient, deliver_pending_mail
 from notifications.models import Notification
 from payments.models import Tier
 from tests.fixtures import set_membership
@@ -339,18 +341,14 @@ class EmailAudienceTest(SummaryNotificationsFixture):
         self.member.email_verified = True
         self.member.save(update_fields=['email_verified'])
         # member2 stays unverified -> no email.
-        with patch(
-            'email_app.services.email_service.EmailService.send',
-        ) as mock_send:
-            mock_send.return_value = object()  # non-None -> counted as sent
-            notify_summary_published(self.ch0)
-        sent_emails = {
-            call.args[0].email for call in mock_send.call_args_list
-        }
-        self.assertEqual(sent_emails, {'main@test.com'})
-        # The email used the chapter template.
-        templates = {call.args[1] for call in mock_send.call_args_list}
-        self.assertEqual(templates, {'bookclub_chapter_summary'})
+        notify_summary_published(self.ch0)
+        deliveries = EmailDelivery.objects.filter(
+            purpose='bookclub_chapter_summary',
+        )
+        self.assertEqual(
+            set(deliveries.values_list('recipient_email', flat=True)),
+            {'main@test.com'},
+        )
 
     def test_studio_publish_excludes_acting_staff_from_email(self):
         # Staff is tier-eligible + verified; the Studio path must not email them.
@@ -359,14 +357,14 @@ class EmailAudienceTest(SummaryNotificationsFixture):
         self.member.email_verified = True
         self.member.save(update_fields=['email_verified'])
         self.client.force_login(self.staff)
-        with patch(
-            'email_app.services.email_service.EmailService.send',
-        ) as mock_send:
-            mock_send.return_value = object()
-            self._studio_edit_chapter(
-                self.ch0, summary='Body.', publish=True,
-            )
-        recipients = {call.args[0].email for call in mock_send.call_args_list}
+        self._studio_edit_chapter(
+            self.ch0, summary='Body.', publish=True,
+        )
+        recipients = set(
+            EmailDelivery.objects.filter(
+                purpose='bookclub_chapter_summary',
+            ).values_list('recipient_email', flat=True)
+        )
         self.assertNotIn('staff@test.com', recipients)
         self.assertIn('main@test.com', recipients)
 
@@ -379,7 +377,7 @@ class BestEffortContractTest(SummaryNotificationsFixture):
         self.member.save(update_fields=['email_verified'])
 
         with patch(
-            'email_app.services.email_service.EmailService.send',
+            'bookclub.summary_notifications.send_package_mail',
             side_effect=RuntimeError('SES down'),
         ):
             resp = self._api_patch(
@@ -407,3 +405,104 @@ class BestEffortContractTest(SummaryNotificationsFixture):
         self.assertEqual(resp.status_code, 200)
         self.book.refresh_from_db()
         self.assertIsNotNone(self.book.summary_published_at)
+
+
+@tag("core")
+class WorkerDeliveryContextTest(SummaryNotificationsFixture):
+    """A1.2 slice 1: the worker rebuilds the summary email context.
+
+    The producer persists only the ``Book``/``Chapter`` relation on the
+    durable delivery (#1613); the URL-bearing excerpt never touches the
+    row. These tests drain pending deliveries through the real worker
+    resolver (``email_app.hooks._resolve_bookclub_summary_context``) and
+    assert the provider-visible email still carries the exact context the
+    old synchronous send rendered.
+    """
+
+    def _verified(self, *users):
+        for user in users:
+            user.email_verified = True
+            user.save(update_fields=['email_verified'])
+
+    def _drain(self):
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+        return stub
+
+    def _published_deliveries(self, purpose):
+        return EmailDelivery.objects.filter(purpose=purpose)
+
+    def test_chapter_summary_email_context_is_rebuilt_by_the_worker(self):
+        self.ch0.summary = 'A tight recap of chapter zero.'
+        self.ch0.save(update_fields=['summary'])
+        self._verified(self.member, self.member2)
+
+        notify_summary_published(self.ch0, acting_user=self.staff)
+
+        deliveries = self._published_deliveries('bookclub_chapter_summary')
+        self.assertEqual(
+            set(deliveries.values_list('recipient_email', flat=True)),
+            {'main@test.com', 'main2@test.com'},
+        )
+        # Durable rows carry the relation, never the rendered context.
+        for delivery in deliveries:
+            self.assertEqual(delivery.related_object_type, 'bookclub.chapter')
+            self.assertEqual(str(delivery.related_object_id), str(self.ch0.pk))
+            self.assertNotIn('summary_url', delivery.context_data)
+            self.assertNotIn('book_title', delivery.context_data)
+
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 2)
+        by_recipient = {
+            call['Destination']['ToAddresses'][0]: call for call in stub.calls
+        }
+        call = by_recipient['main@test.com']
+        self.assertIn(
+            'New chapter summary in Inference Engineering',
+            call['Content']['Simple']['Subject']['Data'],
+        )
+        html = call['Content']['Simple']['Body']['Html']['Data']
+        self.assertIn('Inference Engineering', html)
+        self.assertIn('Chapter 0', html)
+        self.assertIn('A tight recap of chapter zero.', html)
+        self.assertIn(
+            f'/books/inference-engineering/chapters/{self.ch0.number}#summary',
+            html,
+        )
+
+    def test_book_summary_email_context_is_rebuilt_by_the_worker(self):
+        self.book.summary = 'The whole-book takeaway, in one paragraph.'
+        self.book.save(update_fields=['summary'])
+        self._verified(self.member, self.member2)
+
+        notify_summary_published(self.book, acting_user=self.staff)
+
+        deliveries = self._published_deliveries('bookclub_book_summary')
+        self.assertEqual(
+            set(deliveries.values_list('recipient_email', flat=True)),
+            {'main@test.com', 'main2@test.com'},
+        )
+        for delivery in deliveries:
+            self.assertEqual(delivery.related_object_type, 'bookclub.book')
+            self.assertEqual(str(delivery.related_object_id), str(self.book.pk))
+            self.assertNotIn('summary_url', delivery.context_data)
+
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 2)
+        by_recipient = {
+            call['Destination']['ToAddresses'][0]: call for call in stub.calls
+        }
+        html = by_recipient['main@test.com'][
+            'Content']['Simple']['Body']['Html']['Data']
+        self.assertIn('Inference Engineering', html)
+        self.assertIn('The whole-book takeaway, in one paragraph.', html)
+        # The book summary page is itself the summary — no #summary anchor
+        # exists on it, so the link carries no fragment (unlike chapters).
+        self.assertIn(
+            'https://aishippinglabs.com/books/inference-engineering/summary',
+            html,
+        )

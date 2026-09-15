@@ -5,6 +5,12 @@ broadcast when an organizer publishes a chapter or full-book summary. It
 reuses the existing notification framework end to end — no new channel
 plumbing.
 
+A1.2 slice 1: the email fan-out goes through the durable package delivery
+(``email_app.package_mail.send_package_mail``). Because a summary excerpt
+may carry links, the durable row stores only the ``Book``/``Chapter``
+relation and the worker resolver (``email_app.hooks``) rebuilds the email
+context at delivery time (issue #1613).
+
 The single entry point :func:`notify_summary_published` is called from BOTH
 publish surfaces (Studio ``studio/views/books.py`` and the admin API
 ``api/views/books.py``) via the shared transition predicate
@@ -23,6 +29,7 @@ point in try/except + ``logger.exception`` for defence in depth.
 
 import logging
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.urls import reverse
 
@@ -33,7 +40,7 @@ from bookclub.models import (
     Chapter,
 )
 from bookclub.summaries import summary_excerpt
-from email_app.services.email_service import EmailService
+from email_app.package_mail import send_package_mail
 from integrations.config import site_base_url
 from notifications.models import Notification
 from notifications.services.notification_service import _get_eligible_users
@@ -70,9 +77,13 @@ def is_new_publish(old_published_at, new_published_at):
 def _summary_payload(obj):
     """Return the notification payload for a ``Book`` or ``Chapter`` publish.
 
-    Returns a dict with ``book``, ``title``, ``body``, ``url`` (relative),
-    ``full_url``, ``email_template``, and ``email_context``. Copy is plain
-    text (no markdown), matching issue #1374.
+    Returns a dict with ``book``, ``related`` (the published object),
+    ``title``, ``body``, ``url`` (relative), ``full_url``, and
+    ``email_template``. Copy is plain text (no markdown), matching issue
+    #1374. The email itself persists only the ``related`` relation
+    (``send_package_mail(related=...)``): a summary excerpt may carry
+    links, so the durable delivery stores no rendered context and the
+    worker resolver rebuilds the email context at delivery time (#1613).
     """
     if isinstance(obj, Chapter):
         chapter = obj
@@ -87,13 +98,6 @@ def _summary_payload(obj):
         ) + '#summary'
         full_url = f'{site_base_url()}{url}'
         email_template = 'bookclub_chapter_summary'
-        email_context = {
-            'book_title': book.title,
-            'chapter_number': chapter.number,
-            'chapter_title': chapter.title,
-            'summary_line': body,
-            'summary_url': full_url,
-        }
     else:
         book = obj
         title = f'Book summary published: {book.title}'
@@ -103,19 +107,14 @@ def _summary_payload(obj):
         url = reverse('bookclub_book_summary', kwargs={'slug': book.slug})
         full_url = f'{site_base_url()}{url}'
         email_template = 'bookclub_book_summary'
-        email_context = {
-            'book_title': book.title,
-            'summary_line': body,
-            'summary_url': full_url,
-        }
     return {
         'book': book,
+        'related': obj,
         'title': title,
         'body': body,
         'url': url,
         'full_url': full_url,
         'email_template': email_template,
-        'email_context': email_context,
     }
 
 
@@ -156,25 +155,28 @@ def _email_eligible_users(required_level, *, exclude_user=None):
 def _send_summary_emails(payload, required_level, *, exclude_user=None):
     """Fan out the summary email; return the success count (best-effort).
 
-    Per-recipient try/except so one bad address never blocks the rest of the
-    fan-out (mirrors ``_send_email_channel``).
+    A1.2 slice 1: each send goes through the durable package delivery with
+    the published object attached as its relation; the worker resolver
+    rebuilds the email context at delivery time (#1613). Per-recipient
+    try/except so one bad address never blocks the rest of the fan-out
+    (mirrors ``_send_email_channel``).
     """
-    service = EmailService()
     template = payload['email_template']
-    context = payload['email_context']
     sent = 0
     for user in _email_eligible_users(required_level, exclude_user=exclude_user):
         try:
-            log = service.send(user, template, context)
+            delivery = send_package_mail(
+                user, template, {}, related=payload['related'],
+            )
         except Exception:
             logger.warning(
                 'Failed to send "%s" email to %s',
                 template, user.email, exc_info=True,
             )
             continue
-        # EmailService.send returns None for skipped recipients (e.g. a
-        # globally unsubscribed user for promotional mail).
-        if log is not None:
+        # A suppressed delivery is the preference resolver opting the
+        # recipient out; every other state is queued for the durable worker.
+        if delivery.state != EmailDelivery.State.SUPPRESSED:
             sent += 1
     return sent
 

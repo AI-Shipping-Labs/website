@@ -23,6 +23,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments import services as payment_services
 from payments.exceptions import WebhookPermanentError
 from payments.models import (
@@ -660,9 +661,9 @@ class TierWelcomeEmailRoutingTest(QuietSubscriptionLookupMixin, TestCase):
     """Issue #847: each paid tier routes to its own welcome EmailLog.
 
     Drives the real ``handle_checkout_completed`` -> ``notify_paid_signup``
-    -> ``EmailService`` path (SES short-circuited in test settings) and
-    asserts the EmailLog row written carries the tier-specific slug, with
-    zero rows for the other two tiers.
+    -> package mail path (SES stubbed by the test runner) and asserts the
+    EmailLog row the delivery worker writes carries the tier-specific
+    slug, with zero rows for the other two tiers.
     """
 
     WELCOME_SLUGS = ("basic_welcome", "cofounder_welcome", "premium_welcome")
@@ -688,6 +689,8 @@ class TierWelcomeEmailRoutingTest(QuietSubscriptionLookupMixin, TestCase):
             handle_checkout_completed(
                 self._tier_session(user, tier_slug=tier_slug),
             )
+        # The welcome EmailLog row lands from the delivery worker.
+        deliver_pending_mail()
 
         # Exactly one welcome of the expected slug for this user.
         self.assertEqual(
@@ -745,6 +748,7 @@ class TierWelcomeEmailRoutingTest(QuietSubscriptionLookupMixin, TestCase):
             handle_checkout_completed(
                 self._tier_session(user, tier_slug="basic"),
             )
+        deliver_pending_mail()
 
         self.assertEqual(
             EmailLog.objects.filter(
@@ -759,6 +763,8 @@ class TierWelcomeEmailRoutingTest(QuietSubscriptionLookupMixin, TestCase):
 
         user = User.objects.create_user(email="free847@test.com")
         handle_checkout_completed(self._tier_session(user, tier_slug="free"))
+        # Drain so a leaked welcome would surface as an EmailLog row.
+        deliver_pending_mail()
 
         for slug in self.WELCOME_SLUGS:
             self.assertEqual(
@@ -833,13 +839,16 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
         # Main tier (level >= 10) triggers notify_paid_signup ->
         # cofounder_welcome. Run the real handler so email_verified is
         # flipped before any send happens.
+        stub_client = StubSESClient()
         with patch(
-            "email_app.services.email_service.EmailService._send_ses",
-            return_value="ses-msg-id",
-        ) as mock_send_ses:
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub_client,
+        ):
             handle_checkout_completed(
                 self._tier_session(user, tier_slug="main"),
             )
+            # The welcome is sent by the durable delivery worker.
+            deliver_pending_mail()
 
         user.refresh_from_db()
         self.assertTrue(user.email_verified)
@@ -851,18 +860,14 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
             )
         )
 
-        # The cofounder_welcome HTML actually sent via SES carries no
-        # verify-email CTA / link.
-        welcome_calls = [
-            call.args for call in mock_send_ses.call_args_list
-        ]
-        self.assertTrue(welcome_calls, "no email was sent via SES")
-        # The cofounder_welcome is sent to the payer's own address.
-        welcome_html = next(
-            (args[2] or "")
-            for args in welcome_calls
-            if args[0] == "mainpayer@test.com"
+        # The cofounder_welcome HTML actually pushed through SES carries
+        # no verify-email CTA / link.
+        welcome_kwargs = next(
+            kwargs
+            for kwargs in stub_client.calls
+            if kwargs["Destination"]["ToAddresses"] == ["mainpayer@test.com"]
         )
+        welcome_html = welcome_kwargs["Content"]["Simple"]["Body"]["Html"]["Data"]
         # Sanity: this is the welcome body, not an empty/other email.
         self.assertIn("Welcome to the community", welcome_html)
         # The verify-email CTA / link must be absent.

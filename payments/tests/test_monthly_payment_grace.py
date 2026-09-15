@@ -19,7 +19,7 @@ in ``playwright_tests/test_monthly_payment_grace_1413.py``):
 
 from datetime import datetime, timedelta
 from datetime import timezone as dt_timezone
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from community_base.config.service import set as package_set
 from community_base.mail.models import EmailDelivery
@@ -1185,3 +1185,202 @@ class QaRegressionAndScenarioTest(GraceBase):
                 now=now + service.CLAIM_TIMEOUT + timedelta(hours=1),
             )
         send.assert_not_called()
+
+
+class SuppressedDeliveryTest(GraceBase):
+    """Issue #1653: preference-suppressed grace sends are terminal.
+
+    The real site resolver never suppresses grace mail today (all four
+    purposes are transactional), so these tests fake suppression at the two
+    seams this issue owns: the ``send_package_mail`` return value for the
+    pure mapping units, and the package preference-resolver hook
+    (``community_base.mail.service.get``) for the end-to-end durable-row
+    flow that a widened resolver would produce.
+    """
+
+    @staticmethod
+    def _suppressed_result(delivery, reason="unsubscribed_at_send"):
+        """Durable suppressed row exactly as the package ``send`` returns."""
+        return EmailDelivery.objects.create(
+            idempotency_key=service._grace_idempotency_key(delivery),
+            purpose=f"payment_grace_{delivery.kind}",
+            template_key=f"payment_grace_{delivery.kind}",
+            recipient_email=delivery.recipient,
+            recipient_user=delivery.grace.user,
+            context_hash="0" * 64,
+            state=EmailDelivery.State.SUPPRESSED,
+            reason_code=reason,
+        )
+
+    def test_suppressed_is_a_status_choice_with_label(self):
+        self.assertEqual(Delivery.STATUS_SUPPRESSED, "suppressed")
+        self.assertIn(
+            (Delivery.STATUS_SUPPRESSED, "Suppressed"), Delivery.STATUS_CHOICES,
+        )
+        row = Delivery.objects.create(
+            grace=self.create_grace(),
+            kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient="member@example.com",
+            status=Delivery.STATUS_SUPPRESSED,
+        )
+        self.assertEqual(row.get_status_display(), "Suppressed")
+
+    def test_suppressed_send_maps_to_terminal_suppressed(self):
+        grace = self.create_grace()
+        delivery = Delivery.objects.create(
+            grace=grace, kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient=grace.user.email,
+        )
+        suppressed = self._suppressed_result(delivery)
+        with patch.object(
+            service, "send_package_mail", return_value=suppressed,
+        ) as send:
+            service.process_due_deliveries()
+        self.assertEqual(send.call_count, 1)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.status, Delivery.STATUS_SUPPRESSED)
+        self.assertIsNone(delivery.sent_at)
+        self.assertIsNone(delivery.transport_started_at)
+        self.assertIsNone(delivery.claim_token)
+        self.assertIsNone(delivery.claimed_at)
+        self.assertEqual(delivery.attempt_count, 1)
+        self.assertEqual(delivery.email_delivery_id, suppressed.pk)
+        self.assertIn("unsubscribed_at_send", delivery.last_error)
+        self.assertIn("no SES send was attempted", delivery.last_error)
+        self.assertIn("not retried", delivery.last_error)
+
+    def test_suppressed_delivery_is_never_reclaimed_or_resent(self):
+        grace = self.create_grace()
+        delivery = Delivery.objects.create(
+            grace=grace, kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient=grace.user.email,
+        )
+        suppressed = self._suppressed_result(delivery)
+        with patch.object(service, "send_package_mail", return_value=suppressed):
+            service.process_due_deliveries()
+        delivery.refresh_from_db()
+        frozen_attempts = delivery.attempt_count
+        frozen_last_attempt = delivery.last_attempt_at
+        later = timezone.now() + timedelta(hours=2)
+        self.assertIsNone(service._claim_delivery(delivery.pk, later))
+        with patch.object(service, "send_package_mail") as resend:
+            service.process_due_deliveries(now=later)
+            service.process_due_deliveries(
+                now=later + service.CLAIM_TIMEOUT + timedelta(minutes=1),
+            )
+        resend.assert_not_called()
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.status, Delivery.STATUS_SUPPRESSED)
+        self.assertEqual(delivery.attempt_count, frozen_attempts)
+        self.assertEqual(delivery.last_attempt_at, frozen_last_attempt)
+        self.assertEqual(delivery.email_delivery_id, suppressed.pk)
+
+    def test_inflight_failed_delivery_becomes_suppressed_at_next_attempt(self):
+        grace = self.create_grace()
+        now = timezone.now()
+        delivery = Delivery.objects.create(
+            grace=grace, kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient=grace.user.email,
+            status=Delivery.STATUS_FAILED,
+            attempt_count=2,
+            last_attempt_at=now - timedelta(hours=3),
+            last_error="Email transport failed (ConnectionError)",
+        )
+        suppressed = self._suppressed_result(delivery)
+        with patch.object(service, "send_package_mail", return_value=suppressed):
+            service.process_due_deliveries(now=now)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.status, Delivery.STATUS_SUPPRESSED)
+        self.assertEqual(delivery.attempt_count, 3)
+        self.assertIn("unsubscribed_at_send", delivery.last_error)
+        self.assertNotIn("ConnectionError", delivery.last_error)
+        self.assertIsNone(delivery.transport_started_at)
+
+    def test_package_suppressed_result_links_durable_row_with_reason_code(self):
+        grace = self.create_grace()
+        delivery = Delivery.objects.create(
+            grace=grace, kind=Delivery.KIND_FAILURE_MEMBER,
+            recipient=grace.user.email,
+        )
+
+        def suppress(**kwargs):
+            return "unsubscribed_at_send"
+
+        with patch("community_base.mail.service.get", return_value=suppress):
+            service.process_due_deliveries()
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.status, Delivery.STATUS_SUPPRESSED)
+        self.assertIsNotNone(delivery.email_delivery)
+        self.assertEqual(
+            delivery.email_delivery.state, EmailDelivery.State.SUPPRESSED,
+        )
+        self.assertEqual(
+            delivery.email_delivery.reason_code, "unsubscribed_at_send",
+        )
+        # Suppression happens before any transport, so no worker ran and no
+        # audit row exists.
+        self.assertEqual(EmailLog.objects.count(), 0)
+        self.assertIsNone(delivery.sent_at)
+
+    @override_settings(STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce")
+    def test_resubscribe_never_revives_suppression_and_fresh_kind_reopens(self):
+        user = self.make_user()
+        user.unsubscribed = True
+        user.save(update_fields=["unsubscribed"])
+
+        def suppress(**kwargs):
+            return "unsubscribed_at_send"
+
+        with (
+            patch.object(service, "_audit"),
+            patch("community_base.mail.service.get", return_value=suppress),
+        ):
+            grace, qualification = service.start_grace_from_failure(
+                invoice=invoice(), subscription=subscription(),
+                event_id="evt_suppressed", event_created=1_723_459_600,
+                livemode=False,
+            )
+        self.assertTrue(qualification.eligible)
+        initial = list(grace.deliveries.all())
+        self.assertEqual(len(initial), 2)
+        self.assertEqual(
+            {row.status for row in initial}, {Delivery.STATUS_SUPPRESSED},
+        )
+        frozen_attempts = {row.pk: row.attempt_count for row in initial}
+
+        # The member re-subscribes mid-grace; terminal stays terminal even
+        # though the preference now allows the mail again.
+        user.unsubscribed = False
+        user.save(update_fields=["unsubscribed"])
+        real_send = service.send_package_mail
+        send_spy = Mock(wraps=real_send)
+        reminder_time = grace.effective_expires_at - timedelta(hours=48)
+        with (
+            patch.object(
+                service, "_revalidate",
+                return_value=(subscription(), invoice(), "ok", ""),
+            ),
+            patch.object(service, "_audit"),
+            patch.object(service, "send_package_mail", send_spy),
+        ):
+            service.sweep_payment_graces(now=reminder_time)
+        # Only the freshly created reminder kind was sent; the suppressed
+        # rows were never re-claimed.
+        self.assertEqual(
+            [call.args[1] for call in send_spy.call_args_list],
+            ["payment_grace_reminder_member"],
+        )
+        reminder = grace.deliveries.get(kind=Delivery.KIND_REMINDER_MEMBER)
+        self.assertEqual(reminder.status, Delivery.STATUS_SENT)
+        self.assertIsNotNone(reminder.email_delivery)
+        for row in initial:
+            row.refresh_from_db()
+            self.assertEqual(row.status, Delivery.STATUS_SUPPRESSED)
+            self.assertEqual(row.attempt_count, frozen_attempts[row.pk])
+            self.assertEqual(row.email_delivery.reason_code, "unsubscribed_at_send")
+        self.assertEqual(
+            EmailDelivery.objects.filter(
+                purpose__startswith="payment_grace_failure_",
+            ).count(),
+            2,
+        )

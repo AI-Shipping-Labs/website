@@ -737,7 +737,12 @@ def _claim_delivery(delivery_id, now):
         delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
             "grace__user__membership__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
-        if delivery.status == Delivery.STATUS_SENT or delivery.attempt_count >= MAX_DELIVERY_ATTEMPTS:
+        if (
+            delivery.status in {Delivery.STATUS_SENT, Delivery.STATUS_SUPPRESSED}
+            or delivery.attempt_count >= MAX_DELIVERY_ATTEMPTS
+        ):
+            # Issue #1653: ``suppressed`` is terminal exactly like ``sent`` —
+            # no re-claim, no backoff scheduling, attempt_count frozen.
             return None
         if delivery.transport_started_at:
             # Once transport starts, automatic reclaim would permit two SES
@@ -785,7 +790,7 @@ def _begin_delivery_transport(delivery_id, token, now):
             "grace__user__membership__tier", "grace__base_tier_at_start",
         ).get(pk=delivery_id)
         if (
-            delivery.status == Delivery.STATUS_SENT
+            delivery.status in {Delivery.STATUS_SENT, Delivery.STATUS_SUPPRESSED}
             or delivery.claim_token != token
             or delivery.transport_started_at is not None
         ):
@@ -861,15 +866,17 @@ def _grace_idempotency_key(delivery):
 def _send_delivery(delivery):
     """Queue one grace mail through the durable package delivery.
 
-    The grace is attached as the worker resolver's relation. A suppressed
-    delivery returns ``None`` so the caller keeps the legacy observable
-    behaviour (suppression was retried as ``STATUS_FAILED``); a queued
-    delivery returns the durable row — ``sent`` means the durable
-    delivery exists, and the SES outcome plus the audit ``EmailLog`` row
-    land from the worker.
+    The grace is attached as the worker resolver's relation. The durable
+    ``EmailDelivery`` row is returned for every non-raising outcome —
+    including suppression (issue #1653): the caller maps a
+    ``State.SUPPRESSED`` result to the terminal non-retry
+    ``STATUS_SUPPRESSED`` and links the row so operators can trace the
+    package ``reason_code``. ``sent`` means the durable delivery exists,
+    and the SES outcome plus the audit ``EmailLog`` row land from the
+    worker.
     """
     template_name, context = _delivery_template(delivery)
-    result = send_package_mail(
+    return send_package_mail(
         delivery.grace.user,
         template_name,
         context,
@@ -877,14 +884,15 @@ def _send_delivery(delivery):
         idempotency_key=_grace_idempotency_key(delivery),
         related=delivery.grace,
     )
-    if result.state == EmailDelivery.State.SUPPRESSED:
-        return None
-    return result
 
 
 def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
     now = now or timezone.now()
-    qs = Delivery.objects.exclude(status=Delivery.STATUS_SENT)
+    # Issue #1653: terminal ``suppressed`` rows are excluded exactly like
+    # ``sent`` — no re-claim, no retry churn on opted-out mail.
+    qs = Delivery.objects.exclude(
+        status__in=[Delivery.STATUS_SENT, Delivery.STATUS_SUPPRESSED],
+    )
     if grace_ids is not None:
         qs = qs.filter(grace_id__in=grace_ids)
     if initial_only:
@@ -913,17 +921,34 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
                 continue
             current.claim_token = None
             current.claimed_at = None
-            current.last_error = error
-            if email_delivery is not None:
-                current.status = Delivery.STATUS_SENT
-                current.sent_at = timezone.now()
-                current.email_delivery = email_delivery
-            else:
-                current.status = Delivery.STATUS_FAILED
-                # A caught failure is known not to have succeeded and may be
-                # retried after backoff.  Only an interrupted/unknown outcome
-                # retains the transport fence above.
+            if (
+                email_delivery is not None
+                and email_delivery.state == EmailDelivery.State.SUPPRESSED
+            ):
+                # Issue #1653: suppression is discovered synchronously before
+                # any SES call, so there is no unknown transport outcome to
+                # protect — the fence is released and the row goes terminal:
+                # never retried, never re-claimed, ``sent_at`` stays null.
+                reason = email_delivery.reason_code or "preference_suppressed"
+                current.status = Delivery.STATUS_SUPPRESSED
                 current.transport_started_at = None
+                current.email_delivery = email_delivery
+                current.last_error = (
+                    f"Suppressed by mail preference ({reason}): no SES send "
+                    "was attempted and the delivery is not retried."
+                )
+            else:
+                current.last_error = error
+                if email_delivery is not None:
+                    current.status = Delivery.STATUS_SENT
+                    current.sent_at = timezone.now()
+                    current.email_delivery = email_delivery
+                else:
+                    current.status = Delivery.STATUS_FAILED
+                    # A caught failure is known not to have succeeded and may be
+                    # retried after backoff.  Only an interrupted/unknown outcome
+                    # retains the transport fence above.
+                    current.transport_started_at = None
             current.save(update_fields=[
                 "claim_token", "claimed_at", "transport_started_at",
                 "last_error", "status", "sent_at", "email_delivery",

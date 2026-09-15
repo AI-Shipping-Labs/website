@@ -1,3 +1,4 @@
+import re
 from datetime import timedelta
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from accounts.models import TierOverride, User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.models import Tier
+from studio.templatetags import studio_filters
 from tests.fixtures import set_membership
 
 
@@ -124,3 +126,53 @@ class PaymentGraceStudioTest(TestCase):
         self.assertIn("studio_status_badge delivery.status", report_source)
         self.assertIn("studio_status_badge grace.status", detail_source)
         self.assertIn("studio_status_badge delivery.status", detail_source)
+
+    def _status_badge_span(self, html, label):
+        """Return the studio-status-badge span rendering exactly ``label``."""
+        matches = re.findall(
+            r'<span[^>]*data-component="studio-status-badge"[^>]*>\s*'
+            + re.escape(label)
+            + r"\s*</span>",
+            html,
+        )
+        self.assertTrue(matches, f"no status badge rendering {label!r}")
+        return matches[0]
+
+    def test_suppressed_delivery_uses_grey_badge_distinct_from_failed(self):
+        # Issue #1653: suppression renders through the canonical grey-muted
+        # badge family (the `skipped` pair), never the red `failed` pair, on
+        # both the reconciliation report and the member detail page.
+        Delivery.objects.create(
+            grace=self.grace, kind=Delivery.KIND_REMINDER_MEMBER,
+            recipient=self.member.email, status=Delivery.STATUS_SUPPRESSED,
+            last_error=(
+                "Suppressed by mail preference (unsubscribed_at_send): "
+                "no SES send was attempted and the delivery is not retried."
+            ),
+        )
+        Delivery.objects.create(
+            grace=self.grace, kind=Delivery.KIND_EXPIRED_MEMBER,
+            recipient=self.member.email, status=Delivery.STATUS_FAILED,
+        )
+        badge_classes = studio_filters.STATUS_BADGE_CLASSES
+        suppressed_classes = badge_classes["suppressed"]
+        failed_classes = badge_classes["failed"]
+        self.assertEqual(suppressed_classes, badge_classes["skipped"])
+        self.assertNotEqual(suppressed_classes, failed_classes)
+        report = self.client.get(
+            reverse("studio_subscription_reconciliation"),
+            {"filter": "payment_grace"},
+        )
+        detail = self.client.get(
+            reverse("studio_user_detail", args=[self.member.pk]),
+        )
+        for response in (report, detail):
+            self.assertContains(response, "Suppressed")
+            self.assertContains(response, "Failed")
+            html = response.content.decode()
+            suppressed_badge = self._status_badge_span(html, "Suppressed")
+            self.assertIn(suppressed_classes, suppressed_badge)
+            self.assertNotIn(failed_classes, suppressed_badge)
+            failed_badge = self._status_badge_span(html, "Failed")
+            self.assertIn(failed_classes, failed_badge)
+            self.assertNotIn(suppressed_classes, failed_badge)

@@ -207,6 +207,72 @@ class MavenEnrollmentStepGrantTest(_MavenFixtureMixin, TestCase):
             CourseAccess.objects.filter(user=self.user, course=self.course).exists()
         )
 
+    def test_force_retry_recovers_skipped_enrollment_step(self):
+        # The #1659 step migration backfilled pre-existing occurrences with
+        # an enrollment_status of SKIPPED, and the five-minute scheduled
+        # recovery job targets pending/failed/running only. The force-retry
+        # path is how those rows get their grant once course.yaml declares
+        # the matching keys (website #1662 roster replay, checklist step 10).
+        occurrence = self._occurrence(
+            self.user, course_key="from-rag-to-agents", cohort_key="cohort-4",
+            key="skipped-recovery",
+            enrollment_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        )
+        result = retry_occurrence_step(occurrence, "enrollment")
+        self.assertEqual(result.outcome, MavenEnrollmentEvent.STEP_SUCCEEDED)
+        self.assertTrue(
+            CourseAccess.objects.filter(user=self.user, course=self.course).exists()
+        )
+        self.assertTrue(
+            CohortEnrollment.objects.filter(user=self.user, cohort=self.cohort).exists()
+        )
+
+    def test_force_retry_of_skipped_welcome_stays_not_retryable(self):
+        # Only the enrollment step may leave the skipped state under force:
+        # a preference-suppressed welcome must never re-send member-visible
+        # email.
+        occurrence = self._occurrence(
+            self.user, course_key="from-rag-to-agents", cohort_key="cohort-4",
+            key="skipped-welcome",
+            welcome_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        )
+        result = retry_occurrence_step(occurrence, "welcome")
+        self.assertEqual(result.reason, "not_retryable")
+        self.assertFalse(result.attempted)
+
+    def test_force_retry_recovers_skipped_enrollment_step(self):
+        # The #1659 step migration backfilled pre-existing occurrences with
+        # an enrollment_status of SKIPPED, and the five-minute scheduled
+        # recovery job targets pending/failed/running only. The force-retry
+        # path is how those rows get their grant once course.yaml declares
+        # the matching keys (website #1662 roster replay, checklist step 10).
+        occurrence = self._occurrence(
+            self.user, course_key="from-rag-to-agents", cohort_key="cohort-4",
+            key="skipped-recovery",
+            enrollment_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        )
+        result = retry_occurrence_step(occurrence, "enrollment")
+        self.assertEqual(result.outcome, MavenEnrollmentEvent.STEP_SUCCEEDED)
+        self.assertTrue(
+            CourseAccess.objects.filter(user=self.user, course=self.course).exists()
+        )
+        self.assertTrue(
+            CohortEnrollment.objects.filter(user=self.user, cohort=self.cohort).exists()
+        )
+
+    def test_force_retry_of_skipped_welcome_stays_not_retryable(self):
+        # Only the enrollment step may leave the skipped state under force:
+        # a preference-suppressed welcome must never re-send member-visible
+        # email.
+        occurrence = self._occurrence(
+            self.user, course_key="from-rag-to-agents", cohort_key="cohort-4",
+            key="skipped-welcome",
+            welcome_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        )
+        result = retry_occurrence_step(occurrence, "welcome")
+        self.assertEqual(result.reason, "not_retryable")
+        self.assertFalse(result.attempted)
+
     def test_scheduled_recovery_job_picks_up_pending_enrollment_step(self):
         # jobs.tasks.cleanup.retry_maven_enrollment_steps is the five-minute
         # scheduled recovery job; it must retry an incomplete ``enrollment``

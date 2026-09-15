@@ -728,7 +728,25 @@ def _run_step(pk, name, actions, *, force=False):
         )
         status = getattr(row, status_field)
         attempts = getattr(row, attempts_field)
-        if status in {row.STEP_SUCCEEDED, row.STEP_SKIPPED}:
+        if status == row.STEP_SUCCEEDED:
+            return MavenStepRetryResult(
+                step=name,
+                outcome=status,
+                attempted=False,
+                reason="not_retryable",
+            )
+        if status == row.STEP_SKIPPED and not (
+            force and name == "enrollment"
+        ):
+            # A skipped step is normally terminal: re-running a
+            # preference-suppressed welcome would re-send member-visible
+            # email, and a not-in-workspace slack re-lookup only repeats
+            # itself. The one recoverable case is an enrollment step that
+            # was skipped because course.yaml declared no matching
+            # maven_course_key / cohort key at the time: the grant is
+            # idempotent and member-invisible, and force-retrying it is the
+            # documented roster-replay path (website #1662 go-live
+            # checklist step 10; #1659 promised retryability).
             return MavenStepRetryResult(
                 step=name,
                 outcome=status,

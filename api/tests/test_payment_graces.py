@@ -86,6 +86,53 @@ class PaymentGraceApiTest(TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["details"]["field"], "status")
 
+    def test_delivery_status_suppressed_filter_matches_terminal_rows(self):
+        # Issue #1653: the filter enum gains the terminal `suppressed` status.
+        Delivery.objects.create(
+            grace=self.grace, kind=Delivery.KIND_REMINDER_MEMBER,
+            recipient=self.member.email, status=Delivery.STATUS_SUPPRESSED,
+            last_error=(
+                "Suppressed by mail preference (unsubscribed_at_send): "
+                "no SES send was attempted and the delivery is not retried."
+            ),
+        )
+        response = self.client.get(
+            "/api/payments/payment-graces?delivery_status=suppressed",
+            **self.auth(),
+        )
+        payload = response.json()
+        self.assertEqual(payload["count"], 1)
+        statuses = [
+            delivery["status"]
+            for delivery in payload["payment_graces"][0]["deliveries"]
+        ]
+        self.assertIn("suppressed", statuses)
+        suppressed_row = next(
+            delivery
+            for delivery in payload["payment_graces"][0]["deliveries"]
+            if delivery["status"] == "suppressed"
+        )
+        self.assertIn("unsubscribed_at_send", suppressed_row["last_error"])
+
+    def test_delivery_status_failed_filter_does_not_match_suppressed(self):
+        Delivery.objects.create(
+            grace=self.grace, kind=Delivery.KIND_REMINDER_MEMBER,
+            recipient=self.member.email, status=Delivery.STATUS_SUPPRESSED,
+        )
+        response = self.client.get(
+            "/api/payments/payment-graces?delivery_status=failed",
+            **self.auth(),
+        )
+        self.assertEqual(response.json()["count"], 0)
+
+    def test_unknown_delivery_status_still_returns_422(self):
+        response = self.client.get(
+            "/api/payments/payment-graces?delivery_status=bogus",
+            **self.auth(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["details"]["field"], "delivery_status")
+
     def test_nonstaff_token_is_401(self):
         # Token rows cannot normally be created for non-staff; use the
         # compatibility bulk path to prove the decorator's fail-closed gate.

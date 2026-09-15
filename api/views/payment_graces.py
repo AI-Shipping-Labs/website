@@ -14,7 +14,7 @@ from payments.services.monthly_payment_grace import _effective_tier
 VALID_STATUS = {value for value, _ in Grace.STATUS_CHOICES}
 VALID_SOURCE = {value for value, _ in Grace.SOURCE_CHOICES}
 VALID_TIERS = {"free", "basic", "main", "premium"}
-VALID_DELIVERY_STATUS = {"pending", "sent", "failed"}
+VALID_DELIVERY_STATUS = {"pending", "sent", "failed", "suppressed"}
 PAGE_SIZE = 100
 
 

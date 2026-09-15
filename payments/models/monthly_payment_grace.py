@@ -122,10 +122,15 @@ class MonthlyPaymentGraceDelivery(models.Model):
     STATUS_PENDING = "pending"
     STATUS_SENT = "sent"
     STATUS_FAILED = "failed"
+    # Issue #1653: terminal non-retry outcome for a preference-suppressed
+    # send (``EmailDelivery.State.SUPPRESSED``) — the mail was not sent and
+    # is never retried, but it is not a transport fault either.
+    STATUS_SUPPRESSED = "suppressed"
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending"),
         (STATUS_SENT, "Sent"),
         (STATUS_FAILED, "Failed"),
+        (STATUS_SUPPRESSED, "Suppressed"),
     ]
 
     grace = models.ForeignKey(

@@ -55,6 +55,7 @@ def _seed_occurrence(key, *, user=None, **fields):
         "lifecycle": MavenEnrollmentEvent.LIFECYCLE_ACTIVE,
         "outcome": MavenEnrollmentEvent.OUTCOME_ONBOARDED,
         "override_status": MavenEnrollmentEvent.STEP_SUCCEEDED,
+        "enrollment_status": MavenEnrollmentEvent.STEP_SKIPPED,
         "notification_status": MavenEnrollmentEvent.STEP_SKIPPED,
         "slack_status": MavenEnrollmentEvent.STEP_SKIPPED,
         "welcome_status": MavenEnrollmentEvent.STEP_SKIPPED,
@@ -116,12 +117,13 @@ def test_staff_finds_alias_linked_failure_and_reads_five_step_detail(
     detail = detail_response.json()
     assert [step["name"] for step in detail["steps"]] == [
         "override",
+        "enrollment",
         "notification",
         "slack",
         "welcome",
         "removal",
     ]
-    welcome = detail["steps"][3]
+    welcome = detail["steps"][4]
     assert welcome["needs_attention"] is True
     assert welcome["last_error"] == "RuntimeError"
     context.close()
@@ -167,7 +169,7 @@ def test_staff_retries_exhausted_welcome_and_attention_list_clears(
         "outcome": "succeeded",
         "attempted": True,
     }
-    assert payload["occurrence"]["steps"][3]["attempts"] == MAX_STEP_ATTEMPTS + 1
+    assert payload["occurrence"]["steps"][4]["attempts"] == MAX_STEP_ATTEMPTS + 1
     assert send.call_count == 1
 
     remaining = context.request.get(
@@ -217,8 +219,8 @@ def test_staff_gets_conflict_instead_of_duplicate_fresh_running_attempt(
         f"{django_server}/api/integrations/maven/occurrences/{occurrence.pk}",
         headers=_headers(key),
     ).json()
-    assert current["steps"][3]["attempts"] == 2
-    assert current["steps"][3]["status"] == "running"
+    assert current["steps"][4]["attempts"] == 2
+    assert current["steps"][4]["status"] == "running"
     context.close()
 
 

@@ -18,6 +18,7 @@ from django import template
 from django.conf import settings
 from django.utils.safestring import mark_safe
 
+from content.access import LEVEL_OPEN
 from content.templatetags.teaser_tags import strip_markdown
 from content.utils.h1 import strip_leading_title_h1
 from events.services.display_time import format_event_tz_strip
@@ -392,8 +393,17 @@ def _build_recording_jsonld(event):
 
 
 def _build_event_jsonld(event):
-    """Build JSON-LD for an Event."""
+    """Build JSON-LD for an Event.
+
+    Issue #1663: fixes the Search Console critical error (``location`` had
+    no ``url``, an invalid ``VirtualLocation``) and adds the four missing
+    recommended fields — ``eventStatus``, ``image``, ``performer``,
+    ``offers`` — all backed by real model data. Fields are omitted entirely
+    when the underlying data is absent; nothing is ever filled with a
+    placeholder.
+    """
     site_url = _get_site_url()
+    page_url = f'{site_url}{event.get_absolute_url()}'
     data = {
         '@context': 'https://schema.org',
         '@type': 'Event',
@@ -407,21 +417,58 @@ def _build_event_jsonld(event):
             'name': SITE_NAME,
             'url': site_url,
         },
-        'url': f'{site_url}{event.get_absolute_url()}',
+        'url': page_url,
     }
     if getattr(event, 'end_datetime', None):
         data['endDate'] = _format_datetime(event.end_datetime)
+
+    # Every event is virtual (no venue/address data on the model), so
+    # ``location`` is always a ``VirtualLocation``. ``url`` must be the
+    # canonical page — never ``zoom_join_url``, which is gated behind
+    # registration and would otherwise leak the direct meeting link to
+    # anonymous crawlers and anyone who views page source.
     location = getattr(event, 'location', '')
-    if location:
-        data['location'] = {
-            '@type': 'VirtualLocation',
-            'name': location,
+    data['location'] = {
+        '@type': 'VirtualLocation',
+        'name': location or 'Online',
+        'url': page_url,
+    }
+
+    data['eventStatus'] = (
+        'https://schema.org/EventCancelled'
+        if event.status == 'cancelled'
+        else 'https://schema.org/EventScheduled'
+    )
+
+    banner_url = effective_banner_url(event)
+    if banner_url:
+        data['image'] = banner_url
+
+    hosts = event.ordered_hosts
+    if len(hosts) == 1:
+        data['performer'] = {'@type': 'Person', 'name': hosts[0].name}
+    elif len(hosts) > 1:
+        data['performer'] = [
+            {'@type': 'Person', 'name': host.name} for host in hosts
+        ]
+
+    # ``offers`` implies "you can act on this now" — only true for a still
+    # upcoming, community-hosted event that is open to everyone. Mirrors
+    # ``_build_course_jsonld``'s ``is_free``-only pattern rather than
+    # inventing a price for tier-gated or third-party-hosted events.
+    if (
+        event.required_level == LEVEL_OPEN
+        and not event.is_external
+        and event.is_upcoming
+    ):
+        data['offers'] = {
+            '@type': 'Offer',
+            'url': page_url,
+            'price': '0',
+            'priceCurrency': 'EUR',
+            'availability': 'https://schema.org/InStock',
         }
-    else:
-        data['location'] = {
-            '@type': 'VirtualLocation',
-            'name': 'Online',
-        }
+
     return data
 
 

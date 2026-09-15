@@ -18,6 +18,7 @@ from django.utils import timezone
 from accounts.models import ImportBatch, TierOverride
 from community.models import CommunityAuditLog
 from content.access import get_user_level
+from content.models import Cohort, Course
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import _run_step, _welcome_context
 from payments.models import Tier
@@ -493,6 +494,17 @@ class MavenConcurrentDeliveryTest(TransactionTestCase):
         )
 
     def test_simultaneous_identical_deliveries_run_side_effects_once(self):
+        # Issue #1659: already_processed now also requires ``enrollment`` to
+        # be terminal, so this needs a resolvable maven_course_key/external_key
+        # matching the course_id/cohort_id keys this payload carries.
+        course = Course.objects.create(
+            title="Course", slug="course-concurrent-1659",
+            maven_course_key="course-concurrent",
+        )
+        Cohort.objects.create(
+            course=course, external_key="cohort-concurrent", name="Cohort",
+            start_date="2026-01-01", end_date="2026-03-01",
+        )
         barrier = threading.Barrier(2)
         side_effect_lock = threading.Lock()
         calls = {"notification": 0, "slack": 0, "welcome": 0}

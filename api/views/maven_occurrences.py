@@ -96,6 +96,8 @@ _DETAIL_PROPERTIES = {
     "account_created": {"type": "boolean"},
     "welcome_eligible": {"type": "boolean"},
     "removed_at": _NULLABLE_DATETIME,
+    "course_access_granted": {"type": "boolean"},
+    "cohort_enrolled": {"type": "boolean"},
     "steps": {"type": "array", "items": _STEP_SCHEMA},
 }
 _DETAIL_SCHEMA = {
@@ -290,7 +292,7 @@ def maven_occurrences_collection(request):
     methods={
         "GET": {
             "description": (
-                "Return the current persisted occurrence and all five ledger "
+                "Return the current persisted occurrence and all six ledger "
                 "steps. This operation is read-only and makes no provider calls."
             ),
             "responses": {

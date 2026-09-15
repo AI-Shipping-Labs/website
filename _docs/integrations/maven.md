@@ -204,6 +204,20 @@ preserved, so it is one extra hop rather than a dead end.
   its own expiry and becomes effective if a temporary stronger grant expires.
   The grant is recorded in
   `CommunityAuditLog` (`action="maven_enrollment_override"`).
+- Grants course access and cohort membership (issue #1659): resolves
+  `content.Course` by `maven_course_key` and `content.Cohort` by
+  `external_key` (both matched case-insensitively against the webhook's
+  `course_key`/`cohort_key`, scoped to the resolved course for the cohort),
+  then creates `CourseAccess(access_type="granted")` and `CohortEnrollment`
+  idempotently. When the resolved cohort has a linked office-hours
+  `EventSeries`, also creates a standing `SeriesRegistration`; a cohort with
+  no linked series is a clean no-op for that part. Runs after `override`
+  succeeds and independently of `notification`/`slack`/`welcome` — it never
+  blocks them, and they never block it. An unresolvable `course_key` or
+  `cohort_key` fails the step with `MavenUnknownCourseError` /
+  `MavenUnknownCohortError`, visible un-redacted on
+  `/studio/maven-events/<pk>/` and retryable once `course.yaml` declares the
+  matching `maven_course_key` / cohort `key`.
 - Invites them to Slack (idempotent — no-op if already in the workspace).
 - Sends the course-framed `maven_welcome` email (transactional; from
   `welcome@`; carries a transparent notice + the newsletter opt-in + a scoped
@@ -239,26 +253,40 @@ preserved, so it is one extra hop rather than a dead end.
 
 `user_cohort.removed`:
 
-- Makes NO change to the override, access, or Slack membership.
+- Makes NO change to the Maven tier override or Slack membership — those are
+  never touched by removal.
 - Sends a staff heads-up (same recipients/style as the paid-signup
   notification) naming the user, user ID, a clickable Studio link, the cohort
   (and course), and suggested manual actions. A human decides.
 - An email that resolves to no account is handled gracefully (lighter
   "unknown user" note, no error).
+- Revokes the course grant and cohort membership (issue #1659): deletes the
+  matching `CohortEnrollment` unconditionally, and deletes
+  `CourseAccess(access_type="granted")` for the resolved course only when the
+  user holds no other `lifecycle=active` occurrence still granting that
+  course (a member enrolled in a second, still-active cohort under the same
+  course keeps access). `access_type="purchased"` `CourseAccess` is never
+  touched. When the cohort has a linked office-hours `EventSeries`, also
+  deletes the standing `SeriesRegistration`. Resolution mirrors the
+  `enrollment` step, but an occurrence whose course/cohort key never resolved
+  has nothing to revoke — this is best-effort and never fails the `removal`
+  step or blocks the staff heads-up.
 
 Lifecycle and idempotency: identity is a SHA-256 hash of normalized email plus
 course and cohort identity. Provider IDs are preferred; normalized labels are
 the fallback. Thus identically named cohorts in different courses do not
 collide. One active `MavenEnrollmentEvent` occurrence is admitted under a
-database constraint. Removal closes it without revocation; a later enrollment
-creates a genuine new occurrence.
+database constraint. Removal closes the occurrence and revokes the course
+grant and cohort membership it created, but never the tier override or Slack
+membership; a later enrollment creates a genuine new occurrence.
 
-The entitlement, enrollment staff heads-up, Slack invite, welcome, and removal
-notification each persist their own status, attempted/completed timestamps,
-bounded attempt count (three automatic attempts), and a safe error class. A
-five-minute scheduled recovery job retries pending, failed, or stale-running
-work only while the selected step has fewer than three attempts. Successful and
-skipped steps are never repeated.
+The entitlement, course-access enrollment, staff heads-up notification, Slack
+invite, welcome, and removal each persist their own status,
+attempted/completed timestamps, bounded attempt count (three automatic
+attempts), and a safe error class. A five-minute scheduled recovery job
+retries pending, failed, or stale-running work only while the selected step
+has fewer than three attempts. Successful and skipped steps are never
+repeated.
 
 An entitlement failure returns HTTP 500 while another automatic attempt is
 available so Maven can redeliver safely. When any incomplete step reaches the
@@ -298,7 +326,7 @@ The three slashless routes are:
 | Method | Route | Result |
 |---|---|---|
 | `GET` | `/api/integrations/maven/occurrences` | Filtered occurrence summaries |
-| `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and all five current steps |
+| `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and all six current steps |
 | `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/steps/<step>/retry` | One forced safe retry and the refreshed occurrence |
 
 List filters combine with AND. `email` is a case-insensitive exact lookup that
@@ -306,8 +334,8 @@ matches the short-lived occurrence email and, when the canonical primary/alias
 resolver finds an account, every occurrence linked to that user. `course` and
 `cohort` match a label substring or their exact provider key. `lifecycle`
 accepts `active`, `removed`, or `legacy`; `status` accepts `all`, `failed`, or
-`needs_attention`; and `failed_step` accepts `override`, `notification`,
-`slack`, `welcome`, or `removal`.
+`needs_attention`; and `failed_step` accepts `override`, `enrollment`,
+`notification`, `slack`, `welcome`, or `removal`.
 
 Pages default to `limit=50&offset=0`. Positive limits above 200 are clamped to
 200, and `total_count` reports all filtered rows while `count` reports rows in
@@ -327,11 +355,15 @@ curl -sS \
   "https://aishippinglabs.com/api/integrations/maven/occurrences/123"
 ```
 
-The detail response always includes `override`, `notification`, `slack`,
-`welcome`, and `removal` in dependency order. Each row reports status,
-attempts, timestamps, whether it needs attention, and a safe error class or
-controlled reason. Unsafe legacy errors appear as `last_error: "redacted"`
-with `error_redacted: true`.
+The detail response always includes `override`, `enrollment`, `notification`,
+`slack`, `welcome`, and `removal` in dependency order. Each row reports
+status, attempts, timestamps, whether it needs attention, and a safe error
+class or controlled reason. Unsafe legacy errors appear as
+`last_error: "redacted"` with `error_redacted: true`. The detail response also
+includes `course_access_granted` and `cohort_enrolled` booleans — the current
+`CourseAccess`/`CohortEnrollment` existence for the occurrence's resolved
+course/cohort — so an operator can confirm a member's grant without a
+database query.
 
 After fixing the provider or configuration cause, retry only the affected
 step. The URL supplies every option, so no request body is needed:

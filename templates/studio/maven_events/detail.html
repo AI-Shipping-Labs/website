@@ -5,6 +5,10 @@
 <a href="{% url 'studio_maven_event_list' %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to Maven occurrences</a>
 <h1 class="mt-2 text-2xl font-semibold text-foreground">Maven occurrence #{{ event.pk }}</h1>
 <p class="mt-1 text-muted-foreground">{{ event.course|default:'Course' }} / {{ event.cohort|default:'cohort' }} &middot; {{ event.lifecycle }}</p>
+<p class="mt-1 text-sm text-muted-foreground" data-testid="maven-occurrence-keys">
+  course_key: <code class="font-mono">{{ event.course_key|default:'—' }}</code>
+  &middot; cohort_key: <code class="font-mono">{{ event.cohort_key|default:'—' }}</code>
+</p>
 <p class="mt-2 text-sm text-muted-foreground" data-testid="maven-occurrence-member">
   Canonical member:
   {% if event.user_id %}

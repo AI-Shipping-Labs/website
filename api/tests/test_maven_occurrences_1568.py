@@ -412,7 +412,7 @@ class MavenOccurrenceListTest(MavenOccurrenceApiTestBase):
 
 
 class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
-    def test_detail_has_exact_fields_five_steps_and_safe_errors(self):
+    def test_detail_has_exact_fields_six_steps_and_safe_errors(self):
         now = timezone.now()
         occurrence = self.event(
             "detail-shape",
@@ -454,26 +454,31 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
                 "account_created",
                 "welcome_eligible",
                 "removed_at",
+                "course_access_granted",
+                "cohort_enrolled",
                 "steps",
             },
         )
         self.assertEqual(body["user"], {"id": self.member.pk, "email": self.member.email})
         self.assertEqual(body["failed_steps"], ["override", "notification"])
         self.assertEqual([step["name"] for step in body["steps"]], list(STEP_NAMES))
-        override = body["steps"][0]
+        steps_by_name = {step["name"]: step for step in body["steps"]}
+        override = steps_by_name["override"]
         self.assertEqual(override["last_error"], "RuntimeError")
         self.assertFalse(override["error_redacted"])
         self.assertTrue(override["needs_attention"])
-        notification = body["steps"][1]
+        notification = steps_by_name["notification"]
         self.assertEqual(notification["last_error"], "redacted")
         self.assertTrue(notification["error_redacted"])
-        slack = body["steps"][2]
+        slack = steps_by_name["slack"]
         self.assertEqual(slack["last_error"], SLACK_NOT_IN_WORKSPACE_NOTE)
         self.assertFalse(slack["error_redacted"])
-        self.assertEqual(body["steps"][3]["last_error"], "")
-        self.assertFalse(body["steps"][3]["error_redacted"])
+        self.assertEqual(steps_by_name["welcome"]["last_error"], "")
+        self.assertFalse(steps_by_name["welcome"]["error_redacted"])
         self.assertIsInstance(override["attempted_at"], str)
         self.assertIsNone(body["removed_at"])
+        self.assertFalse(body["course_access_granted"])
+        self.assertFalse(body["cohort_enrolled"])
 
     def test_redacted_email_stays_empty_and_private_storage_never_serializes(self):
         private_user = User.objects.create_user(
@@ -515,7 +520,8 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
             detail["user"],
             {"id": private_user.pk, "email": "canonical-visible-1568@example.com"},
         )
-        self.assertEqual(detail["steps"][3]["last_error"], "redacted")
+        welcome_step = next(s for s in detail["steps"] if s["name"] == "welcome")
+        self.assertEqual(welcome_step["last_error"], "redacted")
 
     def test_detail_unknown_is_structured_404_and_get_is_read_only(self):
         occurrence = self.event(
@@ -609,6 +615,12 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
                     )
                     stack.enter_context(
                         patch(
+                            "integrations.services.maven._run_enrollment_step",
+                            side_effect=lambda *args, **kwargs: calls.append("enrollment"),
+                        )
+                    )
+                    stack.enter_context(
+                        patch(
                             "community.services.staff_notifications.notify_maven_enrollment",
                             side_effect=lambda *args, **kwargs: calls.append("notification") or True,
                         )
@@ -668,10 +680,11 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
                 self.retry_url(failed, "welcome"), **self.auth()
             )
         self.assertEqual(failed_response.json()["retry"]["outcome"], "failed")
-        self.assertEqual(
-            failed_response.json()["occurrence"]["steps"][3]["last_error"],
-            "RuntimeError",
+        welcome_step = next(
+            s for s in failed_response.json()["occurrence"]["steps"]
+            if s["name"] == "welcome"
         )
+        self.assertEqual(welcome_step["last_error"], "RuntimeError")
         self.assert_private_markers_absent(failed_response)
         self.assertEqual(send.call_count, 1)
 

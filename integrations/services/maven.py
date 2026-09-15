@@ -17,6 +17,8 @@ from accounts.services.email_resolution import normalize_email, resolve_user_by_
 from accounts.utils.tokens import generate_password_reset_token, generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
+from content.models import Course, CourseAccess
+from content.models.cohort import Cohort, CohortEnrollment
 from email_app.services import EmailService
 from integrations.config import get_config, site_base_url, validate_email_config_value
 from integrations.maven_config import (
@@ -35,12 +37,20 @@ EVENT_REMOVED = "user_cohort.removed"
 MAX_STEP_ATTEMPTS = 3
 MAX_DATABASE_CONTENTION_RETRIES = 10
 RUNNING_STEP_LEASE = timedelta(minutes=15)
-STEP_NAMES = ("override", "notification", "slack", "welcome", "removal")
+STEP_NAMES = ("override", "enrollment", "notification", "slack", "welcome", "removal")
 _SQLITE_DELIVERY_LOCK = threading.Lock()
 
 
 class MavenTransientError(Exception):
     """The durable core entitlement step failed and the sender should retry."""
+
+
+class MavenUnknownCourseError(Exception):
+    """No ``Course.maven_course_key`` matches the occurrence's ``course_key``."""
+
+
+class MavenUnknownCohortError(Exception):
+    """No ``Cohort.external_key`` under the resolved course matches ``cohort_key``."""
 
 
 @dataclass
@@ -270,7 +280,7 @@ def _is_database_contention(exc):
 def _dry_run(event_type, email, course, cohort):
     user = resolve_user_by_email(email)
     if event_type == EVENT_REMOVED:
-        return MavenResult("removal_notified", actions=["Would close the active occurrence without revoking access.", "Would persist and attempt the independent removal notification step."], user_id=user.pk if user else None)
+        return MavenResult("removal_notified", actions=["Would close the active occurrence and revoke its course access and cohort membership (tier override and Slack membership are never touched).", "Would persist and attempt the independent removal notification step."], user_id=user.pk if user else None)
     return MavenResult(
         "already_member" if user and _is_active_community_member(user) else "onboarded",
         actions=[
@@ -310,6 +320,7 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
                     payload=_safe_payload(payload),
                     welcome_eligible=not already_member,
                     account_created=created_user,
+                    enrollment_status=MavenEnrollmentEvent.STEP_PENDING,
                     notification_status=MavenEnrollmentEvent.STEP_PENDING,
                     slack_status=(MavenEnrollmentEvent.STEP_SKIPPED if already_member else MavenEnrollmentEvent.STEP_PENDING),
                     welcome_status=(MavenEnrollmentEvent.STEP_SKIPPED if already_member else MavenEnrollmentEvent.STEP_PENDING),
@@ -339,7 +350,7 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
     status = "already_member" if not occurrence.welcome_eligible else "onboarded"
     if not created_occurrence and all(
         getattr(occurrence, f"{name}_status") in {MavenEnrollmentEvent.STEP_SUCCEEDED, MavenEnrollmentEvent.STEP_SKIPPED}
-        for name in ("override", "notification", "slack", "welcome")
+        for name in ("override", "enrollment", "notification", "slack", "welcome")
     ):
         status = "already_processed"
     return MavenResult(
@@ -663,7 +674,9 @@ def run_occurrence_steps(occurrence, *, step=None, force=False):
     occurrence.refresh_from_db(fields=["override_status"])
     if occurrence.override_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
         return actions
-    for name in ("notification", "slack", "welcome"):
+    # A failed or still-pending ``enrollment`` never blocks the other three —
+    # a course grant is independent of Slack/welcome eligibility.
+    for name in ("enrollment", "notification", "slack", "welcome"):
         _run_step(occurrence.pk, name, actions, force=force)
     return actions
 
@@ -760,6 +773,8 @@ def _run_step(pk, name, actions, *, force=False):
             tier = Tier.objects.get(slug=maven_override_tier_slug())
             expiry = row.created_at + timedelta(days=maven_override_duration_days())
             actions.append(_grant_or_refresh_override(row.user, tier, expiry, row.cohort, row.course, source=f"maven:{row.identity_hash}"))
+        elif name == "enrollment":
+            _run_enrollment_step(row, actions)
         elif name == "notification":
             from community.services.staff_notifications import notify_maven_enrollment
 
@@ -805,10 +820,11 @@ def _run_step(pk, name, actions, *, force=False):
                     attempted=True,
                 )
             _send_welcome(row.user, row.course, row.cohort, actions)
-        else:
+        elif name == "removal":
             from community.services.staff_notifications import notify_maven_cohort_removal
             notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)
             actions.append("Sent staff removal heads-up.")
+            _revoke_maven_grants(row, actions)
     except Exception as exc:
         # Provider exception messages can contain addresses, response bodies,
         # or tokens. Persist and log only the safe exception class.
@@ -870,6 +886,144 @@ def _enrollment_notification_entitlement(occurrence):
     if grant is not None and grant.expires_at not in expiry_candidates:
         expiry_candidates.append(grant.expires_at)
     return tier, max(expiry_candidates)
+
+
+def resolve_maven_course(course_key):
+    """Resolve ``Course.maven_course_key`` case-insensitively, or raise.
+
+    A blank ``course_key`` is always unresolvable — matching it against
+    blank ``maven_course_key`` rows (the common unconfigured default) would
+    silently grant the wrong course, so it is excluded explicitly rather
+    than relying on an empty-string match to fail to find anything.
+    """
+    if not course_key:
+        raise MavenUnknownCourseError("course_key is blank")
+    course = (
+        Course.objects.exclude(maven_course_key="")
+        .filter(maven_course_key__iexact=course_key)
+        .first()
+    )
+    if course is None:
+        raise MavenUnknownCourseError(
+            f"no Course.maven_course_key matches {course_key!r}"
+        )
+    return course
+
+
+def resolve_maven_cohort(course, cohort_key):
+    """Resolve ``Cohort.external_key`` under ``course`` case-insensitively, or raise."""
+    if not cohort_key:
+        raise MavenUnknownCohortError("cohort_key is blank")
+    cohort = (
+        Cohort.objects.filter(course=course)
+        .exclude(external_key="")
+        .filter(external_key__iexact=cohort_key)
+        .first()
+    )
+    if cohort is None:
+        raise MavenUnknownCohortError(
+            f"no Cohort.external_key under course={course.pk} matches {cohort_key!r}"
+        )
+    return cohort
+
+
+def _cohort_event_series(cohort):
+    """Return the cohort's linked ``EventSeries``, or ``None``.
+
+    Reads ``event_series`` defensively (issue #1660 adds the field to
+    ``Cohort`` on a parallel track): ``getattr`` with a default so this
+    ships and stays a clean no-op whether or not that field has landed yet.
+    """
+    if not getattr(cohort, "event_series_id", None):
+        return None
+    return getattr(cohort, "event_series", None)
+
+
+def _run_enrollment_step(row, actions):
+    """Resolve course/cohort and grant course access + cohort membership.
+
+    Idempotent: ``get_or_create`` never duplicates an existing
+    ``CourseAccess``/``CohortEnrollment`` row. An unresolvable
+    ``course_key``/``cohort_key`` raises one of the dedicated
+    ``MavenUnknown*Error`` classes so ``_run_step`` persists a safe,
+    un-redacted, retryable failure rather than silently skipping.
+    """
+    course = resolve_maven_course(row.course_key)
+    cohort = resolve_maven_cohort(course, row.cohort_key)
+
+    CourseAccess.objects.get_or_create(
+        user=row.user,
+        course=course,
+        defaults={"access_type": "granted"},
+    )
+    actions.append(f"Granted course access to {course.slug}.")
+
+    CohortEnrollment.objects.get_or_create(cohort=cohort, user=row.user)
+    actions.append(f"Enrolled in cohort {cohort.external_key}.")
+
+    series = _cohort_event_series(cohort)
+    if series is not None:
+        from events.services.registration import get_or_create_series_registration
+
+        get_or_create_series_registration(series, row.user)
+        actions.append("Registered for the cohort's office-hours series.")
+
+
+def _revoke_maven_grants(row, actions):
+    """Best-effort revoke of the course grant and cohort membership on removal.
+
+    Resolution mirrors the ``enrollment`` step, but an unresolvable
+    course/cohort key never fails the ``removal`` step: an occurrence whose
+    ``enrollment`` step never succeeded (unconfigured key, or a
+    pre-#1659 backfilled row) has nothing to revoke, and removal's staff
+    heads-up must keep working regardless.
+
+    ``CohortEnrollment`` is deleted unconditionally for the resolved
+    cohort. ``CourseAccess(access_type="granted")`` is deleted only when no
+    other ``lifecycle=active`` occurrence for this user still grants the
+    same resolved course — a member holding a second active cohort under
+    the same course keeps access. ``access_type="purchased"`` rows are
+    never touched.
+    """
+    if row.user_id is None:
+        return
+    try:
+        course = resolve_maven_course(row.course_key)
+    except MavenUnknownCourseError:
+        return
+    cohort = None
+    try:
+        cohort = resolve_maven_cohort(course, row.cohort_key)
+    except MavenUnknownCohortError:
+        cohort = None
+
+    if cohort is not None:
+        deleted, _counts = CohortEnrollment.objects.filter(
+            cohort=cohort, user_id=row.user_id,
+        ).delete()
+        if deleted:
+            actions.append("Revoked cohort enrollment.")
+        series = _cohort_event_series(cohort)
+        if series is not None:
+            from events.models import SeriesRegistration
+
+            series_deleted, _series_counts = SeriesRegistration.objects.filter(
+                series=series, user_id=row.user_id,
+            ).delete()
+            if series_deleted:
+                actions.append("Revoked standing series registration.")
+
+    other_active = MavenEnrollmentEvent.objects.filter(
+        user_id=row.user_id,
+        lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE,
+        course_key__iexact=course.maven_course_key,
+    ).exists()
+    if not other_active:
+        deleted, _counts = CourseAccess.objects.filter(
+            user_id=row.user_id, course=course, access_type="granted",
+        ).delete()
+        if deleted:
+            actions.append("Revoked course access.")
 
 
 def _finish_step(pk, name, status, error):

@@ -19,6 +19,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 
 from community.services.slack import SlackAPIError
+from content.models import Cohort, Course
 from email_app.services.email_service import EmailService
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
@@ -265,6 +266,16 @@ class MavenPayloadToleranceTest(MavenWebhookMixin):
     def test_wrapped_and_flat_deliveries_for_one_person_share_an_identity(
         self, _send_ses, _notify,
     ):
+        # Issue #1659: already_processed now also requires ``enrollment`` to
+        # be terminal, so this needs a resolvable maven_course_key/external_key.
+        course = Course.objects.create(
+            title="Buildcamp", slug="buildcamp-1565-identity",
+            maven_course_key="buildcamp",
+        )
+        Cohort.objects.create(
+            course=course, external_key="cohort 1", name="Cohort 1",
+            start_date="2026-01-01", end_date="2026-03-01",
+        )
         self.post({
             "event": "user_cohort.enrolled",
             "payload": {

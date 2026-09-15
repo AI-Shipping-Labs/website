@@ -39,7 +39,35 @@ testimonials:
     name: ...
     role: ...
     source_url: ...
+maven_course_key: from-rag-to-agents   # optional; matches the Maven webhook's course_key
+cohorts:                               # optional; upserted into content.Cohort
+  - key: cohort-4                      # matches the Maven webhook's cohort_key
+    name: Cohort 4
+    start_date: 2026-09-21
+    end_date: 2026-11-22
 ```
+
+### `maven_course_key` and `cohorts:`
+
+Issue #1659: `maven_course_key` links this course to a Maven course so an
+inbound Maven enrollment webhook can grant course access automatically.
+`cohorts:` declares the cohorts that Maven enrollees are matched against.
+
+Each `cohorts:` entry is upserted into `content.Cohort` keyed on
+`(course, external_key=key)`: a new `key` creates a cohort, a known `key`
+updates `name`/`start_date`/`end_date` when they changed. A cohort `key`
+removed from a later YAML edit is left untouched in the database — cohorts
+are never deleted by sync, since they may already have enrollments. `key`,
+`name`, `start_date`, and `end_date` are all required on every entry; an
+entry missing one fails only that course's sync (its `SyncLog` entry names
+the missing field), not the whole sync run.
+
+`maven_course_key` and cohort `key` values must exactly match what the real
+Maven webhook sends in `course_key`/`cohort_key` — confirm this with a live
+test enrollment before relying on it (see `_docs/integrations/maven.md`,
+"Testing live"). A mismatch fails the enrollment `enrollment` step silently
+from the enrollee's perspective (they still get the community welcome, just
+not the course grant) — visible on `/studio/maven-events/<pk>/`.
 
 ### Access levels
 
@@ -67,6 +95,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `required_level`, `default_unit_access` | YAML | Edit in GitHub, then re-sync. |
 | `instructors` | YAML | Order matters — first instructor is primary on cards. |
 | `discussion_url`, `testimonials` | YAML | Edit in GitHub, then re-sync. |
+| `maven_course_key`, `cohorts:` | YAML | Edit in GitHub, then re-sync. Cohorts are upserted, never deleted, by sync. |
 | `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
 | `individual_price_eur` | DB only | Not yet editable for source-managed courses in Studio; use an explicit low-level maintenance change. Not in `course.yaml`. |
 | `stripe_product_id`, `stripe_price_id` | DB only | Created via "Create Stripe Product" button after a price is set. |

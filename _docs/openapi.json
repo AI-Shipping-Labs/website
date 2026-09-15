@@ -7507,6 +7507,7 @@
             "schema": {
               "enum": [
                 "override",
+                "enrollment",
                 "notification",
                 "slack",
                 "welcome",
@@ -7578,6 +7579,7 @@
                             "items": {
                               "enum": [
                                 "override",
+                                "enrollment",
                                 "notification",
                                 "slack",
                                 "welcome",
@@ -7602,6 +7604,7 @@
                             "items": {
                               "enum": [
                                 "override",
+                                "enrollment",
                                 "notification",
                                 "slack",
                                 "welcome",
@@ -7743,7 +7746,7 @@
     },
     "/api/integrations/maven/occurrences/{occurrence_id}": {
       "get": {
-        "description": "Return the current persisted occurrence and all five ledger steps. This operation is read-only and makes no provider calls.",
+        "description": "Return the current persisted occurrence and all six ledger steps. This operation is read-only and makes no provider calls.",
         "parameters": [
           {
             "in": "path",
@@ -7766,11 +7769,17 @@
                     "cohort": {
                       "type": "string"
                     },
+                    "cohort_enrolled": {
+                      "type": "boolean"
+                    },
                     "cohort_key": {
                       "type": "string"
                     },
                     "course": {
                       "type": "string"
+                    },
+                    "course_access_granted": {
+                      "type": "boolean"
                     },
                     "course_key": {
                       "type": "string"
@@ -7789,6 +7798,7 @@
                       "items": {
                         "enum": [
                           "override",
+                          "enrollment",
                           "notification",
                           "slack",
                           "welcome",
@@ -7813,6 +7823,7 @@
                       "items": {
                         "enum": [
                           "override",
+                          "enrollment",
                           "notification",
                           "slack",
                           "welcome",
@@ -7872,6 +7883,7 @@
                           "name": {
                             "enum": [
                               "override",
+                              "enrollment",
                               "notification",
                               "slack",
                               "welcome",
@@ -7952,6 +7964,8 @@
                     "account_created",
                     "welcome_eligible",
                     "removed_at",
+                    "course_access_granted",
+                    "cohort_enrolled",
                     "steps"
                   ],
                   "type": "object"
@@ -8044,11 +8058,17 @@
                         "cohort": {
                           "type": "string"
                         },
+                        "cohort_enrolled": {
+                          "type": "boolean"
+                        },
                         "cohort_key": {
                           "type": "string"
                         },
                         "course": {
                           "type": "string"
+                        },
+                        "course_access_granted": {
+                          "type": "boolean"
                         },
                         "course_key": {
                           "type": "string"
@@ -8067,6 +8087,7 @@
                           "items": {
                             "enum": [
                               "override",
+                              "enrollment",
                               "notification",
                               "slack",
                               "welcome",
@@ -8091,6 +8112,7 @@
                           "items": {
                             "enum": [
                               "override",
+                              "enrollment",
                               "notification",
                               "slack",
                               "welcome",
@@ -8150,6 +8172,7 @@
                               "name": {
                                 "enum": [
                                   "override",
+                                  "enrollment",
                                   "notification",
                                   "slack",
                                   "welcome",
@@ -8230,6 +8253,8 @@
                         "account_created",
                         "welcome_eligible",
                         "removed_at",
+                        "course_access_granted",
+                        "cohort_enrolled",
                         "steps"
                       ],
                       "type": "object"
@@ -8250,6 +8275,7 @@
                         "step": {
                           "enum": [
                             "override",
+                            "enrollment",
                             "notification",
                             "slack",
                             "welcome",
@@ -8344,6 +8370,7 @@
                   "code": "invalid_maven_step",
                   "details": {
                     "allowed": [
+                      "enrollment",
                       "notification",
                       "override",
                       "removal",

@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class Cohort(models.Model):
@@ -38,9 +39,25 @@ class Cohort(models.Model):
             'cohort itself is preserved.'
         ),
     )
+    external_key = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text=(
+            "Maven's cohort identifier string, matched case-insensitively "
+            "against the Maven webhook's cohort_key at enrollment time "
+            "(issue #1659). Source-owned from course.yaml's cohorts: list; "
+            "blank means no external mapping. Unique per course when set."
+        ),
+    )
 
     class Meta:
         ordering = ['start_date']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['course', 'external_key'],
+                condition=~Q(external_key=''),
+                name='unique_cohort_course_external_key',
+            ),
+        ]
 
     def __str__(self):
         return f'{self.course.title} - {self.name}'

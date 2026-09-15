@@ -1,6 +1,9 @@
 """Course sync dispatcher."""
 
+import datetime
 import os
+
+from django.utils.dateparse import parse_date
 
 from content.sync_parsers.base import FamilyParser
 from content.sync_parsers.checkout_view import (
@@ -341,6 +344,7 @@ def _sync_single_course(
             course, course_data, course_dir, repo_dir, rel_path, source,
             commit_sha, stats, known_images, course_ignore_patterns,
         )
+        _sync_course_cohorts(course, course_data, rel_path)
 
         # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
         # only on create/update. ``_enqueue_banner_if_missing`` itself
@@ -428,6 +432,7 @@ def _build_course_defaults(
         'required_level': course_data.get('required_level', 0),
         'default_unit_required_level': default_unit_required_level,
         'discussion_url': course_data.get('discussion_url', ''),
+        'maven_course_key': course_data.get('maven_course_key', ''),
         'tags': course_data.get('tags', []),
         'testimonials': course_data.get('testimonials', []),
         'status': 'published',
@@ -542,6 +547,93 @@ def _sync_course_children(
         course, course_dir, repo_dir, source.repo_name,
         commit_sha, stats, known_images=known_images,
         course_ignore_patterns=course_ignore_patterns,
+    )
+
+
+_COHORT_REQUIRED_FIELDS = ('key', 'name', 'start_date', 'end_date')
+
+
+def _sync_course_cohorts(course, course_data, rel_path):
+    """Upsert ``course.yaml``'s ``cohorts:`` list into ``content.Cohort``.
+
+    Issue #1659: each entry is keyed on ``(course, external_key=key)`` — a
+    new key creates a cohort, a known key updates ``name``/``start_date``/
+    ``end_date`` when they changed. A cohort key dropped from a later YAML
+    edit is left untouched in the database (reconcile-never-destroy, same as
+    the rest of the sync pipeline; a cohort may already have enrollments).
+
+    Raises :class:`GitHubSyncError` on a malformed entry so the caller's
+    per-course exception handler records it against this course's sync only
+    — it must never abort the whole content sync run.
+    """
+    from content.models.cohort import Cohort
+
+    cohorts_data = course_data.get('cohorts') or []
+    if not isinstance(cohorts_data, list):
+        raise GitHubSyncError(
+            f'Invalid cohorts in {rel_path}: expected a list'
+        )
+
+    for entry in cohorts_data:
+        if not isinstance(entry, dict):
+            raise GitHubSyncError(
+                f'Invalid cohorts entry in {rel_path}: expected a mapping, '
+                f'got {type(entry).__name__}'
+            )
+        missing = [
+            field for field in _COHORT_REQUIRED_FIELDS
+            if entry.get(field) is None or entry.get(field) == ''
+        ]
+        if missing:
+            raise GitHubSyncError(
+                f"Invalid cohorts entry in {rel_path}: "
+                f"missing {', '.join(missing)}"
+            )
+
+        key = str(entry['key']).strip()
+        defaults = {
+            'name': entry['name'],
+            'start_date': _parse_cohort_date(
+                entry['start_date'], field_name='start_date', rel_path=rel_path,
+            ),
+            'end_date': _parse_cohort_date(
+                entry['end_date'], field_name='end_date', rel_path=rel_path,
+            ),
+        }
+
+        cohort = Cohort.objects.filter(course=course, external_key=key).first()
+        if cohort is None:
+            Cohort.objects.create(course=course, external_key=key, **defaults)
+            continue
+
+        changed_fields = [
+            field for field, value in defaults.items()
+            if getattr(cohort, field) != value
+        ]
+        if changed_fields:
+            for field in changed_fields:
+                setattr(cohort, field, defaults[field])
+            cohort.save(update_fields=changed_fields)
+
+
+def _parse_cohort_date(value, *, field_name, rel_path):
+    """Resolve a ``cohorts:`` date value to a ``datetime.date``.
+
+    PyYAML's safe loader already parses unquoted ISO ``YYYY-MM-DD`` values
+    into ``datetime.date``, so that is accepted directly. A quoted string is
+    parsed explicitly so authors who quote the date don't hit a type error.
+    """
+    if isinstance(value, datetime.datetime):
+        return value.date()
+    if isinstance(value, datetime.date):
+        return value
+    if isinstance(value, str):
+        parsed = parse_date(value.strip())
+        if parsed is not None:
+            return parsed
+    raise GitHubSyncError(
+        f'Invalid cohorts entry in {rel_path}: {field_name} {value!r} is '
+        f'not a valid date (expected YYYY-MM-DD)'
     )
 
 

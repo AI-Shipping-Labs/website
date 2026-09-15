@@ -45,8 +45,7 @@ class MavenOccurrenceSkippedReasonTest(TestCase):
             reverse("studio_maven_event_detail", args=[self.event.pk])
         )
 
-        note = response.context["steps"][2]
-        self.assertEqual(note["name"], "slack")
+        note = next(s for s in response.context["steps"] if s["name"] == "slack")
         self.assertEqual(note["status"], MavenEnrollmentEvent.STEP_SKIPPED)
         self.assertContains(response, "not in the Slack workspace")
         self.assertContains(response, "the join link was delivered in")

@@ -3,7 +3,15 @@
 import re
 
 from api.serializers.datetime import isoformat_or_none
-from integrations.services.maven import SLACK_NOT_IN_WORKSPACE_NOTE, STEP_NAMES
+from content.models import CohortEnrollment, CourseAccess
+from integrations.services.maven import (
+    SLACK_NOT_IN_WORKSPACE_NOTE,
+    STEP_NAMES,
+    MavenUnknownCohortError,
+    MavenUnknownCourseError,
+    resolve_maven_cohort,
+    resolve_maven_course,
+)
 from integrations.services.maven_attention import (
     failed_step_names,
     occurrence_attention_reasons,
@@ -56,11 +64,14 @@ def serialize_maven_occurrence(occurrence, *, detail=False, now=None):
     if not detail:
         return data
 
+    course_access_granted, cohort_enrolled = _maven_grant_flags(occurrence)
     data.update(
         {
             "account_created": occurrence.account_created,
             "welcome_eligible": occurrence.welcome_eligible,
             "removed_at": isoformat_or_none(occurrence.removed_at),
+            "course_access_granted": course_access_granted,
+            "cohort_enrolled": cohort_enrolled,
             "steps": [
                 _serialize_step(occurrence, name, attention_reasons)
                 for name in STEP_NAMES
@@ -68,6 +79,35 @@ def serialize_maven_occurrence(occurrence, *, detail=False, now=None):
         }
     )
     return data
+
+
+def _maven_grant_flags(occurrence):
+    """Return ``(course_access_granted, cohort_enrolled)`` for Studio/API support.
+
+    Resolution mirrors the ``enrollment`` step. An unresolvable course or
+    cohort key (unconfigured mapping, or a pre-#1659 backfilled row) is
+    reported as ``False``/``False`` rather than raising — this is read-only
+    operator visibility, never a provider call.
+    """
+    if occurrence.user_id is None or not occurrence.course_key:
+        return False, False
+    try:
+        course = resolve_maven_course(occurrence.course_key)
+    except MavenUnknownCourseError:
+        return False, False
+    course_access_granted = CourseAccess.objects.filter(
+        user_id=occurrence.user_id, course=course,
+    ).exists()
+    cohort_enrolled = False
+    try:
+        cohort = resolve_maven_cohort(course, occurrence.cohort_key)
+    except MavenUnknownCohortError:
+        cohort = None
+    if cohort is not None:
+        cohort_enrolled = CohortEnrollment.objects.filter(
+            cohort=cohort, user_id=occurrence.user_id,
+        ).exists()
+    return course_access_granted, cohort_enrolled
 
 
 def _serialize_step(occurrence, name, attention_reasons):

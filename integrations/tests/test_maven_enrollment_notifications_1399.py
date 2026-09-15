@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import EmailAlias, TierOverride
+from content.models import Cohort, Course
 from integrations.config import clear_config_cache
 from integrations.maven_config import maven_override_duration_days
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
@@ -45,6 +46,17 @@ class MavenEnrollmentNotificationTest(TestCase):
         configure(STAFF_SIGNUP_NOTIFY_EMAIL="staff@example.com")
         self.addCleanup(clear_config_cache)
         self.main = Tier.objects.get(slug="main")
+        # Issue #1659: a resolvable maven_course_key/external_key pair so
+        # the ``enrollment`` step reaches a terminal state and doesn't
+        # perpetually block ``already_processed`` classification.
+        course = Course.objects.create(
+            title="AI Engineering", slug="ai-engineering-1399",
+            maven_course_key="ai engineering",
+        )
+        Cohort.objects.create(
+            course=course, external_key="autumn 2026", name="Autumn 2026",
+            start_date="2026-09-01", end_date="2026-12-01",
+        )
 
     def post(self, event="user_cohort.enrolled", email="member@example.com", **extra):
         payload = {

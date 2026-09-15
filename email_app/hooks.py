@@ -490,6 +490,8 @@ def _resolve_sprint_end_recap_context(delivery, context):
     from django.urls import reverse  # noqa: PLC0415
 
     from integrations.config import site_base_url  # noqa: PLC0415
+    from plans.models import Plan, Sprint  # noqa: PLC0415
+    from questionnaires.models import Response  # noqa: PLC0415
 
     plan = _related_plan(delivery)
     if plan is None:
@@ -502,8 +504,6 @@ def _resolve_sprint_end_recap_context(delivery, context):
     )
     feedback_response_id = str(context.get("feedback_response_id") or "").strip()
     if feedback_response_id.isdigit():
-        from questionnaires.models import Response  # noqa: PLC0415
-
         feedback_response = Response.objects.filter(
             pk=feedback_response_id,
         ).first()
@@ -579,8 +579,8 @@ def _resolve_sprint_cadence_context(delivery, context):
 
     from django.urls import reverse  # noqa: PLC0415
 
-    from plans.models import Week  # noqa: PLC0415
     from integrations.config import site_base_url  # noqa: PLC0415
+    from plans.models import Week  # noqa: PLC0415
 
     plan = _related_plan(delivery)
     if plan is None:
@@ -618,11 +618,11 @@ def _resolve_payment_grace_context(delivery, context):
     send, while the template documents the member.
     """
 
+    from integrations.config import site_base_url  # noqa: PLC0415
     from payments.models import MonthlyPaymentGrace  # noqa: PLC0415
     from payments.services.monthly_payment_grace import (  # noqa: PLC0415
         safe_portal_url,
     )
-    from integrations.config import site_base_url  # noqa: PLC0415
 
     grace = None
     if delivery.related_object_type == "payments.monthlypaymentgrace":

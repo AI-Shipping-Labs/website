@@ -7,6 +7,7 @@ or short-lived Customer Portal sessions.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import uuid
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from urllib.parse import urlparse
 import stripe
 from community_base.config.models import Setting
 from community_base.config.service import get as package_get
+from community_base.mail.models import EmailDelivery
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import IntegrityError, transaction
@@ -25,8 +27,8 @@ from django.utils import timezone
 from accounts.models import User
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_active_override, get_user_level
-from email_app.services import EmailService
-from integrations.config import get_config, site_base_url
+from email_app.package_mail import send_package_mail
+from integrations.config import get_config
 from payments.exceptions import (
     WebhookAmbiguousUserError,
     WebhookPermanentError,
@@ -794,13 +796,22 @@ def _begin_delivery_transport(delivery_id, token, now):
 
 
 def _delivery_template(delivery):
+    """Build the durable send context for one grace delivery.
+
+    Scalar inputs only (issues #1613, #1629): the portal link, the Studio
+    member link and the reconciliation-report link are re-minted at
+    delivery time by the worker resolver
+    (``email_app.hooks._resolve_payment_grace_context``) from the attached
+    ``MonthlyPaymentGrace`` relation — ``recovery_url`` re-reads the portal
+    configuration at delivery time exactly like the old send-time read, so
+    an unsafe or missing portal still renders the template's
+    reply-instead fallback.
+    """
     grace = delivery.grace
     user = grace.user
     effective = _effective_tier(user)
-    portal = safe_portal_url()
     deadline = grace.effective_expires_at.astimezone(dt_timezone.utc)
     context = {
-        "recovery_url": portal,
         "deadline_utc": deadline.strftime("%Y-%m-%d %H:%M UTC"),
         "base_tier": (
             user.membership.tier.name if user.membership.tier_id else "Free"
@@ -816,8 +827,6 @@ def _delivery_template(delivery):
         "stripe_invoice_id": grace.stripe_invoice_id,
         "failure_time": grace.grace_started_at.astimezone(dt_timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "interval": f"{grace.interval} x {grace.interval_count}",
-        "studio_member_url": f"{site_base_url()}/studio/users/{user.pk}/",
-        "studio_report_url": f"{site_base_url()}/studio/payments/subscription-reconciliation/?filter=payment_grace",
     }
     names = {
         Delivery.KIND_FAILURE_MEMBER: "payment_grace_failure_member",
@@ -828,15 +837,49 @@ def _delivery_template(delivery):
     return names[delivery.kind], context
 
 
+def _grace_idempotency_key(delivery):
+    """The durable dedupe key for one grace mail send.
+
+    Carries the legacy ``EmailLog.dedupe_key`` shape
+    ``monthly-payment-grace:{grace_id}:{kind}:{recipient}`` with one
+    forced change: the package idempotency-key grammar
+    (``[A-Za-z0-9][A-Za-z0-9._:-]*``) cannot hold the ``@``/``+`` of an
+    email address, so the recipient is folded into a stable 16-hex digest.
+    Dedupe semantics are unchanged — one logical send per grace, kind and
+    recipient — and the recipient stays visible on the delivery row and
+    the worker-written ``EmailLog``.
+    """
+    recipient_digest = hashlib.sha256(
+        delivery.recipient.encode("utf-8"),
+    ).hexdigest()[:16]
+    return (
+        f"monthly-payment-grace:{delivery.grace_id}:"
+        f"{delivery.kind}:{recipient_digest}"
+    )
+
+
 def _send_delivery(delivery):
+    """Queue one grace mail through the durable package delivery.
+
+    The grace is attached as the worker resolver's relation. A suppressed
+    delivery returns ``None`` so the caller keeps the legacy observable
+    behaviour (suppression was retried as ``STATUS_FAILED``); a queued
+    delivery returns the durable row — ``sent`` means the durable
+    delivery exists, and the SES outcome plus the audit ``EmailLog`` row
+    land from the worker.
+    """
     template_name, context = _delivery_template(delivery)
-    return EmailService().send(
+    result = send_package_mail(
         delivery.grace.user,
         template_name,
         context,
         recipient_email=delivery.recipient,
-        dedupe_key=f"monthly-payment-grace:{delivery.grace_id}:{delivery.kind}:{delivery.recipient}",
+        idempotency_key=_grace_idempotency_key(delivery),
+        related=delivery.grace,
     )
+    if result.state == EmailDelivery.State.SUPPRESSED:
+        return None
+    return result
 
 
 def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
@@ -855,10 +898,14 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
         if delivery is None:
             continue
         try:
-            email_log = _send_delivery(delivery)
+            email_delivery = _send_delivery(delivery)
+            # The missing-portal note keeps surfacing here (builder side, the
+            # surface on-call already watches): the send itself succeeds with
+            # the template's reply-instead fallback, and the operator note
+            # lands on the delivery row exactly as before.
             error = "" if safe_portal_url() else "STRIPE_CUSTOMER_PORTAL_URL is missing or invalid; recovery link omitted."
         except Exception as exc:  # transport/config errors are retryable
-            email_log = None
+            email_delivery = None
             error = f"Email transport failed ({exc.__class__.__name__})"
         with transaction.atomic():
             current = Delivery.objects.select_for_update().get(pk=delivery.pk)
@@ -867,10 +914,10 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
             current.claim_token = None
             current.claimed_at = None
             current.last_error = error
-            if email_log is not None:
+            if email_delivery is not None:
                 current.status = Delivery.STATUS_SENT
                 current.sent_at = timezone.now()
-                current.email_log = email_log
+                current.email_delivery = email_delivery
             else:
                 current.status = Delivery.STATUS_FAILED
                 # A caught failure is known not to have succeeded and may be
@@ -879,7 +926,7 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
                 current.transport_started_at = None
             current.save(update_fields=[
                 "claim_token", "claimed_at", "transport_started_at",
-                "last_error", "status", "sent_at", "email_log",
+                "last_error", "status", "sent_at", "email_delivery",
             ])
 
 

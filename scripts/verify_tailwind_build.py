@@ -146,6 +146,7 @@ NON_TAILWIND_WORDS = {
     "left-anti-join",
     "max-width",
     "min-height",
+    "row-presentation",
     "top-level",
     "uppercased",
     "visible-input",

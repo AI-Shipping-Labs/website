@@ -2575,6 +2575,7 @@ class SeedContentSourcesCommandTest(TestCase):
             'AI-Shipping-Labs/content',
             'AI-Shipping-Labs/python-course',
             'AI-Shipping-Labs/workshops-content',
+            'AI-Shipping-Labs/ai-buildcamp-course',
         }
         self.assertEqual(repos, expected)
 
@@ -2590,13 +2591,13 @@ class SeedContentSourcesCommandTest(TestCase):
                 f"Expected {source.repo_name} to be marked private",
             )
 
-    def test_seeds_exactly_three_rows(self):
-        """Issue #310: one ContentSource per canonical repo (3 total)."""
+    def test_seeds_exactly_four_rows(self):
+        """Issue #310/#1661: one ContentSource per canonical repo (4 total)."""
         from io import StringIO
 
         from django.core.management import call_command
         call_command('seed_content_sources', stdout=StringIO())
-        self.assertEqual(PackageContentSource.objects.count(), 3)
+        self.assertEqual(PackageContentSource.objects.count(), 4)
 
 
 # ===========================================================================

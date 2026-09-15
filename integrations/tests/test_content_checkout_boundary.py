@@ -527,13 +527,14 @@ class ContentCheckoutPipelineTest(TestCase):
                 )
 
                 existing.refresh_from_db()
-                # A2.3 bounded contract: the escaping cover image fails its
-                # family with a rich filesystem_boundary entry; other
-                # content still syncs, so the run is partial, not failed.
-                # The media pre-pass (mocked here) legitimately runs before
-                # the family error surfaces; the escape itself never reaches
-                # the variant store.
-                self.assertEqual(result.status, 'partial')
+                # A2.3 keeps the legacy security contract: an authored
+                # reference that escapes the checkout is a boundary refusal
+                # and fails the sync (never a silent partial). The engine
+                # translation is bounded at the refusal itself: the media
+                # pre-pass (mocked here) legitimately runs before the family
+                # error surfaces, the escape never reaches the variant
+                # store, and nothing outside the repo is leaked in errors.
+                self.assertEqual(result.status, 'failed')
                 self.assertEqual(existing.title, 'Existing title')
                 self.assertTrue(existing.published)
                 self.assertTrue(result.errors[0]['filesystem_boundary'])

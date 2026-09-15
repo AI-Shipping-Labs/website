@@ -9,13 +9,13 @@ import datetime
 import uuid
 from unittest.mock import patch
 
+from community_base.content_sync.models import SyncLog
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Workshop, WorkshopPage
 from events.models import Event
-from community_base.content_sync.models import SyncLog
 from integrations.models import ContentSource
 from jobs.tasks import build_task_name
 

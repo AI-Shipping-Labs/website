@@ -6,6 +6,9 @@ from unittest.mock import patch
 
 from botocore.exceptions import ClientError
 from community_base.content_sync.checkout import ImmutableCheckout
+from community_base.content_sync.models import (
+    SyncLog as PackageSyncLog,
+)
 from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -109,12 +112,19 @@ class ArticleImageSyncTest(TestCase):
         self.source.last_synced_commit = "b" * 40
         self.source.last_sync_status = "success"
         self.source.save(update_fields=["last_synced_commit", "last_sync_status"])
-        package_sync.return_value = SyncLog.objects.create(
-            source=self.source, status="skipped",
+        # The stubbed package boundary returns package rows. The package
+        # head-unchanged fast path records a warning and the seen commit,
+        # which is what keeps run_sync from retrying past the enabled gate.
+        package_sync.return_value = PackageSyncLog.objects.create(
+            source_id=self.source.pk,
+            status="skipped",
+            commit_sha="b" * 40,
+            warnings=["Repository commit was already synchronized"],
         )
 
         run_sync(self.source)
 
+        self.assertEqual(package_sync.call_count, 1)
         self.assertFalse(package_sync.call_args.kwargs["force"])
 
     @patch("community_base.content_sync.github.GitHubClient.resolve_commit")
@@ -152,7 +162,7 @@ class ArticleImageSyncTest(TestCase):
         log = sync_content_source(self.source)
 
         self.assertNotEqual(log.status, "skipped")
-        resolve_commit.assert_called_once()
+        self.assertEqual(resolve_commit.call_count, 1)
 
     def test_backfill_dry_run_then_write_is_scoped_idempotent_and_non_destructive(self):
         sync_content_source(self.source, repo_dir=self.repo.name)

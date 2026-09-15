@@ -8,6 +8,7 @@ import frontmatter
 import yaml
 
 from content.sync_parsers.checkout_view import (
+    ContentCheckoutError,
     checkout_is_file,
     checkout_read_text,
 )
@@ -233,13 +234,15 @@ def _render_event_recap_file(repo_dir, event_rel_path, data, source, rel_path):
         }
 
     if os.path.isabs(recap_file):
-        raise ValueError(f'recap_file must be relative in {rel_path}')
+        # Fail-closed boundary contract (#1500): an absolute recap_file
+        # targets outside the checkout and refuses the sync outright.
+        raise ContentCheckoutError(recap_file, 'absolute_path')
 
     event_base = os.path.dirname(event_rel_path)
     recap_rel_path = os.path.normpath(os.path.join(event_base, recap_file))
     recap_path = os.path.join(repo_dir, recap_rel_path)
     if recap_rel_path == '..' or recap_rel_path.startswith(f'..{os.sep}'):
-        raise ValueError(f'recap_file escapes content repo in {rel_path}')
+        raise ContentCheckoutError(recap_file, 'outside_checkout')
     if not checkout_is_file(recap_path):
         raise FileNotFoundError(f'recap_file not found in {rel_path}: {recap_file}')
 

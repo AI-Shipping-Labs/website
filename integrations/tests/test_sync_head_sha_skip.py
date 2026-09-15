@@ -26,6 +26,10 @@ import tempfile
 import uuid
 from unittest import mock
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.test import TestCase
 from django.utils import timezone
 
@@ -93,6 +97,7 @@ class SyncSkipSameShaTest(TestCase):
     def setUp(self):
         self.source = ContentSource.objects.create(
             repo_name='owner/blog-235-same',
+            webhook_secret='secret',
             last_synced_commit='a' * 40,
             last_sync_status='success',
         )
@@ -114,10 +119,14 @@ class SyncSkipSameShaTest(TestCase):
         # No checkout, no file walk.
         mock_clone.assert_not_called()
         # Lock was released even on the skip path.
-        mock_release.assert_called_once()
+        self.assertEqual(mock_release.call_count, 1)
         # Only one SyncLog row was written (the skip log) — no separate
-        # ``running`` row was leaked.
-        self.assertEqual(SyncLog.objects.filter(source=self.source).count(), 1)
+        # ``running`` row was leaked. The engine writes package rows, and
+        # the P6 mapping preserves source UUIDs.
+        self.assertEqual(
+            PackageSyncLog.objects.filter(source_id=self.source.pk).count(),
+            1,
+        )
 
     @mock.patch(
         'community_base.content_sync.github.GitHubClient.resolve_commit',
@@ -131,11 +140,12 @@ class SyncSkipSameShaTest(TestCase):
             log.warnings, ['Repository commit was already synchronized'],
         )
 
-        # Source state reflects the skip.
-        self.source.refresh_from_db()
-        self.assertEqual(self.source.last_sync_status, 'skipped')
+        # Source state reflects the skip on the package row the engine
+        # owns (same UUID as the legacy row, preserved by the P6 mapping).
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertEqual(package_source.last_sync_status, 'skipped')
         # last_synced_commit is unchanged (we already had it).
-        self.assertEqual(self.source.last_synced_commit, 'a' * 40)
+        self.assertEqual(package_source.last_synced_commit, 'a' * 40)
 
 
 class SyncSkipNewShaTest(TestCase):
@@ -253,8 +263,8 @@ class SyncSkipPreviousFailureTest(TestCase):
         log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'failed')
-        mock_fetch.assert_called_once()
-        mock_clone.assert_called_once()
+        self.assertEqual(mock_fetch.call_count, 1)
+        self.assertEqual(mock_clone.call_count, 1)
 
 
 class SyncSkipHeadFetchFailureTest(TestCase):
@@ -277,7 +287,7 @@ class SyncSkipHeadFetchFailureTest(TestCase):
 
         self.assertEqual(log.status, 'failed')
         self.assertNotEqual(log.status, 'skipped')
-        mock_fetch.assert_called_once()
+        self.assertEqual(mock_fetch.call_count, 1)
 
 
 class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
@@ -305,9 +315,9 @@ class SyncFailureDoesNotUpdateLastSyncedCommitTest(TestCase):
         log = sync_content_source(self.source)
 
         self.assertEqual(log.status, 'failed')
-        self.source.refresh_from_db()
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
         # Still the old SHA — the failure must not overwrite it.
-        self.assertEqual(self.source.last_synced_commit, 'a' * 40)
+        self.assertEqual(package_source.last_synced_commit, 'a' * 40)
 
 
 class SyncSuccessUpdatesLastSyncedCommitTest(TestCase):
@@ -358,8 +368,10 @@ class SyncSuccessUpdatesLastSyncedCommitTest(TestCase):
         self.assertEqual(log.status, 'success')
         self.assertEqual(log.commit_sha, self.expected_sha)
 
-        self.source.refresh_from_db()
-        self.assertEqual(self.source.last_synced_commit, self.expected_sha)
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertEqual(
+            package_source.last_synced_commit, self.expected_sha,
+        )
 
 
 class SyncFromDiskWithoutGitTest(TestCase):
@@ -393,8 +405,8 @@ class SyncFromDiskWithoutGitTest(TestCase):
         mock_fetch.assert_not_called()
         # Non-git dir: SHA falls back to the legacy marker so we don't
         # accidentally clobber last_synced_commit with garbage.
-        self.source.refresh_from_db()
-        self.assertEqual(self.source.last_synced_commit, 'a' * 40)
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertEqual(package_source.last_synced_commit, 'a' * 40)
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +460,7 @@ class WebhookForcesSyncTest(TestCase):
             HTTP_X_GITHUB_DELIVERY='delivery-235-1',
         )
         self.assertEqual(response.status_code, 202)
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +482,7 @@ class StudioForceResyncFlagTest(TestCase):
             repo_name='owner/repo-235-force-flag',
         )
 
-    @mock.patch('integrations.services.content_sync_queue.enqueue_content_sync')
+    @mock.patch('studio.views.sync.enqueue_content_sync')
     def test_per_source_trigger_forwards_force(self, mock_sync):
         response = self.client.post(
             f'/studio/sync/{self.source.pk}/trigger/',
@@ -480,12 +492,12 @@ class StudioForceResyncFlagTest(TestCase):
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.enqueue_content_sync')
+    @mock.patch('studio.views.sync.enqueue_content_sync')
     def test_per_source_trigger_default_is_not_forced(self, mock_sync):
         self.client.post(f'/studio/sync/{self.source.pk}/trigger/')
         self.assertFalse(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.enqueue_content_syncs')
+    @mock.patch('studio.views.sync.enqueue_content_syncs')
     def test_repo_trigger_forwards_force(self, mock_sync):
         self.client.post(
             f'/studio/sync/{self.source.repo_name}/trigger-repo/',
@@ -494,7 +506,7 @@ class StudioForceResyncFlagTest(TestCase):
         mock_sync.assert_called_once()
         self.assertTrue(mock_sync.call_args.kwargs.get('force'))
 
-    @mock.patch('integrations.services.content_sync_queue.enqueue_content_syncs')
+    @mock.patch('studio.views.sync.enqueue_content_syncs')
     def test_sync_all_forwards_force(self, mock_sync):
         self.client.post('/studio/sync/all/', {'force': '1'})
         mock_sync.assert_called()

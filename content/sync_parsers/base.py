@@ -113,6 +113,7 @@ class FamilyParser:
                 errors = media_errors + errors
             state.errors.clear()
             run_state.emit_results(self.content_type, state.details)
+            run_state.emit_counts(self.content_type, state.counts)
             state.details.clear()
             if errors:
                 run_state.emit_errors(self.content_type, errors)
@@ -149,6 +150,8 @@ class FamilyParser:
         state = self._state(run)
         state.errors.extend(stats.get('errors') or [])
         state.details.extend(stats.get('items_detail') or [])
+        for key in ('created', 'updated', 'unchanged', 'deleted'):
+            state.counts[key] += stats.get(key) or 0
         if stats.get('created'):
             return 'created'
         if stats.get('updated'):

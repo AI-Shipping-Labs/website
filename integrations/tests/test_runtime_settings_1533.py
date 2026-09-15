@@ -8,13 +8,17 @@ from unittest.mock import patch
 from community_base.api.models import APIKey
 from community_base.config.models import Setting
 from community_base.config.service import set as package_set
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from integrations.config import clear_config_cache
-from integrations.models import ContentSource, IntegrationSetting, SyncLog
+from integrations.models import IntegrationSetting
 from integrations.settings_registry import (
     SETTING_VALUE_TYPES,
     get_group_by_name,
@@ -124,22 +128,26 @@ class RuntimeSyncCallerTest(TestCase):
         SYNC_RUNNING_THRESHOLD_MINUTES='60',
     )
     def test_watchdog_uses_db_thresholds_and_reports_resolved_minutes(self):
-        queued_source = ContentSource.objects.create(
-            repo_name='example/queued', last_sync_status='queued',
+        # The watchdog owns the package rows (A2.3); the legacy rows it used
+        # to flip are retained only for rollback.
+        queued_source = PackageContentSource.objects.create(
+            slug='queued', repo_name='example/queued',
+            last_sync_status='queued',
         )
-        running_source = ContentSource.objects.create(
-            repo_name='example/running', last_sync_status='running',
+        running_source = PackageContentSource.objects.create(
+            slug='running', repo_name='example/running',
+            last_sync_status='running',
         )
-        queued_log = SyncLog.objects.create(
+        queued_log = PackageSyncLog.objects.create(
             source=queued_source, status='queued',
         )
-        running_log = SyncLog.objects.create(
+        running_log = PackageSyncLog.objects.create(
             source=running_source, status='running',
         )
-        SyncLog.objects.filter(pk=queued_log.pk).update(
+        PackageSyncLog.objects.filter(pk=queued_log.pk).update(
             started_at=timezone.now() - timedelta(minutes=6),
         )
-        SyncLog.objects.filter(pk=running_log.pk).update(
+        PackageSyncLog.objects.filter(pk=running_log.pk).update(
             started_at=timezone.now() - timedelta(minutes=9),
         )
         IntegrationSetting.objects.create(

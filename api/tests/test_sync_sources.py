@@ -2,16 +2,19 @@
 
 import json
 from io import StringIO
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
-from integrations.models import ContentSource, SyncLog
-from jobs.tasks import build_task_name
+from integrations.models import ContentSource
 
 User = get_user_model()
 
@@ -136,7 +139,10 @@ class SyncSourcesApiTest(TestCase):
         self.assertTrue(ContentSource.objects.filter(pk=self.source.pk).exists())
 
     def test_trigger_source_sync_queues_job_with_force(self):
-        with patch("django_q.tasks.async_task", return_value="task-id") as mock_async:
+        with patch(
+            "integrations.services.content_sync_queue.package_queue_source_sync",
+            return_value=(MagicMock(pk="intent-1234"), True),
+        ) as mock_queue:
             response = self.client.post(
                 f"/api/sync/sources/{self.source.pk}/trigger",
                 data=json.dumps({"force": True}),
@@ -147,24 +153,20 @@ class SyncSourcesApiTest(TestCase):
         self.assertEqual(response.status_code, 202)
         data = response.json()
         self.assertEqual(data["status"], "queued")
-        self.assertEqual(data["task_id"], "task-id")
+        self.assertEqual(data["task_id"], "intent-1234")
         self.assertFalse(data["ran_inline"])
         self.assertEqual(data["source"]["id"], str(self.source.pk))
-        self.source.refresh_from_db()
-        self.assertEqual(self.source.last_sync_status, "queued")
+        # The queued marker lands in the package SyncLog and source row the
+        # operator surfaces read; the P6 mapping preserves the legacy pk.
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertEqual(package_source.last_sync_status, "queued")
         self.assertTrue(
-            SyncLog.objects.filter(source=self.source, status="queued").exists()
+            PackageSyncLog.objects.filter(
+                source_id=self.source.pk, status="queued"
+            ).exists()
         )
-        mock_async.assert_called_once()
-        self.assertTrue(mock_async.call_args.kwargs["force"])
-        self.assertEqual(
-            mock_async.call_args.kwargs["task_name"],
-            build_task_name(
-                "Sync content source",
-                self.source.repo_name,
-                "API sync source trigger",
-            ),
-        )
+        self.assertEqual(mock_queue.call_count, 1)
+        self.assertTrue(mock_queue.call_args.kwargs["force"])
 
     def test_trigger_missing_source_returns_404(self):
         response = self.client.post(
@@ -223,7 +225,7 @@ class WorkshopsContentAutoSyncTriggerTest(TestCase):
         cls.staff_token = Token.objects.create(user=cls.staff, name="ws-sync")
         # Register sources exactly as production does on first-time setup.
         call_command("seed_content_sources", stdout=StringIO())
-        cls.workshops_source = ContentSource.objects.get(
+        cls.workshops_source = PackageContentSource.objects.get(
             repo_name="AI-Shipping-Labs/workshops-content",
         )
 
@@ -232,8 +234,9 @@ class WorkshopsContentAutoSyncTriggerTest(TestCase):
 
     def test_non_forced_trigger_resolves_and_queues_workshops_sync(self):
         with patch(
-            "django_q.tasks.async_task", return_value="task-id"
-        ) as mock_async:
+            "integrations.services.content_sync_queue.package_queue_source_sync",
+            return_value=(MagicMock(pk="intent-ws"), True),
+        ) as mock_queue:
             response = self.client.post(
                 f"/api/sync/sources/{self.workshops_source.pk}/trigger",
                 # Empty JSON body, no force — exactly what the workflow's
@@ -246,23 +249,25 @@ class WorkshopsContentAutoSyncTriggerTest(TestCase):
         self.assertEqual(response.status_code, 202)
         data = response.json()
         self.assertEqual(data["status"], "queued")
-        self.assertEqual(data["task_id"], "task-id")
+        self.assertEqual(data["task_id"], "intent-ws")
         self.assertEqual(
             data["source"]["repo_name"],
             "AI-Shipping-Labs/workshops-content",
         )
         # The queued task must NOT force — idempotency is the site's job.
-        mock_async.assert_called_once()
-        self.assertFalse(mock_async.call_args.kwargs["force"])
+        self.assertEqual(mock_queue.call_count, 1)
+        self.assertFalse(mock_queue.call_args.kwargs["force"])
         # A queued SyncLog row exists for this source (the dashboard pill).
         self.assertTrue(
-            SyncLog.objects.filter(
-                source=self.workshops_source, status="queued"
+            PackageSyncLog.objects.filter(
+                source_id=self.workshops_source.pk, status="queued"
             ).exists()
         )
 
     def test_trigger_against_unknown_source_does_not_queue(self):
-        with patch("django_q.tasks.async_task") as mock_async:
+        with patch(
+            "integrations.services.content_sync_queue.package_queue_source_sync",
+        ) as mock_queue:
             response = self.client.post(
                 "/api/sync/sources/"
                 "00000000-0000-0000-0000-000000000000/trigger",
@@ -272,7 +277,9 @@ class WorkshopsContentAutoSyncTriggerTest(TestCase):
             )
 
         self.assertEqual(response.status_code, 404)
-        mock_async.assert_not_called()
+        mock_queue.assert_not_called()
         self.assertFalse(
-            SyncLog.objects.filter(source=self.workshops_source).exists()
+            PackageSyncLog.objects.filter(
+                source_id=self.workshops_source.pk
+            ).exists()
         )

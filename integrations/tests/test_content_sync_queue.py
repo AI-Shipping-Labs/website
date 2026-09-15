@@ -8,7 +8,7 @@ by the package now, so those legacy contract tests were retired with the
 """
 
 import uuid
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.test import TestCase
@@ -29,6 +29,7 @@ class ContentSyncQueueServiceTest(TestCase):
 
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_enqueue_returns_structured_queued_result(self, mock_queue):
         result = enqueue_content_sync(self.source)
@@ -37,10 +38,11 @@ class ContentSyncQueueServiceTest(TestCase):
         self.assertTrue(result.queued)
         self.assertFalse(result.ran_inline)
         self.assertEqual(result.source, self.source)
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
 
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_enqueue_marks_source_queued_when_requested(self, mock_queue):
         enqueue_content_sync(self.source)
@@ -53,6 +55,7 @@ class ContentSyncQueueServiceTest(TestCase):
 
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_enqueue_uses_batch_id_for_queued_log(self, mock_queue):
         batch_id = uuid.uuid4()
@@ -68,6 +71,7 @@ class ContentSyncQueueServiceTest(TestCase):
 
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_mark_queued_false_does_not_create_queued_state(self, mock_queue):
         enqueue_content_sync(self.source, mark_queued=False)
@@ -77,10 +81,11 @@ class ContentSyncQueueServiceTest(TestCase):
                 source_id=self.source.pk,
             ).exists(),
         )
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
 
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_force_true_forwarded_to_dispatcher(self, mock_queue):
         enqueue_content_sync(self.source, force=True)
@@ -101,9 +106,10 @@ class ContentSyncQueueServiceTest(TestCase):
         self.assertFalse(result.queued)
         self.assertFalse(result.ran_inline)
         self.assertEqual(result.error, 'queue error')
-        # The queued marker row was already written when the dispatcher
-        # raised; the watchdog owns failing stale markers.
-        self.assertTrue(
+        # The marker row and the dispatch intent share one transaction, so
+        # a dispatcher failure rolls both back: nothing claims a queued
+        # state that never landed in the queue.
+        self.assertFalse(
             PackageSyncLog.objects.filter(
                 source_id=self.source.pk, status='queued',
             ).exists(),
@@ -113,6 +119,7 @@ class ContentSyncQueueServiceTest(TestCase):
 class ContentSyncQueueBulkServiceTest(TestCase):
     @patch(
         'integrations.services.content_sync_queue.package_queue_source_sync',
+        return_value=(MagicMock(), True),
     )
     def test_bulk_enqueue_returns_one_result_per_source(self, mock_queue):
         source_a = ContentSource.objects.create(

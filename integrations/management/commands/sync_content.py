@@ -156,7 +156,18 @@ class Command(BaseCommand):
                 )
             for source in sources:
                 self.stdout.write(f'Syncing {source.repo_name}...')
-                result = run_sync(source, repo_dir=repo_dir if from_disk else None, force=force)
+                try:
+                    result = run_sync(
+                        source,
+                        repo_dir=repo_dir if from_disk else None,
+                        force=force,
+                    )
+                except Exception as e:  # noqa: BLE001 - one bad source must not stop the rest
+                    self.stderr.write(
+                        self.style.ERROR(f'  FAILED [{source.repo_name}]: {e}')
+                    )
+                    has_errors = True
+                    continue
                 created = result.items_created
                 updated = result.items_updated
                 total_created += created

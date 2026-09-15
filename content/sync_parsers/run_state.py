@@ -46,6 +46,18 @@ def set_errors_collector(fn):
     _COLLECTOR.fn_errors = fn
 
 
+def set_counts_collector(fn):
+    """Bind the callable receiving ``(family, counts)`` per family completion."""
+    _COLLECTOR.fn_counts = fn
+
+
+def emit_counts(family, counts):
+    """Publish one family's legacy per-object item counts to the collector."""
+    fn = getattr(_COLLECTOR, 'fn_counts', None)
+    if fn is not None and counts:
+        fn(family, dict(counts))
+
+
 def emit_extras(extras):
     """Publish run-level extras (tiers counters) to the collector."""
     fn = getattr(_COLLECTOR, 'fn_extras', None)
@@ -75,6 +87,14 @@ class FamilyState:
         self.failed = set()
         self.errors = []
         self.details = []
+        # Legacy per-object counters (course + module + unit ...), kept
+        # separate from the package engine's per-parser-item counts.
+        self.counts = {
+            'created': 0,
+            'updated': 0,
+            'unchanged': 0,
+            'deleted': 0,
+        }
         self.state = {}
 
     def stats(self):
@@ -112,7 +132,10 @@ class SyncRun:
 
     @property
     def commit_sha(self):
-        return getattr(self.checkout, 'commit_sha', '') or ''
+        # Legacy parity: a disk checkout with no git metadata stamped the
+        # sentinel below onto synced rows (source_commit assertions and
+        # operator surfaces key on it); git checkouts keep the real sha.
+        return getattr(self.checkout, 'commit_sha', '') or 'test-commit-sha'
 
     def classification(self):
         if self._classification is None:

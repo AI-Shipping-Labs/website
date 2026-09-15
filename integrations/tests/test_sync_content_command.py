@@ -7,21 +7,25 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import call, patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
 from integrations.management.commands.sync_content import Command
-from integrations.models import ContentSource
 
 COMMAND_MODULE = 'integrations.management.commands.sync_content'
 WEBHOOK_SECRET = 'webhook-secret-must-not-leak'
 
 
-def _result(*, created=0, updated=0, errors=None):
+def _result(*, created=0, updated=0, unchanged=0, deleted=0, errors=None):
     return SimpleNamespace(
         items_created=created,
         items_updated=updated,
+        items_unchanged=unchanged,
+        items_deleted=deleted,
         errors=[] if errors is None else errors,
     )
 
@@ -34,7 +38,10 @@ def _repo_dir():
 
 class SyncContentCommandTest(TestCase):
     def _source(self, repo_name):
-        return ContentSource.objects.create(
+        # The command walks the package registry (A2.3); the mirror keeps a
+        # legacy row alongside but is not what gets dispatched.
+        return PackageContentSource.objects.create(
+            slug=repo_name.rsplit('/', 1)[-1].lower(),
             repo_name=repo_name,
             webhook_secret=WEBHOOK_SECRET,
         )
@@ -73,7 +80,7 @@ class SyncContentCommandTest(TestCase):
     def test_empty_registry_is_rejected_with_seed_guidance(self, sync_source):
         error, stdout, stderr = self._run_with_error()
 
-        self.assertIn('No content sources configured', str(error))
+        self.assertIn('No matching content sources', str(error))
         self.assertIn('seed_content_sources', str(error))
         self.assertEqual(stdout, '')
         self.assertEqual(stderr, '')
@@ -114,12 +121,23 @@ class SyncContentCommandTest(TestCase):
         with _repo_dir() as repo_dir:
             stdout, stderr = self._run('--from-disk', str(repo_dir))
 
+        # --from-disk is a rehearsal sync: the command forces past the
+        # enabled gate so secretless sources still sync, and (A2.3) it
+        # syncs a symlink-free snapshot copy of the clone, never the
+        # clone itself — the package checkout refuses symlinks and local
+        # clones carry tooling symlinks.
+        passed_calls = sync_source.call_args_list
+        passed_dirs = [entry.kwargs['repo_dir'] for entry in passed_calls]
         self.assertEqual(
-            sync_source.call_args_list,
-            [
-                call(source_a, repo_dir=str(repo_dir), force=False),
-                call(source_b, repo_dir=str(repo_dir), force=False),
-            ],
+            [entry.args[0] for entry in passed_calls],
+            [source_a, source_b],
+        )
+        self.assertEqual(passed_dirs, [passed_dirs[0], passed_dirs[0]])
+        self.assertNotEqual(passed_dirs[0], str(repo_dir))
+        self.assertTrue(passed_dirs[0].endswith('/repo'))
+        self.assertEqual(
+            [entry.kwargs['force'] for entry in passed_calls],
+            [True, True],
         )
         self.assertNotIn('Syncing tiers.yaml...', stdout)
         self.assertEqual(stderr, '')

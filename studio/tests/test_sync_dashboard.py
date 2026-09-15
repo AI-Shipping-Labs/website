@@ -5,11 +5,11 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from community_base.content_sync.models import ContentSource, SyncLog
 from integrations.services.content_sync_queue import ContentSyncQueueResult
 
 User = get_user_model()
@@ -1788,7 +1788,9 @@ class StudioSyncTriggerTest(TestCase):
                 follow=True,
             )
 
-        self.assertEqual(response.status_code, 200)
+        # Behavioral contract: the followed redirect renders the sync
+        # dashboard (source row visible) with a 200, not a queued lie.
+        self.assertContains(response, "AI-Shipping-Labs/blog", status_code=200)
         self.assertIn(
             "Error triggering sync for AI-Shipping-Labs/blog",
             logs.output[0],
@@ -1807,7 +1809,7 @@ class StudioSyncTriggerTest(TestCase):
         )
         self.client.post(f"/studio/sync/{self.source.pk}/trigger/")
         # Exactly one enqueue call (vs two if it had hit sync_all).
-        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_count, 1)
         synced_source = mock_enqueue.call_args[0][0]
         self.assertEqual(synced_source.pk, self.source.pk)
         self.assertNotEqual(synced_source.pk, other.pk)
@@ -1879,7 +1881,7 @@ class StudioSyncRepoTriggerTest(TestCase):
             repo_name="AI-Shipping-Labs/content",
         )
         self.client.post("/studio/sync/AI-Shipping-Labs/content/trigger-repo/")
-        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_count, 1)
         self.assertIsNotNone(mock_enqueue.call_args.kwargs["batch_id"])
 
     @patch("studio.views.sync.enqueue_content_syncs")
@@ -1985,7 +1987,7 @@ class StudioSyncAllTest(TestCase):
             repo_name="AI-Shipping-Labs/content",
         )
         self.client.post("/studio/sync/all/")
-        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_count, 1)
         self.assertEqual(len(mock_enqueue.call_args.args[0]), 2)
 
     @patch("studio.views.sync.enqueue_content_syncs")
@@ -2023,7 +2025,7 @@ class StudioSyncAllTest(TestCase):
             repo_name="AI-Shipping-Labs/content",
         )
         self.client.post("/studio/sync/all/")
-        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_count, 1)
         self.assertIsNotNone(mock_enqueue.call_args.kwargs["batch_id"])
 
     def test_sync_all_requires_post(self):
@@ -2039,7 +2041,7 @@ class StudioSyncAllTest(TestCase):
     def test_sync_all_with_no_sources(self, mock_enqueue):
         response = self.client.post("/studio/sync/all/")
         self.assertEqual(response.status_code, 302)
-        mock_enqueue.assert_called_once()
+        self.assertEqual(mock_enqueue.call_count, 1)
         self.assertEqual(list(mock_enqueue.call_args.args[0]), [])
 
 

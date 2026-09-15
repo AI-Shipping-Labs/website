@@ -18,11 +18,11 @@ Covers:
 import datetime
 from unittest.mock import patch
 
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from content.models import Article, Course, Module, Unit, Workshop
-from community_base.content_sync.models import ContentSource, SyncLog
 
 User = get_user_model()
 

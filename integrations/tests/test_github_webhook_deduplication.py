@@ -102,7 +102,7 @@ class GitHubWebhookDeduplicationTest(TestCase):
         self.assertEqual(second.status_code, 200)
         self.assertEqual(second.json()['message'], 'Duplicate delivery')
 
-        first.mock_queue.assert_called_once()
+        self.assertEqual(first.mock_queue.call_count, 1)
         self.assertEqual(PackageWebhookLog.objects.filter(
             service='github',
         ).count(), 1)
@@ -161,8 +161,8 @@ class GitHubWebhookDeduplicationTest(TestCase):
 
         self.assertEqual(first.json()['message'], 'Sync queued')
         self.assertEqual(second.json()['message'], 'Sync queued')
-        first.mock_queue.assert_called_once()
-        second.mock_queue.assert_called_once()
+        self.assertEqual(first.mock_queue.call_count, 1)
+        self.assertEqual(second.mock_queue.call_count, 1)
         self.assertEqual(PackageWebhookLog.objects.filter(
             service='github',
         ).count(), 2)

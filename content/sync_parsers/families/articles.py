@@ -19,6 +19,7 @@ from content.sync_parsers.parsing import (
     _parse_markdown_file,
     _validate_frontmatter,
 )
+from content.utils.includes import ensure_include_paths_in_bounds
 from integrations.services.article_images import build_article_image_manifest
 from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
@@ -372,6 +373,9 @@ class ArticlesParser(FamilyParser):
             current_slug = None
             try:
                 metadata, body = _parse_markdown_file(filepath)
+                # #1500: a traversal or absolute include refuses the whole
+                # repo at discovery, before any article is upserted.
+                ensure_include_paths_in_bounds(body)
                 current_slug = metadata.get(
                     'slug', os.path.splitext(filename)[0],
                 ) if isinstance(metadata, dict) else None

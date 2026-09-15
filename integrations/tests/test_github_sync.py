@@ -522,7 +522,7 @@ class GitHubWebhookEndpointTest(TestCase):
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()['message'], 'Sync queued')
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
         package_source = PackageContentSource.objects.get(pk=self.source.pk)
         self.assertIsNotNone(package_source.last_webhook_at)
         webhook_log = PackageWebhookLog.objects.get(service='github')
@@ -540,7 +540,7 @@ class GitHubWebhookEndpointTest(TestCase):
         }
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 202)
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
 
     @patch('community_base.content_sync.webhooks.queue_source_sync')
     def test_invalid_signature_returns_401(self, mock_queue):
@@ -675,7 +675,7 @@ class GitHubWebhookEndpointTest(TestCase):
         response = self._post_webhook(payload)
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.json()['message'], 'Sync queued')
-        mock_queue.assert_called_once()
+        self.assertEqual(mock_queue.call_count, 1)
 
     def test_webhook_logged(self):
         payload = {
@@ -1018,15 +1018,16 @@ class SyncArticlesTest(TestCase):
     def test_sync_log_created(self):
         sync_log = sync_repo(self.source, self.repo)
         self.assertIsNotNone(sync_log)
-        self.assertEqual(sync_log.source, self.source)
+        # The engine writes package rows; the P6 mapping preserves pks.
+        self.assertEqual(sync_log.source_id, self.source.pk)
         self.assertIsNotNone(sync_log.finished_at)
 
     def test_sync_updates_source_status(self):
         sync_repo(self.source, self.repo)
-        self.source.refresh_from_db()
-        self.assertEqual(self.source.last_sync_status, 'success')
-        self.assertIsNotNone(self.source.last_synced_at)
-        self.assertIsNotNone(self.source.last_sync_log)
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        self.assertEqual(package_source.last_sync_status, 'success')
+        self.assertIsNotNone(package_source.last_synced_at)
+        self.assertIsNotNone(package_source.last_sync_log)
 
     def test_sync_with_errors_partial_status(self):
         """If some files have errors, status should be 'partial'."""
@@ -2300,7 +2301,7 @@ class SyncFailureTest(TestCase):
             )
             package_source = PackageContentSource.objects.get(pk=source.pk)
             self.assertEqual(package_source.last_sync_status, 'failed')
-            self.assertIn('failed', (package_source.last_sync_log or '').lower())
+            self.assertIn('max_files=0', package_source.last_sync_log or '')
         finally:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)

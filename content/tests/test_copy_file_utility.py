@@ -113,19 +113,25 @@ class EmptyStringCopyFileBehavesLikeNoneTest(SimpleTestCase):
 
 
 class TraversalRejectedTest(SimpleTestCase):
-    """``..`` in the copy_file value is rejected before any file is opened."""
+    """``..`` in the copy_file value refuses the repo at the boundary (#1500).
 
-    def test_dotdot_path_rejected_with_filename_error(self):
+    Since A2.3 a traversal attempt raises ``ContentCheckoutError`` (the sync
+    ends ``failed`` with a ``filesystem_boundary`` entry), not a bounded
+    per-file error — main's checkout preloading refused the same authored
+    escapes before any parser ran.
+    """
+
+    def test_dotdot_path_raises_boundary_error(self):
+        from content.sync_parsers.checkout_view import ContentCheckoutError
+
         with tempfile.TemporaryDirectory() as folder:
-            body, error = resolve_copy_file_content(
-                folder, '../other/secret.md',
-            )
+            with self.assertRaises(ContentCheckoutError) as caught:
+                resolve_copy_file_content(
+                    folder, '../other/secret.md',
+                )
 
-        self.assertIsNone(body)
-        self.assertIsNotNone(error)
-        self.assertIn("'../other/secret.md'", error)
-        self.assertIn('must be a filename', error)
-        self.assertIn('not a path', error)
+        self.assertEqual(caught.exception.kind, 'outside_checkout')
+        self.assertEqual(caught.exception.step, 'filesystem_boundary')
 
 
 # ----------------------------------------------------------------------

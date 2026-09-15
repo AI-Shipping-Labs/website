@@ -23,12 +23,12 @@ import uuid
 from datetime import date, timedelta
 from unittest.mock import patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from community_base.content_sync.orchestration import (
     acquire_source_lock,
     release_source_lock,
-)
-from community_base.content_sync.models import (
-    ContentSource as PackageContentSource,
 )
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -449,7 +449,7 @@ class WebhookFloodTest(TestCase):
         ) as queue_sync:
             release_source_lock(source, follow_up_key=source.pk)
 
-        queue_sync.assert_called_once()
+        self.assertEqual(queue_sync.call_count, 1)
 
         # After release, the flag and lock are cleared
         source.refresh_from_db()
@@ -858,7 +858,7 @@ class WebhookDeduplicationTest(TestCase):
             response = self._post_push(payload)
 
         self.assertEqual(response.status_code, 202)
-        queue_sync.assert_called_once()
+        self.assertEqual(queue_sync.call_count, 1)
         self.source.refresh_from_db()
         self.assertIsNotNone(self.source.last_webhook_at)
 
@@ -878,7 +878,7 @@ class WebhookDeduplicationTest(TestCase):
             response = self._post_push(payload)
 
         self.assertEqual(response.status_code, 202)
-        queue_sync.assert_called_once()
+        self.assertEqual(queue_sync.call_count, 1)
 
 
 # ===========================================================================

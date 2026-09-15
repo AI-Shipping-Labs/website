@@ -26,6 +26,7 @@ from content.sync_parsers.parsing import (
     _parse_markdown_file,
     _validate_frontmatter,
 )
+from content.utils.includes import ensure_include_paths_in_bounds
 
 _VALID_STATUSES = {STATUS_DRAFT, STATUS_PUBLISHED}
 _VALID_NAV_SECTIONS = {
@@ -293,6 +294,9 @@ class MarketingPagesParser(FamilyParser):
             content_id = None
             try:
                 metadata, body = _parse_markdown_file(filepath)
+                # #1500: a traversal or absolute include refuses the whole
+                # repo at discovery, before any page is upserted.
+                ensure_include_paths_in_bounds(body)
                 content_id = metadata.get('content_id')
                 _validate_frontmatter(metadata, 'marketing_page', rel_path)
             except Exception as exc:  # noqa: BLE001 - bounded per-file capture

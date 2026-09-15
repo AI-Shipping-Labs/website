@@ -73,11 +73,12 @@ def _normalize_checkout_refusals(log):
 def run_sync(source, repo_dir=None, batch_id=None, force=False):
     """Run one content source through the package engine.
 
-    Returns the package ``SyncLog`` row. Site parser detail entries are
-    appended to ``items_detail`` after the package write so both the compact
-    package entries and the legacy rich entries are available to operators.
-    Rich per-file parser errors are prepended to ``log.errors`` in the legacy
-    ``{'file', 'error'}`` shape next to the package's bounded entry.
+    Returns the package ``SyncLog`` row. The site parser contract is merged
+    in after the package write: ``items_*`` keep counting content objects
+    (issues #222/#224/#225), ``items_detail``/``errors`` keep the legacy
+    rich ``{title, slug, action}`` / ``{'file', 'error'}`` shapes for the
+    families the site parsers enriched, and a checkout-boundary refusal
+    fails the sync outright (#1500) instead of ending partial.
     """
     force = force or _manifest_reconciliation_pending(source, repo_dir)
 
@@ -90,21 +91,27 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
 
     collected_details = []
     collected_errors = []
+    collected_counts = {}
     rich_families = set()
     extras = {}
 
     def _collect(family, details):
+        rich_families.add(family)
         collected_details.extend(details)
 
     def _collect_errors(family, errors):
         rich_families.add(family)
         collected_errors.extend(errors)
 
+    def _collect_counts(family, counts):
+        collected_counts[family] = counts
+
     def _collect_extras(run_extras):
         extras.update(run_extras)
 
     run_state.set_results_collector(_collect)
     run_state.set_errors_collector(_collect_errors)
+    run_state.set_counts_collector(_collect_counts)
     run_state.set_extras_collector(_collect_extras)
     try:
         log = package_sync_content_source(
@@ -132,6 +139,7 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
     finally:
         run_state.set_results_collector(None)
         run_state.set_errors_collector(None)
+        run_state.set_counts_collector(None)
         run_state.set_extras_collector(None)
 
     boundary_refusals = _normalize_checkout_refusals(log)
@@ -151,8 +159,40 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
         ]
         log.errors = collected_errors + package_entries
         changed_fields.append('errors')
-    if collected_details:
-        log.items_detail = list(log.items_detail or []) + collected_details
+    if collected_counts:
+        # The package counts one parser item per discovery unit (a whole
+        # course tree is one item); the operator contract counts content
+        # objects, which the moved dispatcher bodies already tally.
+        log.items_created = sum(
+            counts.get('created', 0) for counts in collected_counts.values()
+        )
+        log.items_updated = sum(
+            counts.get('updated', 0) for counts in collected_counts.values()
+        )
+        log.items_unchanged = sum(
+            counts.get('unchanged', 0) for counts in collected_counts.values()
+        )
+        log.items_deleted = sum(
+            counts.get('deleted', 0) for counts in collected_counts.values()
+        )
+        changed_fields.extend([
+            'items_created',
+            'items_updated',
+            'items_unchanged',
+            'items_deleted',
+        ])
+    if collected_details or rich_families:
+        # The package's compact entries duplicate the rich entries for
+        # enriched families; keep the rich ones first and preserve compact
+        # entries only for families the site parsers did not enrich.
+        package_details = [
+            entry for entry in (log.items_detail or [])
+            if not (
+                isinstance(entry, dict)
+                and entry.get('content_type') in rich_families
+            )
+        ]
+        log.items_detail = collected_details + package_details
         changed_fields.append('items_detail')
     if extras:
         # Namespaced compatibility representation for the legacy tier
@@ -168,8 +208,21 @@ def run_sync(source, repo_dir=None, batch_id=None, force=False):
         })
         log.warnings = warnings
         changed_fields.append('warnings')
+    boundary_failure = any(
+        isinstance(entry, dict) and entry.get('step') == 'filesystem_boundary'
+        for entry in (log.errors or [])
+    )
+    if boundary_failure and log.status != 'failed':
+        # Fail-closed legacy contract (#1500): a checkout-boundary refusal
+        # is a failed sync, not a partial one.
+        log.status = 'failed'
+        changed_fields.append('status')
     if changed_fields:
         log.save(update_fields=changed_fields)
+    if boundary_failure:
+        PackageContentSource.objects.filter(pk=source.pk).update(
+            last_sync_status='failed',
+        )
     return log
 
 

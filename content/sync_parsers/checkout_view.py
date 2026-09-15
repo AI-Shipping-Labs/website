@@ -70,7 +70,9 @@ class ContentCheckoutError(GitHubSyncError):
             'file': self.rel_path,
             'error': f'{self.rel_path}: {self.kind}',
             'step': self.step,
+            'kind': self.kind,
             'filesystem_boundary': True,
+            'retryable': False,
         }
 
 

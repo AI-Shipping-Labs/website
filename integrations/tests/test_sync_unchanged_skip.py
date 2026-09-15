@@ -33,6 +33,9 @@ from datetime import date, datetime
 from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from django.test import TestCase
 
 from content.models import Article, CuratedLink, Unit
@@ -223,14 +226,14 @@ class SyncArticlesUnchangedTest(TestCase):
         """
         self._seed_articles(n=2)
         sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.source.refresh_from_db()
-        first_ts = self.source.last_synced_at
+        package_source = PackageContentSource.objects.get(pk=self.source.pk)
+        first_ts = package_source.last_synced_at
 
         # Re-sync identical content
         sync_content_source(self.source, repo_dir=self.temp_dir)
-        self.source.refresh_from_db()
-        self.assertIsNotNone(self.source.last_synced_at)
-        self.assertGreaterEqual(self.source.last_synced_at, first_ts)
+        package_source.refresh_from_db()
+        self.assertIsNotNone(package_source.last_synced_at)
+        self.assertGreaterEqual(package_source.last_synced_at, first_ts)
 
 
 # ---------------------------------------------------------------------------

@@ -18,11 +18,11 @@ import datetime
 import json
 from unittest.mock import patch
 
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from community_base.content_sync.models import ContentSource, SyncLog
 from studio.views.sync import (
     WATCHDOG_QUEUED_ERROR,
     WATCHDOG_RUNNING_ERROR,

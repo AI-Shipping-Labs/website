@@ -9,13 +9,13 @@ so this module runs only in the serial PostgreSQL verification lane.
 from datetime import timedelta
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.db import connection
 from django.test import TestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from accounts.models import TierOverride, User
-from community_base.mail.models import EmailDelivery
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.services import monthly_payment_grace as service

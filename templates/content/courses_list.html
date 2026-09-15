@@ -27,46 +27,7 @@
       {% if courses %}
       <div class="{{ course_grid_classes }}" data-testid="courses-grid">
         {% for course in courses %}
-        <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
-          {% with course_primary_instructor=course.primary_instructor %}
-          <a href="/courses/{{ course.slug }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
-            {% if course.is_free %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
-            {% elif course.required_level > 0 %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_label preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
-            {% else %}
-              {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
-            {% endif %}
-            <div class="min-w-0 p-4 sm:p-5">
-              <div class="mb-3 flex flex-wrap items-center gap-2">
-                {% member_access_badge course.required_level testid="course-access-badge" %}
-                {% if course.pk in enrolled_course_ids %}
-                {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}
-                {% endif %}
-              </div>
-              <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
-                {{ course.title }}
-              </h2>
-              {% if course_primary_instructor %}
-              <p class="mt-1 min-w-0 truncate text-sm text-muted-foreground">by {{ course_primary_instructor.name }}</p>
-              {% endif %}
-              {% if course.description_html %}
-              <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ course.description_html|striptags|truncatechars:120 }}</p>
-              {% endif %}
-              {% if course.tags %}
-              <div class="mt-3 flex flex-wrap gap-1.5" data-testid="course-card-tags">
-                {% for tag in course.tags|slice:":3" %}
-                <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
-                {% endfor %}
-                {% if course.tags|length > 3 %}
-                <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ course.tags|length|add:'-3' }} more course tags">+{{ course.tags|length|add:"-3" }}</span>
-                {% endif %}
-              </div>
-              {% endif %}
-            </div>
-          </a>
-          {% endwith %}
-        </article>
+        {% include "content/_course_card.html" with course=course enrolled_course_ids=enrolled_course_ids %}
         {% endfor %}
       </div>
       {% else %}
@@ -75,6 +36,25 @@
       {% else %}
       {% member_empty_state title='No courses available yet' body='Check back soon for structured learning paths.' icon='book-open' kind='fresh' %}
       {% endif %}
+      {% endif %}
+
+      {% if entitlement_courses %}
+      {% comment %}
+        Issue #1658: courses sold outside the membership plans (e.g. the
+        Maven buildcamp). Always shown, independent of the topic filter;
+        excluded from the tag-filter facet pool above. Hidden entirely
+        when there are zero entitlement-mode courses (Featured-articles
+        empty-state precedent, issue #227) — no empty state here.
+      {% endcomment %}
+      <div class="mt-12" data-testid="sold-separately-section">
+        <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Sold separately</h2>
+        <p class="mt-2 text-sm text-muted-foreground">Independent programs with their own enrollment — not included in Basic, Main or Premium plans.</p>
+        <div class="mt-6 {{ entitlement_course_grid_classes }}" data-testid="sold-separately-grid">
+          {% for course in entitlement_courses %}
+          {% include "content/_course_card.html" with course=course enrolled_course_ids=enrolled_course_ids show_sold_separately=True %}
+          {% endfor %}
+        </div>
+      </div>
       {% endif %}
     </div>
   </section>

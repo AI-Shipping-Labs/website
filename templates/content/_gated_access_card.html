@@ -1,5 +1,6 @@
 {% load access_tags %}
 {% load accounts_extras %}
+{% load member_badges %}
 {% comment %}
 Canonical gated-content card. This is the ONE partial every paid /
 tier-gated / free-with-sign-in content block renders (issue #1335). The
@@ -32,6 +33,14 @@ Expected context:
 ``required_tier_name`` carries the bare tier name (Basic / Main / Premium);
 ``tier_public_label`` renders the pill ("Basic or above required"). Empty
 means free-with-sign-in and a "Free with sign-in" chip renders instead.
+
+Issue #1658: ``gated_entitlement`` (boolean, default falsy) is an additive
+flag for courses sold outside the membership plans (e.g. Maven). When
+true, it renders a "Sold separately" pill instead of the tier pill and
+routes into the same paid-style CTA layout even though ``required_tier_name``
+is empty (no tier grants access to an entitlement-only course). The CTA
+opens in a new tab, since ``gated_cta_url`` is an external enroll URL. No
+existing caller sets this flag, so every other surface is unchanged.
 {% endcomment %}
 <div class="overflow-hidden rounded-lg border border-accent/30 bg-accent/5" data-testid="{{ gated_card_testid }}">
   <div class="flex flex-col items-center gap-6 p-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:p-8 sm:text-left">
@@ -50,6 +59,8 @@ means free-with-sign-in and a "Free with sign-in" chip renders instead.
         <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>
         {{ required_tier_name|tier_public_label }} required
       </span>
+      {% elif gated_entitlement %}
+      {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" testid="gated-entitlement-badge" %}
       {% elif signup_cta_url %}
       <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-500" data-testid="gated-free-badge">
         <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>
@@ -68,8 +79,8 @@ means free-with-sign-in and a "Free with sign-in" chip renders instead.
       </div>
       {% endif %}
 
-      {% if required_tier_name %}
-      {# ---- PAID: value manifest + decision row ---- #}
+      {% if required_tier_name or gated_entitlement %}
+      {# ---- PAID / ENTITLEMENT: value manifest + decision row ---- #}
       {% if gated_value_items %}
       <ul class="mt-5 flex flex-col flex-wrap items-center gap-x-6 gap-y-2.5 sm:flex-row sm:items-start" data-testid="gated-value-items">
         {% for item in gated_value_items %}
@@ -89,12 +100,15 @@ means free-with-sign-in and a "Free with sign-in" chip renders instead.
         {% else %}
         <span class="hidden sm:block"></span>
         {% endif %}
+        {% if gated_cta_url %}
         <a href="{{ gated_cta_url }}"
+           {% if gated_entitlement %}target="_blank" rel="noopener noreferrer"{% endif %}
            class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-6 py-3 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
            data-testid="{{ gated_cta_testid }}">
           {{ gated_cta_label }}
           <i data-lucide="arrow-up-right" class="h-4 w-4"></i>
         </a>
+        {% endif %}
       </div>
 
       {% elif signup_cta_url %}

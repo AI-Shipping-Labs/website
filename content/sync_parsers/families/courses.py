@@ -53,6 +53,74 @@ _ACCESS_NAME_TO_LEVEL = {
 }
 _VALID_ACCESS_LEVELS = frozenset(_ACCESS_NAME_TO_LEVEL.values())
 
+# Issue #1658: courses sold outside the membership plans (e.g. the Maven
+# buildcamp). 'tier' is the default (existing behaviour for every course
+# that omits the key); 'entitlement' skips the tier comparison entirely.
+_VALID_ACCESS_MODES = frozenset({'tier', 'entitlement'})
+
+
+def _resolve_access_mode(
+    course_data, rel_path, *, required_level=0, default_unit_required_level=None,
+):
+    """Resolve and validate the optional ``access_mode:`` YAML key.
+
+    Returns ``'tier'`` when the key is absent (today's behaviour for every
+    existing course — no regression). Raises :class:`GitHubSyncError` for
+    an unrecognized value, or for an ``'entitlement'`` course that would
+    ship with a hole in the gating it claims to have (issue #1658 QA
+    follow-up):
+
+    - no ``enroll_url`` — no way to enroll is a content bug on its own.
+    - ``required_level`` below Basic — ``can_access()`` grants
+      ``LEVEL_OPEN``/``LEVEL_REGISTERED`` content before the
+      entitlement/tier branch ever runs (documented, intentional
+      early-return behaviour in ``content/access.py``), so a
+      sub-Basic ``required_level`` makes the entitlement gate a no-op:
+      every anonymous or signed-in visitor gets in while the page still
+      shows "Sold separately" copy.
+    - ``default_unit_required_level`` below Basic — same hole, but for
+      the per-lesson wall: this is the field that actually controls
+      whether unit content is readable, and it can be set independently
+      of ``required_level``. This is the field that made the real
+      buildcamp course.yaml (``required_level: 0`` +
+      ``default_unit_access: registered``) exploitable.
+
+    Per-unit ``access:`` overrides are intentionally NOT checked here —
+    one unit explicitly opened as a free preview lesson inside an
+    otherwise-gated entitlement course is the same legitimate pattern
+    tier-mode courses already use, not a content bug.
+    """
+    raw = course_data.get('access_mode')
+    if raw is None:
+        return 'tier'
+    key = str(raw).strip().lower()
+    if key not in _VALID_ACCESS_MODES:
+        raise GitHubSyncError(
+            f"Unknown access_mode {raw!r}: expected 'tier' or 'entitlement' "
+            f'(in {os.path.join(rel_path, "course.yaml")})'
+        )
+    if key == 'entitlement':
+        yaml_path = os.path.join(rel_path, 'course.yaml')
+        if not str(course_data.get('enroll_url', '') or '').strip():
+            raise GitHubSyncError(
+                f'access_mode: entitlement requires enroll_url (in {yaml_path})'
+            )
+        level_basic = _ACCESS_NAME_TO_LEVEL['basic']
+        if required_level < level_basic:
+            raise GitHubSyncError(
+                f'access_mode: entitlement requires required_level Basic or '
+                f'above (got {required_level!r}) (in {yaml_path})'
+            )
+        if (
+            default_unit_required_level is not None
+            and default_unit_required_level < level_basic
+        ):
+            raise GitHubSyncError(
+                f'access_mode: entitlement requires default_unit_access Basic '
+                f'or above (got {default_unit_required_level!r}) (in {yaml_path})'
+            )
+    return key
+
 
 def _parse_access_value(raw, *, field_name, rel_path):
     """Resolve a YAML ``access:`` / ``default_unit_access:`` value to an int.
@@ -420,6 +488,12 @@ def _build_course_defaults(
     default_unit_required_level = _resolve_default_unit_required_level(
         course_data, rel_path,
     )
+    required_level = course_data.get('required_level', 0)
+    access_mode = _resolve_access_mode(
+        course_data, rel_path,
+        required_level=required_level,
+        default_unit_required_level=default_unit_required_level,
+    )
     return {
         'title': course_data.get('title', slug),
         'description': description,
@@ -429,10 +503,13 @@ def _build_course_defaults(
             source,
             os.path.join(rel_path, 'course.yaml'),
         ),
-        'required_level': course_data.get('required_level', 0),
+        'required_level': required_level,
         'default_unit_required_level': default_unit_required_level,
         'discussion_url': course_data.get('discussion_url', ''),
         'maven_course_key': course_data.get('maven_course_key', ''),
+        'access_mode': access_mode,
+        'enroll_url': course_data.get('enroll_url', '') or '',
+        'program_label': course_data.get('program_label', '') or '',
         'tags': course_data.get('tags', []),
         'testimonials': course_data.get('testimonials', []),
         'status': 'published',

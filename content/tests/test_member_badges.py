@@ -165,7 +165,11 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
         template_paths = [
             'templates/accounts/account.html',
             'templates/content/_blog_card_badges.html',
-            'templates/content/courses_list.html',
+            # Issue #1658 — the course catalog card (including its member
+            # badges) moved into the shared _course_card.html partial so
+            # the standard grid and the "Sold separately" section render
+            # identical markup.
+            'templates/content/_course_card.html',
             # Issue #1339 — the project card rebased onto _content_card.html; its
             # member badges now live in the dedicated badge partial.
             'templates/content/_project_card_badges.html',

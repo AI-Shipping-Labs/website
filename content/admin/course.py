@@ -113,10 +113,11 @@ class CourseAdmin(admin.ModelAdmin):
 
     list_display = [
         'title', 'slug', 'status', 'primary_instructor_name',
-        'required_level', 'created_at', 'updated_at', 'studio_link',
+        'required_level', 'access_mode', 'created_at', 'updated_at',
+        'studio_link',
     ]
     list_display_links = ['title']
-    list_filter = ['status', 'required_level']
+    list_filter = ['status', 'required_level', 'access_mode']
     search_fields = ['title', 'description', 'instructors__name']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
@@ -132,7 +133,7 @@ class CourseAdmin(admin.ModelAdmin):
             ),
         }),
         ('Tags & Visibility', {
-            'fields': ('tags', 'required_level'),
+            'fields': ('tags', 'required_level', 'access_mode'),
         }),
         ('Individual Purchase', {
             'fields': ('individual_price_eur', 'stripe_product_id', 'stripe_price_id'),
@@ -146,7 +147,9 @@ class CourseAdmin(admin.ModelAdmin):
             'classes': ('collapse',),
         }),
         ('Publishing', {
-            'fields': ('status', 'discussion_url'),
+            'fields': (
+                'status', 'discussion_url', 'enroll_url', 'program_label',
+            ),
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),

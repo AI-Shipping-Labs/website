@@ -1,0 +1,55 @@
+{% load access_tags %}
+{% load member_badges %}
+{% comment %}
+Shared course catalog card, used by both the standard grid and the
+"Sold separately" (entitlement-mode) section on ``/courses`` (issue
+#1658). Identical markup for both groups — the only addition for the
+entitlement section is the "Sold separately" badge in the signal row.
+
+Expected context: ``course``, ``enrolled_course_ids`` (set of course IDs
+the current user is enrolled in). Optional ``show_sold_separately``
+(boolean, default falsy) renders the extra badge.
+{% endcomment %}
+<article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
+  {% with course_primary_instructor=course.primary_instructor %}
+  <a href="/courses/{{ course.slug }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
+    {% if course.is_free %}
+      {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+    {% elif course.required_level > 0 %}
+      {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label=course.required_level|required_tier_label preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+    {% else %}
+      {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
+    {% endif %}
+    <div class="min-w-0 p-4 sm:p-5">
+      <div class="mb-3 flex flex-wrap items-center gap-2">
+        {% member_access_badge course.required_level testid="course-access-badge" %}
+        {% if show_sold_separately %}
+        {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" testid="course-sold-separately-badge" %}
+        {% endif %}
+        {% if course.pk in enrolled_course_ids %}
+        {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}
+        {% endif %}
+      </div>
+      <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
+        {{ course.title }}
+      </h2>
+      {% if course_primary_instructor %}
+      <p class="mt-1 min-w-0 truncate text-sm text-muted-foreground">by {{ course_primary_instructor.name }}</p>
+      {% endif %}
+      {% if course.description_html %}
+      <p class="mt-2 text-sm text-muted-foreground line-clamp-2">{{ course.description_html|striptags|truncatechars:120 }}</p>
+      {% endif %}
+      {% if course.tags %}
+      <div class="mt-3 flex flex-wrap gap-1.5" data-testid="course-card-tags">
+        {% for tag in course.tags|slice:":3" %}
+        <span class="max-w-full truncate rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{{ tag }}</span>
+        {% endfor %}
+        {% if course.tags|length > 3 %}
+        <span class="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ course.tags|length|add:'-3' }} more course tags">+{{ course.tags|length|add:"-3" }}</span>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+  </a>
+  {% endwith %}
+</article>

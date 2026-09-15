@@ -83,6 +83,9 @@ class CourseAdminCRUDTest(TestCase):
             'required_level': 0,
             'status': 'draft',
             'discussion_url': 'https://github.com/test',
+            'access_mode': 'tier',
+            'enroll_url': '',
+            'program_label': '',
             # Module inline management form
             'modules-TOTAL_FORMS': '0',
             'modules-INITIAL_FORMS': '0',

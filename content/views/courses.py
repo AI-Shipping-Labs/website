@@ -62,28 +62,46 @@ def _build_live_session_entries(events_qs, user):
     return entries
 
 
+def _course_grid_classes(count):
+    """Return the 1/2/3-column grid class string for ``count`` cards."""
+    if count == 1:
+        return "grid gap-6 sm:grid-cols-1 lg:mx-auto lg:max-w-md"
+    if count == 2:
+        return "grid gap-6 sm:grid-cols-2 lg:mx-auto lg:max-w-4xl"
+    return "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+
+
 def courses_list(request):
-    """Course catalog page: grid of all published courses."""
-    courses = Course.objects.filter(status='published')
+    """Course catalog page: grid of all published courses.
+
+    Issue #1658: published courses split into two groups. Standard
+    (``access_mode='tier'``) courses keep today's grid, tag-filter facet
+    pool, and empty-state behaviour unchanged. Entitlement-mode courses
+    (sold outside the membership plans, e.g. Maven) render in their own
+    "Sold separately" section below — excluded from the tag-filter pool
+    and never filtered out by the selected tag.
+    """
+    published = Course.objects.filter(status='published')
+    standard_courses = published.filter(access_mode='tier')
+    entitlement_courses = list(
+        published.filter(access_mode='entitlement').order_by('-created_at')
+    )
     selected_tags = _get_selected_tags(request)
 
-    # Collect all tags from published courses for the tag filter UI
+    # Collect tags from standard (tier-gated) published courses only —
+    # entitlement courses don't feed the filter facet pool.
     all_tags = set()
-    for course in courses:
+    for course in standard_courses:
         if course.tags:
             all_tags.update(course.tags)
     all_tags = sorted(all_tags)
 
-    # Filter by tags if provided (AND logic)
-    courses = _filter_by_tags(courses, selected_tags)
-    courses = list(courses)
+    # Filter standard courses by tag if provided (AND logic). Entitlement
+    # courses are never filtered — they always show in their own section.
+    courses = list(_filter_by_tags(standard_courses, selected_tags))
 
-    if len(courses) == 1:
-        course_grid_classes = "grid gap-6 sm:grid-cols-1 lg:mx-auto lg:max-w-md"
-    elif len(courses) == 2:
-        course_grid_classes = "grid gap-6 sm:grid-cols-2 lg:mx-auto lg:max-w-4xl"
-    else:
-        course_grid_classes = "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+    course_grid_classes = _course_grid_classes(len(courses))
+    entitlement_course_grid_classes = _course_grid_classes(len(entitlement_courses))
 
     # Set of course IDs the user is currently enrolled in — drives the
     # "Enrolled" badge in the template (issue #236). Single query.
@@ -104,6 +122,8 @@ def courses_list(request):
         'base_path': '/courses',
         'enrolled_course_ids': enrolled_course_ids,
         'course_grid_classes': course_grid_classes,
+        'entitlement_courses': entitlement_courses,
+        'entitlement_course_grid_classes': entitlement_course_grid_classes,
     }
     return render(request, 'content/courses_list.html', context)
 
@@ -159,6 +179,12 @@ def course_detail(request, slug):
     if not has_access:
         if gating.get('gated_reason') == 'unverified_email':
             cta_message = ''
+        elif gating.get('gated_reason') == 'entitlement_required':
+            # Issue #1658: sold-separately course — CTA is "Enroll via
+            # {program_label}" linking to the external enroll_url, not
+            # the tier-pricing "Unlock with {tier}" / /membership CTA.
+            cta_message = gating['gated_heading']
+            cta_url = gating['gated_cta_url']
         else:
             tier_name = get_required_tier_name(course.required_level)
             # Find yearly price for the tier if available
@@ -292,6 +318,9 @@ def course_detail(request, slug):
         context.update(gating)
     elif gating.get('gated_reason'):
         context['gated_reason'] = gating['gated_reason']
+    # Issue #1658: tells the gated-access card to render the "Sold
+    # separately" pill and open the enroll CTA in a new tab.
+    context['gated_entitlement'] = gating.get('gated_entitlement', False)
     return render(request, 'content/course_detail.html', context)
 
 
@@ -676,6 +705,22 @@ def api_cohort_enroll(request, slug, cohort_id):
     cohort = get_object_or_404(Cohort, pk=cohort_id, course=course, is_active=True)
     user = request.user
 
+    # Issue #1658: entitlement-mode courses are never self-enroll — this
+    # applies unconditionally, including to staff and users who already
+    # hold CourseAccess. Cohort membership for these courses comes only
+    # from staff admin (CohortEnrollmentInline) or the enrollment
+    # integration (#1659), never this student-facing endpoint.
+    if course.access_mode == 'entitlement':
+        return JsonResponse(
+            {
+                'error': (
+                    'This course is sold separately; enrollment is '
+                    'managed by staff or the enrollment integration.'
+                ),
+            },
+            status=403,
+        )
+
     # Must have required tier to enroll
     if not can_access(user, course):
         tier_name = get_required_tier_name(course.required_level)
@@ -717,6 +762,19 @@ def api_cohort_unenroll(request, slug, cohort_id):
     course = get_object_or_404(Course, slug=slug, status='published')
     cohort = get_object_or_404(Cohort, pk=cohort_id, course=course)
     user = request.user
+
+    # Issue #1658: symmetry with api_cohort_enroll — a user who cannot
+    # self-enroll must not be able to self-unenroll either.
+    if course.access_mode == 'entitlement':
+        return JsonResponse(
+            {
+                'error': (
+                    'This course is sold separately; enrollment is '
+                    'managed by staff or the enrollment integration.'
+                ),
+            },
+            status=403,
+        )
 
     enrollment = CohortEnrollment.objects.filter(cohort=cohort, user=user).first()
     if not enrollment:

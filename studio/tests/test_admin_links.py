@@ -193,6 +193,9 @@ ALLOWED_TEST_SNAPSHOTS = {
     "content/tests/test_downloads.py": _TestSnapshot(
         5, "86cf3393bc4f039f8eff3cb86b21ddb2c698b5076fce0db1a5d2e2f3eb1ea208"
     ),
+    "content/tests/test_entitlement_admin_1658.py": _TestSnapshot(
+        3, "bd2083036359b6ff1728f8e009f06e9b5597973452659df026f851ab5d15f09a"
+    ),
     "content/tests/test_projects.py": _TestSnapshot(
         5, "66f6d5828ee567bb3f2bb55fe7503a1a081ccd1f62883833c8eabb15ec1949b6"
     ),

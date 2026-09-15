@@ -13,6 +13,6 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='eventseries',
             name='visibility',
-            field=models.CharField(choices=[('public', 'Public listing'), ('hidden', 'Hidden series')], default='public', help_text="Issue #1660: 'hidden' removes every occurrence in this series from every discovery surface (/events, the calendar, the ICS feed, related-content rails, homepage/dashboard feed candidates) for everyone, including staff. This is separate from 'is_active', which only 404s the public series page. The series/event/recap pages stay reachable to staff and to members entitled through a linked Cohort or Sprint.", max_length=10),
+            field=models.CharField(choices=[('public', 'Public listing'), ('hidden', 'Hidden series')], db_default='public', default='public', help_text="Issue #1660: 'hidden' removes every occurrence in this series from every discovery surface (/events, the calendar, the ICS feed, related-content rails, homepage/dashboard feed candidates) for everyone, including staff. This is separate from 'is_active', which only 404s the public series page. The series/event/recap pages stay reachable to staff and to members entitled through a linked Cohort or Sprint.", max_length=10),
         ),
     ]

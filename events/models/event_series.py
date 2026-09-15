@@ -129,6 +129,7 @@ class EventSeries(TimestampedModelMixin, models.Model):
         max_length=10,
         choices=EVENT_SERIES_VISIBILITY_CHOICES,
         default=VISIBILITY_PUBLIC,
+        db_default=VISIBILITY_PUBLIC,
         help_text=(
             "Issue #1660: 'hidden' removes every occurrence in this series "
             "from every discovery surface (/events, the calendar, the ICS "

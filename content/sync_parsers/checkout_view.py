@@ -388,6 +388,13 @@ def checkout_is_file(path: str) -> bool:
 
 def checkout_is_dir(path: str) -> bool:
     view = _view()
+    # The checkout root is a directory even though the manifest (files
+    # only) can never name it. Mirror the special-case in ``kind()`` so
+    # callers like the course unit lookup builder accept a course dir
+    # that IS the checkout root (course.yaml at the repo root, issue
+    # #1667). The manifest contract in ``relative()`` stays untouched.
+    if os.path.abspath(os.fspath(path)) == os.path.abspath(view.root):
+        return True
     try:
         rel = view.relative(path)
     except ContentCheckoutError:

@@ -426,6 +426,29 @@ def _run_check(phases):
     )
 
 
+def _run_seed_content_sources(phases):
+    """Seed package content sources, timed. Propagates on failure.
+
+    Issue #1662: a repo's ``ContentSource`` row must exist before the GitHub
+    webhook for a push is accepted (the receiver 404s unknown repos), and the
+    operator-facing create paths (Studio form / JSON import) need a human
+    session. Running the idempotent, pure-database seed here -- the sole-
+    migrator predeploy boot -- bootstraps every newly declared source on the
+    first deploy that runs the pre-deploy gate, so no source is ever missing
+    from a fresh environment. A failure propagates like the rest of the gate:
+    the one-off task exits non-zero and the deploy aborts before anything
+    serves.
+    """
+    from django.core.management import call_command
+
+    print("Seed package content sources", flush=True)
+    _timed(
+        "seed_content_sources",
+        lambda: call_command("seed_content_sources"),
+        record=phases,
+    )
+
+
 def _serving_boot_check_enabled():
     """Return whether legacy serving boot should run ``manage.py check``.
 
@@ -439,21 +462,24 @@ def _serving_boot_check_enabled():
 
 
 def _run_predeploy(phases):
-    """``BOOT_MODE=predeploy``: migrate + #529 check, then return (exit 0).
+    """``BOOT_MODE=predeploy``: migrate + #529 check + seed, then exit 0.
 
-    Runs NO schedules, NO gunicorn, NO qcluster. A non-zero exit from migrate
-    or check propagates (the exception is not caught here) so the pre-deploy
+    Runs NO schedules, NO gunicorn, NO qcluster. A non-zero exit from migrate,
+    check, or the content-source seed propagates (the exception is not caught
+    here) so the pre-deploy
     one-off ECS task fails and ``deploy/deploy_dev.sh`` aborts the deploy
     WITHOUT rolling the service. This is the single migrator (#336) and the
     #529 misconfig gate, moved off every serving container's pre-bind path.
 
     We deliberately do NOT persist ``boot_timing:web``/``:worker`` from here:
     a predeploy task is not a serving container. The per-phase BOOT_TIMING
-    lines for ``django_setup`` / ``migrate`` / ``check`` are still emitted by
-    ``_timed`` so the pre-deploy task's CloudWatch logs remain diagnosable.
+    lines for ``django_setup`` / ``migrate`` / ``check`` / the seed are still
+    emitted by ``_timed`` so the pre-deploy task's CloudWatch logs remain
+    diagnosable.
     """
     _run_migrate(phases)
     _run_check(phases)
+    _run_seed_content_sources(phases)
 
 
 def _initialize_runtime_observability():

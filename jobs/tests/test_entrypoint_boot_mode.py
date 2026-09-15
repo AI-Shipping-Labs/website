@@ -3,8 +3,9 @@
 Issue #1141 Phase 2A: the entrypoint dispatches on the ``BOOT_MODE`` env var
 to untangle web-vs-worker role dispatch from migrate-on-boot:
 
-* ``predeploy`` -> ``django.setup`` -> ``migrate`` -> ``check`` -> exit 0
-  (no schedules, no gunicorn, no qcluster). A failing migrate/check propagates.
+* ``predeploy`` -> ``django.setup`` -> ``migrate`` -> ``check`` ->
+  ``seed_content_sources`` -> exit 0 (no schedules, no gunicorn, no
+  qcluster). A failing migrate/check/seed propagates (issue #1662).
 * ``web`` -> ``django.setup`` -> schedules -> gunicorn (SKIPS migrate + check).
 * ``worker`` -> ``django.setup`` -> schedules -> qcluster (SKIPS migrate + check).
 * absent -> exactly the legacy ``RUN_MIGRATIONS`` behavior (backward-compat).
@@ -94,6 +95,29 @@ class PredeployModeTest(BootModeDispatchTestBase):
         self.start_qcluster.assert_not_called()
         self.register_schedules.assert_not_called()
         self.initialize_observability.assert_not_called()
+
+    def test_predeploy_seeds_content_sources_after_check(self):
+        # Issue #1662: the seed bootstraps newly declared content sources on
+        # the sole-migrator boot. It is pure-database, so it must run only
+        # after migrate and the #529 check have both passed -- ordering is
+        # the behavior under test, not merely presence.
+        self._run_main_with_env({"BOOT_MODE": "predeploy"})
+
+        names = _command_names(self.call_command)
+        self.assertLess(names.index("migrate"), names.index("check"))
+        self.assertLess(
+            names.index("check"), names.index("seed_content_sources")
+        )
+
+    def test_predeploy_seed_failure_propagates_and_skips_serve(self):
+        # Same fail-closed contract as migrate/check: a seed failure must
+        # fail the one-off task (aborting the deploy) and must never reach a
+        # serving handoff.
+        self.call_command.side_effect = Exception("seed boom")
+        with self.assertRaisesRegex(Exception, "seed boom"):
+            self._run_main_with_env({"BOOT_MODE": "predeploy"})
+        self.start_gunicorn.assert_not_called()
+        self.start_qcluster.assert_not_called()
 
     def test_predeploy_does_not_persist_boot_timing(self):
         # A predeploy task is not a serving container; it must not overwrite

@@ -58,7 +58,16 @@ class _DiskSnapshot:
                 if os.path.islink(candidate):
                     removed += 1
                     continue
-                shutil.copy2(candidate, os.path.join(target_dir, name))
+                try:
+                    shutil.copy2(candidate, os.path.join(target_dir, name))
+                except FileNotFoundError:
+                    # A concurrent sqlite user (e.g. a parallel Django test
+                    # worker) can delete a transient sidecar file between
+                    # the os.walk listing above and this copy (issue
+                    # #1643). Skip vanished sqlite sidecars; surface
+                    # anything else so genuine gaps still fail the run.
+                    if not name.endswith(('-journal', '-wal', '-shm')):
+                        raise
         self.removed_symlinks = removed
 
     def _strip_symlinks(self, root):
@@ -148,10 +157,10 @@ class Command(BaseCommand):
         total_updated = 0
         has_errors = False
 
-        # Only the --from-disk flow snapshots a tree. The GitHub flow lets
-        # run_sync clone per source; snapshotting '.' there would copy the
-        # whole working directory (and race live files) for a repo_dir that
-        # is discarded.
+        # Only the --from-disk flow consumes a snapshot tree. The GitHub flow
+        # passes repo_dir=None (run_sync clones per source), so snapshotting
+        # '.' there would copy the whole working directory — and race live
+        # files such as parallel test workers' sqlite journals (issue #1643).
         disk_snapshot = _DiskSnapshot(from_disk) if from_disk else nullcontext(None)
         with disk_snapshot as repo_dir:
             if from_disk and disk_snapshot.removed_symlinks:

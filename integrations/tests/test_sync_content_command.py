@@ -14,7 +14,10 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
-from integrations.management.commands.sync_content import Command
+from integrations.management.commands.sync_content import (
+    Command,
+    _DiskSnapshot,
+)
 
 COMMAND_MODULE = 'integrations.management.commands.sync_content'
 WEBHOOK_SECRET = 'webhook-secret-must-not-leak'
@@ -242,3 +245,52 @@ class SyncContentCommandTest(TestCase):
     # integrations.tests.test_tiers_sync).
 
 
+
+
+class DiskSnapshotCopyRaceTest(TestCase):
+    """Issue #1643: a transient sqlite sidecar (``-journal``/``-wal``/``-shm``)
+    created by a concurrent process can vanish between the ``os.walk``
+    listing and ``copy2``. The snapshot must skip that and still copy
+    everything else; a vanished regular file must keep failing the run.
+    """
+
+    def _snapshot_entries(self, source_dir):
+        with _DiskSnapshot(str(source_dir)) as snapshot:
+            return {p.name for p in Path(snapshot).rglob('*') if p.is_file()}
+
+    def _vanishing_copy2(self, vanished_suffix):
+        from integrations.management.commands import (
+            sync_content as command_module,
+        )
+        real_copy2 = command_module.shutil.copy2
+
+        def copy2(src, dst):
+            if str(src).endswith(vanished_suffix):
+                raise FileNotFoundError(
+                    2, 'No such file or directory', str(src),
+                )
+            return real_copy2(src, dst)
+
+        return copy2
+
+    def test_snapshot_skips_sqlite_sidecar_that_vanished_mid_copy(self):
+        with _repo_dir() as repo:
+            (repo / 'article.md').write_text('# hi', encoding='utf-8')
+            (repo / 'test_db.sqlite3-journal').write_text('x', encoding='utf-8')
+            with patch(
+                f'{COMMAND_MODULE}.shutil.copy2',
+                side_effect=self._vanishing_copy2('-journal'),
+            ):
+                entries = self._snapshot_entries(repo)
+        self.assertIn('article.md', entries)
+        self.assertNotIn('test_db.sqlite3-journal', entries)
+
+    def test_snapshot_still_fails_when_regular_file_vanishes_mid_copy(self):
+        with _repo_dir() as repo:
+            (repo / 'article.md').write_text('# hi', encoding='utf-8')
+            with patch(
+                f'{COMMAND_MODULE}.shutil.copy2',
+                side_effect=self._vanishing_copy2('article.md'),
+            ):
+                with self.assertRaises(FileNotFoundError):
+                    self._snapshot_entries(repo)

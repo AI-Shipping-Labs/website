@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from accounts.models import TierOverride, User
-from email_app.models import EmailLog
+from community_base.mail.models import EmailDelivery
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.services import monthly_payment_grace as service
@@ -117,11 +117,16 @@ class MonthlyPaymentGracePostgresLockingTest(TierSetupMixin, TestCase):
 
     @staticmethod
     def record_delivery(delivery):
-        return EmailLog.objects.create(
-            user=delivery.grace.user,
+        # Stands in for ``_send_delivery``: since A1.2 slice 2 it returns
+        # the durable ``EmailDelivery`` row (never a legacy ``EmailLog``),
+        # which the sweep links on ``MonthlyPaymentGraceDelivery.email_delivery``.
+        return EmailDelivery.objects.create(
+            idempotency_key=f"postgres-lock-test:{delivery.grace_id}:{delivery.kind}",
+            purpose=f"monthly-payment-grace-{delivery.kind}",
+            template_key=f"payment_grace_{delivery.kind}",
             recipient_email=delivery.recipient,
-            email_type=delivery.kind,
-            subject=f"PostgreSQL lock test: {delivery.kind}",
+            recipient_user=delivery.grace.user,
+            context_hash="0" * 64,
         )
 
     @override_settings(PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com")

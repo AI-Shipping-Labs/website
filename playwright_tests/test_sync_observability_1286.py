@@ -330,9 +330,13 @@ def test_dashboard_fragment_poll_updates_summary_and_card_atomically(django_serv
     row = page.get_by_test_id("sync-health-row").filter(has_text="fresh-content")
     card = page.locator(f"#sync-source-{source.pk}")
 
+    # A2.3: the dashboard enqueues through ``enqueue_content_sync``, whose
+    # durable dispatch step is the aliased ``package_queue_source_sync``.
+    # Intercept that seam so the queued marker row and card status are real
+    # but no task dispatches.
     with mock.patch(
-        "integrations.services.content_sync_queue._enqueue_async_task",
-        return_value="synthetic-sync-task",
+        "integrations.services.content_sync_queue.package_queue_source_sync",
+        return_value=(mock.Mock(pk="synthetic-sync-task"), True),
     ) as enqueue:
         card.get_by_role("button", name="Sync now").click()
         page.wait_for_load_state("networkidle")

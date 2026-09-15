@@ -10,6 +10,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from contextlib import nullcontext
 
 from community_base.content_sync.models import ContentSource as PackageContentSource
 from django.core.management.base import BaseCommand, CommandError
@@ -147,7 +148,11 @@ class Command(BaseCommand):
         total_updated = 0
         has_errors = False
 
-        disk_snapshot = _DiskSnapshot(from_disk or '.')
+        # Only the --from-disk flow snapshots a tree. The GitHub flow lets
+        # run_sync clone per source; snapshotting '.' there would copy the
+        # whole working directory (and race live files) for a repo_dir that
+        # is discarded.
+        disk_snapshot = _DiskSnapshot(from_disk) if from_disk else nullcontext(None)
         with disk_snapshot as repo_dir:
             if from_disk and disk_snapshot.removed_symlinks:
                 self.stdout.write(

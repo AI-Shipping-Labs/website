@@ -22,11 +22,19 @@ pytestmark = pytest.mark.local_only
 
 
 def _reset_state():
+    from community_base.content_sync.models import (
+        ContentSource as PackageContentSource,
+    )
+    from community_base.content_sync.models import SyncLog as PackageSyncLog
     from django_q.models import OrmQ
 
     from integrations.models import ContentSource, SyncLog
-    from integrations.services.github import INSTALLATION_REPOS_CACHE_KEY
+    from integrations.services.github_app import INSTALLATION_REPOS_CACHE_KEY
 
+    # A2.3: the Studio flow writes the package tables; legacy rows only
+    # matter through the legacy_mirror, so clear both sides.
+    PackageSyncLog.objects.all().delete()
+    PackageContentSource.objects.all().delete()
     SyncLog.objects.all().delete()
     ContentSource.objects.all().delete()
     OrmQ.objects.all().delete()
@@ -78,7 +86,9 @@ def test_staff_adds_content_source_with_blank_secret_and_first_sync_is_queued(
     assert card.get_by_text("Force resync", exact=True).is_visible()
     assert card.get_by_text("See in workers", exact=True).is_visible()
 
-    from integrations.models import ContentSource, SyncLog
+    # The create flow writes the package tables directly (A2.3); the legacy
+    # integrations rows are only populated by the mirror on legacy writes.
+    from community_base.content_sync.models import ContentSource, SyncLog
 
     source = ContentSource.objects.get(repo_name="AI-Shipping-Labs/content-demo")
     body_text = page.locator("body").inner_text()

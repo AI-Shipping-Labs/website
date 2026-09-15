@@ -40,7 +40,7 @@ class Cohort(models.Model):
         ),
     )
     external_key = models.CharField(
-        max_length=255, blank=True, default='',
+        max_length=255, blank=True, default='', db_default='',
         help_text=(
             "Maven's cohort identifier string, matched case-insensitively "
             "against the Maven webhook's cohort_key at enrollment time "

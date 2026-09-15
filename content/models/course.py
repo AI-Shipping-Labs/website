@@ -96,7 +96,7 @@ class Course(
         help_text="Slack channel URL for paid courses, GitHub URL for free courses.",
     )
     maven_course_key = models.CharField(
-        max_length=255, blank=True, default='',
+        max_length=255, blank=True, default='', db_default='',
         help_text=(
             "Maven's course identifier string, matched case-insensitively "
             "against the Maven webhook's course_key at enrollment time "

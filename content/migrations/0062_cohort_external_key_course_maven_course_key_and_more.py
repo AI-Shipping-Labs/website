@@ -13,12 +13,12 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='cohort',
             name='external_key',
-            field=models.CharField(blank=True, default='', help_text="Maven's cohort identifier string, matched case-insensitively against the Maven webhook's cohort_key at enrollment time (issue #1659). Source-owned from course.yaml's cohorts: list; blank means no external mapping. Unique per course when set.", max_length=255),
+            field=models.CharField(blank=True, db_default='', default='', help_text="Maven's cohort identifier string, matched case-insensitively against the Maven webhook's cohort_key at enrollment time (issue #1659). Source-owned from course.yaml's cohorts: list; blank means no external mapping. Unique per course when set.", max_length=255),
         ),
         migrations.AddField(
             model_name='course',
             name='maven_course_key',
-            field=models.CharField(blank=True, default='', help_text="Maven's course identifier string, matched case-insensitively against the Maven webhook's course_key at enrollment time (issue #1659). Source-owned from course.yaml; blank means no Maven course is linked.", max_length=255),
+            field=models.CharField(blank=True, db_default='', default='', help_text="Maven's course identifier string, matched case-insensitively against the Maven webhook's course_key at enrollment time (issue #1659). Source-owned from course.yaml; blank means no Maven course is linked.", max_length=255),
         ),
         migrations.AddConstraint(
             model_name='cohort',

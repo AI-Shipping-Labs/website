@@ -79,7 +79,10 @@ class MavenOccurrenceKeyCorrectionTest(TestCase):
             **self.auth(),
         )
 
-        self.assertEqual(response.status_code, 200)
+        # Assert on the payload, not a literal status code: the #1450
+        # ratchet freezes the population of direct status-200 literals.
+        self.assertEqual(response.json()["id"], occurrence.pk)
+        self.assertEqual(response.json()["course_key"], "from-rag-to-agents")
         occurrence.refresh_from_db()
         self.assertEqual(occurrence.course_key, "from-rag-to-agents")
         self.assertEqual(occurrence.cohort_key, "4")

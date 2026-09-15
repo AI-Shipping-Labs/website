@@ -8023,6 +8023,60 @@
         ]
       }
     },
+    "/api/integrations/maven/occurrences/{occurrence_id}/keys": {
+      "patch": {
+        "description": "Staff-only data fix for occurrences whose stored payload keys predate a Maven-side rename and can no longer resolve (the enrollment step fails with MavenUnknownCourseError / MavenUnknownCohortError). Updates course_key and cohort_key, recomputes the identity hash from the occurrence's email, and writes a CommunityAuditLog entry. The display labels and dedupe key (built from display labels, not keys) are untouched. Force-retry the enrollment step afterwards (website #1662 go-live checklist step 10).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "cohort_key": "4",
+                "course_key": "from-rag-to-agents"
+              },
+              "schema": {
+                "properties": {
+                  "cohort_key": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "course_key": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Keys corrected; returns the occurrence."
+          },
+          "404": {
+            "description": "Occurrence not found."
+          },
+          "422": {
+            "description": "Missing/blank keys or payload too long."
+          }
+        },
+        "summary": "Correct the stored course_key/cohort_key on one occurrence",
+        "tags": [
+          "Maven Occurrences"
+        ]
+      }
+    },
     "/api/integrations/maven/occurrences/{occurrence_id}/steps/{step}/retry": {
       "post": {
         "description": "Force one incomplete step through the shared durable Maven retry service. The URL fully identifies the operation; no request body or caller-controlled retry options are accepted. A caught provider failure is a completed request with ``retry.outcome=failed``.",

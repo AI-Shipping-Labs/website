@@ -137,7 +137,17 @@ class RescheduleEmailTimezoneLineTest(TestCase):
     def _capture_html(self, user):
         EventRegistration.objects.create(event=self.event, user=user)
         old_start = "2026-06-01T16:00:00+00:00"
-        with patch("events.services.registration_email.boto3") as mock_boto3:
+        # Issue #1632: stub the cancel token so the body is
+        # deterministic — the real JWT's random base64url signature
+        # contains the bare ``UTC`` trigram these assertions forbid about
+        # once in 6,400 renders.
+        with (
+            patch("events.services.registration_email.boto3") as mock_boto3,
+            patch(
+                "events.tasks.notify_reschedule.generate_cancel_token",
+                return_value="deterministic-cancel-token",
+            ),
+        ):
             client = mock_boto3.client.return_value
             client.send_email.return_value = {"MessageId": "tz-resched-1"}
             send_reschedule_notice_one(self.event.pk, user.pk, old_start)

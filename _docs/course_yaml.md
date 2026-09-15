@@ -33,6 +33,9 @@ instructors:                        # ordered list; first is primary
 required_level: 0                   # 0=open, 10=basic, 20=main, 30=premium
 default_unit_access: registered     # optional default for every unit
 discussion_url: https://...         # Slack channel URL or GitHub URL
+access_mode: entitlement            # optional; 'tier' (default, omit) or 'entitlement'
+enroll_url: https://maven.com/alexey-grigorev/from-rag-to-agents  # required when access_mode: entitlement
+program_label: Maven                # optional; shown on the "Sold separately" badge/CTA
 tags: [ai-agents, rag]
 testimonials:
   - quote: ...
@@ -85,6 +88,12 @@ Accepted values for `default_unit_access` and per-unit `access:` (case-insensiti
 | Paid course, no anonymous access | `10` / `20` / `30` | (omit) | (omit) |
 | Paid course with one free intro lesson | `10` / `20` / `30` | (omit) | `open` on lesson 1 |
 
+### Programs sold outside the membership plans
+
+`access_mode` (issue #1658) controls whether tier level grants access at all. Omit it (or set `access_mode: tier`) for every normal course — subscription tier / `TierOverride` comparison works exactly as described above. Set `access_mode: entitlement` for a course sold as an independent program (e.g. the Maven buildcamp): the tier comparison is skipped entirely, and only a `CourseAccess` grant or staff opens the course, for any subscription tier the visitor holds — but only once `required_level` and `default_unit_access` are Basic or above. Below Basic (`required_level: 0`/`registered`, or an inherited course default at that level), `can_access()` grants `LEVEL_OPEN`/`LEVEL_REGISTERED` content before the entitlement branch ever runs — that early return is intentional (free/sign-in-walled content stays free), which means an entitlement course must not be left at the free/registered levels. `required_level` and `default_unit_access` — the field that actually governs whether lesson content is readable — are both required to be Basic or above when `access_mode: entitlement`; the sync fails the course otherwise, so a placeholder value like `default_unit_access: registered` cannot silently ship as a paywall-free "Sold separately" page.
+
+`enroll_url` is required when `access_mode: entitlement` — the sync fails the course otherwise. It is the external signup page linked from the "Enroll via {program_label}" CTA. `program_label` is optional short copy for that CTA and the "Sold separately" badge (e.g. `Maven`); when blank, the CTA reads "Enroll" without a program name.
+
 ### Source-owned vs Studio-owned fields
 
 Studio writes nothing back to GitHub. Some operational fields therefore live only in the database. Studio owns local-course edits; source-managed operational fields that Studio does not yet expose require an explicit low-level maintenance change until the tracked Studio/API follow-up lands. They do not appear in `course.yaml`.
@@ -96,6 +105,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `instructors` | YAML | Order matters — first instructor is primary on cards. |
 | `discussion_url`, `testimonials` | YAML | Edit in GitHub, then re-sync. |
 | `maven_course_key`, `cohorts:` | YAML | Edit in GitHub, then re-sync. Cohorts are upserted, never deleted, by sync. |
+| `access_mode`, `enroll_url`, `program_label` | YAML | Edit in GitHub, then re-sync. `access_mode: entitlement` requires `enroll_url`, and requires `required_level` and `default_unit_access` to both be Basic or above; sync fails the course otherwise. |
 | `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
 | `individual_price_eur` | DB only | Not yet editable for source-managed courses in Studio; use an explicit low-level maintenance change. Not in `course.yaml`. |
 | `stripe_product_id`, `stripe_price_id` | DB only | Created via "Create Stripe Product" button after a price is set. |

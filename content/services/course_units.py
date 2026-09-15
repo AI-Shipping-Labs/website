@@ -37,6 +37,7 @@ ACCESS_DENIED_LEGACY_SIGNIN = 'legacy_anonymous_signin_required'
 ACCESS_DENIED_AUTHENTICATION = 'authentication_required'
 ACCESS_DENIED_INSUFFICIENT_TIER = 'insufficient_tier'
 ACCESS_DENIED_UNVERIFIED_EMAIL = 'unverified_email'
+ACCESS_DENIED_ENTITLEMENT_REQUIRED = 'entitlement_required'
 
 
 @dataclass(frozen=True)
@@ -160,6 +161,7 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
     gating = build_gating_context(user, unit, 'unit')
     is_unverified_gate = decision.gated_reason == ACCESS_DENIED_UNVERIFIED_EMAIL
     is_auth_required_gate = decision.gated_reason == ACCESS_DENIED_AUTHENTICATION
+    is_entitlement_gate = decision.gated_reason == ACCESS_DENIED_ENTITLEMENT_REQUIRED
     unit_url = unit.get_absolute_url()
 
     if is_unverified_gate:
@@ -175,16 +177,21 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
         }
     else:
         # A registered wall, or an anonymous visitor on a free course, is an
-        # authentication gate. Everything else (anonymous on a paid course,
-        # or a signed-in member below the tier) is an upgrade gate.
+        # authentication gate. An entitlement-mode course (issue #1658)
+        # denial is its own reason — the tier comparison never ran, so it
+        # must not collapse into the "Upgrade to {tier}" copy. Everything
+        # else (anonymous on a paid course, or a signed-in member below
+        # the tier) is an upgrade gate.
         is_free_course_signin = (
             not is_authenticated_user(user) and course.required_level == 0
         )
-        if is_auth_required_gate or is_free_course_signin:
+        if is_entitlement_gate:
+            reason = 'entitlement_required'
+        elif is_auth_required_gate or is_free_course_signin:
             reason = 'authentication_required'
         else:
             reason = 'insufficient_tier'
-        copy = build_gated_access_copy(
+        copy_kwargs = dict(
             gated_reason=reason,
             verb='read this lesson',
             noun='lesson',
@@ -195,6 +202,10 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
                 'Get full access to this course and more with a membership.'
             ),
         )
+        if is_entitlement_gate:
+            copy_kwargs['enroll_url'] = course.enroll_url
+            copy_kwargs['program_label'] = course.program_label
+        copy = build_gated_access_copy(**copy_kwargs)
 
     teaser_body_html = None
     if unit.body_html:
@@ -232,6 +243,11 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
         'gated_cta_url': copy['gated_cta_url'],
         'gated_cta_label': copy['gated_cta_label'],
         'gated_cta_testid': 'teaser-upgrade-cta',
+        'gated_reason': decision.gated_reason,
+        # Issue #1658: tells _gated_access_card.html to render the "Sold
+        # separately" pill and open the enroll CTA in a new tab instead
+        # of the tier "Upgrade" pill/link.
+        'gated_entitlement': is_entitlement_gate,
     }
     if is_unverified_gate:
         context.update(gating)

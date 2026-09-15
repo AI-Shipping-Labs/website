@@ -33,6 +33,9 @@
           {% elif course.required_level > 0 %}
           {% member_tier_badge course.required_level tone="accent_strong" icon="lock" %}
           {% endif %}
+          {% if course.access_mode == "entitlement" %}
+          {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" %}
+          {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
           {{ course.title }}
@@ -147,7 +150,18 @@
                 {% endif %}
               </p>
             </div>
-            {% if has_access and user_authenticated %}
+            {% if course.access_mode == "entitlement" %}
+              {% comment %}
+                Issue #1658: self-enroll into an official cohort is not a
+                student action for entitlement-mode courses — enrollment
+                comes only from staff admin or the enrollment integration.
+                Show the badge for cohorts the user already belongs to
+                (e.g. staff-granted); render nothing otherwise.
+              {% endcomment %}
+              {% if user_authenticated and cohort.pk in user_enrolled_cohort_ids %}
+              {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="cohort-enrolled-badge" %}
+              {% endif %}
+            {% elif has_access and user_authenticated %}
               {% if cohort.pk in user_enrolled_cohort_ids %}
               <button
                 type="button"
@@ -314,6 +328,16 @@
         <p class="mt-2 mb-6 text-sm text-muted-foreground">Create a free account to access all lessons in this course.</p>
         {% include "accounts/includes/_signup_actions.html" with actions_class="sm:max-w-sm sm:mx-auto" %}
       </div>
+      {% elif gated_reason == "entitlement_required" %}
+      {% comment %}
+        Issue #1658: sold-separately course — "Enroll via {program_label}"
+        opening the external enroll_url in a new tab, not the tier-pricing
+        "Unlock with {tier}" CTA to /membership. If enroll_url is blank
+        (content bug), the card still shows the heading/description with
+        no CTA button (_gated_access_card.html hides it when gated_cta_url
+        is empty).
+      {% endcomment %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="This course is sold separately from AI Shipping Labs membership plans." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="course-gated-cta-button" gated_entitlement=True %}
       {% elif cta_message %}
       {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="course-gated-cta-button" %}
       {% endif %}

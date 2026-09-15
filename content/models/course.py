@@ -20,6 +20,16 @@ STATUS_CHOICES = [
     ('published', 'Published'),
 ]
 
+# Issue #1658: courses sold outside the membership plans (e.g. the Maven
+# buildcamp). 'tier' is today's behaviour — subscription tier / TierOverride
+# comparison. 'entitlement' skips the tier comparison entirely: only a
+# CourseAccess row (purchased or granted) or staff/superuser opens the
+# course. See content/access.py for the branch that reads this field.
+ACCESS_MODE_CHOICES = [
+    ('tier', 'Tier-gated'),
+    ('entitlement', 'Entitlement-only'),
+]
+
 
 class Course(
     SyncedContentIdentityMixin,
@@ -102,6 +112,31 @@ class Course(
             "against the Maven webhook's course_key at enrollment time "
             "(issue #1659). Source-owned from course.yaml; blank means no "
             "Maven course is linked."
+        ),
+    )
+    access_mode = models.CharField(
+        max_length=20, choices=ACCESS_MODE_CHOICES, default='tier',
+        db_default='tier',
+        help_text=(
+            "'tier' (default): access follows subscription tier level. "
+            "'entitlement': tier comparison is skipped — only a "
+            "CourseAccess row or staff/superuser opens the course. For "
+            "programs sold outside the membership plans (issue #1658)."
+        ),
+    )
+    enroll_url = models.URLField(
+        max_length=500, blank=True, default='', db_default='',
+        help_text=(
+            "External signup page (e.g. the Maven course page). Only "
+            "meaningful when access_mode='entitlement'."
+        ),
+    )
+    program_label = models.CharField(
+        max_length=100, blank=True, default='', db_default='',
+        help_text=(
+            "Short external-program name shown on the 'Sold separately' "
+            "badge and enroll CTA, e.g. 'Maven'. Blank falls back to "
+            "generic copy."
         ),
     )
     individual_price_eur = models.DecimalField(
@@ -204,6 +239,15 @@ class Course(
     @property
     def required_tier_name(self):
         return get_required_tier_name(self.required_level)
+
+    @property
+    def is_entitlement_mode(self) -> bool:
+        """True when tier comparison is skipped for this course (issue #1658).
+
+        Call sites branch on this instead of comparing ``access_mode`` to
+        the ``'entitlement'`` magic string directly.
+        """
+        return self.access_mode == 'entitlement'
 
     def total_units(self):
         """Return the total number of units in this course."""

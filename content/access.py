@@ -201,6 +201,28 @@ def get_active_override(user):
     )
 
 
+def _resolve_course(content):
+    """Return the course associated with ``content``, or ``None``.
+
+    Issue #1658: mirrors ``_is_course``/``_is_unit`` below so the
+    ``access_mode`` branch (entitlement-only courses) and the tier
+    branch resolve the same course object without importing ``Course``/
+    ``Unit`` at module level. Non-course content (articles, workshops,
+    etc.) returns ``None`` — those content types have no ``access_mode``
+    and stay on the tier path unconditionally.
+    """
+    if _is_course(content):
+        return content
+    if _is_unit(content):
+        return content.module.course
+    return None
+
+
+def _is_entitlement_course(course):
+    """True when ``course`` (possibly ``None``) is entitlement-gated."""
+    return course is not None and getattr(course, 'access_mode', 'tier') == 'entitlement'
+
+
 def _resolve_required_level(content):
     """Return the access level to gate ``content`` against.
 
@@ -255,22 +277,27 @@ def can_access(user, content):
             return True
         return bool(user.email_verified)
 
-    if get_user_level(user) >= required:
+    course = _resolve_course(content)
+    if _is_entitlement_course(course):
+        # Issue #1658: entitlement-mode courses skip the tier comparison
+        # entirely — a Main/Premium subscriber does NOT get in just from
+        # their tier. Staff/superuser still get access; check explicitly
+        # rather than relying on get_user_level's staff shortcut, which
+        # this branch never calls.
+        if user is not None and (user.is_staff or user.is_superuser):
+            return True
+    elif get_user_level(user) >= required:
         return True
+
     # Check individual course access (CourseAccess model). Both the
     # course itself and any unit belonging to that course should bypass
-    # the per-unit / course-level gating once a user holds CourseAccess.
-    if user is not None and user.is_authenticated:
-        if _is_course(content):
-            from content.models import CourseAccess
-            return CourseAccess.objects.filter(
-                user=user, course=content,
-            ).exists()
-        if _is_unit(content):
-            from content.models import CourseAccess
-            return CourseAccess.objects.filter(
-                user=user, course=content.module.course,
-            ).exists()
+    # the per-unit / course-level gating once a user holds CourseAccess,
+    # in both tier and entitlement modes.
+    if user is not None and user.is_authenticated and course is not None:
+        from content.models import CourseAccess
+        return CourseAccess.objects.filter(
+            user=user, course=course,
+        ).exists()
     return False
 
 
@@ -298,6 +325,13 @@ def get_gated_reason(user, content):
         and (user is None or not user.is_authenticated)
     ):
         return 'authentication_required'
+    # Issue #1658: entitlement-mode courses/units are denied here only
+    # when required >= LEVEL_BASIC — at LEVEL_OPEN/LEVEL_REGISTERED
+    # can_access() already granted access above, so this branch is
+    # unreachable for those levels (access_mode is a documented no-op
+    # there; do not special-case it further).
+    if _is_entitlement_course(_resolve_course(content)) and required >= LEVEL_BASIC:
+        return 'entitlement_required'
     return 'insufficient_tier'
 
 
@@ -422,6 +456,8 @@ def build_gated_access_copy(
     upgrade_description=None,
     show_signin_on_paid_guest=True,
     encode_next=True,
+    enroll_url=None,
+    program_label='',
 ):
     """Return the canonical ``_gated_access_card.html`` copy for a gate.
 
@@ -435,9 +471,14 @@ def build_gated_access_copy(
 
     ``resource_url`` is the path the visitor should return to after
     authenticating; it feeds the ``?next=`` query string on the sign-in and
-    sign-up URLs. Only the ``authentication_required`` and
-    ``insufficient_tier`` reasons are handled here — ``unverified_email``
+    sign-up URLs. ``authentication_required``, ``insufficient_tier`` and
+    ``entitlement_required`` are handled here — ``unverified_email``
     renders ``content/_verify_email_required.html`` instead.
+
+    ``enroll_url``/``program_label`` (issue #1658) are only consulted for
+    ``gated_reason='entitlement_required'`` — the external enroll CTA for
+    a course sold outside the membership plans (e.g. the Maven buildcamp).
+    Every other reason ignores them.
     """
     from urllib.parse import urlencode
 
@@ -473,6 +514,31 @@ def build_gated_access_copy(
             'gated_cta_label': 'Sign in',
             'signup_cta_url': signup_url,
             'signup_cta_label': 'Create a free account',
+            'signin_cta_url': '',
+            'signin_cta_label': '',
+        }
+
+    if gated_reason == 'entitlement_required':
+        # Issue #1658: no tier grants access to this course — the tier
+        # comparison was skipped entirely, so there is no tier pill and
+        # no upgrade path. The only way in is the external enroll URL
+        # (Maven) or a staff-granted CourseAccess row.
+        heading = (
+            f'Enroll via {program_label} to {verb}'
+            if program_label else f'Enroll to {verb}'
+        )
+        return {
+            'gated_heading': heading,
+            'gated_description': (
+                'This course is sold separately from AI Shipping Labs '
+                'membership plans.'
+            ),
+            'required_tier_name': '',
+            'current_user_state': '',
+            'gated_cta_url': enroll_url or '',
+            'gated_cta_label': 'Enroll now',
+            'signup_cta_url': '',
+            'signup_cta_label': '',
             'signin_cta_url': '',
             'signin_cta_label': '',
         }
@@ -560,6 +626,15 @@ def build_gating_context(
         resource_url = get_url() if callable(get_url) else ''
 
     verb, noun = get_content_type_copy(content_type)
+    entitlement_kwargs = {}
+    if gated_reason == 'entitlement_required':
+        # Issue #1658: supply the course's enroll_url/program_label so
+        # the CTA points at the external signup page instead of /membership.
+        course = _resolve_course(content)
+        entitlement_kwargs = {
+            'enroll_url': getattr(course, 'enroll_url', '') if course else '',
+            'program_label': getattr(course, 'program_label', '') if course else '',
+        }
     copy = build_gated_access_copy(
         gated_reason=gated_reason,
         verb=verb,
@@ -570,6 +645,7 @@ def build_gating_context(
         upgrade_description=upgrade_description,
         show_signin_on_paid_guest=show_signin_on_paid_guest,
         encode_next=False,
+        **entitlement_kwargs,
     )
 
     return {
@@ -580,5 +656,6 @@ def build_gating_context(
         'gated_icon': gated_icon,
         'gated_cta_testid': gated_cta_testid,
         'pricing_url': '/membership',
+        'gated_entitlement': gated_reason == 'entitlement_required',
         **copy,
     }

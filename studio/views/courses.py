@@ -76,6 +76,14 @@ def course_edit(request, course_id):
         course.status = request.POST.get('status', 'draft')
         course.required_level = int(request.POST.get('required_level', 0))
         course.discussion_url = request.POST.get('discussion_url', '')
+        # Issue #1658: courses sold outside the membership plans. Only
+        # local-only courses reach this branch (synced courses are
+        # rejected above); invalid POST values fall back to 'tier'
+        # rather than writing garbage into the DB column.
+        access_mode_raw = request.POST.get('access_mode', 'tier')
+        course.access_mode = access_mode_raw if access_mode_raw in ('tier', 'entitlement') else 'tier'
+        course.enroll_url = request.POST.get('enroll_url', '')
+        course.program_label = request.POST.get('program_label', '')
         course.tags = parse_comma_separated_tags(request.POST.get('tags', ''))
         individual_price_raw = request.POST.get('individual_price_eur', '').strip()
         if individual_price_raw:

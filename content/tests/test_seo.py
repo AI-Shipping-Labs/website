@@ -12,7 +12,7 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_BASIC
+from content.access import LEVEL_BASIC, LEVEL_OPEN
 from content.models import (
     Article,
     Course,
@@ -25,7 +25,7 @@ from content.models import (
     WorkshopPage,
 )
 from content.templatetags.seo_tags import build_seo_description
-from events.models import Event
+from events.models import Event, EventHost, Host
 
 
 def _meta_content(content, attr, key):
@@ -212,7 +212,7 @@ class StructuredDataRecordingTest(TestCase):
 
 
 class StructuredDataEventTest(TestCase):
-    """Test JSON-LD structured data generation for events."""
+    """Test JSON-LD structured data generation for events (issue #1663)."""
 
     def setUp(self):
         self.event = Event.objects.create(
@@ -220,10 +220,10 @@ class StructuredDataEventTest(TestCase):
             slug='ai-workshop',
             description='A live AI workshop.',
             start_datetime=timezone.make_aware(
-                timezone.datetime(2025, 7, 1, 18, 0),
+                timezone.datetime(2026, 10, 1, 18, 0),
             ),
             end_datetime=timezone.make_aware(
-                timezone.datetime(2025, 7, 1, 20, 0),
+                timezone.datetime(2026, 10, 1, 20, 0),
             ),
             location='Zoom',
             status='upcoming',
@@ -255,6 +255,179 @@ class StructuredDataEventTest(TestCase):
         result = template.render(context)
         data = self._extract_jsonld(result)
         self.assertNotIn('endDate', data)
+
+    # --- location (critical Search Console error) ---
+
+    def test_location_is_virtual_location_with_canonical_url(self):
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['location']['@type'], 'VirtualLocation')
+        self.assertEqual(data['location']['url'], data['url'])
+
+    def test_location_never_leaks_zoom_join_url(self):
+        self.event.zoom_join_url = 'https://zoom.us/j/secret-meeting-id'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        self.assertNotIn('secret-meeting-id', result)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('zoom.us', json.dumps(data))
+
+    def test_location_falls_back_to_online_when_blank(self):
+        self.event.location = ''
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['location']['name'], 'Online')
+
+    # --- eventStatus ---
+
+    def test_event_status_cancelled(self):
+        self.event.status = 'cancelled'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['eventStatus'], 'https://schema.org/EventCancelled')
+
+    def test_event_status_scheduled_for_upcoming(self):
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['eventStatus'], 'https://schema.org/EventScheduled')
+
+    def test_event_status_scheduled_for_completed(self):
+        self.event.status = 'completed'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(data['eventStatus'], 'https://schema.org/EventScheduled')
+
+    # --- image ---
+
+    def test_image_present_when_banner_exists(self):
+        self.event.cover_image_url = 'https://cdn.aishippinglabs.com/events/1/banner.png'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(
+            data['image'], 'https://cdn.aishippinglabs.com/events/1/banner.png',
+        )
+
+    def test_image_absent_when_no_banner(self):
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('image', data)
+
+    # --- performer ---
+
+    def test_performer_absent_with_no_hosts(self):
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('performer', data)
+
+    def test_performer_single_host(self):
+        host = Host.objects.create(
+            name='Test Workshop Host', slug='test-workshop-host-1663',
+        )
+        EventHost.objects.create(event=self.event, host=host, position=0)
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(
+            data['performer'], {'@type': 'Person', 'name': 'Test Workshop Host'},
+        )
+
+    def test_performer_multiple_hosts_in_position_order(self):
+        host_a = Host.objects.create(name='Host A', slug='host-a-1663')
+        host_b = Host.objects.create(name='Host B', slug='host-b-1663')
+        # Create out of position order to prove the ordering is by
+        # ``position``, not creation/insertion order.
+        EventHost.objects.create(event=self.event, host=host_b, position=1)
+        EventHost.objects.create(event=self.event, host=host_a, position=0)
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(
+            data['performer'],
+            [
+                {'@type': 'Person', 'name': 'Host A'},
+                {'@type': 'Person', 'name': 'Host B'},
+            ],
+        )
+
+    # --- offers ---
+
+    def test_offers_present_for_open_community_upcoming_event(self):
+        self.event.required_level = LEVEL_OPEN
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertEqual(
+            data['offers'],
+            {
+                '@type': 'Offer',
+                'url': data['url'],
+                'price': '0',
+                'priceCurrency': 'EUR',
+                'availability': 'https://schema.org/InStock',
+            },
+        )
+
+    def test_offers_absent_for_tier_gated_event(self):
+        self.event.required_level = LEVEL_BASIC
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('offers', data)
+
+    def test_offers_absent_for_external_event(self):
+        self.event.external_host = 'Luma'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('offers', data)
+
+    def test_offers_absent_for_completed_event(self):
+        self.event.status = 'completed'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('offers', data)
+
+    def test_offers_absent_for_cancelled_event(self):
+        self.event.status = 'cancelled'
+        self.event.save()
+        template = Template('{% load seo_tags %}{% structured_data event %}')
+        context = Context({'event': self.event})
+        result = template.render(context)
+        data = self._extract_jsonld(result)
+        self.assertNotIn('offers', data)
 
     def _extract_jsonld(self, html):
         start = html.index('<script type="application/ld+json">') + len(

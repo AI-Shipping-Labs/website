@@ -30,6 +30,12 @@ def _seed_settings():
     Setting.objects.filter(key__in={item.key for item in slack_definitions}).delete()
     package_set("SLACK_BOT_TOKEN", "xoxb-existing", actor_ref="test:1287")
     for item in slack_definitions:
+        if item.key == "SLACK_ENVIRONMENT":
+            # Seeded even though the key is optional: the section-isolation
+            # tests rely on this non-secret sibling value surviving a save
+            # of a different card (issue #1627).
+            package_set(item.key, "production", actor_ref="test:1287")
+            continue
         if item.secret or item.optional:
             continue
         if item.value_type == "bool":
@@ -38,8 +44,6 @@ def _seed_settings():
             value = f"https://example.com/{item.key.lower()}"
         else:
             value = f"test-{item.key.lower()}"
-        if item.key == "SLACK_ENVIRONMENT":
-            value = "production"
         package_set(item.key, value, actor_ref="test:1287")
     for key, value in {
         "STRIPE_CUSTOMER_PORTAL_URL": "https://example.com/portal",

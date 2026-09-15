@@ -142,8 +142,8 @@ class MavenEnrolledTest(TestCase):
             QUERY_STRING=f"secret={SECRET}",
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_new_email_creates_account_grants_override_invites_and_emails(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_new_email_creates_account_grants_override_invites_and_emails(self, package_mail):
         response = self._post(
             {
                 "event": "user_cohort.enrolled",
@@ -163,22 +163,22 @@ class MavenEnrolledTest(TestCase):
         self.assertEqual(override.override_tier, self.main)
         self.assertGreater(override.expires_at, timezone.now() + timedelta(days=1700))
 
-        email_service.return_value.send.assert_called_once()
-        sent_args = email_service.return_value.send.call_args
+        self.assertEqual(package_mail.call_count, 1)
+        sent_args = package_mail.call_args
         self.assertEqual(sent_args.args[1], "maven_welcome")
 
-    @patch("integrations.services.maven.EmailService")
-    def test_non_enrolled_event_ignored(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_non_enrolled_event_ignored(self, package_mail):
         response = self._post(
             {"event": "payment.success", "email": "paid@test.com"}
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "ignored"})
         self.assertFalse(User.objects.filter(email="paid@test.com").exists())
-        email_service.return_value.send.assert_not_called()
+        package_mail.assert_not_called()
 
-    @patch("integrations.services.maven.EmailService")
-    def test_existing_account_resolved_no_duplicate(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_existing_account_resolved_no_duplicate(self, package_mail):
         existing = User.objects.create_user(email="member@test.com", password="x")
         self._post({"event": "user_cohort.enrolled", "email": "MEMBER@test.com"})
         self.assertEqual(User.objects.filter(email__iexact="member@test.com").count(), 1)
@@ -186,8 +186,8 @@ class MavenEnrolledTest(TestCase):
             TierOverride.objects.filter(user=existing, is_active=True).exists()
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_resolves_via_alias_no_duplicate(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_resolves_via_alias_no_duplicate(self, package_mail):
         canonical = User.objects.create_user(email="canon@test.com", password="x")
         EmailAlias.objects.create(user=canonical, email="alias@test.com")
         self._post({"event": "user_cohort.enrolled", "email": "alias@test.com"})
@@ -196,8 +196,8 @@ class MavenEnrolledTest(TestCase):
             TierOverride.objects.filter(user=canonical, is_active=True).exists()
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_existing_override_extended_not_stacked(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_existing_override_extended_not_stacked(self, package_mail):
         user = User.objects.create_user(email="ext@test.com", password="x")
         TierOverride.objects.create(
             user=user,
@@ -214,8 +214,8 @@ class MavenEnrolledTest(TestCase):
             active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_longer_existing_override_not_shortened(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_longer_existing_override_not_shortened(self, package_mail):
         user = User.objects.create_user(email="long@test.com", password="x")
         far = timezone.now() + timedelta(days=9000)
         TierOverride.objects.create(
@@ -229,8 +229,8 @@ class MavenEnrolledTest(TestCase):
         active = TierOverride.objects.get(user=user, is_active=True)
         self.assertEqual(active.expires_at, far)
 
-    @patch("integrations.services.maven.EmailService")
-    def test_duplicate_delivery_already_processed(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_duplicate_delivery_already_processed(self, package_mail):
         # Issue #1659: ``already_processed`` requires ``enrollment`` to have
         # reached a terminal state too, so this needs a resolvable
         # maven_course_key/external_key pair to let that step succeed.
@@ -258,7 +258,7 @@ class MavenEnrolledTest(TestCase):
             1,
         )
         # Welcome email sent exactly once across both deliveries.
-        self.assertEqual(email_service.return_value.send.call_count, 1)
+        self.assertEqual(package_mail.call_count, 1)
         self.assertEqual(
             MavenEnrollmentEvent.objects.filter(
                 email="dup@test.com", event_type="user_cohort.enrolled"
@@ -266,8 +266,8 @@ class MavenEnrolledTest(TestCase):
             1,
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_redelivery_with_pending_enrollment_is_not_already_processed(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_redelivery_with_pending_enrollment_is_not_already_processed(self, package_mail):
         # Issue #1659 tester finding: a redelivered webhook whose enrollment
         # step is still non-terminal (no maven_course_key configured, so it
         # keeps failing/retrying) must NOT report already_processed — that
@@ -285,8 +285,8 @@ class MavenEnrolledTest(TestCase):
         second = self._post(body)
         self.assertNotEqual(second.json(), {"status": "already_processed"})
 
-    @patch("integrations.services.maven.EmailService")
-    def test_override_grant_audited(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_override_grant_audited(self, package_mail):
         self._post({"event": "user_cohort.enrolled", "email": "audit@test.com"})
         user = User.objects.get(email="audit@test.com")
         self.assertTrue(
@@ -295,8 +295,8 @@ class MavenEnrolledTest(TestCase):
             ).exists()
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_already_member_no_email_no_dup_but_override_refreshed(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_already_member_no_email_no_dup_but_override_refreshed(self, package_mail):
         user = User.objects.create_user(
             email="active@test.com", password="x", slack_member=True,
         )
@@ -312,7 +312,7 @@ class MavenEnrolledTest(TestCase):
             {"event": "user_cohort.enrolled", "email": "active@test.com"}
         )
         self.assertEqual(response.json(), {"status": "already_member"})
-        email_service.return_value.send.assert_not_called()
+        package_mail.assert_not_called()
         # Override extended (refreshed) but still single + active.
         active = TierOverride.objects.filter(user=user, is_active=True)
         self.assertEqual(active.count(), 1)
@@ -320,8 +320,8 @@ class MavenEnrolledTest(TestCase):
             active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_lapsed_override_slack_member_is_not_already_member(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_lapsed_override_slack_member_is_not_already_member(self, package_mail):
         user = User.objects.create_user(
             email="lapsed@test.com", password="x", slack_member=True,
         )
@@ -338,16 +338,16 @@ class MavenEnrolledTest(TestCase):
         )
 
         self.assertEqual(response.json(), {"status": "onboarded"})
-        email_service.return_value.send.assert_called_once()
+        self.assertEqual(package_mail.call_count, 1)
         active = TierOverride.objects.filter(user=user, is_active=True)
         self.assertEqual(active.count(), 1)
         self.assertGreater(
             active.first().expires_at, timezone.now() + timedelta(days=1700)
         )
 
-    @patch("integrations.services.maven.EmailService")
+    @patch("integrations.services.maven.send_package_mail")
     def test_inactive_or_basic_override_slack_member_is_not_already_member(
-        self, email_service,
+        self, package_mail,
     ):
         basic = Tier.objects.get(slug="basic")
         inactive = User.objects.create_user(
@@ -380,10 +380,10 @@ class MavenEnrolledTest(TestCase):
 
         self.assertEqual(inactive_response.json(), {"status": "onboarded"})
         self.assertEqual(basic_response.json(), {"status": "onboarded"})
-        self.assertEqual(email_service.return_value.send.call_count, 2)
+        self.assertEqual(package_mail.call_count, 2)
 
-    @patch("integrations.services.maven.EmailService")
-    def test_transient_failure_returns_500_and_persists_retryable_step(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_transient_failure_returns_500_and_persists_retryable_step(self, package_mail):
         with patch(
             "integrations.services.maven._grant_or_refresh_override",
             side_effect=RuntimeError("boom"),
@@ -400,8 +400,8 @@ class MavenEnrolledTest(TestCase):
             TierOverride.objects.filter(user__email="fail@test.com").exists()
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_new_account_not_in_marketing_audience(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_new_account_not_in_marketing_audience(self, package_mail):
         from email_app.models import EmailCampaign
 
         self._post({"event": "user_cohort.enrolled", "email": "audience@test.com"})

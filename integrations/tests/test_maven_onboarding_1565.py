@@ -13,6 +13,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 import yaml
+from community_base.mail.jobs import deliver as deliver_job
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -20,7 +22,8 @@ from django.test import TestCase, override_settings
 
 from community.services.slack import SlackAPIError
 from content.models import Cohort, Course
-from email_app.services.email_service import EmailService
+from email_app.package_mail import send_package_mail
+from email_app.testing import StubSESClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import MavenResult, _welcome_context
@@ -89,12 +92,45 @@ def _configure():
     clear_config_cache()
 
 
-def _sent(mock_send_ses):
-    """Return [(email_type, subject, html)] for every SES send."""
+def _deliver_all():
+    """Drain pending deliveries through a fresh stub; return the SES calls.
+
+    Since A1.2 slice 3 the welcome is a durable ``EmailDelivery``; tests
+    that assert on the provider-visible email drain the worker first.
+    """
+    stub = StubSESClient()
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=stub,
+    ):
+        deliver_pending_mail()
+    return stub.calls
+
+
+def _sent_messages(calls):
+    """Return [(subject, html)] for every drained SES send."""
     return [
-        (call.kwargs["email_type"], call.args[1], call.args[2])
-        for call in mock_send_ses.call_args_list
+        (
+            call["Content"]["Simple"]["Subject"]["Data"],
+            call["Content"]["Simple"]["Body"]["Html"]["Data"],
+        )
+        for call in calls
     ]
+
+
+def _drain_welcome_html(user, course, cohort):
+    """Queue one welcome through the package, drain it, return its HTML."""
+
+    delivery = send_package_mail(
+        user, "maven_welcome", _welcome_context(course, cohort),
+    )
+    stub = StubSESClient()
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=stub,
+    ):
+        deliver_job(None, {"delivery_id": str(delivery.id)})
+    return stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
 
 
 class MavenWebhookMixin(TestCase):
@@ -119,12 +155,11 @@ class MavenWebhookMixin(TestCase):
     "community.services.slack.SlackCommunityService.lookup_user_by_email",
     return_value=None,
 )
-@patch.object(EmailService, "_send_ses", return_value="ses-message-id")
 class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
     """A brand-new enrollee gets exactly one email that can reach Slack."""
 
     def test_single_welcome_email_carries_the_gated_slack_join_link(
-        self, send_ses, _lookup, _notify,
+        self, _lookup, _notify,
     ):
         response = self.post({
             "event": "user_cohort.enrolled",
@@ -134,15 +169,16 @@ class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
         })
         self.assertEqual(response.json()["status"], "onboarded")
 
-        sent = _sent(send_ses)
-        self.assertEqual([email_type for email_type, _, _ in sent], ["maven_welcome"])
-
-        _type, _subject, html = sent[0]
-        user = User.objects.get(email="cold@example.com")
-        context = _welcome_context(user, "Course", "")
+        # Exactly one durable mail purpose was queued, and the worker
+        # delivers it with the gated Slack link (slice 3).
+        self.assertEqual(
+            list(EmailDelivery.objects.values_list("purpose", flat=True)),
+            ["maven_welcome"],
+        )
+        _subject, html = _sent_messages(_deliver_all())[0]
         self.assertIn("https://aishippinglabs.com/community/slack", html)
         self.assertIn("/api/password-reset?token=", html)
-        self.assertIn(context["sign_in_url"], html)
+        self.assertIn("https://aishippinglabs.com/accounts/login/", html)
         # Every CTA in the email is a real absolute link, including the
         # onboarding ask, which a joining enrollee never passes otherwise
         # (sign in -> Join Slack redirects them off-site).
@@ -152,7 +188,7 @@ class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
         self.assertNotIn("finish onboarding", html)
 
     def test_slack_step_is_skipped_with_a_visible_reason_not_succeeded(
-        self, send_ses, _lookup, _notify,
+        self, _lookup, _notify,
     ):
         self.post({
             "event": "user_cohort.enrolled",
@@ -174,7 +210,6 @@ class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
     "community.services.slack.SlackCommunityService.lookup_user_by_email",
     return_value="U-IN-WORKSPACE",
 )
-@patch.object(EmailService, "_send_ses", return_value="ses-message-id")
 @override_settings(
     SLACK_ENABLED=True,
     SLACK_BOT_TOKEN="xoxb-test",
@@ -186,7 +221,7 @@ class MavenSlackChannelFailureTest(MavenWebhookMixin):
 
     @patch("community.services.slack.SlackCommunityService._api_call")
     def test_step_is_failed_not_succeeded_when_every_channel_add_errors(
-        self, mock_api, _send_ses, _lookup, _notify,
+        self, mock_api, _lookup, _notify,
     ):
         # The enrollee resolves to a Slack account, but the bot is not in
         # any community channel, so they join nothing.
@@ -211,7 +246,7 @@ class MavenSlackChannelFailureTest(MavenWebhookMixin):
 
     @patch("community.services.slack.SlackCommunityService._api_call")
     def test_step_succeeds_when_the_member_actually_joins_a_channel(
-        self, mock_api, _send_ses, _lookup, _notify,
+        self, mock_api, _lookup, _notify,
     ):
         mock_api.return_value = {"ok": True}
 
@@ -231,10 +266,9 @@ class MavenSlackChannelFailureTest(MavenWebhookMixin):
     return_value=True,
 )
 @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-@patch.object(EmailService, "_send_ses", return_value="ses-message-id")
 class MavenPayloadToleranceTest(MavenWebhookMixin):
     def test_data_envelope_is_processed_identically_to_the_flat_payload(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         flat = self.post({
             "event": "user_cohort.enrolled",
@@ -264,7 +298,7 @@ class MavenPayloadToleranceTest(MavenWebhookMixin):
         )
 
     def test_wrapped_and_flat_deliveries_for_one_person_share_an_identity(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         # Issue #1659: already_processed now also requires ``enrollment`` to
         # be terminal, so this needs a resolvable maven_course_key/external_key.
@@ -301,7 +335,7 @@ class MavenPayloadToleranceTest(MavenWebhookMixin):
         self.assertEqual(events.first().identity_hash, wrapped_hash)
 
     def test_student_and_member_nesting_are_accepted_for_the_email(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         self.post({
             "event": "user_cohort.enrolled",
@@ -322,10 +356,9 @@ class MavenPayloadToleranceTest(MavenWebhookMixin):
     return_value=True,
 )
 @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-@patch.object(EmailService, "_send_ses", return_value="ses-message-id")
 class MavenNameCaptureTest(MavenWebhookMixin):
     def test_nested_names_are_stored_and_greet_the_enrollee_by_name(
-        self, send_ses, _notify,
+        self, _notify,
     ):
         self.post({
             "event": "user_cohort.enrolled",
@@ -340,10 +373,10 @@ class MavenNameCaptureTest(MavenWebhookMixin):
         self.assertEqual(user.first_name, "John")
         self.assertEqual(user.last_name, "Smith")
 
-        _type, _subject, html = _sent(send_ses)[0]
+        _subject, html = _sent_messages(_deliver_all())[0]
         self.assertIn("Hi John Smith,", html)
 
-    def test_name_never_reaches_the_ledger_payload(self, _send_ses, _notify):
+    def test_name_never_reaches_the_ledger_payload(self, _notify):
         self.post({
             "event": "user_cohort.enrolled",
             "email": "ledger@example.com",
@@ -357,7 +390,7 @@ class MavenNameCaptureTest(MavenWebhookMixin):
         self.assertNotIn("Smith", serialized)
 
     def test_top_level_and_single_full_name_forms_are_accepted(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         self.post({
             "event": "user_cohort.enrolled",
@@ -380,7 +413,7 @@ class MavenNameCaptureTest(MavenWebhookMixin):
         self.assertEqual(whole.last_name, "Brewster Hopper")
 
     def test_an_over_long_name_is_truncated_to_the_column_width(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         """An unvalidated payload name must not raise a DataError (#1565).
 
@@ -399,7 +432,7 @@ class MavenNameCaptureTest(MavenWebhookMixin):
         self.assertEqual(len(user.last_name), 150)
 
     def test_a_name_the_member_set_themselves_is_never_overwritten(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         existing = User.objects.create_user(
             email="jo@example.com", password="x", first_name="Jo",
@@ -422,7 +455,6 @@ class MavenNameCaptureTest(MavenWebhookMixin):
     return_value=True,
 )
 @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-@patch.object(EmailService, "_send_ses", return_value="ses-message-id")
 class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
     """Staff gets a hidden copy of the enrollee welcome (issue #1570).
 
@@ -430,16 +462,13 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
     unset ``STAFF_SIGNUP_NOTIFY_EMAIL`` stays a clean no-op.
     """
 
-    def _welcome_call(self, send_ses):
-        calls = [
-            call for call in send_ses.call_args_list
-            if call.kwargs["email_type"] == "maven_welcome"
-        ]
+    def _welcome_call(self):
+        calls = _deliver_all()
         self.assertEqual(len(calls), 1)
         return calls[0]
 
     def test_staff_is_bcced_when_the_signup_notify_email_is_set(
-        self, send_ses, _notify,
+        self, _notify,
     ):
         IntegrationSetting.objects.update_or_create(
             key="STAFF_SIGNUP_NOTIFY_EMAIL",
@@ -453,12 +482,16 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
             "course": "Buildcamp",
         })
 
-        call = self._welcome_call(send_ses)
-        self.assertEqual(call.kwargs["bcc"], "staff@example.com")
+        call = self._welcome_call()
+        self.assertEqual(
+            call["Destination"]["BccAddresses"], ["staff@example.com"],
+        )
         # The enrollee remains the primary recipient.
-        self.assertEqual(call.args[0], "bcc-on@example.com")
+        self.assertEqual(
+            call["Destination"]["ToAddresses"], ["bcc-on@example.com"],
+        )
 
-    def test_no_bcc_when_the_setting_is_unset(self, send_ses, _notify):
+    def test_no_bcc_when_the_setting_is_unset(self, _notify):
         IntegrationSetting.objects.filter(key="STAFF_SIGNUP_NOTIFY_EMAIL").delete()
         clear_config_cache()
 
@@ -468,10 +501,10 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
             "course": "Buildcamp",
         })
 
-        self.assertIsNone(self._welcome_call(send_ses).kwargs["bcc"])
+        self.assertNotIn("BccAddresses", self._welcome_call()["Destination"])
 
     def test_a_malformed_staff_address_never_costs_the_enrollee_the_welcome(
-        self, send_ses, _notify,
+        self, _notify,
     ):
         """One bad BCC would make SES reject the primary To as well."""
         IntegrationSetting.objects.update_or_create(
@@ -487,9 +520,11 @@ class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
                 "course": "Buildcamp",
             })
 
-        call = self._welcome_call(send_ses)
-        self.assertIsNone(call.kwargs["bcc"])
-        self.assertEqual(call.args[0], "bcc-bad@example.com")
+        call = self._welcome_call()
+        self.assertNotIn("BccAddresses", call["Destination"])
+        self.assertEqual(
+            call["Destination"]["ToAddresses"], ["bcc-bad@example.com"],
+        )
         event = MavenEnrollmentEvent.objects.get(email="bcc-bad@example.com")
         self.assertEqual(event.welcome_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
 
@@ -547,8 +582,19 @@ class MavenCourseFallbackTest(MavenWebhookMixin):
             password="x",
             first_name="Sam",
         )
-        return EmailService()._render_template(
-            "maven_welcome", user, _welcome_context(user, course, cohort),
+        delivery = send_package_mail(
+            user, "maven_welcome", _welcome_context(course, cohort),
+        )
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            deliver_job(None, {"delivery_id": str(delivery.id)})
+        simple = stub.calls[0]["Content"]["Simple"]
+        return (
+            simple["Subject"]["Data"],
+            simple["Body"]["Html"]["Data"],
         )
 
     def test_cohort_is_used_when_the_payload_has_no_course(self):
@@ -602,10 +648,7 @@ class MavenCourseChannelTest(MavenWebhookMixin):
                 key="MAVEN_COURSE_SLACK_CHANNEL"
             ).delete()
         clear_config_cache()
-        _subject, body = EmailService()._render_template(
-            "maven_welcome", user, _welcome_context(user, "Buildcamp", "Cohort 1"),
-        )
-        return body
+        return _drain_welcome_html(user, "Buildcamp", "Cohort 1")
 
     def test_channel_is_named_when_the_setting_is_configured(self):
         body = self._render("chan-on@example.com", "#ai-engineering-buildcamp")
@@ -741,18 +784,17 @@ class ReplayCommandGuardTest(TestCase):
         self.addCleanup(clear_config_cache)
 
     def test_missing_course_and_cohort_raise_command_error_and_send_nothing(self):
-        with patch.object(EmailService, "_send_ses") as send_ses:
-            with self.assertRaises(CommandError) as ctx:
-                call_command(
-                    "replay_maven_event",
-                    "--event", "user_cohort.enrolled",
-                    "--email", "real@person.com",
-                    stdout=StringIO(),
-                )
+        with self.assertRaises(CommandError) as ctx:
+            call_command(
+                "replay_maven_event",
+                "--event", "user_cohort.enrolled",
+                "--email", "real@person.com",
+                stdout=StringIO(),
+            )
         message = str(ctx.exception)
         self.assertIn("--course", message)
         self.assertIn("--cohort", message)
-        send_ses.assert_not_called()
+        self.assertFalse(EmailDelivery.objects.exists())
         self.assertFalse(User.objects.filter(email="real@person.com").exists())
 
     def test_missing_cohort_alone_names_only_that_flag(self):
@@ -805,9 +847,8 @@ class ReplayCommandGuardTest(TestCase):
         return_value=True,
     )
     @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-    @patch.object(EmailService, "_send_ses", return_value="ses-message-id")
     def test_real_run_prints_resolved_recipient_course_and_cohort(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         out = StringIO()
         call_command(
@@ -830,9 +871,8 @@ class ReplayCommandGuardTest(TestCase):
         return_value=True,
     )
     @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-    @patch.object(EmailService, "_send_ses", return_value="ses-message-id")
     def test_enveloped_runs_print_the_values_the_handler_processes(
-        self, _send_ses, _notify,
+        self, _notify,
     ):
         for envelope in ("data", "payload"):
             with self.subTest(envelope=envelope):

@@ -5,9 +5,9 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from io import StringIO
-from unittest.mock import patch
-from urllib.parse import parse_qs, urlparse
+from unittest.mock import MagicMock, patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.db import IntegrityError, close_old_connections, connection, transaction
@@ -16,11 +16,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.models import ImportBatch, TierOverride
+from accounts.utils.tokens import generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import get_user_level
 from content.models import Cohort, Course
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
-from integrations.services.maven import _run_step, _welcome_context
+from integrations.services.maven import _run_step
 from payments.models import Tier
 from website.release_phase import R1_EXPAND_COMPATIBILITY
 
@@ -42,7 +43,7 @@ def enable_maven():
     "integrations.services.maven._invite_to_slack",
     lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
 )
-@patch("integrations.services.maven.EmailService")
+@patch("integrations.services.maven.send_package_mail")
 class MavenCorrectionsTest(TestCase):
     def setUp(self):
         enable_maven()
@@ -279,8 +280,13 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
     def test_failed_welcome_retries_without_repeating_successful_slack(self):
         with patch(
             "integrations.services.maven._invite_to_slack", return_value=SLACK_ADDED,
-        ) as slack, patch("integrations.services.maven.EmailService") as service:
-            service.return_value.send.side_effect = [RuntimeError("provider detail must not persist"), None]
+        ) as slack, patch(
+            "integrations.services.maven.send_package_mail",
+        ) as package_mail:
+            package_mail.side_effect = [
+                RuntimeError("provider detail must not persist"),
+                MagicMock(spec=EmailDelivery),
+            ]
             self.post({"event": "user_cohort.enrolled", "email": "retry@example.com"})
             event = MavenEnrollmentEvent.objects.get()
             self.assertEqual(event.slack_status, event.STEP_SUCCEEDED)
@@ -290,7 +296,7 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
             event.refresh_from_db()
             self.assertEqual(event.welcome_status, event.STEP_SUCCEEDED)
             self.assertEqual(slack.call_count, 1)
-            self.assertEqual(service.return_value.send.call_count, 2)
+            self.assertEqual(package_mail.call_count, 2)
 
     def test_scheduled_retry_is_bounded_and_records_step_times(self):
         from jobs.tasks.cleanup import retry_maven_enrollment_steps
@@ -298,12 +304,12 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
         with patch(
             "integrations.services.maven._invite_to_slack", return_value=SLACK_ADDED,
         ) as slack, patch(
-            "integrations.services.maven.EmailService"
-        ) as service:
-            service.return_value.send.side_effect = [
+            "integrations.services.maven.send_package_mail",
+        ) as package_mail:
+            package_mail.side_effect = [
                 RuntimeError("first"),
                 RuntimeError("second"),
-                None,
+                MagicMock(spec=EmailDelivery),
             ]
             response = self.post(
                 {"event": "user_cohort.enrolled", "email": "auto-retry@example.com"}
@@ -324,7 +330,7 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
             self.assertEqual(event.welcome_attempts, 3)
             self.assertEqual(event.welcome_status, event.STEP_SUCCEEDED)
             self.assertEqual(slack.call_count, 1)
-            self.assertEqual(service.return_value.send.call_count, 3)
+            self.assertEqual(package_mail.call_count, 3)
 
     def test_scheduled_retry_stops_after_three_failed_attempts(self):
         from jobs.tasks.cleanup import retry_maven_enrollment_steps
@@ -332,9 +338,9 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
         with patch(
             "integrations.services.maven._invite_to_slack", return_value=SLACK_ADDED,
         ), patch(
-            "integrations.services.maven.EmailService"
-        ) as service:
-            service.return_value.send.side_effect = RuntimeError("down")
+            "integrations.services.maven.send_package_mail",
+        ) as package_mail:
+            package_mail.side_effect = RuntimeError("down")
             self.post({"event": "user_cohort.enrolled", "email": "bounded@example.com"})
             retry_maven_enrollment_steps()
             retry_maven_enrollment_steps()
@@ -342,7 +348,7 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
             event = MavenEnrollmentEvent.objects.get()
             self.assertEqual(event.welcome_attempts, 3)
             self.assertEqual(event.welcome_status, event.STEP_FAILED)
-            self.assertEqual(service.return_value.send.call_count, 3)
+            self.assertEqual(package_mail.call_count, 3)
 
     def test_scheduled_retry_recovers_slack_and_removal_independently(self):
         from jobs.tasks.cleanup import retry_maven_enrollment_steps
@@ -350,7 +356,9 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
         with patch(
             "integrations.services.maven._invite_to_slack",
             side_effect=[RuntimeError("slack down"), SLACK_ADDED],
-        ) as slack, patch("integrations.services.maven.EmailService") as service:
+        ) as slack, patch(
+            "integrations.services.maven.send_package_mail",
+        ) as package_mail:
             self.post(
                 {"event": "user_cohort.enrolled", "email": "slack-retry@example.com"}
             )
@@ -361,7 +369,7 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
             event.refresh_from_db()
             self.assertEqual(event.slack_status, event.STEP_SUCCEEDED)
             self.assertEqual(slack.call_count, 2)
-            self.assertEqual(service.return_value.send.call_count, 1)
+            self.assertEqual(package_mail.call_count, 1)
 
         with patch(
             "community.services.staff_notifications.notify_maven_cohort_removal",
@@ -378,12 +386,14 @@ class MavenRetryPreferenceAndOpsTest(TestCase):
             self.assertEqual(notify.call_count, 2)
 
     @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
-    @patch("integrations.services.maven.EmailService")
-    def test_scoped_opt_out_preserves_access_and_account_can_reenable(self, email_service):
+    def test_scoped_opt_out_preserves_access_and_account_can_reenable(self):
         self.post({"event": "user_cohort.enrolled", "email": "opt@example.com"})
         user = User.objects.get(email="opt@example.com")
         level = get_user_level(user)
-        token = parse_qs(urlparse(_welcome_context(user, "Course")["opt_out_url"]).query)["token"][0]
+        # The welcome renders this exact scoped token from the worker
+        # resolver (covered in email_app slice-3 resolver tests); the
+        # endpoint behavior is what this test pins.
+        token = generate_user_action_token(user.pk, "maven_email_opt_out")
         response = self.client.get(f"/api/maven-email-opt-out?token={token}")
         self.assertContains(response, "access are unchanged")
         user.refresh_from_db()

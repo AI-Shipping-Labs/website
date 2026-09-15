@@ -99,8 +99,8 @@ class MavenStepLockPostgresTest(TestCase):
                 .all()[:1]
             )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_enrolled_webhook_grants_override_and_returns_json(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_enrolled_webhook_grants_override_and_returns_json(self, package_mail):
         response = self._post(self._enrolled_payload("Emil.Lee@stern.nyu.edu"))
 
         # Before the fix this raised NotSupportedError out of the view and
@@ -129,7 +129,7 @@ class MavenStepLockPostgresTest(TestCase):
             ).exists()
         )
         self.assertEqual(
-            email_service.return_value.send.call_args.args[1], "maven_welcome"
+            package_mail.call_args.args[1], "maven_welcome"
         )
 
     def test_removal_webhook_runs_its_step(self):
@@ -157,8 +157,8 @@ class MavenStepLockPostgresTest(TestCase):
             occurrence.removal_status, MavenEnrollmentEvent.STEP_PENDING
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_redelivery_resumes_the_existing_occurrence(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_redelivery_resumes_the_existing_occurrence(self, package_mail):
         """A crashed delivery is resumable: attempts were never burned."""
         payload = self._enrolled_payload("resume@test.com")
 
@@ -198,8 +198,8 @@ class MavenStepLockPostgresTest(TestCase):
             TierOverride.objects.filter(user=occurrence.user, is_active=True).exists()
         )
 
-    @patch("integrations.services.maven.EmailService")
-    def test_retry_job_resumes_pending_occurrences(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_retry_job_resumes_pending_occurrences(self, package_mail):
         """``retry_maven_enrollment_steps`` must not raise on PostgreSQL."""
         from jobs.tasks.cleanup import retry_maven_enrollment_steps
 

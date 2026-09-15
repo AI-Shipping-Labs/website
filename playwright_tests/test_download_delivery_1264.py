@@ -42,6 +42,36 @@ def _seed_download(*, slug='browser-guide', required_level=0):
 
 @pytest.mark.django_db(transaction=True)
 class TestDownloadDelivery1264:
+    @staticmethod
+    def _capture_rendered_mail(mailbox, monkeypatch, django_server):
+        """Capture each mail exactly as the worker renders it (A1.2 slice 3).
+
+        The request queues a durable ``EmailDelivery``; the session's sync
+        jobs backend drains it at commit and the worker resolver mints the
+        delivery or verification link then. Capturing at the render
+        boundary records the provider-visible context without re-running
+        the resolver (which would mint a second grant).
+        """
+
+        from community_base.mail.backends import ses_local
+
+        real_render = ses_local.render_delivery
+
+        def capture_render(delivery, context):
+            mailbox.update({
+                'recipient': delivery.recipient_email,
+                'purpose': delivery.purpose,
+                **context,
+            })
+            return real_render(delivery, context)
+
+        monkeypatch.setattr(ses_local, 'render_delivery', capture_render)
+        # The worker resolver reads the site URL lazily from this module.
+        monkeypatch.setattr(
+            'integrations.config.site_base_url',
+            lambda: django_server,
+        )
+
     @pytest.mark.core
     def test_real_mailbox_verify_presign_count_and_activity_journey(
         self,
@@ -54,21 +84,7 @@ class TestDownloadDelivery1264:
         with django_db_blocker.unblock():
             download = _seed_download(slug='real-mailbox-guide')
 
-        def capture_mail(_service, user, template_name, context, **_kwargs):
-            mailbox.update({
-                'recipient': user.email,
-                'template': template_name,
-                **context,
-            })
-
-        monkeypatch.setattr(
-            'content.services.download_requests.EmailService.send',
-            capture_mail,
-        )
-        monkeypatch.setattr(
-            'content.services.download_requests.site_base_url',
-            lambda: django_server,
-        )
+        self._capture_rendered_mail(mailbox, monkeypatch, django_server)
         monkeypatch.setattr(
             'content.services.download_delivery.verify_download_object_exists',
             lambda _key: None,
@@ -84,7 +100,7 @@ class TestDownloadDelivery1264:
         form.get_by_test_id('download-request-submit').click()
         expect(page.get_by_test_id('download-request-success')).to_be_visible()
         assert mailbox['recipient'] == 'real-mailbox@example.com'
-        assert mailbox['template'] == 'download_delivery'
+        assert mailbox['purpose'] == 'download_delivery'
         assert mailbox['verification_required'] is True
 
         page.goto(mailbox['delivery_url'], wait_until='domcontentloaded')
@@ -100,6 +116,7 @@ class TestDownloadDelivery1264:
             assert delivered.download_count == 1
             assert grant.redeemed_at is not None
             assert grant.user.email_verified is True
+            assert grant.user.email == 'real-mailbox@example.com'
             assert UserActivity.objects.filter(
                 user=grant.user,
                 event_type=UserActivity.EVENT_RESOURCE_VIEW,
@@ -126,21 +143,7 @@ class TestDownloadDelivery1264:
             user.email_verified = True
             user.save(update_fields=['email_verified'])
 
-        def capture_mail(_service, recipient, template_name, context, **_kwargs):
-            mailbox.update({
-                'recipient': recipient.email,
-                'template': template_name,
-                **context,
-            })
-
-        monkeypatch.setattr(
-            'content.services.download_requests.EmailService.send',
-            capture_mail,
-        )
-        monkeypatch.setattr(
-            'content.services.download_requests.site_base_url',
-            lambda: django_server,
-        )
+        self._capture_rendered_mail(mailbox, monkeypatch, django_server)
         monkeypatch.setattr(
             'content.services.download_delivery.verify_download_object_exists',
             lambda _key: None,
@@ -155,6 +158,8 @@ class TestDownloadDelivery1264:
         form.locator('input[name="email"]').fill(user.email)
         form.get_by_test_id('download-request-submit').click()
         expect(page.get_by_test_id('download-request-success')).to_be_visible()
+        assert mailbox['recipient'] == user.email
+        assert mailbox['purpose'] == 'download_delivery'
         assert mailbox['verification_required'] is False
         page.goto(mailbox['delivery_url'], wait_until='domcontentloaded')
         expect(page).to_have_url(

@@ -13,8 +13,10 @@ authentication events, not consent, and neither may subscribe anyone.
 """
 
 import json
+import re
 from unittest.mock import patch
 
+from community_base.mail.jobs import deliver as deliver_job
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -22,11 +24,10 @@ from accounts.utils.tokens import (
     generate_password_reset_token,
     generate_user_action_token,
 )
+from email_app.package_mail import send_package_mail
 from email_app.services.campaign_audience import eligible_campaign_recipients
-from email_app.services.email_service import (
-    EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
-    EmailService,
-)
+from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
+from email_app.testing import StubSESClient
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import _welcome_context
 from payments.models import Tier
@@ -49,6 +50,26 @@ def enable_maven():
     clear_config_cache()
 
 
+def welcome_opt_in_url(user):
+    """Queue a welcome for ``user``, drain the worker, return the minted
+    verify-and-subscribe link (A1.2 slice 3: the durable path is the only
+    place the tokened links exist)."""
+
+    delivery = send_package_mail(
+        user, "maven_welcome", _welcome_context("Course"),
+    )
+    stub = StubSESClient()
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=stub,
+    ):
+        deliver_job(None, {"delivery_id": str(delivery.id)})
+    html = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
+    match = re.search(r'href="([^"]*/api/verify-and-subscribe\?token=[^"]*)"', html)
+    assert match, "maven_welcome renders no verify-and-subscribe link"
+    return match.group(1)
+
+
 class MavenWebhookMixin(TestCase):
     def setUp(self):
         enable_maven()
@@ -69,18 +90,16 @@ class MavenWebhookMixin(TestCase):
     "integrations.services.maven._invite_to_slack",
     lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
 )
-@patch("integrations.services.maven.EmailService")
+@patch("integrations.services.maven.send_package_mail")
 class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
-    def test_one_click_both_verifies_and_subscribes(self, email_service):
+    def test_one_click_both_verifies_and_subscribes(self, package_mail):
         """The email's promise and the endpoint's effect have to match."""
         self.enroll("opt-in-1593@example.com")
         user = User.objects.get(email="opt-in-1593@example.com")
         self.assertTrue(user.unsubscribed)
         self.assertFalse(user.email_verified)
 
-        response = self.client.get(
-            _welcome_context(user, "Course")["newsletter_opt_in_url"]
-        )
+        response = self.client.get(welcome_opt_in_url(user))
 
         self.assertContains(response, "You&#x27;re subscribed")
         user.refresh_from_db()
@@ -91,14 +110,12 @@ class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
         self.assertTrue(user.email_preferences["maven_emails"])
 
     def test_landing_page_says_what_happened_and_offers_the_way_out(
-        self, email_service,
+        self, package_mail,
     ):
         self.enroll("opt-in-page-1593@example.com")
         user = User.objects.get(email="opt-in-page-1593@example.com")
 
-        response = self.client.get(
-            _welcome_context(user, "Course")["newsletter_opt_in_url"]
-        )
+        response = self.client.get(welcome_opt_in_url(user))
 
         self.assertContains(response, "You&#x27;re subscribed")
         self.assertContains(response, "verified")
@@ -109,11 +126,11 @@ class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
         self.assertContains(response, "no sign-in needed")
 
     def test_opting_in_twice_is_idempotent_and_does_not_look_broken(
-        self, email_service,
+        self, package_mail,
     ):
         self.enroll("twice-1593@example.com")
         user = User.objects.get(email="twice-1593@example.com")
-        url = _welcome_context(user, "Course")["newsletter_opt_in_url"]
+        url = welcome_opt_in_url(user)
 
         self.client.get(url)
         response = self.client.get(url)
@@ -124,12 +141,11 @@ class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
         user.refresh_from_db()
         self.assertFalse(user.unsubscribed)
 
-    def test_opting_in_then_out_leaves_them_out(self, email_service):
+    def test_opting_in_then_out_leaves_them_out(self, package_mail):
         self.enroll("in-then-out-1593@example.com")
         user = User.objects.get(email="in-then-out-1593@example.com")
-        context = _welcome_context(user, "Course")
 
-        self.client.get(context["newsletter_opt_in_url"])
+        self.client.get(welcome_opt_in_url(user))
         self.client.get(
             "/api/unsubscribe?token="
             + generate_user_action_token(user.pk, "unsubscribe")
@@ -142,7 +158,7 @@ class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
         self.assertTrue(user.email_verified)
 
     def test_opting_in_grants_no_access_and_touches_nothing_else(
-        self, email_service,
+        self, package_mail,
     ):
         self.enroll("scope-1593@example.com")
         user = User.objects.get(email="scope-1593@example.com")
@@ -152,7 +168,7 @@ class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
         before_slack = user.slack_member
         before_tier = user.tier_id
 
-        self.client.get(_welcome_context(user, "Course")["newsletter_opt_in_url"])
+        self.client.get(welcome_opt_in_url(user))
 
         user.refresh_from_db()
         self.assertEqual(get_user_level(user), before_level)
@@ -330,10 +346,10 @@ class VerifyAndSubscribeTokenScopeTest(TestCase):
     "integrations.services.maven._invite_to_slack",
     lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
 )
-@patch("integrations.services.maven.EmailService")
+@patch("integrations.services.maven.send_package_mail")
 class MavenCampaignAudienceTest(MavenWebhookMixin):
     def test_an_enrollee_who_never_opts_in_reaches_no_campaign_audience(
-        self, email_service,
+        self, package_mail,
     ):
         self.enroll("no-optin-1593@example.com")
         user = User.objects.get(email="no-optin-1593@example.com")
@@ -344,13 +360,13 @@ class MavenCampaignAudienceTest(MavenWebhookMixin):
         )
 
     def test_opting_in_makes_them_reachable_including_verified_only(
-        self, email_service,
+        self, package_mail,
     ):
         """The opt-in verifies too, so it clears both filters at once."""
         self.enroll("optin-audience-1593@example.com")
         user = User.objects.get(email="optin-audience-1593@example.com")
 
-        self.client.get(_welcome_context(user, "Course")["newsletter_opt_in_url"])
+        self.client.get(welcome_opt_in_url(user))
 
         self.assertIn(user, eligible_campaign_recipients())
         self.assertIn(
@@ -362,27 +378,31 @@ class MavenWelcomeSentMessageTest(TestCase):
     """Assert on what SES actually receives, not on the template body.
 
     Issue #1593 shipped a trap that every template-level test missed, because
-    the thing that caused it does not exist in the template. ``EmailService``
-    appends a generic "your email is not verified — to verify it, click here"
-    footer to unverified recipients, pointing at ``/api/verify-email``. The
-    Maven welcome asks the reader to verify their email as the way to opt IN,
-    via ``/api/verify-and-subscribe``. Two links, one verb, and the more
-    directive of the two silently did not subscribe them.
+    the thing that caused it does not exist in the template. The generic
+    verify-email footer points unverified recipients at
+    ``/api/verify-email``. The Maven welcome asks the reader to verify their
+    email as the way to opt IN, via ``/api/verify-and-subscribe``. Two
+    links, one verb, and the more directive of the two silently did not
+    subscribe them.
 
-    So these tests render through ``EmailService.send`` and inspect the exact
-    HTML handed to ``_send_ses``. A test that renders the template can never
-    catch a regression that lives in the wrapper.
+    So these tests send the welcome through the package and drain the
+    worker, then inspect the exact HTML handed to SES (A1.2 slice 3). A
+    test that renders the template can never catch a regression that lives
+    in the wrapper.
     """
 
     def _sent_html(self, user):
-        with patch.object(
-            EmailService, "_send_ses", return_value="ses-message-id",
-        ) as send_ses:
-            EmailService().send(
-                user, "maven_welcome", _welcome_context(user, "Course"),
-            )
-        self.assertTrue(send_ses.called, "maven_welcome was not sent")
-        return send_ses.call_args[0][2]
+        delivery = send_package_mail(
+            user, "maven_welcome", _welcome_context("Course"),
+        )
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            deliver_job(None, {"delivery_id": str(delivery.id)})
+        self.assertTrue(stub.calls, "maven_welcome was not sent")
+        return stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
 
     def test_the_sent_email_offers_exactly_one_verify_link(self):
         user = User.objects.create_user(

@@ -1,14 +1,22 @@
-"""Sprint cadence notification coverage for issue #1200."""
+"""Sprint cadence notification coverage for issue #1200.
+
+Since A1.2 slice 2 the cadence mails queue durable ``EmailDelivery``
+rows; tests drain pending deliveries with
+:func:`email_app.testing.deliver_pending_mail` where they assert on the
+provider outcome.
+"""
 
 import datetime
 from unittest.mock import patch
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
-from email_app.services.email_service import EmailService
+from email_app.package_mail import send_package_mail
+from email_app.testing import deliver_pending_mail
 from notifications.models import Notification
 from plans.models import (
     SPRINT_CADENCE_KIND_WEEK_NOTE_PROMPT,
@@ -24,16 +32,6 @@ from plans.models import (
 from plans.services.sprint_cadence import send_sprint_cadence_notifications
 
 User = get_user_model()
-
-
-def _fake_send(_service, user, template_name, _context):
-    if user.email.startswith('fail-'):
-        raise RuntimeError(f'SES rejected {user.email}')
-    return EmailLog.objects.create(
-        user=user,
-        email_type=template_name,
-        ses_message_id=f'ses-{user.pk}',
-    )
 
 
 @tag('core')
@@ -70,10 +68,8 @@ class SprintCadenceNotificationTests(TestCase):
             status='active',
         )
 
-    @patch.object(EmailService, 'send', autospec=True, side_effect=_fake_send)
     def test_week_start_selects_only_active_shared_plans_and_is_idempotent(
         self,
-        _send,
     ):
         eligible = self._plan('eligible@test.com')
         week1 = self._week(eligible, 1, position=0, theme='Prep')
@@ -140,10 +136,8 @@ class SprintCadenceNotificationTests(TestCase):
             1,
         )
 
-    @patch.object(EmailService, 'send', autospec=True, side_effect=_fake_send)
     def test_week_note_prompt_is_due_at_week_end_and_suppressed_by_note(
         self,
-        _send,
     ):
         prompt_plan = self._plan('prompt@test.com')
         prompt_week = self._week(prompt_plan, 2, position=1, theme='Validate')
@@ -178,10 +172,8 @@ class SprintCadenceNotificationTests(TestCase):
         )
         self.assertIsNotNone(log.notification)
 
-    @patch.object(EmailService, 'send', autospec=True, side_effect=_fake_send)
     def test_email_preferences_filter_email_but_keep_in_app_notification(
         self,
-        mock_send,
     ):
         opted_in = self._plan('opted-in@test.com')
         self._week(opted_in, 1, position=0)
@@ -206,32 +198,48 @@ class SprintCadenceNotificationTests(TestCase):
 
         self.assertEqual(result['week_start_created'], 4)
         self.assertEqual(Notification.objects.count(), 4)
+        # Only the opted-in member gets a durable delivery queued.
         self.assertEqual(result['emails_sent'], 1)
-        self.assertEqual(mock_send.call_count, 1)
+        self.assertEqual(
+            EmailDelivery.objects.values_list(
+                'recipient_email', flat=True,
+            ).get(),
+            'opted-in@test.com',
+        )
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.values_list('user__email', flat=True).get(),
             'opted-in@test.com',
         )
         self.assertEqual(
             SprintCadenceDeliveryLog.objects.filter(
-                email_log__isnull=True,
+                email_delivery__isnull=True,
             ).count(),
             3,
         )
 
-    @patch.object(EmailService, 'send', autospec=True, side_effect=_fake_send)
-    def test_email_failure_is_logged_without_blocking_other_members(
-        self,
-        _send,
-    ):
+    def test_send_failure_is_logged_without_blocking_other_members(self):
+        """A send-time failure records ``email_failed`` and never blocks
+        the other member; the worker transports the queued delivery."""
         failing = self._plan('fail-member@test.com')
         self._week(failing, 1, position=0)
         passing = self._plan('pass-member@test.com')
         self._week(passing, 1, position=0)
 
-        result = send_sprint_cadence_notifications(
-            today=datetime.date(2026, 5, 1),
-        )
+        real_send = send_package_mail
+
+        def fail_only_failing_member(member, *args, **kwargs):
+            if member.email.startswith('fail-'):
+                raise RuntimeError(f'SES rejected {member.email}')
+            return real_send(member, *args, **kwargs)
+
+        with patch(
+            'plans.services.sprint_cadence.send_package_mail',
+            side_effect=fail_only_failing_member,
+        ):
+            result = send_sprint_cadence_notifications(
+                today=datetime.date(2026, 5, 1),
+            )
 
         self.assertEqual(result['week_start_created'], 2)
         self.assertEqual(result['emails_sent'], 1)
@@ -241,5 +249,11 @@ class SprintCadenceNotificationTests(TestCase):
         self.assertEqual(failed_log.status, SPRINT_CADENCE_STATUS_EMAIL_FAILED)
         self.assertIn('SES rejected fail-member@test.com', failed_log.last_error)
         self.assertIsNotNone(failed_log.notification)
-        self.assertIsNone(failed_log.email_log)
-        self.assertEqual(EmailLog.objects.count(), 1)
+        self.assertIsNone(failed_log.email_delivery)
+        passing_log = SprintCadenceDeliveryLog.objects.get(plan=passing)
+        self.assertIsNotNone(passing_log.email_delivery)
+        deliver_pending_mail()
+        self.assertEqual(
+            EmailLog.objects.values_list('user__email', flat=True).get(),
+            'pass-member@test.com',
+        )

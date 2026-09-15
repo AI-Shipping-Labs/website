@@ -1,8 +1,17 @@
-"""Tests for sprint-end recap delivery (issue #1201)."""
+"""Tests for sprint-end recap delivery (issue #1201).
+
+Since A1.2 slice 2 the recap queues a durable ``EmailDelivery`` and the
+provider send happens from the delivery worker, so tests drain pending
+deliveries with :func:`email_app.testing.deliver_pending_mail` (and a
+stubbed ``ses_local`` client when they assert on SES outcomes).
+"""
 
 import datetime
 from unittest.mock import patch
 
+from community_base.jobs.runner import RetryableJobError
+from community_base.mail.jobs import deliver as deliver_job
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
@@ -10,6 +19,8 @@ from django.utils import timezone
 
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from email_app.models import EmailLog
+from email_app.package_mail import send_package_mail
+from email_app.testing import StubSESClient, deliver_pending_mail
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.models import Notification
@@ -33,6 +44,30 @@ from questionnaires.models import Question, Questionnaire, Response
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()
+
+
+class FlakyThenHealthySESClient(StubSESClient):
+    """A transport that times out once, then recovers (worker retry)."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.timeout_calls = 0
+
+    def send_email(self, **kwargs):
+        if self.timeout_calls == 0:
+            self.timeout_calls += 1
+            from botocore.exceptions import ConnectTimeoutError
+
+            raise ConnectTimeoutError(endpoint_url="https://ses.test")
+        return super().send_email(**kwargs)
+
+
+def _drain_one(delivery, client):
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=client,
+    ):
+        deliver_job(None, {"delivery_id": str(delivery.id)})
 
 
 @tag('core')
@@ -73,9 +108,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
             )
         return plan
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_selects_only_eligible_ended_shared_member_plans(self, mock_ses):
-        mock_ses.return_value = 'ses-ok'
+    def test_selects_only_eligible_ended_shared_member_plans(self):
         ended = self._sprint('ended')
         eligible = self._member('eligible@test.com')
         self._shared_plan(ended, eligible, checkpoints=3, done=2)
@@ -108,6 +141,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         self._shared_plan(cancelled, self._member('cancelled@test.com'))
 
         summary = send_sprint_end_recaps(today=self.today)
+        deliver_pending_mail()
 
         self.assertEqual(summary['eligible_count'], 1)
         self.assertEqual(summary['sent_count'], 1)
@@ -130,9 +164,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
             SprintEndDeliveryLog.objects.filter(plan=plan).exists(),
         )
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_zero_checkpoint_plan_has_clear_copy(self, mock_ses):
-        mock_ses.return_value = 'ses-ok'
+    def test_zero_checkpoint_plan_has_clear_copy(self):
         sprint = self._sprint('zero')
         member = self._member('zero@test.com')
         self._shared_plan(sprint, member, checkpoints=0)
@@ -142,9 +174,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         notification = Notification.objects.get(user=member)
         self.assertIn('no checkpoints yet', notification.body)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_legacy_blank_checkpoint_does_not_inflate_recap(self, mock_ses):
-        mock_ses.return_value = 'ses-ok'
+    def test_legacy_blank_checkpoint_does_not_inflate_recap(self):
         sprint = self._sprint('meaningful-progress')
         member = self._member('meaningful-progress@test.com')
         plan = self._shared_plan(sprint, member, checkpoints=2, done=1)
@@ -162,9 +192,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         self.assertIn('1 of 2 checkpoints', notification.body)
         self.assertNotIn('2 of 3 checkpoints', notification.body)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_delivery_is_idempotent_for_same_sprint_member(self, mock_ses):
-        mock_ses.return_value = 'ses-ok'
+    def test_delivery_is_idempotent_for_same_sprint_member(self):
         sprint = self._sprint('idempotent')
         member = self._member('member@test.com')
         self._shared_plan(sprint, member)
@@ -176,6 +204,8 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         self.assertEqual(second['skipped_count'], 1)
         self.assertEqual(SprintEndDeliveryLog.objects.count(), 1)
         self.assertEqual(Notification.objects.filter(user=member).count(), 1)
+        self.assertEqual(EmailDelivery.objects.count(), 1)
+        deliver_pending_mail()
         self.assertEqual(
             EmailLog.objects.filter(
                 user=member,
@@ -183,21 +213,26 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
             ).count(),
             1,
         )
-        self.assertEqual(mock_ses.call_count, 1)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_email_failure_is_recorded_without_blocking_other_members(
-        self,
-        mock_ses,
-    ):
-        mock_ses.side_effect = [RuntimeError('SES down'), 'ses-ok']
+    def test_send_failure_is_recorded_without_blocking_other_members(self):
         sprint = self._sprint('resilient')
         failed_member = self._member('failed@test.com')
         ok_member = self._member('ok@test.com')
         self._shared_plan(sprint, failed_member)
         self._shared_plan(sprint, ok_member)
 
-        summary = send_sprint_end_recaps(today=self.today)
+        real_send = send_package_mail
+
+        def fail_only_failed_member(member, *args, **kwargs):
+            if member.email == 'failed@test.com':
+                raise RuntimeError('SES down')
+            return real_send(member, *args, **kwargs)
+
+        with patch(
+            'plans.tasks.sprint_end.send_package_mail',
+            side_effect=fail_only_failed_member,
+        ):
+            summary = send_sprint_end_recaps(today=self.today)
 
         self.assertEqual(summary['email_failed_count'], 1)
         self.assertEqual(summary['sent_count'], 1)
@@ -209,16 +244,52 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
         )
         self.assertIn('SES down', failed_log.last_error)
         self.assertIsNone(failed_log.email_log)
+        self.assertIsNone(failed_log.email_delivery)
         ok_log = SprintEndDeliveryLog.objects.get(member=ok_member)
         self.assertEqual(ok_log.status, SPRINT_END_DELIVERY_STATUS_SENT)
-        self.assertIsNotNone(ok_log.email_log)
+        self.assertIsNotNone(ok_log.email_delivery)
+        self.assertIsNone(ok_log.email_log)
 
-    @patch('email_app.services.email_service.EmailService._send_ses')
-    def test_feedback_auto_distribution_setting_controls_responses(
-        self,
-        mock_ses,
-    ):
-        mock_ses.return_value = 'ses-ok'
+    def test_ses_transport_trouble_is_the_workers_concern_and_retries(self):
+        """A drain-time SES timeout never fails the fan-out.
+
+        The site log keeps ``sent`` (the durable delivery exists); the
+        delivery is left retryable for the worker and the provider send
+        completes on the retried job.
+        """
+        sprint = self._sprint('transport')
+        member = self._member('transport@test.com')
+        self._shared_plan(sprint, member)
+
+        summary = send_sprint_end_recaps(today=self.today)
+        self.assertEqual(summary['sent_count'], 1)
+        log = SprintEndDeliveryLog.objects.get(member=member)
+        self.assertEqual(log.status, SPRINT_END_DELIVERY_STATUS_SENT)
+        delivery = EmailDelivery.objects.get()
+        self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
+
+        flaky = FlakyThenHealthySESClient()
+        with self.assertRaises(RetryableJobError):
+            _drain_one(delivery, flaky)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, EmailDelivery.State.RETRYABLE)
+        self.assertFalse(
+            EmailLog.objects.filter(email_type='sprint_end_recap').exists(),
+        )
+        # The retried worker job completes the provider send.
+        _drain_one(delivery, StubSESClient())
+        delivery.refresh_from_db()
+        self.assertEqual(
+            delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED,
+        )
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=member, email_type='sprint_end_recap',
+            ).count(),
+            1,
+        )
+
+    def test_feedback_auto_distribution_setting_controls_responses(self):
         questionnaire = Questionnaire.objects.create(
             title='Sprint Feedback',
             slug='sprint-feedback',

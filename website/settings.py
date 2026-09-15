@@ -829,7 +829,11 @@ COMMUNITY_BASE = {
     'CONTENT_SYNC_GITHUB_PRIVATE_KEY': _lazy_package_setting(
         _package_github_app_private_key
     ),
-    'CONTENT_SYNC_MEDIA_BACKEND': 's3',
+    # 's3' only when a bucket is configured: CI and fresh environments have
+    # no CONTENT bucket, and the package store refuses to construct without
+    # one -- the null backend keeps syncs working there (same graceful
+    # degradation the legacy sync had without the bucket env).
+    'CONTENT_SYNC_MEDIA_BACKEND': 's3' if AWS_S3_CONTENT_BUCKET else 'null',
     'CONTENT_SYNC_S3_BUCKET': AWS_S3_CONTENT_BUCKET,
     'CONTENT_SYNC_S3_PUBLIC_URL': CONTENT_CDN_BASE,
     'CONTENT_SYNC_S3_REGION': AWS_S3_CONTENT_REGION,

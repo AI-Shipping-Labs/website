@@ -761,6 +761,41 @@ IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_H
 # ses_local backend, with the site hooks in email_app.hooks keeping the
 # EmailLog audit row, template overrides, newsletter opt-out and the
 # unsubscribe / verify-email footers.
+def _lazy_package_setting(getter):
+    """Wrap a COMMUNITY_BASE value so it resolves on first use.
+
+    The package content-sync client stringifies these values when it is
+    constructed (per sync run), so a SimpleLazyObject defers any DatabaseCache
+    GET or Secrets Manager round-trip out of settings import. The predeploy
+    task imports settings before the database is guaranteed migrated, and
+    serving boots must not gain a per-boot Secrets Manager call.
+    """
+    from django.utils.functional import SimpleLazyObject
+
+    return SimpleLazyObject(getter)
+
+
+def _package_github_app_id():
+    from integrations.config import get_config
+
+    return get_config('GITHUB_APP_ID', '')
+
+
+def _package_github_app_installation_id():
+    from integrations.config import get_config
+
+    return get_config('GITHUB_APP_INSTALLATION_ID', '')
+
+
+def _package_github_app_private_key():
+    # Same resolver the legacy sync client uses (Studio DB override ->
+    # env -> Secrets Manager), so both clients always see identical
+    # credentials.
+    from integrations.services.github_app import _resolve_github_app_private_key
+
+    return _resolve_github_app_private_key()
+
+
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
@@ -780,4 +815,22 @@ COMMUNITY_BASE = {
     'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
     'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
+    # Package content-sync GitHub client + S3 media store (A2.3 cutover
+    # completion, website #1662): without these the sync worker fails every
+    # source with "GitHub App credentials are required for a private
+    # source". The S3 values are the same bucket/CDN the legacy sync
+    # uploaded to; the store's key layout is self-consistent, so no legacy
+    # image URL changes.
+    'CONTENT_SYNC_GITHUB_API_URL': 'https://api.github.com',
+    'CONTENT_SYNC_GITHUB_APP_ID': _lazy_package_setting(_package_github_app_id),
+    'CONTENT_SYNC_GITHUB_INSTALLATION_ID': _lazy_package_setting(
+        _package_github_app_installation_id
+    ),
+    'CONTENT_SYNC_GITHUB_PRIVATE_KEY': _lazy_package_setting(
+        _package_github_app_private_key
+    ),
+    'CONTENT_SYNC_MEDIA_BACKEND': 's3',
+    'CONTENT_SYNC_S3_BUCKET': AWS_S3_CONTENT_BUCKET,
+    'CONTENT_SYNC_S3_PUBLIC_URL': CONTENT_CDN_BASE,
+    'CONTENT_SYNC_S3_REGION': AWS_S3_CONTENT_REGION,
 }

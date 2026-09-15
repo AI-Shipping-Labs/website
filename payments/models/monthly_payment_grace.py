@@ -148,6 +148,17 @@ class MonthlyPaymentGraceDelivery(models.Model):
         on_delete=models.SET_NULL,
         related_name="monthly_payment_grace_deliveries",
     )
+    # A1.2 slice 2: package-path sends carry the durable ``EmailDelivery``
+    # instead — the audit ``EmailLog`` row is only written by the delivery
+    # worker after provider acceptance, so it can no longer be linked
+    # synchronously. Legacy rows keep ``email_log``.
+    email_delivery = models.ForeignKey(
+        "cb_mail.EmailDelivery",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
     last_error = models.CharField(max_length=500, blank=True, default="")
     claimed_at = models.DateTimeField(null=True, blank=True)
     claim_token = models.UUIDField(null=True, blank=True, editable=False)

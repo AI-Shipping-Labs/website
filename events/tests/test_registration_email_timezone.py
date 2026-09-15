@@ -58,12 +58,32 @@ class RegistrationEmailTimezoneTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_html(self, user):
-        """Send the registration email and return the rendered HTML body."""
+    def _capture_html(self, user, event=None):
+        """Send the registration email and return the rendered HTML body.
+
+        The cancel token is stubbed so the rendered body is
+        deterministic. The production token is a JWT whose base64url
+        signature changes every run (the ``exp`` claim advances, and
+        HMAC avalanche makes the whole signature change), and roughly
+        1 in 6,400 signatures contain the literal ``UTC`` trigram these
+        assertions forbid (issue #1632: the intermittent CI failure
+        rendered every human-visible fragment correctly and hid the
+        ``UTC`` inside the token, which GitHub Actions masks as
+        ``token=***`` in the logged assertion repr). Stubbing the token
+        keeps the body-content assertions strict without letting JWT
+        randomness fail them; JWT signing itself is owned by the
+        cancel-token tests.
+        """
         registration = EventRegistration.objects.create(
-            event=self.event, user=user,
+            event=event or self.event, user=user,
         )
-        with patch('events.services.registration_email.boto3') as mock_boto3:
+        with (
+            patch('events.services.registration_email.boto3') as mock_boto3,
+            patch(
+                'events.services.registration_email.generate_cancel_token',
+                return_value='deterministic-cancel-token',
+            ),
+        ):
             mock_client = MagicMock()
             mock_client.send_email.return_value = {'MessageId': 'tz-msg-1'}
             mock_boto3.client.return_value = mock_client
@@ -143,20 +163,8 @@ class RegistrationEmailTimezoneTest(TestCase):
             email='kolkata@example.com',
             preferred_timezone='Asia/Kolkata',
         )
-        registration = EventRegistration.objects.create(event=event, user=user)
 
-        with patch('events.services.registration_email.boto3') as mock_boto3:
-            mock_client = MagicMock()
-            mock_client.send_email.return_value = {'MessageId': 'tz-msg-2'}
-            mock_boto3.client.return_value = mock_client
-            send_registration_confirmation(registration)
-            raw = mock_client.send_email.call_args[1]['Content']['Raw']['Data']
-        msg = email.message_from_string(raw)
-        html = next(
-            part.get_payload(decode=True).decode('utf-8')
-            for part in msg.walk()
-            if part.get_content_type() == 'text/html'
-        )
+        html = self._capture_html(user, event=event)
 
         self.assertIn('18:00 Asia/Kolkata', html)
 

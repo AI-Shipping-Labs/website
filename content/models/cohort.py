@@ -21,6 +21,23 @@ class Cohort(models.Model):
         null=True, blank=True,
         help_text="Maximum number of participants. Leave blank for unlimited.",
     )
+    # Issue #1660: mirrors ``Sprint.event_series`` / ``Book.event_series``.
+    # ``SET_NULL`` (not ``CASCADE``): deleting the series only severs the
+    # link, the cohort itself is preserved. A cohort links to at most one
+    # series; the FK carries no uniqueness constraint the other way
+    # (mirrors the existing Sprint/Book precedent).
+    event_series = models.ForeignKey(
+        'events.EventSeries',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='cohorts',
+        help_text=(
+            'Optional recurring meeting series (e.g. office hours) whose '
+            'occurrences are surfaced to enrolled cohort members on the '
+            'course page. Deleting the series unlinks the cohort; the '
+            'cohort itself is preserved.'
+        ),
+    )
 
     class Meta:
         ordering = ['start_date']

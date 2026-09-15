@@ -101,6 +101,10 @@ STATUS_BADGE_CLASSES = {
     'superseded': 'bg-secondary text-muted-foreground',
     'review': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
     'pending': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
+    # Issue #1660: a hidden EventSeries never appears in any public
+    # discovery surface — amber matches the canonical "needs a second
+    # look, not an error" caution tone used for Override/Draft states.
+    'hidden': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
 }
 
 TIER_PILL_CLASSES = {

@@ -109,6 +109,7 @@ def course_edit(request, course_id):
     active_enrollment_count = Enrollment.objects.filter(
         course=course, unenrolled_at__isnull=True,
     ).count()
+    cohort_count = course.cohorts.count()
     course_instructor_rows = list(
         CourseInstructor.objects.filter(course=course)
         .select_related('instructor')
@@ -130,6 +131,7 @@ def course_edit(request, course_id):
         'announce_url': reverse('studio_course_announce_slack', kwargs={'course_id': course.pk}),
         'access_count': access_count,
         'active_enrollment_count': active_enrollment_count,
+        'cohort_count': cohort_count,
         'course_instructor_rows': course_instructor_rows,
         'available_instructors': available_instructors,
         **notification_action_context('course', course),

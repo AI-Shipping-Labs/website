@@ -33,6 +33,33 @@ from content.services.enrollment import (
     unenroll as unenroll_user,
 )
 from content.views.pages import _filter_by_tags, _get_selected_tags
+from events.models import Event
+from events.models.event import PUBLIC_EVENT_STATUSES
+from events.services.display_time import build_event_time_display
+
+
+def _build_live_session_entries(events_qs, user):
+    """Return row-presentation data for the course page's live-sessions block.
+
+    Issue #1660: mirrors ``plans.views.sprints._build_sprint_call_entries``
+    ("can join now" gate) and ``bookclub.views`` ("read the recap" gate),
+    but this block shows every occurrence — not just the next upcoming one.
+    """
+    entries = []
+    for event in events_qs:
+        is_past = event.is_past
+        entries.append({
+            'event': event,
+            'time_display': build_event_time_display(event, user),
+            'is_past': is_past,
+            # Same "can join now" gate the event detail page's join
+            # affordance uses (issue #1660 spec: `can_show_zoom_link` and
+            # not-yet-ended).
+            'can_join_now': not is_past and event.can_show_zoom_link(),
+            'join_url': event.get_join_url(),
+            'recap_url': event.get_recap_url() if event.has_recap else '',
+        })
+    return entries
 
 
 def courses_list(request):
@@ -167,6 +194,45 @@ def course_detail(request, slug):
             ).values_list('cohort_id', flat=True)
         )
 
+    # Live-sessions block (issue #1660): resolves every EventSeries linked
+    # via a Cohort of this course, then renders occurrences only when the
+    # viewer is entitled (enrolled in one of those cohorts, or staff) to at
+    # least one such series. This is an entitlement gate, not a tier gate —
+    # anonymous and non-entitled authenticated viewers see no block at all,
+    # with no upsell CTA (#1658 owns the course-level entitlement CTA).
+    live_session_entries = []
+    if user.is_authenticated:
+        cohorts_with_series = list(
+            course.cohorts.exclude(event_series_id__isnull=True)
+        )
+        if cohorts_with_series:
+            if user.is_staff:
+                entitled_series_ids = {
+                    cohort.event_series_id for cohort in cohorts_with_series
+                }
+            else:
+                entitled_series_ids = set(
+                    CohortEnrollment.objects.filter(
+                        user=user,
+                        cohort__course=course,
+                        cohort__event_series_id__isnull=False,
+                    ).values_list('cohort__event_series_id', flat=True)
+                )
+            if entitled_series_ids:
+                # Issue #1660: same status exclusion as the sprint page fix
+                # — draft/cancelled occurrences stay out of this block too.
+                live_session_events = (
+                    Event.objects.filter(
+                        event_series_id__in=entitled_series_ids,
+                        status__in=PUBLIC_EVENT_STATUSES,
+                    )
+                    .select_related('event_series')
+                    .order_by('start_datetime')
+                )
+                live_session_entries = _build_live_session_entries(
+                    live_session_events, user,
+                )
+
     # Discussion button: visible only on paid courses for Main+ tier users with community access.
     show_discussion = (
         bool(course.discussion_url)
@@ -198,6 +264,7 @@ def course_detail(request, slug):
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
         'active_cohorts': active_cohorts,
+        'live_session_entries': live_session_entries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
         'buy_individual': buy_individual,
         'buy_individual_price': buy_individual_price,

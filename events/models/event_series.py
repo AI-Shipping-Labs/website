@@ -48,6 +48,20 @@ DAY_OF_WEEK_CHOICES = [
     (6, 'Sunday'),
 ]
 
+# Issue #1660: a NEW, separate flag from ``is_active``. ``is_active`` only
+# hides the public series page (404s it); ``visibility`` controls whether
+# the series' occurrences appear on ANY listing/discovery surface (/events,
+# the calendar grid, the ICS feed, related-content rails, homepage/dashboard
+# feed candidates). A ``hidden`` series' detail/recap/series pages stay
+# reachable to staff and to members entitled via a linked Cohort or Sprint
+# (see ``events.services.series_entitlement.is_entitled_for_series``).
+VISIBILITY_PUBLIC = 'public'
+VISIBILITY_HIDDEN = 'hidden'
+EVENT_SERIES_VISIBILITY_CHOICES = [
+    (VISIBILITY_PUBLIC, 'Public listing'),
+    (VISIBILITY_HIDDEN, 'Hidden series'),
+]
+
 
 class EventSeries(TimestampedModelMixin, models.Model):
     """A series of related events created together as a weekly cadence."""
@@ -109,6 +123,20 @@ class EventSeries(TimestampedModelMixin, models.Model):
         help_text=(
             'Hide flag. When False the series is hidden from public series '
             'listings; existing occurrences keep their own per-event status.'
+        ),
+    )
+    visibility = models.CharField(
+        max_length=10,
+        choices=EVENT_SERIES_VISIBILITY_CHOICES,
+        default=VISIBILITY_PUBLIC,
+        help_text=(
+            "Issue #1660: 'hidden' removes every occurrence in this series "
+            "from every discovery surface (/events, the calendar, the ICS "
+            "feed, related-content rails, homepage/dashboard feed "
+            "candidates) for everyone, including staff. This is separate "
+            "from 'is_active', which only 404s the public series page. The "
+            "series/event/recap pages stay reachable to staff and to "
+            "members entitled through a linked Cohort or Sprint."
         ),
     )
     auto_banner_url = models.URLField(
@@ -201,6 +229,17 @@ class EventSeries(TimestampedModelMixin, models.Model):
         # number matches what the public series page lists.
         return self.events.filter(status__in=PUBLIC_EVENT_STATUSES).count()
 
+    @property
+    def is_hidden(self):
+        """Issue #1660: True when ``visibility='hidden'``.
+
+        A hidden series is removed from every discovery surface for every
+        viewer, including staff. Only the series/event/recap pages keep a
+        staff/entitled bypass (see ``is_publicly_visible`` and
+        ``events.services.series_entitlement.is_entitled_for_series``).
+        """
+        return self.visibility == VISIBILITY_HIDDEN
+
     def is_publicly_visible(self):
         """Return True when a non-staff visitor may load the public page.
 
@@ -217,6 +256,12 @@ class EventSeries(TimestampedModelMixin, models.Model):
 
         Staff bypass this guard in the view so they can preview a series
         before publishing.
+
+        Issue #1660: this predicate is unrelated to ``is_hidden`` — a
+        hidden series is a stricter guard applied separately by callers
+        (``event_series_public``) so staff-bypass semantics for the two
+        flags can diverge (hidden has no staff bypass on discovery, only on
+        the detail/recap/series pages).
         """
         return self.is_active and self.published_event_count > 0
 

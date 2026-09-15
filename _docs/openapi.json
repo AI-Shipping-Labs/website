@@ -4568,6 +4568,7 @@
                       "start_time": "17:00:00",
                       "timezone": "Europe/Berlin",
                       "updated_at": "2026-04-15T12:00:00+00:00",
+                      "visibility": "public",
                       "zoom_meetings_last_run": {
                         "created": [
                           42,
@@ -4645,6 +4646,14 @@
                   },
                   "timezone": {
                     "type": "string"
+                  },
+                  "visibility": {
+                    "description": "Defaults to 'public'. 'hidden' (issue #1660) removes every occurrence in this series from /events, the calendar, the ICS feed, and related-content rails, for everyone including staff. Separate from 'is_active', which only 404s the public series page.",
+                    "enum": [
+                      "hidden",
+                      "public"
+                    ],
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -4675,6 +4684,7 @@
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
                   "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "public",
                   "zoom_meetings_last_run": {
                     "created": [
                       42,
@@ -4765,6 +4775,7 @@
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
                   "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "public",
                   "zoom_meetings_last_run": {
                     "created": [
                       42,
@@ -4859,6 +4870,14 @@
                   },
                   "timezone": {
                     "type": "string"
+                  },
+                  "visibility": {
+                    "description": "'hidden' (issue #1660) removes every occurrence in this series from /events, the calendar, the ICS feed, and related-content rails, for everyone including staff. Separate from 'is_active', which only 404s the public series page.",
+                    "enum": [
+                      "hidden",
+                      "public"
+                    ],
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -4886,6 +4905,7 @@
                   "start_time": "17:00:00",
                   "timezone": "Europe/Berlin",
                   "updated_at": "2026-04-15T12:00:00+00:00",
+                  "visibility": "public",
                   "zoom_meetings_last_run": {
                     "created": [
                       42,

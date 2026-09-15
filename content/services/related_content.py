@@ -166,8 +166,11 @@ def _iter_candidates(
             'book-marked',
         ),
         (
+            # Issue #1660: a hidden-series office-hours session must never
+            # show up as "Related content", even when its tags match.
             Event.objects.filter(published=True)
-            .exclude(status__in=HIDDEN_FROM_PUBLIC_STATUSES),
+            .exclude(status__in=HIDDEN_FROM_PUBLIC_STATUSES)
+            .exclude(event_series__visibility='hidden'),
             'event',
             'Event',
             'calendar',

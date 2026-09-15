@@ -53,11 +53,17 @@ def feed_events_queryset(now=None):
         now = timezone.now()
     window_start = now - timedelta(days=FEED_BACKFILL_DAYS)
 
+    # Issue #1660: independent query (not routed through
+    # ``public_events_queryset``), so the hidden-series exclusion is
+    # duplicated here. A hidden-series occurrence must never appear in the
+    # subscribable feed.
     return Event.objects.filter(
         published=True,
         start_datetime__gte=window_start,
     ).exclude(
         status__in=('draft', 'cancelled'),
+    ).exclude(
+        event_series__visibility='hidden',
     ).order_by('start_datetime')
 
 

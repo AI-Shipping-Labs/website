@@ -169,6 +169,11 @@ SIDEBAR_ROUTE_FAMILIES = (
         # course peer-reviews page and redirect straight back to it.
         'studio_certificate_revoke',
         'studio_certificate_unrevoke',
+        # Issue #1660: course-scoped cohort list/edit, same nesting as
+        # enrollments above.
+        'studio_course_cohort_list',
+        'studio_course_cohort_create',
+        'studio_course_cohort_edit',
     )),
     ('content', 'projects', (
         'studio_project_list',

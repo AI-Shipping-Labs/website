@@ -201,6 +201,7 @@ class EventSeriesListTest(EventSeriesApiTestBase):
                 "timezone",
                 "required_level",
                 "is_active",
+                "visibility",
                 "event_count",
                 "published_event_count",
                 "zoom_meetings_last_run",

@@ -76,6 +76,11 @@ from studio.views.campaigns import (
     campaign_wave_release,
 )
 from studio.views.certificates import certificate_revoke, certificate_unrevoke
+from studio.views.cohorts import (
+    cohort_create,
+    cohort_edit,
+    cohort_list,
+)
 from studio.views.contacts_import import (
     user_import,
     user_import_confirm,
@@ -449,6 +454,23 @@ urlpatterns = [
         'courses/<int:course_id>/enrollments/<int:enrollment_id>/unenroll',
         enrollment_unenroll,
         name='studio_course_enrollment_unenroll',
+    ),
+
+    # Cohorts scoped to a course (issue #1660)
+    path(
+        'courses/<int:course_id>/cohorts/',
+        cohort_list,
+        name='studio_course_cohort_list',
+    ),
+    path(
+        'courses/<int:course_id>/cohorts/create',
+        cohort_create,
+        name='studio_course_cohort_create',
+    ),
+    path(
+        'courses/<int:course_id>/cohorts/<int:cohort_id>/edit',
+        cohort_edit,
+        name='studio_course_cohort_edit',
     ),
 
     # Articles

@@ -235,6 +235,23 @@
         </span>
       </label>
     </div>
+    {% comment %}Issue #1660: a NEW, separate flag from ``is_active``. Hidden removes
+       every occurrence from /events, the calendar, the ICS feed, and related-content
+       rails for everyone, including staff — but the series/event/recap pages stay
+       reachable to staff and to members enrolled in a linked cohort or sprint.{% endcomment %}
+    <div>
+      <label class="block text-xs font-medium text-foreground mb-1" for="meta-visibility">Discovery</label>
+      <select id="meta-visibility" name="visibility"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-testid="event-series-visibility">
+        {% for value, label in visibility_choices %}
+        <option value="{{ value }}" {% if series.visibility == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+      <span class="block text-xs text-muted-foreground mt-1" data-testid="event-series-visibility-help">
+        Hidden series never appear on /events, the calendar, the ICS feed, or related-content rails, but the series, event, and recap pages stay reachable to staff and to members enrolled in a linked cohort or sprint.
+      </span>
+    </div>
     {# Issue #854 Part B: opt-in parent->child propagation. Default unchecked. #}
     <div class="flex items-start gap-2 pt-1">
       <input id="meta-propagate" type="checkbox" name="propagate"

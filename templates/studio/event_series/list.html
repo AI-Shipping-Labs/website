@@ -31,7 +31,13 @@
       {% for series in series_list %}
       <tr class="{% studio_list_class 'row' %}" data-testid="event-series-row">
         <td class="px-6 py-4">
-          <a href="{% url 'studio_event_series_detail' series_id=series.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ series.name }}</a>
+          <div class="flex items-center gap-2">
+            <a href="{% url 'studio_event_series_detail' series_id=series.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ series.name }}</a>
+            {% comment %}Issue #1660: spot a hidden series in the list without opening it.{% endcomment %}
+            {% if series.is_hidden %}
+              {% studio_status_badge 'hidden' 'Hidden' %}
+            {% endif %}
+          </div>
           <p class="text-xs text-muted-foreground mt-1">/{{ series.slug }}</p>
         </td>
         {% comment %}

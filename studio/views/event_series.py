@@ -37,6 +37,7 @@ from accounts.services.timezones import (
 )
 from content.access import VISIBILITY_CHOICES
 from events.models import Event, EventSeries
+from events.models.event_series import EVENT_SERIES_VISIBILITY_CHOICES
 from events.services.occurrence_publication import publish_series_drafts
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
@@ -77,6 +78,11 @@ MAX_OCCURRENCES = 26
 
 # Issue #958: valid occurrence/series access levels.
 _VALID_REQUIRED_LEVELS = {value for value, _label in VISIBILITY_CHOICES}
+
+# Issue #1660: valid series ``visibility`` choices.
+_VALID_SERIES_VISIBILITIES = {
+    value for value, _label in EVENT_SERIES_VISIBILITY_CHOICES
+}
 
 
 def _series_notification_context(series):
@@ -483,6 +489,15 @@ def event_series_detail(request, series_id):
                 # (absent in POST) means hide. Default stays True for series
                 # created before this field existed.
                 series.is_active = request.POST.get('is_active') == 'on'
+                # Issue #1660: independent of ``is_active``. An unrecognized
+                # or missing posted value silently keeps the current value
+                # rather than resetting to 'public', since the form always
+                # renders a valid select option.
+                posted_visibility = (
+                    request.POST.get('visibility') or ''
+                ).strip()
+                if posted_visibility in _VALID_SERIES_VISIBILITIES:
+                    series.visibility = posted_visibility
                 series.save()
                 if propagate:
                     updated = _propagate_series_to_children(series)
@@ -502,6 +517,7 @@ def event_series_detail(request, series_id):
             return render(request, 'studio/event_series/detail.html', {
                 'series': series,
                 'events': events,
+                'visibility_choices': EVENT_SERIES_VISIBILITY_CHOICES,
                 'add_error': (
                     'Could not propagate: a generated event slug collided '
                     'with an existing event. No changes were saved.'
@@ -548,6 +564,7 @@ def event_series_detail(request, series_id):
         'series': series,
         'events': events,
         'draft_count': draft_count,
+        'visibility_choices': EVENT_SERIES_VISIBILITY_CHOICES,
         'publish_all_confirmation': (
             f'Publish {draft_count} draft '
             f'occurrence{"" if draft_count == 1 else "s"} '

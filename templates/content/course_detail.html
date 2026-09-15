@@ -183,6 +183,22 @@
       </div>
       {% endif %}
 
+      {% comment %}Issue #1660: member-only live-sessions block. An entitlement
+      gate, not a tier gate — anonymous and non-entitled viewers see nothing
+      here, with no upsell CTA (#1658 owns the course-level entitlement CTA).
+      Built the book club way: `content/_live_session_row.html` is a thin call
+      site for the canonical `includes/_list_row.html` row owner.{% endcomment %}
+      {% if live_session_entries %}
+      <div class="mb-8 rounded-lg border border-border bg-card p-6" data-testid="course-live-sessions">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">Live sessions</h2>
+        <div class="space-y-0.5">
+          {% for entry in live_session_entries %}
+          {% include "content/_live_session_row.html" with entry=entry user=user %}
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+
       <!-- Syllabus -->
       <style>
         .module-details > div {

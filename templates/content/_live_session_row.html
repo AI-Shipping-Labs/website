@@ -1,0 +1,28 @@
+{% load date_formatting %}
+{% comment %}
+Course page live-sessions row (issue #1660).
+
+A thin call site for the canonical row owner `templates/includes/_list_row.html`,
+built the book club way — see `templates/bookclub/_meeting_row.html`, which this
+mirrors. The row's primary link is always the event detail page (so a click-through
+works identically for an upcoming or a past occurrence); a quiet secondary link
+below offers "Join now" when the occurrence can be joined right now, or "Read the
+notes from this session" when it is past and has a published recap. Both gates
+mirror `plans.views.sprints._build_sprint_call_entries` / `_series_meetings`.
+
+Context:
+  entry   a dict from `content.views.courses._build_live_session_entries`:
+          {event, time_display, is_past, can_join_now, join_url, recap_url}
+  user    the viewer, for timezone-aware datetime rendering.
+{% endcomment %}
+{% user_event_datetime entry.event.start_datetime user fmt='%a, %b %d, %H:%M' as session_when %}
+{% include "includes/_list_row.html" with href=entry.event.get_absolute_url title=entry.event.title|add:" · "|add:session_when marker_kind="custom" marker_html='<i data-lucide="calendar" class="h-4 w-4 text-muted-foreground"></i>' testid="live-session-row" %}
+{% if entry.can_join_now %}
+<p class="pb-1 pl-10 pr-3 text-xs text-muted-foreground">
+  <a href="{{ entry.join_url }}" target="_blank" rel="noopener noreferrer" class="text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="live-session-join">Join now</a>
+</p>
+{% elif entry.is_past and entry.recap_url %}
+<p class="pb-1 pl-10 pr-3 text-xs text-muted-foreground">
+  <a href="{{ entry.recap_url }}" class="text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="live-session-recap">Read the notes from this session</a>
+</p>
+{% endif %}

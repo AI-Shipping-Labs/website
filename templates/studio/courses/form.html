@@ -288,6 +288,18 @@
         <span class="ml-2 inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full bg-muted text-xs text-muted-foreground"
               data-testid="panel-enrollment-count">{{ active_enrollment_count|default:0 }}</span>
       </a>
+      {% comment %}Issue #1660: discoverable path to the new cohorts list — not
+      reachable by direct URL only.{% endcomment %}
+      <a href="{% url 'studio_course_cohort_list' course_id=course.pk %}"
+         class="inline-flex items-center justify-between rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted"
+         data-testid="panel-manage-cohorts">
+        <span class="inline-flex items-center">
+          <i data-lucide="calendar-days" class="mr-2 h-4 w-4"></i>
+          <span>Manage Cohorts</span>
+        </span>
+        <span class="ml-2 inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full bg-muted text-xs text-muted-foreground"
+              data-testid="panel-cohort-count">{{ cohort_count|default:0 }}</span>
+      </a>
     </div>
   </div>
 

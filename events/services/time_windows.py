@@ -46,9 +46,20 @@ def past_window_q(now=None, *, field_prefix=''):
 
 
 def public_events_queryset(queryset=None):
-    """Return events visible on public/member event listing surfaces."""
+    """Return events visible on public/member event listing surfaces.
+
+    Issue #1660: also excludes occurrences of a hidden-visibility
+    ``EventSeries`` (``EventSeries.visibility='hidden'``). This is the
+    shared base for ``upcoming_events_queryset`` / ``past_events_queryset``
+    / ``past_public_events_queryset``, so a hidden-series occurrence
+    disappears from ``/events`` (both Upcoming and past), the member API's
+    past-events surface, and every homepage/dashboard call site that
+    routes through those helpers.
+    """
     queryset = queryset if queryset is not None else Event.objects.all()
-    return queryset.exclude(status__in=HIDDEN_FROM_PUBLIC_STATUSES)
+    return queryset.exclude(
+        status__in=HIDDEN_FROM_PUBLIC_STATUSES,
+    ).exclude(event_series__visibility='hidden')
 
 
 def upcoming_events_queryset(queryset=None, *, now=None, public=True):

@@ -602,3 +602,40 @@ class RelatedContentRailRenderTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="related-content-rail"')
+
+
+class RelatedContentHiddenSeriesTest(TestCase):
+    """Issue #1660: a hidden-series occurrence never leaks into the rail."""
+
+    def test_hidden_series_event_excluded_even_with_matching_tags(self):
+        from events.models import EventSeries
+
+        current = Article.objects.create(
+            title='Agent Article',
+            slug='agent-article-1660',
+            date=date(2026, 2, 1),
+            tags=['agents'],
+            published=True,
+        )
+        hidden_series = EventSeries.objects.create(
+            name='Buildcamp Office Hours',
+            slug='buildcamp-oh-related-1660',
+            cadence='none',
+            day_of_week=None,
+            start_time=None,
+            visibility='hidden',
+        )
+        hidden_event = Event.objects.create(
+            title='Hidden Office Hours Session',
+            slug='hidden-office-hours-1660',
+            start_datetime=_event_datetime(),
+            status='completed',
+            published=True,
+            tags=['agents'],
+            event_series=hidden_series,
+            materials=[{'label': 'Notes', 'url': 'https://example.com/notes'}],
+        )
+
+        rail = build_related_content_rail(current)
+
+        self.assertNotIn(hidden_event.title, _titles(rail))

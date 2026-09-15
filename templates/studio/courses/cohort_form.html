@@ -1,0 +1,72 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{{ cohort.name }} - Cohorts{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_course_cohort_list' course_id=course.pk as cohorts_list_url %}
+{% studio_header_actions title=cohort.name subtitle=course.title back_url=cohorts_list_url back_label="Cohorts" %}{% endstudio_header_actions %}
+
+{% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
+
+<form id="cohort-form" method="post" class="bg-card border border-border rounded-lg p-4 sm:p-6 max-w-xl space-y-4"
+      data-testid="cohort-edit-form">
+  {% csrf_token %}
+  <div>
+    <label class="block text-xs font-medium text-foreground mb-1" for="cohort-name">Name</label>
+    <input id="cohort-name" type="text" name="name" value="{{ cohort.name }}" required
+           class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+           data-testid="cohort-edit-name">
+  </div>
+  <div class="flex flex-col sm:flex-row gap-3">
+    <div class="flex-1">
+      <label class="block text-xs font-medium text-foreground mb-1" for="cohort-start">Start date</label>
+      <input id="cohort-start" type="date" name="start_date" value="{{ cohort.start_date|date:'Y-m-d' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+             data-testid="cohort-edit-start-date">
+    </div>
+    <div class="flex-1">
+      <label class="block text-xs font-medium text-foreground mb-1" for="cohort-end">End date</label>
+      <input id="cohort-end" type="date" name="end_date" value="{{ cohort.end_date|date:'Y-m-d' }}" required
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+             data-testid="cohort-edit-end-date">
+    </div>
+  </div>
+  <div>
+    <label class="block text-xs font-medium text-foreground mb-1" for="cohort-max-participants">Max participants</label>
+    <input id="cohort-max-participants" type="number" min="0" name="max_participants" value="{{ cohort.max_participants|default_if_none:'' }}" placeholder="Leave blank for unlimited"
+           class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+           data-testid="cohort-edit-max-participants">
+  </div>
+  <div class="flex items-start gap-2">
+    <input id="cohort-is-active" type="checkbox" name="is_active" {% if cohort.is_active %}checked{% endif %}
+           class="mt-0.5 h-4 w-4 rounded border-border bg-secondary text-accent focus:ring-accent"
+           data-testid="cohort-edit-is-active">
+    <label for="cohort-is-active" class="text-xs text-foreground">
+      Active
+      <span class="block text-muted-foreground">Shown on the course page as the next cohort when checked.</span>
+    </label>
+  </div>
+  {% comment %}Issue #1660: links this cohort's enrolled members to a recurring
+  series (e.g. office hours) surfaced on the course page's live-sessions block.{% endcomment %}
+  <div>
+    <label class="block text-xs font-medium text-foreground mb-1" for="cohort-event-series">Event series</label>
+    <select id="cohort-event-series" name="event_series_id"
+            class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+            data-testid="cohort-edit-event-series">
+      <option value="">No linked series</option>
+      {% for series in event_series_options %}
+      <option value="{{ series.pk }}" {% if cohort.event_series_id == series.pk %}selected{% endif %}>{{ series.name }}</option>
+      {% endfor %}
+    </select>
+    <p class="text-xs text-muted-foreground mt-1">Members enrolled in this cohort see the series' upcoming and past occurrences on the course page, even when the series is hidden from public discovery.</p>
+  </div>
+  <div class="flex flex-wrap items-center gap-2 pt-2">
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+            data-testid="cohort-edit-save">
+      Save
+    </button>
+    <a href="{% url 'studio_course_cohort_list' course_id=course.pk %}" class="text-sm text-muted-foreground hover:text-foreground">Back to cohorts</a>
+  </div>
+</form>
+{% endblock %}

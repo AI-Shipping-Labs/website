@@ -79,7 +79,10 @@ from api.views.events import (
     serialize_event,
 )
 from events.models import Event, EventSeries
-from events.models.event_series import EVENT_SERIES_CADENCE_CHOICES
+from events.models.event_series import (
+    EVENT_SERIES_CADENCE_CHOICES,
+    EVENT_SERIES_VISIBILITY_CHOICES,
+)
 from events.services.occurrence_publication import publish_series_drafts
 from events.services.series_registration import (
     enroll_series_registrants_in_event,
@@ -106,6 +109,12 @@ VALID_CADENCES = {value for value, _label in EVENT_SERIES_CADENCE_CHOICES}
 
 _VALID_CADENCES_ENUM = sorted(VALID_CADENCES)
 
+# Issue #1660.
+VALID_SERIES_VISIBILITIES = {
+    value for value, _label in EVENT_SERIES_VISIBILITY_CHOICES
+}
+_VALID_SERIES_VISIBILITIES_ENUM = sorted(VALID_SERIES_VISIBILITIES)
+
 _EVENT_SERIES_EXAMPLE = {
     "id": 1,
     "name": "Weekly Office Hours",
@@ -117,6 +126,7 @@ _EVENT_SERIES_EXAMPLE = {
     "timezone": "Europe/Berlin",
     "required_level": 20,
     "is_active": True,
+    "visibility": "public",
     "event_count": 12,
     "published_event_count": 10,
     "zoom_meetings_last_run": {
@@ -140,6 +150,7 @@ SERIES_WRITABLE_FIELDS = {
     "timezone",
     "required_level",
     "is_active",
+    "visibility",
 }
 
 LEVEL_MISMATCH_MESSAGE = (
@@ -163,6 +174,7 @@ def serialize_event_series(series):
         "timezone": series.timezone,
         "required_level": series.required_level,
         "is_active": series.is_active,
+        "visibility": series.visibility,
         "event_count": series.event_count,
         "published_event_count": series.published_event_count,
         "zoom_meetings_last_run": series.zoom_meetings_last_run,
@@ -304,6 +316,13 @@ def _collect_series_values(data, *, existing=None):
             errors["is_active"] = "Must be a boolean."
         else:
             values["is_active"] = data["is_active"]
+
+    if "visibility" in data:
+        visibility = data["visibility"]
+        if visibility not in VALID_SERIES_VISIBILITIES:
+            errors["visibility"] = "Must be 'public' or 'hidden'."
+        else:
+            values["visibility"] = visibility
 
     name_for_slug = values.get(
         "name", existing.name if existing is not None else "",
@@ -463,6 +482,18 @@ def _save_series_or_error(series):
                         ),
                     },
                     "is_active": {"type": "boolean"},
+                    "visibility": {
+                        "type": "string",
+                        "enum": _VALID_SERIES_VISIBILITIES_ENUM,
+                        "description": (
+                            "Defaults to 'public'. 'hidden' (issue #1660) "
+                            "removes every occurrence in this series from "
+                            "/events, the calendar, the ICS feed, and "
+                            "related-content rails, for everyone including "
+                            "staff. Separate from 'is_active', which only "
+                            "404s the public series page."
+                        ),
+                    },
                 },
                 "example": {
                     "name": "Weekly Office Hours",
@@ -625,6 +656,18 @@ def event_series_collection(request):
                         ),
                     },
                     "is_active": {"type": "boolean"},
+                    "visibility": {
+                        "type": "string",
+                        "enum": _VALID_SERIES_VISIBILITIES_ENUM,
+                        "description": (
+                            "'hidden' (issue #1660) removes every "
+                            "occurrence in this series from /events, the "
+                            "calendar, the ICS feed, and related-content "
+                            "rails, for everyone including staff. Separate "
+                            "from 'is_active', which only 404s the public "
+                            "series page."
+                        ),
+                    },
                 },
                 "example": {"is_active": False},
             },

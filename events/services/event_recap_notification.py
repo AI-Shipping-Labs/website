@@ -54,12 +54,20 @@ def _not_ready(reason, message):
 
 
 def assert_recap_ready(event):
-    """Return the relative canonical recap URL when anonymous access is ready.
+    """Return the relative canonical recap URL once the exact audience can open it.
 
     This mirrors the public recap view's derived state. There is deliberately
     no stored "announced" or "published recap" flag: recap publication remains
     the combination of content, event timing, public event state, and the
     existing canonical route.
+
+    Issue #1660: for a hidden-series event, "readiness" no longer means an
+    anonymous visitor could open the recap page — a hidden series' recap
+    page 404s for anyone not staff or entitled. It means the exact
+    registrant audience (who registered via the cohort/sprint enrollment
+    flow and are therefore entitled by construction) can open it. No
+    additional gate is needed here: the checks below remain the correct and
+    sufficient readiness signal for both public and hidden series.
     """
     if not event.has_recap:
         _not_ready("missing_recap", "Add non-empty recap content first.")

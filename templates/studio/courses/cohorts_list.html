@@ -1,0 +1,106 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}Cohorts - {{ course.title }}{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
+{% studio_header_actions title="Cohorts" subtitle=cohorts_subtitle back_url=course_edit_url back_label=course.title %}{% endstudio_header_actions %}
+
+{% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
+
+<!-- New cohort form -->
+<div class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-8 max-w-xl">
+  <h2 class="text-lg font-semibold text-foreground mb-4">New cohort</h2>
+  <form method="post" action="{% url 'studio_course_cohort_create' course_id=course.pk %}"
+        class="space-y-3" data-testid="cohort-create-form">
+    {% csrf_token %}
+    <div>
+      <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-name">Name</label>
+      <input id="new-cohort-name" type="text" name="name" required placeholder="e.g. September 2026 Cohort"
+             class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+             data-testid="cohort-create-name">
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3">
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-start">Start date</label>
+        <input id="new-cohort-start" type="date" name="start_date" required
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+               data-testid="cohort-create-start-date">
+      </div>
+      <div class="flex-1">
+        <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-end">End date</label>
+        <input id="new-cohort-end" type="date" name="end_date" required
+               class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+               data-testid="cohort-create-end-date">
+      </div>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-series">Event series</label>
+      <select id="new-cohort-series" name="event_series_id"
+              class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-testid="cohort-create-event-series">
+        <option value="">No linked series</option>
+        {% for series in event_series_options %}
+        <option value="{{ series.pk }}">{{ series.name }}</option>
+        {% endfor %}
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">Optional. Links this cohort's members to a recurring meeting series (e.g. office hours) surfaced on the course page.</p>
+    </div>
+    <button type="submit"
+            class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
+            data-testid="cohort-create-submit">
+      Create cohort
+    </button>
+  </form>
+</div>
+
+{% studio_list_filter search "" "Search cohorts..." None False %}
+
+{% if cohorts or search %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Name</th>
+        <th class="{% studio_list_class 'th' %}">Dates</th>
+        <th class="{% studio_list_class 'th' %}">Enrolled</th>
+        <th class="{% studio_list_class 'th' %}">Event series</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for cohort in cohorts %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="cohort-row">
+        <td class="px-6 py-4" data-label="Name">
+          <a href="{% url 'studio_course_cohort_edit' course_id=course.pk cohort_id=cohort.pk %}" class="text-sm font-medium text-foreground hover:text-accent">{{ cohort.name }}</a>
+          {% if not cohort.is_active %}
+          {% studio_status_badge 'archived' 'Inactive' %}
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Dates">{{ cohort.start_date|operator_date }} – {{ cohort.end_date|operator_date }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Enrolled">{{ cohort.enrollment_count }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Event series">
+          {% if cohort.event_series %}{{ cohort.event_series.name }}{% else %}—{% endif %}
+        </td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_course_cohort_edit' course_id=course.pk cohort_id=cohort.pk as cohort_edit_url %}
+            {% studio_list_action cohort_edit_url 'Edit' 'secondary' %}
+          </div>
+        </td>
+      </tr>
+      {% empty %}
+        {% url 'studio_course_cohort_list' course_id=course.pk as cohorts_clear_url %}
+        {% studio_empty_state 'filter' entity_label='cohort' entity_label_plural='cohorts' clear_url=cohorts_clear_url colspan=5 %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if show_pager %}
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="cohorts-list-pager" %}
+{% endif %}
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='cohort' entity_label_plural='cohorts' empty_message='No cohorts for this course yet.' testid_suffix='cohorts-empty' %}
+{% endif %}
+{% endblock %}

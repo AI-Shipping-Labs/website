@@ -59,6 +59,7 @@ from events.services.display_time import (
     should_display_event_location,
 )
 from events.services.freestyle_evidence import build_freestyle_evidence
+from events.services.series_entitlement import is_entitled_for_series
 from events.services.series_registration import _eligible_occurrences
 from events.services.time_windows import past_public_events_queryset
 from events.services.timeline import (
@@ -272,10 +273,16 @@ def events_calendar(request, year=None, month=None):
     else:
         month_end = date(year, month + 1, 1)
 
+    # Issue #1660: also exclude occurrences of a hidden-visibility series.
+    # This is an independent inline query (not routed through
+    # ``public_events_queryset``), so the exclusion is duplicated here
+    # rather than shared.
     events = Event.objects.filter(
         start_datetime__date__gte=month_start,
         start_datetime__date__lt=month_end,
-    ).exclude(status__in=HIDDEN_FROM_PUBLIC_STATUSES).order_by('start_datetime')
+    ).exclude(
+        status__in=HIDDEN_FROM_PUBLIC_STATUSES,
+    ).exclude(event_series__visibility='hidden').order_by('start_datetime')
 
     # Map events to days
     events_by_day = {}
@@ -654,6 +661,17 @@ def event_detail(request, event_id, slug):
         event.status == 'cancelled'
         and not event.published
         and not request.user.is_staff
+    ):
+        raise Http404
+
+    # Issue #1660: a hidden-series occurrence 404s for anyone not staff or
+    # entitled (enrolled in a linked Cohort/Sprint). Hidden means hidden
+    # from discovery for everyone, but the page itself stays reachable to
+    # the exact audience the series was built for.
+    if (
+        event.event_series_id is not None
+        and event.event_series.is_hidden
+        and not is_entitled_for_series(request.user, event.event_series)
     ):
         raise Http404
 
@@ -1071,6 +1089,16 @@ def event_recap(request, event_id, slug):
     if event.status == 'cancelled' and not request.user.is_staff:
         raise Http404
 
+    # Issue #1660: hidden-series recap 404s for anyone not staff or
+    # entitled. Keep ``published=True`` untouched for hidden-series
+    # events — ``published`` is never repurposed for hiding.
+    if (
+        event.event_series_id is not None
+        and event.event_series.is_hidden
+        and not is_entitled_for_series(request.user, event.event_series)
+    ):
+        raise Http404
+
     if not event.has_recap:
         raise Http404
 
@@ -1151,6 +1179,12 @@ def event_series_public(request, series_id, slug):
     # can preview a series before publishing. The rule lives once on the
     # model (``is_publicly_visible``) so the view and tests share it.
     if not request.user.is_staff and not series.is_publicly_visible():
+        raise Http404('Series is not publicly visible.')
+
+    # Issue #1660: a hidden series 404s for anyone not staff or entitled
+    # (enrolled in a linked Cohort/Sprint) — a stricter guard than
+    # ``is_active=False``, which only staff bypass above.
+    if series.is_hidden and not is_entitled_for_series(request.user, series):
         raise Http404('Series is not publicly visible.')
     # Issue #668: annotate Count('registrations') so the attendee-count
     # chip on every card resolves from the SELECT, not from N follow-up

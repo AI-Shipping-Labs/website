@@ -33,6 +33,7 @@ from accounts.utils.display import display_name
 from content.access import LEVEL_TO_TIER_NAME, get_user_level
 from crm.models import CRMRecord
 from events.models import Event
+from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.display_time import build_event_time_display
 from integrations.config import get_config, is_enabled, site_base_url
 from notifications.models import Notification
@@ -80,6 +81,9 @@ def _build_sprint_call_entries(events, user):
             'location_label': _event_location_label(event),
             'detail_url': event.get_absolute_url(),
             'join_url': event.get_join_url(),  # Issue #1082: id-canonical
+            # Issue #1660: quiet "Read the notes from this session" link,
+            # the same gate `templates/bookclub/_meeting_row.html` uses.
+            'recap_url': event.get_recap_url() if event.has_recap else '',
         })
     return entries
 
@@ -120,13 +124,24 @@ def _resolve_sprint_or_404(slug, user, *, with_event_series=False):
     ``EventSeries`` (one extra row) and prefetches its events ordered by
     start datetime so the public sprint detail page can render the
     "Meeting schedule" section without N+1 queries (issue #565).
+
+    Issue #1660: the prefetch is filtered to ``PUBLIC_EVENT_STATUSES``
+    (``upcoming`` / ``completed``), mirroring ``bookclub.views._series_meetings``
+    and the public series page's own status exclusion. Fixes a leak where
+    ``draft`` and ``cancelled`` occurrences previously rendered on the public
+    sprint page. Applied unconditionally, including for staff: unlike the
+    sprint's own ``draft`` status gate above, no existing test or product
+    decision documents a staff-preview need for individual draft/cancelled
+    calls, so this filter does not special-case staff.
     """
     qs = Sprint.objects.all()
     if with_event_series:
         qs = qs.select_related('event_series').prefetch_related(
             Prefetch(
                 'event_series__events',
-                queryset=Event.objects.order_by('start_datetime'),
+                queryset=Event.objects.filter(
+                    status__in=PUBLIC_EVENT_STATUSES,
+                ).order_by('start_datetime'),
                 to_attr='ordered_events',
             ),
         )

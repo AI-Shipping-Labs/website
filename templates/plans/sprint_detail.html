@@ -240,6 +240,11 @@
                   <i data-lucide="video" class="h-4 w-4"></i>
                   <span>{{ call.location_label }}</span>
                 </div>
+                {% comment %}Issue #1660: quiet body link for a past call with a
+                published recap, matching templates/bookclub/_meeting_row.html.{% endcomment %}
+                {% if call.recap_url %}
+                <a href="{{ call.recap_url }}" class="text-sm text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-call-recap">Read the notes from this session</a>
+                {% endif %}
               </div>
 
               <div class="flex min-w-0 flex-col gap-2 sm:flex-row lg:flex-col lg:items-stretch">

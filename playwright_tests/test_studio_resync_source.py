@@ -412,9 +412,22 @@ class TestWorkshopResyncFromDetail:
         assert 'Sync queued' in body
 
         # A queued SyncLog row was created for the workshop source.
-        from integrations.models import SyncLog
-        log = SyncLog.objects.get(source=source)
-        assert log.status == 'queued'
+        # A2.3 moved sync bookkeeping onto the community_base.content_sync
+        # engine: the queue contract writes package rows (the legacy
+        # integrations.SyncLog table is rollback-only and no longer
+        # receives writes). The package row mirrors the legacy source's
+        # primary key, so resolve it via the created row's pk.
+        from community_base.content_sync.models import (
+            ContentSource as PackageContentSource,
+        )
+        from community_base.content_sync.models import SyncLog as PackageSyncLog
+        package_source = PackageContentSource.objects.get(pk=source.pk)
+        # The queue contract always writes a queued marker row; the durable
+        # dispatcher may additionally run the sync right after the request
+        # and append a result row (skipped/success), so filter on the marker.
+        assert PackageSyncLog.objects.filter(
+            source=package_source, status='queued',
+        ).exists()
 
         connection.close()
         context.close()
@@ -433,7 +446,7 @@ class TestResyncNonStaffBlocked:
         _reset_state()
         _create_user('main@test.com', tier_slug='main')
         article = _create_article()
-        _create_source('AI-Shipping-Labs/content', 'article')
+        source = _create_source('AI-Shipping-Labs/content', 'article')
 
         context = _auth_context(browser, 'main@test.com')
         page = context.new_page()
@@ -461,9 +474,13 @@ class TestResyncNonStaffBlocked:
             f'expected 403 for member, got {response.status}'
         )
 
-        # No SyncLog row was created.
-        from integrations.models import SyncLog
-        assert SyncLog.objects.count() == 0
+        # No SyncLog row was created (package sync tables; the legacy
+        # integrations.SyncLog table no longer receives writes since A2.3,
+        # so assert on the table the queue contract actually writes).
+        from community_base.content_sync.models import SyncLog as PackageSyncLog
+        assert not PackageSyncLog.objects.filter(
+            source_id=source.pk,
+        ).exists()
 
         connection.close()
         context.close()
@@ -564,9 +581,14 @@ class TestResyncMissingContentSource:
         assert 'Old-Org/old-repo' in body
         assert 'article' in body
 
-        # No SyncLog row was created.
-        from integrations.models import SyncLog
-        assert SyncLog.objects.count() == 0
+        # No SyncLog row was created for the orphan repo (package sync
+        # tables; the legacy integrations.SyncLog table no longer receives
+        # writes since A2.3, so assert on the table the queue contract
+        # actually writes).
+        from community_base.content_sync.models import SyncLog as PackageSyncLog
+        assert not PackageSyncLog.objects.filter(
+            source__repo_name='Old-Org/old-repo',
+        ).exists()
 
         connection.close()
         context.close()

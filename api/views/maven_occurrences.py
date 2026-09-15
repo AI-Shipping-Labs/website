@@ -12,10 +12,14 @@ from accounts.services.email_resolution import resolve_user_by_email
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.maven import serialize_maven_occurrence
-from api.utils import require_methods
+from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
 from integrations.models import MavenEnrollmentEvent
-from integrations.services.maven import STEP_NAMES, retry_occurrence_step
+from integrations.services.maven import (
+    STEP_NAMES,
+    _identity,
+    retry_occurrence_step,
+)
 from integrations.services.maven_attention import (
     failed_occurrences,
     needs_attention_occurrences,
@@ -523,3 +527,113 @@ def _write_retry_audit(request, occurrence, step, outcome):
             f"subject_user_id={subject_id} actor_token={actor}"
         ),
     )
+
+
+@token_required
+@csrf_exempt
+@require_methods("PATCH")
+@openapi_spec(
+    tag="Maven Occurrences",
+    summary="Correct the stored course/cohort resolution keys",
+    methods={
+        "PATCH": {
+            "summary": "Correct the stored course_key/cohort_key on one occurrence",
+            "description": (
+                "Staff-only data fix for occurrences whose stored payload "
+                "keys predate a Maven-side rename and can no longer resolve "
+                "(the enrollment step fails with MavenUnknownCourseError / "
+                "MavenUnknownCohortError). Updates course_key and cohort_key, "
+                "recomputes the identity hash from the occurrence's email, "
+                "and writes a CommunityAuditLog entry. The display labels and "
+                "dedupe key (built from display labels, not keys) are "
+                "untouched. Force-retry the enrollment step afterwards "
+                "(website #1662 go-live checklist step 10)."
+            ),
+            "request_body": {
+                "properties": {
+                    "course_key": {"type": "string", "minLength": 1},
+                    "cohort_key": {"type": "string", "minLength": 1},
+                },
+                "example": {
+                    "course_key": "from-rag-to-agents",
+                    "cohort_key": "4",
+                },
+            },
+            "responses": {
+                200: {"description": "Keys corrected; returns the occurrence."},
+                404: {"description": "Occurrence not found."},
+                422: {
+                    "description": "Missing/blank keys or payload too long.",
+                },
+            },
+        },
+    },
+)
+def maven_occurrence_key_correction(request, occurrence_id):
+    occurrence = (
+        MavenEnrollmentEvent.objects.select_related("user")
+        .filter(pk=occurrence_id)
+        .first()
+    )
+    if occurrence is None:
+        return _occurrence_not_found()
+
+    data, body_error = parse_json_body(request)
+    if body_error is not None:
+        return body_error
+    if not isinstance(data, dict):
+        return error_response(
+            "Body must be a JSON object",
+            "invalid_type",
+            status=422,
+            details={"field": "body", "expected": "object"},
+        )
+
+    errors = {}
+    updates = {}
+    for field in ("course_key", "cohort_key"):
+        raw = data.get(field)
+        if raw is None or not str(raw).strip():
+            errors[field] = "A non-empty replacement key is required."
+            continue
+        value = str(raw).strip()
+        if len(value) > 255:
+            errors[field] = "Must be at most 255 characters."
+            continue
+        updates[field] = value
+    if errors:
+        return error_response(
+            "Validation failed",
+            "invalid_occurrence_keys",
+            status=422,
+            details=errors,
+        )
+
+    old_keys = (occurrence.course_key, occurrence.cohort_key)
+    occurrence.course_key = updates["course_key"]
+    occurrence.cohort_key = updates["cohort_key"]
+    if occurrence.email:
+        occurrence.identity_hash = _identity(
+            occurrence.email,
+            occurrence.course_key,
+            occurrence.cohort_key,
+        )
+    occurrence.save(
+        update_fields=["course_key", "cohort_key", "identity_hash", "updated_at"],
+    )
+    CommunityAuditLog.objects.create(
+        user=occurrence.user,
+        action="maven_occurrence_keys_corrected",
+        details=(
+            f"occurrence={occurrence.pk} course_key="
+            f"{old_keys[0]!r}->{occurrence.course_key!r} cohort_key="
+            f"{old_keys[1]!r}->{occurrence.cohort_key!r}"
+        ),
+    )
+    logger.warning(
+        "Maven occurrence keys corrected occurrence=%s by staff API",
+        occurrence.pk,
+    )
+
+    occurrence.refresh_from_db()
+    return JsonResponse(serialize_maven_occurrence(occurrence))

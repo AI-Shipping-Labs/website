@@ -117,6 +117,7 @@ from api.views.marketing_pages import (
 )
 from api.views.maven_occurrences import (
     maven_occurrence_detail,
+    maven_occurrence_key_correction,
     maven_occurrence_step_retry,
     maven_occurrences_collection,
 )
@@ -542,6 +543,11 @@ urlpatterns = [
         "integrations/maven/occurrences",
         maven_occurrences_collection,
         name="api_maven_occurrences_collection",
+    ),
+    path(
+        "integrations/maven/occurrences/<int:occurrence_id>/keys",
+        maven_occurrence_key_correction,
+        name="api_maven_occurrence_key_correction",
     ),
     path(
         "integrations/maven/occurrences/<int:occurrence_id>",

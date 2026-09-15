@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from accounts.models import EmailAlias, TierOverride
 from community.models import CommunityAuditLog
+from content.models import Cohort, Course
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from payments.models import Tier
 
@@ -230,7 +231,21 @@ class MavenEnrolledTest(TestCase):
 
     @patch("integrations.services.maven.EmailService")
     def test_duplicate_delivery_already_processed(self, email_service):
-        body = {"event": "user_cohort.enrolled", "email": "dup@test.com", "cohort": "C1"}
+        # Issue #1659: ``already_processed`` requires ``enrollment`` to have
+        # reached a terminal state too, so this needs a resolvable
+        # maven_course_key/external_key pair to let that step succeed.
+        course = Course.objects.create(
+            title="LLM Zoomcamp", slug="llm-zoomcamp-dup-1659",
+            maven_course_key="llm zoomcamp",
+        )
+        Cohort.objects.create(
+            course=course, external_key="c1", name="C1",
+            start_date="2026-01-01", end_date="2026-03-01",
+        )
+        body = {
+            "event": "user_cohort.enrolled", "email": "dup@test.com",
+            "course": "LLM Zoomcamp", "cohort": "C1",
+        }
         first = self._post(body)
         self.assertEqual(first.json(), {"status": "onboarded"})
         second = self._post(body)
@@ -250,6 +265,25 @@ class MavenEnrolledTest(TestCase):
             ).count(),
             1,
         )
+
+    @patch("integrations.services.maven.EmailService")
+    def test_redelivery_with_pending_enrollment_is_not_already_processed(self, email_service):
+        # Issue #1659 tester finding: a redelivered webhook whose enrollment
+        # step is still non-terminal (no maven_course_key configured, so it
+        # keeps failing/retrying) must NOT report already_processed — that
+        # would understate that an enrollment attempt just ran in this call.
+        body = {
+            "event": "user_cohort.enrolled", "email": "pending-enrollment@test.com",
+            "course": "Unmapped Course", "cohort": "Unmapped Cohort",
+        }
+        first = self._post(body)
+        self.assertEqual(first.json(), {"status": "onboarded"})
+
+        occurrence = MavenEnrollmentEvent.objects.get(email="pending-enrollment@test.com")
+        self.assertEqual(occurrence.enrollment_status, MavenEnrollmentEvent.STEP_FAILED)
+
+        second = self._post(body)
+        self.assertNotEqual(second.json(), {"status": "already_processed"})
 
     @patch("integrations.services.maven.EmailService")
     def test_override_grant_audited(self, email_service):

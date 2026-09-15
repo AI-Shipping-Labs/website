@@ -95,6 +95,15 @@ class Course(
         max_length=500, blank=True, default='',
         help_text="Slack channel URL for paid courses, GitHub URL for free courses.",
     )
+    maven_course_key = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text=(
+            "Maven's course identifier string, matched case-insensitively "
+            "against the Maven webhook's course_key at enrollment time "
+            "(issue #1659). Source-owned from course.yaml; blank means no "
+            "Maven course is linked."
+        ),
+    )
     individual_price_eur = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True,
         help_text="Price for one-time individual purchase in EUR. Null = not sold individually.",

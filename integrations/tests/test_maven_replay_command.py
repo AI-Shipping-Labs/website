@@ -8,6 +8,7 @@ from django.core.management import call_command
 from django.test import TestCase
 
 from accounts.models import TierOverride
+from content.models import Cohort, CohortEnrollment, Course, CourseAccess
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 
 User = get_user_model()
@@ -53,6 +54,16 @@ class ReplayMavenEventTest(TestCase):
     )
     @patch("integrations.services.maven.EmailService")
     def test_real_run_then_idempotent(self, email_service):
+        # Issue #1659: already_processed now also requires ``enrollment`` to
+        # be terminal, so this needs a resolvable maven_course_key/external_key.
+        course = Course.objects.create(
+            title="LLM Zoomcamp", slug="llm-zoomcamp-replay-idempotent",
+            maven_course_key="llm zoomcamp",
+        )
+        Cohort.objects.create(
+            course=course, external_key="spring 2026", name="Spring 2026",
+            start_date="2026-01-01", end_date="2026-03-01",
+        )
         out = StringIO()
         call_command(
             "replay_maven_event",
@@ -82,6 +93,45 @@ class ReplayMavenEventTest(TestCase):
             1,
         )
         self.assertEqual(email_service.return_value.send.call_count, 1)
+
+    @patch(
+        "integrations.services.maven._invite_to_slack",
+        lambda u, a: (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
+    )
+    @patch("integrations.services.maven.EmailService")
+    def test_backfill_replay_runs_the_enrollment_step_like_a_live_webhook(self, email_service):
+        # Issue #1659: cohort-4 members enrolled before this feature shipped
+        # are backfilled through this exact replay path.
+        course = Course.objects.create(
+            title="Buildcamp", slug="buildcamp-replay-1659",
+            maven_course_key="buildcamp",
+        )
+        cohort = Cohort.objects.create(
+            course=course, external_key="cohort 4", name="Cohort 4",
+            start_date="2026-09-21", end_date="2026-11-22",
+        )
+        out = StringIO()
+        call_command(
+            "replay_maven_event",
+            "--event", "user_cohort.enrolled",
+            "--email", "backfill-1659@test.com",
+            "--course", "Buildcamp",
+            "--cohort", "Cohort 4",
+            stdout=out,
+        )
+
+        occurrence = MavenEnrollmentEvent.objects.get(email="backfill-1659@test.com")
+        self.assertEqual(occurrence.enrollment_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
+        self.assertTrue(
+            CourseAccess.objects.filter(
+                user__email="backfill-1659@test.com", course=course,
+            ).exists()
+        )
+        self.assertTrue(
+            CohortEnrollment.objects.filter(
+                cohort=cohort, user__email="backfill-1659@test.com",
+            ).exists()
+        )
 
     @patch("community.services.staff_notifications.notify_maven_cohort_removal")
     def test_removal_replay(self, notify):

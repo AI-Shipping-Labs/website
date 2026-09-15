@@ -118,10 +118,14 @@ def redact_old_maven_enrollment_pii(days=30):
 def retry_maven_enrollment_steps(limit=100):
     """Retry incomplete Maven side effects, bounded by their persisted attempts."""
     from integrations.models import MavenEnrollmentEvent
-    from integrations.services.maven import MAX_STEP_ATTEMPTS, run_occurrence_steps
+    from integrations.services.maven import (
+        MAX_STEP_ATTEMPTS,
+        STEP_NAMES,
+        run_occurrence_steps,
+    )
 
     retryable = Q()
-    for name in ("override", "notification", "slack", "welcome", "removal"):
+    for name in STEP_NAMES:
         retryable |= Q(
             **{
                 f"{name}_status__in": [

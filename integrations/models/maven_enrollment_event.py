@@ -103,6 +103,13 @@ class MavenEnrollmentEvent(models.Model):
     welcome_attempted_at = models.DateTimeField(null=True, blank=True)
     welcome_completed_at = models.DateTimeField(null=True, blank=True)
     welcome_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    enrollment_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
+    )
+    enrollment_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
+    enrollment_attempted_at = models.DateTimeField(null=True, blank=True)
+    enrollment_completed_at = models.DateTimeField(null=True, blank=True)
+    enrollment_error = models.CharField(max_length=255, blank=True, default="", db_default="")
     notification_status = models.CharField(
         max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
     )

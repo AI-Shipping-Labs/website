@@ -8,21 +8,20 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import timedelta
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
 from accounts.models import TierOverride
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
-from accounts.utils.tokens import generate_password_reset_token, generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
 from content.models import Course, CourseAccess
 from content.models.cohort import Cohort, CohortEnrollment
-from email_app.services import EmailService
-from integrations.config import get_config, site_base_url, validate_email_config_value
+from email_app.package_mail import send_package_mail
+from integrations.config import get_config, validate_email_config_value
 from integrations.maven_config import (
-    maven_course_slack_channel,
     maven_override_duration_days,
     maven_override_tier_slug,
 )
@@ -589,72 +588,56 @@ def _staff_welcome_bcc():
 
 
 def _send_welcome(user, course, cohort, actions):
-    EmailService().send(
+    # A1.2 slice 3: the welcome goes through the durable package delivery.
+    # The stored context carries the course scalar only (#1613); the worker
+    # resolver mints every link and token at delivery time. ``sent`` means
+    # the durable delivery exists — the SES outcome and the ``EmailLog``
+    # audit row land from the worker.
+    delivery = send_package_mail(
         user,
         "maven_welcome",
-        _welcome_context(user, course, cohort),
+        _welcome_context(course, cohort),
         bcc=_staff_welcome_bcc(),
     )
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
+        # Honest action for the suppressed case; the welcome step itself
+        # still succeeded (nothing to retry). The preference resolver never
+        # suppresses this transactional purpose in practice.
+        actions.append("maven_welcome suppressed by preferences; not sent.")
+        return
     actions.append("Sent maven_welcome email.")
 
 
 # Issue #1593: this link lives in an unsolicited welcome email that people act
 # on days or weeks later, so it is not held to the 24-hour registration
 # contract. That is this codebase's own distinction, not a new one:
-# ``EmailService.VERIFY_FOOTER_TOKEN_EXPIRY_HOURS`` already gives the footer
-# verify link 7 days "because email recipients open messages on their own
-# schedule", and that token writes the same ``email_verified`` field through
-# the same endpoint family. Thirty rather than seven because every dimension
-# that comment cites is stronger here: the reader has no pending intent, the
-# course may not have started, and there is no resend path for this token.
-# Bounded rather than non-expiring, unlike the ``unsubscribe`` and
-# ``maven_email_opt_out`` footer tokens, because this one also asserts mailbox
-# ownership. An expired click still lands on a page that routes to account
-# email preferences rather than dead-ending.
+# ``VERIFY_FOOTER_TOKEN_EXPIRY_HOURS`` in ``email_app.services.email_service``
+# already gives the footer verify link 7 days "because email recipients open
+# messages on their own schedule", and that token writes the same
+# ``email_verified`` field through the same endpoint family. Thirty rather
+# than seven because every dimension that comment cites is stronger here: the
+# reader has no pending intent, the course may not have started, and there is
+# no resend path for this token. Bounded rather than non-expiring, unlike the
+# ``unsubscribe`` and ``maven_email_opt_out`` footer tokens, because this one
+# also asserts mailbox ownership. An expired click still lands on a page that
+# routes to account email preferences rather than dead-ending.
 NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
 
 
-def _welcome_context(user, course, cohort=""):
-    site_url = site_base_url().rstrip("/")
-    reset_token = generate_password_reset_token(user, expiry_hours=24)
-    opt_out_token = generate_user_action_token(user.pk, "maven_email_opt_out")
-    opt_in_token = generate_user_action_token(
-        user.pk,
-        "verify_and_subscribe",
-        expiry_hours=NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
-    )
+def _welcome_context(course, cohort=""):
+    """Durable send context: the course scalar only (issues #1613, #1647).
+
+    No ``user_name`` key here on purpose (issue #1591): the worker resolver
+    resolves the greeting with ``greeting_name`` so a nameless enrollee gets
+    "Hi there," and not their email handle. Every link and token is minted
+    by ``email_app.hooks._resolve_maven_welcome_context`` at delivery time,
+    which also starts the token expiry clocks then — a worker backlog or a
+    retry loop never shortens the recipient's usable window (#1593). No
+    placeholder ever reaches an enrollee: course, else cohort, else the
+    template's generic, course-free copy.
+    """
     return {
-        # No "user_name" key here on purpose (issue #1591): caller context
-        # wins over EmailService's injected default, and Maven enrollees
-        # regularly arrive with no name at all. Let EmailService resolve
-        # the greeting so a nameless enrollee gets "Hi there," and not
-        # their email handle.
-        # No placeholder ever reaches an enrollee: course, else cohort,
-        # else the template's generic, course-free copy.
         "course_name": (course or "").strip() or (cohort or "").strip(),
-        # Optional Studio setting: names the cohort's Slack channel in the
-        # welcome copy. Blank is the shipping default and the template
-        # branches so the sentence still reads cleanly.
-        "course_channel": maven_course_slack_channel(),
-        "password_reset_url": f"{site_url}/api/password-reset?token={reset_token}",
-        "sign_in_url": f"{site_url}/accounts/login/",
-        # The one thing we ask them to do after joining must be a real link.
-        # Same destination and wording as community_invite.md.
-        "onboarding_url": f"{site_url}/onboarding/",
-        # /community/slack is @login_required + Main-gated. A signed-out
-        # click redirects through login with next= preserved, so the copy no
-        # longer needs a numbered set-password -> sign-in -> join sequence
-        # (issue #1593).
-        "slack_join_url": f"{site_url}/community/slack",
-        "opt_out_url": f"{site_url}/api/maven-email-opt-out?token={opt_out_token}",
-        # Issue #1593: the newsletter is opt-IN. This is the one click that
-        # both verifies the address and subscribes them; nothing else in the
-        # enrollment flow subscribes anybody. It is a distinct token action
-        # from ``verify_email`` precisely so that ordinary verification can
-        # never be mistaken for newsletter consent.
-        "newsletter_opt_in_url": (
-            f"{site_url}/api/verify-and-subscribe?token={opt_in_token}"
-        ),
     }
 
 

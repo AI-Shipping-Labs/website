@@ -52,8 +52,8 @@ class ReplayMavenEventTest(TestCase):
         "integrations.services.maven._invite_to_slack",
         lambda u, a: (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
     )
-    @patch("integrations.services.maven.EmailService")
-    def test_real_run_then_idempotent(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_real_run_then_idempotent(self, package_mail):
         # Issue #1659: already_processed now also requires ``enrollment`` to
         # be terminal, so this needs a resolvable maven_course_key/external_key.
         course = Course.objects.create(
@@ -92,14 +92,14 @@ class ReplayMavenEventTest(TestCase):
             ).count(),
             1,
         )
-        self.assertEqual(email_service.return_value.send.call_count, 1)
+        self.assertEqual(package_mail.call_count, 1)
 
     @patch(
         "integrations.services.maven._invite_to_slack",
         lambda u, a: (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
     )
-    @patch("integrations.services.maven.EmailService")
-    def test_backfill_replay_runs_the_enrollment_step_like_a_live_webhook(self, email_service):
+    @patch("integrations.services.maven.send_package_mail")
+    def test_backfill_replay_runs_the_enrollment_step_like_a_live_webhook(self, package_mail):
         # Issue #1659: cohort-4 members enrolled before this feature shipped
         # are backfilled through this exact replay path.
         course = Course.objects.create(

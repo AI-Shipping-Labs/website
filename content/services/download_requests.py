@@ -3,7 +3,6 @@
 import datetime
 import hashlib
 import logging
-from urllib.parse import quote
 
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
@@ -13,13 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from accounts.services.verification import resolve_unverified_ttl_days
-from accounts.utils.tokens import generate_user_action_token
-from content.services.download_delivery import (
-    create_delivery_grant,
-    get_delivery_token_ttl_hours,
-)
-from email_app.services.email_service import EmailService
-from integrations.config import site_base_url
+from email_app.package_mail import send_package_mail
 from website.request_ip import client_ip_from_request
 
 logger = logging.getLogger(__name__)
@@ -93,45 +86,29 @@ def send_download_request(
     newsletter_opt_in=False,
     surface='detail',
 ):
-    """Create a grant and send either verification or direct delivery mail."""
-    with transaction.atomic():
-        expires_hours = get_delivery_token_ttl_hours()
-        grant_token = create_delivery_grant(
-            user,
-            download,
-            newsletter_opt_in=newsletter_opt_in,
-            surface=surface,
-        )
-        internal_path = (
-            f'/api/downloads/{download.slug}/file?grant={quote(grant_token)}'
-        )
-        if user.email_verified:
-            delivery_url = f'{site_base_url()}{internal_path}'
-        else:
-            verify_token = generate_user_action_token(
-                user.pk,
-                'verify_email',
-                expiry_hours=expires_hours,
-                return_path=internal_path,
-            )
-            delivery_url = f'{site_base_url()}/api/verify-email?token={verify_token}'
+    """Queue the durable download-delivery email for one request.
 
-        try:
-            EmailService().send(
-                user,
-                'download_delivery',
-                {
-                    'resource_title': download.title,
-                    'delivery_url': delivery_url,
-                    'verification_required': not user.email_verified,
-                    'newsletter_opt_in': bool(newsletter_opt_in),
-                    'expires_hours': expires_hours,
-                    'site_url': site_base_url(),
-                },
-            )
-        except Exception:
-            raise
-    return grant_token
+    A1.2 slice 3: the send goes through the package, so no grant is minted
+    here any more — the worker resolver creates a fresh one-time grant and
+    the delivery or verification link at delivery time, keeping every
+    bearer token out of the durable row (#1613) and starting its TTL clock
+    when the mail is produced rather than when the request arrived. The
+    stored context carries scalars only; the ``Download`` rides along as
+    the delivery's ``related`` relation. Returns the durable
+    ``EmailDelivery`` — a transport failure never raises here, the worker
+    retries it.
+    """
+    with transaction.atomic():
+        return send_package_mail(
+            user,
+            'download_delivery',
+            {
+                'resource_title': download.title,
+                'newsletter_opt_in': bool(newsletter_opt_in),
+                'surface': surface,
+            },
+            related=download,
+        )
 
 
 def request_download_for_email(
@@ -141,8 +118,11 @@ def request_download_for_email(
     newsletter_opt_in=False,
     surface='detail',
 ):
-    # Roll a new capture back with its grant when transactional delivery
-    # fails, so retries never leave an unreachable passwordless account.
+    # Roll a new capture back when the durable send is refused (a guard or
+    # configuration failure would never deliver), so retries never leave an
+    # unreachable passwordless account. Transport trouble no longer raises:
+    # the delivery is durable and the worker retries it, so the account
+    # stays reachable.
     with transaction.atomic():
         user, _created = _get_or_create_download_user(email)
         send_download_request(

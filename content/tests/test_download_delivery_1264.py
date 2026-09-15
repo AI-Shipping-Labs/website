@@ -1,8 +1,10 @@
 import json
+import re
 from io import StringIO
 from unittest.mock import patch
 from urllib.parse import parse_qs, unquote, urlparse
 
+from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.core.management import CommandError, call_command
@@ -19,10 +21,42 @@ from content.services.download_validation import (
     storage_key_from_configured_s3_url,
     validate_download_metadata,
 )
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments.models import Tier
 from tests.fixtures import set_membership
 
 User = get_user_model()
+
+
+def deliver_and_capture():
+    """Drain pending deliveries through a fresh stub; return the stub.
+
+    Since A1.2 slice 3 the download-delivery mail is a durable
+    ``EmailDelivery``: the request only queues it, and the grant link is
+    minted by the worker resolver at delivery time.
+    """
+
+    stub = StubSESClient()
+    with patch(
+        'community_base.mail.backends.ses_local.configured_client',
+        return_value=stub,
+    ):
+        deliver_pending_mail()
+    return stub
+
+
+def sent_html(stub):
+    """The provider-visible HTML of the single drained send."""
+
+    assert len(stub.calls) == 1, f'expected one SES send, got {len(stub.calls)}'
+    simple = stub.calls[0]['Content']['Simple']
+    return simple['Body']['Html']['Data']
+
+
+def href_with_suffix(html, suffix):
+    match = re.search(rf'href="([^"]*{re.escape(suffix)}[^"]*)"', html)
+    assert match, f'no href containing {suffix} in sent email'
+    return match.group(1)
 
 
 def make_download(**overrides):
@@ -247,8 +281,7 @@ class DownloadDelivery1264Test(TestCase):
                 self.assertEqual(response['Pragma'], 'no-cache')
                 self.assertEqual(response['Referrer-Policy'], 'no-referrer')
 
-    @patch('content.services.download_requests.EmailService.send')
-    def test_new_capture_is_download_sourced_and_not_marketing_subscribed(self, send):
+    def test_new_capture_is_download_sourced_and_not_marketing_subscribed(self):
         download = make_download()
         response = self.client.post(
             f'/api/downloads/{download.slug}/request?surface=shortcode',
@@ -265,21 +298,29 @@ class DownloadDelivery1264Test(TestCase):
         self.assertFalse(user.account_activated)
         self.assertTrue(user.unsubscribed)
         self.assertFalse(user.email_preferences['newsletter'])
+        # The request queues exactly one durable delivery (slice 3); the
+        # grant is minted by the worker at delivery time.
+        delivery = EmailDelivery.objects.get(
+            purpose='download_delivery', recipient_user=user,
+        )
+        self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
+        self.assertEqual(delivery.related_object_type, 'content.download')
+        stub = deliver_and_capture()
         grant = DownloadDeliveryGrant.objects.get(user=user)
         self.assertFalse(grant.newsletter_opt_in)
         self.assertEqual(grant.surface, 'shortcode')
         self.assertIsNone(grant.redeemed_at)
-        send.assert_called_once()
+        self.assertEqual(len(stub.calls), 1)
         self.assertNotIn(user.email, response.content.decode())
 
     @patch(
-        'content.services.download_requests.EmailService.send',
+        'content.services.download_requests.send_package_mail',
         side_effect=RuntimeError(
             'SENTINEL_EMAIL=rolled-back@example.com '
             'SENTINEL_ENDPOINT=https://mail-secret.example/send',
         ),
     )
-    def test_failed_email_rolls_back_new_capture_and_grant(self, _send):
+    def test_refused_send_rolls_back_new_capture(self, _send):
         download = make_download()
         with self.assertLogs('content.views.api', level='ERROR') as captured:
             response = self.client.post(
@@ -292,6 +333,7 @@ class DownloadDelivery1264Test(TestCase):
             User.objects.filter(email='rolled-back@example.com').exists(),
         )
         self.assertFalse(DownloadDeliveryGrant.objects.exists())
+        self.assertFalse(EmailDelivery.objects.exists())
         logs = '\n'.join(captured.output)
         self.assertIn('reason=email_delivery_failure', logs)
         self.assertNotIn('SENTINEL_', logs)
@@ -299,8 +341,39 @@ class DownloadDelivery1264Test(TestCase):
         self.assertNotIn('mail-secret.example', logs)
         self.assertNotIn('Traceback', logs)
 
-    @patch('content.services.download_requests.EmailService.send')
-    def test_request_response_is_same_for_new_and_existing_address(self, send):
+    def test_transport_trouble_is_the_workers_concern_and_retries(self):
+        """A SES outage no longer fails the request with a 503.
+
+        Slice 3: the delivery is durable, so the API can honestly accept
+        the request; the worker retries the transport and the grant link
+        is minted only when the mail is actually produced.
+        """
+        download = make_download()
+        response = self.client.post(
+            f'/api/downloads/{download.slug}/request',
+            data=json.dumps({'email': 'durable@example.com'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 202)
+        user = User.objects.get(email='durable@example.com')
+        delivery = EmailDelivery.objects.get(
+            purpose='download_delivery', recipient_user=user,
+        )
+        self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
+        self.assertFalse(DownloadDeliveryGrant.objects.exists())
+
+        stub = deliver_and_capture()
+
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED)
+        self.assertTrue(
+            DownloadDeliveryGrant.objects.filter(
+                user=user, download=download,
+            ).exists(),
+        )
+        self.assertEqual(len(stub.calls), 1)
+
+    def test_request_response_is_same_for_new_and_existing_address(self):
         download = make_download()
         existing = User.objects.create_user(
             email='existing@example.com',
@@ -322,8 +395,7 @@ class DownloadDelivery1264Test(TestCase):
         'content.services.download_delivery.build_download_presigned_url',
         return_value='https://signed.example/resource?signature=secret',
     )
-    @patch('content.services.download_requests.EmailService.send')
-    def test_verified_grant_redeems_once_and_confirms_opt_in(self, send, presign):
+    def test_verified_grant_redeems_once_and_confirms_opt_in(self, presign):
         download = make_download()
         user = User.objects.create_user(
             email='verified@example.com',
@@ -342,10 +414,15 @@ class DownloadDelivery1264Test(TestCase):
         self.assertEqual(response.status_code, 202)
         user.refresh_from_db()
         self.assertTrue(user.unsubscribed)
-        delivery_url = send.call_args.args[2]['delivery_url']
-        send_context = send.call_args.args[2]
-        self.assertTrue(send_context['newsletter_opt_in'])
-        grant_token = unquote(parse_qs(urlparse(delivery_url).query)['grant'][0])
+        delivery = EmailDelivery.objects.get(
+            purpose='download_delivery', recipient_user=user,
+        )
+        self.assertTrue(delivery.context_data['newsletter_opt_in'])
+        stub = deliver_and_capture()
+        grant_url = href_with_suffix(
+            sent_html(stub), f'/api/downloads/{download.slug}/file?grant=',
+        )
+        grant_token = unquote(parse_qs(urlparse(grant_url).query)['grant'][0])
 
         first = self.client.get(
             f'/api/downloads/{download.slug}/file',
@@ -373,11 +450,9 @@ class DownloadDelivery1264Test(TestCase):
         'content.services.download_delivery.build_download_presigned_url',
         return_value='https://signed.example/unchecked',
     )
-    @patch('content.services.download_requests.EmailService.send')
     def test_unchecked_existing_user_preserves_marketing_preferences(
         self,
-        send,
-        _presign,
+        presign,
     ):
         download = make_download()
         user = User.objects.create_user(
@@ -391,11 +466,15 @@ class DownloadDelivery1264Test(TestCase):
             data=json.dumps({'email': user.email, 'newsletter_opt_in': False}),
             content_type='application/json',
         )
-        context = send.call_args.args[2]
-        self.assertFalse(context['newsletter_opt_in'])
-        grant_token = unquote(
-            parse_qs(urlparse(context['delivery_url']).query)['grant'][0],
+        delivery = EmailDelivery.objects.get(
+            purpose='download_delivery', recipient_user=user,
         )
+        self.assertFalse(delivery.context_data['newsletter_opt_in'])
+        grant_url = href_with_suffix(
+            sent_html(deliver_and_capture()),
+            f'/api/downloads/{download.slug}/file?grant=',
+        )
+        grant_token = unquote(parse_qs(urlparse(grant_url).query)['grant'][0])
         response = self.client.get(
             f'/api/downloads/{download.slug}/file',
             {'grant': grant_token},
@@ -405,10 +484,8 @@ class DownloadDelivery1264Test(TestCase):
         self.assertTrue(user.unsubscribed)
         self.assertFalse(user.email_preferences['newsletter'])
 
-    @patch('content.services.download_requests.EmailService.send')
     def test_third_party_checked_request_requires_mailbox_click_to_subscribe(
         self,
-        send,
     ):
         download = make_download()
         victim = User.objects.create_user(
@@ -429,22 +506,26 @@ class DownloadDelivery1264Test(TestCase):
         victim.refresh_from_db()
         self.assertTrue(victim.unsubscribed)
         self.assertFalse(victim.email_preferences['newsletter'])
-        self.assertTrue(send.call_args.args[2]['newsletter_opt_in'])
+        delivery = EmailDelivery.objects.get(
+            purpose='download_delivery', recipient_user=victim,
+        )
+        self.assertTrue(delivery.context_data['newsletter_opt_in'])
 
     @patch(
         'content.services.download_delivery.build_download_presigned_url',
         return_value='https://signed.example/resource',
     )
-    @patch('content.services.download_requests.EmailService.send')
-    def test_unverified_mailbox_verification_continues_to_grant(self, send, _presign):
+    def test_unverified_mailbox_verification_continues_to_grant(self, presign):
         download = make_download()
         self.client.post(
             f'/api/downloads/{download.slug}/request',
             data=json.dumps({'email': 'verify-download@example.com'}),
             content_type='application/json',
         )
-        delivery_url = send.call_args.args[2]['delivery_url']
-        response = self.client.get(urlparse(delivery_url).path + '?' + urlparse(delivery_url).query)
+        verify_url = href_with_suffix(
+            sent_html(deliver_and_capture()), '/api/verify-email?token=',
+        )
+        response = self.client.get(urlparse(verify_url).path + '?' + urlparse(verify_url).query)
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Cache-Control'], 'private, no-store, max-age=0')
         self.assertEqual(response['Pragma'], 'no-cache')
@@ -468,8 +549,7 @@ class DownloadDelivery1264Test(TestCase):
         self.assertEqual(download.download_count, 0)
 
     @patch('content.services.download_delivery.build_download_presigned_url')
-    @patch('content.services.download_requests.EmailService.send')
-    def test_under_tier_grant_redirects_to_safe_recovery(self, send, presign):
+    def test_under_tier_grant_redirects_to_safe_recovery(self, presign):
         download = make_download(required_level=30)
         user = User.objects.create_user(email='basic-requester@example.com', password='password', email_verified=True, unsubscribed=True, email_preferences={'newsletter': False})
         set_membership(user, tier=self.basic_tier)
@@ -482,9 +562,12 @@ class DownloadDelivery1264Test(TestCase):
             content_type='application/json',
         )
         self.assertEqual(request_response.status_code, 202)
-        delivery_url = send.call_args.args[2]['delivery_url']
+        grant_url = href_with_suffix(
+            sent_html(deliver_and_capture()),
+            f'/api/downloads/{download.slug}/file?grant=',
+        )
         redemption = self.client.get(
-            urlparse(delivery_url).path + '?' + urlparse(delivery_url).query,
+            urlparse(grant_url).path + '?' + urlparse(grant_url).query,
         )
         self.assertRedirects(
             redemption,

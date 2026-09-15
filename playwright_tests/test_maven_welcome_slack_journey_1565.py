@@ -42,16 +42,15 @@ def _enrol(email):
 
     ensure_tiers()
     # Not in the Slack workspace: the real invite path runs and produces the
-    # real ledger note, so the Studio journey asserts production copy.
+    # real ledger note, so the Studio journey asserts production copy. The
+    # welcome mail is queued as a durable delivery and the session's sync
+    # jobs backend drains it against the installed SES stub (A1.2).
     with patch(
         "community.services.staff_notifications.notify_maven_enrollment",
         return_value=True,
     ), patch(
         "community.services.slack.SlackCommunityService.lookup_user_by_email",
         return_value=None,
-    ), patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-message-id",
     ):
         result = handle_maven_event({
             "event": "user_cohort.enrolled",
@@ -67,17 +66,28 @@ def _enrol(email):
 
 
 def _render_welcome(user):
-    """Render the maven_welcome body exactly as a real send would."""
+    """Render the maven_welcome body exactly as a real send would.
+
+    A1.2 slice 3: the producer persists the course scalar only and the
+    worker resolver mints every link and token at delivery time, so the
+    stored delivery is re-rendered through the package renderer with the
+    same resolver the worker runs.
+    """
+    from community_base.mail.backends.ses_local import render_delivery
+    from community_base.mail.models import EmailDelivery
     from django.db import connection
 
-    from email_app.services.email_service import EmailService
-    from integrations.services.maven import _welcome_context
+    from email_app.hooks import resolve_auth_mail_context
 
-    _subject, body_html = EmailService()._render_template(
-        "maven_welcome", user, _welcome_context(user, COURSE, COHORT),
+    delivery = EmailDelivery.objects.filter(
+        purpose="maven_welcome", recipient_user=user,
+    ).latest("created_at")
+    context = resolve_auth_mail_context(
+        delivery=delivery, context=dict(delivery.context_data),
     )
+    rendered = render_delivery(delivery, context)
     connection.close()
-    return body_html
+    return rendered.html
 
 
 def _slack_href(body_html):

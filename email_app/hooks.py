@@ -662,6 +662,120 @@ def _resolve_checkout_payment_failed_context(delivery, context):
     context["retry_url"] = f"{site_base_url().rstrip('/')}{retry_path}"
 
 
+# A1.2 slice 3: the content download delivery and the Maven welcome.
+
+
+def _resolve_download_delivery_context(delivery, context):
+    """Mint the grant or verification link from the Download relation.
+
+    The bearer secret of a download grant is unrecoverable from its stored
+    hash, so the worker mints a fresh one-time grant at delivery time from
+    the stored scalars (opt-in, surface) and the ``content.download``
+    relation. The TTL clock therefore starts when the mail is produced,
+    not when the request arrived, and no bearer token ever sits in the
+    durable row (#1613). ``verification_required`` is re-read from the
+    recipient at the same moment so the copy and the link shape can never
+    disagree.
+    """
+
+    from urllib.parse import quote  # noqa: PLC0415
+
+    from accounts.utils.tokens import generate_user_action_token  # noqa: PLC0415
+    from content.models import Download  # noqa: PLC0415
+    from content.services.download_delivery import (  # noqa: PLC0415
+        create_delivery_grant,
+        get_delivery_token_ttl_hours,
+    )
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    download = None
+    if delivery.related_object_type == "content.download":
+        download = Download.objects.filter(
+            pk=delivery.related_object_id,
+        ).first()
+    if download is None:
+        raise PermanentJobError("download_delivery_download_missing")
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("download_delivery_user_missing")
+
+    expires_hours = get_delivery_token_ttl_hours()
+    grant_token = create_delivery_grant(
+        user,
+        download,
+        newsletter_opt_in=bool(context.get("newsletter_opt_in")),
+        surface=str(context.get("surface") or "detail"),
+    )
+    internal_path = (
+        f'/api/downloads/{download.slug}/file?grant={quote(grant_token)}'
+    )
+    base_url = site_base_url().rstrip("/")
+    if user.email_verified:
+        context["delivery_url"] = f"{base_url}{internal_path}"
+        context["verification_required"] = False
+    else:
+        verify_token = generate_user_action_token(
+            user.pk,
+            'verify_email',
+            expiry_hours=expires_hours,
+            return_path=internal_path,
+        )
+        context["delivery_url"] = (
+            f"{base_url}/api/verify-email?token={verify_token}"
+        )
+        context["verification_required"] = True
+    context["expires_hours"] = expires_hours
+
+
+def _resolve_maven_welcome_context(delivery, context):
+    """Mint every welcome link, token and config scalar at delivery time.
+
+    The expiry clocks on the three tokens start here rather than at
+    webhook intake, so a worker backlog or a retry loop never shortens
+    the recipient's usable window (issue #1593: welcome links are not
+    held to tight contracts). The greeting keeps the issue #1591 rule —
+    ``greeting_name`` resolution, never the email handle — which the
+    legacy synchronous renderer used to own.
+    """
+
+    from accounts.utils.tokens import (  # noqa: PLC0415
+        generate_password_reset_token,
+        generate_user_action_token,
+    )
+    from integrations.config import site_base_url  # noqa: PLC0415
+    from integrations.maven_config import maven_course_slack_channel  # noqa: PLC0415
+    from integrations.services.maven import (  # noqa: PLC0415
+        NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+    )
+
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("maven_welcome_user_missing")
+
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+    context["course_channel"] = maven_course_slack_channel()
+    context["sign_in_url"] = f"{base_url}/accounts/login/"
+    context["onboarding_url"] = f"{base_url}/onboarding/"
+    context["slack_join_url"] = f"{base_url}/community/slack"
+    reset_token = generate_password_reset_token(user, expiry_hours=24)
+    context["password_reset_url"] = (
+        f"{base_url}/api/password-reset?token={reset_token}"
+    )
+    opt_out_token = generate_user_action_token(user.pk, "maven_email_opt_out")
+    context["opt_out_url"] = (
+        f"{base_url}/api/maven-email-opt-out?token={opt_out_token}"
+    )
+    opt_in_token = generate_user_action_token(
+        user.pk,
+        "verify_and_subscribe",
+        expiry_hours=NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+    )
+    context["newsletter_opt_in_url"] = (
+        f"{base_url}/api/verify-and-subscribe?token={opt_in_token}"
+    )
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
@@ -669,9 +783,10 @@ def resolve_auth_mail_context(*, delivery, context):
     the privacy deletion request, the recap, the post-event follow-up, the
     notification sends (slice 4: event reminder, workshop announcement,
     plan share), the staff heads-ups and the bookclub summaries (slice 1),
-    and the plans and payments member mail (slice 2: sprint-end recap,
+    the plans and payments member mail (slice 2: sprint-end recap,
     partner intro, cadence week notes, the four payment-grace templates
-    and checkout failure) persist only non-secret inputs and relations;
+    and checkout failure), and the content download delivery and Maven
+    welcome (slice 3) persist only non-secret inputs and relations;
     this resolver builds their URLs at delivery time so
     ``EmailDelivery.context_data`` never retains a clickable link (issue
     #1613, enforced by the site guard in
@@ -714,6 +829,10 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_payment_grace_context(delivery, context)
     elif delivery.purpose == "checkout_payment_failed":
         _resolve_checkout_payment_failed_context(delivery, context)
+    elif delivery.purpose == "download_delivery":
+        _resolve_download_delivery_context(delivery, context)
+    elif delivery.purpose == "maven_welcome":
+        _resolve_maven_welcome_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
         "password_reset",

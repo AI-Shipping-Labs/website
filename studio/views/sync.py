@@ -18,6 +18,10 @@ import logging
 import uuid
 from collections import OrderedDict
 
+from community_base.content_sync.models import (
+    ContentSource,  # package rows (A2.3)
+    SyncLog,  # package rows (A2.3)
+)
 from django.contrib import messages
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -25,7 +29,13 @@ from django.utils import timezone
 from django.utils.html import format_html
 from django.views.decorators.http import require_POST
 
-from integrations.models import ContentSource, SyncLog
+
+def _asl_compat(log):
+    """Read the A2.3 namespaced tiers counters from a package SyncLog."""
+    for entry in (log.warnings or []):
+        if isinstance(entry, dict) and 'asl_compat' in entry:
+            return entry['asl_compat']
+    return {}
 from integrations.services import content_sync_queue
 from integrations.services.content_sync_queue import (
     enqueue_content_sync,
@@ -57,10 +67,34 @@ from studio.worker_health import get_worker_status
 
 logger = logging.getLogger(__name__)
 
+def _commit_url(log):
+    """GitHub URL for the synced commit (mirrors the legacy property)."""
+    if not log.commit_sha:
+        return ''
+    repo_name = getattr(log.source, 'repo_name', '')
+    if '/' not in repo_name:
+        return ''
+    return f'https://github.com/{repo_name}/commit/{log.commit_sha}'
+
+
+def _source_commit_url(source):
+    """GitHub URL for the source's last synced commit."""
+    if not source.last_synced_commit or '/' not in source.repo_name:
+        return ''
+    return f'https://github.com/{source.repo_name}/commit/{source.last_synced_commit}'
+
 
 def _mark_source_queued(source, batch_id=None):
-    """Compatibility wrapper; queue-state implementation lives in the service."""
-    return content_sync_queue._mark_source_queued(source, batch_id=batch_id)
+    """Compatibility wrapper; queue-state implementation lives in the service.
+
+    Callers may still hold a legacy ``integrations.ContentSource`` row; the
+    package queue state must be written against the package row it mirrors
+    to (shared primary key).
+    """
+    package_source = content_sync_queue._package_source(source)
+    return content_sync_queue._mark_source_queued(
+        package_source, batch_id=batch_id,
+    )
 
 
 # Error messages used by the watchdog when it auto-fails a stuck SyncLog.
@@ -512,8 +546,8 @@ def _aggregate_batch(logs, *, structured_errors=None):
             'errors_count': 0,
             'items_detail': [],
             'commit_sha': log.commit_sha or '',
-            'short_commit_sha': log.short_commit_sha,
-            'commit_url': log.commit_url,
+            'short_commit_sha': (log.commit_sha or '')[:7],
+            'commit_url': _commit_url(log),
             'is_skipped': log.status == 'skipped',
         }
         return per_type[display]
@@ -585,9 +619,9 @@ def _aggregate_batch(logs, *, structured_errors=None):
         if log.status != 'skipped':
             all_errors.extend(log.errors or [])
 
-        if log.tiers_synced:
+        if _asl_compat(log).get('tiers_synced'):
             tiers_synced = True
-            tiers_count = log.tiers_count
+            tiers_count = _asl_compat(log).get('tiers_count', 0)
 
     overall_status = logical_status(logs)
     structured_errors = structured_errors or structure_errors(all_errors)
@@ -718,9 +752,12 @@ def _build_repos_context():
             'overall_status': None,
             'last_synced_commit': source.last_synced_commit or '',
             'short_synced_commit': source.short_synced_commit,
-            'synced_commit_url': source.synced_commit_url,
-            'webhook_secret_configured': source.webhook_secret_configured,
-            'webhook_security_status': source.webhook_security_status,
+            'synced_commit_url': _source_commit_url(source),
+            'webhook_secret_configured': bool((source.webhook_secret or '').strip()),
+            'webhook_security_status': (
+                'configured' if (source.webhook_secret or '').strip()
+                else 'missing_secret'
+            ),
             'health': health,
         }
         if source.last_sync_status == 'failed':

@@ -1,7 +1,6 @@
 """Runtime Site-setting coverage for issue #1533."""
 
 import json
-import uuid
 from datetime import timedelta
 from pathlib import Path
 from unittest.mock import patch
@@ -9,14 +8,17 @@ from unittest.mock import patch
 from community_base.api.models import APIKey
 from community_base.config.models import Setting
 from community_base.config.service import set as package_set
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.models import SyncLog as PackageSyncLog
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from integrations.config import clear_config_cache
-from integrations.models import ContentSource, IntegrationSetting, SyncLog
-from integrations.services.github_sync.orchestration import _start_sync_log
+from integrations.models import IntegrationSetting
 from integrations.settings_registry import (
     SETTING_VALUE_TYPES,
     get_group_by_name,
@@ -126,22 +128,26 @@ class RuntimeSyncCallerTest(TestCase):
         SYNC_RUNNING_THRESHOLD_MINUTES='60',
     )
     def test_watchdog_uses_db_thresholds_and_reports_resolved_minutes(self):
-        queued_source = ContentSource.objects.create(
-            repo_name='example/queued', last_sync_status='queued',
+        # The watchdog owns the package rows (A2.3); the legacy rows it used
+        # to flip are retained only for rollback.
+        queued_source = PackageContentSource.objects.create(
+            slug='queued', repo_name='example/queued',
+            last_sync_status='queued',
         )
-        running_source = ContentSource.objects.create(
-            repo_name='example/running', last_sync_status='running',
+        running_source = PackageContentSource.objects.create(
+            slug='running', repo_name='example/running',
+            last_sync_status='running',
         )
-        queued_log = SyncLog.objects.create(
+        queued_log = PackageSyncLog.objects.create(
             source=queued_source, status='queued',
         )
-        running_log = SyncLog.objects.create(
+        running_log = PackageSyncLog.objects.create(
             source=running_source, status='running',
         )
-        SyncLog.objects.filter(pk=queued_log.pk).update(
+        PackageSyncLog.objects.filter(pk=queued_log.pk).update(
             started_at=timezone.now() - timedelta(minutes=6),
         )
-        SyncLog.objects.filter(pk=running_log.pk).update(
+        PackageSyncLog.objects.filter(pk=running_log.pk).update(
             started_at=timezone.now() - timedelta(minutes=9),
         )
         IntegrationSetting.objects.create(
@@ -167,22 +173,9 @@ class RuntimeSyncCallerTest(TestCase):
             'Worker did not report completion within 8 minutes',
         )
 
-    @override_settings(SYNC_QUEUED_THRESHOLD_MINUTES='2')
-    def test_worker_claims_log_inside_db_configured_queued_window(self):
-        source = ContentSource.objects.create(repo_name='example/reused-log')
-        queued_log = SyncLog.objects.create(source=source, status='queued')
-        SyncLog.objects.filter(pk=queued_log.pk).update(
-            started_at=timezone.now() - timedelta(minutes=7),
-        )
-        IntegrationSetting.objects.create(
-            key='SYNC_QUEUED_THRESHOLD_MINUTES', value='10', group='site',
-        )
-        clear_config_cache()
-
-        claimed_log = _start_sync_log(source, batch_id=uuid.uuid4())
-
-        self.assertEqual(claimed_log.pk, queued_log.pk)
-        self.assertEqual(claimed_log.status, 'running')
+# The queued-marker claiming test (#1533) was removed with the legacy engine:
+# the package orchestration writes its own running row and the watchdog above
+# fails markers that no worker picked up within the configured window.
 
 
 class ExpectWorkerRuntimeTest(TestCase):

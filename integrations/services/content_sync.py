@@ -1,0 +1,261 @@
+"""Site entry points for the package content sync engine (A2.3).
+
+The package (``community_base.content_sync``) owns orchestration, locking,
+checkout security, durable dispatch, and its own audit rows. This module is
+the single site-side wrapper every legacy caller goes through:
+
+- ``run_sync`` executes one source synchronously and merges the site parsers'
+  rich per-item detail entries into the package ``SyncLog`` so Studio
+  history keeps its ``{title, slug, action, content_type}`` shape;
+- the legacy Django-Q task string ``integrations.services.github.sync_content_source``
+  resolves here, so persisted tasks translate to the package engine;
+- ``integrations.services.content_sync_queue`` queues through the package
+  durable dispatcher.
+"""
+
+import re
+
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.orchestration import (
+    sync_content_source as package_sync_content_source,
+)
+
+from integrations.models import ContentSource
+
+
+def _source_row_deleted(source):
+    """Whether the persisted row behind ``source`` disappeared (issue #221).
+
+    A persisted worker task can wake up after its source row was deleted;
+    treat the sync as best-effort instead of raising. The check follows the
+    instance's own table: package-row callers (``sync_content --from-disk``
+    on a fresh database seeds package rows only) must not be vetoed by the
+    empty legacy table, while legacy instances keep the legacy-table check
+    that #221 shipped with.
+    """
+    if isinstance(source, PackageContentSource):
+        return not PackageContentSource.objects.filter(pk=source.pk).exists()
+    return not ContentSource.objects.filter(pk=source.pk).exists()
+
+
+def _normalize_checkout_refusals(log):
+    """Rewrite package checkout-construction refusals to the legacy shape.
+
+    The package ImmutableCheckout refuses symlinked/non-regular repo
+    entries before any parser runs and records one bounded
+    ``{'error': ...}`` entry. Legacy operator surfaces key on the rich
+    ``{'file', 'kind', 'step', 'filesystem_boundary'}`` shape, so the
+    wrapper rewrites those entries. Returns the rich entries it inserted.
+    """
+    pattern = re.compile(r'^(?P<what>Symlink|Non-regular file) is not allowed: (?P<rel>.+)$')
+    rich = []
+    kept = []
+    for entry in (log.errors or []):
+        message = str(entry.get('error', '')) if isinstance(entry, dict) else ''
+        match = pattern.match(message)
+        if match and isinstance(entry, dict) and 'file' not in entry:
+            rich.append({
+                'file': match.group('rel'),
+                'error': message,
+                'kind': 'symlink' if match.group('what') == 'Symlink' else 'non_regular_file',
+                'step': 'filesystem_boundary',
+                'filesystem_boundary': True,
+            })
+            continue
+        kept.append(entry)
+    if rich:
+        log.errors = rich + kept
+    return rich
+
+
+def run_sync(source, repo_dir=None, batch_id=None, force=False):
+    """Run one content source through the package engine.
+
+    Returns the package ``SyncLog`` row. The site parser contract is merged
+    in after the package write: ``items_*`` keep counting content objects
+    (issues #222/#224/#225), ``items_detail``/``errors`` keep the legacy
+    rich ``{title, slug, action}`` / ``{'file', 'error'}`` shapes for the
+    families the site parsers enriched, and a checkout-boundary refusal
+    fails the sync outright (#1500) instead of ending partial.
+    """
+    force = force or _manifest_reconciliation_pending(source, repo_dir)
+
+    if source.pk and _source_row_deleted(source):
+        # Issue #221: a persisted worker task can wake up after its source
+        # row was deleted. Treat the sync as best-effort instead of raising.
+        return None
+
+    from content.sync_parsers import run_state
+
+    collected_details = []
+    collected_errors = []
+    collected_counts = {}
+    rich_families = set()
+    extras = {}
+
+    def _collect(family, details):
+        rich_families.add(family)
+        collected_details.extend(details)
+
+    def _collect_errors(family, errors):
+        rich_families.add(family)
+        collected_errors.extend(errors)
+
+    def _collect_counts(family, counts):
+        collected_counts[family] = counts
+
+    def _collect_extras(run_extras):
+        extras.update(run_extras)
+
+    run_state.set_results_collector(_collect)
+    run_state.set_errors_collector(_collect_errors)
+    run_state.set_counts_collector(_collect_counts)
+    run_state.set_extras_collector(_collect_extras)
+    try:
+        log = package_sync_content_source(
+            source,
+            repo_dir=repo_dir,
+            batch_id=batch_id,
+            force=force,
+        )
+        if (
+            not force
+            and log.status == 'skipped'
+            and not log.commit_sha
+            and not log.warnings
+        ):
+            # The P6 mapping marks secretless sources disabled and the
+            # package skips those outright. Legacy entry points always ran
+            # the sync, so retry past the enabled gate. The head-unchanged
+            # fast path is left intact: it records a warning and a commit.
+            log = package_sync_content_source(
+                source,
+                repo_dir=repo_dir,
+                batch_id=batch_id,
+                force=True,
+            )
+    finally:
+        run_state.set_results_collector(None)
+        run_state.set_errors_collector(None)
+        run_state.set_counts_collector(None)
+        run_state.set_extras_collector(None)
+
+    boundary_refusals = _normalize_checkout_refusals(log)
+    changed_fields = []
+    if boundary_refusals:
+        changed_fields.append('errors')
+    if collected_errors:
+        # Rich per-file entries replace the bounded package entry of the
+        # same family so operator surfaces keep the legacy {'file', ...}
+        # shape; families the site parsers did not enrich keep theirs.
+        package_entries = [
+            entry for entry in (log.errors or [])
+            if not (
+                isinstance(entry, dict)
+                and entry.get('content_type') in rich_families
+            )
+        ]
+        log.errors = collected_errors + package_entries
+        changed_fields.append('errors')
+    if collected_counts:
+        # The package counts one parser item per discovery unit (a whole
+        # course tree is one item); the operator contract counts content
+        # objects, which the moved dispatcher bodies already tally.
+        log.items_created = sum(
+            counts.get('created', 0) for counts in collected_counts.values()
+        )
+        log.items_updated = sum(
+            counts.get('updated', 0) for counts in collected_counts.values()
+        )
+        log.items_unchanged = sum(
+            counts.get('unchanged', 0) for counts in collected_counts.values()
+        )
+        log.items_deleted = sum(
+            counts.get('deleted', 0) for counts in collected_counts.values()
+        )
+        changed_fields.extend([
+            'items_created',
+            'items_updated',
+            'items_unchanged',
+            'items_deleted',
+        ])
+    if collected_details or rich_families:
+        # The package's compact entries duplicate the rich entries for
+        # enriched families; keep the rich ones first and preserve compact
+        # entries only for families the site parsers did not enrich.
+        package_details = [
+            entry for entry in (log.items_detail or [])
+            if not (
+                isinstance(entry, dict)
+                and entry.get('content_type') in rich_families
+            )
+        ]
+        log.items_detail = collected_details + package_details
+        changed_fields.append('items_detail')
+    if extras:
+        # Namespaced compatibility representation for the legacy tier
+        # counters (package SyncLog has no dedicated columns).
+        warnings = [w for w in (log.warnings or []) if not (
+            isinstance(w, dict) and 'asl_compat' in w
+        )]
+        warnings.append({
+            'asl_compat': {
+                'tiers_synced': bool(extras.get('tiers_synced')),
+                'tiers_count': int(extras.get('tiers_count', 0)),
+            },
+        })
+        log.warnings = warnings
+        changed_fields.append('warnings')
+    boundary_failure = any(
+        isinstance(entry, dict) and entry.get('step') == 'filesystem_boundary'
+        for entry in (log.errors or [])
+    )
+    if boundary_failure and log.status != 'failed':
+        # Fail-closed legacy contract (#1500): a checkout-boundary refusal
+        # is a failed sync, not a partial one.
+        log.status = 'failed'
+        changed_fields.append('status')
+    if changed_fields:
+        log.save(update_fields=changed_fields)
+    if boundary_failure:
+        PackageContentSource.objects.filter(pk=source.pk).update(
+            last_sync_status='failed',
+        )
+    return log
+
+
+def sync_content_source(source, repo_dir=None, batch_id=None, force=False):
+    """Legacy-compatible sync entry (old facade signature).
+
+    Persisted Django-Q tasks reference
+    ``integrations.services.github.sync_content_source``; that facade
+    delegates here so existing queued tasks run the package engine.
+    """
+    return run_sync(
+        source,
+        repo_dir=repo_dir,
+        batch_id=batch_id,
+        force=force,
+    )
+
+
+def _manifest_reconciliation_pending(source, repo_dir):
+    """Whether the head-unchanged fast path must not suppress this sync.
+
+    A schema-first deployment can leave legacy Article manifests incomplete
+    (for example when storage was unavailable during an earlier sync). The
+    package fast path only consults the last commit and status, so the site
+    escalates ``force`` for the next legacy-path sync until every article
+    manifest is reconciled. ``repo_dir`` syncs never take the remote fast
+    path anyway.
+    """
+    if repo_dir is not None:
+        return False
+    from content.models import Article
+
+    return Article.objects.filter(
+        source_repo=source.repo_name,
+        image_manifest_complete=False,
+    ).exists()

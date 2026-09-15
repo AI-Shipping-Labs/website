@@ -30,11 +30,13 @@ from datetime import datetime
 from datetime import timezone as dt_timezone
 from unittest.mock import patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from django.test import TestCase
 
 from content.models import Instructor, Workshop, WorkshopPage
 from events.models import Event
-from integrations.models import ContentSource
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 SAMPLE_WORKSHOP_UUID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
@@ -339,7 +341,7 @@ class WorkshopSyncTutorialOnlyNoEventTest(_WorkshopSyncFixtureBase):
         self.assertIsNone(Workshop.objects.get(slug='demo').event_id)
 
     def test_resync_unlinks_legacy_generated_empty_event(self):
-        from integrations.services.github_sync.dispatchers.workshops import (
+        from content.sync_parsers.families.workshops import (
             _derive_workshop_event_content_id,
         )
 
@@ -1253,7 +1255,7 @@ class WorkshopSeedContentSourceTest(TestCase):
         from django.core.management import call_command
 
         call_command('seed_content_sources', stdout=StringIO())
-        qs = ContentSource.objects.filter(
+        qs = PackageContentSource.objects.filter(
             repo_name='AI-Shipping-Labs/workshops-content',
         )
         self.assertEqual(qs.count(), 1)
@@ -1269,7 +1271,7 @@ class WorkshopSeedContentSourceTest(TestCase):
         call_command('seed_content_sources', stdout=StringIO())
 
         self.assertEqual(
-            ContentSource.objects.filter(
+            PackageContentSource.objects.filter(
                 repo_name='AI-Shipping-Labs/workshops-content',
             ).count(),
             1,

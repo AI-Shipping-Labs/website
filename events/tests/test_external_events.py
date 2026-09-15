@@ -29,11 +29,11 @@ from django.urls import reverse
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN
-from events.models import Event
-from events.models.event import EXTERNAL_HOST_CHOICES
-from integrations.services.github_sync.dispatchers.events import (
+from content.sync_parsers.families.events import (
     _build_synced_event_content_defaults,
 )
+from events.models import Event
+from events.models.event import EXTERNAL_HOST_CHOICES
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()

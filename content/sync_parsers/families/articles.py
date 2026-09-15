@@ -1,0 +1,414 @@
+"""Article sync parser (family adapter over the moved dispatcher)."""
+
+import os
+
+from django.db import transaction
+from django.utils import timezone
+
+from content.sync_parsers.base import FamilyParser
+from content.sync_parsers.checkout_view import raise_if_checkout_error
+from content.sync_parsers.common import logger
+from content.sync_parsers.media import (
+    _check_broken_image_refs,
+    rewrite_cover_image_url,
+    rewrite_image_urls,
+)
+from content.sync_parsers.parsing import (
+    _check_slug_collision,
+    _defaults_differ,
+    _parse_markdown_file,
+    _validate_frontmatter,
+)
+from content.utils.includes import ensure_include_paths_in_bounds
+from integrations.services.article_images import build_article_image_manifest
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
+
+_ARTICLE_STATUS_VALUES = {'draft', 'published'}
+
+
+def _published_from_article_status(metadata, rel_path):
+    """Return the published flag from article author-facing status."""
+    raw_status = metadata.get('status', None)
+    if raw_status is None or raw_status == '':
+        return True
+
+    status = str(raw_status).strip().lower()
+    if status not in _ARTICLE_STATUS_VALUES:
+        raise ValueError(
+            f"Unsupported article status in {rel_path}: {raw_status!r}. "
+            "Allowed values are 'draft', 'published', or omitted."
+        )
+    return status == 'published'
+
+
+def _resolve_article_source_event(metadata, rel_path):
+    """Resolve an explicit article ``event_id`` / ``event_slug`` reference.
+
+    References are intentionally opt-in: without either key the relationship
+    is cleared.  ``event_id`` wins whenever it is present, including when its
+    value is malformed, so a conflicting slug can never mask a bad primary
+    reference.  Resolution is read-only and never creates or updates an Event.
+    """
+    from events.models import Event
+
+    if 'event_id' in metadata:
+        raw_event_id = metadata['event_id']
+        if isinstance(raw_event_id, bool):
+            event_id = None
+        else:
+            try:
+                event_id = int(str(raw_event_id).strip())
+            except (TypeError, ValueError):
+                event_id = None
+        if event_id is None or event_id <= 0:
+            raise ValueError(
+                f"Invalid event_id {raw_event_id!r} in {rel_path}: expected "
+                "an existing positive Event id. Article was not synced."
+            )
+        event = Event.objects.filter(pk=event_id).first()
+        if event is None:
+            raise ValueError(
+                f"Unresolved event_id {raw_event_id!r} in {rel_path}: no "
+                "matching Event exists. Article was not synced."
+            )
+        return event
+
+    if 'event_slug' in metadata:
+        raw_event_slug = metadata['event_slug']
+        if not isinstance(raw_event_slug, str):
+            raise ValueError(
+                f"Invalid event_slug {raw_event_slug!r} in {rel_path}: "
+                "expected a non-blank Event slug. Article was not synced."
+            )
+        event_slug = raw_event_slug.strip()
+        if not event_slug:
+            raise ValueError(
+                f"Invalid event_slug {raw_event_slug!r} in {rel_path}: "
+                "expected a non-blank Event slug. Article was not synced."
+            )
+        event = Event.objects.filter(slug=event_slug).first()
+        if event is None:
+            raise ValueError(
+                f"Unresolved event_slug {raw_event_slug!r} in {rel_path}: no "
+                "matching Event exists. Article was not synced."
+            )
+        return event
+
+    return None
+
+
+def _sync_article(source, repo_dir, rel_path, metadata, body, commit_sha,
+                  stats, known_images, seen_slugs, failed_slugs):
+    """Upsert one article markdown file (moved dispatcher body)."""
+    from content.models import Article
+
+    filename = os.path.basename(rel_path)
+    filepath = os.path.join(repo_dir, rel_path)
+    current_slug = None  # Track slug for error handling
+
+    try:
+        # Derive slug before validation so we can track failures
+        current_slug = metadata.get('slug', os.path.splitext(filename)[0])
+
+        # Edge Case 7: Frontmatter validation
+        _validate_frontmatter(metadata, 'article', rel_path)
+
+        # Require content_id in frontmatter
+        content_id = metadata.get('content_id')
+        if not content_id:
+            msg = f'Skipping {rel_path}: missing content_id in frontmatter'
+            logger.warning(msg)
+            stats['errors'].append({'file': rel_path, 'error': msg})
+            return
+
+        # Edge Case 2: Check slug collision across sources
+        if _check_slug_collision(Article, current_slug, source.repo_name, rel_path):
+            stats['errors'].append({
+                'file': rel_path,
+                'error': (
+                    f"Slug collision: '{current_slug}' already exists from a "
+                    f"different source. Skipped."
+                ),
+            })
+            failed_slugs.add(current_slug)
+            return
+
+        # Warn on same-source slug collision (last-file-wins)
+        if current_slug in seen_slugs:
+            logger.warning(
+                'Same-source slug collision: %s appears multiple '
+                'times in %s. Last file wins.',
+                current_slug, source.repo_name,
+            )
+
+        seen_slugs.add(current_slug)
+
+        # Build responsive variants from the author-owned references before
+        # rewriting them. The manifest itself is machine-owned, while the
+        # Markdown and cover fields retain their existing sync behavior.
+        base_dir = os.path.dirname(rel_path)
+
+        # Edge Case 8: Check for broken image references
+        if known_images is not None:
+            _check_broken_image_refs(
+                body, rel_path, source.repo_name, base_dir,
+                known_images, stats['errors'],
+            )
+
+        authored_body = body
+        authored_cover = (
+            metadata.get('cover_image', '')
+            or metadata.get('cover_image_url', '')
+        )
+        image_manifest, image_stats = build_article_image_manifest(
+            source=source,
+            repo_dir=repo_dir,
+            rel_path=rel_path,
+            body=authored_body,
+            cover_image=authored_cover,
+        )
+        for image_error in image_stats.errors:
+            stats['errors'].append({
+                'file': rel_path,
+                'article': current_slug,
+                'source': source.repo_name,
+                **image_error,
+            })
+
+        body = rewrite_image_urls(authored_body, source.repo_name, base_dir)
+
+        # Extract page_type and data from frontmatter
+        page_type = metadata.get('page_type', 'blog')
+        data = metadata.get('data', {})
+        published = _published_from_article_status(metadata, rel_path)
+        source_event = _resolve_article_source_event(metadata, rel_path)
+
+        defaults = {
+            'title': metadata.get('title', current_slug),
+            'description': metadata.get('description', ''),
+            'content_markdown': body,
+            'author': metadata.get('author', ''),
+            'tags': metadata.get('tags', []),
+            'cover_image_url': rewrite_cover_image_url(
+                authored_cover,
+                source, rel_path,
+                known_images=known_images, errors=stats['errors'],
+            ),
+            'image_manifest': image_manifest,
+            'image_manifest_complete': image_stats.complete,
+            'required_level': metadata.get('required_level', 0),
+            'published': published,
+            'source_repo': source.repo_name,
+            'source_path': rel_path,
+            'source_commit': commit_sha,
+            'page_type': page_type,
+            'data_json': data,
+            'content_id': content_id,
+            'source_event': source_event,
+        }
+
+        # Parse date
+        date_str = metadata.get('date')
+        if date_str:
+            from datetime import date as date_type
+            if isinstance(date_str, str):
+                defaults['date'] = date_type.fromisoformat(date_str)
+            elif isinstance(date_str, date_type):
+                defaults['date'] = date_str
+        else:
+            defaults['date'] = timezone.now().date()
+
+        # Pre-derive description so the no-change comparison below
+        # matches what Article.save() would persist. Article.save()
+        # auto-fills description from the first 200 chars of
+        # content_markdown when description is empty; if we left
+        # defaults['description'] = '' we'd see a spurious diff on
+        # every re-sync (issue #225).
+        if not defaults['description'] and body:
+            defaults['description'] = body[:200]
+
+        with transaction.atomic():
+            # Idempotent lookup: prefer content_id within this source's
+            # repo (issue #311 / #310), fall back to slug, then to
+            # source_path. This lets authors rename articles without
+            # triggering a duplicate insert.
+            article = Article.objects.filter(
+                content_id=content_id,
+                source_repo=source.repo_name,
+            ).first()
+            if article is None:
+                article = Article.objects.filter(
+                    slug=current_slug,
+                    source_repo=source.repo_name,
+                ).first()
+            if article is None:
+                article = Article.objects.filter(
+                    source_repo=source.repo_name,
+                    source_path=rel_path,
+                ).first()
+
+            if article is None:
+                article = Article(
+                    slug=current_slug, **defaults,
+                )
+                article.save()
+                created = True
+                changed = True
+            else:
+                identity_changed = (
+                    article.slug != current_slug
+                    or article.source_path != rel_path
+                )
+                if identity_changed or _defaults_differ(article, defaults):
+                    article.slug = current_slug
+                    for k, v in defaults.items():
+                        setattr(article, k, v)
+                    article.save()
+                    created = False
+                    changed = True
+                else:
+                    created = False
+                    changed = False
+
+            # Expand content-owned HTML includes after save (save already
+            # rendered markdown to HTML). Only re-run when we actually saved —
+            # for an unchanged row the rendered HTML is already correct.
+            if changed and '<!-- include:' in article.content_html:
+                from content.utils.includes import expand_content_includes
+                expanded = expand_content_includes(
+                    article.content_html,
+                    repo_dir=repo_dir,
+                    base_dir=os.path.dirname(filepath),
+                    context={'data': article.data_json},
+                )
+                Article.objects.filter(pk=article.pk).update(content_html=expanded)
+                article.content_html = expanded
+
+            # Issue #595: warn (don't block) when the rendered HTML still
+            # links to a retired URL prefix (e.g. /event-recordings/...).
+            # Only check on a write — unchanged rows already passed this
+            # gate during their own sync.
+            if changed:
+                from content.utils.legacy_urls import (
+                    detect_legacy_urls,
+                    detect_relative_links,
+                )
+                detect_legacy_urls(
+                    article.content_html, rel_path, stats['errors'],
+                )
+                # Issue #1342: also warn on content-repo-relative links.
+                detect_relative_links(
+                    article.content_html, rel_path, stats['errors'],
+                )
+
+        if not changed:
+            stats['unchanged'] += 1
+            return
+
+        action = 'created' if created else 'updated'
+        if created:
+            stats['created'] += 1
+        else:
+            stats['updated'] += 1
+        stats['items_detail'].append({
+            'title': defaults['title'],
+            'slug': current_slug,
+            'action': action,
+            'content_type': 'article',
+        })
+
+        # Issue #788: enqueue auto-banner render when the article is
+        # new or its title changed. ``_enqueue_banner_if_missing``
+        # itself short-circuits when cover_image_url is set or the
+        # auto_banner_title_hash already matches the current title,
+        # so the dispatcher hot path stays simple.
+        _enqueue_banner_if_missing('article', article.pk)
+
+    except Exception as e:
+        raise_if_checkout_error(e)
+        # Track the slug as failed so it's excluded from cleanup.
+        # Use filename-based slug as safe fallback, plus current_slug
+        # if it was derived from metadata before the error.
+        failed_slugs.add(os.path.splitext(filename)[0])
+        if current_slug:
+            failed_slugs.add(current_slug)
+        stats['errors'].append({
+            'file': rel_path,
+            'error': str(e),
+        })
+        logger.warning('Error syncing article %s: %s', rel_path, e)
+
+
+def _cleanup_articles(source, stats, seen_slugs, failed_slugs):
+    """Edge Case 3: Exclude failed slugs from stale-content cleanup."""
+    from content.models import Article
+
+    stale_articles = Article.objects.filter(
+        source_repo=source.repo_name,
+        published=True,
+    ).exclude(slug__in=seen_slugs).exclude(slug__in=failed_slugs)
+
+    for article in stale_articles:
+        stats['items_detail'].append({
+            'title': article.title,
+            'slug': article.slug,
+            'action': 'deleted',
+            'content_type': 'article',
+        })
+    deleted_count = stale_articles.count()
+    stale_articles.update(published=False, status='draft')
+    stats['deleted'] += deleted_count
+    return deleted_count
+
+
+class ArticlesParser(FamilyParser):
+    content_type = 'articles'
+    state_name = 'articles'
+
+    def iter_items(self, run):
+        state = self._state(run)
+        for rel_path in run.classification().article_files:
+            filepath = os.path.join(run.repo_dir, rel_path)
+            filename = os.path.basename(rel_path)
+            current_slug = None
+            try:
+                metadata, body = _parse_markdown_file(filepath)
+                # #1500: a traversal or absolute include refuses the whole
+                # repo at discovery, before any article is upserted.
+                ensure_include_paths_in_bounds(body)
+                current_slug = metadata.get(
+                    'slug', os.path.splitext(filename)[0],
+                ) if isinstance(metadata, dict) else None
+            except Exception as e:  # noqa: BLE001 - bounded per-file capture
+                raise_if_checkout_error(e)
+                failed_slugs = {os.path.splitext(filename)[0]}
+                state.record_error({'file': rel_path, 'error': str(e)})
+                logger.warning('Error syncing article %s: %s', rel_path, e)
+                state.failed.update(failed_slugs)
+                continue
+            yield rel_path, {
+                'rel_path': rel_path,
+                'metadata': metadata,
+                'body': body,
+                'identity': current_slug,
+            }
+
+    def process(self, run, payload):
+        state = self._state(run)
+        stats = self.item_stats()
+        _sync_article(
+            run.source, run.repo_dir, payload['rel_path'],
+            payload['metadata'], payload['body'], run.commit_sha,
+            stats, run.known_images(), state.seen, state.failed,
+        )
+        action = self.absorb(run, stats)
+        return action, None
+
+    def cleanup(self, run):
+        state = self._state(run)
+        stats = self.item_stats()
+        deleted = _cleanup_articles(
+            run.source, stats, state.seen, state.failed,
+        )
+        self.absorb(run, stats)
+        return deleted

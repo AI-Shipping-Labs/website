@@ -6,7 +6,7 @@ from typing import Any, TypeVar
 
 from django.db import models
 
-from integrations.services.github_sync.parsing import _defaults_differ
+from content.sync_parsers.parsing import _defaults_differ
 
 ModelT = TypeVar('ModelT', bound=models.Model)
 Stats = MutableMapping[str, Any]

@@ -7,21 +7,25 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import call, patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
 from integrations.management.commands.sync_content import Command
-from integrations.models import ContentSource
 
 COMMAND_MODULE = 'integrations.management.commands.sync_content'
 WEBHOOK_SECRET = 'webhook-secret-must-not-leak'
 
 
-def _result(*, created=0, updated=0, errors=None):
+def _result(*, created=0, updated=0, unchanged=0, deleted=0, errors=None):
     return SimpleNamespace(
         items_created=created,
         items_updated=updated,
+        items_unchanged=unchanged,
+        items_deleted=deleted,
         errors=[] if errors is None else errors,
     )
 
@@ -34,7 +38,10 @@ def _repo_dir():
 
 class SyncContentCommandTest(TestCase):
     def _source(self, repo_name):
-        return ContentSource.objects.create(
+        # The command walks the package registry (A2.3); the mirror keeps a
+        # legacy row alongside but is not what gets dispatched.
+        return PackageContentSource.objects.create(
+            slug=repo_name.rsplit('/', 1)[-1].lower(),
             repo_name=repo_name,
             webhook_secret=WEBHOOK_SECRET,
         )
@@ -52,10 +59,9 @@ class SyncContentCommandTest(TestCase):
             call_command('sync_content', *args, stdout=stdout, stderr=stderr)
         return caught.exception, stdout.getvalue(), stderr.getvalue()
 
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
-    @patch(f'{COMMAND_MODULE}._sync_tiers_yaml')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_missing_disk_path_is_rejected_before_any_dispatch(
-        self, sync_tiers, sync_source,
+        self, sync_source,
     ):
         with _repo_dir() as parent:
             missing = parent / 'missing-content-clone'
@@ -69,19 +75,18 @@ class SyncContentCommandTest(TestCase):
         self.assertEqual(stdout, '')
         self.assertEqual(stderr, '')
         sync_source.assert_not_called()
-        sync_tiers.assert_not_called()
 
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_empty_registry_is_rejected_with_seed_guidance(self, sync_source):
         error, stdout, stderr = self._run_with_error()
 
-        self.assertIn('No content sources configured', str(error))
+        self.assertIn('No matching content sources', str(error))
         self.assertIn('seed_content_sources', str(error))
         self.assertEqual(stdout, '')
         self.assertEqual(stderr, '')
         sync_source.assert_not_called()
 
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_remote_syncs_every_source_once_in_repo_name_order(self, sync_source):
         source_z = self._source('AI-Shipping-Labs/zeta')
         source_a = self._source('AI-Shipping-Labs/alpha')
@@ -94,7 +99,8 @@ class SyncContentCommandTest(TestCase):
 
         self.assertEqual(
             sync_source.call_args_list,
-            [call(source_a), call(source_z)],
+            [call(source_a, repo_dir=None, force=False),
+             call(source_z, repo_dir=None, force=False)],
         )
         self.assertIn('Syncing AI-Shipping-Labs/alpha...', stdout)
         self.assertLess(
@@ -104,10 +110,9 @@ class SyncContentCommandTest(TestCase):
         self.assertIn('Done. 5 created, 5 updated total.', stdout)
         self.assertEqual(stderr, '')
 
-    @patch(f'{COMMAND_MODULE}._sync_tiers_yaml')
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_disk_sync_passes_repo_dir_and_skips_absent_tiers(
-        self, sync_source, sync_tiers,
+        self, sync_source,
     ):
         source_b = self._source('AI-Shipping-Labs/beta')
         source_a = self._source('AI-Shipping-Labs/alpha')
@@ -116,18 +121,28 @@ class SyncContentCommandTest(TestCase):
         with _repo_dir() as repo_dir:
             stdout, stderr = self._run('--from-disk', str(repo_dir))
 
+        # --from-disk is a rehearsal sync: the command forces past the
+        # enabled gate so secretless sources still sync, and (A2.3) it
+        # syncs a symlink-free snapshot copy of the clone, never the
+        # clone itself — the package checkout refuses symlinks and local
+        # clones carry tooling symlinks.
+        passed_calls = sync_source.call_args_list
+        passed_dirs = [entry.kwargs['repo_dir'] for entry in passed_calls]
         self.assertEqual(
-            sync_source.call_args_list,
-            [
-                call(source_a, repo_dir=str(repo_dir)),
-                call(source_b, repo_dir=str(repo_dir)),
-            ],
+            [entry.args[0] for entry in passed_calls],
+            [source_a, source_b],
         )
-        sync_tiers.assert_not_called()
+        self.assertEqual(passed_dirs, [passed_dirs[0], passed_dirs[0]])
+        self.assertNotEqual(passed_dirs[0], str(repo_dir))
+        self.assertTrue(passed_dirs[0].endswith('/repo'))
+        self.assertEqual(
+            [entry.kwargs['force'] for entry in passed_calls],
+            [True, True],
+        )
         self.assertNotIn('Syncing tiers.yaml...', stdout)
         self.assertEqual(stderr, '')
 
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_partial_errors_continue_aggregate_and_raise_command_error(
         self, sync_source,
     ):
@@ -149,7 +164,11 @@ class SyncContentCommandTest(TestCase):
         self.assertNotIsInstance(error, SystemExit)
         self.assertEqual(
             sync_source.call_args_list,
-            [call(source_a), call(source_b), call(source_c)],
+            [
+                call(source_a, repo_dir=None, force=False),
+                call(source_b, repo_dir=None, force=False),
+                call(source_c, repo_dir=None, force=False),
+            ],
         )
         self.assertIn('Done. 5 created, 5 updated total.', stdout)
         self.assertIn(
@@ -164,7 +183,7 @@ class SyncContentCommandTest(TestCase):
         self.assertNotIn(WEBHOOK_SECRET, str(error))
 
     @patch('django.core.management.base.connections.close_all')
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_django_cli_maps_command_error_to_exit_code_one(
         self, sync_source, close_all,
     ):
@@ -178,7 +197,7 @@ class SyncContentCommandTest(TestCase):
             command.run_from_argv(['manage.py', 'sync_content'])
 
         self.assertEqual(caught.exception.code, 1)
-        sync_source.assert_called_once_with(source)
+        sync_source.assert_called_once_with(source, repo_dir=None, force=False)
         self.assertIn('Done. 0 created, 0 updated total.', stdout.getvalue())
         self.assertIn(
             'ERROR [AI-Shipping-Labs/content]: invalid article metadata',
@@ -190,7 +209,7 @@ class SyncContentCommandTest(TestCase):
         )
         close_all.assert_called_once_with()
 
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
+    @patch(f'{COMMAND_MODULE}.run_sync')
     def test_repeated_runs_keep_stable_once_per_source_dispatch(self, sync_source):
         source_a = self._source('AI-Shipping-Labs/alpha')
         source_b = self._source('AI-Shipping-Labs/beta')
@@ -206,70 +225,20 @@ class SyncContentCommandTest(TestCase):
 
         self.assertEqual(
             sync_source.call_args_list,
-            [call(source_a), call(source_b), call(source_a), call(source_b)],
+            [
+                call(source_a, repo_dir=None, force=False),
+                call(source_b, repo_dir=None, force=False),
+                call(source_a, repo_dir=None, force=False),
+                call(source_b, repo_dir=None, force=False),
+            ],
         )
         self.assertIn('Done. 1 created, 1 updated total.', first_stdout)
         self.assertIn('Done. 1 created, 1 updated total.', second_stdout)
         self.assertEqual(first_stderr, '')
         self.assertEqual(second_stderr, '')
 
-    @patch(f'{COMMAND_MODULE}._sync_tiers_yaml')
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
-    def test_present_tiers_file_syncs_once_and_reports_success(
-        self, sync_source, sync_tiers,
-    ):
-        self._source('AI-Shipping-Labs/content')
-        sync_source.return_value = _result(created=1)
-        sync_tiers.return_value = {'synced': True, 'count': 4}
+        # The command-level tiers.yaml handling tests were retired with the
+    # legacy engine: tiers is a registered parser family now (covered by
+    # integrations.tests.test_tiers_sync).
 
-        with _repo_dir() as repo_dir:
-            (repo_dir / 'tiers.yaml').write_text('[]\n', encoding='utf-8')
-            stdout, stderr = self._run('--from-disk', str(repo_dir))
 
-        sync_tiers.assert_called_once_with(str(repo_dir))
-        self.assertIn('Syncing tiers.yaml...', stdout)
-        self.assertIn('tiers.yaml synced to database', stdout)
-        self.assertIn('Done. 1 created, 0 updated total.', stdout)
-        self.assertEqual(stderr, '')
-
-    @patch(f'{COMMAND_MODULE}._sync_tiers_yaml')
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
-    def test_unsuccessful_tiers_result_fails_after_source_summary(
-        self, sync_source, sync_tiers,
-    ):
-        self._source('AI-Shipping-Labs/content')
-        sync_source.return_value = _result(updated=2)
-        sync_tiers.return_value = {'synced': False, 'count': 0}
-
-        with _repo_dir() as repo_dir:
-            (repo_dir / 'tiers.yaml').write_text('[]\n', encoding='utf-8')
-            error, stdout, stderr = self._run_with_error(
-                '--from-disk', str(repo_dir),
-            )
-
-        sync_tiers.assert_called_once_with(str(repo_dir))
-        self.assertIn('Done. 0 created, 2 updated total.', stdout)
-        self.assertIn('FAILED to sync tiers.yaml', stderr)
-        self.assertIn('completed with errors', str(error).lower())
-
-    @patch(f'{COMMAND_MODULE}._sync_tiers_yaml')
-    @patch(f'{COMMAND_MODULE}.sync_content_source')
-    def test_raising_tiers_sync_fails_after_source_summary(
-        self, sync_source, sync_tiers,
-    ):
-        self._source('AI-Shipping-Labs/content')
-        sync_source.return_value = _result(created=2)
-        sync_tiers.side_effect = RuntimeError('tier database unavailable')
-
-        with _repo_dir() as repo_dir:
-            (repo_dir / 'tiers.yaml').write_text('[]\n', encoding='utf-8')
-            error, stdout, stderr = self._run_with_error(
-                '--from-disk', str(repo_dir),
-            )
-
-        sync_tiers.assert_called_once_with(str(repo_dir))
-        self.assertIn('Done. 2 created, 0 updated total.', stdout)
-        self.assertIn(
-            'FAILED to sync tiers.yaml: tier database unavailable', stderr,
-        )
-        self.assertIn('completed with errors', str(error).lower())

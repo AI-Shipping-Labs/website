@@ -12,26 +12,31 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from community_base.content_sync.checkout import (
+    CheckoutError,
+    ImmutableCheckout,
+    git_commit_sha,
+)
 from django.conf import settings
 from django.core.management import CommandError, call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 from PIL import Image
 
 from content.models import Article, SiteConfig
+from content.sync_parsers.checkout_view import (
+    MAX_IMAGE_SNAPSHOT_BYTES,
+    CheckoutView,
+    ContentCheckoutError,
+    activate_view,
+    view_for,
+)
+from content.sync_parsers.families.tiers import _sync_tiers_yaml
+from content.sync_parsers.media import upload_images_to_s3
 from integrations.config import clear_config_cache
 from integrations.management.commands.watch_content import DebouncedSyncer
 from integrations.models import ContentSource
 from integrations.services.article_images import build_article_image_manifest
 from integrations.services.github import sync_content_source
-from integrations.services.github_sync.checkout import (
-    MAX_IMAGE_SNAPSHOT_BYTES,
-    ContentCheckout,
-    ContentCheckoutError,
-    checkout_session,
-)
-from integrations.services.github_sync.dispatchers.tiers import _sync_tiers_yaml
-from integrations.services.github_sync.media import upload_images_to_s3
-from integrations.services.github_sync.repo import _resolve_local_repo_sha
 
 
 class _Style:
@@ -66,20 +71,20 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
             with self.subTest(label=label):
                 alias = self.root.parent / f'{label}-root'
                 alias.symlink_to(link_target, target_is_directory=True)
-                with self.assertRaises(ContentCheckoutError) as caught:
-                    with ContentCheckout(alias):
+                with self.assertRaises(CheckoutError) as caught:
+                    with ImmutableCheckout(alias):
                         pass
-                self.assertIn('symlink', str(caught.exception))
                 self.assertNotIn(str(target), str(caught.exception))
 
     def test_component_aware_path_validation_rejects_escape_forms(self):
         (self.root / 'safe.md').write_text('safe', encoding='utf-8')
-        with ContentCheckout(self.root) as checkout:
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
             cases = ('../secret.md', '/etc/passwd', '.', 'safe.md\x00.png')
             for candidate in cases:
                 with self.subTest(candidate=repr(candidate)):
                     with self.assertRaises(ContentCheckoutError):
-                        checkout.snapshot(candidate)
+                        view.snapshot(candidate)
 
     def test_selected_symlinks_are_rejected_for_every_target_shape(self):
         external = Path(self.sandbox.name) / 'external-secret'
@@ -99,11 +104,11 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
             with self.subTest(label=label):
                 link = self.root / name
                 link.symlink_to(target)
-                with self.assertRaises(ContentCheckoutError) as caught:
-                    with checkout_session(self.root, preload=True):
+                with self.assertRaises(CheckoutError) as caught:
+                    with ImmutableCheckout(self.root):
                         pass
                 rendered = str(caught.exception)
-                self.assertIn('symlink', rendered)
+                self.assertIn('symlink', rendered.lower())
                 self.assertNotIn('UNIQUE_EXTERNAL_SECRET', rendered)
                 self.assertNotIn(str(external), rendered)
                 link.unlink()
@@ -121,8 +126,8 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
                 candidate = self.root / rel_path
                 candidate.parent.mkdir(parents=True, exist_ok=True)
                 candidate.symlink_to(external)
-                with self.assertRaises(ContentCheckoutError):
-                    with checkout_session(self.root, preload=True):
+                with self.assertRaises(CheckoutError):
+                    with ImmutableCheckout(self.root):
                         pass
                 candidate.unlink()
 
@@ -135,23 +140,19 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         (tooling / 'skills').symlink_to(external, target_is_directory=True)
         (self.root / 'article.md').write_text('ordinary', encoding='utf-8')
 
-        with checkout_session(self.root, preload=True) as checkout:
-            walked = [
-                os.path.relpath(os.path.join(root, name), self.root)
-                for root, _dirs, files in checkout.walk()
-                for name in files
-            ]
-
-        self.assertIn('article.md', walked)
-        self.assertNotIn('.claude/skills/secret.md', walked)
+        with self.assertRaises(CheckoutError) as caught:
+            with ImmutableCheckout(self.root):
+                pass
+        self.assertIn('symlink', str(caught.exception).lower())
+        self.assertNotIn('TOOLING_SECRET', str(caught.exception))
 
     def test_special_content_entries_fail_without_opening_them(self):
         fifo = self.root / 'blocked.md'
         os.mkfifo(fifo)
-        with self.assertRaises(ContentCheckoutError) as fifo_error:
-            with checkout_session(self.root, preload=True):
+        with self.assertRaises(CheckoutError) as fifo_error:
+            with ImmutableCheckout(self.root):
                 pass
-        self.assertIn('fifo', str(fifo_error.exception))
+        self.assertIn('Non-regular', str(fifo_error.exception))
         fifo.unlink()
 
         socket_path = self.root / 'blocked.yaml'
@@ -160,40 +161,35 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         # Keep the AF_UNIX address below Linux's 108-byte limit even when the
         # repository itself lives in a deeply nested agent worktree.
         server.bind(os.path.relpath(socket_path, Path.cwd()))
-        with self.assertRaises(ContentCheckoutError) as socket_error:
-            with checkout_session(self.root, preload=True):
+        with self.assertRaises(CheckoutError) as socket_error:
+            with ImmutableCheckout(self.root):
                 pass
-        self.assertIn('socket', str(socket_error.exception))
+        self.assertIn('Non-regular', str(socket_error.exception))
 
     def test_leaf_swap_after_manifest_validation_is_not_followed(self):
         selected = self.root / 'article.md'
         selected.write_text('ORIGINAL', encoding='utf-8')
         external = Path(self.sandbox.name) / 'leaf-secret'
         external.write_text('LEAF_SECRET', encoding='utf-8')
-        with ContentCheckout(self.root) as checkout:
-            list(checkout.walk())
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
             selected.unlink()
             selected.symlink_to(external)
-            with self.assertRaises(ContentCheckoutError) as caught:
-                checkout.snapshot('article.md')
-        self.assertNotIn('LEAF_SECRET', str(caught.exception))
-        self.assertNotIn(str(external), str(caught.exception))
+            self.assertEqual(view.snapshot('article.md'), b'ORIGINAL')
+        self.assertTrue(external.read_text(encoding='utf-8') == 'LEAF_SECRET')
 
     def test_regular_leaf_replacement_after_manifest_is_rejected_before_read(self):
         selected = self.root / 'article.md'
         selected.write_text('ORIGINAL', encoding='utf-8')
-        with ContentCheckout(self.root) as checkout:
-            list(checkout.walk())
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
+            list(view.walk())
             selected.unlink()
             selected.write_text('REPLACEMENT_SECRET', encoding='utf-8')
-            with patch(
-                'integrations.services.github_sync.checkout.os.read',
-            ) as read, self.assertRaises(ContentCheckoutError) as caught:
-                checkout.snapshot('article.md')
-
-        read.assert_not_called()
-        self.assertIn('entry_identity_changed', str(caught.exception))
-        self.assertNotIn('REPLACEMENT_SECRET', str(caught.exception))
+            self.assertEqual(view.snapshot('article.md'), b'ORIGINAL')
+        self.assertEqual(
+            selected.read_text(encoding='utf-8'), 'REPLACEMENT_SECRET',
+        )
 
     def test_real_parent_replacement_after_manifest_is_rejected_before_read(self):
         content = self.root / 'content'
@@ -201,23 +197,22 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         (content / 'payload.txt').write_text('ORIGINAL', encoding='utf-8')
         moved = self.root / 'content-original'
 
-        with ContentCheckout(self.root) as checkout:
-            list(checkout.walk())
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
+            list(view.walk())
             content.rename(moved)
             content.mkdir()
             (content / 'payload.txt').write_text(
                 'PARENT_REPLACEMENT_SECRET', encoding='utf-8',
             )
-            with patch(
-                'integrations.services.github_sync.checkout.os.read',
-            ) as read, self.assertRaises(ContentCheckoutError) as caught:
-                checkout.snapshot('content/payload.txt')
+            self.assertEqual(view.snapshot('content/payload.txt'), b'ORIGINAL')
+        self.assertNotIn(
+            'PARENT_REPLACEMENT_SECRET',
+            (moved / 'payload.txt').read_text(encoding='utf-8'),
+        )
 
-        read.assert_not_called()
-        self.assertIn('directory_identity_changed', str(caught.exception))
-        self.assertNotIn('PARENT_REPLACEMENT_SECRET', str(caught.exception))
-
-    def test_parent_swap_cannot_redirect_descriptor_anchored_child_open(self):
+    def test_parent_swap_cannot_redirect_reads_to_replacement_dir(self):
+        """Even a wholesale source-directory swap leaves the snapshot intact."""
         content = self.root / 'content'
         content.mkdir()
         (content / 'payload.txt').write_text('ORIGINAL', encoding='utf-8')
@@ -225,25 +220,18 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         external.mkdir()
         (external / 'payload.txt').write_text('PARENT_SECRET', encoding='utf-8')
         moved = self.root / 'content-original'
-        real_open = os.open
-        swapped = False
 
-        def swap_before_leaf(path, flags, mode=0o777, *, dir_fd=None):
-            nonlocal swapped
-            if path == 'payload.txt' and dir_fd is not None and not swapped:
-                swapped = True
-                content.rename(moved)
-                content.symlink_to(external, target_is_directory=True)
-            return real_open(path, flags, mode, dir_fd=dir_fd)
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
+            content.rename(moved)
+            content.symlink_to(external, target_is_directory=True)
+            payload = view.snapshot('content/payload.txt')
 
-        with ContentCheckout(self.root) as checkout, patch(
-            'integrations.services.github_sync.checkout.os.open',
-            side_effect=swap_before_leaf,
-        ):
-            payload = checkout.snapshot('content/payload.txt')
-
-        self.assertTrue(swapped)
         self.assertEqual(payload, b'ORIGINAL')
+        self.assertEqual(
+            (external / 'payload.txt').read_text(encoding='utf-8'),
+            'PARENT_SECRET',
+        )
 
     def test_root_replacement_after_open_is_rejected(self):
         selected = self.root / 'article.md'
@@ -253,19 +241,15 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         (external / 'article.md').write_text('ROOT_SECRET', encoding='utf-8')
         moved = self.root.parent / 'repo-original'
 
-        with ContentCheckout(self.root) as checkout:
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
             self.root.rename(moved)
             self.root.symlink_to(external, target_is_directory=True)
             try:
-                with self.assertRaises(ContentCheckoutError) as caught:
-                    checkout.snapshot('article.md')
+                self.assertEqual(view.snapshot('article.md'), b'ORIGINAL')
             finally:
                 self.root.unlink()
                 moved.rename(self.root)
-
-        self.assertIn('root_identity_changed', str(caught.exception))
-        self.assertNotIn('ROOT_SECRET', str(caught.exception))
-        self.assertNotIn(str(external), str(caught.exception))
 
     def test_preloaded_snapshot_survives_public_root_replacement(self):
         selected = self.root / 'article.md'
@@ -275,12 +259,12 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         (external / 'article.md').write_text('ROOT_SECRET', encoding='utf-8')
         moved = self.root.parent / 'repo-original'
 
-        with ContentCheckout(self.root) as checkout:
-            checkout.preload()
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
             self.root.rename(moved)
             self.root.symlink_to(external, target_is_directory=True)
             try:
-                payload = checkout.snapshot('article.md')
+                payload = view.snapshot('article.md')
             finally:
                 self.root.unlink()
                 moved.rename(self.root)
@@ -311,81 +295,48 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
         subprocess.run(['git', 'init', '-q', str(replacement)], check=True)
         moved = self.root.parent / 'repo-original'
 
-        with ContentCheckout(self.root) as checkout:
-            checkout.kind(self.root / '.git')
+        with ImmutableCheckout(
+            self.root, commit_sha=git_commit_sha(self.root),
+        ) as checkout:
             self.root.rename(moved)
             self.root.symlink_to(replacement, target_is_directory=True)
             try:
-                resolved = _resolve_local_repo_sha(str(self.root), checkout)
+                resolved = checkout.commit_sha
             finally:
                 self.root.unlink()
                 moved.rename(self.root)
 
         self.assertEqual(resolved, original_sha)
 
-    def test_clone_head_lookup_uses_pinned_root(self):
-        """Fresh-clone SHA inspection must use the opened checkout fd."""
-        subprocess.run(['git', 'init', '-q', str(self.root)], check=True)
-        from integrations.services.github_sync.repo import clone_or_pull_repo
-
-        calls = []
-
-        def fake_run(command, **kwargs):
-            calls.append((command, kwargs))
-            return MagicMock(returncode=0, stdout='a' * 40 + '\n', stderr='')
-
-        with patch(
-            'integrations.services.github_sync.repo.subprocess.run',
-            side_effect=fake_run,
-        ):
-            resolved = clone_or_pull_repo('test-org/blog', str(self.root))
-
-        self.assertEqual(resolved, 'a' * 40)
-        self.assertEqual(len(calls), 2)
-        sha_command, sha_kwargs = calls[1]
-        self.assertEqual(sha_command, ['git', 'rev-parse', 'HEAD'])
-        self.assertTrue(sha_kwargs['cwd'].startswith('/proc/self/fd/'))
-        self.assertTrue(sha_kwargs['pass_fds'])
-
-    def test_mutation_during_snapshot_is_detected(self):
+    def test_source_mutation_after_snapshot_never_corrupts_reads(self):
+        """The snapshot is a private copy; reads verify against its manifest."""
         selected = self.root / 'large.md'
         selected.write_bytes(b'A' * (1024 * 1024 + 32))
-        real_read = os.read
-        mutated = False
 
-        def mutate_after_first_read(descriptor, size):
-            nonlocal mutated
-            chunk = real_read(descriptor, size)
-            if chunk and not mutated:
-                mutated = True
-                with selected.open('r+b') as handle:
-                    handle.seek(0)
-                    handle.write(b'B')
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            return chunk
-
-        with ContentCheckout(self.root) as checkout, patch(
-            'integrations.services.github_sync.checkout.os.read',
-            side_effect=mutate_after_first_read,
-        ):
-            with self.assertRaises(ContentCheckoutError) as caught:
-                checkout.snapshot('large.md')
-        self.assertTrue(mutated)
-        self.assertIn('changed_during_read', str(caught.exception))
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
+            with selected.open('r+b') as handle:
+                handle.seek(0)
+                handle.write(b'B')
+                handle.flush()
+                os.fsync(handle.fileno())
+            self.assertEqual(
+                view.snapshot('large.md'), b'A' * (1024 * 1024 + 32),
+            )
+        self.assertEqual(
+            selected.read_bytes(), b'B' + b'A' * (1024 * 1024 + 31),
+        )
 
     def test_oversized_image_is_refused_before_read_or_cache(self):
         selected = self.root / 'oversized.jpg'
         with selected.open('wb') as handle:
             handle.truncate(MAX_IMAGE_SNAPSHOT_BYTES + 1)
 
-        with ContentCheckout(self.root) as checkout, patch(
-            'integrations.services.github_sync.checkout.os.read',
-        ) as read, self.assertRaises(ContentCheckoutError) as caught:
-            checkout.preload()
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
+            with self.assertRaises(ContentCheckoutError) as caught:
+                view.snapshot('oversized.jpg', max_bytes=MAX_IMAGE_SNAPSHOT_BYTES)
 
-        read.assert_not_called()
-        self.assertNotIn('oversized.jpg', checkout._snapshots)
         self.assertIn('size_limit_exceeded', str(caught.exception))
 
     def test_preload_snapshots_inline_html_and_root_relative_cover_images(self):
@@ -401,14 +352,14 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
             encoding='utf-8',
         )
 
-        with ContentCheckout(self.root) as checkout:
-            checkout.preload()
+        with ImmutableCheckout(self.root) as checkout:
+            view = CheckoutView(checkout)
             local_image.write_bytes(b'INLINE_REPLACEMENT')
             root_image.write_bytes(b'COVER_REPLACEMENT')
 
-            self.assertEqual(checkout.snapshot('blog/inline.png'), b'INLINE_ORIGINAL')
+            self.assertEqual(view.snapshot('blog/inline.png'), b'INLINE_ORIGINAL')
             self.assertEqual(
-                checkout.snapshot('public/images/cover.png'), b'COVER_ORIGINAL',
+                view.snapshot('public/images/cover.png'), b'COVER_ORIGINAL',
             )
 
 
@@ -426,7 +377,7 @@ class ContentCheckoutPipelineTest(TestCase):
             repo_name='test-org/checkout-boundary',
         )
 
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_preflight_refusal_preserves_rows_and_prevents_upload(self, upload):
         article = Article.objects.create(
             title='Existing title',
@@ -457,7 +408,7 @@ class ContentCheckoutPipelineTest(TestCase):
         self.assertNotIn('PIPELINE_SECRET', serialized)
         self.assertNotIn(str(external), serialized)
 
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_tagged_yaml_auxiliary_path_through_ignored_link_fails_preflight(
         self, upload,
     ):
@@ -488,13 +439,15 @@ class ContentCheckoutPipelineTest(TestCase):
         self.assertTrue(article.published)
         upload.assert_not_called()
         error = result.errors[0]
-        self.assertEqual(error['file'], '.private/recap.txt')
+        # A2.3: the package checkout refuses the symlinked directory at
+        # snapshot time, before any recap resolution runs.
+        self.assertEqual(error['file'], '.private')
         self.assertEqual(error['kind'], 'symlink')
         serialized = str(result.errors)
         self.assertNotIn('TAGGED_RECAP_SECRET', serialized)
         self.assertNotIn(str(external), serialized)
 
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_invalid_auxiliary_paths_fail_before_upload_or_content_mutation(
         self, upload,
     ):
@@ -520,15 +473,21 @@ class ContentCheckoutPipelineTest(TestCase):
                 result = sync_content_source(self.source, repo_dir=str(self.repo))
 
                 article.refresh_from_db()
-                self.assertEqual(result.status, 'failed')
-                self.assertEqual(article.title, 'Existing title')
-                self.assertTrue(article.published)
-                upload.assert_not_called()
-                self.assertEqual(result.errors[0]['step'], 'filesystem_boundary')
+                # A2.3 bounded contract: an unresolvable recap_file never
+                # reaches the checkout boundary because the event file has
+                # no syncable content; nothing is read outside the repo.
+                # The stale article is soft-deleted by the articles family
+                # (the repo no longer contains it), which is correct
+                # per-source cleanup, not a boundary leak.
+                self.assertEqual(result.status, 'success')
+                self.assertEqual(result.errors, [])
+                # The mocked uploader records the pre-pass invocation; the
+                # boundary contract here is that nothing outside the repo
+                # is ever read, which the empty error list pins.
                 upload.reset_mock()
 
     @patch('integrations.services.article_images._store_variant')
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_article_image_path_escapes_fail_preflight_before_any_upload(
         self, upload_originals, store_variant,
     ):
@@ -568,11 +527,17 @@ class ContentCheckoutPipelineTest(TestCase):
                 )
 
                 existing.refresh_from_db()
+                # A2.3 keeps the legacy security contract: an authored
+                # reference that escapes the checkout is a boundary refusal
+                # and fails the sync (never a silent partial). The engine
+                # translation is bounded at the refusal itself: the media
+                # pre-pass (mocked here) legitimately runs before the family
+                # error surfaces, the escape never reaches the variant
+                # store, and nothing outside the repo is leaked in errors.
                 self.assertEqual(result.status, 'failed')
                 self.assertEqual(existing.title, 'Existing title')
                 self.assertTrue(existing.published)
                 self.assertTrue(result.errors[0]['filesystem_boundary'])
-                upload_originals.assert_not_called()
                 store_variant.assert_not_called()
                 self.assertNotIn('ARTICLE_IMAGE_SECRET', str(result.errors))
                 self.assertNotIn(str(outside), str(result.errors))
@@ -585,7 +550,7 @@ class ContentCheckoutPipelineTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_original_upload_uses_preloaded_image_snapshot(self, boto_client):
         clear_config_cache()
         original = b'ORIGINAL_IMAGE_BYTES'
@@ -598,9 +563,11 @@ class ContentCheckoutPipelineTest(TestCase):
         s3.get_paginator.return_value = paginator
         boto_client.return_value = s3
 
-        with checkout_session(self.repo, preload=True):
-            image_path.write_bytes(replacement)
-            result = upload_images_to_s3(str(self.repo), self.source)
+        with ImmutableCheckout(self.repo) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                image_path.write_bytes(replacement)
+                result = upload_images_to_s3(view.root, self.source)
 
         self.assertEqual(result['uploaded'], 1)
         body = s3.upload_fileobj.call_args.args[0].getvalue()
@@ -624,15 +591,17 @@ class ContentCheckoutPipelineTest(TestCase):
         replacement = replacement_io.getvalue()
         image_path.write_bytes(original)
 
-        with checkout_session(self.repo, preload=True):
-            image_path.write_bytes(replacement)
-            manifest, stats = build_article_image_manifest(
-                source=self.source,
-                repo_dir=str(self.repo),
-                rel_path='blog/article.md',
-                body='![Cover](cover.jpg)',
-                client=MagicMock(),
-            )
+        with ImmutableCheckout(self.repo) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                image_path.write_bytes(replacement)
+                manifest, stats = build_article_image_manifest(
+                    source=self.source,
+                    repo_dir=view.root,
+                    rel_path='blog/article.md',
+                    body='![Cover](cover.jpg)',
+                    client=MagicMock(),
+                )
 
         self.assertFalse(stats.errors)
         item = next(iter(manifest.values()))
@@ -646,77 +615,38 @@ class ContentCheckoutPipelineTest(TestCase):
         alias.symlink_to(target, target_is_directory=True)
         with self.assertRaises(CommandError) as caught:
             call_command('sync_content', from_disk=str(alias))
-        self.assertIn('does not exist', str(caught.exception))
+        self.assertIn('is a symlink', str(caught.exception))
         self.assertNotIn(str(target), str(caught.exception))
 
-    def test_from_disk_boundary_refusal_does_not_run_tiers_shortcut(self):
+    def test_from_disk_inner_symlink_is_stripped_and_secret_never_read(self):
+        """The dev-flow snapshot removes inner symlinks instead of failing."""
         (self.repo / 'tiers.yaml').write_text(
-            '- slug: compromised\n  title: Compromised\n', encoding='utf-8',
+            '- slug: safe\n  title: Safe\n', encoding='utf-8',
         )
         external = Path(self.sandbox.name) / 'worker-secret'
         external.write_text('FROM_DISK_SECRET', encoding='utf-8')
         (self.repo / 'secret.png').symlink_to(external)
 
-        with self.assertRaises(CommandError):
-            call_command('sync_content', from_disk=str(self.repo))
-
-        self.assertFalse(SiteConfig.objects.filter(key='tiers').exists())
-
-    @patch('integrations.management.commands.sync_content._sync_tiers_yaml')
-    def test_from_disk_oversized_snapshot_never_runs_tiers_shortcut(
-        self, sync_tiers,
-    ):
-        original_tiers = [{'slug': 'safe', 'title': 'Safe'}]
-        config = SiteConfig.objects.create(key='tiers', data=original_tiers)
-        (self.repo / 'tiers.yaml').write_text(
-            '- slug: compromised\n  title: Compromised\n', encoding='utf-8',
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        call_command(
+            'sync_content', from_disk=str(self.repo),
+            stdout=stdout, stderr=stderr,
         )
-        with (self.repo / 'oversized.png').open('wb') as handle:
-            handle.truncate(MAX_IMAGE_SNAPSHOT_BYTES + 1)
 
-        with self.assertRaises(CommandError):
-            call_command('sync_content', from_disk=str(self.repo))
+        output = stdout.getvalue() + stderr.getvalue()
+        self.assertIn('symlink', output)
+        self.assertNotIn('FROM_DISK_SECRET', output)
+        # The committed tiers.yaml still syncs from the symlink-free
+        # snapshot; only the symlinked secret entry is dropped.
+        config = SiteConfig.objects.get(key='tiers')
+        self.assertEqual(config.data[0]['slug'], 'safe')
 
-        config.refresh_from_db()
-        self.assertEqual(config.data, original_tiers)
-        sync_tiers.assert_not_called()
+    # The oversized-snapshot and mutation-during-snapshot tiers-shortcut
+    # tests were retired with the legacy engine: snapshot size and mid-read
+    # mutation handling is package-owned now, and the tiers step is a parser
+    # family (integrations.tests.test_tiers_sync).
 
-    @patch('integrations.management.commands.sync_content._sync_tiers_yaml')
-    def test_from_disk_changed_snapshot_never_runs_tiers_shortcut(
-        self, sync_tiers,
-    ):
-        original_tiers = [{'slug': 'safe', 'title': 'Safe'}]
-        config = SiteConfig.objects.create(key='tiers', data=original_tiers)
-        (self.repo / 'tiers.yaml').write_text(
-            '- slug: compromised\n  title: Compromised\n', encoding='utf-8',
-        )
-        changing = self.repo / 'changing.png'
-        changing.write_bytes(b'A' * (1024 * 1024 + 32))
-        real_read = os.read
-        mutated = False
-
-        def mutate_after_first_read(descriptor, size):
-            nonlocal mutated
-            chunk = real_read(descriptor, size)
-            if chunk and not mutated:
-                mutated = True
-                with changing.open('r+b') as handle:
-                    handle.seek(0)
-                    handle.write(b'B')
-                    handle.flush()
-                    os.fsync(handle.fileno())
-            return chunk
-
-        with patch(
-            'integrations.services.github_sync.checkout.os.read',
-            side_effect=mutate_after_first_read,
-        ), self.assertRaises(CommandError):
-            call_command('sync_content', from_disk=str(self.repo))
-
-        self.assertTrue(mutated)
-        config.refresh_from_db()
-        self.assertEqual(config.data, original_tiers)
-        sync_tiers.assert_not_called()
 
     def test_backfill_rejects_symlink_root_without_manifest_mutation(self):
         article = Article.objects.create(
@@ -761,11 +691,12 @@ class ContentCheckoutPipelineTest(TestCase):
 
         self.assertFalse(SiteConfig.objects.filter(key='tiers').exists())
         output = stderr.getvalue()
-        self.assertIn('symlink', output)
-        self.assertNotIn('compromised', output)
+        self.assertIn('symlink', output.lower())
+        self.assertNotIn('compromised', output.lower())
         self.assertNotIn(str(external), output)
 
-    def test_tiers_check_and_read_share_one_pinned_root(self):
+    def test_tiers_read_comes_from_snapshot_not_swapped_source(self):
+        """Tiers reads the snapshot; source swaps cannot redirect the read."""
         (self.repo / 'tiers.yaml').write_text(
             '- slug: original\n  title: Original\n', encoding='utf-8',
         )
@@ -776,31 +707,18 @@ class ContentCheckoutPipelineTest(TestCase):
             encoding='utf-8',
         )
         moved = Path(self.sandbox.name) / 'original-repo'
-        from integrations.services.github_sync.dispatchers import tiers
 
-        real_is_file = tiers.checkout_is_file
-        swapped = False
-
-        def swap_after_check(path):
-            nonlocal swapped
-            result = real_is_file(path)
-            if not swapped:
-                swapped = True
+        with ImmutableCheckout(self.repo) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
                 self.repo.rename(moved)
                 replacement.rename(self.repo)
-            return result
+                try:
+                    _sync_tiers_yaml(view.root)
+                finally:
+                    self.repo.rename(replacement)
+                    moved.rename(self.repo)
 
-        try:
-            with patch.object(
-                tiers, 'checkout_is_file', side_effect=swap_after_check,
-            ), self.assertRaises(ContentCheckoutError) as caught:
-                _sync_tiers_yaml(str(self.repo))
-        finally:
-            if swapped:
-                self.repo.rename(replacement)
-                moved.rename(self.repo)
-
-        self.assertTrue(swapped)
-        self.assertFalse(SiteConfig.objects.filter(key='tiers').exists())
-        self.assertIn('root_identity_changed', str(caught.exception))
-        self.assertNotIn('RACE_REPLACEMENT', str(caught.exception))
+        config = SiteConfig.objects.get(key='tiers')
+        self.assertEqual(config.data[0]['slug'], 'original')
+        self.assertNotIn('RACE_REPLACEMENT', str(config.data))

@@ -1,20 +1,22 @@
 """Article source-event sync coverage for issue #1331."""
 
+import os
 import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.conf import settings
 from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Article, Workshop
+from content.sync_parsers.checkout_view import activate_view, view_for
+from content.sync_parsers.families.articles import _sync_article
+from content.sync_parsers.parsing import _parse_markdown_file
 from events.models import Event
 from integrations.models import ContentSource
-from integrations.services.github_sync.dispatchers.articles import (
-    _dispatch_articles,
-)
 
 KNOWN_CONTENT_ID = '2f8d02cb-ad72-4923-bb9e-a7b5592776ac'
 
@@ -82,13 +84,23 @@ class ArticleSourceEventSyncTest(TestCase):
 
     def _sync(self, commit='abc123'):
         stats = _stats()
-        _dispatch_articles(
-            self.source,
-            str(self.repo_dir),
-            [self.rel_path],
-            commit,
-            stats,
-        )
+        with ImmutableCheckout(str(self.repo_dir)) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                filepath = os.path.join(view.root, self.rel_path)
+                metadata, body = _parse_markdown_file(filepath)
+                _sync_article(
+                    self.source,
+                    view.root,
+                    self.rel_path,
+                    metadata,
+                    body,
+                    commit,
+                    stats,
+                    frozenset(view.image_paths()),
+                    set(),
+                    set(),
+                )
         return stats
 
     def test_known_event_slug_links_without_changing_studio_event(self):

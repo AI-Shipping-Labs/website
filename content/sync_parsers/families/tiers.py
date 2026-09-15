@@ -5,12 +5,13 @@ import os
 import yaml
 from django.db import DatabaseError
 
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.base import FamilyParser
+from content.sync_parsers.checkout_view import (
     checkout_is_file,
     checkout_read_text,
     checkout_scope,
 )
-from integrations.services.github_sync.common import logger
+from content.sync_parsers.common import logger
 
 # Per-tier fields synced onto payments.Tier rows (matched by stripe_key == Tier.slug).
 # yaml-wins semantics: a non-empty yaml value overwrites the DB row, even if a
@@ -243,3 +244,43 @@ def _sync_tiers_yaml_from_checkout(repo_dir):
 
     logger.info('tiers.yaml synced to SiteConfig (%d tiers)', len(tiers_data))
     return {'synced': True, 'count': len(tiers_data)}
+
+
+def _tiers_result_action(previous, result):
+    """Map a tiers sync result to a package action string.
+
+    The legacy engine never counted tiers.yaml in the created/updated item
+    counts (it tracked tiers_synced/tiers_count separately); returning
+    'unchanged' preserves that semantics.
+    """
+    return 'unchanged'
+
+
+class TiersParser(FamilyParser):
+    content_type = 'tiers'
+    state_name = 'tiers'
+
+    def iter_items(self, run):
+        from content.sync_parsers.checkout_view import checkout_is_file
+
+        tiers_path = os.path.join(run.repo_dir, 'tiers.yaml')
+        if checkout_is_file(tiers_path):
+            yield 'tiers.yaml', {'rel_path': 'tiers.yaml'}
+
+    def process(self, run, payload):
+        state = self._state(run)
+        result = _sync_tiers_yaml_from_checkout(run.repo_dir)
+        state.state['tiers_result'] = result
+        from content.sync_parsers import run_state
+
+        # Tier counters surface on the package log via the namespaced
+        # warnings entry written by the site runner.
+        run_state.emit_extras({
+            'tiers_synced': bool(result.get('synced')),
+            'tiers_count': int(result.get('count', 0)),
+        })
+        action = _tiers_result_action(None, result)
+        return action, None
+
+    def cleanup(self, run):
+        return 0

@@ -10,13 +10,13 @@ import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 
-from integrations.config import get_config, s3_content_upload_enabled
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
     checkout_read_bytes,
     checkout_scope,
     checkout_walk,
 )
-from integrations.services.github_sync.common import IMAGE_EXTENSIONS, logger
+from content.sync_parsers.common import IMAGE_EXTENSIONS, logger
+from integrations.config import get_config, s3_content_upload_enabled
 
 
 def _image_base_url(repo_name):

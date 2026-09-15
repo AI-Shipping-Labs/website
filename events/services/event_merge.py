@@ -147,7 +147,7 @@ def find_duplicate_event_pairs():
     EXCLUDED — they have already been merged and should not clutter the review
     list. Returns a list of ``(canonical, duplicate)`` tuples, canonical first.
     """
-    from integrations.services.github_sync.dispatchers.workshops import (
+    from content.sync_parsers.families.workshops import (
         _normalize_title_for_match,
     )
 

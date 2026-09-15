@@ -60,6 +60,8 @@ urlpatterns = [
     path('', include('bookclub.urls')),
     path('', include('community.urls')),
     path('studio/', include('studio.urls')),
+    # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
+    path('studio/', include('community_base.content_sync.studio_urls')),
     path('', include('triggers.urls')),
     path('studio/triggers/', include('triggers.studio_urls')),
 ]

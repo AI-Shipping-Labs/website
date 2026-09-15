@@ -2,8 +2,8 @@
 
 import os
 
-from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.base import FamilyParser
+from content.sync_parsers.checkout_view import (
     checkout_exists,
     checkout_is_dir,
     checkout_is_file,
@@ -11,29 +11,30 @@ from integrations.services.github_sync.checkout import (
     checkout_scandir,
     raise_if_checkout_error,
 )
-from integrations.services.github_sync.common import GitHubSyncError, logger
-from integrations.services.github_sync.dispatchers.instructors import (
+from content.sync_parsers.common import GitHubSyncError, logger
+from content.sync_parsers.families.instructors import (
     _attach_instructors_to_course,
     _resolve_instructors_for_yaml,
 )
-from integrations.services.github_sync.lifecycle import (
+from content.sync_parsers.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
     upsert_synced_object,
 )
-from integrations.services.github_sync.media import (
+from content.sync_parsers.media import (
     _check_broken_image_refs,
     rewrite_cover_image_url,
     rewrite_image_urls,
 )
-from integrations.services.github_sync.parsing import (
+from content.sync_parsers.parsing import (
     _compute_content_hash,
     _defaults_differ,
     _parse_markdown_file,
     _parse_yaml_file,
     _validate_frontmatter,
 )
-from integrations.services.github_sync.repo import _matches_ignore_patterns, derive_slug, extract_sort_order
+from content.sync_parsers.repo_util import _matches_ignore_patterns, derive_slug, extract_sort_order
+from integrations.services.banner_generator.dispatch import enqueue_if_missing as _enqueue_banner_if_missing
 
 # Issue #465: maps the operator-facing string keys in YAML (the verb-aligned
 # ``access:`` / ``default_unit_access:`` vocabulary) to the integer levels
@@ -130,6 +131,36 @@ def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
     )
 
 
+class CoursesParser(FamilyParser):
+    content_type = 'courses'
+    state_name = 'courses'
+
+    def iter_items(self, run):
+        for course_dir in run.classification().course_dirs:
+            rel_dir = os.path.relpath(course_dir, run.repo_dir)
+            yield rel_dir, {'rel_path': rel_dir, 'course_dir': course_dir}
+
+    def process(self, run, payload):
+        state = self._state(run)
+        stats = self.item_stats()
+        _sync_single_course(
+            payload['course_dir'], run.repo_dir, run.source, run.commit_sha,
+            stats, state.seen, state.failed,
+            known_images=run.known_images(),
+        )
+        action = self.absorb(run, stats)
+        return action, None
+
+    def cleanup(self, run):
+        state = self._state(run)
+        stats = self.item_stats()
+        deleted = _cleanup_stale_courses_for_source(
+            run.source, state.seen, state.failed, stats,
+        )
+        self.absorb(run, stats)
+        return deleted
+
+
 def _cleanup_stale_courses_for_source(
     source, seen_course_slugs, failed_course_slugs, stats,
 ):
@@ -139,7 +170,7 @@ def _cleanup_stale_courses_for_source(
         source_repo=source.repo_name,
         status='published',
     ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs))
-    cleanup_stale_synced_objects(
+    return cleanup_stale_synced_objects(
         stale_courses,
         stats=stats,
         detail=lambda course, action: {
@@ -335,6 +366,7 @@ def _sync_single_course(
         logger.warning(
             'Error syncing course %s: %s',
             os.path.basename(course_dir.rstrip(os.sep)), e,
+            exc_info=True,
         )
 
 

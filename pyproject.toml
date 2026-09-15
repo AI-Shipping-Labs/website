@@ -143,6 +143,10 @@ select = ["F", "I", "PLC0415"]
 "*/views/*.py" = ["PLC0415"]
 "*/services/*.py" = ["PLC0415"]
 "*/admin/*.py" = ["PLC0415"]
+# A2.3: the content sync parser families moved from
+# integrations/services/github_sync/dispatchers and keep their inline
+# imports (deferred model imports avoid app-loading cycles).
+"content/sync_parsers/**" = ["PLC0415"]
 # Tests may use inline imports for setup
 "*/tests/*.py" = ["PLC0415"]
 # Live-judge conftest defers the pytest-django blocker + optional

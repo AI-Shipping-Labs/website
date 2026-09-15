@@ -21,12 +21,12 @@ from botocore.exceptions import ClientError
 from django.test import TestCase, override_settings
 
 from content.models import Workshop
-from integrations.config import clear_config_cache
-from integrations.models import ContentSource
-from integrations.services.github_sync.media import (
+from content.sync_parsers.media import (
     rewrite_cover_image_url,
     upload_images_to_s3,
 )
+from integrations.config import clear_config_cache
+from integrations.models import ContentSource
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 
@@ -146,7 +146,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_per_file_upload_error_carries_step_s3_upload(self, mock_boto_client):
         mock_s3 = MagicMock()
         mock_boto_client.return_value = mock_s3
@@ -172,7 +172,7 @@ class UploadImagesToS3StepTaggingTest(TestCase):
         AWS_ACCESS_KEY_ID='fake',
         AWS_SECRET_ACCESS_KEY='fake',
     )
-    @patch('integrations.services.github_sync.media.boto3.client')
+    @patch('content.sync_parsers.media.boto3.client')
     def test_listing_error_carries_step_s3_list_and_upload_continues(
         self, mock_boto_client,
     ):

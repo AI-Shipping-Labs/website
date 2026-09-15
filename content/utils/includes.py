@@ -3,7 +3,8 @@ import re
 
 from django.template import Context, Engine
 
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
+    ContentCheckoutError,
     active_checkout,
     checkout_is_file,
     checkout_read_text,
@@ -16,9 +17,12 @@ INCLUDE_RE = re.compile(r'<!--\s*include:([A-Za-z0-9_./-]+)\s*-->')
 def _resolve_include_path(include_path, base_dir, repo_dir):
     """Resolve an include path without allowing escapes outside the repo."""
     if os.path.isabs(include_path):
-        raise ValueError(f'Include path must be relative: {include_path}')
+        # Fail-closed boundary contract: an absolute include targets
+        # outside the checkout and must be a boundary refusal (#1500),
+        # not a bounded malformed-file error.
+        raise ContentCheckoutError(include_path, 'outside_checkout')
     if '..' in include_path.split('/'):
-        raise ValueError(f'Include path escapes content repo: {include_path}')
+        raise ContentCheckoutError(include_path, 'outside_checkout')
 
     root = os.path.abspath(repo_dir)
     if include_path.startswith('widgets/'):
@@ -33,6 +37,21 @@ def _resolve_include_path(include_path, base_dir, repo_dir):
     if not checkout_is_file(candidate):
         raise FileNotFoundError(f'Include file not found: {include_path}')
     return candidate
+
+
+def ensure_include_paths_in_bounds(body):
+    """Refuse authored include directives that escape the checkout (#1500).
+
+    Called during parser discovery, before any item is upserted: a
+    traversal or absolute include fails the whole repo at the filesystem
+    boundary — main's checkout preloading refused the same authored
+    references before any parser ran. Missing in-bounds includes stay
+    bounded per-file errors handled at expansion time.
+    """
+    for match in INCLUDE_RE.finditer(body or ''):
+        include_path = match.group(1).strip()
+        if os.path.isabs(include_path) or '..' in include_path.split('/'):
+            raise ContentCheckoutError(include_path, 'outside_checkout')
 
 
 def expand_content_includes(html, *, repo_dir, base_dir, context):

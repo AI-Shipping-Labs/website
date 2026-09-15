@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from django.utils.text import slugify
 
-from integrations.services.github_sync.common import logger
+from content.sync_parsers.common import logger
 
 
 @dataclass(frozen=True)

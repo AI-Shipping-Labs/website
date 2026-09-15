@@ -6,6 +6,7 @@ but cannot create, edit, or delete source rows.
 
 from uuid import UUID
 
+from community_base.content_sync.models import ContentSource  # package rows (A2.3)
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.csrf import csrf_exempt
@@ -20,7 +21,21 @@ from api.utils import (
     require_methods,
     validation_response,
 )
-from integrations.models import ContentSource
+
+
+def _webhook_secret_configured(source):
+    return bool((source.webhook_secret or '').strip())
+
+
+def _webhook_security_status(source):
+    return 'configured' if (source.webhook_secret or '').strip() else 'missing_secret'
+
+
+def _synced_commit_url(source):
+    if not source.last_synced_commit or '/' not in source.repo_name:
+        return ''
+    return f'https://github.com/{source.repo_name}/commit/{source.last_synced_commit}'
+
 from integrations.services.content_sync_queue import enqueue_content_sync
 from integrations.services.sync_observability import (
     SYNC_HISTORY_STATUSES,
@@ -120,15 +135,15 @@ def _serialize_source(source, health=None):
         "repo_name": source.repo_name,
         "short_name": source.short_name,
         "is_private": source.is_private,
-        "webhook_secret_configured": source.webhook_secret_configured,
-        "webhook_security_status": source.webhook_security_status,
+        "webhook_secret_configured": _webhook_secret_configured(source),
+        "webhook_security_status": _webhook_security_status(source),
         "last_sync_status": source.last_sync_status,
         "last_synced_at": isoformat_or_none(source.last_synced_at),
         "sync_locked_at": isoformat_or_none(source.sync_locked_at),
         "sync_requested": source.sync_requested,
         "last_synced_commit": source.last_synced_commit,
         "short_synced_commit": source.short_synced_commit,
-        "synced_commit_url": source.synced_commit_url,
+        "synced_commit_url": _synced_commit_url(source),
         "max_files": source.max_files,
         "created_at": isoformat_or_none(source.created_at),
         "updated_at": isoformat_or_none(source.updated_at),

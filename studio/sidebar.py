@@ -439,6 +439,13 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_content_source_refresh',
         'studio_content_sources_export',
         'studio_content_sources_import',
+        # Package-owned sync surfaces (A2.3); they render the Studio shell
+        # and are the operator-facing counterparts of the routes above.
+        'community_base_content_sources',
+        'community_base_content_source_edit',
+        'community_base_content_source_sync',
+        'community_base_content_sync_history',
+        'community_base_content_sync_worker',
     )),
     ('operations', 'worker', (
         'studio_worker',

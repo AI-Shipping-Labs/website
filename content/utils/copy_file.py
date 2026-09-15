@@ -33,7 +33,8 @@ import re
 
 import frontmatter
 
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
+    ContentCheckoutError,
     active_checkout,
     checkout_is_file,
     checkout_read_text,
@@ -174,14 +175,19 @@ def _resolve_copy_file_content_from_checkout(
             )
 
         candidate = copy_file_setting.strip()
+        if '..' in candidate:
+            # Fail-closed legacy contract (#1500): a traversal attempt
+            # refuses the whole repo at the filesystem boundary, before any
+            # workshop mutation — main's checkout preloading raised the
+            # same way on authored reference escapes.
+            raise ContentCheckoutError(candidate, 'outside_checkout')
         if (
             '/' in candidate
-            or '..' in candidate
             or candidate.startswith('.')
         ):
-            # Reject path traversal AND subdir paths AND hidden-file refs.
-            # ``..`` in any position blocks both ``../foo.md`` and
-            # ``foo/../bar.md``. ``/`` blocks subdirectories.
+            # Subdir paths and hidden-file refs stay bounded per-file
+            # errors; the ``..`` check above already blocked
+            # ``../foo.md`` and ``foo/../bar.md``.
             return (
                 None,
                 f'copy_file {copy_file_setting!r} must be a filename in '

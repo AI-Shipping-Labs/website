@@ -6,6 +6,11 @@ class ContentConfig(AppConfig):
 
     def ready(self):
         import content.signals  # noqa: F401
+        from content.sync_parsers import register_all
+
+        # A2.3: site parsers register with the package content_sync engine
+        # at startup; registration is deterministic and fails on duplicates.
+        register_all()
         from comments.threads import register_thread_owner
         from content.models import Unit, WorkshopPage
 

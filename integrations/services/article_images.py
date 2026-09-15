@@ -14,8 +14,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 from django.conf import settings
 from PIL import Image, ImageCms, ImageOps, UnidentifiedImageError
 
-from integrations.config import get_config, s3_content_upload_enabled
-from integrations.services.github_sync.checkout import (
+from content.sync_parsers.checkout_view import (
     MAX_IMAGE_SNAPSHOT_BYTES,
     active_checkout,
     checkout_is_file,
@@ -23,11 +22,12 @@ from integrations.services.github_sync.checkout import (
     checkout_scope,
     extract_authored_image_references,
 )
-from integrations.services.github_sync.media import (
+from content.sync_parsers.media import (
     _repo_short,
     _resolve_image_path,
     rewrite_cover_image_url,
 )
+from integrations.config import get_config, s3_content_upload_enabled
 
 logger = logging.getLogger(__name__)
 

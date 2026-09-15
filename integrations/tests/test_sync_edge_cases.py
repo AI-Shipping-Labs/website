@@ -21,8 +21,15 @@ import os
 import tempfile
 import uuid
 from datetime import date, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from community_base.content_sync.models import (
+    ContentSource as PackageContentSource,
+)
+from community_base.content_sync.orchestration import (
+    acquire_source_lock,
+    release_source_lock,
+)
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -35,14 +42,12 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from integrations.models import ContentSource, SyncLog
-from integrations.services.github import (
+from content.sync_parsers.parsing import (
     _compute_content_hash,
     _validate_frontmatter,
-    acquire_sync_lock,
-    release_sync_lock,
-    sync_content_source,
 )
+from integrations.models import ContentSource, SyncLog
+from integrations.services.github import sync_content_source
 
 User = get_user_model()
 
@@ -224,7 +229,7 @@ class S3FailureNoAbortTest(_ArticleSyncTestBase):
     """Test that S3 upload failures do not abort content sync."""
 
     @override_settings(AWS_S3_CONTENT_BUCKET='test-bucket')
-    @patch('integrations.services.github_sync.orchestration.upload_images_to_s3')
+    @patch('content.sync_parsers.media.upload_images_to_s3')
     def test_s3_error_does_not_abort_sync(self, mock_upload):
         """S3 upload error should not prevent content sync."""
         mock_upload.return_value = {
@@ -270,7 +275,7 @@ class ConcurrentSyncSkipTest(TestCase):
         )
 
         # Second lock should fail
-        acquired = acquire_sync_lock(source)
+        acquired = acquire_source_lock(source)
         self.assertFalse(acquired)
 
 
@@ -326,12 +331,72 @@ class SkipPathStaleSourceTest(TestCase):
         self.assertIsNotNone(sync_log)
         self.assertEqual(sync_log.status, 'skipped')
         self.assertEqual(sync_log.source_id, source.pk)
-        self.assertTrue(
-            any(
-                'already in progress' in str(e.get('error', ''))
-                for e in sync_log.errors
-            ),
+        entries = [str(e) for e in list(sync_log.errors) + list(sync_log.warnings)]
+        self.assertTrue(any('already running' in e for e in entries))
+
+
+# ===========================================================================
+# Scenario (A2.3 fresh database): package-row sources sync without legacy rows
+# ===========================================================================
+
+
+class PackageRowStaleSourceGuardTest(TestCase):
+    """The #221 stale-source guard must follow the instance's own table.
+
+    ``seed_content_sources`` writes package ``ContentSource`` rows only, so
+    on a fresh database the legacy ``integrations.ContentSource`` table is
+    empty. Checking package rows against the legacy table made
+    ``run_sync`` return ``None`` for every live source and crashed
+    ``sync_content --from-disk`` with ``AttributeError: 'NoneType' object
+    has no attribute 'items_created'``.
+    """
+
+    def test_package_row_not_vetoed_by_empty_legacy_table(self):
+        """Given only a package ContentSource row (fresh DB, legacy empty),
+        when the stale-source guard evaluates the package row,
+        then it reports the row as present."""
+        from community_base.content_sync.models import (
+            ContentSource as PackageContentSource,
         )
+
+        from integrations.services.content_sync import _source_row_deleted
+
+        self.assertFalse(
+            ContentSource.objects.filter(
+                repo_name='test-org/fresh'
+            ).exists(),
+            'precondition: the legacy table must be empty for this repo',
+        )
+        package_source = PackageContentSource.objects.create(
+            repo_name='test-org/fresh',
+        )
+        self.assertFalse(_source_row_deleted(package_source))
+
+    def test_deleted_package_row_is_reported_stale(self):
+        """Given a package instance whose package row was deleted,
+        when the stale-source guard evaluates it,
+        then it reports the row as gone so run_sync returns None."""
+        from community_base.content_sync.models import (
+            ContentSource as PackageContentSource,
+        )
+
+        from integrations.services.content_sync import _source_row_deleted
+
+        package_source = PackageContentSource.objects.create(
+            repo_name='test-org/deleted',
+        )
+        PackageContentSource.objects.filter(pk=package_source.pk).delete()
+        self.assertTrue(_source_row_deleted(package_source))
+
+    def test_deleted_legacy_row_is_still_reported_stale(self):
+        """Given a legacy instance whose legacy row was deleted (#221 race),
+        when the stale-source guard evaluates it,
+        then it reports the row as gone."""
+        from integrations.services.content_sync import _source_row_deleted
+
+        source = ContentSource.objects.create(repo_name='test-org/legacy')
+        ContentSource.objects.filter(pk=source.pk).delete()
+        self.assertTrue(_source_row_deleted(source))
 
 
 # ===========================================================================
@@ -351,7 +416,7 @@ class StaleLockReclaimTest(TestCase):
             sync_locked_at=timezone.now() - timedelta(minutes=15),
         )
 
-        acquired = acquire_sync_lock(source)
+        acquired = acquire_source_lock(source)
         self.assertTrue(acquired)
 
 
@@ -367,7 +432,8 @@ class WebhookFloodTest(TestCase):
         """Given a source with sync_locked_at set (sync running),
         when 5 webhooks set sync_requested,
         then when the running sync completes, it returns True for follow-up."""
-        source = ContentSource.objects.create(
+        source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             sync_locked_at=timezone.now(),
         )
@@ -377,9 +443,13 @@ class WebhookFloodTest(TestCase):
             source.sync_requested = True
             source.save(update_fields=['sync_requested'])
 
-        # When sync completes, release_sync_lock returns True
-        follow_up = release_sync_lock(source)
-        self.assertTrue(follow_up)
+        # When sync completes, release clears the flags and queues the follow-up
+        with patch(
+            'community_base.content_sync.queue.queue_source_sync',
+        ) as queue_sync:
+            release_source_lock(source, follow_up_key=source.pk)
+
+        self.assertEqual(queue_sync.call_count, 1)
 
         # After release, the flag and lock are cleared
         source.refresh_from_db()
@@ -388,14 +458,19 @@ class WebhookFloodTest(TestCase):
 
     def test_no_follow_up_when_not_requested(self):
         """When no follow-up was requested, release returns False."""
-        source = ContentSource.objects.create(
+        source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             sync_locked_at=timezone.now(),
             sync_requested=False,
         )
 
-        follow_up = release_sync_lock(source)
-        self.assertFalse(follow_up)
+        with patch(
+            'community_base.content_sync.queue.queue_source_sync',
+        ) as queue_sync:
+            release_source_lock(source, follow_up_key=source.pk)
+
+        queue_sync.assert_not_called()
 
 
 # ===========================================================================
@@ -453,7 +528,7 @@ class FrontmatterValidationTest(_ArticleSyncTestBase):
         """Slug is derived from filename when missing from frontmatter.
         Articles, courses, recordings, projects, and downloads should
         not require slug in REQUIRED_FIELDS."""
-        from integrations.services.github import REQUIRED_FIELDS
+        from content.sync_parsers.common import REQUIRED_FIELDS
         for content_type in ['article', 'course', 'recording', 'project', 'download']:
             self.assertNotIn(
                 'slug', REQUIRED_FIELDS.get(content_type, []),
@@ -669,13 +744,11 @@ class MaxFilesLimitTest(_ArticleSyncTestBase):
                 'date': '2026-01-01',
             }, f'Body {i}.')
 
-        with self.assertLogs('integrations.services.github', level='ERROR') as logs:
-            sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
 
         self.assertEqual(sync_log.status, 'failed')
-        self.assertIn('Sync failed for test-org/blog', logs.output[0])
         self.assertTrue(
-            any('more than 5 content files' in str(e.get('error', ''))
+            any('max_files=5' in str(e.get('error', ''))
                 for e in sync_log.errors),
         )
         # No articles should have been created
@@ -738,10 +811,16 @@ class UnitContentHashTest(TestCase):
 
 
 class WebhookDeduplicationTest(TestCase):
-    """Test webhook handler dedup logic."""
+    """Test the package webhook handler wiring at the legacy URL.
+
+    A2.3: one package handler (``community_base.content_sync.webhooks``)
+    serves POST /api/webhooks/github. Source state lives in the package
+    rows; sync dispatch goes through the package queue, never inline.
+    """
 
     def setUp(self):
-        self.source = ContentSource.objects.create(
+        self.source = PackageContentSource.objects.create(
+            slug='blog',
             repo_name='test-org/blog',
             webhook_secret='test-secret',
         )
@@ -753,76 +832,58 @@ class WebhookDeduplicationTest(TestCase):
         ).hexdigest()
         return f'sha256={sig}'
 
+    def _post_push(self, payload):
+        return self.client.post(
+            '/api/webhooks/github',
+            data=payload,
+            content_type='application/json',
+            HTTP_X_GITHUB_EVENT='push',
+            HTTP_X_GITHUB_DELIVERY='delivery-1',
+            HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
+        )
+
     def test_webhook_updates_last_webhook_at(self):
         """last_webhook_at is updated on every webhook received."""
         payload = json.dumps({
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'test-org/blog'},
+            'repository': {
+                'full_name': 'test-org/blog',
+                'default_branch': 'main',
+            },
         }).encode()
 
-        with patch('integrations.views.github_webhook.sync_content_source'):
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=payload,
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-                HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
-            )
+        with patch(
+            'community_base.content_sync.webhooks.queue_source_sync',
+        ) as queue_sync:
+            response = self._post_push(payload)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(queue_sync.call_count, 1)
         self.source.refresh_from_db()
         self.assertIsNotNone(self.source.last_webhook_at)
 
-    def test_webhook_sets_sync_requested_when_locked(self):
-        """If sync is running, webhook sets sync_requested flag."""
-        self.source.sync_locked_at = timezone.now()
-        self.source.save()
-
+    def test_webhook_queues_through_package_queue_when_unlocked(self):
+        """A valid push queues the sync via the package queue."""
         payload = json.dumps({
             'ref': 'refs/heads/main',
-            'repository': {'full_name': 'test-org/blog'},
+            'repository': {
+                'full_name': 'test-org/blog',
+                'default_branch': 'main',
+            },
         }).encode()
 
-        with patch('integrations.views.github_webhook.sync_content_source') as mock_sync:
-            response = self.client.post(
-                '/api/webhooks/github',
-                data=payload,
-                content_type='application/json',
-                HTTP_X_GITHUB_EVENT='push',
-                HTTP_X_HUB_SIGNATURE_256=self._make_signature(payload),
-            )
+        with patch(
+            'community_base.content_sync.webhooks.queue_source_sync',
+        ) as queue_sync:
+            response = self._post_push(payload)
 
-        self.assertEqual(response.status_code, 200)
-        self.source.refresh_from_db()
-        self.assertTrue(self.source.sync_requested)
-        # sync_content_source should NOT have been called
-        mock_sync.assert_not_called()
+        self.assertEqual(response.status_code, 202)
+        self.assertEqual(queue_sync.call_count, 1)
 
 
 # ===========================================================================
 # Clone timeout configuration test
 # ===========================================================================
-
-
-class CloneTimeoutConfigTest(TestCase):
-    """Test that clone timeout is configurable."""
-
-    @override_settings(GITHUB_SYNC_CLONE_TIMEOUT=60)
-    @patch('integrations.services.github_sync.repo.subprocess.run')
-    def test_clone_uses_configured_timeout(self, mock_run):
-        from integrations.services.github import clone_or_pull_repo
-
-        mock_run.return_value = MagicMock(returncode=0, stdout='abc123\n', stderr='')
-
-        temp_dir = tempfile.mkdtemp()
-        try:
-            clone_or_pull_repo('test-org/blog', temp_dir)
-            # First call is the clone, check timeout
-            call_args = mock_run.call_args_list[0]
-            self.assertEqual(call_args.kwargs.get('timeout'), 60)
-        finally:
-            import shutil
-            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 # ===========================================================================

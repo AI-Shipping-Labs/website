@@ -1,11 +1,13 @@
 """Characterization tests for the GitHub sync pipeline refactor (#603)."""
 
+from community_base.content_sync.checkout import ImmutableCheckout
 from django.test import TestCase
 
 from content.models import Course
+from content.sync_parsers.checkout_view import activate_view, view_for
+from content.sync_parsers.families.classify import RepoFileClassifier
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
-from integrations.services.github_sync.orchestration import _classify_repo_files
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 
 
@@ -44,7 +46,10 @@ class RepoFileClaimingCharacterizationTest(TestCase):
             'Article body.',
         )
 
-        classified = _classify_repo_files(str(repo.path))
+        with ImmutableCheckout(str(repo.path)) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                classified = RepoFileClassifier(view.root).classify()
 
         self.assertEqual(
             [path.replace('\\', '/') for path in classified.article_files],

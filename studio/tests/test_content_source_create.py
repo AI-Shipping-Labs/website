@@ -8,12 +8,12 @@ are gone.
 from unittest.mock import patch
 
 import pytest
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import Client, TestCase, tag
 
-from integrations.models import ContentSource, SyncLog
-from integrations.services.github import (
+from integrations.services.github_app import (
     INSTALLATION_REPOS_CACHE_KEY,
     GitHubSyncError,
 )
@@ -105,7 +105,8 @@ class ContentSourceCreateViewTest(TestCase):
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
     def test_get_hides_repos_with_existing_content_source(self, _mock_list):
-        ContentSource.objects.create(repo_name='AI-Shipping-Labs/blog')
+        ContentSource.objects.create(
+            slug='blog', repo_name='AI-Shipping-Labs/blog')
         response = self.client.get('/studio/content-sources/new/')
         self.assertNotContains(response, 'value="AI-Shipping-Labs/blog"')
         self.assertContains(response, 'value="AI-Shipping-Labs/content"')
@@ -113,8 +114,10 @@ class ContentSourceCreateViewTest(TestCase):
     @patch('studio.views.content_sources.list_installation_repositories',
            return_value=SAMPLE_REPOS)
     def test_get_shows_empty_state_when_all_repos_registered(self, _mock_list):
-        ContentSource.objects.create(repo_name='AI-Shipping-Labs/blog')
-        ContentSource.objects.create(repo_name='AI-Shipping-Labs/content')
+        ContentSource.objects.create(
+            slug='blog', repo_name='AI-Shipping-Labs/blog')
+        ContentSource.objects.create(
+            slug='content', repo_name='AI-Shipping-Labs/content')
         response = self.client.get('/studio/content-sources/new/')
         self.assertContains(
             response, 'All accessible repos are already registered',
@@ -215,7 +218,7 @@ class ContentSourceCreateViewTest(TestCase):
 
         self.assertEqual(response.redirect_chain[-1], ('/studio/sync/', 302))
         source = ContentSource.objects.get(repo_name='AI-Shipping-Labs/blog')
-        self.assertIsNone(source.last_sync_status)
+        self.assertEqual(source.last_sync_status, '')
         self.assertFalse(SyncLog.objects.filter(source=source).exists())
         self.assertIn(
             'Could not queue initial sync for AI-Shipping-Labs/blog',

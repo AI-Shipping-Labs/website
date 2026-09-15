@@ -5,7 +5,7 @@ from datetime import date
 from django.test import TestCase
 
 from content.models import Article
-from integrations.services.github_sync.lifecycle import (
+from content.sync_parsers.lifecycle import (
     cleanup_stale_synced_objects,
     find_synced_object,
     upsert_synced_object,

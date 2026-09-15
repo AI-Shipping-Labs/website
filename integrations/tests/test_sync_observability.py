@@ -1,11 +1,11 @@
 import uuid
 from datetime import date, timedelta
 
+from community_base.content_sync.models import ContentSource, SyncLog
 from django.test import TestCase
 from django.utils import timezone
 
 from content.models import Article, Course, Workshop
-from integrations.models import ContentSource, SyncLog
 from integrations.services.sync_observability import (
     logical_history_page,
     logical_status,
@@ -122,8 +122,8 @@ class StructuredErrorsTest(TestCase):
 class LogicalHistoryQueryTest(TestCase):
     @classmethod
     def setUpTestData(cls):
-        cls.one = ContentSource.objects.create(repo_name='org/one')
-        cls.two = ContentSource.objects.create(repo_name='org/two')
+        cls.one = ContentSource.objects.create(slug='one', repo_name='org/one')
+        cls.two = ContentSource.objects.create(slug='two', repo_name='org/two')
 
     def test_source_scoping_happens_before_computed_status(self):
         batch_id = uuid.uuid4()
@@ -174,5 +174,5 @@ class LogicalHistoryQueryTest(TestCase):
         batch_plan = SyncLog.objects.filter(
             batch_id=batch_id,
         ).order_by('-started_at').explain()
-        self.assertIn('sync_src_status_started_idx', source_plan)
-        self.assertIn('sync_batch_started_idx', batch_plan)
+        self.assertIn('cb_sync_src_status_idx', source_plan)
+        self.assertIn('cb_sync_batch_started_idx', batch_plan)

@@ -1140,11 +1140,12 @@ def handle_checkout_async_payment_failed(session_data, event_context=None):
         resolved_user = locked.user
 
     if resolved_user is not None:
-        # Serialize the check/send/log sequence by business key. EmailLog's
-        # unique dedupe key prevents retries after success; this row lock also
-        # prevents two first deliveries from reaching SES concurrently before
-        # either log exists. A transport exception rolls back only this small
-        # email transaction, leaving payment_failed durable and retryable.
+        # Serialize the check/queue sequence by business key. The delivery's
+        # idempotency key (checkout-payment-failed:{session_id}) dedupes
+        # replays onto one durable delivery; this row lock also prevents two
+        # first sends from queueing concurrently before either row exists.
+        # The provider send happens from the delivery worker (A1.2 slice 2),
+        # so a SES failure no longer rolls anything back here.
         with transaction.atomic():
             locked = CheckoutFulfillment.objects.select_for_update().get(
                 pk=fulfillment.pk,

@@ -1,16 +1,26 @@
-"""Delayed-notification Checkout settlement coverage for issue #1423."""
+"""Delayed-notification Checkout settlement coverage for issue #1423.
+
+Since A1.2 slice 2 the checkout failure mail queues a durable
+``EmailDelivery`` under the ``checkout-payment-failed:{session_id}``
+idempotency key; the provider send happens from the delivery worker, so
+tests drain pending deliveries (with a stubbed or failing
+``ses_local`` client) instead of patching the legacy SES transport.
+"""
 
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
+from community_base.jobs.runner import RetryableJobError
+from community_base.mail.jobs import deliver as deliver_job
+from community_base.mail.models import EmailDelivery
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import User
 from content.models import Course, CourseAccess
 from email_app.models import EmailLog
-from email_app.services import EmailServiceError
+from email_app.testing import StubSESClient, deliver_pending_mail
 from payments.models import (
     CheckoutAccountBinding,
     CheckoutFulfillment,
@@ -141,11 +151,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(row.status, CheckoutFulfillment.STATUS_QUARANTINED)
         self.assertEqual(row.reason, PaymentAccountMismatch.REASON_EXPIRED_BINDING)
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-delayed-failure",
-    )
-    def test_failure_records_once_and_deduplicates_transactional_email(self, _mock_ses):
+    def test_failure_records_once_and_deduplicates_transactional_email(self):
         pending = self.membership_session()
         handle_checkout_completed(pending)
         handle_checkout_async_payment_failed(
@@ -161,6 +167,17 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.user.refresh_from_db()
         self.assertEqual(row.status, CheckoutFulfillment.STATUS_PAYMENT_FAILED)
         self.assertEqual(self.user.membership.tier, self.free_tier)
+        # The second failure event replays onto the same idempotency key,
+        # so exactly one durable delivery exists for the session.
+        deliveries = EmailDelivery.objects.filter(
+            purpose="checkout_payment_failed",
+        )
+        self.assertEqual(deliveries.count(), 1)
+        self.assertEqual(
+            deliveries.get().idempotency_key,
+            "checkout-payment-failed:cs_delayed",
+        )
+        deliver_pending_mail()
         logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
         self.assertEqual(logs.count(), 1)
         self.assertEqual(
@@ -230,8 +247,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(after.details, before.details)
         send_failure.assert_not_called()
 
-    @patch("email_app.services.email_service.EmailService._send_ses")
-    def test_unknown_failure_never_uses_payload_email_as_authority(self, mock_ses):
+    def test_unknown_failure_never_uses_payload_email_as_authority(self):
         payload = self.membership_session(session_id="cs_unknown")
         payload["client_reference_id"] = None
         payload["customer_details"] = {"email": "payload-only@test.com"}
@@ -240,33 +256,56 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(row.status, CheckoutFulfillment.STATUS_PAYMENT_FAILED)
         self.assertIsNone(row.user)
         self.assertFalse(User.objects.filter(email="payload-only@test.com").exists())
-        self.assertFalse(EmailLog.objects.filter(email_type="checkout_payment_failed").exists())
-        mock_ses.assert_not_called()
+        self.assertFalse(EmailDelivery.objects.filter(purpose="checkout_payment_failed").exists())
 
-    @patch("email_app.services.email_service.EmailService._send_ses")
-    def test_failure_email_transport_error_keeps_state_and_retries(self, mock_ses):
-        mock_ses.side_effect = [EmailServiceError("SES unavailable"), "ses-retried"]
+    def test_failure_email_transport_error_keeps_state_and_worker_retries(self):
+        """A SES timeout never raises into the webhook handler.
+
+        The durable delivery stays retryable for the worker; the retried
+        job completes the provider send and writes the audit row.
+        """
         payload = self.membership_session()
         handle_checkout_completed(payload)
-        with self.assertRaises(EmailServiceError):
-            handle_checkout_async_payment_failed(payload)
+        handle_checkout_async_payment_failed(payload)
         self.assertEqual(
             CheckoutFulfillment.objects.get(stripe_session_id="cs_delayed").status,
             CheckoutFulfillment.STATUS_PAYMENT_FAILED,
         )
-        self.assertFalse(EmailLog.objects.filter(email_type="checkout_payment_failed").exists())
+        delivery = EmailDelivery.objects.get(purpose="checkout_payment_failed")
+        self.assertEqual(delivery.state, EmailDelivery.State.PENDING)
+        self.assertFalse(
+            EmailLog.objects.filter(email_type="checkout_payment_failed").exists(),
+        )
 
-        handle_checkout_async_payment_failed(payload)
+        class TimedOutSESClient(StubSESClient):
+            """A transport whose first call times out (worker retry)."""
+
+            def send_email(self, **kwargs):
+                from botocore.exceptions import ConnectTimeoutError
+
+                raise ConnectTimeoutError(endpoint_url="https://ses.test")
+
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=TimedOutSESClient(),
+        ):
+            with self.assertRaises(RetryableJobError):
+                deliver_job(None, {"delivery_id": str(delivery.id)})
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.state, EmailDelivery.State.RETRYABLE)
+
+        # The retried worker job completes the provider send.
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=StubSESClient(),
+        ):
+            deliver_job(None, {"delivery_id": str(delivery.id)})
         self.assertEqual(
             EmailLog.objects.filter(email_type="checkout_payment_failed").count(),
             1,
         )
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-recovery",
-    )
-    def test_paid_success_recovers_payment_failed_once(self, _mock_ses):
+    def test_paid_success_recovers_payment_failed_once(self):
         payload = self.membership_session()
         handle_checkout_completed(payload)
         handle_checkout_async_payment_failed(payload)

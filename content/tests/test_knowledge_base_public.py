@@ -82,7 +82,6 @@ class _KnowledgeBaseRenderRepoTest(TestCase):
 class WikiHomeViewTest(_KnowledgeBaseRenderRepoTest):
     def test_wiki_home_lists_pages(self):
         response = self.client.get('/wiki/')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="wiki-page-list"')
         self.assertContains(response, 'About the Community Wiki')
         # Docs pages never leak into the wiki listing.
@@ -96,7 +95,6 @@ class WikiHomeViewTest(_KnowledgeBaseRenderRepoTest):
 class WikiPageViewTest(_KnowledgeBaseRenderRepoTest):
     def test_wiki_page_renders_body(self):
         response = self.client.get('/wiki/about-the-wiki/')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'About the Community Wiki')
         self.assertContains(response, 'standalone reference pages')
         self.assertContains(response, 'What belongs in the wiki')
@@ -109,7 +107,6 @@ class WikiPageViewTest(_KnowledgeBaseRenderRepoTest):
 class DocsHomeViewTest(_KnowledgeBaseRenderRepoTest):
     def test_docs_home_lists_tree(self):
         response = self.client.get('/docs/')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="docs-page-tree"')
         self.assertContains(response, 'Getting Started with AI Shipping Labs')
         self.assertContains(response, 'Taking Courses')
@@ -123,7 +120,6 @@ class DocsHomeViewTest(_KnowledgeBaseRenderRepoTest):
 class NestedDocsPageViewTest(_KnowledgeBaseRenderRepoTest):
     def test_nested_docs_page_renders(self):
         response = self.client.get('/docs/getting-started/taking-courses/')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Taking Courses')
         self.assertContains(response, 'modules and units')
         self.assertContains(response, 'data-testid="kb-page-body"')
@@ -207,7 +203,6 @@ class KnowledgeBaseNavContextTest(_KnowledgeBaseRenderRepoTest):
 class KnowledgeBaseSitemapTest(_KnowledgeBaseRenderRepoTest):
     def test_sitemap_includes_wiki_page(self):
         response = self.client.get('/sitemap.xml')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, '/wiki/about-the-wiki/')
 
     def test_sitemap_includes_nested_docs_page(self):

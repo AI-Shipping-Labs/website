@@ -57,12 +57,11 @@ class RemoveTrailingSlashMiddlewareTest(TestCase):
 
     def test_wiki_trailing_slash_not_redirected(self):
         """Package knowledge base routes keep their canonical trailing slash."""
-        response = self.client.get('/wiki/')
-        self.assertEqual(response.status_code, 200)
+        # assertContains implies 200 and keeps the status-200 ratchet shrink-only.
+        self.assertContains(self.client.get('/wiki/'), 'data-testid="wiki-page-list"')
 
     def test_docs_trailing_slash_not_redirected(self):
-        response = self.client.get('/docs/')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(self.client.get('/docs/'), 'data-testid="docs-page-tree"')
 
     def test_wiki_no_slash_appends_slash(self):
         """Slashless KB URLs canonicalize to the package's slashful route."""

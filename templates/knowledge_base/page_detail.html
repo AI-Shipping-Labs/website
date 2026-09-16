@@ -11,15 +11,18 @@
   <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
     <div class="flex flex-col gap-10 py-8 lg:flex-row lg:py-16">
       <article class="min-w-0 max-w-3xl flex-1">
-        {% if ancestors %}
-          <nav aria-label="Breadcrumb" class="mb-4 text-sm text-muted-foreground">
-            {% if page.section == 'docs' %}<a href="/docs" class="hover:text-accent">Documentation</a>{% else %}<a href="/wiki" class="hover:text-accent">Wiki</a>{% endif %}
-            {% for ancestor in ancestors %}
-              <span aria-hidden="true"> / </span>
-              <a href="{{ ancestor.get_absolute_url }}" class="hover:text-accent">{{ ancestor.title }}</a>
-            {% endfor %}
-          </nav>
-        {% endif %}
+        {% comment %}
+          The section crumb always renders: wiki pages are flat, so the
+          ancestors list is empty there and the section link is the only
+          way back to /wiki.
+        {% endcomment %}
+        <nav aria-label="Breadcrumb" class="mb-4 text-sm text-muted-foreground">
+          {% if page.section == 'docs' %}<a href="/docs" class="hover:text-accent">Documentation</a>{% else %}<a href="/wiki" class="hover:text-accent">Wiki</a>{% endif %}
+          {% for ancestor in ancestors %}
+            <span aria-hidden="true"> / </span>
+            <a href="{{ ancestor.get_absolute_url }}" class="hover:text-accent">{{ ancestor.title }}</a>
+          {% endfor %}
+        </nav>
 
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">{{ page.title }}</h1>
         {% if page.summary %}

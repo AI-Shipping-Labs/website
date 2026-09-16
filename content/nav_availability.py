@@ -13,10 +13,20 @@ from integrations.shared_cache import (
 _PUBLIC_DOWNLOADS_CACHE_KEY = 'content:public_downloads_available:v1'
 _MARKETING_NAV_CACHE_KEY = 'content:marketing_nav:v1'
 _MARKETING_NAV_SECTIONS = ('about', 'community', 'resources')
+_KB_WIKI_CACHE_KEY = 'content:kb_wiki_available:v1'
+_KB_DOCS_CACHE_KEY = 'content:kb_docs_available:v1'
 _UNSET = object()
 
 _has_published_downloads = _UNSET
 _marketing_nav = _UNSET
+_kb_section_cache_keys = {
+    'wiki': _KB_WIKI_CACHE_KEY,
+    'docs': _KB_DOCS_CACHE_KEY,
+}
+_kb_nav = {
+    'wiki': False,
+    'docs': False,
+}
 
 
 def _read_shared_flag():
@@ -127,3 +137,54 @@ def get_marketing_pages_nav():
     if _marketing_nav is _UNSET:
         _marketing_nav = _empty_marketing_nav()
     return _marketing_nav
+
+
+def _read_kb_flag(section):
+    try:
+        return get_shared_cache(_kb_section_cache_keys[section], _UNSET)
+    except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
+        return _UNSET
+
+
+def _write_kb_flag(section, value):
+    try:
+        set_shared_cache(_kb_section_cache_keys[section], bool(value), None)
+    except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
+        pass
+
+
+def refresh_knowledge_base_nav_cache():
+    """Refresh the cached Wiki/Docs nav flags from the package pages.
+
+    One refresh covers both sections so any writer (sync cleanup, Studio
+    edits, post-migrate warmer) can keep the pair consistent. A missing
+    knowledge base table (partial deploy before the package migration)
+    reads as "no pages" instead of breaking the write path.
+    """
+    from community_base.knowledge_base.models import KnowledgeBasePage
+
+    global _kb_nav
+    for section in ('wiki', 'docs'):
+        try:
+            available = KnowledgeBasePage.objects.filter(
+                section=section,
+                status='published',
+            ).exists()
+        except DatabaseError:
+            available = False
+        _kb_nav[section] = available
+        _write_kb_flag(section, available)
+    return dict(_kb_nav)
+
+
+def has_published_kb_pages_for_nav(section):
+    """Return whether the public nav should expose one KB section's link.
+
+    Like the Downloads flag this never queries the pages table; writers
+    refresh the shared flags when published pages change.
+    """
+    cached = _read_kb_flag(section)
+    if cached is not _UNSET:
+        _kb_nav[section] = bool(cached)
+        return _kb_nav[section]
+    return _kb_nav[section]

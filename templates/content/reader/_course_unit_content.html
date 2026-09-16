@@ -1,5 +1,6 @@
 {% load video_tags %}
 {% load member_badges %}
+{% load accounts_extras %}
 
 {% include "content/reader/_mobile_progress_bar.html" %}
 
@@ -50,15 +51,101 @@
 </div>
 {% endif %}
 
-{% if unit.homework_html %}
+{% if unit.homework_html or homework %}
 <div class="mb-12 rounded-lg border border-border bg-card p-6">
   <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
     <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
     Homework
   </h2>
+  {% if unit.homework_html %}
   <div class="prose">
     {{ unit.homework_html|safe }}
   </div>
+  {% endif %}
+
+  {% if homework %}
+  <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission">
+    <p class="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="homework-due-date">
+      <i data-lucide="calendar-clock" class="h-4 w-4 flex-shrink-0"></i>
+      Due {{ homework_due_date_display }} &mdash; shown in your account timezone
+    </p>
+
+    {% if not user_authenticated %}
+    <div data-testid="homework-login-prompt">
+      <p class="mb-4 text-sm text-muted-foreground">Log in to submit your homework.</p>
+      <a href="/accounts/login/?next={{ unit.get_absolute_url }}"
+         class="{% button_classes 'primary' %}"
+         data-testid="homework-login-cta">
+        Log in to submit
+      </a>
+    </div>
+    {% else %}
+
+      {% if not homework_is_accepting %}
+      <div class="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-foreground" data-testid="homework-deadline-passed-banner">
+        {% if homework_is_self_paced %}
+        This homework is closed. Your submission is shown below and can no longer be edited.
+        {% else %}
+        The deadline for this homework passed on {{ homework_due_date_display }}. Your submission is shown below and can no longer be edited.
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <form method="post" action="{{ unit.get_absolute_url }}" data-testid="homework-submission-form">
+        {% csrf_token %}
+        {% for item in homework_questions %}
+        <fieldset class="mb-6" data-testid="homework-question" data-question-id="{{ item.question.pk }}">
+          <legend class="mb-2 text-sm font-medium text-foreground">{{ item.question.text }}</legend>
+          {% if item.question.question_type == 'MC' %}
+          <div class="space-y-2">
+            {% for option in item.options %}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="radio" name="answer_{{ item.question.pk }}" value="{{ option.value }}"
+                     {% if option.selected %}checked{% endif %}
+                     {% if not homework_is_accepting %}disabled{% endif %}
+                     class="h-4 w-4 border-border text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              {{ option.text }}
+            </label>
+            {% endfor %}
+          </div>
+          {% elif item.question.question_type == 'CB' %}
+          <div class="space-y-2">
+            {% for option in item.options %}
+            <label class="flex items-center gap-2 text-sm text-foreground">
+              <input type="checkbox" name="answer_{{ item.question.pk }}[]" value="{{ option.value }}"
+                     {% if option.selected %}checked{% endif %}
+                     {% if not homework_is_accepting %}disabled{% endif %}
+                     class="h-4 w-4 rounded border-border text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              {{ option.text }}
+            </label>
+            {% endfor %}
+          </div>
+          {% else %}
+          <textarea name="answer_{{ item.question.pk }}"
+                    rows="{% if item.question.question_type == 'FL' %}5{% else %}2{% endif %}"
+                    {% if not homework_is_accepting %}disabled{% endif %}
+                    class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ item.text_answer }}</textarea>
+          {% endif %}
+        </fieldset>
+        {% endfor %}
+
+        <div class="mb-6">
+          <label for="homework-link-input" class="mb-2 block text-sm font-medium text-foreground">Homework link (optional)</label>
+          <input type="url" id="homework-link-input" name="homework_link" value="{{ homework_link_value }}"
+                 placeholder="https://github.com/..."
+                 {% if not homework_is_accepting %}disabled{% endif %}
+                 class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        </div>
+
+        {% if homework_is_accepting %}
+        <button type="submit" class="{% button_classes 'primary' %}" data-testid="homework-submit-button">
+          Submit homework
+        </button>
+        {% endif %}
+      </form>
+    {% endif %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 

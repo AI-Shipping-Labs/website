@@ -194,6 +194,65 @@ Per-unit `access` overrides the course's `default_unit_access`. `is_preview: tru
 
 Issue #1674: `kind: homework` routes the body into `Unit.homework` exactly like the existing `is_homework: true` does today — `is_homework: true` keeps working as a legacy alias and, when `kind:` is absent, sets `kind='homework'` too. If both are set and disagree, `kind:` wins and sync records an info-level note. `kind: event` requires `session_position:` (a positive integer, matching `events.Event.series_position`) — sync does NOT look up any `events.Event` row at sync time (curriculum syncs independently of which cohorts/events exist; the actual event is resolved per viewer/cohort at render time). Sync fails that unit, naming the file, if `session_position` is missing, non-numeric, or not a positive integer when `kind: event` is set. `is_bonus: true` sets `Unit.is_bonus` — excluded from the progress denominator, still tracked/shown.
 
+### Homework: `questions:` and `due_date:`
+
+Issue #1683 (tranche 1). Extends the same `kind: homework` unit file with a
+submittable, auto-scored question list. `due_date:` is required whenever
+`questions:` is present.
+
+```markdown
+---
+content_id: <UUID>
+sort_order: 41
+title: 'Module 1 Homework: Document Processing with AI'
+kind: homework                        # or is_homework: true, per #1674
+due_date: '2026-09-27T21:59:00Z'      # ISO-8601 with an explicit UTC offset -- a naive
+                                        # datetime (no offset) is a sync error naming the file
+questions:
+  - id: q1-lines                       # required, stable across edits -- the re-sync upsert key
+    text: 'How many lines are in the extracted content from the "Think Python" book?'
+    type: multiple_choice              # multiple_choice | free_form | free_form_long | checkboxes
+    options: ['12,268', '14,268', '16,268', '18,268']
+    correct: '3'                       # 1-based index (comma-separated for checkboxes)
+    score: 1                           # optional, default 1
+  - id: q7-reflection
+    text: 'What was the hardest part of this homework?'
+    type: free_form
+    answer_type: any                   # any | float | integer | exact_string | contains_string
+---
+markdown body (the homework instructions/prose)
+```
+
+Sync resolves ONE target cohort per sync pass (`_resolve_homework_cohort`
+in `content/sync_parsers/families/homework.py`): the course's currently
+in-range `mode='cohort'` cohort; if none is in range and the course has
+exactly one cohort overall (including a `mode='self_paced'` cohort), that
+cohort; otherwise the homework file is skipped with a logged sync warning
+(not a hard failure -- unrelated units in the same course still sync).
+`Homework.content_id` is scoped `(cohort, content_id)`, not globally
+unique, specifically so a later cohort resolving against the same
+curriculum unit gets its own `Homework` row instead of colliding with an
+earlier cohort's -- reconcile-never-destroy, same as the rest of the sync
+pipeline; an earlier cohort's `Homework` row is never touched by a later
+cohort's sync pass. A `questions:` entry removed from a later edit deletes
+the corresponding question (and its submitted answers) on next sync.
+
+Render-time resolution is a related but DIFFERENT, per-viewer policy
+(`content.services.course_units.resolve_homework_for_unit`, a sibling of
+`resolve_session_event`'s policy for `kind: event` units): the viewer's
+own enrolled cohort (any mode) first, else the most recent past dated
+cohort or any self-paced cohort. A self-paced cohort has no
+`start_date`/`end_date` and therefore no deadline to be late against --
+`Homework.is_accepting_submissions` never enforces `due_date` for a
+`mode='self_paced'` cohort (only `state == OPEN` gates it); the frontmatter
+`due_date:` value is still stored on that cohort's `Homework` row (sync
+requires it whenever `questions:` is present, dated cohort or not) but is
+inert for a self-paced learner.
+
+A `kind: homework` unit with no `questions:`/`due_date:` frontmatter keeps
+rendering as prose-only instructions, with no submission form -- adding
+`questions:` later is what turns it into a submittable homework.
+
 ## Editing workflow
 
 1. Open the course in Studio: `/studio/courses/<id>/edit`. The "Source-managed course" sticky bar links to the file on GitHub via the `Edit on GitHub` button.

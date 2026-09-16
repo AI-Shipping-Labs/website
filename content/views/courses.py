@@ -1,6 +1,7 @@
 from collections import Counter
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,6 +33,10 @@ from content.services.enrollment import (
 )
 from content.services.enrollment import (
     unenroll as unenroll_user,
+)
+from content.services.homework_submissions import (
+    parse_submission_post,
+    save_submission,
 )
 from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.models import Event
@@ -668,6 +673,9 @@ def _render_course_unit_detail(request, course, module, unit):
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
+    if request.method == 'POST':
+        return _handle_homework_submission_post(request, unit)
+
     # Record a `lesson_open` activity row for the CRM timeline (issue #853),
     # only for authenticated users who have access (this branch). Deduped:
     # re-opening the same unit within 30 minutes does not create a new row.
@@ -678,6 +686,7 @@ def _render_course_unit_detail(request, course, module, unit):
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit,
     )
+    context.update(course_unit_service.build_homework_submission_context(user, unit))
     return render(request, 'content/course_unit_detail.html', context)
 
 
@@ -725,6 +734,53 @@ def course_submodule_unit_detail(
     )
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
     return _render_course_unit_detail(request, course, submodule, unit)
+
+
+def _handle_homework_submission_post(request, unit):
+    """Handle a homework submission POST on the unit detail page.
+
+    Issue #1683 tranche 1. Reuses the same URL/view as the GET unit page —
+    called from ``_render_course_unit_detail``, so it applies uniformly
+    whether the unit's module is top-level or a submodule (issue #1674).
+    The absolute requirement: a submitted answer is never lost and never
+    silently rejected, so every branch below either saves the submission
+    or shows a specific reason it wasn't saved and redirects back to the
+    same unit page (never a generic error, never a silent no-op).
+    """
+    unit_url = unit.get_absolute_url()
+
+    if not request.user.is_authenticated:
+        return redirect(f'/accounts/login/?next={unit_url}')
+
+    homework = course_unit_service.resolve_homework_for_unit(unit, request.user)
+    if homework is None:
+        return redirect(unit_url)
+
+    if not homework.is_accepting_submissions:
+        if homework.is_self_paced:
+            messages.error(
+                request,
+                'This homework is closed; this answer was not saved.',
+            )
+        else:
+            messages.error(
+                request,
+                'The deadline for this homework has passed; this answer was not saved.',
+            )
+        return redirect(unit_url)
+
+    answers_by_question_id = parse_submission_post(request.POST, homework)
+    homework_link = request.POST.get('homework_link', '').strip()
+    save_submission(
+        homework, request.user,
+        homework_link=homework_link,
+        answers_by_question_id=answers_by_question_id,
+    )
+    messages.success(
+        request,
+        'Your homework was submitted. You can update it anytime before the deadline.',
+    )
+    return redirect(unit_url)
 
 
 # --- Unit API endpoints ---

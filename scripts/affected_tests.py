@@ -770,18 +770,45 @@ def _git(args: list[str], *, repo_root: Path = REPO_ROOT) -> str:
     return completed.stdout
 
 
+def _merge_base(base: str, repo_root: Path, allow_fallback: bool = True) -> str:
+    """Resolve ``merge-base(base, HEAD)``, optionally with CI-safe fallbacks.
+
+    CI checkouts of a feature branch have no ``origin/main`` ref; with
+    ``allow_fallback`` the resolver walks ``main``, then HEAD itself, which
+    makes the committed diff empty and the plan driven by local changes
+    only. With fallbacks disabled an unresolvable base raises GitError so
+    the CLI keeps its documented exit-2 behavior for explicit bad refs.
+    """
+    candidates = [base]
+    if allow_fallback:
+        candidates += ['main', 'HEAD']
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate or candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            return _git(["merge-base", candidate, "HEAD"], repo_root=repo_root).strip()
+        except GitError:
+            continue
+    if allow_fallback:
+        return _git(["rev-parse", "HEAD"], repo_root=repo_root).strip()
+    raise GitError(f"git merge-base {base} HEAD: cannot resolve base ref")
+
+
 def changed_files(
     base: str = "origin/main",
     *,
     include_untracked: bool = True,
     repo_root: Path = REPO_ROOT,
+    allow_fallback: bool = True,
 ) -> tuple[list[str], str]:
     """Files changed vs ``merge-base(base, HEAD)``, plus local uncommitted work.
 
     SWE work is uncommitted when the tester runs, so unstaged, staged, and
     (by default) untracked files are unioned into the diff.
     """
-    merge_base = _git(["merge-base", base, "HEAD"], repo_root=repo_root).strip()
+    merge_base = _merge_base(base, repo_root, allow_fallback=allow_fallback)
     collected: set[str] = set()
     collected.update(_git(["diff", "--name-only", f"{merge_base}..HEAD"], repo_root=repo_root).split())
     collected.update(_git(["diff", "--name-only"], repo_root=repo_root).split())
@@ -846,7 +873,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        files, merge_base = changed_files(args.base, include_untracked=args.include_untracked)
+        # An explicit --base stays strict (a typo must exit 2); only the
+        # default base falls back, because CI feature-branch checkouts have
+        # no origin/main ref.
+        explicit_base = any(
+            arg == '--base' or arg.startswith('--base=') for arg in (argv or sys.argv[1:])
+        )
+        files, merge_base = changed_files(
+            args.base,
+            include_untracked=args.include_untracked,
+            allow_fallback=not explicit_base,
+        )
         plan = build_plan(files, base=args.base)
     except GitError as exc:
         print(f"error: {exc}", file=sys.stderr)

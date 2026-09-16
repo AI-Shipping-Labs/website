@@ -59,14 +59,23 @@ def snapshot_preexisting_real_state():
 
     worktrees_raw = git("worktree", "list", "--porcelain", "-z")
     worktrees = cleanup.parse_worktree_porcelain(worktrees_raw)
-    main = next(worktree for worktree in worktrees if worktree.branch_ref == "refs/heads/main")
-    configured_boundary = main.path / ".claude" / "worktrees"
-    boundary = (
-        str(configured_boundary),
-        configured_boundary.is_symlink(),
-        os.readlink(configured_boundary) if configured_boundary.is_symlink() else None,
-        str(configured_boundary.resolve(strict=False)),
+    main = next(
+        (worktree for worktree in worktrees if worktree.branch_ref == "refs/heads/main"),
+        None,
     )
+    if main is None:
+        # CI checkouts carry the PR branch only; no main worktree means no
+        # configured boundary to pin. The before/after comparison stays
+        # consistent because both snapshots see the same absence.
+        boundary = None
+    else:
+        configured_boundary = main.path / ".claude" / "worktrees"
+        boundary = (
+            str(configured_boundary),
+            configured_boundary.is_symlink(),
+            os.readlink(configured_boundary) if configured_boundary.is_symlink() else None,
+            str(configured_boundary.resolve(strict=False)),
+        )
 
     processes = []
     for pid in sorted({os.getpid(), os.getppid()}):

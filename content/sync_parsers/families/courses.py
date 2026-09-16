@@ -1279,7 +1279,10 @@ def _has_direct_unit_files(module_dir, course_ignore_patterns, module_ignore_pat
     return False
 
 
-def _upsert_module_row(course, parent_module, entry, module_data, rel_path, repo_name, commit_sha, stats):
+def _upsert_module_row(
+    course, parent_module, entry, module_data, rel_path, repo_name,
+    commit_sha, stats, seen_module_slugs=None,
+):
     """Create or update the ``Module`` row for one module directory.
 
     Shared by top-level modules and submodules (issue #1674) — same
@@ -1289,11 +1292,35 @@ def _upsert_module_row(course, parent_module, entry, module_data, rel_path, repo
     -content invariants (``Module.clean()``) are enforced on every sync,
     converting a ``ValidationError`` into a :class:`GitHubSyncError` that
     names this directory.
+
+    Issue #1681: ``seen_module_slugs`` is a course-wide ``{(parent_pk,
+    slug): rel_path}`` map shared across every directory processed this
+    sync run. Two module directories that derive the same slug within the
+    same sibling group (same parent, or both top-level) would otherwise be
+    silently merged by the ``(course, parent, slug)`` fallback lookup below
+    — the second directory's fields would overwrite the first's row in
+    place, with no error. Checking first and raising a named
+    :class:`GitHubSyncError` (caught by the caller and recorded in
+    ``stats['errors']``) turns that silent merge into a visible error
+    naming both offending source paths, without ever reaching
+    ``module.save()``.
     """
     from content.models import Module
 
     sort_order = module_data.get('sort_order', extract_sort_order(entry.name))
     slug = module_data.get('slug', derive_slug(entry.name))
+
+    if seen_module_slugs is not None:
+        identity_key = (parent_module.pk if parent_module else None, slug)
+        other_rel_path = seen_module_slugs.get(identity_key)
+        if other_rel_path is not None and other_rel_path != rel_path:
+            raise GitHubSyncError(
+                f"Slug collision: modules {other_rel_path!r} and "
+                f"{rel_path!r} both resolve to slug {slug!r} within the "
+                f'same course. Skipped {rel_path}.'
+            )
+        seen_module_slugs[identity_key] = rel_path
+
     is_bonus = bool(module_data.get('bonus', False))
     available_after_days_raw = module_data.get('available_after_days')
     available_after_days = None
@@ -1383,10 +1410,15 @@ def _upsert_module_row(course, parent_module, entry, module_data, rel_path, repo
 def _sync_module_dir(
     course, entry, parent_module, repo_dir, repo_name, commit_sha, stats,
     known_images, course_dir, course_ignore_patterns, course_slug,
-    unit_lookup, seen_module_paths,
+    unit_lookup, seen_module_paths, seen_module_slugs, unit_sync_state,
 ):
     """Sync one module directory: the module row, then either its
     submodules (parent) or its units (leaf) — never both (issue #1674).
+
+    ``seen_module_slugs`` and ``unit_sync_state`` are shared, mutable,
+    course-wide accumulators threaded through the whole recursive tree
+    walk (issue #1681) — see :func:`_upsert_module_row` and
+    :func:`_sync_module_units` for what they track and why.
     """
     module_yaml_path = os.path.join(entry.path, 'module.yaml')
     module_data = _parse_yaml_file(module_yaml_path)
@@ -1425,7 +1457,7 @@ def _sync_module_dir(
 
     module = _upsert_module_row(
         course, parent_module, entry, module_data, rel_path, repo_name,
-        commit_sha, stats,
+        commit_sha, stats, seen_module_slugs=seen_module_slugs,
     )
 
     if submodule_entries:
@@ -1439,6 +1471,7 @@ def _sync_module_dir(
             module_ignore_patterns=module_ignore_patterns,
             course_slug=course_slug,
             unit_lookup=unit_lookup,
+            unit_sync_state=unit_sync_state,
         )
         for submodule_entry in submodule_entries:
             try:
@@ -1446,7 +1479,7 @@ def _sync_module_dir(
                     course, submodule_entry, module, repo_dir, repo_name,
                     commit_sha, stats, known_images, course_dir,
                     course_ignore_patterns, course_slug, unit_lookup,
-                    seen_module_paths,
+                    seen_module_paths, seen_module_slugs, unit_sync_state,
                 )
             except Exception as e:
                 raise_if_checkout_error(e)
@@ -1467,7 +1500,98 @@ def _sync_module_dir(
             module_ignore_patterns=module_ignore_patterns,
             course_slug=course_slug,
             unit_lookup=unit_lookup,
+            unit_sync_state=unit_sync_state,
         )
+
+
+def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patterns):
+    """Dry, read-only walk of the whole course tree (issue #1681).
+
+    Computes, BEFORE any DB write happens this sync run, every unit
+    identity (``content_id``, repo-relative ``source_path``) that will
+    be seen anywhere in the course. Used by the per-module stale-unit
+    sweep in :func:`_sync_module_units` so a stale-candidate decision is
+    safe regardless of directory-walk order: a unit that will be
+    reparented onto a DIFFERENT module later in the walk is never swept
+    from its old module, because its ``content_id`` already shows up in
+    this course-wide set from the very start — the decision doesn't
+    depend on which module directory happens to be processed first.
+
+    Mirrors the file-selection rules :func:`_sync_module_units` itself
+    applies (README excluded, ignore globs respected, ``content_id``
+    required) and the directory-shape rules
+    :func:`_sync_course_modules`/:func:`_sync_module_dir` apply
+    (``module.yaml`` required, one level of submodules). Deliberately
+    permissive about structural edge cases the real sync would reject
+    (e.g. a directory mixing submodules with direct unit files, or a
+    third level of nesting) — being over-inclusive here only delays a
+    genuinely stale unit's cleanup to the course-end fallback sweep
+    (:func:`_cleanup_stale_units_for_course`), it never causes a
+    wrongful immediate delete. A markdown parse failure is likewise
+    skipped silently here (best-effort hint only) — the real walk
+    records that error itself when it gets to the file.
+    """
+    seen_paths = set()
+    seen_content_ids = set()
+
+    if not checkout_is_dir(course_dir):
+        return seen_paths, seen_content_ids
+
+    def _collect_dir(module_dir, module_ignore_patterns):
+        for filename in checkout_listdir(module_dir):
+            if not filename.endswith('.md') or filename.upper() == 'README.MD':
+                continue
+            filepath = os.path.join(module_dir, filename)
+            if not checkout_is_file(filepath):
+                continue
+            rel_to_course = os.path.relpath(filepath, course_dir)
+            if _matches_ignore_patterns(rel_to_course, course_ignore_patterns):
+                continue
+            if _matches_ignore_patterns(filename, module_ignore_patterns):
+                continue
+            try:
+                metadata, _body = _parse_markdown_file(filepath)
+            except ValueError:
+                continue
+            content_id = metadata.get('content_id')
+            if not content_id:
+                continue
+            seen_paths.add(os.path.relpath(filepath, repo_dir))
+            seen_content_ids.add(content_id)
+
+    for entry in checkout_scandir(course_dir):
+        if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
+            continue
+        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
+        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
+            continue
+        module_yaml_path = os.path.join(entry.path, 'module.yaml')
+        if not checkout_exists(module_yaml_path):
+            continue
+        try:
+            module_data = _parse_yaml_file(module_yaml_path) or {}
+        except ValueError:
+            module_data = {}
+        module_ignore_patterns = [
+            str(p) for p in (module_data.get('ignore', []) or [])
+        ]
+
+        _collect_dir(entry.path, module_ignore_patterns)
+
+        for sub_entry in _find_submodule_dir_entries(
+            entry.path, course_ignore_patterns, course_dir,
+        ):
+            sub_yaml_path = os.path.join(sub_entry.path, 'module.yaml')
+            try:
+                sub_data = _parse_yaml_file(sub_yaml_path) or {}
+            except ValueError:
+                sub_data = {}
+            sub_ignore_patterns = [
+                str(p) for p in (sub_data.get('ignore', []) or [])
+            ]
+            _collect_dir(sub_entry.path, sub_ignore_patterns)
+
+    return seen_paths, seen_content_ids
 
 
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
@@ -1491,6 +1615,53 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
 
     course_ignore_patterns = course_ignore_patterns or []
     seen_module_paths = set()
+    # Issue #1674 grooming correction: slug uniqueness is per sibling
+    # group (course, parent), not course-wide — see the constraint
+    # comment on ``Module.Meta``. Keyed ``(parent_pk_or_None, slug) ->
+    # rel_path`` so a genuine collision within the same sibling group is
+    # caught by ``_upsert_module_row`` before it can silently merge two
+    # different directories into one row (issue #1681).
+    seen_module_slugs = {}
+    # Issue #1681: a dry, read-only pre-scan of the whole course tree,
+    # computed BEFORE any DB write this run. ``_sync_module_units``'s
+    # per-module stale-unit sweep uses these course-wide sets (instead
+    # of that one module directory's own listing) to decide whether a
+    # unit still attached to the module being synced is genuinely gone
+    # or will be claimed by a DIFFERENT module later in this same walk
+    # — closing the directory-walk-order race where a unit that's
+    # mid-move would otherwise be deleted (cascading its
+    # ``UserCourseProgress``) before its new module gets a chance to
+    # reparent it, regardless of which module directory is processed
+    # first.
+    precomputed_seen_paths, precomputed_seen_content_ids = (
+        _precompute_course_unit_identities(
+            course_dir, repo_dir, course_ignore_patterns,
+        )
+    )
+    # Course-wide accumulators built incrementally as the REAL walk
+    # proceeds (unlike the precomputed sets above, these only know what
+    # has actually happened so far). Used for duplicate-content_id
+    # detection (real semantics require real processing order), for
+    # legacy content-hash rename-migration matching (a stale unit's
+    # replacement `Unit` row must actually exist in the DB before its
+    # ``UserCourseProgress`` can be repointed onto it), and by the
+    # end-of-course fallback sweep below, which catches anything the
+    # per-module immediate sweep didn't get to — a rename-migration
+    # match created later in the walk than its stale source, or any
+    # edge case the precompute missed.
+    unit_sync_state = {
+        'seen_paths': set(),
+        # content_id -> first rel_path claiming it this run. Used for
+        # duplicate-content_id detection inside ``_sync_module_units``
+        # and, at course-end, as part of the fallback-sweep exclusion.
+        'content_id_sources': {},
+        'failed_content_ids': set(),
+        # content_hash -> newly created Unit, for stale-unit rename
+        # migration (Edge Case 1), scoped course-wide.
+        'new_hashes': {},
+        'precomputed_seen_paths': precomputed_seen_paths,
+        'precomputed_seen_content_ids': precomputed_seen_content_ids,
+    }
 
     # Build the course-wide unit lookup once before processing any unit so the
     # markdown link rewriter (issue #226) can resolve sibling and cross-module
@@ -1524,7 +1695,8 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             _sync_module_dir(
                 course, entry, None, repo_dir, repo_name, commit_sha, stats,
                 known_images, course_dir, course_ignore_patterns, course.slug,
-                unit_lookup, seen_module_paths,
+                unit_lookup, seen_module_paths, seen_module_slugs,
+                unit_sync_state,
             )
         except Exception as e:
             raise_if_checkout_error(e)
@@ -1532,6 +1704,19 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 'file': os.path.relpath(module_yaml_path, repo_dir),
                 'error': str(e),
             })
+
+    # Issue #1681: course-end fallback sweep, BEFORE sweeping stale
+    # modules — a unit that moved to a new (possibly newly created)
+    # module earlier in the walk must already have been reparented off
+    # its old module by the time that old module is deleted below, or
+    # its ``UserCourseProgress`` would cascade-delete along with it. Most
+    # stale units are already gone by now via the per-module immediate
+    # sweep inside ``_sync_module_units`` (informed by the course-wide
+    # precompute above); this catches what that sweep deliberately left
+    # behind — legacy content-hash rename-migration candidates whose
+    # target `Unit` row didn't exist yet at immediate-sweep time — using
+    # the REAL, now-complete, accumulated course state.
+    _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state)
 
     # Remove stale modules (top-level and submodules — seen_module_paths
     # includes every level).
@@ -1544,11 +1729,75 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
     stats['deleted'] += deleted_count
 
 
+def _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state):
+    """End-of-course fallback sweep for ``Unit`` rows still stale after
+    every module directory's own immediate sweep.
+
+    Issue #1681: the immediate per-module sweep inside
+    :func:`_sync_module_units` — informed by the course-wide precompute
+    built before this course's sync started — already closes the
+    directory-walk-order race for the common case (a unit moving between
+    modules, with or without a rename, in the same sync: its
+    ``content_id``/``source_path`` shows up in the precompute from the
+    start, so no module's sweep ever deletes it prematurely). That
+    immediate sweep deliberately *defers* one category: a stale unit
+    whose ``content_hash`` matches a live file somewhere else in the
+    course (a legacy content-hash rename-migration candidate, Edge Case
+    1) — its replacement ``Unit`` row may not have been created yet at
+    immediate-sweep time, so migrating ``UserCourseProgress`` onto it
+    isn't possible until the whole tree has synced. This function runs
+    once, after the whole module/submodule tree for the course has
+    synced (mirroring the stale-*module* sweep in
+    :func:`_sync_course_modules`, which already got this right), using
+    the REAL, now-complete, accumulated course state to catch those
+    deferred candidates — plus anything else still stale as a safety
+    net.
+
+    A unit is stale only if it belongs to this course, its
+    ``source_repo`` matches, and neither its ``content_id`` nor its
+    ``source_path`` was seen anywhere in the course during this run.
+    """
+    from content.models import Unit, UserCourseProgress
+
+    stale_units = Unit.objects.filter(
+        module__course=course,
+        source_repo=repo_name,
+    ).exclude(
+        source_path__in=unit_sync_state['seen_paths'],
+    ).exclude(
+        content_id__in=unit_sync_state['content_id_sources'].keys(),
+    ).exclude(
+        content_id__in=unit_sync_state['failed_content_ids'],
+    )
+
+    new_unit_hashes = unit_sync_state['new_hashes']
+    for stale_unit in stale_units:
+        # Check if a newly created unit anywhere in this course sync run
+        # has the same hash (rename detection, Edge Case 1).
+        if (stale_unit.content_hash
+                and stale_unit.content_hash in new_unit_hashes):
+            new_unit = new_unit_hashes[stale_unit.content_hash]
+            migrated = UserCourseProgress.objects.filter(
+                unit=stale_unit,
+            ).update(unit=new_unit)
+            if migrated:
+                logger.warning(
+                    'Unit appears to have been renamed: %s -> %s, '
+                    'migrated %d completion records.',
+                    stale_unit.source_path, new_unit.source_path, migrated,
+                )
+
+    deleted_count = stale_units.count()
+    stale_units.delete()
+    stats['deleted'] += deleted_count
+
+
 def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stats,
                        known_images=None, course_dir=None,
                        course_ignore_patterns=None,
                        module_ignore_patterns=None,
-                       course_slug=None, unit_lookup=None):
+                       course_slug=None, unit_lookup=None,
+                       unit_sync_state=None):
     """Sync units (markdown files) within a module directory.
 
     ``course_ignore_patterns`` are globs relative to ``course_dir`` (course
@@ -1564,6 +1813,25 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     ``course_slug`` and ``unit_lookup`` are used by the markdown link
     rewriter (issue #226) to convert intra-content ``.md`` links into
     platform URLs. When either is missing, link rewriting is skipped.
+
+    ``unit_sync_state`` (issue #1681) is the course-wide state dict built
+    by :func:`_sync_course_modules`: ``seen_paths``/``content_id_sources``
+    /``failed_content_ids``/``new_hashes`` accumulate incrementally as
+    the real walk proceeds (used for duplicate-content_id detection here
+    and, at course-end, by the fallback sweep); ``precomputed_seen_paths``
+    /``precomputed_seen_content_ids`` are a dry pre-scan of the WHOLE
+    course tree computed once, before any DB
+    write this run, and drive the stale-unit sweep at the end of this
+    function — deciding staleness against "will this identity be seen
+    ANYWHERE in the course this run" rather than this one directory's own
+    listing closes the directory-walk-order race where a unit mid-move
+    to a different module could otherwise be deleted (cascading its
+    ``UserCourseProgress``) before its new module had a chance to
+    reparent it, regardless of which module directory is processed
+    first. A ``None`` is tolerated (falls back to a call-local dict,
+    which disables the stale sweep and duplicate-content_id detection)
+    only so this function stays independently callable/testable; every
+    real caller passes the shared course-wide state.
     """
     from content.models import Unit, UserCourseProgress
     from content.utils.code_annotations import parse_course_unit_body
@@ -1577,10 +1845,25 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     if course_dir is None:
         course_dir = os.path.dirname(module_dir)
 
-    seen_unit_paths = set()
-    failed_unit_content_ids = set()
+    if unit_sync_state is None:
+        # No course-wide precompute available (standalone/test call) —
+        # ``None`` sentinels below disable the stale-unit sweep entirely
+        # rather than risk deleting units this call never saw, since an
+        # empty precompute set would otherwise look like "nothing is
+        # live anywhere" and sweep everything.
+        unit_sync_state = {
+            'seen_paths': set(),
+            'content_id_sources': {},
+            'failed_content_ids': set(),
+            'new_hashes': {},
+            'precomputed_seen_paths': None,
+            'precomputed_seen_content_ids': None,
+        }
+    seen_unit_paths = unit_sync_state['seen_paths']
+    content_id_sources = unit_sync_state['content_id_sources']
+    failed_unit_content_ids = unit_sync_state['failed_content_ids']
     # Track newly created units with their hashes for rename detection
-    new_unit_hashes = {}
+    new_unit_hashes = unit_sync_state['new_hashes']
 
     def _is_ignored(filename):
         """Return True if the file is matched by any course- or module-level ignore glob."""
@@ -1694,6 +1977,25 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 logger.warning(msg)
                 stats['errors'].append({'file': rel_path, 'error': msg})
                 continue
+
+            # Issue #1681: a genuine duplicate content_id (two live files,
+            # one id) is an authoring mistake, not a move — never let it
+            # reach the model layer as a bare IntegrityError. Track which
+            # content_ids have already been claimed by an earlier file
+            # THIS run, course-wide; a second file claiming an
+            # already-consumed content_id is skipped with a named error
+            # (naming both files) instead of attempting the DB write.
+            other_rel_path = content_id_sources.get(unit_content_id)
+            if other_rel_path is not None and other_rel_path != rel_path:
+                msg = (
+                    f'Duplicate content_id {unit_content_id!r}: already '
+                    f'synced from {other_rel_path!r} this run, also found '
+                    f'in {rel_path!r}. Skipped {rel_path}.'
+                )
+                logger.warning(msg)
+                stats['errors'].append({'file': rel_path, 'error': msg})
+                continue
+            content_id_sources[unit_content_id] = rel_path
 
             seen_unit_paths.add(rel_path)
 
@@ -1853,18 +2155,32 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             else:
                 defaults['body'] = body
 
-            # Issue #310/#311: prefer content_id-first lookup so renaming
-            # a unit's filename or slug doesn't trigger a duplicate insert
-            # (which then fails with a unique-constraint violation when the
-            # stale row's slug collides). Fall back to source_path for
-            # legacy rows that predate content_id, and to (module, slug)
-            # so a rename within the same module that updates only the
-            # filename is found.
+            # Issue #1681: content_id is globally unique
+            # (SyncedContentIdentityMixin) — it is the unit's stable
+            # identity, its current module is not. Resolve course-wide by
+            # content_id FIRST so a lesson file that moved to a different
+            # module directory (same content_id, new path) is reparented
+            # onto the existing row instead of falling through to the
+            # create branch and hitting a duplicate-content_id
+            # IntegrityError. This is the same "stable id is the
+            # identity, current location is not" precedent already used
+            # for Course in ``_resolve_course_identity``. Handles a move
+            # + rename in the same sync too, since it doesn't depend on
+            # slug or path matching.
             unit = Unit.objects.filter(
                 content_id=unit_content_id,
-                source_repo=repo_name,
-                module=module,
+                module__course=module.course,
             ).first()
+            # Issue #310/#311: fall back to the original module-scoped
+            # lookups, unchanged, for legacy rows that predate content_id
+            # and for a same-module rename that changes only the
+            # filename/slug.
+            if unit is None:
+                unit = Unit.objects.filter(
+                    content_id=unit_content_id,
+                    source_repo=repo_name,
+                    module=module,
+                ).first()
             if unit is None:
                 unit = Unit.objects.filter(
                     module=module, slug=slug,
@@ -1888,12 +2204,20 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 created = True
                 changed = True
             else:
+                # ``unit.module_id != module.pk`` is the reparent case
+                # (issue #1681): the unit was found course-wide under a
+                # different module than the one being synced. The unit's
+                # PK is unchanged either way, so ``UserCourseProgress.
+                # unit_id`` FKs follow automatically — no explicit
+                # repointing needed.
                 identity_changed = (
                     unit.source_path != rel_path
                     or unit.slug != slug
+                    or unit.module_id != module.pk
                 )
                 if identity_changed or _defaults_differ(unit, defaults):
                     unit.source_path = rel_path
+                    unit.module = module
                     for k, v in defaults.items():
                         setattr(unit, k, v)
                     try:
@@ -1950,32 +2274,56 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'error': str(e),
             })
 
-    # Remove stale units, with rename detection (Edge Case 1)
-    stale_units = Unit.objects.filter(
-        module=module,
-        source_repo=repo_name,
-    ).exclude(
-        source_path__in=seen_unit_paths,
-    ).exclude(
-        content_id__in=failed_unit_content_ids,
-    )
-
-    for stale_unit in stale_units:
-        # Check if a newly created unit in the same course has the same hash
-        if (stale_unit.content_hash
-                and stale_unit.content_hash in new_unit_hashes):
-            new_unit = new_unit_hashes[stale_unit.content_hash]
-            # Migrate UnitCompletion (UserCourseProgress) records
-            migrated = UserCourseProgress.objects.filter(
-                unit=stale_unit,
-            ).update(unit=new_unit)
-            if migrated:
-                logger.warning(
-                    'Unit appears to have been renamed: %s -> %s, '
-                    'migrated %d completion records.',
-                    stale_unit.source_path, new_unit.source_path, migrated,
-                )
-
-    deleted_count = stale_units.count()
-    stale_units.delete()
-    stats['deleted'] += deleted_count
+    # Remove stale units belonging to THIS module. Issue #1681: staleness
+    # is decided against the course-wide precompute (every content_id/
+    # source_path that will be seen ANYWHERE in the course this run,
+    # computed before any DB write happened) rather than this one
+    # directory's own listing — a unit mid-move to a different module
+    # already shows up in the precompute from the start, so it's never
+    # deleted here regardless of directory-walk order. This also matters
+    # for a module transitioning from leaf (direct units) to parent
+    # (submodules) in the same sync: its now-orphaned old units must be
+    # gone by the time a new submodule's ``full_clean()`` validates
+    # "parent has no direct units" a few lines below in
+    # ``_sync_module_dir`` — an end-of-course-only sweep would still be
+    # attached at that point and wrongly fail the submodule.
+    #
+    # ``None`` precompute (standalone/test call with no
+    # ``unit_sync_state``, see above) skips the sweep outright.
+    if unit_sync_state['precomputed_seen_paths'] is not None:
+        stale_units = Unit.objects.filter(
+            module=module,
+            source_repo=repo_name,
+        ).exclude(
+            source_path__in=unit_sync_state['precomputed_seen_paths'],
+        ).exclude(
+            content_id__in=unit_sync_state['precomputed_seen_content_ids'],
+        ).exclude(
+            content_id__in=failed_unit_content_ids,
+        )
+        for stale_unit in stale_units:
+            # Legacy content-hash rename detection (Edge Case 1): a
+            # stale unit with no matching content_id/source_path
+            # anywhere, whose content_hash happens to match a unit
+            # already created earlier THIS run (course-wide, not just
+            # this module — issue #1681), gets its UserCourseProgress
+            # migrated before the row is deleted below. If the matching
+            # new unit hasn't been created yet (its module hasn't been
+            # processed yet in the walk), ``_cleanup_stale_units_for_course``
+            # gets a second chance at course-end.
+            if (stale_unit.content_hash
+                    and stale_unit.content_hash in new_unit_hashes):
+                new_unit = new_unit_hashes[stale_unit.content_hash]
+                migrated = UserCourseProgress.objects.filter(
+                    unit=stale_unit,
+                ).update(unit=new_unit)
+                if migrated:
+                    logger.warning(
+                        'Unit appears to have been renamed: %s -> %s, '
+                        'migrated %d completion records.',
+                        stale_unit.source_path, new_unit.source_path,
+                        migrated,
+                    )
+        deleted_count = stale_units.count()
+        stale_units.delete()
+        stats['deleted'] += deleted_count

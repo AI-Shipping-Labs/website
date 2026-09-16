@@ -190,9 +190,10 @@ INSTALLED_APPS = [
     # engine; site parsers register from content.apps.ContentConfig.ready.
     'community_base.content_sync',
     # A7.1 (#1685): the shared knowledge base app owns wiki/docs storage,
-    # hierarchy and rendering; its models build on the package curriculum
-    # provenance mixins, so the curriculum app is installed alongside it.
-    'community_base.curriculum',
+    # hierarchy and rendering. From community-base v0.4.6 its provenance
+    # mixin is app-neutral (community_base.content_sync.provenance), so the
+    # package curriculum and events apps stay uninstalled here; the site
+    # keeps its own content and events apps.
     'community_base.knowledge_base',
     'community',
     'notifications',

@@ -23,13 +23,24 @@ standard unresolvable-link warning rather than a 404 URL.
 import os
 import shutil
 import tempfile
+from contextlib import contextmanager
 
 from community_base.content_sync.checkout import ImmutableCheckout
 from django.test import TestCase
 
 from content.models import Course, Unit
-from content.sync_parsers.checkout_view import activate_view, view_for
-from content.sync_parsers.families.courses import _build_course_unit_lookup
+from content.sync_parsers.checkout_view import (
+    ContentCheckoutError,
+    activate_view,
+    checkout_is_dir,
+    checkout_kind,
+    checkout_scope,
+    view_for,
+)
+from content.sync_parsers.families.courses import (
+    _build_course_unit_lookup,
+    _build_workshop_page_lookup,
+)
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
@@ -72,9 +83,12 @@ class _LookupFixtureBase(TestCase):
         with ImmutableCheckout(self.temp_dir) as checkout:
             view = view_for(checkout)
             with activate_view(view):
-                snap_course = os.path.join(
+                # normpath maps a course dir that IS the checkout root to the
+                # exact view root (join(root, '.') would otherwise work only
+                # through abspath-normalized comparisons).
+                snap_course = os.path.normpath(os.path.join(
                     view.root, os.path.relpath(course_dir, self.temp_dir),
-                )
+                ))
                 return _build_course_unit_lookup(snap_course, *args, **kwargs)
 
 
@@ -450,3 +464,293 @@ class UnitLookupRespectsIgnoresEndToEndTest(TestCase):
             f'Expected unresolvable-link warning for 02-setup.md; '
             f'got {errors!r}',
         )
+
+
+class CheckoutIsDirRootAgreementTest(_LookupFixtureBase):
+    """``checkout_is_dir`` must agree with ``checkout_kind`` (issue #1667).
+
+    The manifest enumerates files, never the checkout root, so
+    ``relative()`` rejects the root path. ``kind()`` special-cases the
+    root and reports ``'directory'``; ``checkout_is_dir`` used to fall
+    through the ``relative()`` rejection and return ``False``, which
+    silently disabled the course unit lookup for repos whose
+    ``course.yaml`` sits at the repo root (ai-buildcamp-course).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._write_module('01-fundamentals')
+        self._write_unit(
+            '01-fundamentals', '01-intro.md',
+            content_id='11111111-1111-1111-1111-111111111111',
+        )
+
+    @contextmanager
+    def _in_snapshot(self):
+        """Open a checkout view and yield (view, synthetic course dir)."""
+        with ImmutableCheckout(self.temp_dir) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                snap_course = os.path.normpath(os.path.join(
+                    view.root,
+                    os.path.relpath(self.course_dir, self.temp_dir),
+                ))
+                yield view, snap_course
+
+    def test_root_is_dir_matches_kind(self):
+        with self._in_snapshot() as (view, snap_course):
+            with self.subTest('checkout root'):
+                self.assertTrue(checkout_is_dir(view.root))
+                self.assertEqual(checkout_kind(view.root), 'directory')
+            with self.subTest('course dir at root'):
+                self.assertTrue(checkout_is_dir(snap_course))
+                self.assertEqual(checkout_kind(snap_course), 'directory')
+            with self.subTest('nested child'):
+                child = os.path.join(snap_course, '01-fundamentals')
+                self.assertTrue(checkout_is_dir(child))
+                self.assertEqual(checkout_kind(child), 'directory')
+
+    def test_absent_and_outside_paths_stay_negative(self):
+        with self._in_snapshot() as (view, snap_course):
+            absent = os.path.join(snap_course, 'does-not-exist')
+            self.assertFalse(checkout_is_dir(absent))
+            self.assertIsNone(checkout_kind(absent))
+            # A path outside the checkout boundary is rejected, never True.
+            outside = os.path.join(os.path.dirname(self.temp_dir), 'elsewhere')
+            self.assertFalse(checkout_is_dir(outside))
+            self.assertFalse(checkout_is_dir(os.path.join(view.root, '..')))
+
+    def test_real_root_dir_through_local_utility_scope(self):
+        """Outside a sync run, ``checkout_scope`` roots on the real dir."""
+        with checkout_scope(self.temp_dir):
+            self.assertTrue(checkout_is_dir(self.temp_dir))
+            self.assertEqual(checkout_kind(self.temp_dir), 'directory')
+            self.assertFalse(
+                checkout_is_dir(os.path.join(self.temp_dir, 'absent')),
+            )
+
+    def test_no_active_session_still_raises(self):
+        with self.assertRaises(ContentCheckoutError) as ctx:
+            checkout_is_dir(self.course_dir)
+        self.assertEqual(ctx.exception.kind, 'missing_checkout_session')
+
+
+class RootCourseYamlUnitLookupTest(_LookupFixtureBase):
+    """Lookup builds for a repo whose ``course.yaml`` is at the ROOT.
+
+    This is the ai-buildcamp-course layout: the classifier claims the
+    checkout root itself as the course dir (issue #1667). Before the fix
+    ``checkout_is_dir(root)`` was ``False`` and the lookup came back
+    empty, so every sibling and cross-module link stayed unrewritten.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.course_dir = self.temp_dir  # course dir IS the checkout root
+
+    def test_lookup_populated_for_root_level_course_yaml(self):
+        self._write('course.yaml', 'title: "Python Course"\nslug: "python-course"\n')
+        self._write_module('01-fundamentals')
+        self._write_unit(
+            '01-fundamentals', '01-intro.md',
+            content_id='11111111-1111-1111-1111-111111111111',
+        )
+        self._write_unit(
+            '01-fundamentals', '02-setup.md',
+            content_id='22222222-2222-2222-2222-222222222222',
+            extras='slug: "custom-setup"\n',
+        )
+        self._write('01-fundamentals/README.md', '# Fundamentals\n\nOverview.\n')
+        self._write_module('02-advanced')
+        self._write_unit(
+            '02-advanced', '01-agents.md',
+            content_id='33333333-3333-3333-3333-333333333333',
+        )
+
+        lookup = self._lookup(self.course_dir)
+
+        self.assertEqual(
+            lookup,
+            {
+                'fundamentals': {
+                    'README.md': '__module_overview__',
+                    '01-intro.md': 'intro',
+                    # Frontmatter ``slug:`` override is honoured.
+                    '02-setup.md': 'custom-setup',
+                },
+                'advanced': {
+                    '01-agents.md': 'agents',
+                },
+            },
+        )
+
+
+class RootWorkshopYamlPageLookupTest(_LookupFixtureBase):
+    """Same latent bug for a root-level ``workshop.yaml`` (issue #1667).
+
+    The classifier can claim the checkout root for ``workshop.yaml`` too,
+    so ``_build_workshop_page_lookup`` must accept the root as the
+    workshop dir.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.workshop_dir = self.temp_dir  # workshop dir IS the checkout root
+
+    def _write(self, rel_path, content):
+        full = os.path.join(self.workshop_dir, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, 'w') as f:
+            f.write(content)
+
+    def test_lookup_populated_for_root_level_workshop_yaml(self):
+        self._write('workshop.yaml', 'title: "Test Workshop"\nslug: "test-workshop"\n')
+        self._write(
+            '01-intro.md',
+            (
+                '---\n'
+                'title: "Intro"\n'
+                'slug: "intro"\n'
+                '---\n'
+                'Intro body.\n'
+            ),
+        )
+        self._write('README.md', '# Test Workshop\n\nLanding.\n')
+
+        with ImmutableCheckout(self.temp_dir) as checkout:
+            view = view_for(checkout)
+            with activate_view(view):
+                snap_dir = os.path.normpath(os.path.join(
+                    view.root,
+                    os.path.relpath(self.workshop_dir, self.temp_dir),
+                ))
+                lookup = _build_workshop_page_lookup(
+                    snap_dir,
+                    'test-workshop',
+                    workshop_title='Test Workshop',
+                )
+
+        self.assertEqual(lookup['01-intro.md']['slug'], 'intro')
+        self.assertEqual(
+            lookup['01-intro.md']['url'],
+            '/workshops/test-workshop/tutorial/intro',
+        )
+        # Virtual README entry points at the workshop landing URL.
+        self.assertEqual(
+            lookup['README.md']['url'],
+            '/workshops/test-workshop',
+        )
+
+
+class RootCourseYamlUnitLookupEndToEndTest(TestCase):
+    """End-to-end: sibling and cross-module links rewrite in a root layout.
+
+    Issue #1667 user-facing behavior: a course repo that keeps
+    ``course.yaml`` at the repo root must sync with its internal
+    ``.md`` links rewritten to platform URLs, not left raw with
+    ``Unresolvable .md link`` errors on the SyncLog.
+    """
+
+    def setUp(self):
+        self.source = ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/ai-buildcamp-course',
+        )
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write(self, rel_path, content):
+        full = os.path.join(self.temp_dir, rel_path)
+        os.makedirs(os.path.dirname(full), exist_ok=True)
+        with open(full, 'w') as f:
+            f.write(content)
+
+    def test_sibling_and_cross_module_links_rewritten(self):
+        # course.yaml AT THE ROOT — the layout that used to disable the
+        # rewriter entirely.
+        self._write(
+            'course.yaml',
+            (
+                'title: "Python Course"\n'
+                'slug: "python-course"\n'
+                'description: "Learn Python"\n'
+                'instructor_name: "Test"\n'
+                'required_level: 0\n'
+                'content_id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"\n'
+            ),
+        )
+        self._write(
+            '01-fundamentals/module.yaml',
+            'title: "Fundamentals"\nsort_order: 1\n',
+        )
+        self._write(
+            '01-fundamentals/01-intro.md',
+            (
+                '---\n'
+                'title: "Intro"\n'
+                'sort_order: 1\n'
+                'content_id: "11111111-1111-1111-1111-111111111111"\n'
+                '---\n'
+                'See [Setup](02-setup.md) and [Agents](../02-advanced/01-agents.md).\n'
+            ),
+        )
+        self._write(
+            '01-fundamentals/02-setup.md',
+            (
+                '---\n'
+                'title: "Setup"\n'
+                'content_id: "22222222-2222-2222-2222-222222222222"\n'
+                '---\n'
+                'Setup body.\n'
+            ),
+        )
+        self._write(
+            '02-advanced/module.yaml',
+            'title: "Advanced"\nsort_order: 2\n',
+        )
+        self._write(
+            '02-advanced/01-agents.md',
+            (
+                '---\n'
+                'title: "Agents"\n'
+                'content_id: "33333333-3333-3333-3333-333333333333"\n'
+                '---\n'
+                'Agents body.\n'
+            ),
+        )
+
+        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        self.assertIn(sync_log.status, ('success', 'partial'))
+
+        course = Course.objects.get(slug='python-course')
+        intro = Unit.objects.get(module__course=course, slug='intro')
+
+        # Sibling link rewritten to the platform URL (body_html is rendered).
+        self.assertIn(
+            'href="/courses/python-course/fundamentals/setup"',
+            intro.body_html,
+        )
+        # Cross-module link rewritten to the platform URL.
+        self.assertIn(
+            'href="/courses/python-course/advanced/agents"',
+            intro.body_html,
+        )
+        # No raw .md href left behind.
+        self.assertNotIn('02-setup.md', intro.body_html)
+        self.assertNotIn('01-agents.md', intro.body_html)
+
+        # And the SyncLog records no unresolvable-link error for those
+        # filenames (the whole point of the fix — the rewriter used to be
+        # silently off for this layout).
+        errors = sync_log.errors or []
+        for filename in ('02-setup.md', '01-agents.md'):
+            self.assertFalse(
+                any(
+                    'Unresolvable' in (e.get('error') or '')
+                    and filename in (e.get('error') or '')
+                    for e in errors
+                ),
+                f'Unexpected unresolvable-link error for {filename}; '
+                f'got {errors!r}',
+            )

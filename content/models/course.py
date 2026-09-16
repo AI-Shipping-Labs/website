@@ -135,7 +135,7 @@ class Course(
     program_label = models.CharField(
         max_length=100, blank=True, default='', db_default='',
         help_text=(
-            "Short external-program name shown on the 'Sold separately' "
+            "Short external-program name shown on the 'External course' "
             "badge and enroll CTA, e.g. 'Maven'. Blank falls back to "
             "generic copy."
         ),

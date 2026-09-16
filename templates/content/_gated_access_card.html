@@ -36,11 +36,10 @@ means free-with-sign-in and a "Free with sign-in" chip renders instead.
 
 Issue #1658: ``gated_entitlement`` (boolean, default falsy) is an additive
 flag for courses sold outside the membership plans (e.g. Maven). When
-true, it renders a "Sold separately" pill instead of the tier pill and
+true, it renders an "External course" pill instead of the tier pill and
 routes into the same paid-style CTA layout even though ``required_tier_name``
 is empty (no tier grants access to an entitlement-only course). The CTA
-opens in a new tab, since ``gated_cta_url`` is an external enroll URL. No
-existing caller sets this flag, so every other surface is unchanged.
+opens in a new tab, since ``gated_cta_url`` is an external enroll URL.
 {% endcomment %}
 <div class="overflow-hidden rounded-lg border border-accent/30 bg-accent/5" data-testid="{{ gated_card_testid }}">
   <div class="flex flex-col items-center gap-6 p-6 text-center sm:flex-row sm:items-start sm:gap-8 sm:p-8 sm:text-left">
@@ -60,7 +59,7 @@ existing caller sets this flag, so every other surface is unchanged.
         {{ required_tier_name|tier_public_label }} required
       </span>
       {% elif gated_entitlement %}
-      {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" testid="gated-entitlement-badge" %}
+      {% member_status_badge "External course" status="sold_separately" tone="info" icon="external-link" testid="gated-entitlement-badge" %}
       {% elif signup_cta_url %}
       <span class="inline-flex items-center gap-1.5 rounded-full bg-green-500/15 px-2.5 py-1 text-xs font-medium text-green-500" data-testid="gated-free-badge">
         <i data-lucide="badge-check" class="h-3.5 w-3.5"></i>

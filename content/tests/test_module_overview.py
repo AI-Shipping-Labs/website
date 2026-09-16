@@ -232,3 +232,52 @@ class ModuleOverviewGatedCardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Public overview.')
         self.assertNotContains(response, 'data-testid="module-cta"')
 
+
+class ModuleOverviewEntitlementCardTest(TestCase):
+    """Issue #1673: an entitlement-mode module must never show the tier
+    "Upgrade" CTA — it should mirror course_detail's enroll-via-{program}
+    CTA instead, since no tier grants access to an entitlement course.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='AI Engineering Buildcamp', slug='ai-engineering-buildcamp',
+            status='published', required_level=LEVEL_MAIN,
+            access_mode='entitlement', program_label='Maven',
+            enroll_url='https://maven.com/alexey-grigorev/from-rag-to-agents',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Gated Module', slug='gated-module',
+            overview='Public overview.',
+        )
+        Unit.objects.create(
+            module=cls.module, title='Clickable lesson', slug='lesson',
+        )
+
+    def test_anonymous_sees_enroll_cta_not_upgrade(self):
+        response = self.client.get(
+            '/courses/ai-engineering-buildcamp/gated-module',
+        )
+
+        self.assertContains(response, 'data-testid="module-cta"')
+        self.assertContains(response, 'data-testid="module-cta-button"')
+        self.assertContains(response, 'Enroll via Maven to access this module')
+        self.assertContains(response, 'Enroll now')
+        self.assertNotContains(response, 'Upgrade to Main')
+        self.assertNotContains(response, 'data-testid="gated-required-tier"')
+
+    def test_enroll_cta_points_at_enroll_url_and_opens_new_tab(self):
+        response = self.client.get(
+            '/courses/ai-engineering-buildcamp/gated-module',
+        )
+        body = response.content.decode()
+        cta_index = body.index('module-cta-button')
+        anchor_start = body.rindex('<a', 0, cta_index)
+        anchor_tag = body[anchor_start:cta_index]
+        self.assertIn(
+            'https://maven.com/alexey-grigorev/from-rag-to-agents', anchor_tag,
+        )
+        self.assertIn('target="_blank"', anchor_tag)
+        self.assertNotIn('/membership', anchor_tag)
+

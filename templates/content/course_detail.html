@@ -30,11 +30,11 @@
           </span>
           {% if course.is_free %}
           {% member_badge "Free" tone="success" size="md" extra_class="px-3" %}
-          {% elif course.required_level > 0 %}
+          {% elif course.required_level > 0 and course.access_mode != "entitlement" %}
           {% member_tier_badge course.required_level tone="accent_strong" icon="lock" %}
           {% endif %}
           {% if course.access_mode == "entitlement" %}
-          {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" %}
+          {% member_status_badge "External course" status="sold_separately" tone="info" icon="external-link" testid="course-detail-entitlement-badge" %}
           {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">
@@ -292,14 +292,14 @@
       </div>
       {% elif gated_reason == "entitlement_required" %}
       {% comment %}
-        Issue #1658: sold-separately course — "Enroll via {program_label}"
-        opening the external enroll_url in a new tab, not the tier-pricing
-        "Unlock with {tier}" CTA to /membership. If enroll_url is blank
-        (content bug), the card still shows the heading/description with
-        no CTA button (_gated_access_card.html hides it when gated_cta_url
-        is empty).
+        Issue #1658: entitlement (external) course — "Enroll via
+        {program_label}" opening the external enroll_url in a new tab, not
+        the tier-pricing "Unlock with {tier}" CTA to /membership. If
+        enroll_url is blank (content bug), the card still shows the
+        heading/description with no CTA button (_gated_access_card.html
+        hides it when gated_cta_url is empty).
       {% endcomment %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="This course is sold separately from AI Shipping Labs membership plans." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="course-gated-cta-button" gated_entitlement=True %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="This is an external course, run on another platform — it isn't included in any AI Shipping Labs membership plan." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="course-gated-cta-button" gated_entitlement=True %}
       {% elif cta_message %}
       {% include "content/_gated_access_card.html" with gated_card_testid="course-gated-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="course-gated-cta-button" %}
       {% endif %}

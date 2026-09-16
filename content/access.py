@@ -530,8 +530,8 @@ def build_gated_access_copy(
         return {
             'gated_heading': heading,
             'gated_description': (
-                'This course is sold separately from AI Shipping Labs '
-                'membership plans.'
+                'This is an external course, run on another platform — '
+                "it isn't included in any AI Shipping Labs membership plan."
             ),
             'required_tier_name': '',
             'current_user_state': '',

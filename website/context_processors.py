@@ -13,6 +13,7 @@ from analytics.consent import (
 from content.nav_availability import (
     get_marketing_pages_nav,
     has_published_downloads_for_nav,
+    has_published_kb_pages_for_nav,
 )
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
@@ -194,7 +195,7 @@ def _build_env_mismatch_payload(request):
     }
 
 
-def _build_primary_nav(marketing_nav, has_published_downloads):
+def _build_primary_nav(marketing_nav, has_published_downloads, kb_nav=None):
     """Assemble the ordered primary-nav structure rendered in the header.
 
     Single source of truth for the public primary navigation. Both the
@@ -219,7 +220,8 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
     nav entirely (full page removal tracked in #1355), and Past Recordings
     is dropped. The Downloads item is appended to Learning only when
     ``has_published_downloads`` is true, mirroring the prior template
-    ``{% if %}`` guard.
+    ``{% if %}`` guard. A7.1 (#1685) appends Documentation and Wiki to
+    Learning on their cached nav availability flags the same way.
 
     Marketing pages assigned to a nav section are appended after the
     static items for that section. Pages historically tagged for the
@@ -257,6 +259,17 @@ def _build_primary_nav(marketing_nav, has_published_downloads):
     if has_published_downloads:
         learning_items.append(
             {'label': 'Downloads', 'href': '/downloads', 'slug': 'downloads'}
+        )
+    # A7.1 (#1685): Wiki and Documentation surface in Learning only when
+    # the knowledge base actually has published pages in that section,
+    # mirroring the conditional Downloads item above.
+    if kb_nav.get('docs'):
+        learning_items.append(
+            {'label': 'Documentation', 'href': '/docs/', 'slug': 'docs'}
+        )
+    if kb_nav.get('wiki'):
+        learning_items.append(
+            {'label': 'Wiki', 'href': '/wiki/', 'slug': 'wiki'}
         )
     learning_items.extend(marketing_items('resources'))
 
@@ -377,6 +390,12 @@ def site_context(request):
     has_published_downloads = False
     if not getattr(user, 'is_authenticated', False):
         has_published_downloads = has_published_downloads_for_nav()
+    # Cached flags only — like the downloads flag these never touch the
+    # pages table, so a missing knowledge base table cannot break renders.
+    kb_nav = {
+        'wiki': has_published_kb_pages_for_nav('wiki'),
+        'docs': has_published_kb_pages_for_nav('docs'),
+    }
     try:
         marketing_nav = get_marketing_pages_nav()
     except Exception:
@@ -411,9 +430,11 @@ def site_context(request):
         'gtag_pending_event': pending_event,
         'current_year': __import__('datetime').datetime.now().year,
         'has_published_downloads': has_published_downloads,
+        'has_published_wiki': kb_nav['wiki'],
+        'has_published_docs': kb_nav['docs'],
         'marketing_nav': marketing_nav,
         'primary_nav': _build_primary_nav(
-            marketing_nav, has_published_downloads
+            marketing_nav, has_published_downloads, kb_nav
         ),
         'footer_social': {
             'youtube': get_config('SOCIAL_YOUTUBE_URL', ''),

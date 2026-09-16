@@ -140,6 +140,16 @@
               <a href="/downloads" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Downloadables</a>
             </li>
             {% endif %}
+            {% if has_published_docs %}
+            <li>
+              <a href="/docs/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Documentation</a>
+            </li>
+            {% endif %}
+            {% if has_published_wiki %}
+            <li>
+              <a href="/wiki/" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">Wiki</a>
+            </li>
+            {% endif %}
             {% for page in marketing_nav.resources %}
             <li>
               <a href="{{ page.get_absolute_url }}" class="inline-flex min-h-[44px] items-center py-2 text-sm leading-5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-0 sm:py-0.5">{{ page.nav_text }}</a>

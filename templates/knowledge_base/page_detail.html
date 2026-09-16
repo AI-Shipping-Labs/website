@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load seo_tags %}
+
+{% block title %}{{ page.title }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}{% if page.summary %}{{ page.summary }}{% else %}{{ page.title }} — AI Shipping Labs knowledge base.{% endif %}{% endblock %}
+{% block page_head_metadata %}{% page_seo_tags page.title page.summary page.get_absolute_url %}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+    <div class="flex flex-col gap-10 py-8 lg:flex-row lg:py-16">
+      <article class="min-w-0 max-w-3xl flex-1">
+        {% if ancestors %}
+          <nav aria-label="Breadcrumb" class="mb-4 text-sm text-muted-foreground">
+            {% if page.section == 'docs' %}<a href="/docs" class="hover:text-accent">Documentation</a>{% else %}<a href="/wiki" class="hover:text-accent">Wiki</a>{% endif %}
+            {% for ancestor in ancestors %}
+              <span aria-hidden="true"> / </span>
+              <a href="{{ ancestor.get_absolute_url }}" class="hover:text-accent">{{ ancestor.title }}</a>
+            {% endfor %}
+          </nav>
+        {% endif %}
+
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">{{ page.title }}</h1>
+        {% if page.summary %}
+          <p class="mt-4 text-lg text-muted-foreground">{{ page.summary }}</p>
+        {% endif %}
+
+        <div class="prose mt-8 min-w-0 max-w-full" data-testid="kb-page-body">
+          {{ page.body_html|safe }}
+        </div>
+
+        {% if previous or next %}
+          <nav class="mt-12 flex flex-col gap-3 border-t pt-6 sm:flex-row sm:justify-between" aria-label="Page navigation">
+            {% if previous %}
+              <a href="{{ previous.get_absolute_url }}" class="rounded-lg border px-4 py-3 text-sm hover:border-accent/60">
+                <span class="block text-xs uppercase tracking-widest text-muted-foreground">Previous</span>
+                {{ previous.title }}
+              </a>
+            {% endif %}
+            {% if next %}
+              <a href="{{ next.get_absolute_url }}" class="rounded-lg border px-4 py-3 text-sm hover:border-accent/60 sm:ml-auto sm:text-right">
+                <span class="block text-xs uppercase tracking-widest text-muted-foreground">Next</span>
+                {{ next.title }}
+              </a>
+            {% endif %}
+          </nav>
+        {% endif %}
+      </article>
+
+      {% if children %}
+        <aside class="w-full shrink-0 lg:w-72">
+          <h2 class="text-sm font-semibold uppercase tracking-widest text-muted-foreground">In this section</h2>
+          <ul class="mt-4 space-y-2 border-l pl-4">
+            {% for child in children %}
+              <li>
+                <a href="{{ child.get_absolute_url }}" class="text-sm hover:text-accent">{{ child.title }}</a>
+              </li>
+            {% endfor %}
+          </ul>
+        </aside>
+      {% endif %}
+    </div>
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

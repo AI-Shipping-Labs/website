@@ -1,0 +1,12 @@
+<li>
+  <a href="{{ item.page.get_absolute_url }}" class="inline-flex min-h-[44px] items-center text-base font-medium hover:text-accent">
+    {{ item.title }}
+  </a>
+  {% if item.children %}
+    <ul class="ml-4 mt-2 space-y-2 border-l pl-4">
+      {% for child in item.children %}
+        {% include "knowledge_base/_docs_item.html" with item=child %}
+      {% endfor %}
+    </ul>
+  {% endif %}
+</li>

@@ -189,6 +189,11 @@ INSTALLED_APPS = [
     # A2.3: the package content sync engine is the only synchronization
     # engine; site parsers register from content.apps.ContentConfig.ready.
     'community_base.content_sync',
+    # A7.1 (#1685): the shared knowledge base app owns wiki/docs storage,
+    # hierarchy and rendering; its models build on the package curriculum
+    # provenance mixins, so the curriculum app is installed alongside it.
+    'community_base.curriculum',
+    'community_base.knowledge_base',
     'community',
     'notifications',
     'plans.apps.PlansConfig',

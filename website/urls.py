@@ -64,6 +64,10 @@ urlpatterns = [
     path('studio/', include('community_base.content_sync.studio_urls')),
     path('', include('triggers.urls')),
     path('studio/triggers/', include('triggers.studio_urls')),
+    # A7.1: wiki and documentation served from the shared package app.
+    # Storage, hierarchy and views come from the package; the Tailwind
+    # templates under templates/knowledge_base/ are this site's own (D18).
+    path('', include('community_base.knowledge_base.urls')),
 ]
 
 if settings.DEBUG:

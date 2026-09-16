@@ -158,10 +158,17 @@ def _top_tags(tags, n=MAX_TAGS_IN_META):
 def _course_meta_primary(course):
     """Return the Course ``meta_primary`` slot value.
 
-    Free courses (``required_level == LEVEL_OPEN``) show "Free". Paid
-    courses show the tier label (Basic / Main / Premium) so the card
-    immediately communicates the access requirement.
+    Entitlement-mode courses (``access_mode == 'entitlement'``) show the
+    literal "External course" — the same badge text #1673 already ships
+    on every rendered surface (card, gated-access card, detail page) —
+    rather than tier comparison, which is skipped entirely for them
+    (issue #1658). Tier-mode courses keep today's behaviour: free
+    courses (``required_level == LEVEL_OPEN``) show "Free", paid courses
+    show the tier label (Basic / Main / Premium).
     """
+    if getattr(course, 'is_entitlement_mode', False):
+        return 'External course'
+
     from content.access import LEVEL_OPEN, LEVEL_TO_TIER_NAME
 
     level = getattr(course, 'required_level', LEVEL_OPEN) or LEVEL_OPEN
@@ -171,13 +178,17 @@ def _course_meta_primary(course):
 def _course_kicker(course):
     """Return the Course ``kicker`` slot value.
 
-    Courses with at least one ``Cohort`` get the cohort-based label so
-    the OG card reads "Cohort-based course". Otherwise we surface the
-    self-paced label.
+    Courses with at least one dated ``Cohort`` (``mode='cohort'``) get
+    the cohort-based label so the OG card reads "Cohort-based course".
+    Self-paced cohorts (``mode='self_paced'``, issue #1674) don't count
+    — a course whose only cohort is self-paced surfaces the self-paced
+    label instead of being mislabelled "Cohort-based course".
     """
+    from content.models.cohort import COHORT_MODE_COHORT
+
     has_cohort = False
     try:
-        has_cohort = course.cohorts.exists()
+        has_cohort = course.cohorts.filter(mode=COHORT_MODE_COHORT).exists()
     except Exception:  # noqa: BLE001 — best-effort; missing relation
         # ``cohorts`` reverse relation may not exist in some test
         # fixtures. Default to the self-paced label so the render never

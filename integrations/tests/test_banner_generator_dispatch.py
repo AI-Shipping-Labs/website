@@ -601,6 +601,57 @@ class BuildPayloadTest(_BannerGeneratorCacheCleanupMixin, TestCase):
         payload = build_payload('course', course)
         self.assertEqual(payload['meta_primary'], 'Premium')
 
+    def test_course_payload_entitlement_shows_external_course(self):
+        # Issue #1718: entitlement-mode courses skip tier comparison
+        # entirely, so the badge must not show a tier name (e.g. the
+        # false "Basic" pill this issue fixes) — it shows the literal
+        # "External course" string, matching #1673's rendered badges.
+        course = _make_course(
+            access_mode='entitlement',
+            required_level=LEVEL_BASIC,
+            slug='buildcamp',
+        )
+        payload = build_payload('course', course)
+        self.assertEqual(payload['meta_primary'], 'External course')
+
+    def test_course_payload_tier_mode_unaffected_by_entitlement_fix(self):
+        # Tier-mode courses (the default) must keep showing the real
+        # tier label — proves the entitlement branch doesn't leak into
+        # the tier-mode path.
+        course = _make_course(
+            access_mode='tier',
+            required_level=LEVEL_BASIC,
+            slug='tier-basic',
+        )
+        payload = build_payload('course', course)
+        self.assertEqual(payload['meta_primary'], 'Basic')
+
+    def test_course_kicker_self_paced_cohort_not_mislabelled(self):
+        # Issue #1718: a course whose only cohort is self-paced
+        # (mode='self_paced', issue #1674) must not be mislabelled
+        # "Cohort-based course" — the kicker must key off dated
+        # cohorts specifically.
+        from content.models import Cohort
+
+        course = _make_course(slug='self-paced-only')
+        Cohort.objects.create(
+            course=course, name='Self-paced', mode='self_paced',
+        )
+        payload = build_payload('course', course)
+        self.assertEqual(payload['kicker'], 'Self-paced course')
+
+    def test_course_kicker_dated_cohort_still_labelled_cohort_based(self):
+        # Proves the fix didn't regress the real cohort-based path.
+        from content.models import Cohort
+
+        course = _make_course(slug='dated-cohort')
+        Cohort.objects.create(
+            course=course, name='March 2026', mode='cohort',
+            start_date=dt.date(2026, 3, 1), end_date=dt.date(2026, 3, 31),
+        )
+        payload = build_payload('course', course)
+        self.assertEqual(payload['kicker'], 'Cohort-based course')
+
     def test_project_payload(self):
         project = _make_project(
             title='Multi-Agent Research',

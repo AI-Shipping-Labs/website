@@ -52,6 +52,25 @@ def _coerce_nav_order(metadata, rel_path):
         ) from exc
 
 
+_FULL_COMMIT_SHA = re.compile(r'^[0-9a-f]{40}$')
+
+
+def _package_commit_sha(run):
+    """The commit sha the package contract accepts for one checkout.
+
+    ``sync.upsert_page`` full-cleans the row, and the package provenance
+    field validates a full lowercase Git SHA. Git checkouts pass theirs
+    through; disk checkouts carry the legacy ``test-commit-sha`` sentinel,
+    which is handed over as empty so the package derives its stable
+    per-page SHA from the source path and checksum instead.
+    """
+
+    commit_sha = run.commit_sha or ''
+    if _FULL_COMMIT_SHA.match(commit_sha):
+        return commit_sha
+    return ''
+
+
 class KnowledgeBasePagesParser(FamilyParser):
     """Shared body for the wiki and docs parser families.
 
@@ -209,7 +228,7 @@ class KnowledgeBasePagesParser(FamilyParser):
             summary=str(metadata.get('summary') or ''),
             parent_slug=payload['parent_slug'],
             nav_order=payload['nav_order'],
-            commit_sha=run.commit_sha,
+            commit_sha=_package_commit_sha(run),
             source_path=payload['rel_path'],
             checksum=payload['checksum'],
         )

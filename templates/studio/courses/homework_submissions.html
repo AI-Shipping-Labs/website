@@ -1,0 +1,64 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+{% load date_formatting %}
+
+{% block studio_title %}{{ homework.title }} - Submissions{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_homework_list' course_id=course.pk as homework_list_url %}
+{% studio_header_actions title="Submissions" subtitle=homework.title back_url=homework_list_url back_label='Back to homeworks' testid='homework-submissions-title' %}{% endstudio_header_actions %}
+
+<div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="homework-submissions-meta">
+  <span>Cohort: <span class="text-foreground">{{ homework.cohort.name }}</span></span>
+  <span aria-hidden="true">&middot;</span>
+  <span>Due: <span class="text-foreground">{{ homework.due_date|operator_datetime }}</span></span>
+  <span aria-hidden="true">&middot;</span>
+  <span data-testid="homework-submissions-count">{{ submission_items|length }} submission{{ submission_items|length|pluralize }}</span>
+</div>
+
+{% if submission_items %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <div class="divide-y divide-border">
+    {% for item in submission_items %}
+    <details class="group" data-testid="homework-submission-row">
+      <summary class="flex flex-col gap-2 px-4 sm:px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
+        <span class="text-sm text-foreground break-all" data-testid="homework-submission-student">{{ item.submission.student.email }}</span>
+        <span class="text-xs text-muted-foreground" data-testid="homework-submission-submitted-at">{{ item.submission.submitted_at|operator_datetime }}</span>
+      </summary>
+      <div class="px-4 sm:px-6 pb-5 border-t border-border bg-background/40">
+        {% if item.submission.homework_link %}
+        <div class="mt-3 mb-3">
+          <span class="text-sm text-muted-foreground">Homework link:</span>
+          <a href="{{ item.submission.homework_link }}" target="_blank" rel="noopener"
+             class="text-accent hover:underline text-sm ml-2 break-all"
+             data-testid="homework-submission-link">{{ item.submission.homework_link }}</a>
+        </div>
+        {% endif %}
+        {% if item.answers %}
+        <div class="space-y-3">
+          {% for answer in item.answers %}
+          <div data-testid="homework-submission-answer" data-question-id="{{ answer.question_id }}">
+            <p class="text-sm font-medium text-foreground">{{ answer.question.text }}</p>
+            <div class="mt-1 flex flex-wrap items-center gap-2">
+              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">{{ answer.answer_text }}</p>
+              {% if answer.is_correct %}
+              <span data-testid="homework-submission-answer-correct">{% studio_status_badge 'published' 'Correct' %}</span>
+              {% else %}
+              <span data-testid="homework-submission-answer-incorrect">{% studio_status_badge 'reviewed' 'Incorrect' %}</span>
+              {% endif %}
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="mt-3 text-sm text-muted-foreground">No answers on record.</p>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='submission' entity_label_plural='submissions' empty_message='No submissions for this homework yet.' %}
+{% endif %}
+{% endblock %}

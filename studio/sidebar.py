@@ -168,6 +168,10 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_peer_review_extend_deadline',
         'studio_peer_review_form_batch',
         'studio_peer_review_issue_certificates',
+        # Issue #1683: read-only homework/submissions visibility, same
+        # course-scoped nesting as peer reviews above.
+        'studio_homework_list',
+        'studio_homework_submissions',
         # Certificate revoke / un-revoke are POST-only controls on the
         # course peer-reviews page and redirect straight back to it.
         'studio_certificate_revoke',

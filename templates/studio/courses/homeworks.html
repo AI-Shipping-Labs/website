@@ -1,0 +1,48 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+{% load date_formatting %}
+
+{% block studio_title %}Homeworks - {{ course.title }}{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
+{% studio_header_actions title="Homeworks" subtitle=course.title back_url=course_edit_url back_label='Back to course edit' testid='homework-list-title' %}{% endstudio_header_actions %}
+
+{% if homework_rows %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Cohort</th>
+        <th class="{% studio_list_class 'th' %}">Due date</th>
+        <th class="{% studio_list_class 'th' %}">State</th>
+        <th class="{% studio_list_class 'th' %}">Submissions</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for row in homework_rows %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="homework-row">
+        <td class="px-6 py-4 text-sm font-medium text-foreground" data-testid="homework-title">{{ row.homework.title }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-cohort">{{ row.homework.cohort.name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-due-date">{{ row.homework.due_date|operator_datetime }}</td>
+        <td class="px-6 py-4" data-testid="homework-state">
+          {% studio_status_badge row.state_badge_key row.state_label %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-submission-count">{{ row.submission_count }}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_homework_submissions' homework_id=row.homework.pk as submissions_url %}
+            {% studio_list_action submissions_url 'View submissions' 'secondary' %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='homework' entity_label_plural='homeworks' empty_message='No homeworks synced for this course yet.' %}
+{% endif %}
+{% endblock %}

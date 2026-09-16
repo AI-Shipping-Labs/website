@@ -25,7 +25,6 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from email_app.services.email_service import EmailServiceError
 from email_app.testing import StubSESClient, deliver_pending_mail
 
 User = get_user_model()
@@ -172,8 +171,8 @@ class SubscribeAPITest(TestCase):
 class SubscribeEmailDeliveryTest(TestCase):
     """Test that subscribe API actually triggers verification email delivery."""
 
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
-    def test_subscribe_new_email_dispatches_relay_not_ses(self, mock_ses):
+    @patch("email_app.views.newsletter.send_package_mail")
+    def test_subscribe_new_email_dispatches_relay_not_ses(self, mock_send):
         """A6.2 step 4: new subscribers get Relay's verification message."""
         response = self.client.post(
             "/api/subscribe",
@@ -183,15 +182,15 @@ class SubscribeEmailDeliveryTest(TestCase):
         self.assertEqual(response.json()["status"], "ok")
 
         # The site no longer sends the verification mail itself.
-        mock_ses.assert_not_called()
+        mock_send.assert_not_called()
         self.assertTrue(
             JobIntent.objects.filter(
                 handler="email_app.relay_sync.request_contact_verification"
             ).exists()
         )
 
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-id")
-    def test_subscribe_existing_verified_does_not_send_email(self, mock_ses):
+    @patch("email_app.views.newsletter.send_package_mail")
+    def test_subscribe_existing_verified_does_not_send_email(self, mock_send):
         """Already-verified subscriber does not trigger another email."""
         User.objects.create_user(
             email="already-v@example.com",
@@ -202,7 +201,7 @@ class SubscribeEmailDeliveryTest(TestCase):
             data=json.dumps({"email": "already-v@example.com"}),
             content_type="application/json",
         )
-        mock_ses.assert_not_called()
+        mock_send.assert_not_called()
 
 
 class SubscribeLeadMagnetTest(TestCase):
@@ -790,11 +789,15 @@ class SubscribeVerificationEmailHelperTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="newsletter-helper@example.com")
 
-    @patch("email_app.services.email_service.EmailService")
-    def test_send_subscribe_verification_email_soft_fails_email_service_error(
-        self, service_cls,
+    @patch("email_app.views.newsletter.send_package_mail")
+    def test_send_subscribe_verification_email_soft_fails_mail_error(
+        self, mock_send,
     ):
-        service_cls.return_value.send.side_effect = EmailServiceError("SES down")
+        from community_base.mail.service import MailError
+
+        mock_send.side_effect = MailError(
+            "unknown mail purpose: lead_magnet_delivery"
+        )
 
         from email_app.views.newsletter import _send_subscribe_verification_email
 
@@ -813,16 +816,53 @@ class SubscribeVerificationEmailHelperTest(TestCase):
             "\n".join(logs.output),
         )
 
-    @patch("email_app.services.email_service.EmailService")
+    @patch("email_app.views.newsletter.send_package_mail")
     def test_send_subscribe_verification_email_unexpected_error_propagates(
-        self, service_cls,
+        self, mock_send,
     ):
-        service_cls.return_value.send.side_effect = RuntimeError("bad newsletter context")
+        mock_send.side_effect = RuntimeError("bad newsletter context")
 
         from email_app.views.newsletter import _send_subscribe_verification_email
 
         with self.assertRaisesRegex(RuntimeError, "bad newsletter context"):
             _send_subscribe_verification_email(self.user)
+
+    @patch("email_app.views.newsletter.send_package_mail")
+    def test_lead_magnet_helper_stores_scalar_resolver_inputs_only(
+        self, mock_send,
+    ):
+        """A1.2 remainder slice 4: the caller persists no bearer link —
+        only the sanitized ``return_path`` input and scalar copy (#1613).
+        """
+        from email_app.views.newsletter import _send_subscribe_verification_email
+
+        _send_subscribe_verification_email(
+            self.user,
+            redirect_to="/downloads/ai-cheat-sheet/file",
+        )
+
+        self.assertEqual(mock_send.call_count, 1)
+        _user, template_name, context = mock_send.call_args[0]
+        self.assertEqual(template_name, "lead_magnet_delivery")
+        self.assertNotIn("verify_url", context)
+        self.assertNotIn("download_url", context)
+        self.assertEqual(
+            context["return_path"], "/downloads/ai-cheat-sheet/file",
+        )
+        self.assertEqual(context["resource_title"], "your resource")
+        self.assertGreater(context["ttl_days"], 0)
+
+    @patch("email_app.views.newsletter.send_package_mail")
+    def test_subscribe_helper_stores_ttl_scalar_only(self, mock_send):
+        from email_app.views.newsletter import _send_subscribe_verification_email
+
+        _send_subscribe_verification_email(self.user)
+
+        self.assertEqual(mock_send.call_count, 1)
+        _user, template_name, context = mock_send.call_args[0]
+        self.assertEqual(template_name, "email_verification_subscribe")
+        self.assertNotIn("verify_url", context)
+        self.assertEqual(set(context), {"ttl_days"})
 
 
 # Issue #513 ----------------------------------------------------------------
@@ -937,32 +977,47 @@ class EmailVerificationTemplateCopyTest(TestCase):
     receive ``ttl_days`` and ``site_url`` in the context.
     """
 
-    @patch(
-        "email_app.services.email_service.EmailService._send_ses",
-        return_value="ses-513-1",
-    )
-    def test_subscribe_render_uses_subscription_framing(self, mock_ses):
-        # A6.2 step 4: /api/subscribe hands the message to Relay's double
-        # opt-in flow. The site template and its #767 copy contract stay
-        # asserted at the helper level until A6.3 retires the template.
+    def test_subscribe_render_uses_subscription_framing(self):
+        # A6.2 step 4: /api/subscribe hands the standard message to Relay's
+        # double opt-in flow. The lead-magnet path still uses this site
+        # template family, so the #767 copy contract is asserted on the
+        # worker-rendered body of a real durable delivery (A1.2 slice 4).
+        from unittest.mock import patch
+
         from email_app.views import newsletter as newsletter_view
 
         user = User.objects.create_user(email="render-sub@example.com")
         newsletter_view._send_subscribe_verification_email(user)
 
-        mock_ses.assert_called_once()
-        self.assertEqual(mock_ses.call_args[0][0], "render-sub@example.com")
-        # Subject confirms a subscription, not an account.
-        self.assertIn("Confirm", mock_ses.call_args[0][1])
-        self.assertIn("subscription", mock_ses.call_args[0][1])
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            deliver_pending_mail()
 
-        html_lower = mock_ses.call_args[0][2].lower()
+        self.assertEqual(len(stub.calls), 1)
+        self.assertEqual(
+            stub.calls[0]["Destination"]["ToAddresses"],
+            ["render-sub@example.com"],
+        )
+        subject = stub.calls[0]["Content"]["Simple"]["Subject"]["Data"]
+        # Subject confirms a subscription, not an account.
+        self.assertIn("Confirm", subject)
+        self.assertIn("subscription", subject)
+
+        html_lower = (
+            stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"].lower()
+        )
         # Subscribe framing: confirm subscription, not "your account".
         self.assertIn("confirm subscription", html_lower)
         # Issue #767: subscribe path must NOT use account framing.
         self.assertNotIn("we've created a free account for you", html_lower)
         self.assertNotIn("your account will be removed", html_lower)
         self.assertNotIn("your account will be deleted", html_lower)
+        # The worker minted the verification link; the stored context
+        # carried none.
+        self.assertIn("/api/verify-email?token=", html_lower)
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
     @patch(

@@ -11,8 +11,8 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
-from email_app.models import EmailTemplateOverride
-from email_app.services.email_service import EmailService
+from email_app.models import EmailLog, EmailTemplateOverride
+from email_app.testing import deliver_pending_mail
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 
 User = get_user_model()
@@ -452,7 +452,13 @@ class EmailTemplatePreviewTest(TestCase):
 
 
 class EmailTemplateSendTestTest(TestCase):
-    """Send-test fires a real send with the persisted state."""
+    """Send-test creates a durable delivery with the persisted state.
+
+    A1.2 remainder slice 4: ``sent`` in the flash message means the
+    durable delivery exists — the SES outcome and the ``EmailLog`` audit
+    row land from the worker, so the tests drain the delivery and assert
+    the worker-rendered mail.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -465,8 +471,26 @@ class EmailTemplateSendTestTest(TestCase):
         self.client = Client()
         self.client.login(email='staff@test.com', password='pw')
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-test-1')
-    def test_send_test_uses_override_body_when_present(self, mock_ses):
+    def _drain(self):
+        """Deliver every pending delivery through the real worker."""
+        from unittest.mock import patch
+
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+        return stub
+
+    def _flashes(self, response):
+        from django.contrib.messages import get_messages
+
+        return [m.message for m in get_messages(response.wsgi_request)]
+
+    def test_send_test_uses_override_body_when_present(self):
         EmailTemplateOverride.objects.create(
             template_name='welcome',
             subject='OVR subject',
@@ -475,30 +499,111 @@ class EmailTemplateSendTestTest(TestCase):
 
         response = self.client.post(
             '/studio/email-templates/welcome/send-test/',
+            follow=True,
         )
 
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/studio/email-templates/')
-        mock_ses.assert_called_once()
-        to_email, subject, html_body = mock_ses.call_args[0]
-        self.assertEqual(to_email, 'staff@test.com')
-        self.assertEqual(subject, 'OVR subject')
+        self.assertIn(
+            'Test email sent to staff@test.com.',
+            self._flashes(response),
+        )
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 1)
+        call = stub.calls[0]
+        simple = call['Content']['Simple']
+        self.assertEqual(
+            call['Destination']['ToAddresses'], ['staff@test.com'],
+        )
+        self.assertEqual(simple['Subject']['Data'], 'OVR subject')
+        html_body = simple['Body']['Html']['Data']
         self.assertIn('OVR test body', html_body)
+        # Issue #1591: the operator's own greeting, resolved from their
+        # persisted name and never the email handle.
         self.assertIn('Operator', html_body)
+        self.assertNotIn('staff@test', html_body)
         assert_no_internal_footer_text(self, html_body)
+        # The worker recorded the audit row after provider acceptance.
+        self.assertTrue(
+            EmailLog.objects.filter(
+                recipient_email='staff@test.com', email_type='welcome',
+            ).exists(),
+        )
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-test-2')
-    def test_send_test_uses_file_when_no_override(self, mock_ses):
+    def test_send_test_uses_file_when_no_override(self):
         response = self.client.post(
             '/studio/email-templates/welcome/send-test/',
         )
 
         self.assertEqual(response.status_code, 302)
-        mock_ses.assert_called_once()
-        html_body = mock_ses.call_args[0][2]
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
         # Filesystem template body fragment.
         self.assertIn('Browse our', html_body)
         assert_no_internal_footer_text(self, html_body)
+
+    def test_send_test_stores_no_rendered_urls(self):
+        """Issue #1613: URL-bearing placeholder values never go durable.
+
+        A test send has no producer relation, so the worker dispatches no
+        purpose resolver for it: the demo placeholder links are gone, not
+        stored, and no bearer link is minted into a probe delivery.
+        """
+        response = self.client.post(
+            '/studio/email-templates/email_verification_signup/send-test/',
+        )
+        self.assertEqual(response.status_code, 302)
+
+        from community_base.mail.models import EmailDelivery
+
+        delivery = EmailDelivery.objects.get(
+            purpose='email_verification_signup',
+            recipient_email='staff@test.com',
+        )
+        self.assertEqual(delivery.category, 'studio_test_send')
+        self.assertNotIn('verify_url', delivery.context_data)
+        self.assertNotIn('site_url', delivery.context_data)
+
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+        # The scalar copy still renders; no link exists to mint from.
+        self.assertIn('Thanks for signing up', html_body)
+        self.assertNotIn('/api/verify-email?token=', html_body)
+
+    def test_send_test_unsubscribed_operator_is_a_noop_with_warning(self):
+        User.objects.filter(pk=self.staff.pk).update(unsubscribed=True)
+        # ``workshop_announcement`` is promotional, so the preference
+        # resolver suppresses it for an unsubscribed operator before any
+        # delivery job is dispatched.
+        response = self.client.post(
+            '/studio/email-templates/workshop_announcement/send-test/',
+            follow=True,
+        )
+
+        self.assertIn(
+            'Test not sent: your account is marked unsubscribed.',
+            self._flashes(response),
+        )
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 0)
+
+    def test_send_test_refusal_maps_to_loud_error_flash(self):
+        from community_base.mail.service import MailError
+
+        with patch(
+            'studio.views.email_templates.send_package_mail',
+            side_effect=MailError('durable mail context stores a URL: '
+                                  'purpose=welcome path=verify_url'),
+        ):
+            response = self.client.post(
+                '/studio/email-templates/welcome/send-test/',
+                follow=True,
+            )
+
+        flashed = self._flashes(response)
+        self.assertTrue(
+            any(str(m).startswith('Failed to send test email:') for m in flashed),
+        )
 
     def test_send_test_unknown_template_returns_404(self):
         response = self.client.post(

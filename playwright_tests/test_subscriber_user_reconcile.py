@@ -419,21 +419,31 @@ class TestSubscribePageDiscloseAccount:
         # Issue #767: the verification email body — rendered through the
         # subscribe-flow template the user receives — confirms the
         # subscription in subscribe framing and does NOT carry the
-        # "your account" framing reserved for the signup path.
+        # "your account" framing reserved for the signup path. A1.2
+        # slice 4: the render rides the durable package path, with the
+        # worker minting the verify link from the recipient row.
+        from unittest.mock import patch
+
         from accounts.models import User
         user = User.objects.get(email=emails[0])
         from accounts.services.verification import resolve_unverified_ttl_days
-        from email_app.services.email_service import EmailService
-        rendered_subject, rendered_html = (
-            EmailService()._render_template(
-                'email_verification_subscribe',
+        from email_app.package_mail import send_package_mail
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            send_package_mail(
                 user,
-                {
-                    'verify_url': 'https://example.test/verify?token=t',
-                    'site_url': 'https://example.test',
-                    'ttl_days': resolve_unverified_ttl_days(),
-                },
+                'email_verification_subscribe',
+                {'ttl_days': resolve_unverified_ttl_days()},
             )
+        connection.close()
+        assert stub.calls, "Worker rendered no subscribe verification mail"
+        rendered_html = (
+            stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         )
         rendered_lower = rendered_html.lower()
         assert "confirm" in rendered_lower
@@ -442,3 +452,5 @@ class TestSubscribePageDiscloseAccount:
         assert "your account" not in rendered_lower
         assert "account will be deleted" not in rendered_lower
         assert "account will be removed" not in rendered_lower
+        # The worker minted the verification link; none was stored.
+        assert "/api/verify-email?token=" in rendered_lower

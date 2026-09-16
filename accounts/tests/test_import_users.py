@@ -495,8 +495,27 @@ class QueueImportedWelcomeEmailsTest(TestCase):
 
 
 class WelcomeImportedEmailTaskTest(TestCase):
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-1")
-    def test_welcome_email_renders_and_is_idempotent(self, _mock_send):
+    def _drain(self):
+        from community_base.mail.jobs import deliver as deliver_job
+        from community_base.mail.models import EmailDelivery
+
+        from email_app.testing import StubSESClient
+
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            pending = EmailDelivery.objects.filter(
+                state=EmailDelivery.State.PENDING,
+            )
+            for delivery in list(pending):
+                deliver_job(None, {"delivery_id": str(delivery.id)})
+        return stub
+
+    def test_welcome_email_renders_and_is_idempotent(self):
+        from community_base.mail.models import EmailDelivery
+
         user = User.objects.create_user(
             email="welcome@example.com",
             import_source="slack",
@@ -504,31 +523,53 @@ class WelcomeImportedEmailTaskTest(TestCase):
         )
 
         first = send_imported_welcome_email(user.pk)
-        second = send_imported_welcome_email(user.pk)
 
         self.assertEqual(first["status"], "sent")
-        self.assertEqual(second["status"], "skipped")
-        self.assertEqual(second["reason"], "already_sent")
-        self.assertEqual(
-            EmailLog.objects.filter(user=user, email_type="welcome_imported").count(),
-            1,
+        # A1.2 slice 4: ``sent`` means the durable delivery exists; the
+        # ``email_log_id`` key carries the delivery id, and the audit row
+        # lands from the worker. The reset and sign-in links never sit in
+        # the durable context (#1613).
+        delivery = EmailDelivery.objects.get(
+            purpose="welcome_imported", recipient_user=user,
         )
-        html_body = _mock_send.call_args.args[2]
+        self.assertEqual(first["email_log_id"], str(delivery.pk))
+        self.assertNotIn("password_reset_url", delivery.context_data)
+        self.assertNotIn("sign_in_url", delivery.context_data)
+        self.assertEqual(delivery.context_data["import_tags"], "slack-member")
+
+        stub = self._drain()
+        self.assertEqual(len(stub.calls), 1)
+        html_body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertIn("Set your password", html_body)
         self.assertIn("/api/password-reset?token=", html_body)
         self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertEqual(
-            _mock_send.call_args.kwargs["email_type"], "welcome_imported"
-        )
-        self.assertIsNone(_mock_send.call_args.kwargs["unsubscribe_url"])
         self.assertNotIn("/api/unsubscribe?token=", html_body)
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user, email_type="welcome_imported",
+            ).count(),
+            1,
+        )
 
-    @patch("email_app.services.email_service.EmailService._send_ses")
-    def test_unsubscribed_user_is_skipped(self, mock_send):
+        second = send_imported_welcome_email(user.pk)
+
+        self.assertEqual(second["status"], "skipped")
+        self.assertEqual(second["reason"], "already_sent")
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=user, email_type="welcome_imported",
+            ).count(),
+            1,
+        )
+
+    def test_unsubscribed_user_is_skipped(self):
+        from community_base.mail.models import EmailDelivery
+
         user = User.objects.create_user(email="skip@example.com", unsubscribed=True)
         result = send_imported_welcome_email(user.pk)
         self.assertEqual(result["status"], "skipped")
-        mock_send.assert_not_called()
+        self.assertEqual(result["reason"], "unsubscribed")
+        self.assertFalse(EmailDelivery.objects.exists())
 
 
 class ImportUsersCommandTest(TestCase):

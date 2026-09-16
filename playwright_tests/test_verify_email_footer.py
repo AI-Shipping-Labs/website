@@ -13,6 +13,11 @@ actually verify the user when clicked. It would fail if any of:
 - the JWT is malformed or carries the wrong action,
 - the verify endpoint does not flip ``email_verified`` to True.
 
+A1.2 remainder slice 4: the send goes through the durable package path
+(``send_package_mail``) and the footer link is minted by the worker from
+the recipient row, so the captured HTML is exactly what the worker
+rendered.
+
 Usage:
     uv run pytest playwright_tests/test_verify_email_footer.py -v
 """
@@ -40,28 +45,26 @@ pytestmark = pytest.mark.local_only
 
 
 def _capture_send_html(user, template_name, context):
-    """Trigger an EmailService send with SES mocked, return the rendered HTML.
+    """Send through the durable package path; return the rendered HTML.
 
-    Mirrors how the production code wraps a body in
-    ``base_email.html``; bypassing SES means we get the exact bytes the
-    recipient would have seen without making a real API call.
+    The Playwright server drains mail jobs inline with the session SES
+    stub; capturing with a fresh local stub means we get the exact bytes
+    the worker rendered for the recipient without any real API call.
     """
-    # Imported lazily so the module-level Django configuration is in
-    # place before email_app is loaded.
-    from email_app.services.email_service import EmailService
+    from email_app.package_mail import send_package_mail
+    from email_app.testing import StubSESClient
 
-    captured = {}
-
-    def fake_send(self_, to_email, subject, html_body, **kwargs):  # noqa: ARG001
-        captured['html'] = html_body
-        return 'fake-ses-id'
-
-    service = EmailService()
-    with patch.object(EmailService, '_send_ses', autospec=True, side_effect=fake_send):
-        service.send(user, template_name, context)
+    stub = StubSESClient()
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=stub,
+    ):
+        send_package_mail(user, template_name, context)
 
     connection.close()
-    return captured.get('html', '')
+    if not stub.calls:
+        return ''
+    return stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
 
 
 def _extract_verify_url(html):

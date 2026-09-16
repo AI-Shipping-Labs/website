@@ -42,6 +42,7 @@ def send_package_mail(
     bcc=None,
     idempotency_key=None,
     related=None,
+    category=None,
 ):
     """Send one transactional mail through the package (A1.2).
 
@@ -52,7 +53,10 @@ def send_package_mail(
     ``related`` takes a saved model instance and lands on the delivery as
     its ``related_object_type``/``related_object_id`` pair; the site
     recorder maps an ``events.event`` relation onto the ``EmailLog`` audit
-    row's event FK.
+    row's event FK. ``category`` labels the delivery for caller-side
+    classification (A1.2 slice 4: the Studio test send marks itself so the
+    worker resolver knows the delivery has no producer relation); the
+    preference resolver ignores it.
     """
 
     context = context or {}
@@ -91,4 +95,5 @@ def send_package_mail(
             sender=get_sender_for_email_type(template_name),
             extra=extra or None,
             related=related,
+            category=category,
         )

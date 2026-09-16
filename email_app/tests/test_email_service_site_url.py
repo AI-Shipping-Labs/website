@@ -3,6 +3,7 @@
 """
 
 import datetime
+import re
 from urllib.parse import parse_qs, urlparse
 
 import jwt
@@ -12,10 +13,6 @@ from django.test import TestCase, override_settings
 from accounts.models import User
 from accounts.utils.tokens import JWT_ALGORITHM, resolve_password_reset_token
 from email_app.services.email_service import EmailService
-from email_app.tasks.welcome_imported import (
-    _build_context,
-    _build_password_reset_url,
-)
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -145,8 +142,10 @@ class WelcomeOnboardingCtaTest(TestCase):
 
 @override_settings(SITE_BASE_URL='https://env.example.com')
 class WelcomeImportedSiteUrlOverrideTest(TestCase):
-    """``email_app.tasks.welcome_imported`` URL helpers must respect
-    the override and preserve ``rstrip('/')``."""
+    """The imported-member welcome's links are minted by the worker
+    resolver from the resolved ``SITE_BASE_URL`` (A1.2 remainder slice 4)
+    and must respect the override, preserving ``rstrip('/')``.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -160,42 +159,76 @@ class WelcomeImportedSiteUrlOverrideTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def test_welcome_imported_signin_url_uses_db_override(self):
-        _set_override('https://override.example.com')
-        ctx = _build_context(self.user)
-        self.assertEqual(
-            ctx['sign_in_url'], 'https://override.example.com/login/',
+    def _send_and_render(self):
+        from unittest.mock import patch
+
+        from email_app.tasks.welcome_imported import (
+            send_imported_welcome_email,
+        )
+        from email_app.testing import StubSESClient, deliver_pending_mail
+
+        result = send_imported_welcome_email(self.user.pk)
+        self.assertEqual(result['status'], 'sent')
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+        self.assertEqual(len(stub.calls), 1)
+        return (
+            stub.calls[0]['Content']['Simple']['Subject']['Data'],
+            stub.calls[0]['Content']['Simple']['Body']['Html']['Data'],
         )
 
-    def test_welcome_imported_signin_url_falls_back_to_settings(self):
-        ctx = _build_context(self.user)
-        self.assertEqual(
-            ctx['sign_in_url'], 'https://env.example.com/login/',
+    def test_welcome_imported_signin_url_uses_db_override(self):
+        _set_override('https://override.example.com')
+        _subject, body_html = self._send_and_render()
+        self.assertIn(
+            'https://override.example.com/login/', body_html,
         )
+        self.assertNotIn('https://env.example.com/login/', body_html)
+
+    def test_welcome_imported_signin_url_falls_back_to_settings(self):
+        _subject, body_html = self._send_and_render()
+        self.assertIn('https://env.example.com/login/', body_html)
 
     def test_welcome_imported_password_reset_url_uses_db_override(self):
         _set_override('https://override.example.com')
-        url = _build_password_reset_url(self.user)
-        self.assertTrue(
-            url.startswith(
-                'https://override.example.com/api/password-reset?token='
-            ),
-            f'Unexpected reset URL: {url!r}',
+        _subject, body_html = self._send_and_render()
+        self.assertIn(
+            'https://override.example.com/api/password-reset?token=',
+            body_html,
         )
 
     def test_welcome_imported_password_reset_url_falls_back_to_settings(self):
-        url = _build_password_reset_url(self.user)
-        self.assertTrue(
-            url.startswith(
-                'https://env.example.com/api/password-reset?token='
-            ),
-            f'Unexpected reset URL: {url!r}',
+        _subject, body_html = self._send_and_render()
+        self.assertIn(
+            'https://env.example.com/api/password-reset?token=',
+            body_html,
         )
 
     def test_welcome_imported_password_reset_token_uses_one_hour_expiry(self):
+
+        import jwt as pyjwt
+
+        from accounts.utils.tokens import (
+            JWT_ALGORITHM,
+        )
+
         started_at = datetime.datetime.now(datetime.timezone.utc)
-        url = _build_password_reset_url(self.user)
-        payload = _decode_user_action_token(_extract_token(url))
+        _subject, body_html = self._send_and_render()
+        match = re.search(r'/api/password-reset\?token=([A-Za-z0-9_\-.]+)',
+                          body_html)
+        self.assertIsNotNone(match)
+        token = match.group(1)
+        payload = pyjwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[JWT_ALGORITHM],
+            options={"verify_exp": False},
+        )
         expires_at = datetime.datetime.fromtimestamp(
             payload["exp"],
             tz=datetime.timezone.utc,
@@ -203,7 +236,7 @@ class WelcomeImportedSiteUrlOverrideTest(TestCase):
 
         self.assertEqual(payload["user_id"], self.user.pk)
         self.assertEqual(payload["action"], "password_reset")
-        resolved_user, _validated = resolve_password_reset_token(_extract_token(url))
+        resolved_user, _validated = resolve_password_reset_token(token)
         self.assertEqual(resolved_user.pk, self.user.pk)
         self.assertGreater(
             expires_at,
@@ -218,7 +251,8 @@ class WelcomeImportedSiteUrlOverrideTest(TestCase):
         # rstrip('/') must be preserved so URL building doesn't get
         # double-slashes.
         _set_override('https://override.example.com/')
-        ctx = _build_context(self.user)
-        self.assertEqual(
-            ctx['sign_in_url'], 'https://override.example.com/login/',
+        _subject, body_html = self._send_and_render()
+        self.assertIn(
+            'https://override.example.com/login/', body_html,
         )
+        self.assertNotIn('example.com//', body_html)

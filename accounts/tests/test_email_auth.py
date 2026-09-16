@@ -1096,7 +1096,7 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
         from email_app import hooks
 
         resolved = hooks.resolve_auth_mail_context(
-            delivery=SimpleNamespace(purpose="free_welcome"),
+            delivery=SimpleNamespace(purpose="free_welcome", category=""),
             context={"site_url": "https://example.com"},
         )
 
@@ -1111,6 +1111,7 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
             delivery=SimpleNamespace(
                 purpose="email_verification_signup",
                 recipient_user=None,
+                category="",
             ),
             context={"return_path": "/blog/free-return-article"},
         )

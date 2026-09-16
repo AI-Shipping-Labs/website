@@ -700,6 +700,7 @@ DISMISSABLE_DASHBOARD_CARDS = frozenset({
     "free_activation_checklist",
     "free_activation_sprint_guide_seen",
     "getting_started_skip_ai_hero",
+    "getting_started_skip_buildcamp",
     "getting_started_skip_events",
     "getting_started_skip_sprints",
     "getting_started_skip_onboarding",

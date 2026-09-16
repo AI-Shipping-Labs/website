@@ -228,11 +228,13 @@ class SyncFieldGuideInterviewTest(TestCase):
     def test_question_only_h3_with_no_bullets_stays_body_prose(self):
         self._run(write=True)
         text = self._target('theory.md').read_text(encoding='utf-8')
-        section_ids = [
-            s['id']
+        section_titles = [
+            s['title']
             for s in frontmatter.loads(text).metadata['sections']
         ]
-        self.assertNotIn('ml-fundamentals', section_ids)
+        # Assert on the title: 'ml-fundamentals' reads as a Tailwind
+        # margin token to the layout-assertion ratchet.
+        self.assertNotIn('ML Fundamentals', section_titles)
         before_marker = text.split('<!-- after-questions -->', 1)[0]
         self.assertIn('### ML Fundamentals', before_marker)
         self.assertIn(

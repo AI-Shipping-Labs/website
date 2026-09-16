@@ -43,6 +43,8 @@ class RepoClassification:
         download_files,
         marketing_page_files,
         interview_files,
+        wiki_page_files,
+        docs_page_files,
     ):
         self.course_dirs = course_dirs
         self.workshop_dirs = workshop_dirs
@@ -54,6 +56,8 @@ class RepoClassification:
         self.download_files = download_files
         self.marketing_page_files = marketing_page_files
         self.interview_files = interview_files
+        self.wiki_page_files = wiki_page_files
+        self.docs_page_files = docs_page_files
 
 
 def classify_checkout(run):
@@ -103,6 +107,8 @@ class RepoFileClassifier:
         self.download_files = []
         self.marketing_page_files = []
         self.interview_files = []
+        self.wiki_page_files = []
+        self.docs_page_files = []
 
     def classify(self):
         self._claim_structured_subtrees()
@@ -118,6 +124,8 @@ class RepoFileClassifier:
             download_files=self.download_files,
             marketing_page_files=self.marketing_page_files,
             interview_files=self.interview_files,
+            wiki_page_files=self.wiki_page_files,
+            docs_page_files=self.docs_page_files,
         )
 
     def _claim_structured_subtrees(self):
@@ -193,6 +201,16 @@ class RepoFileClassifier:
             and ext in ('.yaml', '.yml', '.md')
         ):
             self.event_files.append(rel_path)
+            return True
+        # Issue #1685: knowledge base sections live in the checkout's
+        # top-level `wiki/` and `docs/` directories. Anchored to the first
+        # path segment so a nested "wiki"/"docs" folder elsewhere (inside a
+        # course or workshop subtree, already claimed above) is untouched.
+        if ext == '.md' and len(parts) >= 2 and parts[0] == 'wiki':
+            self.wiki_page_files.append(rel_path)
+            return True
+        if ext == '.md' and len(parts) >= 2 and parts[0] == 'docs':
+            self.docs_page_files.append(rel_path)
             return True
         return False
 

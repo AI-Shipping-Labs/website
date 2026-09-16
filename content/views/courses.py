@@ -84,7 +84,7 @@ def courses_list(request):
     (``access_mode='tier'``) courses keep today's grid, tag-filter facet
     pool, and empty-state behaviour unchanged. Entitlement-mode courses
     (sold outside the membership plans, e.g. Maven) render in their own
-    "Sold separately" section below — excluded from the tag-filter pool
+    "External courses" section below — excluded from the tag-filter pool
     and never filtered out by the selected tag.
     """
     published = Course.objects.filter(status='published')
@@ -605,10 +605,23 @@ def _render_module_overview(request, course, module):
 
     cta_message = ''
     cta_url = ''
+    gated_entitlement = False
     if not has_access:
-        tier_name = get_required_tier_name(course.required_level)
-        cta_message = f'Upgrade to {tier_name} to access this module'
-        cta_url = '/membership'
+        if course.access_mode == 'entitlement':
+            # Issue #1673: mirror the course-detail pattern — no tier
+            # unlocks an entitlement-mode course, so the module CTA must
+            # not point at /membership either. See course_detail() above.
+            gated_entitlement = True
+            cta_message = (
+                f'Enroll via {course.program_label} to access this module'
+                if course.program_label
+                else 'Enroll to access this module'
+            )
+            cta_url = course.enroll_url or ''
+        else:
+            tier_name = get_required_tier_name(course.required_level)
+            cta_message = f'Upgrade to {tier_name} to access this module'
+            cta_url = '/membership'
 
     context = {
         'course': course,
@@ -622,8 +635,9 @@ def _render_module_overview(request, course, module):
         'cta_url': cta_url,
         'required_tier_name': (
             get_required_tier_name(course.required_level)
-            if not has_access else ''
+            if not has_access and not gated_entitlement else ''
         ),
+        'gated_entitlement': gated_entitlement,
     }
     return render(request, 'content/module_overview.html', context)
 
@@ -913,7 +927,7 @@ def api_cohort_enroll(request, slug, cohort_id):
         return JsonResponse(
             {
                 'error': (
-                    'This course is sold separately; enrollment is '
+                    'This is an external course; enrollment is '
                     'managed by staff or the enrollment integration.'
                 ),
             },
@@ -975,7 +989,7 @@ def api_cohort_unenroll(request, slug, cohort_id):
         return JsonResponse(
             {
                 'error': (
-                    'This course is sold separately; enrollment is '
+                    'This is an external course; enrollment is '
                     'managed by staff or the enrollment integration.'
                 ),
             },

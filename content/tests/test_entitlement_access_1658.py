@@ -255,7 +255,8 @@ class BuildGatedAccessCopyEntitlementTest(TestCase):
         )
         self.assertEqual(
             copy['gated_description'],
-            'This course is sold separately from AI Shipping Labs membership plans.',
+            "This is an external course, run on another platform — it "
+            "isn't included in any AI Shipping Labs membership plan.",
         )
 
     def test_blank_enroll_url_yields_blank_cta_url(self):

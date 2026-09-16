@@ -79,7 +79,7 @@ def _resolve_access_mode(
       early-return behaviour in ``content/access.py``), so a
       sub-Basic ``required_level`` makes the entitlement gate a no-op:
       every anonymous or signed-in visitor gets in while the page still
-      shows "Sold separately" copy.
+      shows "External course" copy.
     - ``default_unit_required_level`` below Basic — same hole, but for
       the per-lesson wall: this is the field that actually controls
       whether unit content is readable, and it can be set independently

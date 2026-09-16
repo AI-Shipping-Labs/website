@@ -11,14 +11,14 @@ Includes:
 - Static pages (home, about, blog listing, etc.)
 """
 
-from django.contrib.sitemaps import Sitemap
-from django.urls import reverse
-
 from community_base.knowledge_base.models import (
     SECTION_DOCS,
     SECTION_WIKI,
     KnowledgeBasePage,
 )
+from django.contrib.sitemaps import Sitemap
+from django.urls import reverse
+
 from content.models import (
     Article,
     Course,

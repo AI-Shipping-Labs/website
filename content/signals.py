@@ -1,7 +1,7 @@
+from community_base.knowledge_base.models import KnowledgeBasePage
 from django.db.models.signals import post_delete, post_migrate, post_save
 from django.dispatch import receiver
 
-from community_base.knowledge_base.models import KnowledgeBasePage
 from content.models import Download, MarketingPage
 from content.nav_availability import (
     refresh_knowledge_base_nav_cache,

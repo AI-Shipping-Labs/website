@@ -1,0 +1,101 @@
+{
+    "family": "ai-shipping-labs",
+    "containerDefinitions": [
+        {
+            "name": "ai-shipping-labs",
+            "image": "repo:testtag-20260708",
+            "essential": true,
+            "environment": [
+                {
+                    "name": "VERSION",
+                    "value": "testtag-20260708"
+                },
+                {
+                    "name": "DEBUG",
+                    "value": "False"
+                },
+                {
+                    "name": "ALLOWED_HOSTS",
+                    "value": "dev.aishippinglabs.com"
+                },
+                {
+                    "name": "CSRF_TRUSTED_ORIGINS",
+                    "value": "https://dev.aishippinglabs.com"
+                },
+                {
+                    "name": "SITE_BASE_URL",
+                    "value": "https://dev.aishippinglabs.com"
+                },
+                {
+                    "name": "RUN_MIGRATIONS",
+                    "value": "true"
+                },
+                {
+                    "name": "R1_SCHEMA_BARRIER_ROLE",
+                    "value": "web"
+                },
+                {
+                    "name": "BOOT_MODE",
+                    "value": "web"
+                },
+                {
+                    "name": "GUNICORN_WORKERS",
+                    "value": "2"
+                },
+                {
+                    "name": "SERVING_BOOT_CHECK_ENABLED",
+                    "value": "false"
+                }
+            ],
+            "portMappings": []
+        },
+        {
+            "name": "ai-shipping-labs-worker",
+            "image": "repo:testtag-20260708",
+            "essential": false,
+            "environment": [
+                {
+                    "name": "VERSION",
+                    "value": "testtag-20260708"
+                },
+                {
+                    "name": "DEBUG",
+                    "value": "False"
+                },
+                {
+                    "name": "ALLOWED_HOSTS",
+                    "value": "dev.aishippinglabs.com"
+                },
+                {
+                    "name": "CSRF_TRUSTED_ORIGINS",
+                    "value": "https://dev.aishippinglabs.com"
+                },
+                {
+                    "name": "SITE_BASE_URL",
+                    "value": "https://dev.aishippinglabs.com"
+                },
+                {
+                    "name": "RUN_MIGRATIONS",
+                    "value": "false"
+                },
+                {
+                    "name": "R1_SCHEMA_BARRIER_ROLE",
+                    "value": "worker"
+                },
+                {
+                    "name": "BOOT_MODE",
+                    "value": "worker"
+                },
+                {
+                    "name": "GUNICORN_WORKERS",
+                    "value": "2"
+                },
+                {
+                    "name": "SERVING_BOOT_CHECK_ENABLED",
+                    "value": "false"
+                }
+            ],
+            "portMappings": []
+        }
+    ]
+}

@@ -10,7 +10,6 @@ navigation, section children, drafting and sitemap inclusion.
 from community_base.knowledge_base.models import (
     SECTION_DOCS,
     SECTION_WIKI,
-    STATUS_PUBLISHED,
     KnowledgeBasePage,
 )
 from django.test import TestCase

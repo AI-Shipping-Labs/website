@@ -161,7 +161,9 @@ def refresh_knowledge_base_nav_cache():
     knowledge base table (partial deploy before the package migration)
     reads as "no pages" instead of breaking the write path.
     """
-    from community_base.knowledge_base.models import KnowledgeBasePage
+    from community_base.knowledge_base.models import (  # noqa: PLC0415
+        KnowledgeBasePage,
+    )
 
     global _kb_nav
     for section in ('wiki', 'docs'):

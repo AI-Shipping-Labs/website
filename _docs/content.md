@@ -435,6 +435,21 @@ short description
 
 `interview-questions/<topic>.md`. One file per topic (`behavioral.md`, `coding.md`, `home-assignments.md`).
 
+Refresh from the field guide: the question banks originate in the
+`ai-engineering-field-guide` repo and drift stale. To regenerate the six
+files from a local guide checkout:
+
+```bash
+uv run python manage.py sync_field_guide_interview \
+    --from-disk ~/git/ai-engineering-field-guide \
+    --content-repo ~/git/ai-shipping-labs-content --write
+```
+
+Dry run by default (drop `--write` to preview). Review the diff, commit and
+push the content repo, then let the webhook sync run. The converter never
+touches the database, never flips `status`, and reuses the existing
+`content_id` values (new files default to `status: coming-soon`).
+
 ### Repo-level files
 
 | File | Purpose |

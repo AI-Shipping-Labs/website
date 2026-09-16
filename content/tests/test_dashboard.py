@@ -1270,6 +1270,29 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         )
         return course, unit
 
+    def _create_buildcamp(self, program_label='Maven'):
+        course = Course.objects.create(
+            title='AI Engineering Buildcamp',
+            slug='ai-buildcamp',
+            status='published',
+            required_level=LEVEL_PREMIUM,
+            access_mode='entitlement',
+            program_label=program_label,
+        )
+        module = Module.objects.create(
+            course=course,
+            title='Start',
+            slug='start',
+            sort_order=1,
+        )
+        unit = Unit.objects.create(
+            module=module,
+            title='Orientation',
+            slug='orientation',
+            sort_order=1,
+        )
+        return course, unit
+
     def _create_active_sprint(self, slug='free-sprint'):
         return Sprint.objects.create(
             name='Free Sprint',
@@ -1416,6 +1439,286 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertTrue(items['sprints']['completed'])
         self.assertContains(response, 'data-testid="free-activation-checklist"')
         self.assertContains(response, 'data-testid="free-plan-teaser"')
+
+    def test_buildcamp_item_visible_with_course_access_grant(self):
+        user = User.objects.create_user(email='buildcamp-grant@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        course, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        keys = [
+            item['key']
+            for item in response.context['free_activation_checklist_items']
+        ]
+        self.assertIn('buildcamp', keys)
+        self.assertEqual(keys.index('buildcamp'), keys.index('ai-hero') + 1)
+        self.assertLess(keys.index('buildcamp'), keys.index('events'))
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertEqual(
+            items['buildcamp']['title'], 'Start AI Engineering Buildcamp',
+        )
+        self.assertEqual(items['buildcamp']['url'], '/courses/ai-buildcamp')
+        self.assertEqual(items['buildcamp']['cta_label'], 'Open course')
+        self.assertEqual(
+            items['buildcamp']['description'],
+            'Begin the course you enrolled in through Maven.',
+        )
+        self.assertFalse(items['buildcamp']['completed'])
+        self.assertContains(response, 'href="/courses/ai-buildcamp"')
+
+    def test_buildcamp_item_absent_without_course_access_grant(self):
+        user = User.objects.create_user(email='buildcamp-nogrant@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        self._create_buildcamp()
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        keys = [
+            item['key']
+            for item in response.context['free_activation_checklist_items']
+        ]
+        self.assertNotIn('buildcamp', keys)
+        self.assertEqual(keys, ['ai-hero', 'events', 'sprints'])
+        self.assertNotContains(response, 'Start AI Engineering Buildcamp')
+
+    def test_buildcamp_item_absent_for_paid_tier_without_grant(self):
+        user = User.objects.create_user(email='buildcamp-paid-nogrant@test.com', password='testpass')
+        set_membership(user, tier=self.premium_tier)
+        self._create_buildcamp()
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        keys = [
+            item['key']
+            for item in response.context['free_activation_checklist_items']
+        ]
+        self.assertNotIn('buildcamp', keys)
+
+    def test_buildcamp_item_absent_for_staff_without_grant(self):
+        """Staff previewing their own dashboard get the entitlement gate
+        exactly like anyone else — the checklist must never rely on
+        `can_access()`'s staff/superuser bypass (issue #1658)."""
+        staff = User.objects.create_user(
+            email='buildcamp-staff@test.com', password='testpass', is_staff=True,
+        )
+        set_membership(staff, tier=self.free_tier)
+        self._create_buildcamp()
+        self._login_user(staff)
+
+        response = self.client.get('/')
+
+        keys = [
+            item['key']
+            for item in response.context['free_activation_checklist_items']
+        ]
+        self.assertNotIn('buildcamp', keys)
+
+    def test_buildcamp_item_omitted_when_course_does_not_exist(self):
+        user = User.objects.create_user(email='buildcamp-nocourse@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        keys = [
+            item['key']
+            for item in response.context['free_activation_checklist_items']
+        ]
+        self.assertNotIn('buildcamp', keys)
+
+    def test_buildcamp_item_completed_by_active_enrollment(self):
+        user = User.objects.create_user(email='buildcamp-enrolled@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        course, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        Enrollment.objects.create(user=user, course=course)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['buildcamp']['completed'])
+
+    def test_buildcamp_item_completed_by_unit_progress(self):
+        user = User.objects.create_user(email='buildcamp-progress@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        course, unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        UserCourseProgress.objects.create(user=user, unit=unit, completed_at=timezone.now())
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['buildcamp']['completed'])
+
+    def test_buildcamp_item_pre_existing_activity_shows_pre_completed_on_first_render(self):
+        """A backfilled Maven member with pre-existing enrollment sees the
+        row pre-completed the very first time it renders, with no separate
+        "first seen" incomplete state."""
+        user = User.objects.create_user(email='buildcamp-backfill@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        course, _unit = self._create_buildcamp()
+        Enrollment.objects.create(user=user, course=course)
+        CourseAccess.objects.create(user=user, course=course)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertIn('buildcamp', items)
+        self.assertTrue(items['buildcamp']['completed'])
+
+    def test_buildcamp_item_can_be_skipped_like_any_other_row(self):
+        user = User.objects.create_user(email='buildcamp-skip@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        course, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        self._login_user(user)
+
+        self.assertContains(
+            self.client.get('/'),
+            'data-testid="free-activation-skip-buildcamp"',
+        )
+
+        skipped = self.client.post(
+            '/account/api/dismiss-card',
+            data=json.dumps({'card': 'getting_started_skip_buildcamp'}),
+            content_type='application/json',
+        )
+        self.assertEqual(
+            skipped.json(),
+            {'status': 'ok', 'card': 'getting_started_skip_buildcamp'},
+        )
+
+        response = self.client.get('/')
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertTrue(items['buildcamp']['completed'])
+        self.assertTrue(items['buildcamp']['skipped'])
+        self.assertContains(
+            response,
+            'data-testid="free-activation-completed-action-buildcamp"',
+        )
+
+    def test_buildcamp_counter_includes_extra_task_for_entitled_member(self):
+        user = User.objects.create_user(email='buildcamp-counter@test.com', password='testpass')
+        set_membership(user, tier=self.main_tier)
+        course, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        ai_hero, _unit = self._create_ai_hero()
+        Enrollment.objects.create(user=user, course=ai_hero)
+        event = Event.objects.create(
+            title='Buildcamp counter event',
+            slug='buildcamp-counter-event',
+            start_datetime=timezone.now() + timedelta(days=2),
+            status='upcoming',
+            required_level=0,
+        )
+        EventRegistration.objects.create(user=user, event=event)
+        self._login_user(user)
+
+        with self.settings(SLACK_INVITE_URL='https://join.slack.com/test'):
+            response = self.client.get('/')
+
+        self.assertEqual(response.context['free_activation_total_count'], 6)
+        self.assertEqual(response.context['free_activation_completed_count'], 2)
+        self.assertContains(response, '2 of 6 complete')
+
+    def test_dismissed_complete_checklist_reopens_after_new_buildcamp_grant(self):
+        """The existing `all_complete`-driven reopen rule handles the new
+        buildcamp item with no buildcamp-specific dismissal code — same
+        mechanism that already reopens the checklist on a tier upgrade."""
+        user = User.objects.create_user(
+            email='buildcamp-reopen@test.com', password='testpass',
+            dashboard_dismissals=['free_activation_sprint_guide_seen'],
+        )
+        set_membership(user, tier=self.free_tier)
+        ai_hero, _unit = self._create_ai_hero()
+        Enrollment.objects.create(user=user, course=ai_hero)
+        event = Event.objects.create(
+            title='Reopen checklist event',
+            slug='reopen-checklist-event',
+            start_datetime=timezone.now() + timedelta(days=2),
+            status='upcoming',
+            required_level=0,
+        )
+        EventRegistration.objects.create(user=user, event=event)
+        self._login_user(user)
+
+        completed = self.client.get('/')
+        self.assertTrue(completed.context['activation_checklist_all_complete'])
+
+        dismissed = self.client.post(
+            '/account/api/dismiss-card',
+            data=json.dumps({'card': 'free_activation_checklist'}),
+            content_type='application/json',
+        )
+        self.assertEqual(
+            dismissed.json(),
+            {'status': 'ok', 'card': 'free_activation_checklist'},
+        )
+        self.assertNotContains(
+            self.client.get('/'), 'data-testid="free-activation-checklist"',
+        )
+
+        buildcamp, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=buildcamp)
+
+        reopened = self.client.get('/')
+
+        self.assertTrue(reopened.context['show_activation_checklist'])
+        items = {
+            item['key']: item
+            for item in reopened.context['free_activation_checklist_items']
+        }
+        self.assertFalse(items['buildcamp']['completed'])
+        self.assertTrue(items['ai-hero']['completed'])
+        self.assertTrue(items['events']['completed'])
+        self.assertTrue(items['sprints']['completed'])
+        self.assertContains(reopened, 'data-testid="free-activation-checklist"')
+
+    def test_basic_member_sees_buildcamp_ordered_after_ai_hero(self):
+        user = User.objects.create_user(email='buildcamp-basic@test.com', password='testpass')
+        set_membership(user, tier=self.basic_tier)
+        course, _unit = self._create_buildcamp()
+        CourseAccess.objects.create(user=user, course=course)
+        self._login_user(user)
+
+        response = self.client.get('/')
+
+        self.assertEqual(
+            [
+                item['key']
+                for item in response.context['free_activation_checklist_items']
+            ],
+            ['onboarding', 'ai-hero', 'buildcamp', 'events', 'sprints'],
+        )
+        items = {
+            item['key']: item
+            for item in response.context['free_activation_checklist_items']
+        }
+        self.assertFalse(items['onboarding']['completed'])
+        self.assertFalse(items['buildcamp']['completed'])
 
     def test_basic_members_start_paid_checklist_with_onboarding(self):
         user = User.objects.create_user(email='basic-activation@test.com', password='testpass')

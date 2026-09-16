@@ -11,6 +11,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from accounts.gating import is_newsletter_only_user
 from accounts.oauth_context import get_oauth_provider_context
 from accounts.services.timezones import format_user_datetime, is_valid_timezone
+from accounts.utils.tags import normalize_tag
 from bookclub.models import BOOK_STATUS_CURRENT, Book, ChapterRead
 from community.services.slack_links import build_slack_profile_url
 from content.access import (
@@ -47,6 +48,7 @@ from questionnaires.onboarding import has_completed_onboarding
 
 DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
 AI_HERO_COURSE_SLUG = 'aihero'
+AI_BUILDCAMP_COURSE_SLUG = 'ai-buildcamp'
 
 TESTIMONIALS = [
     {
@@ -1364,6 +1366,28 @@ def _locked_feed_item(
     }
 
 
+def user_has_checklist_tag(user, tag):
+    """Return True when `user` carries the given operator-managed tag.
+
+    General-purpose audience-targeting helper for checklist items (issue
+    #1678): callable the same lightweight way as the existing tier checks
+    in `_get_activation_context` (e.g. `if user_level >= LEVEL_BASIC:`
+    becomes `if user_has_checklist_tag(user, 'some-tag'):`). Built on
+    `accounts.User.tags` and the normalization in `accounts/utils/tags.py`
+    so callers don't need to worry about casing/whitespace/separator
+    differences between the tag literal in code and how the tag is stored.
+
+    Not wired to any checklist item yet — no current item needs
+    tag-based targeting (the buildcamp item below uses `CourseAccess`
+    instead, which is exact and self-maintaining). This is the reusable
+    plumbing for a future item that has no entitlement signal to key off.
+    """
+    normalized = normalize_tag(tag)
+    if not normalized:
+        return False
+    return normalized in (user.tags or [])
+
+
 def _get_activation_context(
     *,
     user,
@@ -1444,18 +1468,23 @@ def _get_activation_context(
             icon='message-square',
             completed=user.slack_member,
         ))
-    checklist_items.extend([
-        checklist_item(
-            key='ai-hero',
-            title='Start AI Hero',
-            description=(
-                'Begin with the open course for building AI products.'
-            ),
-            url='/courses/aihero',
-            cta_label='Open course',
-            icon='book-open',
-            completed=_has_started_ai_hero(user),
+    checklist_items.append(checklist_item(
+        key='ai-hero',
+        title='Start AI Hero',
+        description=(
+            'Begin with the open course for building AI products.'
         ),
+        url='/courses/aihero',
+        cta_label='Open course',
+        icon='book-open',
+        completed=_has_started_ai_hero(user),
+    ))
+    buildcamp_item = _build_buildcamp_checklist_item(
+        user=user, checklist_item=checklist_item,
+    )
+    if buildcamp_item is not None:
+        checklist_items.append(buildcamp_item)
+    checklist_items.extend([
         checklist_item(
             key='events',
             title='Register for an event',
@@ -1579,16 +1608,57 @@ def _has_started_ai_hero(user):
     course = Course.objects.filter(slug=AI_HERO_COURSE_SLUG).only('id').first()
     if course is None:
         return False
+    return _has_course_activity(user, course.pk)
+
+
+def _has_course_activity(user, course_id):
+    """Return True when the member has an active enrollment or any unit
+    progress in the given course. Shared completion rule for `ai-hero` and
+    `buildcamp` checklist items."""
     if Enrollment.objects.filter(
         user=user,
-        course_id=course.pk,
+        course_id=course_id,
         unenrolled_at__isnull=True,
     ).exists():
         return True
     return UserCourseProgress.objects.filter(
         user=user,
-        unit__module__course_id=course.pk,
+        unit__module__course_id=course_id,
     ).exists()
+
+
+def _build_buildcamp_checklist_item(*, user, checklist_item):
+    """Return the "Start AI Engineering Buildcamp" checklist row, or None.
+
+    Visibility is gated on an individual `CourseAccess` row, queried
+    directly rather than through `content.access.can_access()`: for
+    entitlement-mode courses `can_access()` grants staff/superuser access
+    with no `CourseAccess` row (issue #1658's staff bypass), which would
+    leak this item to staff previewing their own dashboard with no real
+    grant. Staff see the item only when they hold an actual grant, exactly
+    like anyone else.
+    """
+    course = (
+        Course.objects.filter(slug=AI_BUILDCAMP_COURSE_SLUG)
+        .only('id', 'program_label')
+        .first()
+    )
+    if course is None:
+        return None
+    if not CourseAccess.objects.filter(user=user, course_id=course.pk).exists():
+        return None
+    program_label = course.program_label or 'the external program'
+    return checklist_item(
+        key='buildcamp',
+        title='Start AI Engineering Buildcamp',
+        description=(
+            f'Begin the course you enrolled in through {program_label}.'
+        ),
+        url='/courses/ai-buildcamp',
+        cta_label='Open course',
+        icon='rocket',
+        completed=_has_course_activity(user, course.pk),
+    )
 
 
 def _has_active_sprint_plan(user):

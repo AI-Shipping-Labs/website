@@ -104,7 +104,8 @@ class SyncFieldGuideInterviewTest(TestCase):
         sources = {
             '01-theory.md': GUIDE_THEORY,
             '04-ai-system-design.md': GUIDE_SYSTEM_DESIGN,
-            '99-notes.md': '# Notes\n\n- not a question bank\n',
+            'questions.md': '# All questions\n\n- aggregate dump\n',
+            'notes.md': '# Notes\n\n- not a question bank\n',
         }
         for name, text in sources.items():
             (questions / name).write_text(text, encoding='utf-8')
@@ -146,7 +147,10 @@ class SyncFieldGuideInterviewTest(TestCase):
         self.assertFalse(self._target('01-theory.md').exists())
         self.assertFalse(self._target('ai-system-design.md').exists())
         self.assertIn(
-            '99-notes.md (not a known guide question file)', output,
+            'questions.md (aggregate file, not a category bank)', output,
+        )
+        self.assertIn(
+            'notes.md (not a known guide question file)', output,
         )
 
     def test_emitted_sections_match_source_structure(self):

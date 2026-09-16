@@ -2,14 +2,57 @@
 
 from community_base.config import views as package_views
 from community_base.config.registry import groups
-from community_base.config.service import unset
+from community_base.config.service import (
+    REDACTED,
+    Setting,
+    SettingChange,
+    decrypt,
+    definition,
+    mask_sensitive_spans,
+    runtime,
+)
 from community_base.kernel.decorators import staff_required
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.db import transaction
 from django.shortcuts import redirect
 
 from integrations.config import clear_config_cache
+
+
+def _unset_setting(key, actor_ref, reason=""):
+    """Remove one database override and restore normal fallback resolution.
+
+    Compatibility replacement for ``community_base.config.service.unset``,
+    which the package removed in v0.4.x without a successor: the Studio
+    clear-override affordance is site-owned, so the exact v0.3.9 semantics
+    (delete the row, write the audit change, reset and republish the
+    runtime stamp) live here until the package re-ships the function.
+    """
+    item = definition(key)
+    with transaction.atomic():
+        previous = Setting.objects.select_for_update().filter(key=key).first()
+        if previous is None:
+            return False
+        previous.delete()
+        SettingChange.objects.create(
+            setting_key=key,
+            old_value=REDACTED if item.secret else previous.value,
+            old_value_redacted=item.secret,
+            new_value=None,
+            new_value_redacted=False,
+            actor_ref=mask_sensitive_spans(str(actor_ref)),
+            reason=mask_sensitive_spans(
+                str(reason),
+                canaries=(
+                    (str(decrypt(previous.value)),) if item.secret else ()
+                ),
+            ),
+        )
+        runtime.reset()
+        transaction.on_commit(runtime.publish)
+    return True
 
 
 @staff_required
@@ -19,7 +62,7 @@ def settings_save_group(request, group):
     group_definitions = groups().get(group, ())
     allowed_keys = {item.key for item in group_definitions}
     if clear_key and clear_key in allowed_keys:
-        if unset(
+        if _unset_setting(
             clear_key,
             actor_ref=f"user:{request.user.pk}",
             reason=f"Cleared Studio group {group}",

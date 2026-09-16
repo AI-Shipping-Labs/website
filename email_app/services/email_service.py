@@ -1,19 +1,35 @@
-"""Legacy email service for sending transactional emails via Amazon SES.
+"""Deprecated EmailService shim (A1.2 slice 5, issue #1651).
 
-Usage:
-    from email_app.services import EmailService
+This class is closed to new callers. Transactional sends go through the
+``community_base.mail`` package app via
+``email_app.package_mail.send_package_mail``; a new caller that constructs
+``EmailService`` fails the guard test
+``email_app/tests/test_email_service_shim_1651.py``.
 
-    service = EmailService()
-    service.send(user, 'welcome', {'tier_name': 'Main'})
+Construction emits a ``DeprecationWarning`` — a warning, never an error —
+so the recorded exempt producers keep working unchanged:
 
-This class is the transitional A1.2 surface: transactional sends move to
-``community_base.mail`` (via ``email_app.package_mail.send_package_mail``)
-one app per pull request, and the class shrinks to a DeprecationWarning
-shim in the final slice. The rendering and SES transport it used to own
-live in :mod:`email_app.services.email_rendering` and
-:mod:`email_app.services.ses_transport`; the methods below delegate so
-every remaining caller keeps its exact behavior until its own slice
-converts.
+- ``email_app/tasks/send_campaign.py`` and ``studio/views/campaigns.py``:
+  the campaign-family transport, retired by A6.3.
+- ``accounts/services/privacy_workflow.py``: ``prepare_template`` /
+  ``send_prepared``; the package ``send`` cannot model its redacted
+  recipient (recorded at slice 1 acceptance in ``_docs/configuration.md``).
+
+Exempt producers live with the warning rather than suppressing it:
+Python's default filters hide ``DeprecationWarning`` outside ``__main__``
+and dedupe it per call site, so production logs stay clean, while the
+guard test re-enables it with ``simplefilter("always")`` to prove it
+still fires. Do not wrap the exempt call sites in
+``warnings.catch_warnings()`` — a suppressed construction is invisible
+to exactly the check that guards this inventory.
+
+The class has no implementation of its own anymore: rendering lives in
+:mod:`email_app.services.email_rendering`, the SES transport in
+:mod:`email_app.services.ses_transport`, and the package-path hooks in
+:mod:`email_app.hooks`. Every method delegates; ``send`` routes through
+the same ``prepare_template``/``send_prepared`` seam the exempt producers
+use. The class is deleted once A6.3 retires the campaign surfaces and the
+package grows the privacy redacted-recipient seam.
 
 Templates are stored as markdown files in email_app/email_templates/.
 Each template has YAML frontmatter with a subject line, and a markdown
@@ -21,6 +37,7 @@ body that supports Django template variables.
 """
 
 import logging
+import warnings
 from dataclasses import dataclass
 
 from accounts.utils.tokens import generate_user_action_token
@@ -101,6 +118,17 @@ VERIFY_FOOTER_TOKEN_EXPIRY_HOURS = 24 * 7
 
 UNSUBSCRIBED_AT_SEND = "unsubscribed_at_send"
 
+# Emitted once per call site under Python's default filters (and every
+# time under the guard test's ``simplefilter("always")``). Names the
+# replacement and the guard test so the fix is one search away.
+_SHIM_DEPRECATION_MESSAGE = (
+    "email_app.services.EmailService is deprecated: new callers must use "
+    "email_app.package_mail.send_package_mail (the community_base.mail "
+    "package app). Only the recorded exempt producers may still construct "
+    "it (send_campaign, studio campaigns, privacy_workflow); the inventory "
+    "is enforced by email_app/tests/test_email_service_shim_1651.py."
+)
+
 
 @dataclass(frozen=True)
 class RenderedEmailSendResult:
@@ -131,14 +159,21 @@ class PreparedRenderedEmail:
 
 
 class EmailService:
-    """Service for sending transactional emails via Amazon SES v2.
+    """Deprecated transactional-email shim (see the module docstring).
 
-    Loads markdown templates from email_app/email_templates/,
-    renders them with context variables, wraps in HTML email template,
-    sends via SES, and logs every send to EmailLog.
+    Loads markdown templates from email_app/email_templates/, renders
+    them with context variables, wraps in HTML email template, sends via
+    SES, and logs every send to EmailLog — all by delegating to
+    :mod:`email_app.services.email_rendering` and
+    :mod:`email_app.services.ses_transport`. Construction warns.
     """
 
     def __init__(self):
+        warnings.warn(
+            _SHIM_DEPRECATION_MESSAGE,
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._ses_client = None
 
     @property
@@ -159,6 +194,11 @@ class EmailService:
         dedupe_key=None,
     ):
         """Send a transactional email to a user.
+
+        Shim routing: dedupe, then the same ``prepare_template`` /
+        ``send_prepared`` seam the exempt producers use, then the
+        ``EmailLog`` audit row. New callers must not use this method —
+        see the module docstring.
 
         Args:
             user: User model instance (must have .email attribute). The
@@ -188,71 +228,30 @@ class EmailService:
         Raises:
             EmailServiceError: If template not found or SES send fails.
         """
-        if context is None:
-            context = {}
-        to_email = (recipient_email or user.email).strip()
-
         if dedupe_key:
             from email_app.models import EmailLog
             existing = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
             if existing is not None:
                 return existing
 
-        email_kind, skip_reason = self._delivery_decision(user, template_name)
-        if skip_reason is not None:
+        prepared = self.prepare_template(
+            user,
+            template_name,
+            context,
+            recipient_email=recipient_email,
+            cc=cc,
+            bcc=bcc,
+        )
+        if prepared.skip_reason is not None:
             logger.info(
                 "Skipping email email_type=%s user_id=%s reason=%s",
                 template_name,
                 getattr(user, "pk", None),
-                skip_reason,
+                prepared.skip_reason,
             )
             return None
 
-        # Load and render the template. DB overrides beat filesystem
-        # templates, but no override keeps the historical file path.
-        subject, body_markdown, body_html, footer_note = self._render_template_parts(
-            template_name,
-            user,
-            context,
-        )
-
-        unsubscribe_url = None
-        if email_kind == EMAIL_KIND_PROMOTIONAL:
-            unsubscribe_url = self._build_unsubscribe_url(user)
-
-        # Issue #450: only mint the verify-email token when the footer CTA
-        # will actually render (unverified recipient + opted-in template).
-        # Skip the token mint entirely for verified users — wasted work.
-        verify_email_url = None
-        if self._should_include_verify_footer(user, template_name):
-            verify_email_url = self._build_verify_email_url(user)
-
-        # Wrap in base HTML email template
-        full_html = self.render_html_email(
-            subject,
-            body_html,
-            unsubscribe_url=unsubscribe_url,
-            footer_note=footer_note,
-            verify_email_url=verify_email_url,
-        )
-        plain_text = self.render_plain_text_email(
-            body_markdown,
-            footer_note=footer_note,
-            verify_email_url=verify_email_url,
-            unsubscribe_url=unsubscribe_url,
-        )
-
-        # Send via SES
-        ses_message_id = self._send_ses(
-            to_email,
-            subject,
-            full_html,
-            text_body=plain_text,
-            email_type=template_name,
-            unsubscribe_url=unsubscribe_url,
-            cc=cc,
-            bcc=bcc,
-        )
+        ses_message_id = self.send_prepared(prepared)
 
         # Log the send. Internal sends to an ad-hoc recipient surrogate
         # (issue #703 staff signup heads-up) pass an object that is NOT
@@ -267,9 +266,9 @@ class EmailService:
         if isinstance(user, Model) and getattr(user, "pk", None):
             email_log = EmailLog.objects.create(
                 user=user,
-                recipient_email=to_email,
+                recipient_email=prepared.to_email,
                 email_type=template_name,
-                subject=subject,
+                subject=prepared.subject,
                 ses_message_id=ses_message_id,
                 dedupe_key=dedupe_key,
             )
@@ -279,7 +278,7 @@ class EmailService:
         logger.info(
             'Sent "%s" email to %s (SES message ID: %s)',
             template_name,
-            to_email,
+            prepared.to_email,
             ses_message_id,
         )
 

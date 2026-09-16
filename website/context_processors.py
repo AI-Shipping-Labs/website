@@ -198,6 +198,9 @@ def _build_env_mismatch_payload(request):
 def _build_primary_nav(marketing_nav, has_published_downloads, kb_nav=None):
     """Assemble the ordered primary-nav structure rendered in the header.
 
+    ``kb_nav`` is optional; existing two-argument callers (and tests) mean
+    "no knowledge base sections available".
+
     Single source of truth for the public primary navigation. Both the
     desktop dropdown block and the mobile accordion drawer in
     ``templates/includes/header.html`` loop over this structure, so a link
@@ -263,6 +266,7 @@ def _build_primary_nav(marketing_nav, has_published_downloads, kb_nav=None):
     # A7.1 (#1685): Wiki and Documentation surface in Learning only when
     # the knowledge base actually has published pages in that section,
     # mirroring the conditional Downloads item above.
+    kb_nav = kb_nav or {}
     if kb_nav.get('docs'):
         learning_items.append(
             {'label': 'Documentation', 'href': '/docs/', 'slug': 'docs'}

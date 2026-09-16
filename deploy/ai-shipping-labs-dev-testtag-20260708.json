@@ -1,1 +1,0 @@
-{"taskDefinition": {"family": "ai-shipping-labs", "containerDefinitions": [{"name": "ai-shipping-labs", "image": "repo:old", "essential": true, "environment": [], "portMappings": []}]}}

@@ -392,12 +392,12 @@ class TwoLevelCourseUrlUnchangedTest(TestCase):
 
     def test_module_overview_page_still_resolves(self):
         response = self.client.get('/courses/flat-course-url/module-1')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Module 1', status_code=200)
 
     def test_unit_detail_page_still_resolves(self):
         self.client.login(email='flat-url@test.com', password='pw')
         response = self.client.get('/courses/flat-course-url/module-1/lesson-1')
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Lesson 1', status_code=200)
 
 
 class SyllabusIncludeContextLeakRegressionTest(TestCase):

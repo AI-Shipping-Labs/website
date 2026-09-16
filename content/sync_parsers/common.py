@@ -25,6 +25,11 @@ REQUIRED_FIELDS = {
     'workshop': ['content_id', 'slug', 'title', 'pages_required_level'],
     'workshop_page': ['title'],
     'instructor': ['id', 'name'],
+    # Knowledge base pages (issue #1685): page identity in the package is
+    # the slug, but the content repository's every-file-content_id
+    # convention still applies to wiki/ and docs/ markdown.
+    'wiki_pages': ['content_id', 'title'],
+    'docs_pages': ['content_id', 'title'],
 }
 
 INSTRUCTOR_ID_RE = re.compile(r'^[a-z0-9-]+$')

@@ -12,6 +12,10 @@ from content.sync_parsers.families.downloads import DownloadsParser
 from content.sync_parsers.families.events import EventsParser
 from content.sync_parsers.families.instructors import InstructorsParser
 from content.sync_parsers.families.interview_questions import InterviewQuestionsParser
+from content.sync_parsers.families.knowledge_base import (
+    DocsPagesParser,
+    WikiPagesParser,
+)
 from content.sync_parsers.families.marketing_pages import MarketingPagesParser
 from content.sync_parsers.families.projects import ProjectsParser
 from content.sync_parsers.families.tiers import TiersParser
@@ -29,6 +33,10 @@ _PARSER_ORDER = (
     MarketingPagesParser,
     InterviewQuestionsParser,
     TiersParser,
+    # Knowledge base pages fill package-owned storage (issue #1685) and
+    # depend on nothing from the other families.
+    WikiPagesParser,
+    DocsPagesParser,
 )
 
 _registered = False

@@ -3,6 +3,7 @@
 import datetime
 import os
 
+from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_date
 
 from content.sync_parsers.base import FamilyParser
@@ -628,6 +629,8 @@ def _sync_course_children(
 
 
 _COHORT_REQUIRED_FIELDS = ('key', 'name', 'start_date', 'end_date')
+_COHORT_SELF_PACED_REQUIRED_FIELDS = ('key', 'name')
+_VALID_COHORT_MODES = frozenset({'cohort', 'self_paced'})
 
 
 def _sync_course_cohorts(course, course_data, rel_path):
@@ -635,9 +638,17 @@ def _sync_course_cohorts(course, course_data, rel_path):
 
     Issue #1659: each entry is keyed on ``(course, external_key=key)`` — a
     new key creates a cohort, a known key updates ``name``/``start_date``/
-    ``end_date`` when they changed. A cohort key dropped from a later YAML
-    edit is left untouched in the database (reconcile-never-destroy, same as
-    the rest of the sync pipeline; a cohort may already have enrollments).
+    ``end_date``/``mode`` when they changed. A cohort key dropped from a
+    later YAML edit is left untouched in the database (reconcile-never
+    -destroy, same as the rest of the sync pipeline; a cohort may already
+    have enrollments).
+
+    Issue #1674: an optional ``mode:`` key (default ``cohort``, matching
+    the model default). A ``mode: self_paced`` entry must NOT set
+    ``start_date``/``end_date`` — sync fails that course naming the
+    cohort key if either is present. A second ``mode: self_paced`` entry
+    for the same course fails sync too, via ``Cohort.full_clean()``
+    surfacing the partial unique constraint as a ``ValidationError``.
 
     Raises :class:`GitHubSyncError` on a malformed entry so the caller's
     per-course exception handler records it against this course's sync only
@@ -657,30 +668,70 @@ def _sync_course_cohorts(course, course_data, rel_path):
                 f'Invalid cohorts entry in {rel_path}: expected a mapping, '
                 f'got {type(entry).__name__}'
             )
-        missing = [
-            field for field in _COHORT_REQUIRED_FIELDS
-            if entry.get(field) is None or entry.get(field) == ''
-        ]
-        if missing:
+
+        mode_raw = entry.get('mode', 'cohort')
+        mode = str(mode_raw).strip().lower() if not isinstance(mode_raw, bool) else None
+        if mode not in _VALID_COHORT_MODES:
             raise GitHubSyncError(
-                f"Invalid cohorts entry in {rel_path}: "
-                f"missing {', '.join(missing)}"
+                f'Invalid cohorts entry in {rel_path}: unknown mode '
+                f"{mode_raw!r} (expected 'cohort' or 'self_paced')"
             )
 
-        key = str(entry['key']).strip()
-        defaults = {
-            'name': entry['name'],
-            'start_date': _parse_cohort_date(
-                entry['start_date'], field_name='start_date', rel_path=rel_path,
-            ),
-            'end_date': _parse_cohort_date(
-                entry['end_date'], field_name='end_date', rel_path=rel_path,
-            ),
-        }
+        if mode == 'self_paced':
+            missing = [
+                field for field in _COHORT_SELF_PACED_REQUIRED_FIELDS
+                if entry.get(field) is None or entry.get(field) == ''
+            ]
+            if missing:
+                raise GitHubSyncError(
+                    f"Invalid cohorts entry in {rel_path}: "
+                    f"missing {', '.join(missing)}"
+                )
+            key = str(entry['key']).strip()
+            if entry.get('start_date') not in (None, '') or entry.get('end_date') not in (None, ''):
+                raise GitHubSyncError(
+                    f"Invalid cohorts entry '{key}' in {rel_path}: "
+                    'mode: self_paced must not set start_date/end_date'
+                )
+            defaults = {
+                'name': entry['name'],
+                'start_date': None,
+                'end_date': None,
+                'mode': 'self_paced',
+            }
+        else:
+            missing = [
+                field for field in _COHORT_REQUIRED_FIELDS
+                if entry.get(field) is None or entry.get(field) == ''
+            ]
+            if missing:
+                raise GitHubSyncError(
+                    f"Invalid cohorts entry in {rel_path}: "
+                    f"missing {', '.join(missing)}"
+                )
+            key = str(entry['key']).strip()
+            defaults = {
+                'name': entry['name'],
+                'start_date': _parse_cohort_date(
+                    entry['start_date'], field_name='start_date', rel_path=rel_path,
+                ),
+                'end_date': _parse_cohort_date(
+                    entry['end_date'], field_name='end_date', rel_path=rel_path,
+                ),
+                'mode': 'cohort',
+            }
 
         cohort = Cohort.objects.filter(course=course, external_key=key).first()
         if cohort is None:
-            Cohort.objects.create(course=course, external_key=key, **defaults)
+            cohort = Cohort(course=course, external_key=key, **defaults)
+            try:
+                cohort.full_clean()
+            except ValidationError as exc:
+                raise GitHubSyncError(
+                    f"Invalid cohorts entry '{key}' in {rel_path}: "
+                    f'{"; ".join(exc.messages)}'
+                ) from exc
+            cohort.save()
             continue
 
         changed_fields = [
@@ -690,6 +741,13 @@ def _sync_course_cohorts(course, course_data, rel_path):
         if changed_fields:
             for field in changed_fields:
                 setattr(cohort, field, defaults[field])
+            try:
+                cohort.full_clean()
+            except ValidationError as exc:
+                raise GitHubSyncError(
+                    f"Invalid cohorts entry '{key}' in {rel_path}: "
+                    f'{"; ".join(exc.messages)}'
+                ) from exc
             cohort.save(update_fields=changed_fields)
 
 
@@ -714,12 +772,105 @@ def _parse_cohort_date(value, *, field_name, rel_path):
     )
 
 
-def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=None):
-    """Build a ``{module_slug: {filename: unit_slug}}`` map for a course tree.
+def _parse_module_yaml_for_lookup(module_yaml_path, course_dir, entry_name, stats):
+    """Parse one ``module.yaml`` for the link-lookup builder.
 
-    Used by the markdown link rewriter (issue #226) so we can resolve sibling
-    and cross-module ``.md`` links without doing a database round-trip per
-    link. The slug derivation here mirrors what :func:`_sync_module_units`
+    Returns ``(module_slug, module_ignore_patterns)``. Best-effort: a parse
+    failure logs/records the error and falls back to a directory-derived
+    slug with no ignore patterns, mirroring the pre-#1674 inline behaviour.
+    """
+    try:
+        module_data = _parse_yaml_file(module_yaml_path) or {}
+    except ValueError as exc:
+        module_data = {}
+        rel_module_yaml = os.path.relpath(module_yaml_path, course_dir)
+        logger.warning(
+            'Failed to parse %s while building course unit lookup: %s',
+            module_yaml_path, exc,
+        )
+        if stats is not None:
+            stats['errors'].append({
+                'file': rel_module_yaml,
+                'error': str(exc),
+            })
+    module_slug = module_data.get('slug') or derive_slug(entry_name)
+    raw_module_ignore = module_data.get('ignore', []) or []
+    module_ignore_patterns = [str(p) for p in raw_module_ignore]
+    return module_slug, module_ignore_patterns
+
+
+def _collect_module_lookup_files(
+    module_dir, course_dir, course_ignore_patterns, module_ignore_patterns, stats,
+):
+    """Return ``{filename: unit_slug}`` for the ``.md`` files directly in
+    ``module_dir`` (not its submodule subdirectories, if any) — the same
+    file-selection rule :func:`_sync_module_units` applies."""
+    files = {}
+    for filename in checkout_listdir(module_dir):
+        if (
+            not filename.lower().endswith('.md')
+            or filename.startswith('.')
+        ):
+            continue
+        filepath = os.path.join(module_dir, filename)
+        if not checkout_is_file(filepath):
+            continue
+
+        rel_to_course = os.path.relpath(filepath, course_dir)
+        if _matches_ignore_patterns(rel_to_course, course_ignore_patterns):
+            continue
+        if _matches_ignore_patterns(filename, module_ignore_patterns):
+            continue
+
+        try:
+            metadata, _ = _parse_markdown_file(filepath)
+        except ValueError as exc:
+            metadata = {}
+            rel_md = os.path.relpath(filepath, course_dir)
+            logger.warning(
+                'Failed to parse frontmatter in %s while building '
+                'course unit lookup: %s', filepath, exc,
+            )
+            if stats is not None:
+                stats['errors'].append({
+                    'file': rel_md,
+                    'error': str(exc),
+                })
+
+        if filename.lower() == 'readme.md':
+            # README is the module overview, not a unit (issue #222).
+            # Registered under a sentinel slug so the link rewriter can
+            # spot README.md targets and emit module-overview URLs.
+            unit_slug = '__module_overview__'
+        else:
+            if not metadata.get('content_id'):
+                continue
+            unit_slug = metadata.get('slug', derive_slug(filename))
+        files[filename] = unit_slug
+    return files
+
+
+def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=None):
+    """Build a nested module-tree map for the markdown link rewriter.
+
+    Issue #1674: walks one level into submodule subdirectories (the same
+    depth cap the rest of the sync enforces) so cross-submodule links —
+    including links to a submodule under a DIFFERENT parent week — resolve
+    to the correct nested URL instead of being silently left unrewritten.
+    A module directory that mixes submodules with direct unit files (sync
+    rejects that course outright) is walked as a parent here too; its
+    (invalid) direct files are simply not registered, matching "the sync
+    never actually created those units".
+
+    Shape: ``{top_level_slug: {'dir_name': str, 'files': {filename:
+    unit_slug}, 'children': {submodule_slug: {'dir_name': str, 'files':
+    {...}}}}}``. ``files`` is empty on a parent entry (mixed content is
+    forbidden, so a module with ``children`` never legitimately has
+    direct units); ``children`` is empty on a leaf entry.
+
+    Used by the markdown link rewriter (issue #226) so we can resolve
+    sibling and cross-module ``.md`` links without a database round-trip
+    per link. The slug derivation here mirrors what :func:`_sync_module_units`
     writes to ``Module.slug`` / ``Unit.slug`` so the rewriter produces URLs
     that actually resolve.
 
@@ -770,97 +921,46 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
         if not checkout_exists(module_yaml_path):
             continue
 
-        # Best-effort: skip modules whose YAML can't be parsed. We don't want
-        # link rewriting to ever fail the sync, so a parse error here just
-        # means those modules' units can't be link targets. Surface the
-        # error to ``stats['errors']`` when available so staff see it in the
-        # SyncLog instead of silently losing the module (issue #286).
-        # ``_parse_yaml_file`` now wraps yaml errors as ``ValueError`` with
-        # a ``Failed to parse module.yaml: ...`` prefix, so the message we
-        # record matches the documented format without a separate prefix.
-        try:
-            module_data = _parse_yaml_file(module_yaml_path) or {}
-        except ValueError as exc:
-            module_data = {}
-            rel_module_yaml = os.path.relpath(module_yaml_path, course_dir)
-            logger.warning(
-                'Failed to parse %s while building course unit lookup: %s',
-                module_yaml_path, exc,
+        module_slug, module_ignore_patterns = _parse_module_yaml_for_lookup(
+            module_yaml_path, course_dir, entry.name, stats,
+        )
+
+        submodule_entries = _find_submodule_dir_entries(
+            entry.path, course_ignore_patterns, course_dir,
+        )
+
+        children = {}
+        for sub_entry in submodule_entries:
+            sub_yaml_path = os.path.join(sub_entry.path, 'module.yaml')
+            sub_slug, sub_ignore_patterns = _parse_module_yaml_for_lookup(
+                sub_yaml_path, course_dir, sub_entry.name, stats,
             )
-            if stats is not None:
-                stats['errors'].append({
-                    'file': rel_module_yaml,
-                    'error': str(exc),
-                })
-        module_slug = module_data.get('slug') or derive_slug(entry.name)
+            children[sub_slug] = {
+                'dir_name': sub_entry.name,
+                'files': _collect_module_lookup_files(
+                    sub_entry.path, course_dir, course_ignore_patterns,
+                    sub_ignore_patterns, stats,
+                ),
+            }
 
-        # Module-level ignore patterns are relative to the module dir,
-        # course-level patterns are relative to the course dir — same split
-        # _sync_module_units uses.
-        raw_module_ignore = module_data.get('ignore', []) or []
-        module_ignore_patterns = [str(p) for p in raw_module_ignore]
+        # A parent module (has submodule children) never legitimately has
+        # direct unit files (mixed content is rejected by sync) — skip
+        # collecting them so a malformed mixed directory doesn't register
+        # ghost sibling-link targets for units the sync never created.
+        files = (
+            {}
+            if children
+            else _collect_module_lookup_files(
+                entry.path, course_dir, course_ignore_patterns,
+                module_ignore_patterns, stats,
+            )
+        )
 
-        files = {}
-        for filename in checkout_listdir(entry.path):
-            if (
-                not filename.lower().endswith('.md')
-                or filename.startswith('.')
-            ):
-                continue
-            filepath = os.path.join(entry.path, filename)
-            if not checkout_is_file(filepath):
-                continue
-
-            # Same _is_ignored check _sync_module_units uses: a file matched
-            # by either glob list is skipped from sync, so it must also be
-            # skipped from the lookup.
-            rel_to_course = os.path.relpath(filepath, course_dir)
-            if _matches_ignore_patterns(
-                rel_to_course, course_ignore_patterns,
-            ):
-                continue
-            if _matches_ignore_patterns(filename, module_ignore_patterns):
-                continue
-
-            try:
-                metadata, _ = _parse_markdown_file(filepath)
-            except ValueError as exc:
-                # _parse_markdown_file now raises ValueError with a
-                # ``Failed to parse frontmatter in <filename>: ...`` prefix
-                # when frontmatter YAML fails (issue #286).
-                metadata = {}
-                rel_md = os.path.relpath(filepath, course_dir)
-                logger.warning(
-                    'Failed to parse frontmatter in %s while building '
-                    'course unit lookup: %s', filepath, exc,
-                )
-                if stats is not None:
-                    stats['errors'].append({
-                        'file': rel_md,
-                        'error': str(exc),
-                    })
-
-            if filename.lower() == 'readme.md':
-                # README is the module overview, not a unit (issue #222).
-                # We still register it under a sentinel slug so the link
-                # rewriter can spot README.md targets and emit module-overview
-                # URLs (handled in content/utils/md_links.py). README has no
-                # content_id requirement (the sync derives one).
-                unit_slug = '__module_overview__'
-            else:
-                # _sync_module_units skips non-README files missing
-                # content_id (logs a warning, no Unit created). Mirror that
-                # here so the rewriter doesn't emit URLs for ghost units.
-                if not metadata.get('content_id'):
-                    continue
-                # Key-absent default to match _sync_module_units exactly:
-                # an explicit empty ``slug:`` in YAML yields ``''`` rather
-                # than falling back to the filename-derived slug. In
-                # practice authors never write ``slug:`` empty.
-                unit_slug = metadata.get('slug', derive_slug(filename))
-            files[filename] = unit_slug
-
-        lookup[module_slug] = files
+        lookup[module_slug] = {
+            'dir_name': entry.name,
+            'files': files,
+            'children': children,
+        }
 
     return lookup
 
@@ -1137,14 +1237,254 @@ def _resolve_workshop_landing_copy(
     return body
 
 
+def _find_submodule_dir_entries(module_dir, course_ignore_patterns, course_dir):
+    """Return dir entries under ``module_dir`` that are themselves modules.
+
+    A subdirectory is a submodule when it carries its own ``module.yaml``
+    (issue #1674) — exactly mirroring how a course directory's
+    subdirectories become modules today, one level deeper.
+    """
+    entries = []
+    for entry in checkout_scandir(module_dir):
+        if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
+            continue
+        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
+        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
+            continue
+        if checkout_exists(os.path.join(entry.path, 'module.yaml')):
+            entries.append(entry)
+    return entries
+
+
+def _has_direct_unit_files(module_dir, course_ignore_patterns, module_ignore_patterns, course_dir):
+    """Return True if ``module_dir`` has a non-README ``.md`` unit file.
+
+    Mirrors the file-selection rule ``_sync_module_units`` itself applies
+    (README is the overview, not a unit; ignore globs are respected) so
+    the mixed-content detection agrees with what would actually sync.
+    """
+    for filename in checkout_listdir(module_dir):
+        if not filename.endswith('.md') or filename.upper() == 'README.MD':
+            continue
+        filepath = os.path.join(module_dir, filename)
+        if not checkout_is_file(filepath):
+            continue
+        rel_to_course = os.path.relpath(filepath, course_dir)
+        if _matches_ignore_patterns(rel_to_course, course_ignore_patterns):
+            continue
+        if _matches_ignore_patterns(filename, module_ignore_patterns):
+            continue
+        return True
+    return False
+
+
+def _upsert_module_row(course, parent_module, entry, module_data, rel_path, repo_name, commit_sha, stats):
+    """Create or update the ``Module`` row for one module directory.
+
+    Shared by top-level modules and submodules (issue #1674) — same
+    upsert-by-source_path-then-slug lookup, same ``module.yaml`` optional
+    keys (``bonus:`` -> ``is_bonus``, ``available_after_days:``). Runs
+    ``full_clean()`` so the depth-cap / same-course / self-parent / mixed
+    -content invariants (``Module.clean()``) are enforced on every sync,
+    converting a ``ValidationError`` into a :class:`GitHubSyncError` that
+    names this directory.
+    """
+    from content.models import Module
+
+    sort_order = module_data.get('sort_order', extract_sort_order(entry.name))
+    slug = module_data.get('slug', derive_slug(entry.name))
+    is_bonus = bool(module_data.get('bonus', False))
+    available_after_days_raw = module_data.get('available_after_days')
+    available_after_days = None
+    if available_after_days_raw is not None:
+        try:
+            available_after_days = int(available_after_days_raw)
+        except (TypeError, ValueError):
+            raise GitHubSyncError(
+                f'Invalid available_after_days in {rel_path}/module.yaml: '
+                f'{available_after_days_raw!r} (expected an integer)'
+            ) from None
+
+    module_defaults = {
+        'title': module_data.get('title', entry.name),
+        'slug': slug,
+        'sort_order': sort_order,
+        'is_bonus': is_bonus,
+        'available_after_days': available_after_days,
+        'parent': parent_module,
+        'source_repo': repo_name,
+        'source_commit': commit_sha,
+    }
+    # Issue #310: prefer source_path lookup, fall back to (course, parent,
+    # slug). Module has no content_id field, but the fallback lets a
+    # dir-rename that keeps the slug stay idempotent. Scoped by
+    # ``parent_module`` too (issue #1674 grooming correction): slug
+    # uniqueness is per sibling group, not course-wide, so a bare
+    # (course, slug) fallback could match the wrong module once two
+    # submodules under different parents share a slug (e.g. "Homework"
+    # repeated under several weeks).
+    module = Module.objects.filter(
+        course=course, source_path=rel_path,
+    ).first()
+    if module is None:
+        module = Module.objects.filter(
+            course=course, parent=parent_module, slug=slug,
+        ).first()
+
+    if module is None:
+        module = Module(course=course, source_path=rel_path, **module_defaults)
+        created = True
+        changed = True
+    else:
+        identity_changed = (
+            module.source_path != rel_path
+            or module.slug != slug
+            or module.parent_id != (parent_module.pk if parent_module else None)
+        )
+        changed = identity_changed or _defaults_differ(module, module_defaults)
+        module.source_path = rel_path
+        for k, v in module_defaults.items():
+            setattr(module, k, v)
+        created = False
+
+    try:
+        module.full_clean()
+    except ValidationError as exc:
+        raise GitHubSyncError(
+            f'Invalid module in {rel_path}: {"; ".join(exc.messages)}'
+        ) from exc
+
+    if changed:
+        module.save()
+        action = 'created' if created else 'updated'
+        if created:
+            stats['created'] += 1
+        else:
+            stats['updated'] += 1
+        # Per-level breakdown (issue #224): track each module touched
+        # so the dashboard can show "Modules: X created Y updated"
+        # and link to the studio edit page.
+        stats['items_detail'].append({
+            'title': module.title,
+            'slug': module.slug,
+            'action': action,
+            'content_type': 'module',
+            'course_id': course.pk,
+            'course_slug': course.slug,
+            'module_id': module.pk,
+        })
+    else:
+        stats['unchanged'] += 1
+
+    return module
+
+
+def _sync_module_dir(
+    course, entry, parent_module, repo_dir, repo_name, commit_sha, stats,
+    known_images, course_dir, course_ignore_patterns, course_slug,
+    unit_lookup, seen_module_paths,
+):
+    """Sync one module directory: the module row, then either its
+    submodules (parent) or its units (leaf) — never both (issue #1674).
+    """
+    module_yaml_path = os.path.join(entry.path, 'module.yaml')
+    module_data = _parse_yaml_file(module_yaml_path)
+    rel_path = os.path.relpath(entry.path, repo_dir)
+
+    # Edge Case 7: Frontmatter validation
+    _validate_frontmatter(module_data, 'module', rel_path)
+
+    # Recorded before the mixed-content check below so a content mistake
+    # mid-edit never causes a previously-valid module to look stale and
+    # get swept by the end-of-sync cleanup.
+    seen_module_paths.add(rel_path)
+
+    raw_module_ignore = module_data.get('ignore', []) or []
+    module_ignore_patterns = [str(p) for p in raw_module_ignore]
+
+    submodule_entries = _find_submodule_dir_entries(
+        entry.path, course_ignore_patterns, course_dir,
+    )
+    has_direct_units = _has_direct_unit_files(
+        entry.path, course_ignore_patterns, module_ignore_patterns, course_dir,
+    )
+
+    if submodule_entries and has_direct_units:
+        # Reject the mixed directory outright — do not create either side.
+        # A submodule row and/or a stray unit row created before this
+        # check would leave the "does not partially create either side"
+        # contract broken, so the directory-shape check runs before any
+        # DB write for this directory.
+        raise GitHubSyncError(
+            f'Module directory {rel_path} mixes submodule subdirectories '
+            'with direct unit markdown files — a module must hold either '
+            'submodules or units, never both. Move the unit files into a '
+            'submodule subdirectory, or remove the submodule dirs.'
+        )
+
+    module = _upsert_module_row(
+        course, parent_module, entry, module_data, rel_path, repo_name,
+        commit_sha, stats,
+    )
+
+    if submodule_entries:
+        # Parent module: README (if any) is still its overview; it has no
+        # direct units (guarded above), so this only processes the README.
+        _sync_module_units(
+            module, entry.path, repo_dir, repo_name, commit_sha, stats,
+            known_images=known_images,
+            course_dir=course_dir,
+            course_ignore_patterns=course_ignore_patterns,
+            module_ignore_patterns=module_ignore_patterns,
+            course_slug=course_slug,
+            unit_lookup=unit_lookup,
+        )
+        for submodule_entry in submodule_entries:
+            try:
+                _sync_module_dir(
+                    course, submodule_entry, module, repo_dir, repo_name,
+                    commit_sha, stats, known_images, course_dir,
+                    course_ignore_patterns, course_slug, unit_lookup,
+                    seen_module_paths,
+                )
+            except Exception as e:
+                raise_if_checkout_error(e)
+                stats['errors'].append({
+                    'file': os.path.relpath(
+                        os.path.join(submodule_entry.path, 'module.yaml'),
+                        repo_dir,
+                    ),
+                    'error': str(e),
+                })
+    else:
+        # Leaf module (today's two-level shape, unchanged behaviour).
+        _sync_module_units(
+            module, entry.path, repo_dir, repo_name, commit_sha, stats,
+            known_images=known_images,
+            course_dir=course_dir,
+            course_ignore_patterns=course_ignore_patterns,
+            module_ignore_patterns=module_ignore_patterns,
+            course_slug=course_slug,
+            unit_lookup=unit_lookup,
+        )
+
+
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
                          known_images=None, course_ignore_patterns=None):
-    """Sync modules and units for a course.
+    """Sync modules (and, since issue #1674, submodules) and units for a course.
 
     ``course_ignore_patterns`` are globs relative to ``course_dir`` from the
     course-level ``ignore:`` key. A directory whose path matches is skipped
     entirely. The patterns are also passed down to unit sync so individual
     files matched at the course level are skipped wherever they appear.
+
+    A top-level module directory becomes a parent module when it contains
+    one or more subdirectories that themselves carry a ``module.yaml`` —
+    submodules are parsed exactly like top-level modules, one level
+    deeper (own ``sort_order``/slug derivation, own ``module.yaml``
+    overrides, own README overview, own ``ignore:`` list). A directory
+    that mixes submodule subdirectories with direct unit markdown files
+    fails that module's sync with a named error and creates neither side.
     """
     from content.models import Module
 
@@ -1180,101 +1520,11 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             continue
 
         try:
-            module_data = _parse_yaml_file(module_yaml_path)
-            rel_path = os.path.relpath(entry.path, repo_dir)
-
-            # Edge Case 7: Frontmatter validation
-            _validate_frontmatter(module_data, 'module', rel_path)
-
-            seen_module_paths.add(rel_path)
-
-            # Derive sort_order and slug from directory name
-            sort_order = module_data.get(
-                'sort_order', extract_sort_order(entry.name),
+            _sync_module_dir(
+                course, entry, None, repo_dir, repo_name, commit_sha, stats,
+                known_images, course_dir, course_ignore_patterns, course.slug,
+                unit_lookup, seen_module_paths,
             )
-            slug = module_data.get('slug', derive_slug(entry.name))
-
-            module_defaults = {
-                'title': module_data.get('title', entry.name),
-                'slug': slug,
-                'sort_order': sort_order,
-                'source_repo': repo_name,
-                'source_commit': commit_sha,
-            }
-            # Issue #310: prefer source_path lookup, fall back to
-            # (course, slug). Module has no content_id field, but the
-            # (course, slug) fallback lets a dir-rename that keeps the
-            # slug stay idempotent — without it the source_path-based
-            # lookup misses and the unique (course, slug) constraint
-            # fires on insert.
-            module = Module.objects.filter(
-                course=course, source_path=rel_path,
-            ).first()
-            if module is None:
-                module = Module.objects.filter(
-                    course=course, slug=slug,
-                ).first()
-
-            if module is None:
-                module = Module(
-                    course=course, source_path=rel_path, **module_defaults,
-                )
-                module.save()
-                created = True
-                changed = True
-            else:
-                identity_changed = (
-                    module.source_path != rel_path
-                    or module.slug != slug
-                )
-                if identity_changed or _defaults_differ(module, module_defaults):
-                    module.source_path = rel_path
-                    for k, v in module_defaults.items():
-                        setattr(module, k, v)
-                    module.save()
-                    created = False
-                    changed = True
-                else:
-                    created = False
-                    changed = False
-
-            if changed:
-                action = 'created' if created else 'updated'
-                if created:
-                    stats['created'] += 1
-                else:
-                    stats['updated'] += 1
-                # Per-level breakdown (issue #224): track each module touched
-                # so the dashboard can show "Modules: X created Y updated"
-                # and link to the studio edit page.
-                stats['items_detail'].append({
-                    'title': module.title,
-                    'slug': module.slug,
-                    'action': action,
-                    'content_type': 'module',
-                    'course_id': course.pk,
-                    'course_slug': course.slug,
-                    'module_id': module.pk,
-                })
-            else:
-                stats['unchanged'] += 1
-
-            # Module-level ignore patterns (relative to module dir). Course
-            # patterns are translated/filtered separately in _sync_module_units.
-            raw_module_ignore = module_data.get('ignore', []) or []
-            module_ignore_patterns = [str(p) for p in raw_module_ignore]
-
-            # Sync units within this module
-            _sync_module_units(
-                module, entry.path, repo_dir, repo_name, commit_sha, stats,
-                known_images=known_images,
-                course_dir=course_dir,
-                course_ignore_patterns=course_ignore_patterns,
-                module_ignore_patterns=module_ignore_patterns,
-                course_slug=course.slug,
-                unit_lookup=unit_lookup,
-            )
-
         except Exception as e:
             raise_if_checkout_error(e)
             stats['errors'].append({
@@ -1282,7 +1532,8 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 'error': str(e),
             })
 
-    # Remove stale modules
+    # Remove stale modules (top-level and submodules — seen_module_paths
+    # includes every level).
     stale_modules = Module.objects.filter(
         course=course,
         source_repo=repo_name,
@@ -1369,6 +1620,9 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     unit_lookup=unit_lookup,
                     source_path=readme_rel,
                     sync_errors=stats.get('errors'),
+                    parent_module_slug=(
+                        module.parent.slug if module.parent_id else None
+                    ),
                 )
 
             overview_changed = (
@@ -1442,11 +1696,73 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
 
             seen_unit_paths.add(rel_path)
 
+            # Issue #1674: ``kind:`` (lesson/homework/event, case-insensitive).
+            # ``is_homework: true`` keeps working as a legacy alias — when
+            # ``kind:`` is absent it sets ``kind='homework'`` too. If both
+            # are set and disagree, ``kind:`` wins and an info-level note is
+            # recorded (same pattern as the existing access/is_preview
+            # redundancy note below).
+            kind_raw = metadata.get('kind')
+            is_homework_flag = bool(metadata.get('is_homework', False))
+            if kind_raw is not None:
+                kind_key = str(kind_raw).strip().lower()
+                if kind_key not in ('lesson', 'homework', 'event'):
+                    raise GitHubSyncError(
+                        f'Invalid kind in {rel_path}: {kind_raw!r} '
+                        "(expected 'lesson', 'homework', or 'event')"
+                    )
+            else:
+                kind_key = 'homework' if is_homework_flag else 'lesson'
+
+            if (
+                kind_raw is not None
+                and is_homework_flag
+                and kind_key != 'homework'
+            ):
+                stats['errors'].append({
+                    'file': rel_path,
+                    'severity': 'info',
+                    'error': (
+                        'Both kind: and is_homework: set on unit and '
+                        'disagree; kind: wins. Drop is_homework to keep '
+                        'YAML clean.'
+                    ),
+                })
+
+            # ``is_homework`` continues to mean "route body into
+            # Unit.homework instead of Unit.body" — now derived from
+            # ``kind`` rather than the raw frontmatter key so ``kind:
+            # homework`` alone (no ``is_homework:``) routes correctly too.
+            is_homework = kind_key == 'homework'
+
+            session_position_raw = metadata.get('session_position')
+            unit_session_position = None
+            if kind_key == 'event':
+                if session_position_raw is None:
+                    raise GitHubSyncError(
+                        f'kind: event requires session_position in {rel_path}'
+                    )
+                try:
+                    unit_session_position = int(session_position_raw)
+                except (TypeError, ValueError):
+                    unit_session_position = None
+                if (
+                    unit_session_position is None
+                    or isinstance(session_position_raw, bool)
+                    or unit_session_position < 1
+                ):
+                    raise GitHubSyncError(
+                        f'Invalid session_position in {rel_path}: '
+                        f'{session_position_raw!r} (expected a positive '
+                        'integer)'
+                    )
+
+            unit_is_bonus = bool(metadata.get('is_bonus', False))
+
             # Validate structured lesson annotations before URL rewriting or
             # any Unit mutation. Keep the path in ``seen_unit_paths`` first:
             # an invalid replacement must preserve the previously published
             # Unit instead of being mistaken for a deleted source file.
-            is_homework = metadata.get('is_homework', False)
             if not is_homework:
                 parse_course_unit_body(body)
 
@@ -1473,6 +1789,9 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     unit_lookup=unit_lookup,
                     source_path=rel_path,
                     sync_errors=stats.get('errors'),
+                    parent_module_slug=(
+                        module.parent.slug if module.parent_id else None
+                    ),
                 )
 
             # Derive sort_order and slug from filename
@@ -1523,6 +1842,9 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 'source_repo': repo_name,
                 'source_commit': commit_sha,
                 'content_id': unit_content_id,
+                'kind': kind_key,
+                'session_position': unit_session_position,
+                'is_bonus': unit_is_bonus,
             }
 
             if is_homework:
@@ -1555,6 +1877,12 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 unit = Unit(
                     module=module, source_path=rel_path, **defaults,
                 )
+                try:
+                    unit.full_clean()
+                except ValidationError as exc:
+                    raise GitHubSyncError(
+                        f'Invalid unit in {rel_path}: {"; ".join(exc.messages)}'
+                    ) from exc
                 unit.save()
                 created = True
                 changed = True
@@ -1567,6 +1895,12 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                     unit.source_path = rel_path
                     for k, v in defaults.items():
                         setattr(unit, k, v)
+                    try:
+                        unit.full_clean()
+                    except ValidationError as exc:
+                        raise GitHubSyncError(
+                            f'Invalid unit in {rel_path}: {"; ".join(exc.messages)}'
+                        ) from exc
                     unit.save()
                     created = False
                     changed = True

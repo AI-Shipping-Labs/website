@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
+from django.template.defaultfilters import date as django_date
 from django.utils import timezone
 from django.utils.html import strip_tags
 
@@ -25,9 +26,14 @@ from content.access import (
     get_gated_reason,
     get_user_level,
 )
-from content.models import CohortEnrollment, Unit, UserCourseProgress
+from content.models import Cohort, CohortEnrollment, Unit, UserCourseProgress
+from content.models.cohort import COHORT_MODE_COHORT
+from content.models.course import UNIT_KIND_EVENT, non_bonus_units
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
+from events.models import Event
+from events.models.event import PUBLIC_EVENT_STATUSES
+from events.services.display_time import build_event_time_display
 
 TEASER_WORD_LIMIT = 150
 
@@ -109,6 +115,29 @@ def decide_course_unit_access(user, unit: Unit) -> CourseUnitAccessDecision:
     )
 
 
+def _effective_drip_offset_days(unit: Unit) -> int | None:
+    """Resolve the effective drip offset for ``unit`` (issue #1674).
+
+    "Most specific wins" cascade, the same pattern #465 established for
+    ``required_level``/``default_unit_required_level``:
+
+    1. ``Unit.available_after_days`` (existing per-unit override).
+    2. The unit's own (leaf) ``Module.available_after_days``.
+    3. That module's parent ``Module.available_after_days`` (only
+       relevant when the unit's module is a submodule).
+    4. ``None`` when none of those is set — unchanged legacy behaviour
+       (not locked, no cohort lookup even attempted).
+    """
+    if unit.available_after_days is not None:
+        return unit.available_after_days
+    module = unit.module
+    if module.available_after_days is not None:
+        return module.available_after_days
+    if module.parent_id is not None and module.parent.available_after_days is not None:
+        return module.parent.available_after_days
+    return None
+
+
 def decide_course_unit_drip_lock(
     user,
     unit: Unit,
@@ -116,10 +145,11 @@ def decide_course_unit_drip_lock(
     today: datetime.date | None = None,
 ) -> CourseUnitDripDecision:
     """Return whether cohort drip scheduling currently locks ``unit``."""
-    if (
-        not is_authenticated_user(user)
-        or unit.available_after_days is None
-    ):
+    if not is_authenticated_user(user):
+        return CourseUnitDripDecision(is_locked=False)
+
+    offset_days = _effective_drip_offset_days(unit)
+    if offset_days is None:
         return CourseUnitDripDecision(is_locked=False)
 
     enrollment = (
@@ -132,11 +162,19 @@ def decide_course_unit_drip_lock(
         .select_related('cohort')
         .first()
     )
-    if enrollment is None:
+    # No enrollment at all (today's implicit self-paced — a course that
+    # predates mode='self_paced' Cohorts) OR a real self-paced
+    # CohortEnrollment (``mode='self_paced'``, ``start_date=None`` by
+    # construction) both mean "never drip-locked" — falls out of the same
+    # "start_date is None" field with no separate mode branch. Issue
+    # #1674 bug fix: this used to only check ``enrollment is None``, which
+    # would raise ``TypeError`` (``None + timedelta``) once self-paced
+    # learners got real ``CohortEnrollment`` rows.
+    if enrollment is None or enrollment.cohort.start_date is None:
         return CourseUnitDripDecision(is_locked=False)
 
     available_date = enrollment.cohort.start_date + datetime.timedelta(
-        days=unit.available_after_days,
+        days=offset_days,
     )
     today = today or timezone.now().date()
     if today < available_date:
@@ -310,15 +348,34 @@ def build_course_unit_navigation_context(user, course, module, unit):
         and get_user_level(user) >= LEVEL_MAIN
     )
 
-    flat_units = []
-    for nav_module in modules:
-        for nav_unit in nav_module.units.all():
-            flat_units.append(nav_unit.pk)
+    # Issue #1674: reader_progress_total/reader_progress_completed exclude
+    # bonus modules/units (same denominator as total_units()/
+    # completed_units(), via the one named non_bonus_units() filter);
+    # event-kind units count like any other unit. reader_progress_current
+    # is the unit's 1-indexed position within that same non-bonus reading
+    # order — falls back to 1 if the current unit is itself bonus (not a
+    # member of the filtered list).
+    all_units_ordered = get_all_units_ordered(course)
+    non_bonus_unit_ids = set(
+        non_bonus_units(Unit.objects.filter(module__course=course))
+        .values_list('pk', flat=True)
+    )
+    flat_units = [u.pk for u in all_units_ordered if u.pk in non_bonus_unit_ids]
     reader_progress_total = len(flat_units)
     try:
         reader_progress_current = flat_units.index(unit.pk) + 1
     except ValueError:
         reader_progress_current = 1
+    reader_progress_completed = len(completed_unit_ids & non_bonus_unit_ids)
+
+    # Issue #1674: a kind='event' unit renders a session card above the
+    # body. None means either "not a kind='event' unit" or "no Event
+    # resolved for any cohort yet" — the template distinguishes those with
+    # unit.kind, rendering the clean empty state only for the latter.
+    unit_session_entry = (
+        build_unit_session_card_context(unit, user)
+        if unit.kind == UNIT_KIND_EVENT else None
+    )
 
     return {
         'course': course,
@@ -347,17 +404,38 @@ def build_course_unit_navigation_context(user, course, module, unit):
         'reader_progress_kind': 'lesson',
         'reader_progress_current': reader_progress_current,
         'reader_progress_total': reader_progress_total,
-        'reader_progress_completed': len(completed_unit_ids),
+        'reader_progress_completed': reader_progress_completed,
+        'unit_session_entry': unit_session_entry,
     }
 
 
 def get_all_units_ordered(course):
-    """Return all units in course reading order."""
-    return list(
-        Unit.objects.filter(module__course=course)
-        .select_related('module')
-        .order_by('module__sort_order', 'sort_order')
-    )
+    """Return all units in course reading order (issue #1674).
+
+    Depth-first, per the documented contract: top-level modules in
+    ``(sort_order, id)`` order; a leaf module (no children) yields its
+    own units in ``(sort_order, id)`` order; a parent module yields each
+    child submodule's units in ``(sort_order, id)`` order. Mixed content
+    (direct units alongside children) is forbidden by ``Module.clean()``,
+    so there is no interleaving case. Unaffected by ``kind`` or
+    ``is_bonus`` — reading order never changes based on either; only the
+    progress denominator does (:func:`non_bonus_units`).
+
+    This is the single ordering helper both ``get_next_unit``/
+    ``get_prev_unit`` and the progress-percentage/``reader_progress_*``
+    computation call — no second implementation of ordering anywhere.
+    Reuses ``Course.get_syllabus()``'s prefetch: four queries total, one
+    per tree level, not one per module.
+    """
+    units = []
+    for module in course.get_syllabus():
+        children = list(module.children.all())
+        if children:
+            for child in children:
+                units.extend(child.units.all())
+        else:
+            units.extend(module.units.all())
+    return units
 
 
 def get_next_unit(course, current_unit):
@@ -376,3 +454,187 @@ def get_prev_unit(course, current_unit):
         if unit.pk == current_unit.pk and i > 0:
             return all_units[i - 1]
     return None
+
+
+# --- Week dates are derived per cohort, never stored (issue #1674) ---
+#
+# Week dates are cohort-specific (cohort 4's Week 1 is 2026-09-21; a later
+# cohort's Week 1 will be a different date), while ``Module`` is curriculum
+# shared across every cohort — storing a date on the module would
+# reintroduce the exact coupling removed from ``Unit.event``. So dates are
+# derived at render time from ``Cohort.start_date`` +
+# ``Module.available_after_days``, never stored on ``Module``.
+
+
+def resolve_viewer_dated_cohort(user, course):
+    """Return the viewer's active ``mode='cohort'`` Cohort, or ``None``.
+
+    Display-only — used to derive week dates, never to gate access. A
+    self-paced viewer, an anonymous viewer, or a viewer with no dated
+    -cohort enrollment all get ``None``, which callers treat as "show no
+    date range" (not an error).
+    """
+    if not is_authenticated_user(user):
+        return None
+    enrollment = (
+        CohortEnrollment.objects
+        .filter(
+            user=user,
+            cohort__course=course,
+            cohort__mode=COHORT_MODE_COHORT,
+            cohort__is_active=True,
+        )
+        .select_related('cohort')
+        .first()
+    )
+    return enrollment.cohort if enrollment else None
+
+
+def build_module_week_dates(top_level_modules, cohort):
+    """Return ``{module_id: (week_start, week_end)}`` for dated modules.
+
+    Only top-level modules with ``available_after_days`` set get an
+    entry. ``week_start = cohort.start_date + available_after_days``.
+    ``week_end`` derives from the NEXT top-level sibling's own
+    ``available_after_days`` (``next_offset - 1`` day) when the sibling
+    has one set; otherwise (including the last week) defaults to a fixed
+    7-day block (``week_start + 6`` days).
+
+    Returns ``{}`` when ``cohort`` is ``None`` or self-paced
+    (``start_date`` is ``None``) — the caller shows no date range in
+    either case.
+    """
+    if cohort is None or cohort.start_date is None:
+        return {}
+    modules = list(top_level_modules)
+    result = {}
+    for idx, module in enumerate(modules):
+        if module.available_after_days is None:
+            continue
+        week_start = cohort.start_date + datetime.timedelta(
+            days=module.available_after_days,
+        )
+        week_end = None
+        if idx + 1 < len(modules):
+            next_module = modules[idx + 1]
+            if next_module.available_after_days is not None:
+                week_end = cohort.start_date + datetime.timedelta(
+                    days=next_module.available_after_days - 1,
+                )
+        if week_end is None:
+            week_end = week_start + datetime.timedelta(days=6)
+        result[module.pk] = (week_start, week_end)
+    return result
+
+
+def format_week_range(week_start, week_end):
+    """Return a compact display string, e.g. ``Oct 12–18`` or
+    ``Oct 29–Nov 4`` when the range crosses a month boundary."""
+    if week_start.month == week_end.month and week_start.year == week_end.year:
+        return f'{django_date(week_start, "M j")}–{week_end.day}'
+    return f'{django_date(week_start, "M j")}–{django_date(week_end, "M j")}'
+
+
+# --- Event units resolve by cohort at render time (issue #1674) ---
+#
+# There is no ``Unit.event`` FK (a deliberate divergence from
+# ``DataTalksClub/community-base#252`` — see the issue's "Design
+# reference"/"Event units resolve by cohort at render time" sections). A
+# stored FK on shared curriculum would embed one cohort's event into
+# curriculum every cohort reads. Instead ``Unit.session_position`` is
+# resolved against ``events.Event.series_position`` per viewer at render
+# time.
+
+
+def resolve_session_event(unit: Unit, user) -> Event | None:
+    """Resolve the ``Event`` for a ``kind='event'`` unit, or ``None``.
+
+    1. The viewer's own ``CohortEnrollment`` for this unit's course, when
+       that cohort is ``mode='cohort'`` (so it may carry an
+       ``event_series``) — look up an ``Event`` at
+       ``unit.session_position`` in that series.
+    2. Otherwise (the viewer's cohort is ``mode='self_paced'``, its
+       series has no ``Event`` at that position yet, or the viewer has no
+       ``CohortEnrollment`` at all) — fall back to the most recent PAST
+       ``mode='cohort'`` cohort of the same course whose series has an
+       ``Event`` at that position. This is the normal self-paced path,
+       not an error path.
+    3. No ``mode='cohort'`` cohort, past or present, has ever had an
+       ``Event`` at that position -> ``None`` (renders a clean empty
+       state, never a broken link).
+
+    Only draft/cancelled-excluded (``PUBLIC_EVENT_STATUSES``) events are
+    considered a match, mirroring the course page's existing
+    live-sessions block.
+    """
+    if unit.session_position is None:
+        return None
+    course = unit.module.course
+
+    if is_authenticated_user(user):
+        enrollment = (
+            CohortEnrollment.objects
+            .filter(user=user, cohort__course=course)
+            .select_related('cohort')
+            .first()
+        )
+        if (
+            enrollment is not None
+            and enrollment.cohort.mode == COHORT_MODE_COHORT
+            and enrollment.cohort.event_series_id
+        ):
+            event = Event.objects.filter(
+                event_series_id=enrollment.cohort.event_series_id,
+                series_position=unit.session_position,
+                status__in=PUBLIC_EVENT_STATUSES,
+            ).first()
+            if event is not None:
+                return event
+
+    today = timezone.now().date()
+    fallback_series_ids = (
+        Cohort.objects
+        .filter(
+            course=course,
+            mode=COHORT_MODE_COHORT,
+            event_series__isnull=False,
+            start_date__lt=today,
+        )
+        .order_by('-start_date')
+        .values_list('event_series_id', flat=True)
+    )
+    for series_id in fallback_series_ids:
+        event = Event.objects.filter(
+            event_series_id=series_id,
+            series_position=unit.session_position,
+            status__in=PUBLIC_EVENT_STATUSES,
+        ).first()
+        if event is not None:
+            return event
+
+    return None
+
+
+def build_unit_session_card_context(unit: Unit, user):
+    """Build the session-card entry for a ``kind='event'`` unit, or ``None``.
+
+    ``None`` means no ``Event`` resolved anywhere — the template renders
+    the clean "not yet scheduled" empty state instead of a card. When an
+    ``Event`` resolves, returns the same entry shape
+    ``content.views.courses._build_live_session_entries`` builds for the
+    course page's live-sessions block, so the unit page reuses
+    ``content/_live_session_row.html`` unchanged — no second card is
+    hand-rolled.
+    """
+    event = resolve_session_event(unit, user)
+    if event is None:
+        return None
+    is_past = event.is_past
+    return {
+        'event': event,
+        'time_display': build_event_time_display(event, user),
+        'is_past': is_past,
+        'can_join_now': not is_past and event.can_show_zoom_link(),
+        'join_url': event.get_join_url(),
+        'recap_url': event.get_recap_url() if event.has_recap else '',
+    }

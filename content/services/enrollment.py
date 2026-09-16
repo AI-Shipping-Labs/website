@@ -8,6 +8,7 @@ same way.
 from __future__ import annotations
 
 from accounts.utils.user_checks import is_authenticated_user
+from content.models.cohort import COHORT_MODE_SELF_PACED, Cohort, CohortEnrollment
 from content.models.enrollment import (
     SOURCE_AUTO_PROGRESS,
     SOURCE_MANUAL,
@@ -74,6 +75,46 @@ def auto_enroll_on_progress(user, course):
     exists so callers read clearly.
     """
     return ensure_enrollment(user, course, source=SOURCE_AUTO_PROGRESS)
+
+
+def ensure_self_paced_cohort_enrollment(user, course):
+    """Idempotently enroll ``user`` into ``course``'s self-paced Cohort.
+
+    Issue #1674: when a user has course access and holds no
+    ``CohortEnrollment`` in a ``mode='cohort'`` cohort of this course, and
+    the course defines a ``mode='self_paced'`` Cohort, the platform
+    ensures a ``CohortEnrollment`` into it — mirroring the
+    ``get_or_create`` idempotency ``ensure_enrollment`` already uses for
+    course-level ``Enrollment``. This is what makes "every learner is in
+    exactly one cohort" hold in practice, which is what keeps drip-lock
+    and event-slot resolution uniform with no special case for "no
+    cohort at all" vs "self-paced cohort".
+
+    A no-op (returns ``None``) for anonymous users, for users already
+    enrolled in a dated cohort of this course, and for courses with no
+    ``mode='self_paced'`` Cohort defined — the existing "no enrollment =
+    unlocked" behaviour continues to apply for every course that doesn't
+    opt in, unchanged.
+    """
+    if not is_authenticated_user(user):
+        return None
+
+    has_dated_enrollment = CohortEnrollment.objects.filter(
+        user=user, cohort__course=course, cohort__mode='cohort',
+    ).exists()
+    if has_dated_enrollment:
+        return None
+
+    self_paced_cohort = Cohort.objects.filter(
+        course=course, mode=COHORT_MODE_SELF_PACED,
+    ).first()
+    if self_paced_cohort is None:
+        return None
+
+    enrollment, _created = CohortEnrollment.objects.get_or_create(
+        cohort=self_paced_cohort, user=user,
+    )
+    return enrollment
 
 
 def unenroll(user, course) -> bool:

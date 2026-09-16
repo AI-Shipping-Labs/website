@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load seo_tags %}
+{% load member_badges %}
 
 {% block title %}{{ module.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description module "module" %}{% endblock %}
@@ -19,6 +20,10 @@
         <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
+        {% if module.parent %}
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <a href="{{ module.parent.get_absolute_url }}" class="hover:text-foreground transition-colors truncate" data-testid="module-breadcrumb-parent">{{ module.parent.title }}</a>
+        {% endif %}
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <span class="text-foreground truncate">{{ module.title }}</span>
       </div>
@@ -27,8 +32,11 @@
         <div class="mb-3 flex items-center gap-2">
           <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="book-open" class="h-4 w-4"></i>
-            Module
+            {% if module.parent %}Submodule{% else %}Module{% endif %}
           </span>
+          {% if module.is_bonus %}
+          {% member_label_badge "Bonus" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
+          {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
           {{ module.title }}
@@ -41,6 +49,33 @@
       </div>
       {% endif %}
 
+      {% if submodules %}
+      {% comment %}
+        Issue #1674: a parent module holds submodules, not units — this
+        section replaces "Lessons" and must never show "This module has
+        no lessons yet.", which is wrong for a parent module.
+      {% endcomment %}
+      <section class="mb-12" data-testid="module-submodule-list">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">
+          Submodules
+          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ submodules|length }}</span>
+        </h2>
+        <div class="rounded-lg border border-border bg-card divide-y divide-border">
+          {% for submodule in submodules %}
+          <a href="{{ submodule.get_absolute_url }}"
+             class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]"
+             data-testid="module-submodule-link">
+            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+            <span class="text-sm text-foreground flex-1 py-2">{{ submodule.title }}</span>
+            {% if submodule.is_bonus %}
+            {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
+            {% endif %}
+            <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+          </a>
+          {% endfor %}
+        </div>
+      </section>
+      {% else %}
       <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
       <section class="mb-12" data-testid="module-lesson-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">
@@ -67,6 +102,9 @@
                data-testid="module-lesson-link">
               {{ unit.title }}
             </a>
+            {% if unit.is_bonus %}
+            {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
+            {% endif %}
             {% if unit.is_preview and not has_access %}
             <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
             {% endif %}
@@ -79,6 +117,7 @@
         </p>
         {% endif %}
       </section>
+      {% endif %}
 
       {% if cta_message %}
       {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="module-cta-button" %}

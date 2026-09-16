@@ -27,6 +27,7 @@ from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.enrollment import (
     ensure_enrollment,
+    ensure_self_paced_cohort_enrollment,
     is_enrolled,
 )
 from content.services.enrollment import (
@@ -142,9 +143,25 @@ def course_detail(request, slug):
     user = request.user
 
     has_access = can_access(user, course)
+    if has_access:
+        # Issue #1674: "first gains course access" — the other of the two
+        # points the spec names for implicit self-paced cohort membership.
+        ensure_self_paced_cohort_enrollment(user, course)
     modules = course.get_syllabus()
     total = course.total_units()
     completed = course.completed_units(user)
+
+    # Issue #1674: derived cohort week dates for top-level ("week")
+    # modules. Keyed by module.id -> a display-ready "Oct 12–18" string;
+    # empty for a self-paced/anonymous/no-cohort viewer (module heading
+    # shows title only, per the spec).
+    viewer_cohort = course_unit_service.resolve_viewer_dated_cohort(user, course)
+    module_week_ranges = {
+        module_id: course_unit_service.format_week_range(*week_range)
+        for module_id, week_range in course_unit_service.build_module_week_dates(
+            modules, viewer_cohort,
+        ).items()
+    }
 
     # Build set of completed unit IDs and per-module completion counts for
     # the template. Anonymous users get empty containers so the template
@@ -209,7 +226,12 @@ def course_detail(request, slug):
         progress_pct = int((completed / total) * 100)
 
     # Active cohorts
-    active_cohorts = course.cohorts.filter(is_active=True).order_by('start_date')
+    # Issue #1674: the self-enroll block is dated-cohort-only — a
+    # self-paced cohort is never shown as something to manually join,
+    # membership in it is implicit.
+    active_cohorts = course.cohorts.filter(
+        is_active=True, mode='cohort',
+    ).order_by('start_date')
     user_enrolled_cohort_ids = set()
     if user.is_authenticated:
         user_enrolled_cohort_ids = set(
@@ -290,6 +312,7 @@ def course_detail(request, slug):
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
         'active_cohorts': active_cohorts,
+        'module_week_ranges': module_week_ranges,
         'live_session_entries': live_session_entries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
         'buy_individual': buy_individual,
@@ -428,27 +451,16 @@ def api_course_detail(request, slug):
     completed = course.completed_units(user)
 
     # Build syllabus. ``modules`` comes from ``Course.get_syllabus()`` which
-    # prefetches units already ordered by ``sort_order``; iterating
-    # ``module.units.all()`` reads from the prefetch cache. Adding an extra
-    # ``.order_by()`` here would force a fresh SELECT per module (N+1) — see
-    # issue #287.
-    syllabus = []
-    for module in modules:
-        units_data = []
-        for unit in module.units.all():
-            unit_info = {
-                'id': unit.pk,
-                'title': unit.title,
-                'sort_order': unit.sort_order,
-                'is_preview': unit.is_preview,
-            }
-            units_data.append(unit_info)
-        syllabus.append({
-            'id': module.pk,
-            'title': module.title,
-            'sort_order': module.sort_order,
-            'units': units_data,
-        })
+    # prefetches the full tree (top-level modules, their children, and
+    # every leaf module's units) already ordered; iterating
+    # ``module.children.all()``/``module.units.all()`` reads from the
+    # prefetch cache. Adding an extra ``.order_by()`` here would force a
+    # fresh SELECT per module (N+1) — see issue #287.
+    #
+    # Issue #1674: a parent module has no direct units (mixed content is
+    # forbidden) — it gets a ``modules`` list of its submodules instead,
+    # each with the same shape as a top-level entry.
+    syllabus = [_module_json(module) for module in modules]
 
     # Single query: ordered_instructors fetches the full M2M; primary is
     # the first row. Avoids the additional .first() query primary_instructor
@@ -493,33 +505,88 @@ def api_course_detail(request, slug):
 # --- Unit page view ---
 
 
-def _get_unit_or_404(course_slug, module_slug, unit_slug):
-    """Resolve a unit from course slug, module slug, unit slug."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    module = get_object_or_404(Module, course=course, slug=module_slug)
-    unit = get_object_or_404(Unit, module=module, slug=unit_slug)
-    return course, module, unit
+def _unit_json(unit):
+    """Issue #1674: shared unit JSON shape for the public syllabus API.
+
+    ``session_position`` is included only when ``kind == 'event'`` — the
+    stored integer, NOT a resolved Event (resolution is viewer/cohort
+    -specific and this is an unauthenticated-safe read endpoint).
+    """
+    data = {
+        'id': unit.pk,
+        'title': unit.title,
+        'sort_order': unit.sort_order,
+        'is_preview': unit.is_preview,
+        'kind': unit.kind,
+        'is_bonus': unit.is_bonus,
+    }
+    if unit.kind == 'event':
+        data['session_position'] = unit.session_position
+    return data
 
 
-def module_overview(request, course_slug, module_slug):
+def _module_json(module):
+    """Issue #1674: shared module JSON shape for the public syllabus API.
+
+    A leaf module (no children) carries ``units``; a parent module
+    carries a ``modules`` list of its submodules (same shape,
+    recursively) instead — mixed content is forbidden, so exactly one of
+    the two is ever non-empty.
+    """
+    data = {
+        'id': module.pk,
+        'title': module.title,
+        'sort_order': module.sort_order,
+        'parent_id': module.parent_id,
+        'is_bonus': module.is_bonus,
+    }
+    children = list(module.children.all())
+    if children:
+        data['modules'] = [_module_json(child) for child in children]
+        data['units'] = []
+    else:
+        data['units'] = [_unit_json(unit) for unit in module.units.all()]
+    return data
+
+
+def _resolve_top_level_module(course, module_slug):
+    """Resolve a TOP-LEVEL module (``parent_id`` is ``None``) by slug.
+
+    Issue #1674: scoping to ``parent__isnull=True`` is what keeps this
+    lookup unambiguous — ``module_top_level_slug_unique_per_course``
+    guarantees a top-level slug is unique within the course, unlike a
+    submodule slug (unique only among its own siblings). A 404 here (not
+    a raw ``MultipleObjectsReturned``) is the only possible failure mode.
+    """
+    return get_object_or_404(
+        Module.objects.select_related('parent'), course=course,
+        parent__isnull=True, slug=module_slug,
+    )
+
+
+def _render_module_overview(request, course, module):
     """Module overview page: renders ``Module.overview_html`` + lesson list.
 
     Issue #222: the module README is now the module overview rather than a
-    sibling Unit.
+    sibling Unit. Issue #1674: also used for a submodule's own overview
+    page — a submodule either lists its own units (leaf) or has no
+    ``submodules`` at all (max depth two, so a submodule never has
+    children of its own).
 
     Access mirrors the course detail page: the page is always reachable for
     SEO; gated content shows the upgrade CTA. Unit links in the lesson
     list are clickable for users with access; the unit detail view itself
     handles the per-lesson gating / teaser.
     """
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    module = get_object_or_404(Module, course=course, slug=module_slug)
     user = request.user
 
     has_access = can_access(user, course)
     # ``Unit.Meta.ordering = ['sort_order']`` already guarantees ordering;
     # an explicit ``.order_by()`` would be redundant. Issue #287.
     units = list(module.units.all())
+    # Issue #1674: a parent module holds submodules, not units directly —
+    # ``submodules`` is empty for a leaf module (today's two-level shape).
+    submodules = list(module.children.order_by('sort_order', 'id'))
 
     completed_unit_ids: set[int] = set()
     if user.is_authenticated:
@@ -542,6 +609,7 @@ def module_overview(request, course_slug, module_slug):
         'course': course,
         'module': module,
         'units': units,
+        'submodules': submodules,
         'has_access': has_access,
         'user_authenticated': user.is_authenticated,
         'completed_unit_ids': completed_unit_ids,
@@ -555,13 +623,23 @@ def module_overview(request, course_slug, module_slug):
     return render(request, 'content/module_overview.html', context)
 
 
-def course_unit_detail(request, course_slug, module_slug, unit_slug):
+def module_overview(request, course_slug, module_slug):
+    """``/courses/<course_slug>/<module_slug>`` — TOP-LEVEL modules only
+    (issue #1674). Unchanged two-segment shape and behaviour for every
+    existing two-level course; a submodule's own overview page now lives
+    at the three-segment ``course_unit_detail`` route below instead
+    (``/courses/<course>/<parent>/<submodule>``)."""
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    module = _resolve_top_level_module(course, module_slug)
+    return _render_module_overview(request, course, module)
+
+
+def _render_course_unit_detail(request, course, module, unit):
     """Unit page: gated by tier level, except for preview units.
 
     Shows video player, lesson text, homework, sidebar navigation,
     mark-complete toggle, and next-unit button.
     """
-    course, module, unit = _get_unit_or_404(course_slug, module_slug, unit_slug)
     user = request.user
 
     access_decision = course_unit_service.decide_course_unit_access(user, unit)
@@ -575,6 +653,13 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
             context,
             status=access_decision.status_code,
         )
+
+    # Issue #1674: "first interacts with a unit" is one of the two points
+    # the spec names for implicit self-paced cohort membership (the other
+    # is course_detail below, "first gains course access"). Idempotent —
+    # a no-op once a self-paced CohortEnrollment already exists, and a
+    # no-op for courses with no mode='self_paced' Cohort at all.
+    ensure_self_paced_cohort_enrollment(user, course)
 
     drip_decision = course_unit_service.decide_course_unit_drip_lock(user, unit)
     if drip_decision.is_locked:
@@ -594,6 +679,52 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
         user, course, module, unit,
     )
     return render(request, 'content/course_unit_detail.html', context)
+
+
+def course_unit_detail(request, course_slug, module_slug, unit_slug):
+    """``/courses/<course_slug>/<module_slug>/<unit_slug>`` — dispatches
+    between a leaf module's unit page (unchanged, every existing
+    two-level course) and a parent module's SUBMODULE overview page
+    (issue #1674's new shape,
+    ``/courses/<course>/<parent>/<submodule>``).
+
+    Deterministic, not a fallback guess: ``Module.clean()`` forbids mixed
+    content, so a top-level module holds EITHER child submodules OR
+    direct units, never both. If ``module_slug`` names a top-level module
+    WITH children, ``unit_slug`` can only be one of its submodule slugs
+    (that module has no direct units to be a unit's parent). If it has
+    NO children, ``unit_slug`` can only be a unit slug under it — exactly
+    today's two-level behaviour, byte-for-byte unchanged.
+    """
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    top_module = _resolve_top_level_module(course, module_slug)
+
+    if top_module.children.exists():
+        submodule = get_object_or_404(
+            Module.objects.select_related('parent'), course=course,
+            parent=top_module, slug=unit_slug,
+        )
+        return _render_module_overview(request, course, submodule)
+
+    unit = get_object_or_404(Unit, module=top_module, slug=unit_slug)
+    return _render_course_unit_detail(request, course, top_module, unit)
+
+
+def course_submodule_unit_detail(
+    request, course_slug, parent_slug, module_slug, unit_slug,
+):
+    """``/courses/<course>/<parent>/<submodule>/<unit>`` (issue #1674):
+    a unit's page when its module is a submodule. Entirely new URL
+    territory — a two-level course never produces a four-segment path,
+    so this never collides with any existing URL."""
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    parent_module = _resolve_top_level_module(course, parent_slug)
+    submodule = get_object_or_404(
+        Module.objects.select_related('parent'), course=course,
+        parent=parent_module, slug=module_slug,
+    )
+    unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
+    return _render_course_unit_detail(request, course, submodule, unit)
 
 
 # --- Unit API endpoints ---
@@ -634,12 +765,16 @@ def api_course_unit_detail(request, slug, unit_id):
         'homework_html': unit.homework_html,
         'timestamps': unit.timestamps,
         'is_preview': unit.is_preview,
+        'kind': unit.kind,
+        'is_bonus': unit.is_bonus,
         'module': {
             'id': unit.module.pk,
             'title': unit.module.title,
             'sort_order': unit.module.sort_order,
         },
     }
+    if unit.kind == 'event':
+        data['session_position'] = unit.session_position
 
     # Include completion status for authenticated users
     if user.is_authenticated:
@@ -705,6 +840,14 @@ def api_cohort_enroll(request, slug, cohort_id):
     cohort = get_object_or_404(Cohort, pk=cohort_id, course=course, is_active=True)
     user = request.user
 
+    # Issue #1674: self-paced cohort membership is implicit, never a
+    # student action via this endpoint.
+    if cohort.mode == 'self_paced':
+        return JsonResponse(
+            {'error': 'This cohort is self-paced; membership is automatic.'},
+            status=400,
+        )
+
     # Issue #1658: entitlement-mode courses are never self-enroll — this
     # applies unconditionally, including to staff and users who already
     # hold CourseAccess. Cohort membership for these courses comes only
@@ -762,6 +905,13 @@ def api_cohort_unenroll(request, slug, cohort_id):
     course = get_object_or_404(Course, slug=slug, status='published')
     cohort = get_object_or_404(Cohort, pk=cohort_id, course=course)
     user = request.user
+
+    # Issue #1674: symmetric with api_cohort_enroll.
+    if cohort.mode == 'self_paced':
+        return JsonResponse(
+            {'error': 'This cohort is self-paced; membership is automatic.'},
+            status=400,
+        )
 
     # Issue #1658: symmetry with api_cohort_enroll — a user who cannot
     # self-enroll must not be able to self-unenroll either.

@@ -1,4 +1,5 @@
 {% load video_tags %}
+{% load member_badges %}
 
 {% include "content/reader/_mobile_progress_bar.html" %}
 
@@ -8,13 +9,34 @@
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
   <a href="/courses/{{ course.slug }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
   <a href="/courses/{{ course.slug }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden" data-testid="breadcrumb-course-short">...</a>
+  {% if unit.module.parent_id %}
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <a href="{{ unit.module.parent.get_absolute_url }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-parent-module">{{ unit.module.parent.title }}</a>
+  {% endif %}
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
   <span class="truncate text-foreground">{{ unit.title }}</span>
 </div>
 
 {% include "content/reader/_top_nav.html" %}
 
-<h1 class="mb-8 text-2xl font-semibold tracking-tight sm:text-3xl">{{ unit.title }}</h1>
+<div class="mb-8 flex flex-wrap items-center gap-3">
+  <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{{ unit.title }}</h1>
+  {% if unit.is_bonus %}
+  {% member_label_badge "Bonus" tone="accent" size="sm" testid="unit-detail-bonus-badge" %}
+  {% endif %}
+</div>
+
+{% if unit.kind == "event" %}
+<div class="mb-8" data-testid="unit-session-card">
+  {% if unit_session_entry %}
+  {% include "content/_live_session_row.html" with entry=unit_session_entry user=user %}
+  {% else %}
+  <p class="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground" data-testid="unit-session-not-scheduled">
+    Session materials for this slot haven't been scheduled yet.
+  </p>
+  {% endif %}
+</div>
+{% endif %}
 
 {% if unit.video_url %}
 <div class="mb-8">

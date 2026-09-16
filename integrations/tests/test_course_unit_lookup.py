@@ -113,9 +113,9 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
         )
 
         self.assertIn('fundamentals', lookup)
-        self.assertIn('01-intro.md', lookup['fundamentals'])
+        self.assertIn('01-intro.md', lookup['fundamentals']['files'])
         # The ignored file must not be a link target.
-        self.assertNotIn('plan.md', lookup['fundamentals'])
+        self.assertNotIn('plan.md', lookup['fundamentals']['files'])
 
     def test_course_level_ignore_glob_excludes_files_inside_dir(self):
         """``drafts/**`` filters every file in ``drafts/``, mirroring the sync.
@@ -145,9 +145,9 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
         )
 
         self.assertIn('fundamentals', lookup)
-        self.assertIn('01-intro.md', lookup['fundamentals'])
+        self.assertIn('01-intro.md', lookup['fundamentals']['files'])
         # The drafts module exists but has no units to link to.
-        self.assertEqual(lookup.get('drafts'), {})
+        self.assertEqual(lookup.get('drafts', {}).get('files'), {})
 
     def test_course_level_ignore_glob_skips_dir_named_exactly(self):
         """A glob that matches the directory name itself skips the whole module.
@@ -193,8 +193,8 @@ class BuildCourseUnitLookupIgnoreGlobsTest(_LookupFixtureBase):
 
         lookup = self._lookup(self.course_dir)
 
-        self.assertIn('01-intro.md', lookup['fundamentals'])
-        self.assertNotIn('snippet.template.md', lookup['fundamentals'])
+        self.assertIn('01-intro.md', lookup['fundamentals']['files'])
+        self.assertNotIn('snippet.template.md', lookup['fundamentals']['files'])
 
 
 class BuildCourseUnitLookupContentIdTest(_LookupFixtureBase):
@@ -222,8 +222,8 @@ class BuildCourseUnitLookupContentIdTest(_LookupFixtureBase):
 
         lookup = self._lookup(self.course_dir)
 
-        self.assertIn('01-intro.md', lookup['fundamentals'])
-        self.assertNotIn('02-orphan.md', lookup['fundamentals'])
+        self.assertIn('01-intro.md', lookup['fundamentals']['files'])
+        self.assertNotIn('02-orphan.md', lookup['fundamentals']['files'])
 
     def test_readme_does_not_require_content_id(self):
         """README's content_id is derived; missing frontmatter is fine."""
@@ -241,7 +241,7 @@ class BuildCourseUnitLookupContentIdTest(_LookupFixtureBase):
         lookup = self._lookup(self.course_dir)
 
         self.assertEqual(
-            lookup['fundamentals']['README.md'], '__module_overview__',
+            lookup['fundamentals']['files']['README.md'], '__module_overview__',
         )
 
 
@@ -261,7 +261,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
 
         lookup = self._lookup(self.course_dir)
         self.assertEqual(
-            lookup['fundamentals']['README.md'], '__module_overview__',
+            lookup['fundamentals']['files']['README.md'], '__module_overview__',
         )
 
     def test_unit_slug_uses_key_absent_default(self):
@@ -275,7 +275,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
         lookup = self._lookup(self.course_dir)
         # ``02-setup.md`` -> slug ``setup`` via derive_slug, matching what
         # _sync_module_units writes to ``Unit.slug``.
-        self.assertEqual(lookup['fundamentals']['02-setup.md'], 'setup')
+        self.assertEqual(lookup['fundamentals']['files']['02-setup.md'], 'setup')
 
     def test_explicit_slug_in_frontmatter_wins(self):
         self._write_module('01-fundamentals')
@@ -287,7 +287,7 @@ class BuildCourseUnitLookupReadmeSlugTest(_LookupFixtureBase):
 
         lookup = self._lookup(self.course_dir)
         self.assertEqual(
-            lookup['fundamentals']['02-setup.md'], 'custom-setup',
+            lookup['fundamentals']['files']['02-setup.md'], 'custom-setup',
         )
 
 
@@ -573,13 +573,21 @@ class RootCourseYamlUnitLookupTest(_LookupFixtureBase):
             lookup,
             {
                 'fundamentals': {
-                    'README.md': '__module_overview__',
-                    '01-intro.md': 'intro',
-                    # Frontmatter ``slug:`` override is honoured.
-                    '02-setup.md': 'custom-setup',
+                    'dir_name': '01-fundamentals',
+                    'files': {
+                        'README.md': '__module_overview__',
+                        '01-intro.md': 'intro',
+                        # Frontmatter ``slug:`` override is honoured.
+                        '02-setup.md': 'custom-setup',
+                    },
+                    'children': {},
                 },
                 'advanced': {
-                    '01-agents.md': 'agents',
+                    'dir_name': '02-advanced',
+                    'files': {
+                        '01-agents.md': 'agents',
+                    },
+                    'children': {},
                 },
             },
         )

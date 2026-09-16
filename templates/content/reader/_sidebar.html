@@ -38,12 +38,47 @@
 
       {% if reader_nav_kind == "course" %}
         {% for nav_module in modules %}
-        <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk %}open{% endif %}>
+        {% with nav_children=nav_module.children.all %}
+        <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk or nav_module.pk == unit.module.parent_id %}open{% endif %}>
           <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
             <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
             <span class="text-sm font-medium text-foreground">{{ nav_module.title }}</span>
           </summary>
           <div>
+            {% if nav_children %}
+            {% comment %}
+              Issue #1674: a parent module nests one more <details> level
+              for its submodules — same sidebar-module pattern, one level
+              deeper. A leaf module's unit list (below) is unchanged.
+            {% endcomment %}
+            <div class="ml-4">
+              {% for nav_child in nav_children %}
+              <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_child.pk == unit.module.pk %}open{% endif %}>
+                <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+                  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
+                  <span class="text-sm font-medium text-foreground">{{ nav_child.title }}</span>
+                </summary>
+                <div>
+                  <ul class="reader-nav-list mt-1">
+                    {% for nav_unit in nav_child.units.all %}
+                    <li>
+                      {% if nav_unit.pk in completed_unit_ids %}
+                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
+                      {% else %}
+                        {% if nav_unit.pk == unit.pk %}
+                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="circle" trailing_icon="" extra_attrs='aria-current="page"' %}
+                        {% else %}
+                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="circle" trailing_icon="" extra_attrs="" %}
+                        {% endif %}
+                      {% endif %}
+                    </li>
+                    {% endfor %}
+                  </ul>
+                </div>
+              </details>
+              {% endfor %}
+            </div>
+            {% else %}
             {% comment %}
               Issue #527: unit rows use the shared `_list_row.html`
               partial so they match the workshop drawer rows and the
@@ -69,8 +104,10 @@
               </li>
               {% endfor %}
             </ul>
+            {% endif %}
           </div>
         </details>
+        {% endwith %}
         {% endfor %}
       {% elif reader_nav_kind == "workshop" %}
         {% comment %}

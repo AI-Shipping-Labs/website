@@ -11,6 +11,7 @@ from content.views.courses import (
     api_course_unit_detail,
     api_courses_list,
     course_detail,
+    course_submodule_unit_detail,
     course_unit_detail,
     courses_list,
     enroll_course,
@@ -148,8 +149,19 @@ urlpatterns = [
     # Module overview page (issue #222) — must come before the catch-all unit URL.
     # No trailing slash: RemoveTrailingSlashMiddleware would redirect away from it.
     path('courses/<slug:course_slug>/<slug:module_slug>', module_overview, name='module_overview'),
-    # Course unit detail (three slug segments - must be after more specific patterns)
+    # Course unit detail (three slug segments - must be after more specific
+    # patterns). Issue #1674: also resolves a submodule's own overview page
+    # (/courses/<course>/<parent>/<submodule>) — see course_unit_detail's
+    # docstring for the deterministic dispatch, unchanged for every
+    # existing two-level course.
     path('courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>', course_unit_detail, name='course_unit_detail'),
+    # Issue #1674: a unit inside a submodule — new four-segment territory,
+    # never produced by a two-level course, so it cannot collide with the
+    # pattern above.
+    path(
+        'courses/<slug:course_slug>/<slug:parent_slug>/<slug:module_slug>/<slug:unit_slug>',
+        course_submodule_unit_detail, name='course_submodule_unit_detail',
+    ),
     # Certificates
     path('certificates/<uuid:certificate_id>', certificate_page, name='certificate_page'),
     # API endpoints

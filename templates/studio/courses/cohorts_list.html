@@ -21,7 +21,16 @@
              class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
              data-testid="cohort-create-name">
     </div>
-    <div class="flex flex-col sm:flex-row gap-3">
+    <div>
+      <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-mode">Mode</label>
+      <select id="new-cohort-mode" name="mode" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+              data-testid="cohort-create-mode">
+        <option value="cohort" selected>Cohort (dated)</option>
+        <option value="self_paced">Self-paced</option>
+      </select>
+      <p class="text-xs text-muted-foreground mt-1">At most one self-paced cohort per course.</p>
+    </div>
+    <div class="flex flex-col sm:flex-row gap-3" data-testid="cohort-create-dated-fields">
       <div class="flex-1">
         <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-start">Start date</label>
         <input id="new-cohort-start" type="date" name="start_date" required
@@ -54,6 +63,22 @@
     </button>
   </form>
 </div>
+<script>
+  (function () {
+    var modeSelect = document.getElementById('new-cohort-mode');
+    var datedFields = document.querySelector('[data-testid="cohort-create-dated-fields"]');
+    if (!modeSelect || !datedFields) return;
+    function applyMode() {
+      var selfPaced = modeSelect.value === 'self_paced';
+      datedFields.querySelectorAll('input').forEach(function (input) {
+        input.disabled = selfPaced;
+        input.required = !selfPaced;
+      });
+    }
+    modeSelect.addEventListener('change', applyMode);
+    applyMode();
+  })();
+</script>
 
 {% studio_list_filter search "" "Search cohorts..." None False %}
 

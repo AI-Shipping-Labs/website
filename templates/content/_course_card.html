@@ -2,9 +2,12 @@
 {% load member_badges %}
 {% comment %}
 Shared course catalog card, used by both the standard grid and the
-"Sold separately" (entitlement-mode) section on ``/courses`` (issue
-#1658). Identical markup for both groups — the only addition for the
-entitlement section is the "Sold separately" badge in the signal row.
+"External courses" (entitlement-mode) section on ``/courses`` (issue
+#1658). Identical markup for both groups — the only additions for the
+entitlement section are the "External course" badge in the signal row
+and the suppressed tier badge (issue #1673: entitlement-mode
+``required_level`` is a mechanism field, not a real access requirement,
+so the tier badge would be misleading there).
 
 Expected context: ``course``, ``enrolled_course_ids`` (set of course IDs
 the current user is enrolled in). Optional ``show_sold_separately``
@@ -22,9 +25,11 @@ the current user is enrolled in). Optional ``show_sold_separately``
     {% endif %}
     <div class="min-w-0 p-4 sm:p-5">
       <div class="mb-3 flex flex-wrap items-center gap-2">
+        {% if course.access_mode != "entitlement" %}
         {% member_access_badge course.required_level testid="course-access-badge" %}
+        {% endif %}
         {% if show_sold_separately %}
-        {% member_status_badge "Sold separately" status="sold_separately" tone="info" icon="external-link" testid="course-sold-separately-badge" %}
+        {% member_status_badge "External course" status="sold_separately" tone="info" icon="external-link" testid="course-sold-separately-badge" %}
         {% endif %}
         {% if course.pk in enrolled_course_ids %}
         {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}

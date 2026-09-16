@@ -167,7 +167,7 @@ class MemberBadgeTemplateUsageTest(SimpleTestCase):
             'templates/content/_blog_card_badges.html',
             # Issue #1658 — the course catalog card (including its member
             # badges) moved into the shared _course_card.html partial so
-            # the standard grid and the "Sold separately" section render
+            # the standard grid and the "External courses" section render
             # identical markup.
             'templates/content/_course_card.html',
             # Issue #1339 — the project card rebased onto _content_card.html; its

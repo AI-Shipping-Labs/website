@@ -16,6 +16,7 @@ from content.sync_parsers.checkout_view import (
     raise_if_checkout_error,
 )
 from content.sync_parsers.common import GitHubSyncError, logger
+from content.sync_parsers.families.homework import sync_unit_homework
 from content.sync_parsers.families.instructors import (
     _attach_instructors_to_course,
     _resolve_instructors_for_yaml,
@@ -78,7 +79,7 @@ def _resolve_access_mode(
       early-return behaviour in ``content/access.py``), so a
       sub-Basic ``required_level`` makes the entitlement gate a no-op:
       every anonymous or signed-in visitor gets in while the page still
-      shows "Sold separately" copy.
+      shows "External course" copy.
     - ``default_unit_required_level`` below Basic — same hole, but for
       the per-lesson wall: this is the field that actually controls
       whether unit content is readable, and it can be set independently
@@ -1907,6 +1908,13 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
                 else:
                     created = False
                     changed = False
+
+            # Issue #1683: sync `questions:`/`due_date:` into Homework/
+            # Question rows regardless of whether the Unit's own fields
+            # changed -- the frontmatter can change (e.g. extending a
+            # deadline) without the lesson body/title changing.
+            if is_homework:
+                sync_unit_homework(unit, module.course, metadata, rel_path, stats)
 
             if not changed:
                 stats['unchanged'] += 1

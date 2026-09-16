@@ -5,6 +5,7 @@ from .course import *
 from .curated_link import *
 from .download import *
 from .enrollment import *
+from .homework import *
 from .instructor import *
 from .interview_category import *
 from .marketing_page import *

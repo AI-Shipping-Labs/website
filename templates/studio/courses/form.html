@@ -308,6 +308,12 @@
         <i data-lucide="users" class="mr-2 h-4 w-4"></i>
         <span>Manage Peer Reviews</span>
       </a>
+      <a href="{% url 'studio_homework_list' course_id=course.pk %}"
+         class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted"
+         data-testid="panel-manage-homeworks">
+        <i data-lucide="clipboard-list" class="mr-2 h-4 w-4"></i>
+        <span>Manage homeworks</span>
+      </a>
       <a href="{% url 'studio_course_enrollment_list' course_id=course.pk %}"
          class="inline-flex items-center justify-between rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted"
          data-testid="panel-manage-enrollments">

@@ -1,13 +1,15 @@
-"""View/template tests for entitlement-mode courses (issue #1658).
+"""View/template tests for entitlement-mode courses (issue #1658, #1673).
 
 Covers:
-- Course detail page: "Sold separately" badge, enroll CTA (not tier
+- Course detail page: "External course" badge, enroll CTA (not tier
   pricing), gated unit teaser, hidden cohort enroll/unenroll buttons +
   "Enrolled" badge
-- /courses catalog: "Sold separately" section, tag-filter isolation,
+- /courses catalog: "External courses" section, tag-filter isolation,
   empty-state hiding when no entitlement course is published
 - Cohort self-enroll/unenroll API: unconditional 403 refusal
 - Regression: tier-mode course/catalog rendering is unaffected
+- Issue #1673: the tier badge is suppressed on entitlement-mode courses
+  everywhere it renders (catalog card, detail header)
 """
 
 import datetime
@@ -50,11 +52,24 @@ class CourseDetailEntitlementBadgeTest(TierSetupMixin, TestCase):
 
     def test_sold_separately_badge_shown_for_entitlement_course(self):
         response = self.client.get('/courses/ai-engineering-buildcamp')
-        self.assertContains(response, 'Sold separately')
+        self.assertContains(response, 'data-testid="course-detail-entitlement-badge"')
+        self.assertContains(response, 'External course')
 
     def test_no_sold_separately_badge_for_tier_course(self):
         response = self.client.get('/courses/tier-course')
-        self.assertNotContains(response, 'Sold separately')
+        self.assertNotContains(response, 'data-testid="course-detail-entitlement-badge"')
+        self.assertNotContains(response, 'External course')
+
+    def test_entitlement_course_detail_shows_no_tier_pill(self):
+        """Issue #1673: required_level=LEVEL_MAIN must not render a tier
+        pill on an entitlement-mode course's detail header."""
+        response = self.client.get('/courses/ai-engineering-buildcamp')
+        self.assertNotContains(response, 'Main or above')
+
+    def test_tier_course_detail_still_shows_tier_pill(self):
+        """Regression: ordinary tier-mode course keeps its tier pill."""
+        response = self.client.get('/courses/tier-course')
+        self.assertContains(response, 'Main or above')
 
 
 @tag('core')
@@ -267,7 +282,11 @@ class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 403)
         data = json.loads(response.content)
-        self.assertIn('staff', data['error'].lower())
+        self.assertEqual(
+            data['error'],
+            'This is an external course; enrollment is managed by staff '
+            'or the enrollment integration.',
+        )
         self.assertFalse(
             CohortEnrollment.objects.filter(cohort=self.cohort, user=user).exists()
         )
@@ -303,6 +322,12 @@ class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
         response = self.client.post(self._unenroll_url())
 
         self.assertEqual(response.status_code, 403)
+        data = json.loads(response.content)
+        self.assertEqual(
+            data['error'],
+            'This is an external course; enrollment is managed by staff '
+            'or the enrollment integration.',
+        )
         # The user must remain enrolled — no path back out via this endpoint.
         self.assertTrue(
             CohortEnrollment.objects.filter(cohort=self.cohort, user=user).exists()
@@ -352,7 +377,7 @@ class CoursesListEntitlementSectionTest(TierSetupMixin, TestCase):
 
     def test_sold_separately_section_renders_below_standard_grid(self):
         response = self.client.get('/courses')
-        self.assertContains(response, 'Sold separately')
+        self.assertContains(response, 'External courses')
         self.assertContains(response, 'AI Engineering Buildcamp')
         self.assertContains(
             response,
@@ -376,7 +401,7 @@ class CoursesListEntitlementSectionTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses?tag=nonexistent-tag')
         self.assertContains(response, 'No courses found with the selected tags')
         # Entitlement section still renders, unaffected by the filter.
-        self.assertContains(response, 'Sold separately')
+        self.assertContains(response, 'External courses')
         self.assertContains(response, 'AI Engineering Buildcamp')
 
     def test_tag_filter_on_standard_tag_does_not_remove_entitlement_section(self):
@@ -388,6 +413,27 @@ class CoursesListEntitlementSectionTest(TierSetupMixin, TestCase):
     def test_entitlement_course_shows_sold_separately_badge_on_card(self):
         response = self.client.get('/courses')
         self.assertContains(response, 'data-testid="course-sold-separately-badge"')
+        self.assertContains(response, 'External course')
+
+    def test_entitlement_card_shows_no_tier_badge(self):
+        """Issue #1673: catalog card for an entitlement course must not
+        render the tier badge, regardless of required_level."""
+        response = self.client.get('/courses')
+        body = response.content.decode()
+        # Isolate the entitlement card markup: everything from the section
+        # container onward is only the "External courses" grid.
+        section_index = body.index('data-testid="sold-separately-section"')
+        entitlement_markup = body[section_index:]
+        self.assertNotIn('data-testid="course-access-badge"', entitlement_markup)
+
+    def test_standard_card_still_shows_tier_badge(self):
+        """Regression: an ordinary tier-mode course card keeps its
+        tier badge (data-testid="course-access-badge")."""
+        response = self.client.get('/courses')
+        body = response.content.decode()
+        section_index = body.index('data-testid="sold-separately-section"')
+        standard_grid_markup = body[:section_index]
+        self.assertIn('data-testid="course-access-badge"', standard_grid_markup)
 
 
 class CoursesListNoEntitlementCoursesTest(TestCase):
@@ -402,7 +448,7 @@ class CoursesListNoEntitlementCoursesTest(TestCase):
 
     def test_no_sold_separately_heading(self):
         response = self.client.get('/courses')
-        self.assertNotContains(response, 'Sold separately')
+        self.assertNotContains(response, 'External courses')
 
     def test_no_sold_separately_section_container(self):
         response = self.client.get('/courses')

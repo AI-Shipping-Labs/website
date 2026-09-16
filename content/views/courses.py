@@ -1,6 +1,7 @@
 from collections import Counter
 from urllib.parse import urlencode
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -32,6 +33,10 @@ from content.services.enrollment import (
 )
 from content.services.enrollment import (
     unenroll as unenroll_user,
+)
+from content.services.homework_submissions import (
+    parse_submission_post,
+    save_submission,
 )
 from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.models import Event
@@ -79,7 +84,7 @@ def courses_list(request):
     (``access_mode='tier'``) courses keep today's grid, tag-filter facet
     pool, and empty-state behaviour unchanged. Entitlement-mode courses
     (sold outside the membership plans, e.g. Maven) render in their own
-    "Sold separately" section below — excluded from the tag-filter pool
+    "External courses" section below — excluded from the tag-filter pool
     and never filtered out by the selected tag.
     """
     published = Course.objects.filter(status='published')
@@ -600,10 +605,23 @@ def _render_module_overview(request, course, module):
 
     cta_message = ''
     cta_url = ''
+    gated_entitlement = False
     if not has_access:
-        tier_name = get_required_tier_name(course.required_level)
-        cta_message = f'Upgrade to {tier_name} to access this module'
-        cta_url = '/membership'
+        if course.access_mode == 'entitlement':
+            # Issue #1673: mirror the course-detail pattern — no tier
+            # unlocks an entitlement-mode course, so the module CTA must
+            # not point at /membership either. See course_detail() above.
+            gated_entitlement = True
+            cta_message = (
+                f'Enroll via {course.program_label} to access this module'
+                if course.program_label
+                else 'Enroll to access this module'
+            )
+            cta_url = course.enroll_url or ''
+        else:
+            tier_name = get_required_tier_name(course.required_level)
+            cta_message = f'Upgrade to {tier_name} to access this module'
+            cta_url = '/membership'
 
     context = {
         'course': course,
@@ -617,8 +635,9 @@ def _render_module_overview(request, course, module):
         'cta_url': cta_url,
         'required_tier_name': (
             get_required_tier_name(course.required_level)
-            if not has_access else ''
+            if not has_access and not gated_entitlement else ''
         ),
+        'gated_entitlement': gated_entitlement,
     }
     return render(request, 'content/module_overview.html', context)
 
@@ -668,6 +687,9 @@ def _render_course_unit_detail(request, course, module, unit):
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
+    if request.method == 'POST':
+        return _handle_homework_submission_post(request, unit)
+
     # Record a `lesson_open` activity row for the CRM timeline (issue #853),
     # only for authenticated users who have access (this branch). Deduped:
     # re-opening the same unit within 30 minutes does not create a new row.
@@ -678,6 +700,7 @@ def _render_course_unit_detail(request, course, module, unit):
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit,
     )
+    context.update(course_unit_service.build_homework_submission_context(user, unit))
     return render(request, 'content/course_unit_detail.html', context)
 
 
@@ -725,6 +748,53 @@ def course_submodule_unit_detail(
     )
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
     return _render_course_unit_detail(request, course, submodule, unit)
+
+
+def _handle_homework_submission_post(request, unit):
+    """Handle a homework submission POST on the unit detail page.
+
+    Issue #1683 tranche 1. Reuses the same URL/view as the GET unit page —
+    called from ``_render_course_unit_detail``, so it applies uniformly
+    whether the unit's module is top-level or a submodule (issue #1674).
+    The absolute requirement: a submitted answer is never lost and never
+    silently rejected, so every branch below either saves the submission
+    or shows a specific reason it wasn't saved and redirects back to the
+    same unit page (never a generic error, never a silent no-op).
+    """
+    unit_url = unit.get_absolute_url()
+
+    if not request.user.is_authenticated:
+        return redirect(f'/accounts/login/?next={unit_url}')
+
+    homework = course_unit_service.resolve_homework_for_unit(unit, request.user)
+    if homework is None:
+        return redirect(unit_url)
+
+    if not homework.is_accepting_submissions:
+        if homework.is_self_paced:
+            messages.error(
+                request,
+                'This homework is closed; this answer was not saved.',
+            )
+        else:
+            messages.error(
+                request,
+                'The deadline for this homework has passed; this answer was not saved.',
+            )
+        return redirect(unit_url)
+
+    answers_by_question_id = parse_submission_post(request.POST, homework)
+    homework_link = request.POST.get('homework_link', '').strip()
+    save_submission(
+        homework, request.user,
+        homework_link=homework_link,
+        answers_by_question_id=answers_by_question_id,
+    )
+    messages.success(
+        request,
+        'Your homework was submitted. You can update it anytime before the deadline.',
+    )
+    return redirect(unit_url)
 
 
 # --- Unit API endpoints ---
@@ -857,7 +927,7 @@ def api_cohort_enroll(request, slug, cohort_id):
         return JsonResponse(
             {
                 'error': (
-                    'This course is sold separately; enrollment is '
+                    'This is an external course; enrollment is '
                     'managed by staff or the enrollment integration.'
                 ),
             },
@@ -919,7 +989,7 @@ def api_cohort_unenroll(request, slug, cohort_id):
         return JsonResponse(
             {
                 'error': (
-                    'This course is sold separately; enrollment is '
+                    'This is an external course; enrollment is '
                     'managed by staff or the enrollment integration.'
                 ),
             },

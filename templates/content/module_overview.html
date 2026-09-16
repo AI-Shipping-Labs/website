@@ -120,7 +120,16 @@
       {% endif %}
 
       {% if cta_message %}
+      {% if gated_entitlement %}
+      {% comment %}
+        Issue #1673: entitlement-mode module — mirror the course-detail
+        entitlement CTA (external enroll link, no tier pill), not the
+        tier "Upgrade" CTA to /membership.
+      {% endcomment %}
+      {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="This is an external course, run on another platform — it isn't included in any AI Shipping Labs membership plan." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="module-cta-button" gated_entitlement=True %}
+      {% else %}
       {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="module-cta-button" %}
+      {% endif %}
       {% endif %}
     </div>
   </article>

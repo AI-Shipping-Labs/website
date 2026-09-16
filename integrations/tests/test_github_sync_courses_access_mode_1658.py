@@ -244,7 +244,7 @@ class CourseAccessModeSyncTest(TestCase):
         file as placeholders "pending a real pricing/cohort-access
         decision". If access_mode: entitlement were added on top of that
         unchanged, the sync must refuse it rather than publish a course
-        that renders "Sold separately" copy while can_access() grants every
+        that renders "External course" copy while can_access() grants every
         anonymous or signed-in visitor full lesson access.
         """
         log = self._sync(course_data={

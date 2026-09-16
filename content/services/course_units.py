@@ -12,6 +12,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass
 
+from django.db import models
 from django.template.defaultfilters import date as django_date
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -27,13 +28,18 @@ from content.access import (
     get_user_level,
 )
 from content.models import Cohort, CohortEnrollment, Unit, UserCourseProgress
-from content.models.cohort import COHORT_MODE_COHORT
-from content.models.course import UNIT_KIND_EVENT, non_bonus_units
+from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus_units
+from content.models.homework import Homework, QuestionType, Submission
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
-from events.services.display_time import build_event_time_display
+from events.services.display_time import (
+    build_event_time_display,
+    format_event_time_range,
+    resolve_event_display_timezone,
+)
 
 TEASER_WORD_LIMIT = 150
 
@@ -637,4 +643,143 @@ def build_unit_session_card_context(unit: Unit, user):
         'can_join_now': not is_past and event.can_show_zoom_link(),
         'join_url': event.get_join_url(),
         'recap_url': event.get_recap_url() if event.has_recap else '',
+    }
+
+
+# --- Homework units resolve by cohort at render time (issue #1683) ---
+#
+# Same reasoning as the event-unit resolution above: ``Homework.cohort``
+# is cohort-specific while ``Unit`` is curriculum shared across every
+# cohort, so there is no stored FK from ``Unit`` to ``Homework``. Mirrors
+# ``resolve_session_event``'s exact cohort-resolution policy (the
+# enrolled viewer's own dated cohort first, else the most recent past
+# dated cohort) with "has an ``Event`` at this ``session_position``"
+# replaced by "has a ``Homework`` row for this unit's ``content_id``".
+
+
+def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
+    """Resolve the ``Homework`` row backing a ``kind='homework'`` unit, or ``None``.
+
+    A ``kind='homework'`` unit with no matching ``Homework`` row (not yet
+    authored with ``questions:``, or no cohort resolves) returns ``None``
+    -- callers render the unit exactly as before this feature: prose-only
+    ``unit.homework_html``, no form, no error.
+
+    Tester-confirmed bug fix (issue #1683 follow-up): the enrolled-viewer
+    branch used to require ``mode='cohort'``, mirroring
+    ``resolve_session_event`` exactly. That is correct for events (a
+    self-paced cohort has no ``event_series``, so there is nothing to look
+    up), but wrong for homework -- a self-paced cohort's ``Homework`` row
+    is exactly as real as a dated cohort's, and a self-paced-only learner
+    resolved nothing, permanently, with no error. Both branches below now
+    accept either cohort mode; only the fallback branch's "which PAST
+    cohort" ordering still needs ``start_date`` (self-paced cohorts sort
+    after every dated one, since they have no date to rank by, but are
+    still eligible).
+    """
+    if unit.kind != UNIT_KIND_HOMEWORK or not unit.content_id:
+        return None
+    course = unit.module.course
+
+    if is_authenticated_user(user):
+        enrollment = (
+            CohortEnrollment.objects
+            .filter(user=user, cohort__course=course)
+            .select_related('cohort')
+            .first()
+        )
+        if enrollment is not None:
+            homework = (
+                Homework.objects
+                .filter(content_id=unit.content_id, cohort=enrollment.cohort)
+                .select_related('cohort')
+                .first()
+            )
+            if homework is not None:
+                return homework
+
+    today = timezone.now().date()
+    fallback_cohort_ids = (
+        Cohort.objects
+        .filter(course=course)
+        .filter(
+            models.Q(mode=COHORT_MODE_COHORT, start_date__isnull=False, start_date__lt=today)
+            | models.Q(mode=COHORT_MODE_SELF_PACED)
+        )
+        .order_by(models.F('start_date').desc(nulls_last=True))
+        .values_list('id', flat=True)
+    )
+    for cohort_id in fallback_cohort_ids:
+        homework = (
+            Homework.objects
+            .filter(content_id=unit.content_id, cohort_id=cohort_id)
+            .select_related('cohort')
+            .first()
+        )
+        if homework is not None:
+            return homework
+
+    return None
+
+
+def build_homework_submission_context(user, unit):
+    """Build homework submission form context for the unit detail page.
+
+    Issue #1683 tranche 1. Returns ``{'homework': None}`` when no
+    ``Homework`` row resolves for this unit/viewer -- the caller's template
+    then renders the unit exactly as it did before this feature (the
+    explicit backward-compatibility contract: an unauthored or
+    not-yet-matching homework unit stays prose-only, no form, no error).
+    """
+    homework = resolve_homework_for_unit(unit, user)
+    if homework is None:
+        return {'homework': None}
+
+    submission = None
+    answers_by_question_id = {}
+    if is_authenticated_user(user):
+        submission = (
+            Submission.objects
+            .filter(homework=homework, student=user)
+            .prefetch_related('answers')
+            .first()
+        )
+        if submission is not None:
+            answers_by_question_id = {
+                answer.question_id: answer.answer_text or ''
+                for answer in submission.answers.all()
+            }
+
+    question_views = []
+    for question in homework.questions.all():
+        raw_answer = answers_by_question_id.get(question.pk, '')
+        if question.question_type == QuestionType.CHECKBOXES:
+            selected = {v.strip() for v in raw_answer.split(',') if v.strip()}
+        else:
+            selected = {raw_answer} if raw_answer else set()
+        options = [
+            {'value': str(i), 'text': text, 'selected': str(i) in selected}
+            for i, text in enumerate(question.options_list, start=1)
+        ]
+        question_views.append({
+            'question': question,
+            'options': options,
+            'text_answer': raw_answer if question.question_type in (
+                QuestionType.FREE_FORM, QuestionType.FREE_FORM_LONG,
+            ) else '',
+        })
+
+    display_timezone = resolve_event_display_timezone(user)
+
+    return {
+        'homework': homework,
+        'homework_questions': question_views,
+        'homework_submission': submission,
+        'homework_link_value': submission.homework_link if submission else '',
+        'homework_is_accepting': homework.is_accepting_submissions,
+        'homework_is_self_paced': homework.is_self_paced,
+        'homework_due_date_display': format_event_time_range(
+            homework.due_date, None, display_timezone,
+        ),
+        'homework_display_timezone': display_timezone,
     }

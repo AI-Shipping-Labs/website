@@ -171,6 +171,7 @@ from studio.views.events import (
     event_sync_transcript,
 )
 from studio.views.global_search import global_search
+from studio.views.homeworks import homework_list, homework_submissions
 from studio.views.hosts import host_create, host_edit, host_list
 from studio.views.impersonate import impersonate_user, stop_impersonation
 from studio.views.instructors import (
@@ -424,6 +425,10 @@ urlpatterns = [
         studio_course_remove_banner,
         name='studio_course_remove_banner',
     ),
+    # Homework: read-only visibility only (issue #1683 tranche 1).
+    # Scoring/re-scoring operator surfaces are explicitly deferred.
+    path('courses/<int:course_id>/homeworks', homework_list, name='studio_homework_list'),
+    path('homeworks/<int:homework_id>/submissions', homework_submissions, name='studio_homework_submissions'),
     path('courses/<int:course_id>/peer-reviews', peer_review_management, name='studio_peer_review_management'),
     path('courses/<int:course_id>/peer-reviews/form-batch', peer_review_form_batch, name='studio_peer_review_form_batch'),
     path('courses/<int:course_id>/peer-reviews/issue-certificates', peer_review_issue_certificates, name='studio_peer_review_issue_certificates'),

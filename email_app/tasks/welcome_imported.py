@@ -1,11 +1,16 @@
-"""Background tasks for imported-user welcome emails."""
+"""Background tasks for imported-user welcome emails.
+
+The send goes through the durable package path (A1.2 remainder slice 4):
+the import tags and course slugs stay scalar text (#1613) and the worker
+resolver mints the password-reset and sign-in links at delivery time. The
+``EmailLog`` ``already_sent`` dedupe gate is preserved — the worker writes
+the audit row after provider acceptance, so a ``sent`` task result means
+the durable delivery exists.
+"""
 
 from django.contrib.auth import get_user_model
 
-from accounts.utils.tokens import generate_password_reset_token
 from email_app.models import EmailLog
-from email_app.services.email_service import EmailService
-from integrations.config import site_base_url
 
 
 def enqueue_imported_welcome_email(user_id):
@@ -25,6 +30,10 @@ def enqueue_imported_welcome_email(user_id):
 
 def send_imported_welcome_email(user_id):
     """Send the imported-user welcome email once per user."""
+    from community_base.mail.models import EmailDelivery
+
+    from email_app.package_mail import send_package_mail
+
     User = get_user_model()
     try:
         user = User.objects.get(pk=user_id)
@@ -37,15 +46,21 @@ def send_imported_welcome_email(user_id):
     if EmailLog.objects.filter(user=user, email_type="welcome_imported").exists():
         return {"status": "skipped", "reason": "already_sent", "user_id": user_id}
 
-    service = EmailService()
-    email_log = service.send(user, "welcome_imported", _build_context(user))
-    if email_log is None:
+    delivery = send_package_mail(user, "welcome_imported", _build_context(user))
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
         return {"status": "skipped", "reason": "unsubscribed", "user_id": user_id}
-    return {"status": "sent", "user_id": user_id, "email_log_id": email_log.pk}
+    # Honest convention: ``sent`` means the durable delivery exists; the
+    # SES outcome and the ``EmailLog`` audit row land from the worker. The
+    # ``email_log_id`` key carries the delivery id, same as the recap
+    # summary mapping.
+    return {
+        "status": "sent",
+        "user_id": user_id,
+        "email_log_id": str(delivery.pk),
+    }
 
 
 def _build_context(user):
-    site_url = site_base_url().rstrip("/")
     course_db_metadata = (user.import_metadata or {}).get("course_db") or {}
     course_slugs = course_db_metadata.get("course_slugs") or []
     slack_metadata = (user.import_metadata or {}).get("slack") or {}
@@ -56,12 +71,4 @@ def _build_context(user):
         "is_slack_import": bool(slack_metadata) or user.import_source == "slack",
         "course_slugs": course_slugs,
         "course_slug_list": ", ".join(course_slugs),
-        "password_reset_url": _build_password_reset_url(user),
-        "sign_in_url": f"{site_url}/login/",
     }
-
-
-def _build_password_reset_url(user):
-    site_url = site_base_url().rstrip("/")
-    token = generate_password_reset_token(user, expiry_hours=1)
-    return f"{site_url}/api/password-reset?token={token}"

@@ -4,13 +4,10 @@ The preview pane hardcoded ``Ada``, so nobody reviewing copy could see the
 greeting that a member with no name on file actually receives.
 """
 
-from unittest.mock import patch
-
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from email_app.models import EmailTemplateOverride
-from email_app.services.email_service import EmailService
 
 User = get_user_model()
 
@@ -167,17 +164,32 @@ class SendTestUnaffectedByPreviewRecipientTest(TestCase):
         self.client = Client()
         self.client.login(email='operator@test.com', password='pw')
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-1591')
-    def test_send_test_uses_the_operator_real_name(self, mock_ses):
+    def test_send_test_uses_the_operator_real_name(self):
+        from unittest.mock import patch
+
+        from email_app.testing import StubSESClient, deliver_pending_mail
+
         response = self.client.post(
             '/studio/email-templates/welcome/send-test/',
             {'recipient': 'no_name'},
         )
 
         self.assertEqual(response['Location'], '/studio/email-templates/')
-        self.assertEqual(mock_ses.call_count, 1)
-        to_email, _subject, html_body = mock_ses.call_args[0]
-        self.assertEqual(to_email, 'operator@test.com')
+
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+        self.assertEqual(len(stub.calls), 1)
+        self.assertEqual(
+            stub.calls[0]['Destination']['ToAddresses'],
+            ['operator@test.com'],
+        )
+        html_body = (
+            stub.calls[0]['Content']['Simple']['Body']['Html']['Data']
+        )
         self.assertIn('Hi Grace,', html_body)
         self.assertNotIn('Hi there,', html_body)
         self.assertNotIn('Hi Ada,', html_body)

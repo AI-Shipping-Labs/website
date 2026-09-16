@@ -2,7 +2,7 @@
 
 Operators get a list page that surfaces every transactional template, and
 an edit page with subject / body / footer fields plus an iframe-based live
-preview. Saves persist into ``EmailTemplateOverride``; ``EmailService``
+preview. Saves persist into ``EmailTemplateOverride``; the render path
 prefers the override row over the on-disk template, so deleting the row
 reverts to the file.
 """
@@ -10,6 +10,8 @@ reverts to the file.
 import logging
 
 import frontmatter
+from community_base.mail.models import EmailDelivery
+from community_base.mail.service import MailError
 from django.contrib import messages
 from django.http import (
     Http404,
@@ -20,18 +22,16 @@ from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
-from accounts.utils.display import GREETING_FALLBACK
+from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from email_app.models import EmailTemplateOverride
+from email_app.package_mail import send_package_mail
+from email_app.services.context_guard import looks_like_url
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     EmailClassificationError,
     classify_email_type,
 )
-from email_app.services.email_service import (
-    TEMPLATES_DIR,
-    EmailService,
-    EmailServiceError,
-)
+from email_app.services.email_service import TEMPLATES_DIR
 from email_app.services.preview_contexts import (
     RECIPIENT_CHOICES,
     RECIPIENT_NAMED,
@@ -41,6 +41,34 @@ from email_app.services.preview_contexts import (
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
+
+# A Studio test send marks its durable delivery with this category (A1.2
+# remainder slice 4) so the worker resolver knows the delivery has no
+# producer relation: test sends persist scalar placeholder copy only and
+# must never dispatch a relation-dependent production resolver.
+STUDIO_TEST_SEND_CATEGORY = "studio_test_send"
+
+
+def _durable_test_context(context):
+    """Drop URL-bearing placeholder values from a test-send context.
+
+    Issue #1613: a durable context may not carry a rendered link, and the
+    preview placeholders are demo links by design. A test send probes
+    deliverability with the persisted subject and body copy, so the
+    URL-shaped keys are removed and only the scalar copy travels in the
+    durable context. Uses the same predicate as the send-time guard, so a
+    stripped context can never trip it.
+    """
+
+    if isinstance(context, dict):
+        return {
+            key: _durable_test_context(value)
+            for key, value in context.items()
+            if not looks_like_url(value)
+        }
+    if isinstance(context, (list, tuple)):
+        return [_durable_test_context(item) for item in context]
+    return context
 
 
 # Display order on the list page. Mirrors the order operators usually
@@ -213,8 +241,8 @@ def _render_preview_html(
     from content.utils.markdown import render_email_markdown
 
     placeholder = get_preview_context(template_name, recipient=recipient)
-    # ``user_name`` and ``user_email`` are also auto-injected by EmailService
-    # for real sends; mirror that here so previews look the same.
+    # ``user_name`` and ``user_email`` are also auto-injected by the send
+    # path for real mail; mirror that here so previews look the same.
     if recipient == RECIPIENT_NO_NAME:
         placeholder.setdefault('user_name', GREETING_FALLBACK)
         placeholder.setdefault('member_name', GREETING_FALLBACK)
@@ -432,6 +460,11 @@ def email_template_send_test(request, template_name):
     Always uses the persisted state -- override if present, file otherwise.
     The point is to verify deliverability after edits, not to preview an
     unsaved draft (the iframe already does that).
+
+    The send goes through the durable package path (A1.2 remainder slice
+    4): ``sent`` means the durable delivery exists and the SES outcome
+    lands from the worker. Placeholder links are stripped (#1613) and the
+    operator's own greeting scalar travels in the durable context.
     """
     if not _template_exists(template_name):
         raise Http404(f'Unknown email template: {template_name}')
@@ -443,28 +476,44 @@ def email_template_send_test(request, template_name):
 
     # Strip ``user_name`` / ``user_email`` / ``site_url`` / ``site_name``
     # from the placeholder context so the operator's real values flow
-    # through (EmailService injects those from the user). The remaining
-    # keys (``verify_url``, ``tier_name``, etc.) are still needed because
-    # the templates reference them and there is no real source for them
-    # in a manual test send.
+    # through (the send path injects those from the recipient). The
+    # remaining scalar keys (``tier_name``, etc.) keep the copy realistic;
+    # URL-bearing placeholders are dropped by ``_durable_test_context``
+    # because a durable context may not carry a rendered link (#1613).
     placeholder = get_preview_context(template_name)
     for k in ('user_name', 'user_email', 'site_url', 'site_name'):
         placeholder.pop(k, None)
-    service = EmailService()
+    # Issue #1591: the greeting is resolved for the operator, never an
+    # email handle; persisting it as a scalar keeps the worker render
+    # identical to what the synchronous send used to inject.
+    placeholder['user_name'] = greeting_name(request.user) or GREETING_FALLBACK
     try:
-        log = service.send(request.user, template_name, placeholder)
-    except EmailServiceError as exc:
+        delivery = send_package_mail(
+            request.user,
+            template_name,
+            _durable_test_context(placeholder),
+            category=STUDIO_TEST_SEND_CATEGORY,
+        )
+    except MailError as exc:
+        # Guard refusal or unknown purpose: nothing durable exists, so
+        # the loud operator message IS the failure surface.
+        logger.warning(
+            'Studio test send refused for %s: %s', template_name, exc,
+        )
         messages.error(request, f'Failed to send test email: {exc}')
         return redirect('studio_email_template_list')
 
-    if log is None:
-        # Unsubscribed user: send() returns None. Surface that to the
-        # operator so they know the send was a no-op.
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
+        # Preference suppression: the delivery is durable but no mail
+        # will go out. Surface that to the operator so they know the
+        # send was a no-op.
         messages.warning(
             request,
             'Test not sent: your account is marked unsubscribed.',
         )
     else:
+        # Honest convention: the delivery exists; the SES outcome and
+        # the ``EmailLog`` audit row land from the worker.
         messages.success(
             request,
             f'Test email sent to {request.user.email}.',

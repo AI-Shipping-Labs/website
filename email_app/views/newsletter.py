@@ -5,6 +5,7 @@ import json
 import logging
 
 import jwt
+from community_base.mail.service import MailError
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
@@ -21,7 +22,7 @@ from accounts.services.user_creation import create_user_conflict_safe
 from accounts.services.verification import resolve_unverified_ttl_days
 from accounts.utils.tokens import JWT_ALGORITHM, generate_user_action_token
 from email_app import relay_sync
-from integrations.config import site_base_url
+from email_app.package_mail import send_package_mail
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +67,12 @@ def _send_subscribe_verification_email(user, redirect_to=None):
     If redirect_to is provided (lead magnet flow), the verification email
     includes a download link and the verify URL redirects to the download.
 
+    The send goes through the durable package path (A1.2 remainder slice
+    4): only scalar inputs travel in the durable context (#1613) — the
+    sanitized ``return_path`` is a resolver input, never a rendered link —
+    and the worker re-mints the bearer token and the verify/download
+    links at delivery time.
+
     Args:
         user: User model instance.
         redirect_to: Optional download URL for lead magnet flow.
@@ -74,45 +81,29 @@ def _send_subscribe_verification_email(user, redirect_to=None):
         redirect_to,
         default="",
     ) or None
-    token = _generate_verification_token(user.pk, redirect_to=redirect_to)
-    site_url = site_base_url()
-    verify_url = f"{site_url}/api/verify-email?token={token}"
     ttl_days = resolve_unverified_ttl_days()
 
-    from email_app.services.email_service import EmailService, EmailServiceError
+    if redirect_to:
+        # Lead magnet flow: send the lead magnet delivery template with
+        # the resolver inputs; verify and download links are minted at
+        # delivery time from the sanitized redirect target.
+        template_name = "lead_magnet_delivery"
+        context = {
+            "resource_title": "your resource",
+            "return_path": redirect_to,
+            "ttl_days": ttl_days,
+        }
+    else:
+        # Standard newsletter signup. Issue #513: pass ``ttl_days`` so the
+        # verification template can disclose the auto-deletion window for
+        # unverified accounts; the login link comes from the render-only
+        # ``site_url`` the worker injects.
+        template_name = "email_verification_subscribe"
+        context = {"ttl_days": ttl_days}
 
     try:
-        service = EmailService()
-
-        if redirect_to:
-            # Lead magnet flow: send the lead magnet delivery template
-            # with both verify URL and download URL
-            service.send(
-                user,
-                "lead_magnet_delivery",
-                {
-                    "verify_url": verify_url,
-                    "download_url": verify_url,
-                    "resource_title": "your resource",
-                    "site_url": site_url,
-                    "ttl_days": ttl_days,
-                },
-            )
-        else:
-            # Standard newsletter signup. Issue #513: pass ``ttl_days`` and
-            # ``site_url`` so the verification template can disclose the
-            # auto-deletion window for unverified accounts and link the
-            # user to ``/accounts/login/``.
-            service.send(
-                user,
-                "email_verification_subscribe",
-                {
-                    "verify_url": verify_url,
-                    "site_url": site_url,
-                    "ttl_days": ttl_days,
-                },
-            )
-    except EmailServiceError:
+        send_package_mail(user, template_name, context)
+    except MailError:
         logger.exception(
             "Failed to send verification email to %s (user_id=%s, redirect_to=%s)",
             user.email,

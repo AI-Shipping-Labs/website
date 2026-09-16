@@ -256,8 +256,12 @@ class SlackImportAdapterTest(TestCase):
 
 
 class SlackImportWelcomeEmailTest(TestCase):
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-1")
-    def test_slack_welcome_copy_explains_workspace_context(self, mock_send):
+    def test_slack_welcome_copy_explains_workspace_context(self):
+        from community_base.mail.jobs import deliver as deliver_job
+        from community_base.mail.models import EmailDelivery
+
+        from email_app.testing import StubSESClient
+
         user = User.objects.create_user(
             email="welcome-slack@example.com",
             import_source=IMPORT_SOURCE_SLACK,
@@ -268,20 +272,28 @@ class SlackImportWelcomeEmailTest(TestCase):
         result = send_imported_welcome_email(user.pk)
 
         self.assertEqual(result["status"], "sent")
+        stub = StubSESClient()
+        with patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ):
+            for delivery in EmailDelivery.objects.filter(
+                state=EmailDelivery.State.PENDING,
+            ):
+                deliver_job(None, {"delivery_id": str(delivery.id)})
+        self.assertEqual(len(stub.calls), 1)
         self.assertEqual(
-            EmailLog.objects.filter(user=user, email_type="welcome_imported").count(),
+            EmailLog.objects.filter(
+                user=user, email_type="welcome_imported",
+            ).count(),
             1,
         )
-        html_body = mock_send.call_args.args[2]
+        html_body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
         self.assertIn("AI Shipping Labs Slack workspace", html_body)
         self.assertIn("Free account", html_body)
         self.assertIn("does not grant paid membership", html_body)
         self.assertIn("Set your password", html_body)
         self.assertIn("Sign in to AI Shipping Labs", html_body)
-        self.assertEqual(
-            mock_send.call_args.kwargs["email_type"], "welcome_imported"
-        )
-        self.assertIsNone(mock_send.call_args.kwargs["unsubscribe_url"])
         self.assertNotIn("/api/unsubscribe?token=", html_body)
         self.assertNotIn("unsubscribe link below", html_body)
         self.assertIn("account deletion", html_body)

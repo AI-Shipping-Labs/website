@@ -3,7 +3,7 @@
 Member email templates open with ``Hi {{ user_name }},``. ``user_name`` used
 to resolve through ``display_name``, which falls back to the email local-part,
 so a member with no name on file received ``Hi x.arrieta,``. The fallback now
-resolves in ``EmailService`` (and in the Studio preview context), so no
+resolves in the send path (and in the Studio preview context), so no
 template file changes and operator overrides in the database are fixed too.
 
 The Studio preview pane gained a recipient selector so a copy reviewer can
@@ -264,17 +264,27 @@ def test_nameless_member_password_reset_is_greeted_as_a_person(
     )
     assert "nameless-reset@test.com" in staff.content()
 
+    from unittest.mock import patch
+
     from accounts.models import User
-    from email_app.services.email_service import EmailService
+    from email_app.package_mail import send_package_mail
+    from email_app.testing import StubSESClient
 
     user = User.objects.get(email="nameless-reset@test.com")
     assert not user.first_name and not user.last_name
-    _subject, body = EmailService()._render_template(
-        "password_reset",
-        user,
-        {"reset_url": "https://example.com/reset?token=demo"},
-    )
+    # A1.2 slice 4: the greeting contract rides the durable package
+    # path — the worker mints the reset link and renders the template
+    # for a nameless recipient.
+    stub = StubSESClient()
+    with patch(
+        "community_base.mail.backends.ses_local.configured_client",
+        return_value=stub,
+    ):
+        send_package_mail(user, "password_reset", {})
     connection.close()
+
+    assert stub.calls, "Worker rendered no password-reset mail"
+    body = stub.calls[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
 
     assert "Hi there," in body
     assert "nameless-reset" not in body
@@ -323,13 +333,16 @@ def test_named_member_registration_email_keeps_their_name(
     )
     assert "You're registered!" in confirmation.inner_text()
 
-    from email_app.services.email_service import EmailService
+    from email_app.services.email_rendering import render_template_parts
     from email_app.services.preview_contexts import get_preview_context
 
     member = User.objects.get(email="main@test.com")
     context = get_preview_context("event_registration")
     context.pop("user_name", None)
-    _subject, body = EmailService()._render_template(
+    # A1.2 slice 4: event registration is calendar-family mail, whose
+    # production renderer is ``render_template_parts`` — the #1591
+    # greeting resolution lives there.
+    _subject, _markdown, body, _footer = render_template_parts(
         "event_registration", member, context,
     )
     connection.close()

@@ -73,7 +73,9 @@ def unsubscribe_url_builder(delivery):
     from integrations.config import site_base_url  # noqa: PLC0415
 
     token = generate_user_action_token(user.pk, "unsubscribe")
-    return f"{site_base_url()}/api/unsubscribe?token={token}"
+    return (
+        f"{site_base_url().rstrip('/')}/api/unsubscribe?token={token}"
+    )
 
 
 def verify_email_url_builder(delivery):
@@ -99,7 +101,9 @@ def verify_email_url_builder(delivery):
         user.pk,
         expiry_hours=VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
     )
-    return f"{site_base_url()}/api/verify-email?token={token}"
+    return (
+        f"{site_base_url().rstrip('/')}/api/verify-email?token={token}"
+    )
 
 
 def _related_event(delivery):
@@ -113,18 +117,27 @@ def _related_event(delivery):
 
 
 def _resolve_auth_links(delivery, context):
-    """Mint the signup-verification and password-reset bearer links."""
+    """Mint the signup-verification and password-reset bearer links.
+
+    The auth sends are member-facing, so the worker also restores the
+    issue #1591 greeting rule (``greeting_name`` — never an email handle,
+    ``there`` when nameless) that the synchronous renderer used to inject
+    for every template; the package's built-in display name has no
+    nameless fallback.
+    """
 
     user = delivery.recipient_user
     if user is None or not getattr(user, "pk", None):
         return
+    _member_greeting(delivery, context)
 
     from accounts.utils.tokens import generate_password_reset_token  # noqa: PLC0415
     from integrations.config import site_base_url  # noqa: PLC0415
 
+    base_url = site_base_url().rstrip("/")
     if delivery.purpose == "password_reset":
         token = generate_password_reset_token(user, expiry_hours=1)
-        context["reset_url"] = f"{site_base_url()}/api/password-reset?token={token}"
+        context["reset_url"] = f"{base_url}/api/password-reset?token={token}"
         return
 
     from accounts.views.auth import _generate_verification_token  # noqa: PLC0415
@@ -133,7 +146,7 @@ def _resolve_auth_links(delivery, context):
         user.pk,
         return_path=context.get("return_path"),
     )
-    context["verify_url"] = f"{site_base_url()}/api/verify-email?token={token}"
+    context["verify_url"] = f"{base_url}/api/verify-email?token={token}"
 
 
 def _resolve_email_change_confirm(delivery, context):
@@ -662,6 +675,79 @@ def _resolve_checkout_payment_failed_context(delivery, context):
     context["retry_url"] = f"{site_base_url().rstrip('/')}{retry_path}"
 
 
+# A1.2 slice 4: operator surfaces. The Studio test send marks its delivery
+# with a category so the worker knows the delivery has no producer relation
+# to mint links from.
+STUDIO_TEST_SEND_CATEGORY = "studio_test_send"
+
+
+def _resolve_studio_test_send_context(delivery, context):
+    """Keep a Studio test send deliverable without a producer relation.
+
+    The test send persists scalar placeholder copy only (#1613): the
+    caller strips every URL-bearing preview value and stores the
+    operator's own greeting scalar. Relation-dependent purposes must not
+    dispatch their production resolvers here — with no relation attached
+    they would fail closed and strand a permanently failing delivery for
+    a send whose only job is to probe deliverability.
+    """
+
+    return context
+
+
+def _resolve_lead_magnet_context(delivery, context):
+    """Mint the lead magnet's verify and download links at delivery.
+
+    A1.2 slice 4: the newsletter caller stores only the sanitized
+    ``return_path`` (a resolver input, never a rendered link — issue
+    #1613) and the worker re-mints the bearer token, exactly as the
+    synchronous send did in the request. Both template links point at the
+    same verification URL, which redirects to the download after the
+    address is verified.
+    """
+
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("lead_magnet_recipient_missing")
+
+    from accounts.views.auth import _generate_verification_token  # noqa: PLC0415
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+    token = _generate_verification_token(
+        user.pk,
+        return_path=context.get("return_path"),
+    )
+    url = f"{base_url}/api/verify-email?token={token}"
+    context["verify_url"] = url
+    context["download_url"] = url
+
+
+def _resolve_welcome_imported_context(delivery, context):
+    """Mint the imported member's reset and sign-in links.
+
+    A1.2 slice 4: the import tags and course slugs stay scalar text and
+    the two links are minted from the recipient row at delivery time —
+    the one-hour password-reset token is never durable (#1613).
+    """
+
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("welcome_imported_user_missing")
+
+    from accounts.utils.tokens import generate_password_reset_token  # noqa: PLC0415
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+    token = generate_password_reset_token(user, expiry_hours=1)
+    context["password_reset_url"] = (
+        f"{base_url}/api/password-reset?token={token}"
+    )
+    context["sign_in_url"] = f"{base_url}/login/"
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
@@ -669,12 +755,14 @@ def resolve_auth_mail_context(*, delivery, context):
     the privacy deletion request, the recap, the post-event follow-up, the
     notification sends (slice 4: event reminder, workshop announcement,
     plan share), the staff heads-ups and the bookclub summaries (slice 1),
-    and the plans and payments member mail (slice 2: sprint-end recap,
+    the plans and payments member mail (slice 2: sprint-end recap,
     partner intro, cadence week notes, the four payment-grace templates
-    and checkout failure) persist only non-secret inputs and relations;
-    this resolver builds their URLs at delivery time so
-    ``EmailDelivery.context_data`` never retains a clickable link (issue
-    #1613, enforced by the site guard in
+    and checkout failure), and the operator surfaces (A1.2 remainder
+    slice 4: the Studio test send, the newsletter subscribe verification
+    and lead magnet delivery, the imported-member welcome) persist only
+    non-secret inputs and relations; this resolver builds their URLs at
+    delivery time so ``EmailDelivery.context_data`` never retains a
+    clickable link (issue #1613, enforced by the site guard in
     ``email_app.services.context_guard``). Binding failures raise
     ``PermanentJobError`` — a stale relation must fail closed, not
     retry forever — and never name the token or URL. The resolver
@@ -684,7 +772,9 @@ def resolve_auth_mail_context(*, delivery, context):
 
     from integrations.config import site_base_url  # noqa: PLC0415
 
-    if delivery.purpose == "account_email_change_confirm":
+    if delivery.category == STUDIO_TEST_SEND_CATEGORY:
+        _resolve_studio_test_send_context(delivery, context)
+    elif delivery.purpose == "account_email_change_confirm":
         _resolve_email_change_confirm(delivery, context)
     elif delivery.purpose == "account_email_changed_notice":
         _resolve_email_changed_notice(delivery, context)
@@ -714,8 +804,13 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_payment_grace_context(delivery, context)
     elif delivery.purpose == "checkout_payment_failed":
         _resolve_checkout_payment_failed_context(delivery, context)
+    elif delivery.purpose == "lead_magnet_delivery":
+        _resolve_lead_magnet_context(delivery, context)
+    elif delivery.purpose == "welcome_imported":
+        _resolve_welcome_imported_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
+        "email_verification_subscribe",
         "password_reset",
         "email_verification_signup_reminder",
         "email_verification_subscribe_reminder",

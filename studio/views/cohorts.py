@@ -14,6 +14,7 @@ is editable both at creation time and later from the edit page.
 import datetime
 
 from django.contrib import messages
+from django.core.exceptions import ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
@@ -71,27 +72,44 @@ def cohort_list(request, course_id):
 @staff_required
 @require_POST
 def cohort_create(request, course_id):
-    """Create a cohort for this course, including an optional series link."""
+    """Create a cohort for this course, including an optional series link.
+
+    Issue #1674: a ``mode`` selector. ``mode='self_paced'`` hides/ignores
+    the date inputs and event series/max participants — ``Cohort.clean()``
+    (run via ``full_clean()``) is the source of truth for the invariant;
+    a mismatched submission surfaces as a Studio message, not a 500 or a
+    silently-ignored field.
+    """
     course = get_object_or_404(Course, pk=course_id)
     name = request.POST.get('name', '').strip()
-    start_date = _parse_date(request.POST.get('start_date', ''))
-    end_date = _parse_date(request.POST.get('end_date', ''))
-
-    if not name or start_date is None or end_date is None:
-        messages.error(
-            request, 'Name, start date, and end date are required.',
+    mode = request.POST.get('mode', 'cohort').strip()
+    if mode == 'self_paced':
+        cohort = Cohort(course=course, name=name, mode='self_paced')
+    else:
+        start_date = _parse_date(request.POST.get('start_date', ''))
+        end_date = _parse_date(request.POST.get('end_date', ''))
+        cohort = Cohort(
+            course=course,
+            name=name,
+            mode='cohort',
+            start_date=start_date,
+            end_date=end_date,
+            event_series=_resolve_event_series(
+                request.POST.get('event_series_id', ''),
+            ),
         )
+
+    if not name:
+        messages.error(request, 'Name is required.')
         return redirect('studio_course_cohort_list', course_id=course.pk)
 
-    Cohort.objects.create(
-        course=course,
-        name=name,
-        start_date=start_date,
-        end_date=end_date,
-        event_series=_resolve_event_series(
-            request.POST.get('event_series_id', ''),
-        ),
-    )
+    try:
+        cohort.full_clean()
+    except ValidationError as exc:
+        messages.error(request, '; '.join(exc.messages))
+        return redirect('studio_course_cohort_list', course_id=course.pk)
+
+    cohort.save()
     messages.success(request, f'Created cohort "{name}".')
     return redirect('studio_course_cohort_list', course_id=course.pk)
 
@@ -104,36 +122,51 @@ def cohort_edit(request, course_id, cohort_id):
 
     if request.method == 'POST':
         name = request.POST.get('name', '').strip()
-        start_date = _parse_date(request.POST.get('start_date', ''))
-        end_date = _parse_date(request.POST.get('end_date', ''))
-        if not name or start_date is None or end_date is None:
-            messages.error(
-                request, 'Name, start date, and end date are required.',
-            )
+        mode = request.POST.get('mode', 'cohort').strip()
+        if not name:
+            messages.error(request, 'Name is required.')
             return redirect(
                 'studio_course_cohort_edit',
                 course_id=course.pk, cohort_id=cohort.pk,
             )
 
         cohort.name = name
-        cohort.start_date = start_date
-        cohort.end_date = end_date
+        cohort.mode = mode
         cohort.is_active = request.POST.get('is_active') == 'on'
-        max_participants_raw = request.POST.get('max_participants', '').strip()
-        if max_participants_raw:
-            try:
-                cohort.max_participants = int(max_participants_raw)
-            except ValueError:
-                messages.error(request, 'Max participants must be a number.')
-                return redirect(
-                    'studio_course_cohort_edit',
-                    course_id=course.pk, cohort_id=cohort.pk,
-                )
-        else:
+
+        if mode == 'self_paced':
+            cohort.start_date = None
+            cohort.end_date = None
             cohort.max_participants = None
-        cohort.event_series = _resolve_event_series(
-            request.POST.get('event_series_id', ''),
-        )
+            cohort.event_series = None
+        else:
+            cohort.start_date = _parse_date(request.POST.get('start_date', ''))
+            cohort.end_date = _parse_date(request.POST.get('end_date', ''))
+            max_participants_raw = request.POST.get('max_participants', '').strip()
+            if max_participants_raw:
+                try:
+                    cohort.max_participants = int(max_participants_raw)
+                except ValueError:
+                    messages.error(request, 'Max participants must be a number.')
+                    return redirect(
+                        'studio_course_cohort_edit',
+                        course_id=course.pk, cohort_id=cohort.pk,
+                    )
+            else:
+                cohort.max_participants = None
+            cohort.event_series = _resolve_event_series(
+                request.POST.get('event_series_id', ''),
+            )
+
+        try:
+            cohort.full_clean()
+        except ValidationError as exc:
+            messages.error(request, '; '.join(exc.messages))
+            return redirect(
+                'studio_course_cohort_edit',
+                course_id=course.pk, cohort_id=cohort.pk,
+            )
+
         cohort.save()
         messages.success(request, f'Updated "{cohort.name}".')
         return redirect(

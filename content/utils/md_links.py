@@ -76,22 +76,36 @@ def rewrite_md_links(
     unit_lookup,
     source_path=None,
     sync_errors=None,
+    parent_module_slug=None,
 ):
     """Rewrite intra-content ``.md`` links in ``body`` to platform URLs.
+
+    Issue #1674: ``unit_lookup`` is the nested tree shape
+    :func:`content.sync_parsers.families.courses._build_course_unit_lookup`
+    returns — ``{top_level_slug: {'dir_name', 'files', 'children':
+    {submodule_slug: {'dir_name', 'files'}}}}`` — so links can resolve
+    across submodules, including across a DIFFERENT parent week, not just
+    within one flat module directory.
 
     Args:
         body: Raw markdown text.
         course_slug: The slug of the course that owns this body.
-        module_slug: The slug of the module that owns this body.
-        unit_lookup: Mapping ``{module_slug: {filename: unit_slug}}`` covering
-            every unit in the course. ``filename`` is the basename of the
-            source file (e.g. ``"02-setup.md"`` or ``"README.md"``); the value
-            is the destination ``Unit.slug`` (e.g. ``"setup"`` or ``"readme"``).
+        module_slug: The slug of the module that owns this body — the
+            SUBMODULE's own slug when the body's unit lives in a
+            submodule, or the top-level module's slug for a two-level
+            (or top-level-leaf) module. Matches ``Unit.module.slug``.
+        unit_lookup: The nested lookup described above.
         source_path: Repo-relative path of the file being rewritten, used only
             for log/warning messages.
         sync_errors: Optional list to append warning records to. Each record
             has shape ``{'file': source_path, 'error': '...'}`` so it surfaces
             on the SyncLog.
+        parent_module_slug: ``None`` for a two-level course or a top-level
+            leaf module (unchanged, pre-#1674 behaviour). The PARENT
+            module's slug when the body's unit lives in a submodule — this
+            is what lets ``..``-depth resolution distinguish "one level up
+            reaches the parent week" from "one level up reaches the course
+            root".
 
     Returns:
         str: The body with internal ``.md`` links replaced.
@@ -106,6 +120,29 @@ def rewrite_md_links(
                 'file': source_path or '',
                 'error': message,
             })
+
+    def _resolve_dir_slug(dir_name, tree):
+        """Map a directory name to its slug within ``tree`` (top-level
+        ``unit_lookup`` or one module's ``children``)."""
+        return _module_dir_to_slug(dir_name, tree)
+
+    def _files_for(top_slug, sub_slug):
+        top_entry = (unit_lookup or {}).get(top_slug) or {}
+        if sub_slug is None:
+            return top_entry.get('files', {})
+        return (top_entry.get('children', {}).get(sub_slug) or {}).get('files', {})
+
+    def _build_url(top_slug, sub_slug, unit_slug, fragment):
+        # README.md targets resolve to the module's overview page
+        # (issue #222) rather than a /readme unit URL. No trailing slash:
+        # the project uses ``RemoveTrailingSlashMiddleware``.
+        segments = [top_slug]
+        if sub_slug is not None:
+            segments.append(sub_slug)
+        if unit_slug != '__module_overview__':
+            segments.append(unit_slug)
+        path = '/'.join(segments)
+        return f'/courses/{course_slug}/{path}{fragment}'
 
     def _resolve(target):
         """Return rewritten URL, or None to leave the original untouched."""
@@ -150,47 +187,81 @@ def rewrite_md_links(
                 break
         remaining = parts[up_count:]
 
+        in_submodule = parent_module_slug is not None
+
         if up_count == 0 and len(remaining) == 1:
-            # Sibling: same module.
-            target_module_slug = module_slug
+            # Sibling: same module (same submodule if we're in one).
+            target_top_slug = parent_module_slug if in_submodule else module_slug
+            target_sub_slug = module_slug if in_submodule else None
             filename = remaining[0]
-        elif up_count == 1 and len(remaining) == 2:
+        elif up_count == 1 and len(remaining) == 2 and in_submodule:
+            # From within a submodule, one level up reaches the parent
+            # WEEK directory — ../<sibling-submodule>/<file.md> is a
+            # sibling submodule under the SAME parent.
+            target_dir, filename = remaining
+            target_top_slug = parent_module_slug
+            parent_entry = (unit_lookup or {}).get(parent_module_slug) or {}
+            target_sub_slug = _resolve_dir_slug(target_dir, parent_entry.get('children', {}))
+            if target_sub_slug is None:
+                _warn(
+                    f'Could not resolve submodule "{target_dir}" under parent '
+                    f'"{parent_module_slug}" for link "{target}" in '
+                    f'{source_path or "(unknown file)"}.'
+                )
+                return None
+        elif up_count == 1 and len(remaining) == 2 and not in_submodule:
             # Cross-module same-course: ../<other-module>/<file.md>
             # parts[0] is the destination module directory name. The repo
             # dir name may include a numeric prefix (e.g. "03-other-module")
             # while Module.slug strips it, so we map dir name -> slug.
-            target_module_dir = remaining[0]
-            filename = remaining[1]
-            target_module_slug = _module_dir_to_slug(
-                target_module_dir, unit_lookup,
-            )
-            if target_module_slug is None:
+            target_dir, filename = remaining
+            target_top_slug = _resolve_dir_slug(target_dir, unit_lookup)
+            target_sub_slug = None
+            if target_top_slug is None:
                 _warn(
-                    f'Could not resolve module "{target_module_dir}" for link '
+                    f'Could not resolve module "{target_dir}" for link '
                     f'"{target}" in {source_path or "(unknown file)"}.'
                 )
                 return None
+        elif up_count == 2 and len(remaining) == 3 and in_submodule:
+            # From within a submodule, two levels up reaches the COURSE
+            # ROOT — ../../<week>/<submodule>/<file.md> crosses to a
+            # (possibly different) parent week's submodule (issue #1674).
+            top_dir, sub_dir, filename = remaining
+            target_top_slug = _resolve_dir_slug(top_dir, unit_lookup)
+            if target_top_slug is None:
+                _warn(
+                    f'Could not resolve module "{top_dir}" for link '
+                    f'"{target}" in {source_path or "(unknown file)"}.'
+                )
+                return None
+            target_entry = (unit_lookup or {}).get(target_top_slug) or {}
+            target_sub_slug = _resolve_dir_slug(sub_dir, target_entry.get('children', {}))
+            if target_sub_slug is None:
+                _warn(
+                    f'Could not resolve submodule "{sub_dir}" under module '
+                    f'"{target_top_slug}" for link "{target}" in '
+                    f'{source_path or "(unknown file)"}.'
+                )
+                return None
         elif up_count >= 2:
-            # Two or more levels up escapes the course — cross-course,
-            # which is explicitly out of scope.
+            # Two or more levels up escapes the course from a top-level
+            # (non-submodule) unit — cross-course, out of scope.
             _warn(
                 f'Cross-course or out-of-tree link "{target}" in '
                 f'{source_path or "(unknown file)"} left as-is.'
             )
             return None
         else:
-            # Anything else (nested subdirs inside a module, etc.) is out of
-            # scope — we have no slug for those depths.
+            # Anything else (nested subdirs beyond the supported depth,
+            # etc.) is out of scope — we have no slug for those depths.
             _warn(
                 f'Cannot resolve nested link "{target}" in '
                 f'{source_path or "(unknown file)"}: unsupported depth.'
             )
             return None
 
-        target_module_units = (
-            unit_lookup.get(target_module_slug, {})
-            if unit_lookup else {}
-        )
+        target_module_units = _files_for(target_top_slug, target_sub_slug)
         unit_slug = target_module_units.get(filename)
         # Filename lookups should be case-insensitive for README.md-style
         # files where authors mix case.
@@ -201,25 +272,19 @@ def rewrite_md_links(
                     break
 
         if unit_slug is None:
+            target_label = (
+                f'{target_top_slug}/{target_sub_slug}'
+                if target_sub_slug is not None else target_top_slug
+            )
             _warn(
                 f'Unresolvable .md link "{target}" in '
                 f'{source_path or "(unknown file)"}: '
                 f'no unit found for filename "{filename}" in module '
-                f'"{target_module_slug}".'
+                f'"{target_label}".'
             )
             return None
 
-        # README.md targets resolve to the module's overview page
-        # (issue #222) rather than a /readme unit URL. No trailing slash:
-        # the project uses ``RemoveTrailingSlashMiddleware``.
-        if unit_slug == '__module_overview__':
-            return (
-                f'/courses/{course_slug}/{target_module_slug}{fragment}'
-            )
-
-        return (
-            f'/courses/{course_slug}/{target_module_slug}/{unit_slug}{fragment}'
-        )
+        return _build_url(target_top_slug, target_sub_slug, unit_slug, fragment)
 
     def _replace(match):
         target = match.group('target')
@@ -582,24 +647,32 @@ def rewrite_cross_workshop_md_links(
     return _MD_LINK_RE.sub(_replace, body)
 
 
-def _module_dir_to_slug(module_dir_name, unit_lookup):
-    """Map a repo module directory name (e.g. "03-other-module") to module slug.
+def _module_dir_to_slug(module_dir_name, tree):
+    """Map a repo module directory name (e.g. "03-other-module") to its slug.
 
-    Sync derives ``Module.slug`` from the directory name with
-    :func:`derive_slug`, which strips a leading ``\\d+-`` prefix. To stay
-    in lock-step without importing the sync helper (and to handle the case
-    where authors used the slug directly in the link), we accept either:
+    ``tree`` is a ``{slug: {'dir_name': ..., ...}}`` mapping — either the
+    top-level :func:`_build_course_unit_lookup` result or one module's
+    ``children`` dict (issue #1674). Matches, in order:
 
-    - a direct match against a known module slug;
-    - a numeric-prefix-stripped match (``03-other-module`` -> ``other-module``).
+    - the directory name recorded against a known entry (handles a
+      frontmatter ``slug:`` override that differs from the stripped
+      directory name);
+    - a direct match against a known slug (author wrote the slug
+      directly, e.g. ``../other-module/foo.md``);
+    - a numeric-prefix-stripped match (``03-other-module`` ->
+      ``other-module``), matching :func:`derive_slug`.
     """
-    if not unit_lookup:
+    if not tree:
         return None
-    # Direct hit (author wrote `../other-module/foo.md`).
-    if module_dir_name in unit_lookup:
+    for slug, entry in tree.items():
+        if isinstance(entry, dict) and entry.get('dir_name') == module_dir_name:
+            return slug
+    if module_dir_name in tree:
         return module_dir_name
-    # Strip a numeric prefix and try again.
     stripped = re.sub(r'^\d+-', '', module_dir_name)
-    if stripped in unit_lookup:
+    if stripped in tree:
         return stripped
+    for slug, entry in tree.items():
+        if isinstance(entry, dict) and entry.get('dir_name') == stripped:
+            return slug
     return None

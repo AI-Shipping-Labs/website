@@ -25,18 +25,69 @@ from content.utils.md_links import (
 )
 
 COURSE_LOOKUP = {
+    # Issue #1674: the lookup is now a nested tree
+    # ``{slug: {'dir_name', 'files', 'children'}}`` (matching
+    # ``_build_course_unit_lookup``) so submodule links resolve too —
+    # ``'children': {}`` means a leaf (pre-#1674 shape), matching every
+    # existing two-level course.
     'fundamentals': {
-        # README.md is the module overview (issue #222), not a unit.
-        # The sync registers it under the sentinel slug
-        # ``__module_overview__`` so the rewriter can map it to the bare
-        # module URL ``/<course>/<module>/``.
-        'README.md': '__module_overview__',
-        '01-intro.md': 'intro',
-        '02-setup.md': 'setup',
+        'dir_name': 'fundamentals',
+        'files': {
+            # README.md is the module overview (issue #222), not a unit.
+            # The sync registers it under the sentinel slug
+            # ``__module_overview__`` so the rewriter can map it to the
+            # bare module URL ``/<course>/<module>/``.
+            'README.md': '__module_overview__',
+            '01-intro.md': 'intro',
+            '02-setup.md': 'setup',
+        },
+        'children': {},
     },
     'advanced': {
-        '01-pipelines.md': 'pipelines',
-        '02-deploy.md': 'deploy',
+        'dir_name': 'advanced',
+        'files': {
+            '01-pipelines.md': 'pipelines',
+            '02-deploy.md': 'deploy',
+        },
+        'children': {},
+    },
+}
+
+# Issue #1674: a three-level tree — two parent ("week") modules, each with
+# one submodule, used to test cross-submodule link resolution including
+# across a DIFFERENT parent.
+NESTED_COURSE_LOOKUP = {
+    'week-1': {
+        'dir_name': '01-week-1',
+        'files': {},
+        'children': {
+            'foundations': {
+                'dir_name': '01-foundations',
+                'files': {
+                    'README.md': '__module_overview__',
+                    '01-intro.md': 'intro',
+                    '02-deep-dive.md': 'deep-dive',
+                },
+            },
+            'bonus-topic': {
+                'dir_name': '02-bonus-topic',
+                'files': {
+                    '01-extra.md': 'extra',
+                },
+            },
+        },
+    },
+    'week-3': {
+        'dir_name': '03-week-3',
+        'files': {},
+        'children': {
+            'deployment': {
+                'dir_name': '01-deployment',
+                'files': {
+                    '01-docker.md': 'docker',
+                },
+            },
+        },
     },
 }
 
@@ -250,6 +301,103 @@ class RewriteMdLinksTest(SimpleTestCase):
         self.assertIn('/courses/python/fundamentals/setup', result)
         self.assertIn('/courses/python/advanced/deploy', result)
         self.assertIn('https://example.com', result)
+
+
+class RewriteMdLinksNestedSubmoduleTest(SimpleTestCase):
+    """Issue #1674: cross-submodule link resolution, including across a
+    DIFFERENT parent week — the scenario the coordinator asked to be
+    covered explicitly, since #1675 re-imports the buildcamp to exactly
+    this 55-submodule shape."""
+
+    def test_sibling_link_within_same_submodule_resolves(self):
+        body = 'See [Deep dive](02-deep-dive.md).'
+        result = rewrite_md_links(
+            body,
+            course_slug='buildcamp',
+            module_slug='foundations',
+            unit_lookup=NESTED_COURSE_LOOKUP,
+            parent_module_slug='week-1',
+        )
+        self.assertIn(
+            '[Deep dive](/courses/buildcamp/week-1/foundations/deep-dive)',
+            result,
+        )
+
+    def test_readme_link_within_submodule_resolves_to_submodule_overview(self):
+        body = 'Back to [the overview](README.md).'
+        result = rewrite_md_links(
+            body,
+            course_slug='buildcamp',
+            module_slug='foundations',
+            unit_lookup=NESTED_COURSE_LOOKUP,
+            parent_module_slug='week-1',
+        )
+        self.assertIn(
+            '[the overview](/courses/buildcamp/week-1/foundations)',
+            result,
+        )
+
+    def test_sibling_submodule_under_same_parent_resolves(self):
+        """../<sibling-submodule>/<file.md> from within a submodule."""
+        body = 'See the [bonus extra](../02-bonus-topic/01-extra.md).'
+        result = rewrite_md_links(
+            body,
+            course_slug='buildcamp',
+            module_slug='foundations',
+            unit_lookup=NESTED_COURSE_LOOKUP,
+            parent_module_slug='week-1',
+        )
+        self.assertIn(
+            '[bonus extra](/courses/buildcamp/week-1/bonus-topic/extra)',
+            result,
+        )
+
+    def test_submodule_link_across_a_different_parent_resolves(self):
+        """A link from a unit in one submodule to a unit in another
+        submodule under a DIFFERENT parent week — the exact scenario
+        flagged for #1675's re-import (55 submodules across 9 weeks)."""
+        body = 'Later we cover [Docker](../../03-week-3/01-deployment/01-docker.md).'
+        result = rewrite_md_links(
+            body,
+            course_slug='buildcamp',
+            module_slug='foundations',
+            unit_lookup=NESTED_COURSE_LOOKUP,
+            parent_module_slug='week-1',
+            source_path='buildcamp/01-week-1/01-foundations/01-intro.md',
+        )
+        self.assertIn(
+            '[Docker](/courses/buildcamp/week-3/deployment/docker)',
+            result,
+        )
+        self.assertNotIn('01-deployment/01-docker.md', result)
+
+    def test_top_level_leaf_module_link_is_unaffected_by_nesting(self):
+        """A two-level (non-submodule) module's links resolve exactly as
+        before — ``parent_module_slug`` omitted/None is the pre-#1674
+        default, unaffected by any submodule elsewhere in the tree."""
+        body = 'See [Deploy](../advanced/02-deploy.md).'
+        result = rewrite_md_links(
+            body,
+            course_slug='python',
+            module_slug='fundamentals',
+            unit_lookup=COURSE_LOOKUP,
+        )
+        self.assertIn('[Deploy](/courses/python/advanced/deploy)', result)
+
+    def test_unresolvable_cross_parent_submodule_link_warns(self):
+        body = '[Missing](../../03-week-3/99-missing/01-foo.md)'
+        errors = []
+        result = rewrite_md_links(
+            body,
+            course_slug='buildcamp',
+            module_slug='foundations',
+            unit_lookup=NESTED_COURSE_LOOKUP,
+            parent_module_slug='week-1',
+            source_path='buildcamp/01-week-1/01-foundations/01-intro.md',
+            sync_errors=errors,
+        )
+        self.assertIn('[Missing](../../03-week-3/99-missing/01-foo.md)', result)
+        self.assertEqual(len(errors), 1)
 
 
 WORKSHOP_LOOKUP = {

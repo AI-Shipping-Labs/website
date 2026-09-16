@@ -1,0 +1,37 @@
+{% load member_badges %}
+{% comment %}
+  One unit row in the course-detail Syllabus accordion (issue #1674:
+  extracted from the inline block so the three-level accordion can reuse
+  it at every module-nesting depth — markup is unchanged from before).
+
+  Context:
+    unit                the Unit
+    completed_unit_ids  set of completed unit pks (authenticated users)
+    has_access          bool
+{% endcomment %}
+{% comment %}
+  Issue #248: locked unit rows are clickable. The unit detail
+  view returns a teaser preview for non-eligible visitors so
+  we let them click through, see what they'd be unlocking,
+  and then convert. The lock icon sets expectation up-front.
+{% endcomment %}
+<div class="flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 transition-colors hover:bg-muted/50" data-testid="syllabus-unit-row">
+  {% if unit.pk in completed_unit_ids %}
+  <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
+  {% elif unit.is_preview %}
+  <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+  {% elif not has_access %}
+  <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0" data-testid="syllabus-lock-icon"></i>
+  {% else %}
+  <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
+  {% endif %}
+  <a href="{{ unit.get_absolute_url }}" class="flex-1 text-sm transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %}" {% if not has_access and not unit.is_preview %}data-testid="syllabus-locked-link"{% endif %}>
+    {{ unit.title }}
+  </a>
+  {% if unit.is_bonus %}
+  {% member_label_badge "Bonus" tone="accent" size="xs" testid="unit-bonus-badge" %}
+  {% endif %}
+  {% if unit.is_preview and not has_access %}
+  <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
+  {% endif %}
+</div>

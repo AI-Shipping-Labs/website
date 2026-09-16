@@ -1,0 +1,153 @@
+{% load studio_filters %}
+{% comment %}
+  One module row in the Studio course tree, recursive (issue #1674): a
+  leaf module (no children) lists its units; a parent module lists its
+  submodules, each rendered by this same partial one level deeper.
+  Mirrors the pre-#1674 flat markup exactly for a two-level course (no
+  visual regression) and adds one more nesting level, bonus checkboxes,
+  the available_after_days input, and the reparent/reorder controls.
+
+  Context: module, is_synced, top_level_modules_for_reparent
+{% endcomment %}
+{% with unit_count=module.units.all|length children=module.children.all child_count=children|length %}
+<details class="group bg-card border border-border rounded-lg overflow-hidden"
+         data-module-id="{{ module.pk }}"
+         data-testid="module-disclosure">
+  <summary class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 cursor-pointer list-none bg-secondary/40 hover:bg-secondary/60 transition-colors"
+           data-testid="module-summary">
+    <div class="flex items-center gap-2 min-w-0 flex-1">
+      <i data-lucide="chevron-right" class="w-4 h-4 text-muted-foreground transition-transform group-open:rotate-90 shrink-0"></i>
+      <span class="text-xs text-muted-foreground tabular-nums w-6 shrink-0">#{{ module.sort_order }}</span>
+      <span class="text-sm font-medium text-foreground truncate" data-testid="module-title">{{ module.title }}</span>
+      {% if child_count %}
+      <span class="text-xs text-muted-foreground whitespace-nowrap" data-testid="module-submodule-count">
+        {{ child_count }} submodule{{ child_count|pluralize }}
+      </span>
+      {% else %}
+      <span class="text-xs text-muted-foreground whitespace-nowrap" data-testid="module-unit-count">
+        {{ unit_count }} unit{{ unit_count|pluralize }}
+      </span>
+      {% endif %}
+      {% if module.is_bonus %}
+      <span class="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent whitespace-nowrap" data-testid="module-bonus-badge">Bonus</span>
+      {% endif %}
+      <span class="inline-flex">{% studio_origin_badge module %}</span>
+    </div>
+  </summary>
+
+  <div class="px-4 py-3 border-t border-border space-y-3" data-testid="module-body">
+    {% if not is_synced %}
+    <form method="post" action="{% url 'studio_module_edit' module_id=module.pk %}" class="flex flex-wrap items-center gap-3 text-xs" data-testid="module-edit-form">
+      {% csrf_token %}
+      <label class="flex items-center gap-1.5 text-muted-foreground">
+        <input type="checkbox" name="is_bonus" {% if module.is_bonus %}checked{% endif %} class="rounded border-border" data-testid="module-bonus-checkbox">
+        Bonus
+      </label>
+      <label class="flex items-center gap-1.5 text-muted-foreground">
+        Available after (days)
+        <input type="number" name="available_after_days" value="{{ module.available_after_days|default_if_none:'' }}" min="0"
+               class="w-20 bg-secondary border border-border rounded px-2 py-1 text-foreground" data-testid="module-available-after-days">
+      </label>
+      <button type="submit" class="text-accent hover:underline">Save</button>
+    </form>
+    <form method="post" action="{% url 'studio_module_reparent' module_id=module.pk %}" class="flex items-center gap-2 text-xs" data-testid="module-reparent-form">
+      {% csrf_token %}
+      <label class="flex items-center gap-2 text-muted-foreground">
+        Parent
+        <select name="parent_id" class="studio-select bg-secondary border border-border rounded px-2 py-1 text-foreground" data-testid="module-reparent-select">
+          <option value="">Top level</option>
+          {% for candidate in top_level_modules_for_reparent %}
+            {% if candidate.pk != module.pk %}
+            <option value="{{ candidate.pk }}" {% if module.parent_id == candidate.pk %}selected{% endif %}>{{ candidate.title }}</option>
+            {% endif %}
+          {% endfor %}
+        </select>
+      </label>
+      <button type="submit" class="text-accent hover:underline" data-testid="module-reparent-submit">Move</button>
+    </form>
+    {% endif %}
+
+    {% if children %}
+    <ul class="space-y-2" data-testid="module-children">
+      {% for child in children %}
+      <li>{% include "studio/courses/_module_tree_node.html" with module=child is_synced=is_synced top_level_modules_for_reparent=top_level_modules_for_reparent %}</li>
+      {% endfor %}
+    </ul>
+    {% if not is_synced and child_count > 1 %}
+    <div class="flex flex-wrap items-end gap-3 text-xs" data-testid="submodule-reorder-form"
+         data-reorder-scope data-reorder-parent-id="{{ module.pk }}">
+      <input type="hidden" data-reorder-endpoint value="{% url 'studio_module_reorder' course_id=module.course_id %}">
+      {% for child in children %}
+      <label class="flex flex-col gap-1 text-muted-foreground">
+        {{ child.title }}
+        <input type="number" data-reorder-id="{{ child.pk }}" value="{{ child.sort_order }}" class="w-16 bg-secondary border border-border rounded px-1.5 py-1 text-foreground">
+      </label>
+      {% endfor %}
+      <button type="button" class="text-accent hover:underline whitespace-nowrap" data-reorder-save>Save order</button>
+    </div>
+    {% endif %}
+    {% else %}
+    {% if unit_count %}
+    <ul class="divide-y divide-border rounded border border-border overflow-hidden" data-testid="module-units">
+      {% for unit in module.units.all %}
+      <li class="flex flex-wrap items-center justify-between gap-2 px-3 py-2 hover:bg-secondary/30 transition-colors" data-testid="unit-row">
+        <div class="flex items-center gap-2 min-w-0 flex-1">
+          <span class="text-xs text-muted-foreground tabular-nums w-6 shrink-0">{{ unit.sort_order }}</span>
+          <span class="text-sm text-foreground truncate">{{ unit.title }}</span>
+          {% if unit.is_preview %}<span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/20 text-blue-400 whitespace-nowrap">Preview</span>{% endif %}
+          {% if unit.is_bonus %}<span class="text-xs px-1.5 py-0.5 rounded bg-accent/20 text-accent whitespace-nowrap" data-testid="unit-bonus-badge">Bonus</span>{% endif %}
+          {% if unit.kind != 'lesson' %}<span class="text-xs px-1.5 py-0.5 rounded bg-secondary text-muted-foreground whitespace-nowrap">{{ unit.get_kind_display }}</span>{% endif %}
+          {% if unit.video_url %}<i data-lucide="play-circle" class="w-3 h-3 text-muted-foreground shrink-0" title="Has video"></i>{% endif %}
+          {% studio_origin_badge unit %}
+        </div>
+        <a href="{% url 'studio_unit_edit' unit_id=unit.pk %}"
+           class="text-xs text-accent hover:underline whitespace-nowrap"
+           data-testid="unit-edit-link">{% if is_synced %}View{% else %}Edit{% endif %}</a>
+      </li>
+      {% endfor %}
+    </ul>
+    {% if not is_synced and unit_count > 1 %}
+    <div class="flex flex-wrap items-end gap-3 text-xs" data-testid="unit-reorder-form" data-reorder-scope>
+      <input type="hidden" data-reorder-endpoint value="{% url 'studio_unit_reorder' module_id=module.pk %}">
+      {% for unit in module.units.all %}
+      <label class="flex flex-col gap-1 text-muted-foreground">
+        {{ unit.title }}
+        <input type="number" data-reorder-id="{{ unit.pk }}" value="{{ unit.sort_order }}" class="w-16 bg-secondary border border-border rounded px-1.5 py-1 text-foreground">
+      </label>
+      {% endfor %}
+      <button type="button" class="text-accent hover:underline whitespace-nowrap" data-reorder-save>Save order</button>
+    </div>
+    {% endif %}
+    {% else %}
+    <p class="text-xs text-muted-foreground">No units in this module yet.</p>
+    {% endif %}
+    {% endif %}
+
+    {% if not is_synced %}
+      {% if not child_count %}
+      <form method="post" action="{% url 'studio_unit_create' module_id=module.pk %}"
+            class="flex items-center gap-2 pt-2 border-t border-border"
+            data-testid="add-unit-form">
+        {% csrf_token %}
+        <input type="text" name="title" placeholder="New unit title..." required
+               class="bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-accent">
+        <label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" name="is_bonus" class="rounded border-border"> Bonus</label>
+        <button type="submit" class="text-xs text-accent hover:underline whitespace-nowrap">Add Unit</button>
+      </form>
+      {% endif %}
+      {% if not unit_count and not module.parent_id %}
+      <form method="post" action="{% url 'studio_module_create' course_id=module.course_id %}"
+            class="flex items-center gap-2 pt-2 border-t border-border"
+            data-testid="add-submodule-form">
+        {% csrf_token %}
+        <input type="hidden" name="parent_id" value="{{ module.pk }}">
+        <input type="text" name="title" placeholder="New submodule title..." required
+               class="bg-secondary border border-border rounded px-2 py-1 text-xs text-foreground flex-1 min-w-0 focus:outline-none focus:ring-1 focus:ring-accent">
+        <label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" name="is_bonus" class="rounded border-border"> Bonus</label>
+        <button type="submit" class="text-xs text-accent hover:underline whitespace-nowrap">Add Submodule</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </div>
+</details>
+{% endwith %}

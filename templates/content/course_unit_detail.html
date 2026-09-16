@@ -35,6 +35,10 @@
         <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
+        {% if module.parent_id %}
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+        <span class="text-muted-foreground truncate hidden sm:inline" data-testid="teaser-breadcrumb-parent">{{ module.parent.title }}</span>
+        {% endif %}
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <span class="text-muted-foreground truncate hidden sm:inline">{{ module.title }}</span>
       </div>

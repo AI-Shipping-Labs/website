@@ -10,11 +10,44 @@ Local-only courses (no `source_repo` set) remain editable in Studio. This guide 
 
 ## File layout
 
-A course is a top-level directory under the repo's `content_path` (e.g. `courses/`). Three levels:
+A course is a top-level directory under the repo's `content_path` (e.g. `courses/`). Two shapes are supported (issue #1674):
+
+Two-level (simpler courses — module holds units directly):
 
 - `courses/<slug>/course.yaml` — course metadata
 - `courses/<slug>/<module-dir>/module.yaml` — module metadata
 - `courses/<slug>/<module-dir>/<NN>-unit.md` — unit content with frontmatter
+
+Three-level (a module directory that itself contains submodule subdirectories, each with their own `module.yaml`):
+
+```
+courses/<course-slug>/
+  course.yaml
+  01-fundamentals/                 # leaf module (two-level shape)
+    module.yaml
+    README.md                      # module overview
+    01-intro.md
+    02-setup.md
+  02-deployment/                   # parent module (has child module dirs)
+    module.yaml
+    README.md                      # still the parent module's overview
+    01-docker/                     # submodule
+      module.yaml
+      README.md
+      01-lesson.md
+      02-lesson.md
+    02-kubernetes/                 # submodule
+      module.yaml
+      01-lesson.md
+      02-homework.md
+      03-live-qa.md                # kind: event in frontmatter
+```
+
+A module directory becomes a **parent module** when it contains one or more subdirectories that themselves carry a `module.yaml` — a submodule directory is parsed exactly like a top-level module directory, one level deeper (own numeric-prefix `sort_order`, own `derive_slug`, own `module.yaml` overrides, own `README.md` overview, own `ignore:` list). Submodule slugs are unique per **parent** (sibling group), not per course — two submodules under *different* parent weeks may share a slug (e.g. a "Homework" submodule repeated under several weeks), matching how real course content is actually organised. Top-level module slugs stay unique per course, as before.
+
+A module directory **must not** mix submodule subdirectories with direct unit `.md` files (other than `README.md`, which always stays the module overview) — a module holds either child modules or units, never both. The sync rejects that course with a `GitHubSyncError` naming the offending directory path and does not partially create either side (neither the submodules nor the units are written).
+
+Maximum nesting is two levels of module — a submodule cannot itself contain a further submodule level.
 
 A numeric prefix on the module or unit filename (`01-intro`, `05-eval.md`) determines `sort_order` if the YAML/frontmatter does not override it.
 
@@ -48,6 +81,9 @@ cohorts:                               # optional; upserted into content.Cohort
     name: Cohort 4
     start_date: 2026-09-21
     end_date: 2026-11-22
+  - key: self-paced                    # optional second entry; mode: self_paced
+    name: Self-paced
+    mode: self_paced                   # optional; 'cohort' (default) or 'self_paced'
 ```
 
 ### `maven_course_key` and `cohorts:`
@@ -64,6 +100,18 @@ are never deleted by sync, since they may already have enrollments. `key`,
 `name`, `start_date`, and `end_date` are all required on every entry; an
 entry missing one fails only that course's sync (its `SyncLog` entry names
 the missing field), not the whole sync run.
+
+Issue #1674: each entry accepts an optional `mode:` key, `cohort` (default,
+matching the model default) or `self_paced`. A `mode: self_paced` entry
+must OMIT `start_date`/`end_date` — sync fails that course, naming the
+cohort key, if either is present. A course may define at most one
+`mode: self_paced` cohort; a second one fails sync too (surfaces as the
+same "which key" error shape the existing cohort-parsing errors already
+use). A self-paced cohort has no dates, no `event_series`, and unlimited
+capacity by construction — course access alone grants implicit
+membership in it (no self-enroll action), which is what makes a
+self-paced learner resolve to a real `Cohort` row for drip-lock and
+event-slot resolution instead of "no cohort at all".
 
 `maven_course_key` and cohort `key` values must exactly match what the real
 Maven webhook sends in `course_key`/`cohort_key` — confirm this with a live
@@ -119,7 +167,11 @@ When a source-managed course shows `Not configured` next to `Individual price`, 
 content_id: <UUID>                  # stable upsert key
 sort_order: 5                       # optional; otherwise from filename prefix
 title: 'Day 5: Offline Evaluation and Testing'
+bonus: true                          # optional; default false (issue #1674)
+available_after_days: 21             # optional; default null (issue #1674)
 ```
+
+`bonus: true` sets `Module.is_bonus` — the whole submodule (or top-level module) is optional enrichment, excluded from the progress denominator but still tracked/shown. `available_after_days: 21` sets `Module.available_after_days` — same key name and meaning as the existing per-unit frontmatter field, set on a top-level ("week") module to drive the derived cohort week date range shown to learners (`Cohort.start_date` + this offset). Both apply to a submodule's own `module.yaml` too, parsed exactly the same way.
 
 ## Unit frontmatter
 
@@ -131,11 +183,16 @@ title: Logging
 video_url: https://www.youtube.com/embed/...   # optional
 access: open                                   # optional, per-unit override
 is_preview: true                               # legacy alias for `access: open`
+kind: homework                                 # optional; lesson (default) | homework | event, case-insensitive
+session_position: 4                            # required when kind: event; 1-indexed position within the course's live-session series
+is_bonus: true                                 # optional; default false
 ---
 markdown body
 ```
 
 Per-unit `access` overrides the course's `default_unit_access`. `is_preview: true` is a legacy alias for `access: open`; if both are set, `access` wins.
+
+Issue #1674: `kind: homework` routes the body into `Unit.homework` exactly like the existing `is_homework: true` does today — `is_homework: true` keeps working as a legacy alias and, when `kind:` is absent, sets `kind='homework'` too. If both are set and disagree, `kind:` wins and sync records an info-level note. `kind: event` requires `session_position:` (a positive integer, matching `events.Event.series_position`) — sync does NOT look up any `events.Event` row at sync time (curriculum syncs independently of which cohorts/events exist; the actual event is resolved per viewer/cohort at render time). Sync fails that unit, naming the file, if `session_position` is missing, non-numeric, or not a positive integer when `kind: event` is set. `is_bonus: true` sets `Unit.is_bonus` — excluded from the progress denominator, still tracked/shown.
 
 ## Editing workflow
 

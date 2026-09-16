@@ -18,21 +18,32 @@
            class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
            data-testid="cohort-edit-name">
   </div>
-  <div class="flex flex-col sm:flex-row gap-3">
+  {% comment %}Issue #1674: mode selector. JS toggles the date/capacity
+  fields' disabled state; Cohort.clean() is the real source of truth so a
+  bypassed toggle still fails closed server-side.{% endcomment %}
+  <div>
+    <label class="block text-xs font-medium text-foreground mb-1" for="cohort-mode">Mode</label>
+    <select id="cohort-mode" name="mode" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+            data-testid="cohort-edit-mode">
+      <option value="cohort" {% if cohort.mode == 'cohort' or not cohort.mode %}selected{% endif %}>Cohort (dated)</option>
+      <option value="self_paced" {% if cohort.mode == 'self_paced' %}selected{% endif %}>Self-paced</option>
+    </select>
+  </div>
+  <div class="flex flex-col sm:flex-row gap-3" data-testid="cohort-dated-fields">
     <div class="flex-1">
       <label class="block text-xs font-medium text-foreground mb-1" for="cohort-start">Start date</label>
-      <input id="cohort-start" type="date" name="start_date" value="{{ cohort.start_date|form_date_value }}" required
+      <input id="cohort-start" type="date" name="start_date" value="{{ cohort.start_date|form_date_value }}" {% if cohort.mode != 'self_paced' %}required{% endif %}
              class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
              data-testid="cohort-edit-start-date">
     </div>
     <div class="flex-1">
       <label class="block text-xs font-medium text-foreground mb-1" for="cohort-end">End date</label>
-      <input id="cohort-end" type="date" name="end_date" value="{{ cohort.end_date|form_date_value }}" required
+      <input id="cohort-end" type="date" name="end_date" value="{{ cohort.end_date|form_date_value }}" {% if cohort.mode != 'self_paced' %}required{% endif %}
              class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
              data-testid="cohort-edit-end-date">
     </div>
   </div>
-  <div>
+  <div data-testid="cohort-capacity-field">
     <label class="block text-xs font-medium text-foreground mb-1" for="cohort-max-participants">Max participants</label>
     <input id="cohort-max-participants" type="number" min="0" name="max_participants" value="{{ cohort.max_participants|default_if_none:'' }}" placeholder="Leave blank for unlimited"
            class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
@@ -69,4 +80,25 @@
     <a href="{% url 'studio_course_cohort_list' course_id=course.pk %}" class="text-sm text-muted-foreground hover:text-foreground">Back to cohorts</a>
   </div>
 </form>
+<script>
+  (function () {
+    var modeSelect = document.getElementById('cohort-mode');
+    var datedFields = document.querySelector('[data-testid="cohort-dated-fields"]');
+    var capacityField = document.querySelector('[data-testid="cohort-capacity-field"]');
+    if (!modeSelect || !datedFields || !capacityField) return;
+    function applyMode() {
+      var selfPaced = modeSelect.value === 'self_paced';
+      datedFields.querySelectorAll('input').forEach(function (input) {
+        input.disabled = selfPaced;
+        input.required = !selfPaced;
+      });
+      capacityField.querySelectorAll('input').forEach(function (input) {
+        input.disabled = selfPaced;
+        if (selfPaced) input.value = '';
+      });
+    }
+    modeSelect.addEventListener('change', applyMode);
+    applyMode();
+  })();
+</script>
 {% endblock %}

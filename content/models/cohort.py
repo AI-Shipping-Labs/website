@@ -1,6 +1,15 @@
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
+
+COHORT_MODE_COHORT = 'cohort'
+COHORT_MODE_SELF_PACED = 'self_paced'
+
+COHORT_MODE_CHOICES = [
+    (COHORT_MODE_COHORT, 'Cohort'),
+    (COHORT_MODE_SELF_PACED, 'Self-paced'),
+]
 
 
 class Cohort(models.Model):
@@ -15,8 +24,23 @@ class Cohort(models.Model):
         max_length=200,
         help_text='e.g. "March 2026 Cohort"',
     )
-    start_date = models.DateField()
-    end_date = models.DateField()
+    # Issue #1674: dates are required for mode='cohort' (today's behaviour,
+    # made explicit) and must be null for mode='self_paced' — enforced in
+    # clean(). Nullable so a self-paced cohort can exist with no dates at
+    # all, which is what makes drip and event resolution fall back to
+    # "always available" / "the fallback recording" for it.
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
+    mode = models.CharField(
+        max_length=20, choices=COHORT_MODE_CHOICES,
+        default=COHORT_MODE_COHORT, db_default=COHORT_MODE_COHORT,
+        help_text=(
+            "'cohort' (default): a dated, time-bound cohort — today's "
+            "behaviour. 'self_paced': no dates, no event series, "
+            "unlimited capacity. Matches curriculum.Cohort.mode in the "
+            "future community_base package exactly (issue #1674)."
+        ),
+    )
     is_active = models.BooleanField(default=True)
     max_participants = models.IntegerField(
         null=True, blank=True,
@@ -57,10 +81,42 @@ class Cohort(models.Model):
                 condition=~Q(external_key=''),
                 name='unique_cohort_course_external_key',
             ),
+            # Issue #1674: at most one self-paced cohort per course, mirroring
+            # curriculum's ``cb_cohort_self_paced_unique`` in community_base.
+            models.UniqueConstraint(
+                fields=['course'],
+                condition=Q(mode=COHORT_MODE_SELF_PACED),
+                name='cohort_self_paced_unique_per_course',
+            ),
         ]
 
     def __str__(self):
         return f'{self.course.title} - {self.name}'
+
+    def clean(self):
+        super().clean()
+        if self.mode == COHORT_MODE_COHORT:
+            if self.start_date is None or self.end_date is None:
+                raise ValidationError(
+                    "A dated cohort (mode='cohort') requires both "
+                    "start_date and end_date."
+                )
+        elif self.mode == COHORT_MODE_SELF_PACED:
+            if self.start_date is not None or self.end_date is not None:
+                raise ValidationError(
+                    "A self-paced cohort (mode='self_paced') must not "
+                    "have start_date/end_date set."
+                )
+            if self.event_series_id is not None:
+                raise ValidationError(
+                    "A self-paced cohort (mode='self_paced') must not "
+                    "have an event_series — it has no live-session series."
+                )
+            if self.max_participants is not None:
+                raise ValidationError(
+                    "A self-paced cohort (mode='self_paced') must not "
+                    "have max_participants — capacity does not apply."
+                )
 
     @property
     def enrollment_count(self):

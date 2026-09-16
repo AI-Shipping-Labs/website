@@ -102,9 +102,12 @@ from studio.views.courses import (
     course_list,
     course_user_search,
     module_create,
+    module_edit,
     module_reorder,
+    module_reparent,
     unit_create,
     unit_edit,
+    unit_reorder,
 )
 from studio.views.crm import (
     crm_archive,
@@ -398,7 +401,10 @@ urlpatterns = [
     path('courses/<int:course_id>/instructors/<int:association_id>/remove', course_instructor_remove, name='studio_course_instructor_remove'),
     path('courses/<int:course_id>/modules/add', module_create, name='studio_module_create'),
     path('courses/<int:course_id>/modules/reorder', module_reorder, name='studio_module_reorder'),
+    path('modules/<int:module_id>/edit', module_edit, name='studio_module_edit'),
+    path('modules/<int:module_id>/reparent', module_reparent, name='studio_module_reparent'),
     path('modules/<int:module_id>/units/add', unit_create, name='studio_unit_create'),
+    path('modules/<int:module_id>/units/reorder', unit_reorder, name='studio_unit_reorder'),
     path('units/<int:unit_id>/edit', unit_edit, name='studio_unit_edit'),
     path('courses/<int:course_id>/notify', course_notify, name='studio_course_notify'),
     path('courses/<int:course_id>/announce-slack', course_announce_slack, name='studio_course_announce_slack'),

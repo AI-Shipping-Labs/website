@@ -18,9 +18,8 @@ from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import TestCase
 
-from community.services.slack import SlackAPIError
 from content.models import Cohort, Course
 from email_app.package_mail import send_package_mail
 from email_app.testing import StubSESClient, deliver_pending_mail
@@ -32,8 +31,6 @@ User = get_user_model()
 
 WEBHOOK_URL = "/api/webhooks/maven"
 SECRET = "onboarding-1565-secret"
-# ``_invite_to_slack`` returns (step_status, note).
-SLACK_ADDED = (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
 
 # One explicit semantic mapping connects every eligible tier record to the
 # claim that represents it in the Maven welcome. Keeping the record identity in
@@ -151,15 +148,11 @@ class MavenWebhookMixin(TestCase):
     "community.services.staff_notifications.notify_maven_enrollment",
     return_value=True,
 )
-@patch(
-    "community.services.slack.SlackCommunityService.lookup_user_by_email",
-    return_value=None,
-)
 class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
     """A brand-new enrollee gets exactly one email that can reach Slack."""
 
     def test_single_welcome_email_carries_the_gated_slack_join_link(
-        self, _lookup, _notify,
+        self, _notify,
     ):
         response = self.post({
             "event": "user_cohort.enrolled",
@@ -187,85 +180,27 @@ class MavenColdEnrolleeDeliveryTest(MavenWebhookMixin):
         )
         self.assertNotIn("finish onboarding", html)
 
-    def test_slack_step_is_skipped_with_a_visible_reason_not_succeeded(
-        self, _lookup, _notify,
+    def test_slack_step_mirrors_the_succeeded_welcome_not_a_slack_lookup(
+        self, _notify,
     ):
+        # Issue #1665: the slack step no longer calls the Slack API — it
+        # mirrors welcome_status. A cold enrollee's welcome succeeds, so
+        # slack succeeds too, carrying the join-link-delivered note.
         self.post({
             "event": "user_cohort.enrolled",
             "email": "cold2@example.com",
             "course": "Buildcamp",
         })
         event = MavenEnrollmentEvent.objects.get(email="cold2@example.com")
-        self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_SKIPPED)
-        self.assertIn("not in the Slack workspace", event.slack_error)
-        self.assertIn("welcome email", event.slack_error)
         self.assertEqual(event.welcome_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
-
-
-@patch(
-    "community.services.staff_notifications.notify_maven_enrollment",
-    return_value=True,
-)
-@patch(
-    "community.services.slack.SlackCommunityService.lookup_user_by_email",
-    return_value="U-IN-WORKSPACE",
-)
-@override_settings(
-    SLACK_ENABLED=True,
-    SLACK_BOT_TOKEN="xoxb-test",
-    SLACK_ENVIRONMENT="development",
-    SLACK_DEV_COMMUNITY_CHANNEL_IDS=["C001", "C002"],
-)
-class MavenSlackChannelFailureTest(MavenWebhookMixin):
-    """The ledger must not claim a Slack join that never happened (#1565)."""
-
-    @patch("community.services.slack.SlackCommunityService._api_call")
-    def test_step_is_failed_not_succeeded_when_every_channel_add_errors(
-        self, mock_api, _lookup, _notify,
-    ):
-        # The enrollee resolves to a Slack account, but the bot is not in
-        # any community channel, so they join nothing.
-        mock_api.side_effect = SlackAPIError(
-            "Slack API error: not_in_channel",
-            method="conversations.invite",
-            error_code="not_in_channel",
-        )
-
-        self.post({
-            "event": "user_cohort.enrolled",
-            "email": "no-channel@example.com",
-            "course": "Buildcamp",
-        })
-
-        event = MavenEnrollmentEvent.objects.get(email="no-channel@example.com")
-        self.assertNotEqual(event.slack_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
-        self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_FAILED)
-        self.assertIn("joined no community channel", event.slack_error)
-        self.assertIn("not_in_channel", event.slack_error)
-        self.assertLessEqual(len(event.slack_error), 255)
-
-    @patch("community.services.slack.SlackCommunityService._api_call")
-    def test_step_succeeds_when_the_member_actually_joins_a_channel(
-        self, mock_api, _lookup, _notify,
-    ):
-        mock_api.return_value = {"ok": True}
-
-        self.post({
-            "event": "user_cohort.enrolled",
-            "email": "joined@example.com",
-            "course": "Buildcamp",
-        })
-
-        event = MavenEnrollmentEvent.objects.get(email="joined@example.com")
         self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
-        self.assertEqual(event.slack_error, "")
+        self.assertIn("Join link delivered via the maven_welcome email", event.slack_error)
 
 
 @patch(
     "community.services.staff_notifications.notify_maven_enrollment",
     return_value=True,
 )
-@patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
 class MavenPayloadToleranceTest(MavenWebhookMixin):
     def test_data_envelope_is_processed_identically_to_the_flat_payload(
         self, _notify,
@@ -355,7 +290,6 @@ class MavenPayloadToleranceTest(MavenWebhookMixin):
     "community.services.staff_notifications.notify_maven_enrollment",
     return_value=True,
 )
-@patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
 class MavenNameCaptureTest(MavenWebhookMixin):
     def test_nested_names_are_stored_and_greet_the_enrollee_by_name(
         self, _notify,
@@ -454,7 +388,6 @@ class MavenNameCaptureTest(MavenWebhookMixin):
     "community.services.staff_notifications.notify_maven_enrollment",
     return_value=True,
 )
-@patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
 class MavenWelcomeStaffCopyTest(MavenWebhookMixin):
     """Staff gets a hidden copy of the enrollee welcome (issue #1570).
 
@@ -846,7 +779,6 @@ class ReplayCommandGuardTest(TestCase):
         "community.services.staff_notifications.notify_maven_enrollment",
         return_value=True,
     )
-    @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
     def test_real_run_prints_resolved_recipient_course_and_cohort(
         self, _notify,
     ):
@@ -870,7 +802,6 @@ class ReplayCommandGuardTest(TestCase):
         "community.services.staff_notifications.notify_maven_enrollment",
         return_value=True,
     )
-    @patch("integrations.services.maven._invite_to_slack", lambda user, actions: SLACK_ADDED)
     def test_enveloped_runs_print_the_values_the_handler_processes(
         self, _notify,
     ):

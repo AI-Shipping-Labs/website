@@ -25,9 +25,12 @@ User = get_user_model()
 
 class MavenEnrollmentStepOrderingTest(TestCase):
     def test_step_names_order(self):
+        # Issue #1665: ``welcome`` runs before ``slack`` — the ``slack`` step
+        # mirrors ``welcome_status`` instead of calling the Slack API, so the
+        # welcome outcome must exist by the time ``slack`` is evaluated.
         self.assertEqual(
             STEP_NAMES,
-            ("override", "enrollment", "notification", "slack", "welcome", "removal"),
+            ("override", "enrollment", "notification", "welcome", "slack", "removal"),
         )
 
 

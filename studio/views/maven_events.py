@@ -91,7 +91,12 @@ def maven_event_retry(request, pk, step):
     )
     event.refresh_from_db()
     status = getattr(event, f"{step}_status")
-    if result.reason == "not_retryable":
+    if result.reason == "welcome_pending":
+        messages.warning(
+            request,
+            f"Maven {step} step needs the welcome step to complete first; no retry was run.",
+        )
+    elif result.reason == "not_retryable":
         messages.info(request, f"Maven {step} step is already complete; no retry was run.")
     elif status == MavenEnrollmentEvent.STEP_SUCCEEDED:
         messages.success(request, f"Maven {step} step recovered.")

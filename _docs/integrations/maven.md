@@ -3,8 +3,10 @@
 Auto-onboards Maven cohort enrollees into the AI Shipping Labs community
 (issue #960). When a member enrolls in a Maven cohort, a webhook to
 `POST /api/webhooks/maven` resolves/creates their account, grants a long-lived
-`main` tier override, invites them to Slack, and sends a course-framed welcome
-email. A cohort removal sends a staff heads-up but never auto-revokes access.
+`main` tier override, and sends a course-framed welcome email that carries the
+Slack workspace join link (issue #1665: enrollees are never invited to Slack
+directly). A cohort removal sends a staff heads-up but never auto-revokes
+access.
 
 The whole feature is off by default (`MAVEN_ENROLLMENT_ENABLED`). It is
 payment-independent (instructors free-enroll people), idempotent under Maven
@@ -122,34 +124,54 @@ Rejected or unrecognised deliveries are logged with key NAMES only:
 
 ## Slack step statuses
 
-The `slack` step reports what actually happened, and never claims a delivery
-it could not make:
+Issue #1665: the `slack` step makes NO Slack API calls (no
+`users.lookupByEmail`, no `conversations.invite`). Direct Slack invites were
+retired — `users.lookupByEmail` failed deterministically for most Maven
+enrollees (suspected missing `users:read.email` bot scope), and retrying that
+call harder was never going to fix it. The workspace join link already lives
+in the `maven_welcome` email (`slack_join_url` → `/community/slack` →
+`SLACK_INVITE_URL`), so the step instead mirrors the outcome of the
+just-completed `welcome` step — `welcome` now runs before `slack` in the
+occurrence loop specifically so this ordering holds:
 
-| Invite outcome | `slack_status` | Ledger note |
+| `welcome_status` at the moment `slack` runs | `slack_status` | Ledger note |
 |---|---|---|
-| User found in Slack and joined at least one community channel | `succeeded` | empty |
-| User found in Slack but joined no community channel | `failed` | "Enrollee is in the Slack workspace but joined no community channel: `<channel>: <slack error>`", retried within the normal bound |
-| User not in the Slack workspace | `skipped` | "Enrollee is not in the Slack workspace; the join link was delivered in the welcome email." |
-| Slack API raised out of the invite call | `failed` | safe exception class, retried within the normal bound |
+| `succeeded` | `succeeded` | "Join link delivered via the maven_welcome email; direct Slack invite is not attempted for Maven enrollees." |
+| `skipped` (recipient's `maven_emails` preference suppressed it) | `skipped` | "Join link not delivered: welcome email suppressed by the enrollee's maven_emails preference." |
+| `failed` | `failed`, retried within the normal bound | "Join link not delivered: the maven_welcome email failed to send. Retry the welcome step, then retry slack." |
+| still `pending`/`running` (only reachable via a standalone Studio/API retry of `slack` issued before `welcome` has resolved) | unchanged — no attempt consumed | n/a; the retry result reports that `welcome` must resolve first |
 
-`succeeded` requires an actual channel join, never merely that a Slack user id
-resolved. `add_to_channels` turns every per-channel Slack error into
-`{"ok": False}`, so a bot that is not in the community channel, a wrong channel
-id, or an exhausted rate-limit retry would otherwise be recorded as a delivery
-that never happened. Those cases are `failed` with the channel errors visible on
-`/studio/maven-events/<pk>/`, which is an operator-fixable Slack configuration
-problem rather than a member problem.
+An occurrence created with both `slack_status` and `welcome_status` preset to
+`skipped` (the `already_member` case — the enrollee already has active
+community access) is untouched: the early-return for an already-`skipped`
+step means it is never re-evaluated.
 
 A cold Maven enrollee gets exactly one email: `maven_welcome`, which carries
-the Slack join link. The generic `community_invite` email is suppressed for
-Maven (`invite(user, send_invite_email=False)`) so the enrollee is not hit
-with two welcomes seconds apart.
+the Slack join link.
 
 `/community/slack` is `@login_required` and Main-gated. The welcome email no
 longer walks the enrollee through a numbered 1/2/3 sequence (issue #1593): it
 offers sign-in and set-a-password together, then the Slack join link. A signed-
 out click on that link redirects through login with `next=/community/slack`
 preserved, so it is one extra hop rather than a dead end.
+
+### Remediating previously-failed slack steps
+
+Occurrences that recorded `slack_status=failed` under the retired Slack-invite
+mechanism need no raw data migration — they self-heal once the step is
+re-evaluated under the new welcome-mirroring logic, because their
+`welcome_status` is already `succeeded` (the welcome email step is
+independent and was never affected by the Slack API failure). Force-retry
+every currently-failed `slack` step and print a per-occurrence summary:
+
+```bash
+uv run python manage.py retry_failed_maven_slack_steps
+```
+
+Each line reports the occurrence id, the enrollee, the prior status, the
+resulting status, and the ledger note — the summary is also how an operator
+spots the rare exception where `welcome_status` is not `succeeded` for a
+given row and a person needs a manual nudge.
 
 ## Behavior
 
@@ -212,13 +234,14 @@ preserved, so it is one extra hop rather than a dead end.
   idempotently. When the resolved cohort has a linked office-hours
   `EventSeries`, also creates a standing `SeriesRegistration`; a cohort with
   no linked series is a clean no-op for that part. Runs after `override`
-  succeeds and independently of `notification`/`slack`/`welcome` — it never
+  succeeds and independently of `notification`/`welcome`/`slack` — it never
   blocks them, and they never block it. An unresolvable `course_key` or
   `cohort_key` fails the step with `MavenUnknownCourseError` /
   `MavenUnknownCohortError`, visible un-redacted on
   `/studio/maven-events/<pk>/` and retryable once `course.yaml` declares the
   matching `maven_course_key` / cohort `key`.
-- Invites them to Slack (idempotent — no-op if already in the workspace).
+- Records that the Slack join link was delivered via the welcome email — the
+  `slack` step makes no Slack API call (see "Slack step statuses" above).
 - Sends the course-framed `maven_welcome` email (transactional; from
   `welcome@`; carries a transparent notice + the newsletter opt-in + a scoped
   course-email opt-out + a reply-to-remove line). The two tokened links are
@@ -280,8 +303,8 @@ database constraint. Removal closes the occurrence and revokes the course
 grant and cohort membership it created, but never the tier override or Slack
 membership; a later enrollment creates a genuine new occurrence.
 
-The entitlement, course-access enrollment, staff heads-up notification, Slack
-invite, welcome, and removal each persist their own status,
+The entitlement, course-access enrollment, staff heads-up notification,
+welcome, slack, and removal each persist their own status,
 attempted/completed timestamps, bounded attempt count (three automatic
 attempts), and a safe error class. A five-minute scheduled recovery job
 retries pending, failed, or stale-running work only while the selected step
@@ -308,10 +331,11 @@ To recover an occurrence, open its detail page, identify the affected step,
 and fix the underlying provider or configuration cause first. Then use
 `Retry safely` for that step. The staff-authenticated POST is CSRF-protected and
 audited. A manual attempt may exceed the automatic three-attempt ceiling. When
-an entitlement retry succeeds, the eligible notification, Slack, and welcome
-steps resume once in dependency order; already successful or skipped work is
-left untouched. Studio reports the persisted result as recovered, skipped,
-failed again, or already running.
+an entitlement retry succeeds, the eligible notification, welcome, and slack
+steps resume once in dependency order (`welcome` before `slack`, since `slack`
+mirrors `welcome_status`); already successful or skipped work is left
+untouched. Studio reports the persisted result as recovered, skipped, failed
+again, or already running.
 
 ## Operator occurrence API
 
@@ -335,7 +359,7 @@ resolver finds an account, every occurrence linked to that user. `course` and
 `cohort` match a label substring or their exact provider key. `lifecycle`
 accepts `active`, `removed`, or `legacy`; `status` accepts `all`, `failed`, or
 `needs_attention`; and `failed_step` accepts `override`, `enrollment`,
-`notification`, `slack`, `welcome`, or `removal`.
+`notification`, `welcome`, `slack`, or `removal`.
 
 Pages default to `limit=50&offset=0`. Positive limits above 200 are clamped to
 200, and `total_count` reports all filtered rows while `count` reports rows in
@@ -356,7 +380,7 @@ curl -sS \
 ```
 
 The detail response always includes `override`, `enrollment`, `notification`,
-`slack`, `welcome`, and `removal` in dependency order. Each row reports
+`welcome`, `slack`, and `removal` in dependency order. Each row reports
 status, attempts, timestamps, whether it needs attention, and a safe error
 class or controlled reason. Unsafe legacy errors appear as
 `last_error: "redacted"` with `error_redacted: true`. The detail response also
@@ -378,9 +402,12 @@ An attempted provider outcome returns `200` with `retry.outcome` set to the
 persisted `succeeded`, `failed`, or `skipped` state. A caught provider failure
 therefore remains a truthful `200` with `outcome=failed`. A fresh running lease
 returns `409 maven_step_in_progress`; a step already persisted as `succeeded`
-or `skipped` returns `409 maven_step_not_retryable`. A successful forced
-`override` retry resumes only currently eligible downstream enrollment steps
-once in their normal order.
+or `skipped` returns `409 maven_step_not_retryable`; retrying `slack` before
+its mirrored `welcome` step has resolved returns
+`409 maven_step_welcome_pending` — no attempt is consumed and `slack_status`
+is left unchanged, so retry `welcome` first. A successful forced `override`
+retry resumes only currently eligible downstream enrollment steps once in
+their normal order.
 
 The API never returns webhook payloads, dedupe or identity hashes, names,
 Slack IDs, provider bodies, audit details, or token values. After the 30-day
@@ -459,8 +486,9 @@ uv run python manage.py replay_maven_event \
 
 The owner can also test end to end by free-enrolling his own account plus a few
 test accounts into a real Maven test cohort and watching the flow run: account
-created, override granted, Slack invite, welcome email. Maven guidance: after
-adding the webhook, wait ~2 minutes, then enroll as a student would.
+created, override granted, welcome email (carries the Slack join link).
+Maven guidance: after adding the webhook, wait ~2 minutes, then enroll as a
+student would.
 
 ## Backfilling already-enrolled members
 

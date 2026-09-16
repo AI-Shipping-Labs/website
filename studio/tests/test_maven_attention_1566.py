@@ -297,13 +297,12 @@ class MavenStudioRetryTest(TestCase):
             calls.append("notification")
             return True
 
-        def invite(*args, **kwargs):
-            calls.append("slack")
-            return MavenEnrollmentEvent.STEP_SUCCEEDED, ""
-
         def welcome(*args, **kwargs):
             calls.append("welcome")
 
+        # Issue #1665: ``slack`` no longer calls a provider — it mirrors
+        # ``welcome_status`` — so there is nothing to mock for it. Order is
+        # verified through the mocked steps plus the persisted slack outcome.
         with patch(
             "integrations.services.maven._grant_or_refresh_override",
             side_effect=grant,
@@ -314,21 +313,42 @@ class MavenStudioRetryTest(TestCase):
             "community.services.staff_notifications.notify_maven_enrollment",
             side_effect=notify,
         ), patch(
-            "integrations.services.maven._invite_to_slack", side_effect=invite
-        ), patch(
             "integrations.services.maven._send_welcome", side_effect=welcome
         ):
             response = self.client.post(
                 self._retry_url(event, "override"), follow=True
             )
         event.refresh_from_db()
-        self.assertEqual(calls, ["override", "notification", "slack", "welcome"])
+        self.assertEqual(calls, ["override", "notification", "welcome"])
         self.assertEqual(event.override_attempts, MAX_STEP_ATTEMPTS + 1)
         self.assertEqual(event.notification_attempts, 1)
-        self.assertEqual(event.slack_attempts, 1)
         self.assertEqual(event.welcome_attempts, 1)
+        self.assertEqual(event.slack_attempts, 1)
+        self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
         self.assertFalse(needs_attention_occurrences().filter(pk=event.pk).exists())
         self.assertContains(response, "Maven override step recovered.")
+
+    def test_retrying_slack_before_welcome_resolves_declines_and_explains(self):
+        # Issue #1665: the studio "Retry safely" action on ``slack`` must
+        # not consume an attempt or change status while ``welcome`` is
+        # still pending — the operator sees a message to retry welcome
+        # first, then the second retry (after welcome resolves) succeeds.
+        event = self._event(
+            welcome_status=MavenEnrollmentEvent.STEP_PENDING,
+            slack_status=MavenEnrollmentEvent.STEP_PENDING,
+        )
+        response = self.client.post(self._retry_url(event, "slack"), follow=True)
+        event.refresh_from_db()
+        self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_PENDING)
+        self.assertEqual(event.slack_attempts, 0)
+        self.assertContains(response, "needs the welcome step to complete first")
+
+        with patch("integrations.services.maven._send_welcome"):
+            self.client.post(self._retry_url(event, "welcome"), follow=True)
+        second = self.client.post(self._retry_url(event, "slack"), follow=True)
+        event.refresh_from_db()
+        self.assertEqual(event.slack_status, MavenEnrollmentEvent.STEP_SUCCEEDED)
+        self.assertContains(second, "Maven slack step recovered.")
 
     def test_retry_is_staff_post_csrf_and_known_step_only(self):
         event = self._event(

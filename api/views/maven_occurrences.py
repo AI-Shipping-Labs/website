@@ -347,7 +347,10 @@ def maven_occurrence_detail(request, occurrence_id):
                     "description": (
                         "``maven_step_in_progress`` for a fresh running lease; "
                         "``maven_step_not_retryable`` for a step already "
-                        "persisted as succeeded or skipped."
+                        "persisted as succeeded or skipped; "
+                        "``maven_step_welcome_pending`` when the ``slack`` step "
+                        "is retried before its mirrored ``welcome`` step has "
+                        "resolved."
                     ),
                     "schema": _ERROR_SCHEMA,
                     "example": {
@@ -416,6 +419,13 @@ def maven_occurrence_step_retry(request, occurrence_id, step):
             step,
             code="maven_step_in_progress",
             message="Maven step is already in progress",
+        )
+    if result.reason == "welcome_pending":
+        return _retry_conflict(
+            occurrence,
+            step,
+            code="maven_step_welcome_pending",
+            message="Maven slack step cannot resolve until the welcome step completes",
         )
     if result.reason == "not_retryable":
         return _retry_conflict(

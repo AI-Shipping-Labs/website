@@ -7509,8 +7509,8 @@
                 "override",
                 "enrollment",
                 "notification",
-                "slack",
                 "welcome",
+                "slack",
                 "removal"
               ],
               "type": "string"
@@ -7581,8 +7581,8 @@
                                 "override",
                                 "enrollment",
                                 "notification",
-                                "slack",
                                 "welcome",
+                                "slack",
                                 "removal"
                               ],
                               "type": "string"
@@ -7606,8 +7606,8 @@
                                 "override",
                                 "enrollment",
                                 "notification",
-                                "slack",
                                 "welcome",
+                                "slack",
                                 "removal"
                               ],
                               "type": "string"
@@ -7800,8 +7800,8 @@
                           "override",
                           "enrollment",
                           "notification",
-                          "slack",
                           "welcome",
+                          "slack",
                           "removal"
                         ],
                         "type": "string"
@@ -7825,8 +7825,8 @@
                           "override",
                           "enrollment",
                           "notification",
-                          "slack",
                           "welcome",
+                          "slack",
                           "removal"
                         ],
                         "type": "string"
@@ -7885,8 +7885,8 @@
                               "override",
                               "enrollment",
                               "notification",
-                              "slack",
                               "welcome",
+                              "slack",
                               "removal"
                             ],
                             "type": "string"
@@ -8143,8 +8143,8 @@
                               "override",
                               "enrollment",
                               "notification",
-                              "slack",
                               "welcome",
+                              "slack",
                               "removal"
                             ],
                             "type": "string"
@@ -8168,8 +8168,8 @@
                               "override",
                               "enrollment",
                               "notification",
-                              "slack",
                               "welcome",
+                              "slack",
                               "removal"
                             ],
                             "type": "string"
@@ -8228,8 +8228,8 @@
                                   "override",
                                   "enrollment",
                                   "notification",
-                                  "slack",
                                   "welcome",
+                                  "slack",
                                   "removal"
                                 ],
                                 "type": "string"
@@ -8331,8 +8331,8 @@
                             "override",
                             "enrollment",
                             "notification",
-                            "slack",
                             "welcome",
+                            "slack",
                             "removal"
                           ],
                           "type": "string"
@@ -8415,7 +8415,7 @@
                 }
               }
             },
-            "description": "``maven_step_in_progress`` for a fresh running lease; ``maven_step_not_retryable`` for a step already persisted as succeeded or skipped."
+            "description": "``maven_step_in_progress`` for a fresh running lease; ``maven_step_not_retryable`` for a step already persisted as succeeded or skipped; ``maven_step_welcome_pending`` when the ``slack`` step is retried before its mirrored ``welcome`` step has resolved."
           },
           "422": {
             "content": {

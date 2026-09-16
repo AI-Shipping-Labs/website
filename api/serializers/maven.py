@@ -5,7 +5,9 @@ import re
 from api.serializers.datetime import isoformat_or_none
 from content.models import CohortEnrollment, CourseAccess
 from integrations.services.maven import (
-    SLACK_NOT_IN_WORKSPACE_NOTE,
+    SLACK_JOIN_LINK_DELIVERED_NOTE,
+    SLACK_JOIN_LINK_SUPPRESSED_NOTE,
+    SLACK_JOIN_LINK_WELCOME_FAILED_NOTE,
     STEP_NAMES,
     MavenUnknownCohortError,
     MavenUnknownCourseError,
@@ -20,7 +22,11 @@ from integrations.services.maven_attention import (
 _SAFE_EXCEPTION_CLASS = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]{0,254}(?:Error|Exception|DoesNotExist)$"
 )
-_SAFE_CONTROLLED_REASONS = {SLACK_NOT_IN_WORKSPACE_NOTE}
+_SAFE_CONTROLLED_REASONS = {
+    SLACK_JOIN_LINK_DELIVERED_NOTE,
+    SLACK_JOIN_LINK_SUPPRESSED_NOTE,
+    SLACK_JOIN_LINK_WELCOME_FAILED_NOTE,
+}
 
 
 def serialize_maven_step_error(value):

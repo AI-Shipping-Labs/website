@@ -20,9 +20,6 @@ from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
 SECRET = "notification-test-secret"
-# ``_invite_to_slack`` returns (step_status, note); the enrollee joined the
-# community channels (issue #1565).
-SLACK_ADDED = (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
 
 
 def configure(**values):
@@ -36,10 +33,6 @@ def configure(**values):
     clear_config_cache()
 
 
-@patch(
-    "integrations.services.maven._invite_to_slack",
-    lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
-)
 @patch("integrations.services.maven._send_welcome", lambda user, course, cohort, actions: actions.append("welcome"))
 class MavenEnrollmentNotificationTest(TestCase):
     def setUp(self):
@@ -204,9 +197,6 @@ class MavenEnrollmentNotificationTest(TestCase):
             "community.services.staff_notifications._send_staff_maven_enrollment_notification",
             side_effect=[RuntimeError("mail down"), None],
         ) as send, patch(
-            "integrations.services.maven._invite_to_slack",
-            return_value=SLACK_ADDED,
-        ) as invite, patch(
             "integrations.services.maven._send_welcome"
         ) as welcome:
             self.post(email="retry@example.com")
@@ -224,8 +214,11 @@ class MavenEnrollmentNotificationTest(TestCase):
         self.assertIsNotNone(event.notification_completed_at)
         self.assertEqual(grant.expires_at, original_expiry)
         self.assertEqual(send.call_count, 2)
-        self.assertEqual(invite.call_count, 1)
         self.assertEqual(welcome.call_count, 1)
+        # Issue #1665: slack mirrors the (mocked, successful) welcome — no
+        # provider call, and never repeated once it resolves.
+        self.assertEqual(event.slack_status, event.STEP_SUCCEEDED)
+        self.assertEqual(event.slack_attempts, 1)
 
     def test_one_success_completes_step_and_missing_destinations_skip(self):
         configure(
@@ -293,9 +286,6 @@ class MavenEnrollmentNotificationTest(TestCase):
         with patch(
             "community.services.staff_notifications._send_staff_maven_enrollment_notification"
         ) as send, patch(
-            "integrations.services.maven._invite_to_slack",
-            return_value=SLACK_ADDED,
-        ) as invite, patch(
             "integrations.services.maven._send_welcome"
         ) as welcome:
             response = self.client.post(
@@ -308,7 +298,6 @@ class MavenEnrollmentNotificationTest(TestCase):
         event.refresh_from_db()
         self.assertEqual(event.notification_status, event.STEP_SUCCEEDED)
         send.assert_called_once()
-        invite.assert_not_called()
         welcome.assert_not_called()
 
     def test_notice_reports_later_retained_entitlement_expiry(self):

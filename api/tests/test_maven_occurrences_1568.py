@@ -17,7 +17,7 @@ from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import (
     MAX_STEP_ATTEMPTS,
     RUNNING_STEP_LEASE,
-    SLACK_NOT_IN_WORKSPACE_NOTE,
+    SLACK_JOIN_LINK_SUPPRESSED_NOTE,
     STEP_NAMES,
 )
 from payments.models import Tier
@@ -430,7 +430,7 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
                 "provider-private-1568 legacy-private-1568@example.com"
             ),
             slack_status=MavenEnrollmentEvent.STEP_SKIPPED,
-            slack_error=SLACK_NOT_IN_WORKSPACE_NOTE,
+            slack_error=SLACK_JOIN_LINK_SUPPRESSED_NOTE,
         )
         body = self.client.get(self.detail_url(occurrence), **self.auth()).json()
         self.assertEqual(
@@ -471,7 +471,7 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
         self.assertEqual(notification["last_error"], "redacted")
         self.assertTrue(notification["error_redacted"])
         slack = steps_by_name["slack"]
-        self.assertEqual(slack["last_error"], SLACK_NOT_IN_WORKSPACE_NOTE)
+        self.assertEqual(slack["last_error"], SLACK_JOIN_LINK_SUPPRESSED_NOTE)
         self.assertFalse(slack["error_redacted"])
         self.assertEqual(steps_by_name["welcome"]["last_error"], "")
         self.assertFalse(steps_by_name["welcome"]["error_redacted"])
@@ -595,10 +595,13 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
     def test_each_allowed_step_uses_its_provider_once(self):
         for index, step in enumerate(STEP_NAMES):
             with self.subTest(step=step):
-                occurrence = self._all_completed_event(
-                    f"allowed-{index}",
-                    **{f"{step}_status": MavenEnrollmentEvent.STEP_PENDING},
-                )
+                fields = {f"{step}_status": MavenEnrollmentEvent.STEP_PENDING}
+                if step == "slack":
+                    # Issue #1665: ``slack`` calls no provider — it mirrors
+                    # ``welcome_status``, which must be terminal-succeeded
+                    # here for the retry to resolve to "succeeded" below.
+                    fields["welcome_status"] = MavenEnrollmentEvent.STEP_SUCCEEDED
+                occurrence = self._all_completed_event(f"allowed-{index}", **fields)
                 calls = []
                 with ExitStack() as stack:
                     stack.enter_context(
@@ -627,15 +630,6 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
                     )
                     stack.enter_context(
                         patch(
-                            "integrations.services.maven._invite_to_slack",
-                            side_effect=lambda *args, **kwargs: (
-                                calls.append("slack")
-                                or (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
-                            ),
-                        )
-                    )
-                    stack.enter_context(
-                        patch(
                             "integrations.services.maven._send_welcome",
                             side_effect=lambda *args, **kwargs: calls.append("welcome"),
                         )
@@ -652,7 +646,9 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
                 self.assertEqual(response.json()["retry"]["outcome"], "succeeded")
                 occurrence.refresh_from_db()
                 self.assertEqual(getattr(occurrence, f"{step}_attempts"), 1)
-                self.assertEqual(calls, [step])
+                # ``slack`` makes no provider call of its own — it mirrors
+                # the already-terminal ``welcome_status`` set above.
+                self.assertEqual(calls, [] if step == "slack" else [step])
 
     def test_controlled_skip_and_caught_provider_failure_are_truthful_200s(self):
         self.member.email_preferences = {"maven_emails": False}
@@ -730,6 +726,34 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
             3,
         )
 
+    def test_retrying_slack_before_welcome_resolves_is_a_welcome_pending_409(self):
+        # Issue #1665: the operator API must not consume an attempt or
+        # change slack_status when slack is retried before its mirrored
+        # welcome step has resolved, and it must say so distinctly from
+        # the other 409 reasons.
+        occurrence = self._all_completed_event(
+            "welcome-pending",
+            slack_status=MavenEnrollmentEvent.STEP_PENDING,
+            welcome_status=MavenEnrollmentEvent.STEP_PENDING,
+        )
+        response = self.client.post(
+            self.retry_url(occurrence, "slack"), **self.auth()
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "maven_step_welcome_pending")
+        self.assertEqual(response.json()["details"]["status"], "pending")
+        self.assertEqual(response.json()["details"]["attempts"], 0)
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.slack_status, MavenEnrollmentEvent.STEP_PENDING)
+        self.assertEqual(occurrence.slack_attempts, 0)
+
+        with patch("integrations.services.maven._send_welcome"):
+            self.client.post(self.retry_url(occurrence, "welcome"), **self.auth())
+        resumed = self.client.post(
+            self.retry_url(occurrence, "slack"), **self.auth()
+        )
+        self.assertEqual(resumed.json()["retry"]["outcome"], "succeeded")
+
     def test_successful_override_resumes_only_eligible_downstream_in_order(self):
         occurrence = self.event(
             "override-downstream",
@@ -751,7 +775,7 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
         ), patch(
             "community.services.staff_notifications.notify_maven_enrollment",
             side_effect=lambda *args, **kwargs: calls.append("notification") or True,
-        ), patch("integrations.services.maven._invite_to_slack") as slack, patch(
+        ), patch(
             "integrations.services.maven._send_welcome",
             side_effect=lambda *args, **kwargs: calls.append("welcome"),
         ):
@@ -760,7 +784,6 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
             )
         self.assertEqual(response.json()["retry"]["outcome"], "succeeded")
         self.assertEqual(calls, ["override", "notification", "welcome"])
-        slack.assert_not_called()
         occurrence.refresh_from_db()
         self.assertEqual(occurrence.override_attempts, MAX_STEP_ATTEMPTS + 1)
         self.assertEqual(occurrence.notification_attempts, 1)
@@ -781,7 +804,7 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
             side_effect=RuntimeError("provider-private-1568"),
         ), patch(
             "community.services.staff_notifications.notify_maven_enrollment"
-        ) as notify, patch("integrations.services.maven._invite_to_slack") as slack, patch(
+        ) as notify, patch(
             "integrations.services.maven._send_welcome"
         ) as welcome:
             response = self.client.post(
@@ -789,8 +812,10 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
             )
         self.assertEqual(response.json()["retry"]["outcome"], "failed")
         notify.assert_not_called()
-        slack.assert_not_called()
         welcome.assert_not_called()
+        occurrence.refresh_from_db()
+        self.assertEqual(occurrence.slack_status, MavenEnrollmentEvent.STEP_PENDING)
+        self.assertEqual(occurrence.slack_attempts, 0)
 
     def test_invalid_step_and_missing_occurrence_have_no_retry_or_audit(self):
         occurrence = self._all_completed_event(

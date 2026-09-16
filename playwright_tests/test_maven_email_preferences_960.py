@@ -24,9 +24,6 @@ def _user(email):
     # tier fixture before exercising the real Maven import path.
     ensure_tiers()
     with patch(
-        "integrations.services.maven._invite_to_slack",
-        return_value=("succeeded", ""),
-    ), patch(
         "integrations.services.maven._send_welcome"
     ):
         result = handle_maven_event(

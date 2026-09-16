@@ -28,10 +28,7 @@ def _enrollee(email):
     from integrations.services.maven import handle_maven_event
 
     ensure_tiers()
-    with patch(
-        "integrations.services.maven._invite_to_slack",
-        return_value=("succeeded", ""),
-    ), patch("integrations.services.maven._send_welcome"):
+    with patch("integrations.services.maven._send_welcome"):
         result = handle_maven_event(
             {
                 "event": "user_cohort.enrolled",

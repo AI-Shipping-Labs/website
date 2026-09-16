@@ -22,7 +22,7 @@
 <div class="rounded-lg border border-border bg-card p-4">
   <div class="flex items-center justify-between"><h2 class="font-medium capitalize">{{ step.name }}</h2><span>{% studio_status_badge step.status step.status|title %}</span></div>
   {% if step.attention_reason == 'exhausted' %}<p class="mt-2 text-sm text-red-700 dark:text-red-300" data-testid="maven-step-attention-{{ step.name }}">Automatic retries are exhausted. Fix the underlying cause, then use Retry safely.</p>{% elif step.attention_reason == 'stalled' %}<p class="mt-2 text-sm text-amber-700 dark:text-amber-300" data-testid="maven-step-attention-{{ step.name }}">Automatic recovery has been stalled for at least 15 minutes. Fix the underlying cause, then use Retry safely.</p>{% endif %}
-  <p class="mt-2 text-xs text-muted-foreground" data-testid="maven-step-note-{{ step.name }}">Attempts: {{ step.attempts }}{% if step.error %} &middot; {% if step.status == 'skipped' %}Reason{% else %}Last error{% endif %}: {{ step.error }}{% endif %}</p>
+  <p class="mt-2 text-xs text-muted-foreground" data-testid="maven-step-note-{{ step.name }}">Attempts: {{ step.attempts }}{% if step.error %} &middot; {% if step.status == 'skipped' %}Reason{% elif step.status == 'succeeded' %}Note{% else %}Last error{% endif %}: {{ step.error }}{% endif %}</p>
   <p class="mt-1 text-xs text-muted-foreground">
     Last attempted: {{ step.attempted_at|default:'Never' }}
     {% if step.completed_at %}&middot; Completed: {{ step.completed_at }}{% endif %}

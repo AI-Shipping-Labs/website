@@ -181,13 +181,12 @@ class MavenTerminalWebhookTest(TestCase):
             self.assertNotIn(private_value, output)
         self.assertNotIn(occurrence.override_error, acknowledgement)
 
-    @patch(
-        "integrations.services.maven._invite_to_slack",
-        return_value=(MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
-    )
     def test_exhausted_enrollment_delivery_is_acknowledged_without_repetition(
-        self, _invite
+        self,
     ):
+        # Issue #1665: the slack step mirrors welcome_status instead of
+        # calling the Slack API, so a persistently failing welcome exhausts
+        # both welcome and slack together — no Slack mock is needed.
         Tier.objects.get_or_create(slug="main", defaults={"name": "Main", "level": 20})
         with patch(
             "integrations.services.maven._send_welcome",

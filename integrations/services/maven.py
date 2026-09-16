@@ -36,7 +36,7 @@ EVENT_REMOVED = "user_cohort.removed"
 MAX_STEP_ATTEMPTS = 3
 MAX_DATABASE_CONTENTION_RETRIES = 10
 RUNNING_STEP_LEASE = timedelta(minutes=15)
-STEP_NAMES = ("override", "enrollment", "notification", "slack", "welcome", "removal")
+STEP_NAMES = ("override", "enrollment", "notification", "welcome", "slack", "removal")
 _SQLITE_DELIVERY_LOCK = threading.Lock()
 
 
@@ -517,57 +517,29 @@ def _is_active_community_member(user):
     return bool(getattr(user, "slack_member", False) and get_user_level(user) >= LEVEL_MAIN)
 
 
-# Ledger note recorded on the Maven ``slack`` step when the enrollee is not
-# in the Slack workspace. Rendered verbatim on /studio/maven-events/<pk>/ so
-# a person debugging "why did they never reach Slack?" reaches the right
-# conclusion from the page alone.
-SLACK_NOT_IN_WORKSPACE_NOTE = (
-    "Enrollee is not in the Slack workspace; the join link was delivered in "
-    "the welcome email."
+# Issue #1665: the Maven ``slack`` step no longer calls the Slack API
+# (``users.lookupByEmail`` / ``conversations.invite`` failed deterministically
+# for 15 of 17 buildcamp enrollees — not a transient fault worth retrying
+# harder). The workspace join link already lives in the ``maven_welcome``
+# email (``slack_join_url`` -> ``/community/slack`` -> ``SLACK_INVITE_URL``),
+# so the step is repurposed to mirror ``welcome_status`` instead: it records
+# that the link was (or was not) delivered rather than attempting a direct
+# invite. These three notes are rendered verbatim on
+# /studio/maven-events/<pk>/, so a person debugging "why didn't they reach
+# Slack?" reaches the right conclusion — check the welcome email, not a
+# Slack API error — from the page alone.
+SLACK_JOIN_LINK_DELIVERED_NOTE = (
+    "Join link delivered via the maven_welcome email; direct Slack invite "
+    "is not attempted for Maven enrollees."
 )
-
-# Ledger note when the enrollee IS in the workspace but joined no community
-# channel. Almost always an operator-fixable Slack configuration problem
-# (bot not in the channel, wrong channel id), so it is a retryable failure
-# rather than a silent success.
-SLACK_CHANNEL_JOIN_FAILED_NOTE = (
-    "Enrollee is in the Slack workspace but joined no community channel:"
+SLACK_JOIN_LINK_SUPPRESSED_NOTE = (
+    "Join link not delivered: welcome email suppressed by the enrollee's "
+    "maven_emails preference."
 )
-
-
-def _invite_to_slack(user, actions):
-    """Add the enrollee to Slack and report what actually happened.
-
-    Maven enrollees get exactly one email (``maven_welcome``), which now
-    carries the Slack join link, so the generic ``community_invite`` is
-    suppressed here.
-
-    Returns ``(step_status, note)``. ``succeeded`` requires that the member
-    actually joined at least one community channel — never merely that a
-    Slack user id resolved. When every channel add errored (the bot is not
-    in the channel, a channel id is wrong, or the bounded rate-limit retry
-    is exhausted) the step is ``failed`` with the channel errors in the
-    note, so it is visible in Studio and retried rather than recorded as a
-    delivery that never happened.
-    """
-    from community.services.slack import (
-        INVITE_ADDED_TO_CHANNELS,
-        INVITE_CHANNEL_JOIN_FAILED,
-        get_community_service,
-    )
-
-    result = get_community_service().invite(user, send_invite_email=False)
-    if result.outcome == INVITE_ADDED_TO_CHANNELS:
-        actions.append("Added to Slack community channels.")
-        return MavenEnrollmentEvent.STEP_SUCCEEDED, ""
-    if result.outcome == INVITE_CHANNEL_JOIN_FAILED:
-        note = f"{SLACK_CHANNEL_JOIN_FAILED_NOTE} {result.detail}".strip()
-        actions.append("Slack channel join failed; persisted for retry.")
-        return MavenEnrollmentEvent.STEP_FAILED, note[:255]
-    actions.append(
-        "Not in the Slack workspace; join link delivered in the welcome email."
-    )
-    return MavenEnrollmentEvent.STEP_SKIPPED, SLACK_NOT_IN_WORKSPACE_NOTE
+SLACK_JOIN_LINK_WELCOME_FAILED_NOTE = (
+    "Join link not delivered: the maven_welcome email failed to send. "
+    "Retry the welcome step, then retry slack."
+)
 
 
 def _staff_welcome_bcc():
@@ -658,8 +630,11 @@ def run_occurrence_steps(occurrence, *, step=None, force=False):
     if occurrence.override_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
         return actions
     # A failed or still-pending ``enrollment`` never blocks the other three —
-    # a course grant is independent of Slack/welcome eligibility.
-    for name in ("enrollment", "notification", "slack", "welcome"):
+    # a course grant is independent of Slack/welcome eligibility. ``welcome``
+    # runs before ``slack`` (#1665): the ``slack`` step now mirrors
+    # ``welcome_status`` rather than calling the Slack API, so the welcome
+    # outcome must exist before ``slack`` is evaluated.
+    for name in ("enrollment", "notification", "welcome", "slack"):
         _run_step(occurrence.pk, name, actions, force=force)
     return actions
 
@@ -746,6 +721,26 @@ def _run_step(pk, name, actions, *, force=False):
                     attempted=False,
                     reason="in_progress",
                 )
+        if name == "slack" and row.welcome_status in (
+            row.STEP_PENDING, row.STEP_RUNNING,
+        ):
+            # Issue #1665: ``slack`` mirrors ``welcome_status`` instead of
+            # calling the Slack API, and the ordinary occurrence loop always
+            # runs ``welcome`` first — so this is reachable only via a
+            # standalone Studio/API retry of ``slack`` issued before
+            # ``welcome`` has ever resolved. There is nothing to mirror yet,
+            # so the step declines the attempt entirely: no attempt is
+            # consumed (even under a forced retry) and ``slack_status`` is
+            # left untouched.
+            actions.append(
+                "Slack step deferred: the welcome step has not resolved yet."
+            )
+            return MavenStepRetryResult(
+                step=name,
+                outcome=status,
+                attempted=False,
+                reason="welcome_pending",
+            )
         if attempts >= MAX_STEP_ATTEMPTS and not force:
             actions.append(f"{name.title()} retry limit reached.")
             return MavenStepRetryResult(
@@ -799,18 +794,38 @@ def _run_step(pk, name, actions, *, force=False):
                 )
             actions.append("Sent staff enrollment heads-up.")
         elif name == "slack":
-            # ``skipped`` is "we correctly did nothing" — never ``succeeded``
-            # (nothing happened) and never ``failed`` (nothing went wrong, and
-            # a retry would only burn an attempt). ``failed`` is reserved for
-            # a real, retryable Slack problem.
-            slack_status, slack_note = _invite_to_slack(row.user, actions)
-            if slack_status != MavenEnrollmentEvent.STEP_SUCCEEDED:
-                _finish_step(pk, name, slack_status, slack_note)
-                return MavenStepRetryResult(
-                    step=name,
-                    outcome=slack_status,
-                    attempted=True,
+            # Issue #1665: no Slack API call. The step mirrors the
+            # just-resolved ``welcome_status`` — reached here only once it is
+            # terminal (see the early return above) — because the join link
+            # lives in the welcome email rather than a direct invite.
+            if row.welcome_status == MavenEnrollmentEvent.STEP_SUCCEEDED:
+                slack_status, slack_note = (
+                    MavenEnrollmentEvent.STEP_SUCCEEDED,
+                    SLACK_JOIN_LINK_DELIVERED_NOTE,
                 )
+                actions.append("Join link delivered via the maven_welcome email.")
+            elif row.welcome_status == MavenEnrollmentEvent.STEP_SKIPPED:
+                slack_status, slack_note = (
+                    MavenEnrollmentEvent.STEP_SKIPPED,
+                    SLACK_JOIN_LINK_SUPPRESSED_NOTE,
+                )
+                actions.append(
+                    "Join link not delivered: welcome email suppressed by preference."
+                )
+            else:
+                slack_status, slack_note = (
+                    MavenEnrollmentEvent.STEP_FAILED,
+                    SLACK_JOIN_LINK_WELCOME_FAILED_NOTE,
+                )
+                actions.append(
+                    "Join link not delivered: the welcome email failed to send."
+                )
+            _finish_step(pk, name, slack_status, slack_note)
+            return MavenStepRetryResult(
+                step=name,
+                outcome=slack_status,
+                attempted=True,
+            )
         elif name == "welcome":
             if not row.user.email_preferences.get("maven_emails", True):
                 _finish_step(pk, name, MavenEnrollmentEvent.STEP_SKIPPED, "")

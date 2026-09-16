@@ -120,13 +120,6 @@ class MavenWebhookAuthTest(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
-@patch(
-    "integrations.services.maven._invite_to_slack",
-    lambda user, actions: (
-        actions.append("slack"),
-        (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
-    )[1],
-)
 class MavenEnrolledTest(TestCase):
     def setUp(self):
         _enable()

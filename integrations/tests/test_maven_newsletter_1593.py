@@ -28,14 +28,13 @@ from email_app.package_mail import send_package_mail
 from email_app.services.campaign_audience import eligible_campaign_recipients
 from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
 from email_app.testing import StubSESClient
-from integrations.models import IntegrationSetting, MavenEnrollmentEvent
+from integrations.models import IntegrationSetting
 from integrations.services.maven import _welcome_context
 from payments.models import Tier
 
 User = get_user_model()
 
 SECRET = "maven-secret-1593"
-SLACK_ADDED = (MavenEnrollmentEvent.STEP_SUCCEEDED, "")
 
 
 def enable_maven():
@@ -86,10 +85,6 @@ class MavenWebhookMixin(TestCase):
         )
 
 
-@patch(
-    "integrations.services.maven._invite_to_slack",
-    lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
-)
 @patch("integrations.services.maven.send_package_mail")
 class VerifyAndSubscribeOptInTest(MavenWebhookMixin):
     def test_one_click_both_verifies_and_subscribes(self, package_mail):
@@ -342,10 +337,6 @@ class VerifyAndSubscribeTokenScopeTest(TestCase):
         self.assertFalse(user.email_preferences["newsletter"])
 
 
-@patch(
-    "integrations.services.maven._invite_to_slack",
-    lambda user, actions: (actions.append("slack"), SLACK_ADDED)[1],
-)
 @patch("integrations.services.maven.send_package_mail")
 class MavenCampaignAudienceTest(MavenWebhookMixin):
     def test_an_enrollee_who_never_opts_in_reaches_no_campaign_audience(

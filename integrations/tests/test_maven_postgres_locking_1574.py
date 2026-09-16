@@ -57,10 +57,6 @@ def _clear_config_cache():
 
 
 @tag("core", "postgresql")
-@patch(
-    "integrations.services.maven._invite_to_slack",
-    lambda user, actions: (MavenEnrollmentEvent.STEP_SUCCEEDED, ""),
-)
 class MavenStepLockPostgresTest(TestCase):
     def setUp(self):
         if connection.vendor != "postgresql":

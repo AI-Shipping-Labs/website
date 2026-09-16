@@ -14,6 +14,11 @@ Includes:
 from django.contrib.sitemaps import Sitemap
 from django.urls import reverse
 
+from community_base.knowledge_base.models import (
+    SECTION_DOCS,
+    SECTION_WIKI,
+    KnowledgeBasePage,
+)
 from content.models import (
     Article,
     Course,
@@ -168,6 +173,33 @@ class MarketingPageSitemap(Sitemap):
         return obj.get_absolute_url()
 
 
+class KnowledgeBaseSitemap(Sitemap):
+    """Sitemap for one knowledge base section's published pages (#1685)."""
+    changefreq = 'weekly'
+    priority = 0.6
+    section = ''
+
+    def items(self):
+        return KnowledgeBasePage.objects.filter(
+            section=self.section,
+            status='published',
+        ).order_by('slug')
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def location(self, obj):
+        return obj.get_absolute_url()
+
+
+class WikiPageSitemap(KnowledgeBaseSitemap):
+    section = SECTION_WIKI
+
+
+class DocsPageSitemap(KnowledgeBaseSitemap):
+    section = SECTION_DOCS
+
+
 class StaticViewSitemap(Sitemap):
     """Sitemap for static pages."""
     changefreq = 'monthly'
@@ -235,6 +267,8 @@ sitemaps = {
     'workshops': WorkshopSitemap,
     'workshop_pages': WorkshopPageSitemap,
     'marketing_pages': MarketingPageSitemap,
+    'wiki_pages': WikiPageSitemap,
+    'docs_pages': DocsPageSitemap,
     'tags': TagSitemap,
     'static': StaticViewSitemap,
 }

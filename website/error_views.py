@@ -14,10 +14,15 @@ Python: it must inspect the requested path, look up a ``Workshop`` row, and
 choose between a workshop-specific link, a generic workshops-catalog link,
 or no secondary link at all, all without ever issuing a redirect (the 404
 status and body are all this view controls; it never sets ``Location``).
+
+Taking over the view also takes over its template context, so the handler
+reproduces the ``exception``/``request_path`` keys Django's own
+``page_not_found`` supplies (see ``default_404_context``).
 """
 
 import copy
 import re
+from urllib.parse import quote
 
 from django.http import HttpResponseNotFound
 from django.template import loader
@@ -76,6 +81,43 @@ def _request_with_scrubbed_query_string(request):
     return scrubbed
 
 
+def default_404_context(request, exception):
+    """Return the context keys Django's own ``page_not_found`` view supplies.
+
+    Replacing Django's default 404 view replaced its template context too,
+    and that context is a contract: ``exception`` (the ``Http404``
+    message, which views raise as human-readable text like "This reader has
+    not started this book.") and ``request_path``. Tests and templates
+    across the site read them -- ``bookclub`` asserts on ``exception`` to
+    pin down *which* 404 a view raised -- so dropping them silently turned
+    an unrelated passing test into a ``KeyError`` (#1731).
+
+    The derivation mirrors ``django.views.defaults.page_not_found``: prefer
+    the exception's first argument when it is a string, otherwise fall back
+    to the exception class name (``Resolver404`` carries a dict there, not a
+    message). Neither key is rendered by ``templates/404.html``: an
+    ``Http404`` message can name a private object, and 404s that exist to
+    avoid disclosing one (#1550) must keep saying nothing.
+    """
+    if exception is None:
+        # Django always passes the exception, but ``handler404`` keeps a
+        # default so it stays directly callable; ``NoneType`` would be a
+        # nonsense message, the HTTP reason phrase is not.
+        return {'request_path': quote(request.path), 'exception': 'Not Found'}
+    exception_repr = exception.__class__.__name__
+    try:
+        message = exception.args[0]
+    except (AttributeError, IndexError):
+        pass
+    else:
+        if isinstance(message, str):
+            exception_repr = message
+    return {
+        'request_path': quote(request.path),
+        'exception': exception_repr,
+    }
+
+
 def handler404(request, exception=None):
     """Render the friendly 404 page as a genuine, non-redirecting 404.
 
@@ -84,8 +126,8 @@ def handler404(request, exception=None):
     here too, letting ``templates/404.html`` extend ``base.html`` and
     include the normal header/footer.
     """
+    context = default_404_context(request, exception)
     secondary_cta = resolve_workshop_secondary_cta(request.path)
-    context = {}
     if secondary_cta is not None:
         context['secondary_cta_label'], context['secondary_cta_url'] = (
             secondary_cta

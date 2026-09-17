@@ -131,11 +131,18 @@ class TestArbitraryDeadUrlShowsGenericHomepageCta:
         assert "We couldn't find that page" in page.content()
 
         # No workshop-context link fabricated for an unrelated dead path.
-        assert page.locator('a[href="/workshops"]').count() == 0
+        # Scoped to the 404 card: the site chrome this page deliberately
+        # keeps (issue #1724 asked for "a path back into the site") links
+        # to /workshops from the header nav and the footer on every page,
+        # so a document-wide count can never distinguish a fabricated CTA
+        # from ordinary navigation. The card is where a fabricated
+        # secondary CTA would render, and the homepage CTA is the only
+        # link that belongs in it.
+        not_found_card = page.locator('[data-testid="page-not-found"]')
+        assert not_found_card.locator('a[href="/workshops"]').count() == 0
+        assert not_found_card.locator('a').count() == 1
 
-        home_cta = page.locator(
-            '[data-testid="page-not-found"] a', has_text='Go to homepage',
-        )
+        home_cta = not_found_card.locator('a', has_text='Go to homepage')
         assert home_cta.count() == 1
 
         home_cta.first.click()

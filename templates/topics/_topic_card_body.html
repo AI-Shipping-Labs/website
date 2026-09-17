@@ -1,0 +1,12 @@
+{% comment %}
+Issue #1688 - topic card body (title onward). Rendered inside the shared
+content/_content_card.html anchor, after the header row, via
+card_body_template. Topic pages have no media or tags, so this is the
+minimal body: title, then the page summary.
+{% endcomment %}
+<h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">
+  {{ page.title }}
+</h2>
+{% if page.summary %}
+<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ page.summary }}</p>
+{% endif %}

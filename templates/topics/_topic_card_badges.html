@@ -1,0 +1,7 @@
+{% comment %}
+Issue #1688 - badge cluster for the topics grid cards. Every topic is a
+member surface, so the card header shows the canonical access badge
+(Basic or above) from the member_badges owner.
+{% endcomment %}
+{% load member_badges %}
+{% member_access_badge page.required_level testid='topic-card-access-badge' %}

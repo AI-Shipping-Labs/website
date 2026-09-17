@@ -30,6 +30,9 @@ REQUIRED_FIELDS = {
     # convention still applies to wiki/ and docs/ markdown.
     'wiki_pages': ['content_id', 'title'],
     'docs_pages': ['content_id', 'title'],
+    # Member wiki topic pages (issue #1688): the private wiki repo carries
+    # no content_id frontmatter; the file stem is the identity.
+    'wiki_topics': ['title'],
 }
 
 INSTRUCTOR_ID_RE = re.compile(r'^[a-z0-9-]+$')

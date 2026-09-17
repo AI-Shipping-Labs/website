@@ -1671,6 +1671,22 @@ def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patte
     return seen_paths, seen_content_ids
 
 
+def _count_real_errors(errors, start_index):
+    """Count genuine errors recorded in ``errors`` from ``start_index`` on.
+
+    Issue #1721 severity fix: entries appended to ``stats['errors']`` are
+    not all errors. Some carry ``severity: 'info'`` -- an informational
+    note (e.g. homework sync skipped because no cohort resolves, or a
+    redundant-but-harmless YAML key combination) that must never suppress
+    the stale-content sweeps. Anything else counts as a real error,
+    INCLUDING an entry with no ``severity`` key at all: that is exactly
+    the shape the original #1721 incident's 12 validation errors had, and
+    the gate exists to stop a sync from reaping content while any of
+    those are unresolved. Do not assume every entry carries the key.
+    """
+    return sum(1 for e in errors[start_index:] if e.get('severity', 'info') != 'info')
+
+
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,
                          known_images=None, course_ignore_patterns=None):
     """Sync modules (and, since issue #1674, submodules) and units for a course.
@@ -1804,7 +1820,9 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
     # incomplete picture is what deleted 31 live units in the #1721
     # incident. Nothing is trusted to reap content while any error from
     # this walk is unresolved.
-    walk_has_errors = len(stats['errors']) > unit_sync_state['errors_at_walk_start']
+    walk_has_errors = _count_real_errors(
+        stats['errors'], unit_sync_state['errors_at_walk_start'],
+    ) > 0
 
     if not walk_has_errors:
         # Issue #1681: course-end fallback sweep, BEFORE sweeping stale
@@ -1830,7 +1848,9 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         stale_modules.delete()
         stats['deleted'] += deleted_count
     else:
-        error_count = len(stats['errors']) - unit_sync_state['errors_at_walk_start']
+        error_count = _count_real_errors(
+            stats['errors'], unit_sync_state['errors_at_walk_start'],
+        )
         stats['errors'].append({
             'file': course.slug,
             'error': (
@@ -2415,7 +2435,9 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     # accumulators this sweep — and the course-end fallback sweep below —
     # reason from; sweeping on an error-degraded picture is exactly what
     # deleted 31 live units in the #1721 incident.
-    walk_has_errors = len(stats['errors']) > unit_sync_state['errors_at_walk_start']
+    walk_has_errors = _count_real_errors(
+        stats['errors'], unit_sync_state['errors_at_walk_start'],
+    ) > 0
     if unit_sync_state['precomputed_seen_paths'] is not None and not walk_has_errors:
         stale_units = Unit.objects.filter(
             module=module,

@@ -615,6 +615,109 @@ class WalkErrorSuppressesSweepsTest(DirectSyncFixtureBase):
         )
 
 
+class SeverityAwareWalkErrorGateTest(DirectSyncFixtureBase):
+    """Follow-up to #1721: entries appended to ``stats['errors']`` are not
+    all errors. Some carry ``severity: 'info'`` -- informational notes
+    (e.g. a redundant ``access:``/``is_preview:`` combo on a unit) that
+    must never suppress the sweeps on their own. A genuine error --
+    including one with no ``severity`` key at all, the shape the original
+    #1721 incident's errors had -- must still suppress them, even when an
+    info note was also recorded in the same walk.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self._write_course_yaml()
+
+    def _build_baseline(self):
+        c_stay, c_gone = str(uuid.uuid4()), str(uuid.uuid4())
+        self._write_yaml('01-keep/module.yaml', {'title': 'Keep'})
+        self._write_markdown(
+            '01-keep/01-stay.md', {'title': 'Stay', 'content_id': c_stay}, 'Body.\n',
+        )
+        self._write_markdown(
+            '01-keep/02-gone.md', {'title': 'Gone', 'content_id': c_gone}, 'Body.\n',
+        )
+        self._write_yaml('02-stale-module/module.yaml', {'title': 'Stale module'})
+        self._write_markdown(
+            '02-stale-module/01-lesson.md', {'title': 'Only lesson'}, 'Body.\n',
+        )
+        return c_stay, c_gone
+
+    def test_info_note_alone_does_not_suppress_the_sweeps(self):
+        c_stay, c_gone = self._build_baseline()
+        stats = self._sync()
+        self.assertEqual(stats['errors'], [])
+
+        self._remove('01-keep/02-gone.md')
+        self._rmtree('02-stale-module')
+        # Redundant access:/is_preview: combo -- records an info-severity
+        # note, not a real error (courses.py, issue #465 redundancy check).
+        self._write_markdown(
+            '01-keep/03-note.md',
+            {'title': 'Note', 'access': 'open', 'is_preview': True},
+            'Body.\n',
+        )
+
+        stats = self._sync()
+
+        self.assertTrue(stats['errors'])
+        self.assertFalse(
+            any(e.get('severity') != 'info' for e in stats['errors']),
+        )
+
+        # Both course-end sweeps still ran despite the info note.
+        self.assertFalse(Unit.objects.filter(content_id=c_gone).exists())
+        self.assertTrue(Unit.objects.filter(content_id=c_stay).exists())
+        self.assertFalse(
+            Module.objects.filter(
+                course__slug='buildcamp-1721', slug='stale-module',
+            ).exists(),
+        )
+        self.assertGreater(stats['deleted'], 0)
+
+    def test_real_error_still_suppresses_sweeps_alongside_an_info_note(self):
+        c_stay, c_gone = self._build_baseline()
+        self._write_yaml('00-topics-a/module.yaml', {'title': 'Topics A'})
+        self._write_markdown(
+            '00-topics-a/01-lesson.md', {'title': 'Topics A lesson'}, 'Body.\n',
+        )
+        self._write_yaml('00-topics-b/module.yaml', {'title': 'Topics B'})
+        self._write_markdown(
+            '00-topics-b/01-lesson.md', {'title': 'Topics B lesson'}, 'Body.\n',
+        )
+        stats = self._sync()
+        self.assertEqual(stats['errors'], [])
+
+        self._remove('01-keep/02-gone.md')
+        self._rmtree('02-stale-module')
+        self._write_markdown(
+            '01-keep/03-note.md',
+            {'title': 'Note', 'access': 'open', 'is_preview': True},
+            'Body.\n',
+        )
+        # Real error: a slug collision between two top-level modules. No
+        # ``severity`` key on this entry -- the shape the original #1721
+        # incident's errors had.
+        self._write_yaml(
+            '00-topics-b/module.yaml',
+            {'title': 'Topics B', 'slug': 'topics-a'},
+        )
+
+        stats = self._sync()
+
+        self.assertTrue(
+            any(e.get('severity') != 'info' for e in stats['errors']),
+        )
+        self.assertEqual(stats['deleted'], 0)
+        self.assertTrue(Unit.objects.filter(content_id=c_gone).exists())
+        self.assertTrue(
+            Module.objects.filter(
+                course__slug='buildcamp-1721', slug='stale-module',
+            ).exists(),
+        )
+
+
 class LeafToParentDropStillWorksTest(DirectSyncFixtureBase):
     """Scenario 10: re-affirms the pre-existing #1674/#1681 leaf-to
     -parent transition where old direct units are genuinely dropped (no

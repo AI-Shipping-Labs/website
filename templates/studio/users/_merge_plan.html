@@ -47,6 +47,10 @@ the post-merge result. Expects ``plan`` in context.
         <dt class="text-muted-foreground">Operator tokens deleted</dt>
         <dd class="text-foreground">{{ plan.credentials.operator_tokens_deleted }}</dd>
       </div>
+      <div class="flex justify-between gap-4" data-testid="merge-plan-package-api-keys-revoked">
+        <dt class="text-muted-foreground">API keys revoked (community-base)</dt>
+        <dd class="text-foreground">{{ plan.credentials.package_api_keys_revoked }}</dd>
+      </div>
     </dl>
   </div>
 

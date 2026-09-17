@@ -2,12 +2,13 @@
 
 Consolidate a *secondary* (merged-in) ``accounts.User`` into a *canonical*
 (surviving) one: repoint eligible owned rows, revoke the secondary's member API
-keys, delete its operator tokens, reconcile scalar profile / entitlement fields
-by precedence, record the secondary email as an ``EmailAlias`` of canonical (so
-future relay / billing webhooks route correctly via #840a's resolver), then
-deactivate the secondary login. Irreversible data movement plus billing, so the
-whole thing runs inside one ``transaction.atomic()`` and ships a mandatory
-``dry_run`` plan as the safety net.
+keys and community-base API keys, delete its operator tokens, reconcile scalar
+profile / entitlement fields by precedence, record the secondary email as an
+``EmailAlias`` of canonical (so future relay / billing webhooks route correctly
+via #840a's resolver), then deactivate the secondary login. Irreversible data
+movement plus billing, so the whole thing runs inside one
+``transaction.atomic()`` and ships a mandatory ``dry_run`` plan as the safety
+net.
 
 Design notes
 ------------
@@ -99,6 +100,7 @@ class MergePlan:
         self.credentials = {
             "member_api_keys_revoked": 0,
             "operator_tokens_deleted": 0,
+            "package_api_keys_revoked": 0,
         }
         self.reconciled = {}  # field -> change summary
         self.tier_overrides = {"deactivated": [], "kept_active": None}
@@ -387,6 +389,31 @@ def _strategy_member_api_key(
     plan.credentials["member_api_keys_revoked"] = revoked
 
 
+def _strategy_package_api_key(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Revoke the secondary's community-base API keys instead of moving them.
+
+    ``community_base.api.APIKey`` is a credential, so it follows the
+    ``MemberAPIKey`` precedent exactly (issue #1736): revoke in place and leave
+    the row attached to the retired identity as durable security history.
+    Without this strategy the relation is a plain repointable FK and the
+    generic branch would hand a LIVE secret to the surviving account --
+    ``APIKey.authenticate`` filters ``user__is_active=True``, so the repoint is
+    precisely what keeps the old secret working under a new identity.
+
+    The revocation MUST stay a queryset ``update()``: ``APIKey.save()`` calls
+    ``full_clean()`` and ``APIKey.clean()`` rejects a ``kind="staff"`` row whose
+    owner is not ``is_staff``. A merge has to revoke such a legacy row, not
+    raise on it.
+    """
+    revoked = related_model.objects.filter(
+        **{field_name: secondary},
+        revoked_at__isnull=True,
+    ).update(revoked_at=timezone.now())
+    plan.credentials["package_api_keys_revoked"] = revoked
+
+
 def _strategy_operator_token(
     plan, related_model, field_name, canonical, secondary
 ):
@@ -419,11 +446,19 @@ def _strategy_membership(
 # and -- critically -- models whose ownership cannot be treated as a generic
 # move: allauth ``EmailAddress``'s per-user ``primary`` STATE invariant,
 # ``EmailLog``'s campaign-history index, and the non-transferable credential
-# state in ``MemberAPIKey`` / ``Token``. See ``_unique_keys_for`` for the general
-# state-flag classification that backstops anything not enumerated here.
+# state in ``MemberAPIKey`` / ``Token`` / ``cb_api.APIKey``. See
+# ``_unique_keys_for`` for the general state-flag classification that backstops
+# anything not enumerated here.
+#
+# Every credential model reachable from ``User`` by a plain reverse FK MUST be
+# listed here -- a plain FK falls through to the generic repoint branch and
+# would transfer a live secret to the surviving account. The guard test in
+# ``accounts/tests/test_merge_cb_api_key_1736.py`` enforces that for every
+# related model carrying a concrete ``key_hash`` field.
 _SPECIAL_STRATEGIES = {
     ("accounts.MemberAPIKey", "user"): _strategy_member_api_key,
     ("accounts.Token", "user"): _strategy_operator_token,
+    ("cb_api.APIKey", "user"): _strategy_package_api_key,
     ("payments.Membership", "user"): _strategy_membership,
     ("analytics.UserAttribution", "user"): _strategy_user_attribution,
     ("crm.CRMRecord", "user"): _strategy_crm_record,

@@ -17,6 +17,7 @@ from datetime import date
 from unittest import mock
 
 from allauth.account.models import EmailAddress
+from community_base.api.models import APIKey
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
@@ -241,7 +242,11 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertFalse(body["already_merged"])
         self.assertEqual(
             body["credentials"],
-            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+            {
+                "member_api_keys_revoked": 1,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 0,
+            },
         )
 
         active_key.refresh_from_db()
@@ -299,6 +304,7 @@ class CredentialLifecycleTest(UserMergeTestBase):
         expected_credentials = {
             "member_api_keys_revoked": 2,
             "operator_tokens_deleted": 2,
+            "package_api_keys_revoked": 0,
         }
         self.assertEqual(body["credentials"], expected_credentials)
 
@@ -347,7 +353,11 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertFalse(body["already_merged"])
         self.assertEqual(
             body["credentials"],
-            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 1},
+            {
+                "member_api_keys_revoked": 0,
+                "operator_tokens_deleted": 1,
+                "package_api_keys_revoked": 0,
+            },
         )
         self.assertFalse(Token.objects.filter(pk=operator_token.pk).exists())
         self.assertIsNone(Token.authenticate(operator_plaintext))
@@ -396,7 +406,11 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertFalse(body["already_merged"])
         self.assertEqual(
             body["credentials"],
-            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 1},
+            {
+                "member_api_keys_revoked": 1,
+                "operator_tokens_deleted": 1,
+                "package_api_keys_revoked": 0,
+            },
         )
         moved_models = {entry["model"] for entry in body["moved"]}
         self.assertNotIn("accounts.MemberAPIKey", moved_models)
@@ -456,6 +470,7 @@ class CredentialLifecycleTest(UserMergeTestBase):
         expected_credentials = {
             "member_api_keys_revoked": 1,
             "operator_tokens_deleted": 1,
+            "package_api_keys_revoked": 0,
         }
         body = response.json()
         self.assertEqual(body["credentials"], expected_credentials)
@@ -521,6 +536,71 @@ class CredentialLifecycleTest(UserMergeTestBase):
         self.assertFalse(
             CommunityAuditLog.objects.filter(action="merge_accounts").exists()
         )
+
+
+    def test_package_api_key_counter_is_reported_on_every_response_path(self):
+        """Dry run, real merge, and the already-merged no-op agree (#1736)."""
+        canonical, secondary = self._make_pair()
+        canonical_key, canonical_plaintext = APIKey.create_for_user(
+            user=canonical,
+            name="survivor key",
+            scopes=["users.read"],
+            kind=APIKey.Kind.MEMBER,
+        )
+        secondary_key, secondary_plaintext = APIKey.create_for_user(
+            user=secondary,
+            name="dupe key",
+            scopes=["users.read"],
+            kind=APIKey.Kind.MEMBER,
+        )
+        payload = {
+            "canonical_email": "keep@test.com",
+            "merge_email": "dupe@test.com",
+        }
+
+        dry = self._post({**payload, "dry_run": True}).json()
+        self.assertEqual(
+            dry["credentials"],
+            {
+                "member_api_keys_revoked": 0,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 1,
+            },
+        )
+        secondary_key.refresh_from_db()
+        self.assertIsNone(secondary_key.revoked_at)
+
+        real = self._post(payload).json()
+        self.assertEqual(
+            real["credentials"],
+            {
+                "member_api_keys_revoked": 0,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 1,
+            },
+        )
+        self.assertNotIn(
+            APIKey._meta.label, {entry["model"] for entry in real["moved"]}
+        )
+        secondary_key.refresh_from_db()
+        self.assertEqual(secondary_key.user_id, secondary.pk)
+        self.assertIsNotNone(secondary_key.revoked_at)
+        self.assertIsNone(APIKey.authenticate(secondary_plaintext))
+        self.assertEqual(
+            APIKey.authenticate(canonical_plaintext).pk, canonical_key.pk
+        )
+
+        no_op = self._post(payload).json()
+        self.assertTrue(no_op["already_merged"])
+        self.assertEqual(
+            set(no_op["credentials"]), set(real["credentials"])
+        )
+        self.assertEqual(no_op["credentials"]["package_api_keys_revoked"], 0)
+
+        audit = CommunityAuditLog.objects.filter(action="merge_accounts")
+        self.assertEqual(audit.count(), 1)
+        details = json.loads(audit.get().details)
+        self.assertEqual(details["credentials"]["package_api_keys_revoked"], 1)
 
 
 class AtomicityTest(UserMergeTestBase):
@@ -1168,7 +1248,11 @@ class IdempotentNoOpTest(UserMergeTestBase):
         self.assertTrue(second.json()["already_merged"])
         self.assertEqual(
             second.json()["credentials"],
-            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 0},
+            {
+                "member_api_keys_revoked": 0,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 0,
+            },
         )
         # No new audit row.
         self.assertEqual(

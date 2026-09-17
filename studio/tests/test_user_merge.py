@@ -7,6 +7,7 @@ no-op, that confirm runs the real merge on the previewed pair, the signed
 the friendly already-merged state, and the user-detail pre-fill.
 """
 
+from community_base.api.models import APIKey
 from django.contrib.auth import get_user_model
 from django.core import signing
 from django.test import TestCase
@@ -149,7 +150,11 @@ class PreviewIsNoOpTest(MergeUITestBase):
         )
         self.assertEqual(
             response.context["plan"]["credentials"],
-            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+            {
+                "member_api_keys_revoked": 1,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 0,
+            },
         )
         # Confirm form present for a clean merge.
         self.assertContains(response, 'data-testid="merge-confirm-submit"')
@@ -194,7 +199,11 @@ class ConfirmRealMergeTest(MergeUITestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context["result"]["credentials"],
-            {"member_api_keys_revoked": 1, "operator_tokens_deleted": 0},
+            {
+                "member_api_keys_revoked": 1,
+                "operator_tokens_deleted": 0,
+                "package_api_keys_revoked": 0,
+            },
         )
         self.assertContains(
             response,
@@ -345,7 +354,11 @@ class StaffMergeTest(MergeUITestBase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.context["result"]["credentials"],
-            {"member_api_keys_revoked": 0, "operator_tokens_deleted": 1},
+            {
+                "member_api_keys_revoked": 0,
+                "operator_tokens_deleted": 1,
+                "package_api_keys_revoked": 0,
+            },
         )
         self.assertContains(
             response,
@@ -464,3 +477,56 @@ class EntryPointsTest(MergeUITestBase):
         )
         self.assertEqual(response.context["canonical_email"], "keep@test.com")
         self.assertContains(response, 'value="keep@test.com"')
+
+
+class PackageApiKeyCredentialRowTest(MergeUITestBase):
+    """The operator is told a community-base API key is being killed (#1736)."""
+
+    PACKAGE_ROW_TEMPLATE = (
+        '<div class="flex justify-between gap-4" '
+        'data-testid="merge-plan-package-api-keys-revoked">'
+        '<dt class="text-muted-foreground">API keys revoked (community-base)</dt>'
+        '<dd class="text-foreground">{count}</dd>'
+        "</div>"
+    )
+
+    def _make_package_key(self, user, name):
+        return APIKey.create_for_user(
+            user=user,
+            name=name,
+            scopes=["users.read"],
+            kind=APIKey.Kind.MEMBER,
+        )
+
+    def test_preview_and_result_report_the_revoked_package_key_count(self):
+        self._login_staff()
+        canonical, secondary = self._make_pair()
+        _, canonical_plaintext = self._make_package_key(canonical, "survivor key")
+        secondary_key, secondary_plaintext = self._make_package_key(
+            secondary, "dupe key"
+        )
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+        self.assertInHTML(
+            self.PACKAGE_ROW_TEMPLATE.format(count=1),
+            preview.content.decode(),
+        )
+        self.assertEqual(
+            preview.context["plan"]["credentials"]["package_api_keys_revoked"], 1
+        )
+        # The credential is not presented as something that moves.
+        self.assertNotContains(preview, APIKey._meta.label)
+        # Preview is still a no-op.
+        secondary_key.refresh_from_db()
+        self.assertIsNone(secondary_key.revoked_at)
+
+        result = self._confirm(canonical.pk, secondary.pk)
+        self.assertInHTML(
+            self.PACKAGE_ROW_TEMPLATE.format(count=1),
+            result.content.decode(),
+        )
+        self.assertEqual(
+            result.context["result"]["credentials"]["package_api_keys_revoked"], 1
+        )
+        self.assertIsNone(APIKey.authenticate(secondary_plaintext))
+        self.assertIsNotNone(APIKey.authenticate(canonical_plaintext))

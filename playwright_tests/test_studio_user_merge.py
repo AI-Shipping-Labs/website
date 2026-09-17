@@ -31,6 +31,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -68,6 +69,30 @@ def _register_for_event(email, event_slug):
         event=event, user=User.objects.get(email=email)
     )
     connection.close()
+
+
+def _create_package_api_key(email, name):
+    """Give ``email`` a live community-base API key; return its plaintext."""
+    from community_base.api.models import APIKey
+
+    from accounts.models import User
+
+    _, plaintext = APIKey.create_for_user(
+        user=User.objects.get(email=email),
+        name=name,
+        scopes=["users.read"],
+        kind=APIKey.Kind.MEMBER,
+    )
+    connection.close()
+    return plaintext
+
+
+def _package_key_authenticates(plaintext):
+    from community_base.api.models import APIKey
+
+    authenticated = APIKey.authenticate(plaintext) is not None
+    connection.close()
+    return authenticated
 
 
 def _secondary_state(email):
@@ -331,6 +356,62 @@ class TestPreviewIsDryRun:
         assert has_alias is False
         assert _canonical_event_count("keep@test.com") == 0
         assert _canonical_event_count("dupe@test.com") == 1
+
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+class TestRevokedPackageApiKeyIsReported:
+    """The operator sees that a live community-base key dies with the dupe."""
+
+    @browser_journey
+    def test_preview_warns_then_confirm_kills_the_key(self, django_server, browser):
+        _ensure_tiers()
+        staff_email = "key-admin@test.com"
+        _create_staff_user(staff_email)
+        _clear_users_except_staff(staff_email)
+        _create_user("keep@test.com", tier_slug="free")
+        _create_user("dupe@test.com", tier_slug="free")
+        survivor_plaintext = _create_package_api_key("keep@test.com", "survivor key")
+        dupe_plaintext = _create_package_api_key("dupe@test.com", "dupe key")
+
+        context = _auth_context(browser, staff_email)
+        page = context.new_page()
+
+        page.goto(
+            f"{django_server}/studio/users/merge/",
+            wait_until="domcontentloaded",
+        )
+        _fill_merge_form_and_preview(page, "keep@test.com", "dupe@test.com")
+
+        assert page.locator('[data-testid="merge-preview"]').count() == 1
+        preview_row = page.locator(
+            '[data-testid="merge-plan-package-api-keys-revoked"]'
+        )
+        expect(preview_row).to_be_visible()
+        assert "API keys revoked (community-base)" in preview_row.inner_text()
+        assert preview_row.locator("dd").inner_text().strip() == "1"
+        # The credential is not presented as something that moves.
+        assert (
+            page.locator(
+                '[data-testid="merge-plan-moved-row"][data-model="cb_api.APIKey"]'
+            ).count()
+            == 0
+        )
+
+        page.once("dialog", lambda d: d.accept())
+        page.locator('[data-testid="merge-confirm-submit"]').click()
+        page.wait_for_load_state("domcontentloaded")
+
+        assert page.locator('[data-testid="merge-result-headline"]').count() == 1
+        result_row = page.locator(
+            '[data-testid="merge-plan-package-api-keys-revoked"]'
+        )
+        expect(result_row).to_be_visible()
+        assert result_row.locator("dd").inner_text().strip() == "1"
+
+        assert _package_key_authenticates(dupe_plaintext) is False
+        assert _package_key_authenticates(survivor_plaintext) is True
 
         context.close()
 

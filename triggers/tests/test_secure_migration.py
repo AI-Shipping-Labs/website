@@ -12,16 +12,16 @@ class SecureTriggerMigrationTest(TransactionTestCase):
         executor = MigrationExecutor(connection)
         latest_targets = executor.loader.graph.leaf_nodes()
         try:
-            # A preceding migration test may leave accounts one migration
-            # behind. Advance it independently so the trigger rewind below
-            # never mixes forward and backward operations in one plan.
+            # A preceding migration test may leave accounts behind. Advance it
+            # independently so the trigger rewind below never mixes forward and
+            # backward operations in one plan. Since A3.2 (#1692) the accounts
+            # leaf pulls accounts_ext.0001 and payments.0021 in with it, so the
+            # plan is no longer accounts-only; the guard that matters is that
+            # it is purely forwards.
             accounts_leaf = executor.loader.graph.leaf_nodes("accounts")[0]
             accounts_plan = executor.migration_plan([accounts_leaf])
             self.assertTrue(
-                all(
-                    migration.app_label == "accounts" and not backwards
-                    for migration, backwards in accounts_plan
-                ),
+                all(not backwards for _migration, backwards in accounts_plan),
             )
             executor.migrate([accounts_leaf])
 

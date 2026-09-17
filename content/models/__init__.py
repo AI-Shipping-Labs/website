@@ -8,6 +8,7 @@ from .enrollment import *
 from .homework import *
 from .instructor import *
 from .interview_category import *
+from .interview_company import *
 from .marketing_page import *
 from .mixins import *
 from .peer_review import *

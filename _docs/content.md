@@ -450,6 +450,35 @@ push the content repo, then let the webhook sync run. The converter never
 touches the database, never flips `status`, and reuses the existing
 `content_id` values (new files default to `status: coming-soon`).
 
+### Job-market data article (generated)
+
+`blog/ai-engineering-job-market/index.md`, plus the two widget templates its
+`<!-- include:widgets/... -->` markers reference
+(`widgets/job_market_skills.html`, `widgets/job_market_trends.html`). The
+article is a public (`required_level: 0`, `status: published`) data page:
+per-category skill demand bars, month-over-month skill and role-mix tables,
+top employers, top locations, and a dataset provenance footer. The
+aggregates ride in the `data:` frontmatter payload and are rendered
+server-side at sync time — no JavaScript.
+
+The source data is the field guide's monthly job-posting scrapes
+(`job-market/data_structured/<date>/*.yaml`). Refresh after a new monthly
+scrape lands:
+
+```bash
+uv run python manage.py sync_field_guide_job_market \
+    --from-disk ~/git/ai-engineering-field-guide \
+    --content-repo ~/git/ai-shipping-labs-content --write
+```
+
+Dry run by default (drop `--write` to preview the per-scrape summary).
+Review the diff, commit and push the content repo, then let the webhook sync
+run. The converter reads posting YAML files only: it never touches the
+database and never runs git. It reuses the generated article's `content_id`,
+so a second run over unchanged data is a byte-identical diff. The
+`data_through` stamp in the article shows which month the data covers, so
+staleness is visible.
+
 ### Repo-level files
 
 | File | Purpose |

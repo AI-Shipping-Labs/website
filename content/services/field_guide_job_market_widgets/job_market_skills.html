@@ -1,0 +1,21 @@
+<div class="space-y-10">
+  {% for category in data.skill_demand %}
+  <div class="rounded-lg border border-border bg-card p-6 lg:p-8">
+    <h3 class="text-lg font-semibold text-foreground">{{ category.label }}</h3>
+    <p class="mt-2 text-sm text-muted-foreground">Share of the latest scrape's postings that mention each skill.</p>
+    <div class="mt-6 space-y-4">
+      {% for skill in category.skills %}
+      <div>
+        <div class="flex items-center justify-between mb-1.5">
+          <span class="text-sm font-medium text-foreground">{{ skill.name }}</span>
+          <span class="text-xs text-muted-foreground">{{ skill.count }} postings ({{ skill.pct }}%)</span>
+        </div>
+        <div class="h-2 rounded-full bg-secondary overflow-hidden">
+          <div class="h-full rounded-full bg-accent" style="width: {{ skill.pct }}%"></div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>

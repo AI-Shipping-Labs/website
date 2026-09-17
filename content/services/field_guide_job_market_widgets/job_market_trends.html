@@ -1,0 +1,64 @@
+<div class="space-y-10">
+  <div class="rounded-lg border border-border bg-card p-6 lg:p-8">
+    <h3 class="text-lg font-semibold text-foreground">Skill trends by scrape</h3>
+    <p class="mt-2 text-sm text-muted-foreground">Share of that scrape's postings mentioning each skill. Every scrape is an independent cross-section, so shares are within-month.</p>
+    {% for group in data.skill_trends.groups %}
+    <h4 class="mt-6 text-base font-semibold text-foreground">{{ group.label }}</h4>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-border">
+            <th scope="col" class="py-2 pr-4 text-left font-medium text-muted-foreground">Skill</th>
+            {% for label in data.skill_trends.month_labels %}
+            <th scope="col" class="py-2 px-3 text-right font-medium text-muted-foreground">{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for skill in group.skills %}
+          <tr class="border-b border-border">
+            <td class="py-2 pr-4 font-medium text-foreground">{{ skill.name }}</td>
+            {% for share in skill.shares %}
+            <td class="py-2 px-3 text-right text-muted-foreground">{{ share }}%</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="rounded-lg border border-border bg-card p-6 lg:p-8">
+    <h3 class="text-lg font-semibold text-foreground">Role mix by scrape</h3>
+    <p class="mt-2 text-sm text-muted-foreground">Share of each scrape's postings by role type: AI-first builds LLM products directly, AI-support builds around them, ML-first does classic ML, Unclassified has no extracted type.</p>
+    <div class="mt-4 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-border">
+            <th scope="col" class="py-2 pr-4 text-left font-medium text-muted-foreground">Role type</th>
+            {% for label in data.role_mix.month_labels %}
+            <th scope="col" class="py-2 px-3 text-right font-medium text-muted-foreground">{{ label }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for role in data.role_mix.types %}
+          <tr class="border-b border-border">
+            <td class="py-2 pr-4 font-medium text-foreground">{{ role.label }}</td>
+            {% for share in role.shares %}
+            <td class="py-2 px-3 text-right text-muted-foreground">{{ share }}%</td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+          <tr>
+            <td class="py-2 pr-4 font-medium text-foreground">Postings</td>
+            {% for total in data.role_mix.totals %}
+            <td class="py-2 px-3 text-right text-muted-foreground">{{ total }}</td>
+            {% endfor %}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

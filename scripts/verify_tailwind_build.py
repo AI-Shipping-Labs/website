@@ -154,6 +154,8 @@ BARE = {
 }
 NON_TAILWIND_WORDS = {
     "content-type",
+    "left-aligned",
+    "left-aligns",
     "left-anti-join",
     "max-width",
     "min-height",

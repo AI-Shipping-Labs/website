@@ -1,6 +1,7 @@
 """Image URL rewriting and S3 media upload helpers."""
 
 import hashlib
+import html
 import io
 import mimetypes
 import os
@@ -44,13 +45,79 @@ def _resolve_image_path(path, base_path=''):
     return os.path.normpath(os.path.join(base_path, clean_path))
 
 
-def rewrite_image_urls(markdown_text, repo_name, base_path=''):
+# Issue #1725: a light figure and its dark render are swapped by Tailwind's
+# ``dark:`` variants against the ``.dark`` class the theme toggle puts on
+# <html>. The class literals MUST live in this module: tailwind.config.js
+# scans ``./**/*.py`` but never the database, so class names that only ever
+# exist inside stored markdown are invisible to the scanner and the
+# ``dark:hidden`` / ``dark:block`` rules would never be generated.
+_THEME_FIGURE_LIGHT_CLASS = 'theme-figure block dark:hidden'
+_THEME_FIGURE_DARK_CLASS = 'theme-figure hidden dark:block'
+
+# ``<stem>.dark<ext>`` next to the light file. Extension-agnostic, so
+# ``chat.png`` -> ``chat.dark.png`` works even though only ``.svg`` is
+# expected in practice.
+_DARK_SUFFIX = '.dark'
+
+
+def _dark_sibling_author_path(path):
+    """Return the ``<stem>.dark<ext>`` sibling of an authored image path.
+
+    Returns ``None`` when the path cannot have a dark sibling: absolute
+    URLs, paths carrying markdown title syntax (any whitespace ends up in
+    the captured group), and paths whose stem already ends in ``.dark``
+    (the reserved-name rule — ``x.dark.svg`` is never a light base, so no
+    ``x.dark.dark.svg`` lookup ever happens).
+
+    An extensionless ``images/x.dark`` is the one shape the reserved-name
+    check misses: ``splitext`` reads ``.dark`` as the extension, leaving
+    the stem ``images/x``, so this returns ``images/x.dark.dark``. That is
+    harmless and unreachable — ``.dark`` is not in ``IMAGE_EXTENSIONS``, so
+    neither the reference nor its notional sibling can ever be in
+    ``known_images``, and the caller falls through to the single-image path.
+    """
+    if not path or path.startswith(('http://', 'https://', 'data:')):
+        return None
+    if re.search(r'\s', path):
+        return None
+    stem, ext = os.path.splitext(path)
+    if not stem or stem.endswith(_DARK_SUFFIX):
+        return None
+    return f'{stem}{_DARK_SUFFIX}{ext}'
+
+
+def _render_theme_figure_pair(alt, light_url, dark_url):
+    """Return the two adjacent ``<img>`` tags for a theme-paired figure.
+
+    Both tags are emitted on one line with no whitespace between them so
+    python-markdown keeps them in a single paragraph and no baseline gap
+    text node appears between the two variants. The hidden variant is
+    ``display: none`` and therefore out of the accessibility tree, so the
+    shared ``alt`` is announced exactly once.
+    """
+    safe_alt = html.escape(alt or '', quote=True)
+    return (
+        f'<img src="{light_url}" alt="{safe_alt}" '
+        f'class="{_THEME_FIGURE_LIGHT_CLASS}" data-theme-figure="light">'
+        f'<img src="{dark_url}" alt="{safe_alt}" '
+        f'class="{_THEME_FIGURE_DARK_CLASS}" data-theme-figure="dark">'
+    )
+
+
+def rewrite_image_urls(markdown_text, repo_name, base_path='', known_images=None):
     """Rewrite relative image URLs in markdown and HTML to absolute storage URLs.
 
     Args:
         markdown_text: Markdown content with relative image paths.
         repo_name: Repo name for the storage path prefix.
         base_path: Base path within the repo for resolving relative paths.
+        known_images: Optional frozenset of repo-relative image paths the
+            S3 uploader actually saw (``run_state.known_images()``). When
+            provided, a ``![alt](path)`` reference whose ``<stem>.dark<ext>``
+            sibling is present in the set is emitted as a theme-paired
+            pair of ``<img>`` tags (issue #1725). When ``None`` (the
+            default), output is byte-identical to the pre-#1725 behaviour:
+            pairing is opt-in per call site and only workshops opt in.
 
     Returns:
         str: Markdown with rewritten image URLs.
@@ -67,9 +134,25 @@ def rewrite_image_urls(markdown_text, repo_name, base_path=''):
             return f'{image_base}/{repo_short}/{full_path}'
         return f'{image_base}/{full_path}'
 
+    def _paired_dark_path(path):
+        """Return the authored dark sibling path when sync saw the file."""
+        if known_images is None:
+            return None
+        dark_path = _dark_sibling_author_path(path)
+        if dark_path is None:
+            return None
+        if _resolve_image_path(dark_path, base_path) not in known_images:
+            return None
+        return dark_path
+
     def replace_md_image(match):
         alt = match.group(1)
         path = match.group(2)
+        dark_path = _paired_dark_path(path)
+        if dark_path is not None:
+            return _render_theme_figure_pair(
+                alt, _rewrite_path(path), _rewrite_path(dark_path),
+            )
         return f'![{alt}]({_rewrite_path(path)})'
 
     def replace_html_image(match):

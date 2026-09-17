@@ -113,6 +113,14 @@ body {
 .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }
 .prose pre code { background: transparent; padding: 0; border: none; color: hsl(var(--card-foreground)); }
 .prose img { border-radius: 0.5rem; border: 1px solid hsl(var(--border)); width: 100%; margin: 1rem 0; }
+/* Issue #1725: theme-paired figures keep their authored size and canvas.
+   A generated figure is its own panel, so it neither stretches to the
+   reading column (which rescales every label with it) nor gets the card
+   border a screenshot needs. Deliberately sets no `display`: that is owned
+   by the `block` / `hidden` / `dark:block` / `dark:hidden` utilities, and a
+   `display` here would outrank the generated dark: utilities and break the
+   swap. */
+.prose img.theme-figure { width: auto; max-width: 100%; height: auto; margin: 2rem auto; border: none; border-radius: 0; }
 .prose figure { margin: 3rem 0; border: 1px solid hsl(var(--border) / 0.5); border-radius: 0.5rem; padding: 1rem; background: hsl(var(--card) / 0.3); }
 .prose figure img { margin: 0; }
 /* Issue #359: preserve Mermaid's natural SVG width inside a local

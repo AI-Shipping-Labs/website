@@ -31,7 +31,13 @@ _SANITIZE_TAGS = {
 }
 _SANITIZE_ATTRIBUTES = {
     'a': {'href', 'title', 'target', 'rel'},
-    'img': {'src', 'alt', 'title'},
+    # ``class`` and ``data-theme-figure`` carry the light/dark figure swap
+    # emitted by the sync-time pairing pass (issue #1725). Workshop bodies
+    # bypass ``sanitize_html`` today, but an allowlist that silently strips
+    # the swap classes is a trap for the next surface that routes rendered
+    # content back through it. Neither attribute carries execution risk,
+    # and this matches how ``class`` is already allowed on div/span/code/pre.
+    'img': {'src', 'alt', 'title', 'class', 'data-theme-figure'},
     # ``data-event-widget`` is the hydration hook for the claim widget
     # (issue #1070). It carries only a slug and is read by
     # ``static/js/event-widget.js`` to fetch per-user state; keeping it on

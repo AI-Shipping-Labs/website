@@ -67,8 +67,11 @@ def _find_user(email):
             "description": (
                 "Consolidates the ``merge_email`` account into the "
                 "``canonical_email`` account: repoints eligible owned rows, "
-                "revokes the secondary account's member API keys, deletes its "
-                "operator tokens, reconciles profile / entitlement fields by "
+                "revokes the secondary account's member API keys and its "
+                "community-base API keys (``credentials."
+                "package_api_keys_revoked``; revoked in place, never moved to "
+                "canonical), deletes its operator tokens, reconciles profile / "
+                "entitlement fields by "
                 "precedence (UNION tags, OR ``email_verified``, higher ``tier`` "
                 "wins, surviving subscription dictates billing fields), records "
                 "``merge_email`` as an ``EmailAlias`` of canonical so future "
@@ -119,6 +122,7 @@ def _find_user(email):
                         "credentials": {
                             "member_api_keys_revoked": 2,
                             "operator_tokens_deleted": 1,
+                            "package_api_keys_revoked": 1,
                         },
                         "reconciled": {"email_verified": {"to": True}},
                         "tier_overrides": {"deactivated": [], "kept_active": None},
@@ -248,6 +252,7 @@ def merge_users(request):
                     "credentials": {
                         "member_api_keys_revoked": 0,
                         "operator_tokens_deleted": 0,
+                        "package_api_keys_revoked": 0,
                     },
                     "reconciled": {},
                     "tier_overrides": {"deactivated": [], "kept_active": None},

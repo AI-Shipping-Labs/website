@@ -1145,6 +1145,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_arbitrary_dead_url_has_no_workshop_link_and_returns_home",
     })
 
+    issue_1736_owners = frozenset({
+        "playwright_tests/test_studio_user_merge.py::"
+        "TestRevokedPackageApiKeyIsReported::"
+        "test_preview_warns_then_confirm_kills_the_key",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1413,8 +1419,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2633)
-        self.assertEqual(len(inventory.owners), 2431)
+        self.assertEqual(inventory.item_count, 2634)
+        self.assertEqual(len(inventory.owners), 2432)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1452,7 +1458,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1719_owners
             | self.issue_1724_owners
             | self.issue_1725_owners
-            | self.issue_1732_owners,
+            | self.issue_1732_owners
+            | self.issue_1736_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1501,6 +1508,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1720_owners
             | self.issue_1724_owners
             | self.issue_1725_owners
+            | self.issue_1736_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

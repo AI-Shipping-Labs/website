@@ -10,8 +10,10 @@ from django.utils import timezone
 
 from content.models import Download
 from content.nav_availability import (
+    refresh_knowledge_base_nav_cache,
     refresh_marketing_pages_nav_cache,
     refresh_published_downloads_nav_cache,
+    refresh_topics_nav_cache,
 )
 from plans.models import Plan, Sprint
 
@@ -48,8 +50,15 @@ class HeaderTextNavigationIssue580Test(TestCase):
         )
 
     def setUp(self):
+        # This suite asserts the exact nav structure, so every availability
+        # flag must start from this database's own state. The downloads and
+        # marketing refreshes predate #1685; the KB and Topics refreshes
+        # keep suites that sync such pages in the same parallel worker from
+        # leaking their flags into these assertions.
         refresh_published_downloads_nav_cache()
         refresh_marketing_pages_nav_cache()
+        refresh_knowledge_base_nav_cache()
+        refresh_topics_nav_cache()
 
     def _header_html(self, user=None):
         if user is not None:

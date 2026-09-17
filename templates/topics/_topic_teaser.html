@@ -1,0 +1,28 @@
+{% comment %}
+Issue #1688 - gated render for the hub and topic pages, denied levels only.
+
+The view assembles the gate context through content.access
+build_gating_context, so the card copy comes from the one canonical gated
+copy builder. This partial adds the topic-specific teaser: one visible
+plain-text teaser paragraph derived from the body, then a blurred skeleton
+band standing in for the locked content. The skeleton carries no text, so
+no gated body content can leak into a denied response. Anonymous visitors
+additionally get an explicit sign-in prompt.
+{% endcomment %}
+{% load accounts_extras %}
+<p class="text-lg leading-relaxed text-muted-foreground" data-testid="topic-teaser">{{ teaser }}</p>
+<div class="relative mt-6" data-testid="topic-teaser-blur">
+  <div class="select-none space-y-3 blur-sm" aria-hidden="true">
+    <div class="h-4 w-11/12 rounded bg-muted"></div>
+    <div class="h-4 w-full rounded bg-muted"></div>
+    <div class="h-4 w-4/5 rounded bg-muted"></div>
+  </div>
+</div>
+<div class="mt-8">
+  {% include "content/_gated_access_card.html" %}
+</div>
+{% if not user.is_authenticated %}
+<div class="mt-6">
+  <a href="/accounts/login/?next={{ page_url|urlencode }}" class="{% button_classes 'secondary' %}" data-testid="topics-signin-link">Already a member? Sign in</a>
+</div>
+{% endif %}

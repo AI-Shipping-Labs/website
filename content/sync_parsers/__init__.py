@@ -17,6 +17,7 @@ from content.sync_parsers.families.knowledge_base import (
     WikiPagesParser,
 )
 from content.sync_parsers.families.marketing_pages import MarketingPagesParser
+from content.sync_parsers.families.member_wiki import MemberWikiPagesParser
 from content.sync_parsers.families.projects import ProjectsParser
 from content.sync_parsers.families.tiers import TiersParser
 from content.sync_parsers.families.workshops import WorkshopsParser
@@ -37,6 +38,9 @@ _PARSER_ORDER = (
     # depend on nothing from the other families.
     WikiPagesParser,
     DocsPagesParser,
+    # Member wiki topic pages fill the site-owned topics app (issue
+    # #1688); they likewise depend on nothing from the other families.
+    MemberWikiPagesParser,
 )
 
 _registered = False

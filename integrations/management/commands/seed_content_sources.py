@@ -39,6 +39,14 @@ DEFAULT_SOURCES = [
         'is_private': True,
         'max_files': 5000,
     },
+    {
+        # Issue #1688: the private member wiki. Topic pages from `_wiki/`
+        # render under /topics/; the record directories are not synced.
+        'slug': 'wiki',
+        'repo_name': 'AI-Shipping-Labs/wiki',
+        'is_private': True,
+        'max_files': 5000,
+    },
 ]
 
 

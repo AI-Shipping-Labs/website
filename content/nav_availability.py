@@ -15,6 +15,7 @@ _MARKETING_NAV_CACHE_KEY = 'content:marketing_nav:v1'
 _MARKETING_NAV_SECTIONS = ('about', 'community', 'resources')
 _KB_WIKI_CACHE_KEY = 'content:kb_wiki_available:v1'
 _KB_DOCS_CACHE_KEY = 'content:kb_docs_available:v1'
+_TOPICS_CACHE_KEY = 'content:topics_available:v1'
 _UNSET = object()
 
 _has_published_downloads = _UNSET
@@ -27,6 +28,7 @@ _kb_nav = {
     'wiki': False,
     'docs': False,
 }
+_topics_nav = False
 
 
 def _read_shared_flag():
@@ -190,3 +192,51 @@ def has_published_kb_pages_for_nav(section):
         _kb_nav[section] = bool(cached)
         return _kb_nav[section]
     return _kb_nav[section]
+
+
+def _read_topics_flag():
+    try:
+        return get_shared_cache(_TOPICS_CACHE_KEY, _UNSET)
+    except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
+        return _UNSET
+
+
+def _write_topics_flag(value):
+    try:
+        set_shared_cache(_TOPICS_CACHE_KEY, bool(value), None)
+    except (InvalidCacheBackendError, ImproperlyConfigured, DatabaseError):
+        pass
+
+
+def refresh_topics_nav_cache():
+    """Refresh the cached Topics nav flag from the member topic pages.
+
+    Writers (the wiki_topics sync cleanup, Studio edits, post-migrate
+    warmers) refresh the shared flag; public renders only read it. A
+    missing table (partial deploy before the app migration) reads as
+    "no pages" instead of breaking the write path.
+    """
+    global _topics_nav
+    try:
+        available = (
+            apps.get_model('topics', 'TopicPage')
+            .objects.filter(status='published')
+            .exists()
+        )
+    except (DatabaseError, LookupError):
+        available = False
+    _topics_nav = bool(available)
+    _write_topics_flag(_topics_nav)
+    return _topics_nav
+
+
+def has_published_topics_for_nav():
+    """Return whether the public nav should expose the Topics link.
+
+    Like the other availability flags this never queries the pages table.
+    """
+    global _topics_nav
+    cached = _read_topics_flag()
+    if cached is not _UNSET:
+        _topics_nav = bool(cached)
+    return _topics_nav

@@ -195,6 +195,9 @@ INSTALLED_APPS = [
     # package curriculum and events apps stay uninstalled here; the site
     # keeps its own content and events apps.
     'community_base.knowledge_base',
+    # Issue #1688: member topic pages synced from AI-Shipping-Labs/wiki,
+    # rendered Basic-and-above gated under /topics/.
+    'topics',
     'community',
     'notifications',
     'plans.apps.PlansConfig',

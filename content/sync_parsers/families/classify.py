@@ -45,6 +45,7 @@ class RepoClassification:
         interview_files,
         wiki_page_files,
         docs_page_files,
+        member_wiki_page_files,
     ):
         self.course_dirs = course_dirs
         self.workshop_dirs = workshop_dirs
@@ -58,6 +59,7 @@ class RepoClassification:
         self.interview_files = interview_files
         self.wiki_page_files = wiki_page_files
         self.docs_page_files = docs_page_files
+        self.member_wiki_page_files = member_wiki_page_files
 
 
 def classify_checkout(run):
@@ -109,6 +111,7 @@ class RepoFileClassifier:
         self.interview_files = []
         self.wiki_page_files = []
         self.docs_page_files = []
+        self.member_wiki_page_files = []
 
     def classify(self):
         self._claim_structured_subtrees()
@@ -126,6 +129,7 @@ class RepoFileClassifier:
             interview_files=self.interview_files,
             wiki_page_files=self.wiki_page_files,
             docs_page_files=self.docs_page_files,
+            member_wiki_page_files=self.member_wiki_page_files,
         )
 
     def _claim_structured_subtrees(self):
@@ -212,6 +216,21 @@ class RepoFileClassifier:
         if ext == '.md' and len(parts) >= 2 and parts[0] == 'docs':
             self.docs_page_files.append(rel_path)
             return True
+        # Issue #1688: the private wiki repository. `_wiki/` holds the
+        # member topic pages the wiki_topics family syncs; its sibling
+        # underscore-prefixed directories plus `market-wiki/` are the
+        # repository's internal agent record index and must reach no
+        # parser family (canonical workshop/course/article pages already
+        # live on the site), so they are claimed here and dropped. The
+        # content repository has no underscore-prefixed top-level
+        # directories or market-wiki/, so the public wiki/docs branches
+        # above are untouched.
+        if ext == '.md' and len(parts) >= 2:
+            if parts[0] == '_wiki':
+                self.member_wiki_page_files.append(rel_path)
+                return True
+            if parts[0].startswith('_') or parts[0] == 'market-wiki':
+                return True
         return False
 
     def _classify_yaml(self, filepath, rel_path):

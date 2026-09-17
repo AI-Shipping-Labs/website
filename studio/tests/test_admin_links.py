@@ -118,7 +118,7 @@ ALLOWED_RUNTIME_LINES = {
         "js = ('js/admin/timestamp_editor.js',)",
     },
     "integrations/middleware.py": {
-        "SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/', '/wiki/', '/docs/')",
+        "SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/', '/wiki/', '/docs/', '/topics/')",
     },
     "specs/04-content-articles.md": {
         "- R-ART-6: Routine staff article management uses `/studio/articles/`; authenticated production automation remains under the documented bearer API rather than session-authenticated `/api/admin/*` routes.",

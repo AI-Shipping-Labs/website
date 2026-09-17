@@ -15,11 +15,12 @@ class RemoveTrailingSlashMiddleware:
     """Redirect URLs with trailing slashes to the version without.
 
     Skips the root URL ('/') and paths under prefixes that use trailing slashes
-    (admin, accounts, allauth, studio, Django static/media, and the package
-    knowledge base routes whose canonical URLs carry a trailing slash).
+    (admin, accounts, allauth, studio, Django static/media, the package
+    knowledge base routes, and the member topics routes (#1688) whose
+    canonical URLs carry a trailing slash).
     """
 
-    SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/', '/wiki/', '/docs/')
+    SKIP_PREFIXES = ('/admin/', '/accounts/', '/account/', '/onboarding/', '/studio/', '/static/', '/media/', '/wiki/', '/docs/', '/topics/')
     FALLBACK_URL_NAME = 'marketing_page_fallback'
 
     def __init__(self, get_response):

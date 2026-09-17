@@ -892,7 +892,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
         "test_staff_preview_shows_the_ordered_steps_and_the_slack_link",
         "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
-        "test_support_reads_why_an_enrollee_never_reached_slack",
+        "test_support_reads_the_join_link_note_on_the_slack_step",
     })
     issue_1566_owners = frozenset({
         "playwright_tests/test_maven_attention_1566.py::"
@@ -1163,6 +1163,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_edit_in_studio_button_floats_correctly",
     })
 
+    issue_1688_owners = frozenset({
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_basic_member_reads_topic_and_follows_related_link",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_free_member_hits_teaser_and_finds_upgrade_path",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_anonymous_visitor_gets_signin_prompt_and_no_body",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_main_member_discovers_topics_through_hub_grid",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_draft_topic_stays_hidden_from_members",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_gated_topics_stay_out_of_the_sitemap",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1291,8 +1306,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2593)
-        self.assertEqual(len(inventory.owners), 2391)
+        self.assertEqual(inventory.item_count, 2599)
+        self.assertEqual(len(inventory.owners), 2397)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1324,7 +1339,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1542_owners
             | self.issue_1544_owners
             | self.issue_1556_owners
-            | self.issue_1677_owners,
+            | self.issue_1677_owners
+            | self.issue_1688_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

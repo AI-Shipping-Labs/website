@@ -1,6 +1,6 @@
 from django.contrib.sessions.backends.db import SessionStore as DatabaseSessionStore
 
-from accounts.models.session import AccountSession
+from accounts_ext.models import AccountSession
 
 
 def account_id_from_session_data(data):

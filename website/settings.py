@@ -176,6 +176,10 @@ INSTALLED_APPS = [
     'community_base.api',
     # Project apps
     'accounts',
+    # A3.2 (#1692): site-owned extensions to the user model that the shared
+    # community_base.accounts donor does not own (contact tags, the queryable
+    # session row). Survives the A3.3 accounts swap.
+    'accounts_ext.apps.AccountsExtConfig',
     'payments',
     'content',
     'events',
@@ -560,7 +564,7 @@ EXPECT_WORKER = os.environ.get('EXPECT_WORKER', 'true')
 AUTH_USER_MODEL = 'accounts.User'
 
 # Durable database sessions with a queryable account mapping (issue #1521).
-SESSION_ENGINE = 'accounts.session_backend'
+SESSION_ENGINE = 'accounts_ext.session_backend'
 
 # Django sites framework (required by allauth)
 SITE_ID = 1

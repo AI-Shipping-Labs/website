@@ -11,7 +11,6 @@ from django.db.models.query import QuerySet
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
-from accounts.models import ContactTag
 from accounts.utils.tags import (
     TAG_MUTATION_CHUNK_SIZE,
     add_tag,
@@ -24,11 +23,18 @@ from accounts.utils.tags import (
     user_ids_matching_tag_search,
     user_ids_with_exact_tag,
 )
+from accounts_ext.models import ContactTag, MemberExtra
 
 User = get_user_model()
 
 
 def _relation_slugs(user):
+    """Slugs on the authoritative relation (accounts_ext.MemberExtra)."""
+    return set(MemberExtra.for_user(user).contact_tags.values_list("slug", flat=True))
+
+
+def _legacy_relation_slugs(user):
+    """Slugs on the legacy User relation kept in step for the expand window."""
     return set(user.contact_tags.values_list("slug", flat=True))
 
 
@@ -37,13 +43,24 @@ class ContactTagSchemaTest(TestCase):
         slug_field = ContactTag._meta.get_field("slug")
         self.assertTrue(slug_field.unique)
 
-        through = User.contact_tags.through
+        through = MemberExtra.contact_tags.through
         self.assertIn(
-            ("user", "contacttag"),
+            ("memberextra", "contacttag"),
             through._meta.unique_together,
         )
-        self.assertTrue(through._meta.get_field("user").db_index)
+        self.assertTrue(through._meta.get_field("memberextra").db_index)
         self.assertTrue(through._meta.get_field("contacttag").db_index)
+
+    def test_legacy_user_relation_is_kept_in_step_during_the_expand_window(self):
+        user = User.objects.create_user(email="dual-write@test.com", tags=["vip"])
+
+        self.assertEqual(_relation_slugs(user), {"vip"})
+        self.assertEqual(_legacy_relation_slugs(user), {"vip"})
+
+        set_tags(user, ["vip", "beta"])
+
+        self.assertEqual(_relation_slugs(user), {"vip", "beta"})
+        self.assertEqual(_legacy_relation_slugs(user), {"vip", "beta"})
 
 
 class ContactTagSynchronizationTest(TestCase):
@@ -128,13 +145,23 @@ class ContactTagBackfillTest(TestCase):
             "accounts.migrations.0028_contact_tags_relation",
         )
         schema_editor = SimpleNamespace(connection=connection)
+        # 0028 ran while ContactTag still lived under the `accounts` label
+        # (A3.2 moved it to `accounts_ext` without touching the table), so the
+        # historical lookup is redirected onto the current model.
+        historical_apps = SimpleNamespace(
+            get_model=lambda label, name: (
+                ContactTag
+                if name == "ContactTag"
+                else apps.get_model(label, name)
+            )
+        )
 
-        migration.backfill_contact_tags(apps, schema_editor)
-        migration.backfill_contact_tags(apps, schema_editor)
+        migration.backfill_contact_tags(historical_apps, schema_editor)
+        migration.backfill_contact_tags(historical_apps, schema_editor)
 
         user.refresh_from_db()
         self.assertEqual(user.tags, ["legacy-tag", "stripe:active"])
-        self.assertEqual(_relation_slugs(user), set(user.tags))
+        self.assertEqual(_legacy_relation_slugs(user), set(user.tags))
         self.assertEqual(ContactTag.objects.count(), 2)
 
 
@@ -179,8 +206,12 @@ class ContactTagQueryBudgetTest(TestCase):
             )
             sql = " ".join(small[operation][1] + large[operation][1]).lower()
             self.assertNotIn('select "accounts_user"."tags"', sql)
-        self.assertIn("accounts_user_contact_tags", " ".join(large["exact"][1]))
-        self.assertIn("accounts_user_contact_tags", " ".join(large["substring"][1]))
+        self.assertIn(
+            "accounts_ext_memberextra_contact_tags", " ".join(large["exact"][1])
+        )
+        self.assertIn(
+            "accounts_ext_memberextra_contact_tags", " ".join(large["substring"][1])
+        )
 
     def test_tag_counts_are_one_annotated_query(self):
         User.objects.create_user(email="one@test.com", tags=["alpha", "beta"])
@@ -225,7 +256,9 @@ class ContactTagQueryBudgetTest(TestCase):
             and "accounts_user" in query["sql"].lower()
         ]
         self.assertTrue(selects)
-        self.assertTrue(all("accounts_user_contact_tags" in sql for sql in selects))
+        self.assertTrue(
+            all("accounts_ext_memberextra_contact_tags" in sql for sql in selects)
+        )
 
     def test_chunk_failure_rolls_back_entire_rename(self):
         users = [

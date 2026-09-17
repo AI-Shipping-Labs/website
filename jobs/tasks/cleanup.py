@@ -154,8 +154,8 @@ def clear_expired_sessions():
     success with counts even when the wall-clock budget is hit so django-q
     does not retry an oversized pass.
     """
-    from accounts.models import AccountSession
-    from accounts.session_backend import account_id_from_session_data
+    from accounts_ext.models import AccountSession
+    from accounts_ext.session_backend import account_id_from_session_data
 
     started = monotonic()
     now = timezone.now()
@@ -199,7 +199,7 @@ def clear_expired_sessions():
 
 
 def _backfill_session_account_ids(now, limit, account_id_from_session_data):
-    from accounts.models import AccountSession
+    from accounts_ext.models import AccountSession
 
     rows = list(
         AccountSession.objects.filter(

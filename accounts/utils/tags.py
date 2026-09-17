@@ -2,6 +2,7 @@
 
 import re
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.db.models import Count
@@ -36,25 +37,41 @@ def normalize_tags(tags):
 
 
 def _tag_models():
-    User = get_user_model()
-    ContactTag = User._meta.get_field("contact_tags").remote_field.model
-    return User, ContactTag
+    """Return ``(User, ContactTag, MemberExtra)``.
+
+    A3.2 (#1692) moved the authoritative contact-tag relation from
+    ``User.contact_tags`` to ``accounts_ext.MemberExtra.contact_tags``. Every
+    read below goes through ``MemberExtra``; writes additionally keep the
+    legacy ``User.contact_tags`` relation in step for the expand window, so an
+    old image rolling alongside the new one still sees the same tag set. The
+    contract unit drops the legacy write and the field together.
+    """
+    return (
+        get_user_model(),
+        apps.get_model("accounts_ext", "ContactTag"),
+        apps.get_model("accounts_ext", "MemberExtra"),
+    )
 
 
 def _delete_unused_contact_tags():
-    _, ContactTag = _tag_models()
-    ContactTag.objects.filter(users__isnull=True).delete()
+    _, ContactTag, _ = _tag_models()
+    ContactTag.objects.filter(
+        users__isnull=True,
+        member_extras__isnull=True,
+    ).delete()
 
 
 def sync_contact_tags(user):
-    """Make ``user.contact_tags`` set-equal to normalized ``user.tags``."""
-    _, ContactTag = _tag_models()
+    """Make the user's contact-tag relations set-equal to normalized ``tags``."""
+    _, ContactTag, MemberExtra = _tag_models()
     slugs = normalize_tags(user.tags)
     ContactTag.objects.bulk_create(
         [ContactTag(slug=slug) for slug in slugs],
         ignore_conflicts=True,
     )
     tag_rows = list(ContactTag.objects.filter(slug__in=slugs))
+    MemberExtra.for_user(user).contact_tags.set(tag_rows)
+    # Legacy half of the expand window; removed by the contract unit.
     user.contact_tags.set(tag_rows)
     _delete_unused_contact_tags()
 
@@ -94,9 +111,9 @@ def remove_tag(user, raw):
 
 def list_all_tags():
     """Return sorted slugs that have at least one user relation."""
-    _, ContactTag = _tag_models()
+    _, ContactTag, _ = _tag_models()
     return list(
-        ContactTag.objects.filter(users__isnull=False)
+        ContactTag.objects.filter(member_extras__isnull=False)
         .order_by("slug")
         .values_list("slug", flat=True)
         .distinct()
@@ -105,9 +122,9 @@ def list_all_tags():
 
 def tags_with_user_counts():
     """Return all in-use tag names and carrier counts in one query."""
-    _, ContactTag = _tag_models()
+    _, ContactTag, _ = _tag_models()
     rows = (
-        ContactTag.objects.annotate(user_count=Count("users", distinct=True))
+        ContactTag.objects.annotate(user_count=Count("member_extras", distinct=True))
         .filter(user_count__gt=0)
         .order_by("slug")
         .values("slug", "user_count")
@@ -123,10 +140,10 @@ def count_users_with_tag(name):
     normalized = normalize_tag(name)
     if not normalized:
         return 0
-    _, ContactTag = _tag_models()
+    _, ContactTag, _ = _tag_models()
     return (
         ContactTag.objects.filter(slug=normalized)
-        .annotate(user_count=Count("users", distinct=True))
+        .annotate(user_count=Count("member_extras", distinct=True))
         .values_list("user_count", flat=True)
         .first()
         or 0
@@ -136,22 +153,22 @@ def count_users_with_tag(name):
 def user_ids_with_exact_tag(name):
     """Return an indexed queryset of user ids carrying one exact slug."""
     normalized = normalize_tag(name)
-    User, _ = _tag_models()
+    User, _, _ = _tag_models()
     if not normalized:
         return User.objects.none().values_list("pk", flat=True)
     return User.objects.filter(
-        contact_tags__slug=normalized,
+        member_extra__contact_tags__slug=normalized,
     ).values_list("pk", flat=True)
 
 
 def user_ids_matching_tag_search(search):
     """Return user ids whose relation-backed slugs contain ``search``."""
     normalized = normalize_tag(search)
-    User, _ = _tag_models()
+    User, _, _ = _tag_models()
     if not normalized:
         return User.objects.none().values_list("pk", flat=True)
     return (
-        User.objects.filter(contact_tags__slug__icontains=normalized)
+        User.objects.filter(member_extra__contact_tags__slug__icontains=normalized)
         .order_by()
         .values_list("pk", flat=True)
         .distinct()
@@ -170,10 +187,24 @@ def _replace_slug(tags, old, new=None):
     return replaced
 
 
+def _ensure_member_extras(MemberExtra, user_ids):
+    """Create any missing MemberExtra rows for the batch."""
+    known = set(
+        MemberExtra.objects.filter(user_id__in=user_ids).values_list("user_id", flat=True)
+    )
+    missing = [user_id for user_id in user_ids if user_id not in known]
+    if missing:
+        MemberExtra.objects.bulk_create(
+            [MemberExtra(user_id=user_id) for user_id in missing],
+            ignore_conflicts=True,
+            batch_size=TAG_MUTATION_CHUNK_SIZE,
+        )
+
+
 def _matched_user_batch(User, tag, last_pk):
     return list(
         User.objects.select_for_update()
-        .filter(contact_tags=tag, pk__gt=last_pk)
+        .filter(member_extra__contact_tags=tag, pk__gt=last_pk)
         .only("pk", "tags")
         .order_by("pk")[:TAG_MUTATION_CHUNK_SIZE]
     )
@@ -195,7 +226,7 @@ def rename_tag(old, new):
             "new": new_normalized,
         }
 
-    User, ContactTag = _tag_models()
+    User, ContactTag, MemberExtra = _tag_models()
     affected = 0
     with transaction.atomic():
         old_tag = ContactTag.objects.select_for_update().filter(
@@ -208,7 +239,8 @@ def rename_tag(old, new):
                 "new": new_normalized,
             }
         new_tag, _ = ContactTag.objects.get_or_create(slug=new_normalized)
-        through = User.contact_tags.through
+        through = MemberExtra.contact_tags.through
+        legacy_through = User.contact_tags.through
         last_pk = 0
         while True:
             batch = _matched_user_batch(User, old_tag, last_pk)
@@ -227,13 +259,27 @@ def rename_tag(old, new):
                 ["tags"],
                 batch_size=TAG_MUTATION_CHUNK_SIZE,
             )
+            _ensure_member_extras(MemberExtra, batch_ids)
             through.objects.filter(
-                user_id__in=batch_ids,
+                memberextra_id__in=batch_ids,
                 contacttag_id=old_tag.pk,
             ).delete()
             through.objects.bulk_create(
                 [
-                    through(user_id=user_id, contacttag_id=new_tag.pk)
+                    through(memberextra_id=user_id, contacttag_id=new_tag.pk)
+                    for user_id in batch_ids
+                ],
+                ignore_conflicts=True,
+                batch_size=TAG_MUTATION_CHUNK_SIZE,
+            )
+            # Legacy half of the expand window; removed by the contract unit.
+            legacy_through.objects.filter(
+                user_id__in=batch_ids,
+                contacttag_id=old_tag.pk,
+            ).delete()
+            legacy_through.objects.bulk_create(
+                [
+                    legacy_through(user_id=user_id, contacttag_id=new_tag.pk)
                     for user_id in batch_ids
                 ],
                 ignore_conflicts=True,
@@ -255,13 +301,14 @@ def delete_tag(name):
     if not normalized:
         return {"affected": 0, "name": ""}
 
-    User, ContactTag = _tag_models()
+    User, ContactTag, MemberExtra = _tag_models()
     affected = 0
     with transaction.atomic():
         tag = ContactTag.objects.select_for_update().filter(slug=normalized).first()
         if tag is None:
             return {"affected": 0, "name": normalized}
-        through = User.contact_tags.through
+        through = MemberExtra.contact_tags.through
+        legacy_through = User.contact_tags.through
         last_pk = 0
         while True:
             batch = _matched_user_batch(User, tag, last_pk)
@@ -280,6 +327,11 @@ def delete_tag(name):
                 batch_size=TAG_MUTATION_CHUNK_SIZE,
             )
             through.objects.filter(
+                memberextra_id__in=batch_ids,
+                contacttag_id=tag.pk,
+            ).delete()
+            # Legacy half of the expand window; removed by the contract unit.
+            legacy_through.objects.filter(
                 user_id__in=batch_ids,
                 contacttag_id=tag.pk,
             ).delete()

@@ -92,18 +92,6 @@ class UserManager(BaseUserManager):
         return self.create_user(email, password, **extra_fields)
 
 
-class ContactTag(models.Model):
-    """Indexed contact-tag namespace used for membership queries."""
-
-    slug = models.CharField(max_length=255, unique=True)
-
-    class Meta:
-        ordering = ["slug"]
-
-    def __str__(self):
-        return self.slug
-
-
 class User(AbstractUser):
     """Custom user model with email as the primary identifier.
 
@@ -305,8 +293,13 @@ class User(AbstractUser):
         blank=True,
         help_text="Operator-managed contact tags (Studio-only; staff-only data).",
     )
+    # Legacy contact-tag relation. A3.2 (#1692) moved the authoritative
+    # relation to ``accounts_ext.MemberExtra.contact_tags``; this column set
+    # stays through the expand window so an old image rolling alongside the
+    # new one keeps reading and writing a populated table. The contract unit
+    # removes it. Readers must go through ``MemberExtra``.
     contact_tags = models.ManyToManyField(
-        ContactTag,
+        "accounts_ext.ContactTag",
         related_name="users",
         blank=True,
         help_text="Indexed membership relation mirroring the tags JSON payload.",

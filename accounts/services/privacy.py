@@ -22,7 +22,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
-from accounts.models import AccountSession, PrivacyRequestLog
+from accounts.models import PrivacyRequestLog
+from accounts_ext.models import AccountSession
 from email_app.package_mail import send_package_mail
 from integrations.config import (
     get_config,

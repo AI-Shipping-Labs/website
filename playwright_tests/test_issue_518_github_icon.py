@@ -360,7 +360,7 @@ def test_workshop_reader_sidebar_dark(django_server, browser):
 
     _set_theme(page, "dark")
     page.goto(
-        f"{django_server}/workshops/reader-ws/tutorial/intro",
+        f"{django_server}/workshops/reader-ws/intro",
         wait_until="domcontentloaded",
     )
     _set_theme(page, "dark")

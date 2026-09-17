@@ -165,7 +165,7 @@ class TestAnonRegisteredTutorial:
         # Issue #750: workshops live at /workshops/<YYYY-MM-DD>-<slug>;
         # the workshop factory pins the date to 2026-04-21.
         page.goto(
-            f'{django_server}/workshops/reg-tut/tutorial/intro',
+            f'{django_server}/workshops/reg-tut/intro',
             wait_until='domcontentloaded',
         )
 
@@ -187,13 +187,13 @@ class TestAnonRegisteredTutorial:
         href = login.get_attribute('href')
         assert href is not None
         assert href.startswith('/accounts/login/')
-        assert 'next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro' in href
+        assert 'next=%2Fworkshops%2Freg-tut%2Fintro' in href
 
         # Click the secondary signup button.
         signup = page.locator('[data-testid="teaser-signup-cta"]')
         signup_href = signup.get_attribute('href')
         assert signup_href.startswith('/accounts/signup/')
-        assert 'next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro' in signup_href
+        assert 'next=%2Fworkshops%2Freg-tut%2Fintro' in signup_href
 
         signup.click()
         page.wait_for_load_state('domcontentloaded')
@@ -226,7 +226,7 @@ class TestFreeMemberOnBasicTutorial:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/paid-tut/tutorial/intro',
+                f'{django_server}/workshops/paid-tut/intro',
                 wait_until='domcontentloaded',
             )
             body = page.content()
@@ -269,7 +269,7 @@ class TestMainMemberFullBody:
         try:
             page = ctx.new_page()
             response = page.goto(
-                f'{django_server}/workshops/main-tut/tutorial/intro',
+                f'{django_server}/workshops/main-tut/intro',
                 wait_until='domcontentloaded',
             )
             assert response.status == 200
@@ -431,7 +431,7 @@ class TestEmptyBodyFallback:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/empty-tut/tutorial/blank',
+                f'{django_server}/workshops/empty-tut/blank',
                 wait_until='domcontentloaded',
             )
             body = page.content()
@@ -468,7 +468,7 @@ class TestSignInReturnsToTutorial:
         # Issue #750: workshops live at /workshops/<YYYY-MM-DD>-<slug>;
         # the workshop factory pins the date to 2026-04-21.
         page.goto(
-            f'{django_server}/workshops/return-tut/tutorial/intro',
+            f'{django_server}/workshops/return-tut/intro',
             wait_until='domcontentloaded',
         )
         page.locator('[data-testid="teaser-signin-cta"]').click()
@@ -483,10 +483,10 @@ class TestSignInReturnsToTutorial:
         page.fill('#login-password', DEFAULT_PASSWORD)
         page.click('#login-submit')
         # Wait for the JS redirect to complete.
-        page.wait_for_url('**/workshops/return-tut/tutorial/intro')
+        page.wait_for_url('**/workshops/return-tut/intro')
 
         # Lands back on the tutorial page; full body renders.
-        assert '/workshops/return-tut/tutorial/intro' in page.url
+        assert '/workshops/return-tut/intro' in page.url
         body = page.content()
         assert 'data-testid="page-body"' in body
         assert 'TUTORIALHIDDENMARKER' in body
@@ -515,7 +515,7 @@ class TestUnverifiedEmailCard:
         try:
             page = ctx.new_page()
             page.goto(
-                f'{django_server}/workshops/verify-tut/tutorial/intro',
+                f'{django_server}/workshops/verify-tut/intro',
                 wait_until='domcontentloaded',
             )
             body = page.content()

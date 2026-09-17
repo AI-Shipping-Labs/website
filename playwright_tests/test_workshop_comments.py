@@ -160,7 +160,7 @@ class TestWorkshopReaderAsksQuestion:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/prod-agents/intro',
             wait_until='networkidle',
         )
 
@@ -215,7 +215,7 @@ class TestAnonymousVisitorSeesSignupCTA:
         # form 301-redirects, so the template renders the canonical path
         # in href attributes.
         tutorial_path = (
-            '/workshops/intro-ws/tutorial/welcome'
+            '/workshops/intro-ws/welcome'
         )
         page.goto(
             f'{django_server}{tutorial_path}',
@@ -261,7 +261,7 @@ class TestAnonymousVisitorSeesSignupCTA:
         # Canonical workshop URL is /workshops/<YYYY-MM-DD>-<slug>/...
         # (Workshop.date=2026-04-21, slug='intro-ws').
         tutorial_path = (
-            '/workshops/intro-ws/tutorial/welcome'
+            '/workshops/intro-ws/welcome'
         )
         page.goto(
             f'{django_server}{tutorial_path}',
@@ -313,7 +313,7 @@ class TestGatedUserDoesNotSeeQA:
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/paid-ws/tutorial/intro',
+            f'{django_server}/workshops/paid-ws/intro',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -360,7 +360,7 @@ class TestReaderReplies:
         ctx = _auth_context(browser, 'userb@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/prod-agents/intro',
             wait_until='networkidle',
         )
 
@@ -420,7 +420,7 @@ class TestUpvotePersistsAcrossReload:
         ctx = _auth_context(browser, 'voter@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/prod-agents/tutorial/intro',
+            f'{django_server}/workshops/prod-agents/intro',
             wait_until='networkidle',
         )
 
@@ -558,7 +558,7 @@ class TestContentIsolationAcrossSurfaces:
 
         # On the workshop page, only the workshop question is visible.
         page.goto(
-            f'{django_server}/workshops/ws-iso/tutorial/intro',
+            f'{django_server}/workshops/ws-iso/intro',
             wait_until='networkidle',
         )
         page.wait_for_function(
@@ -621,7 +621,7 @@ class TestContentIsolationAcrossSurfaces:
         )
         assert 'UNIT_QUESTION_FINGERPRINT' in page.content()
         page.goto(
-            f'{django_server}/workshops/ws-iso/tutorial/intro',
+            f'{django_server}/workshops/ws-iso/intro',
             wait_until='networkidle',
         )
         assert 'WORKSHOP_QUESTION_FINGERPRINT' in page.content()

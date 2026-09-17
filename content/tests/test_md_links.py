@@ -404,17 +404,17 @@ WORKSHOP_LOOKUP = {
     '01-overview.md': {
         'slug': 'overview',
         'title': 'Welcome and overview',
-        'url': '/workshops/end-to-end-agent-deployment/tutorial/overview',
+        'url': '/workshops/end-to-end-agent-deployment/overview',
     },
     '02-starting-notebook.md': {
         'slug': 'starting-notebook',
         'title': 'Part 1: The starting notebook',
-        'url': '/workshops/end-to-end-agent-deployment/tutorial/starting-notebook',
+        'url': '/workshops/end-to-end-agent-deployment/starting-notebook',
     },
     '10-qa.md': {
         'slug': 'qa',
         'title': 'Q&A: side discussions',
-        'url': '/workshops/end-to-end-agent-deployment/tutorial/qa',
+        'url': '/workshops/end-to-end-agent-deployment/qa',
     },
 }
 
@@ -435,7 +435,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
         # The bare filename must NOT appear as link text or as a URL.
@@ -448,7 +448,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[the Q&A page]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -458,7 +458,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -468,7 +468,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
 
@@ -478,7 +478,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[the Q&A page]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
 
@@ -488,7 +488,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         # URL still resolves via case-insensitive fallback ...
         self.assertIn(
-            '/workshops/end-to-end-agent-deployment/tutorial/qa',
+            '/workshops/end-to-end-agent-deployment/qa',
             result,
         )
         # ... and the title swap still fires because the label, lower-cased
@@ -556,7 +556,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         # The non-image link is rewritten.
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -566,7 +566,7 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -598,35 +598,36 @@ class RewriteWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[Part 1: The starting notebook]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/starting-notebook)',
+            '(/workshops/end-to-end-agent-deployment/starting-notebook)',
             result,
         )
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
         self.assertIn(
             '[the Q&A page]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
 
 
 # Lookup that includes the README.md virtual entry produced by
 # ``_build_workshop_page_lookup`` post issue #304. README.md routes to the
-# workshop landing URL (no /tutorial/ prefix) and uses ``slug=''`` plus the
-# workshop title so the title-substitution rule surfaces a friendly label.
+# workshop landing URL (no page-slug segment) and uses ``slug=''`` plus
+# the workshop title so the title-substitution rule surfaces a friendly
+# label.
 WORKSHOP_LOOKUP_WITH_README = {
     '01-overview.md': {
         'slug': 'overview',
         'title': 'Welcome and overview',
-        'url': '/workshops/end-to-end-agent-deployment/tutorial/overview',
+        'url': '/workshops/end-to-end-agent-deployment/overview',
     },
     '10-qa.md': {
         'slug': 'qa',
         'title': 'Q&A: side discussions',
-        'url': '/workshops/end-to-end-agent-deployment/tutorial/qa',
+        'url': '/workshops/end-to-end-agent-deployment/qa',
     },
     'README.md': {
         'slug': '',
@@ -652,13 +653,16 @@ class RewriteWorkshopMdLinksReadmeVirtualEntryTest(SimpleTestCase):
     def test_readme_md_link_rewrites_to_workshop_landing_with_title(self):
         body = 'See [README.md](README.md).'
         result = self._rewrite(body)
-        # No /tutorial/ in the URL — README routes to the bare landing.
+        # README routes to the bare landing — no extra page-slug segment
+        # after the workshop slug (issue #1720 dropped /tutorial/, so a
+        # trailing-slash check on the workshop slug is what now
+        # distinguishes the landing URL from a page URL).
         self.assertIn(
             '[Production Agents](/workshops/end-to-end-agent-deployment)',
             result,
         )
         self.assertNotIn('](README.md)', result)
-        self.assertNotIn('/tutorial/', result)
+        self.assertNotIn('end-to-end-agent-deployment/', result)
 
     def test_readme_md_link_with_custom_label_preserves_label(self):
         body = 'See [the intro](README.md).'
@@ -711,7 +715,7 @@ class RewriteWorkshopMdLinksReadmeVirtualEntryTest(SimpleTestCase):
             '02-next.md': {
                 'slug': 'next',
                 'title': 'Next',
-                'url': '/workshops/end-to-end-agent-deployment/tutorial/next',
+                'url': '/workshops/end-to-end-agent-deployment/next',
             },
         }
         body = 'See [01-intro.md](01-intro.md).'
@@ -720,7 +724,7 @@ class RewriteWorkshopMdLinksReadmeVirtualEntryTest(SimpleTestCase):
             '[Production Agents](/workshops/end-to-end-agent-deployment)',
             result,
         )
-        self.assertNotIn('/tutorial/intro', result)
+        self.assertNotIn('/intro', result)
 
 
 # Sync-wide cross-workshop lookup keyed by on-disk dated-slug folder name
@@ -798,7 +802,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         body = '[Q&A](../2026-04-21-end-to-end-agent-deployment/10-qa.md)'
         result = self._rewrite(body)
         self.assertIn(
-            '[Q&A](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '[Q&A](/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -809,7 +813,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[link]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
 
@@ -855,7 +859,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         )
         result = self._rewrite(body)
         self.assertIn(
-            '[label](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '[label](/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -867,7 +871,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         result = self._rewrite(body)
         self.assertIn(
             '[link]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
 
@@ -970,7 +974,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         )
         # Non-image link rewritten.
         self.assertIn(
-            '[Q&A](/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '[Q&A](/workshops/end-to-end-agent-deployment/qa)',
             result,
         )
 
@@ -1074,7 +1078,7 @@ class RewriteCrossWorkshopMdLinksTest(SimpleTestCase):
         )
         self.assertIn(
             '[the Q&A]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             result,
         )
         self.assertIn(

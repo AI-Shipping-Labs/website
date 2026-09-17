@@ -574,7 +574,7 @@ class TestVisitorBrowsesCatalog:
         for width in (1280, 393):
             page.set_viewport_size({'width': width, 'height': 900})
             response = page.goto(
-                f'{django_server}/workshops/stable-mermaid/tutorial/diagram',
+                f'{django_server}/workshops/stable-mermaid/diagram',
                 wait_until='domcontentloaded',
             )
             assert response is not None and response.status == 200
@@ -694,7 +694,10 @@ class TestBasicUserReadsPagesButNotRecording:
         """Basic user reads a tutorial via the canonical slug-only URL.
 
         Issue #1064 made ``/workshops/<slug>/tutorial/<page>`` canonical
-        again. Valid dated deep links now 301 to the slug-only URL.
+        again (vs. the dated shape); issue #1720 then dropped the
+        ``/tutorial/`` segment, so the canonical shape is now
+        ``/workshops/<slug>/<page>``. Valid dated deep links still 301 to
+        the slug-only URL.
         """
         _clear_workshops()
         workshop = _create_workshop(
@@ -710,8 +713,11 @@ class TestBasicUserReadsPagesButNotRecording:
 
         canonical_url = (
             f'{django_server}/workshops/{workshop.slug}/'
-            f'tutorial/starting-notebook'
+            f'starting-notebook'
         )
+        # The dated legacy route still matches its own `/tutorial/` shape
+        # (issue #1720 leaves it unchanged); only its resolved target
+        # (canonical_url above) drops the segment.
         dated_url = (
             f'{django_server}/workshops/2026-04-21-{workshop.slug}/'
             f'tutorial/starting-notebook'
@@ -781,7 +787,7 @@ class TestBasicUserReadsPagesButNotRecording:
             'a:has-text("Introduction")',
         ).first.click()
         page.wait_for_load_state('domcontentloaded')
-        assert '/workshops/ws/tutorial/intro' in page.url
+        assert '/workshops/ws/intro' in page.url
 
         body = page.content()
         # Body renders, sidebar highlights current page.
@@ -802,7 +808,7 @@ class TestBasicUserReadsPagesButNotRecording:
         page = ctx.new_page()
         # First page: Next visible, Prev absent.
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/intro',
+            f'{django_server}/workshops/ws/intro',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -811,7 +817,7 @@ class TestBasicUserReadsPagesButNotRecording:
 
         # Middle page: Both visible.
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/setup',
+            f'{django_server}/workshops/ws/setup',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -820,7 +826,7 @@ class TestBasicUserReadsPagesButNotRecording:
 
         # Last page: Prev visible, Next absent.
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/deploy',
+            f'{django_server}/workshops/ws/deploy',
             wait_until='domcontentloaded',
         )
         body = page.content()
@@ -924,7 +930,7 @@ class TestWorkshopSitemap:
         # response.text() doesn't exist on the page object — read content.
         body = page.content()
         assert '/workshops/ws-sitemap' in body
-        assert '/workshops/ws-sitemap/tutorial/only-page' in body
+        assert '/workshops/ws-sitemap/only-page' in body
 
 
 # ----------------------------------------------------------------------
@@ -1078,7 +1084,7 @@ class TestDraftWorkshopHidden:
         assert response is not None and response.status == 404
 
         response = page.goto(
-            f'{django_server}/workshops/draft-ws/tutorial/intro',
+            f'{django_server}/workshops/draft-ws/intro',
         )
         assert response is not None and response.status == 404
 

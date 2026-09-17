@@ -117,7 +117,7 @@ class TestSidebarFitsColumnOnLongTitle:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/long-title-ws/tutorial/intro',
+                f'{django_server}/workshops/long-title-ws/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -183,7 +183,7 @@ class TestSidebarFitsColumnOnLongTitle:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/long-title-ws/tutorial/intro',
+                f'{django_server}/workshops/long-title-ws/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -302,7 +302,7 @@ class TestProseLinksShareAccentColor:
         page = ctx.new_page()
         try:
             url = (
-                f'{django_server}/workshops/prose-links-ws/tutorial/links'
+                f'{django_server}/workshops/prose-links-ws/links'
             )
             page.goto(url, wait_until='domcontentloaded')
 
@@ -471,7 +471,7 @@ class TestWorkshopSidebarTopAlignment:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                f'{django_server}/workshops/gap-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
             link = page.locator('[data-testid="sidebar-back-to-workshop"]')
@@ -515,7 +515,7 @@ class TestWorkshopSidebarTopAlignment:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                f'{django_server}/workshops/gap-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
             link = page.locator('[data-testid="sidebar-back-to-workshop"]')
@@ -554,7 +554,7 @@ class TestWorkshopSidebarTopAlignment:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                f'{django_server}/workshops/gap-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
             collapse = page.locator(
@@ -659,7 +659,7 @@ class TestWorkshopSidebarTopAlignment:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/gap-1080-ws/tutorial/overview',
+                f'{django_server}/workshops/gap-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
             crumb = page.locator('[data-testid="page-breadcrumb"]')
@@ -717,7 +717,7 @@ class TestGatedTutorialNoOrphanColumn:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/gated-1080-ws/tutorial/overview',
+                f'{django_server}/workshops/gated-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
             # Gated pages mirror the paid layout: the navigation sidebar
@@ -791,7 +791,7 @@ class TestSharedReaderWorkshopBehavior:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                f'{django_server}/workshops/shared-reader/intro',
                 wait_until='domcontentloaded',
             )
             collapse = page.locator(
@@ -823,7 +823,7 @@ class TestSharedReaderWorkshopBehavior:
                 " === 'expanded'",
             )
             page.goto(
-                f'{django_server}/workshops/shared-reader/tutorial/setup',
+                f'{django_server}/workshops/shared-reader/setup',
                 wait_until='domcontentloaded',
             )
             assert page.evaluate(
@@ -855,7 +855,7 @@ class TestSharedReaderWorkshopBehavior:
         url_key = 'shared-reader'
         try:
             page.goto(
-                f'{django_server}/workshops/{url_key}/tutorial/intro',
+                f'{django_server}/workshops/{url_key}/intro',
                 wait_until='domcontentloaded',
             )
             assert not page.locator(
@@ -867,9 +867,9 @@ class TestSharedReaderWorkshopBehavior:
             toggle.click()
             page.locator('#sidebar-nav').wait_for(state='visible')
             page.locator(
-                f'#sidebar-nav a[href="/workshops/{url_key}/tutorial/setup"]',
+                f'#sidebar-nav a[href="/workshops/{url_key}/setup"]',
             ).click()
-            page.wait_for_url(f'**/workshops/{url_key}/tutorial/setup')
+            page.wait_for_url(f'**/workshops/{url_key}/setup')
             assert page.locator('[data-testid="page-body"]').is_visible()
         finally:
             ctx.close()
@@ -883,7 +883,7 @@ class TestSharedReaderWorkshopBehavior:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/shared-reader/tutorial/intro',
+                f'{django_server}/workshops/shared-reader/intro',
                 wait_until='domcontentloaded',
             )
             page.locator('[data-testid="mark-page-complete-btn"]').click()

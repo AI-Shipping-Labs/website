@@ -546,8 +546,14 @@ class WorkshopPage(
         return f'{self.workshop.title} — {self.title}'
 
     def get_absolute_url(self):
-        """Public URL for this tutorial page within its workshop."""
-        return f'/workshops/{self.workshop.url_key}/tutorial/{self.slug}'
+        """Public URL for this tutorial page within its workshop.
+
+        Issue #1720: the ``/tutorial/`` segment was dropped — this is the
+        single place the canonical shape is built, so the dated legacy
+        redirect handler (which resolves its target through this method)
+        picks up the new shape automatically.
+        """
+        return f'/workshops/{self.workshop.url_key}/{self.slug}'
 
     @property
     def effective_required_level(self):

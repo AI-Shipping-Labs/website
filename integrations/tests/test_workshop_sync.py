@@ -774,6 +774,76 @@ class WorkshopSyncMissingRequiredFieldTest(_WorkshopSyncFixtureBase):
         self.assertGreater(len(sync_log.errors), 0)
 
 
+class WorkshopSyncReservedVideoSlugTest(_WorkshopSyncFixtureBase):
+    """Issue #1720: ``video`` is a reserved ``WorkshopPage`` slug.
+
+    Now that the canonical page URL is ``/workshops/<slug>/<page_slug>``
+    (the ``/tutorial/`` segment is gone), a page slugged ``video`` would
+    collide with the workshop's own ``/workshops/<slug>/video`` route.
+    Sync must fail loudly, per file, naming the file and the reason —
+    not rely on route ordering alone.
+    """
+
+    def test_video_slugged_page_is_skipped_with_named_error(self):
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        # Filename derives slug 'video' (01-... numeric-prefix stripping).
+        self._write_page(folder, '02-video.md', title='Video')
+        self._write_page(folder, '01-intro.md', title='Intro')
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertFalse(
+            WorkshopPage.objects.filter(
+                workshop=workshop, slug='video',
+            ).exists(),
+        )
+        # A sibling page in the same folder still syncs — one bad file
+        # must not abort the rest of the workshop's pages.
+        self.assertTrue(
+            WorkshopPage.objects.filter(
+                workshop=workshop, slug='intro',
+            ).exists(),
+        )
+        video_errors = [
+            e for e in sync_log.errors
+            if '02-video.md' in e.get('file', '')
+            and 'reserved' in e.get('error', '').lower()
+        ]
+        self.assertEqual(
+            len(video_errors), 1,
+            f'Expected exactly one named per-file error for the video '
+            f'slug, got: {sync_log.errors}',
+        )
+
+    def test_explicit_slug_override_to_video_is_also_reserved(self):
+        # Filename doesn't derive to 'video', but an explicit frontmatter
+        # `slug: video` override still hits the reserved-word check —
+        # the check runs on the resolved slug, not the filename.
+        folder = '2026/2026-04-21-demo'
+        self._write_workshop_yaml(folder=folder)
+        self._write_page(
+            folder, '02-recording.md', title='Recording',
+            extra_frontmatter='slug: video\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        workshop = Workshop.objects.get(slug='demo')
+        self.assertFalse(
+            WorkshopPage.objects.filter(
+                workshop=workshop, slug='video',
+            ).exists(),
+        )
+        video_errors = [
+            e for e in sync_log.errors
+            if '02-recording.md' in e.get('file', '')
+            and 'reserved' in e.get('error', '').lower()
+        ]
+        self.assertEqual(len(video_errors), 1, sync_log.errors)
+
+
 class WorkshopSyncContentIdIdentityTest(_WorkshopSyncFixtureBase):
     """Workshop row identity comes only from ``content_id``."""
 
@@ -1411,17 +1481,17 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
         # gone and replaced with the title.
         self.assertIn(
             '[Part 1: The starting notebook]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/starting-notebook)',
+            '(/workshops/end-to-end-agent-deployment/starting-notebook)',
             overview.body,
         )
         self.assertIn(
             '[Q&A: side discussions]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa)',
+            '(/workshops/end-to-end-agent-deployment/qa)',
             overview.body,
         )
         self.assertIn(
             '[the Q&A page]'
-            '(/workshops/end-to-end-agent-deployment/tutorial/qa#tmux)',
+            '(/workshops/end-to-end-agent-deployment/qa#tmux)',
             overview.body,
         )
         self.assertNotIn('](10-qa.md)', overview.body)
@@ -1429,15 +1499,15 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
 
         # Rendered HTML carries the right hrefs.
         self.assertIn(
-            'href="/workshops/end-to-end-agent-deployment/tutorial/qa"',
+            'href="/workshops/end-to-end-agent-deployment/qa"',
             overview.body_html,
         )
         self.assertIn(
-            'href="/workshops/end-to-end-agent-deployment/tutorial/qa#tmux"',
+            'href="/workshops/end-to-end-agent-deployment/qa#tmux"',
             overview.body_html,
         )
         self.assertIn(
-            'href="/workshops/end-to-end-agent-deployment/tutorial/starting-notebook"',
+            'href="/workshops/end-to-end-agent-deployment/starting-notebook"',
             overview.body_html,
         )
         # And no leftover bare-filename hrefs.
@@ -1449,7 +1519,7 @@ class WorkshopSyncMdLinkRewriteTest(_WorkshopSyncFixtureBase):
             workshop=workshop, slug='starting-notebook',
         )
         self.assertIn(
-            'href="/workshops/end-to-end-agent-deployment/tutorial/overview"',
+            'href="/workshops/end-to-end-agent-deployment/overview"',
             starting.body_html,
         )
 
@@ -1857,7 +1927,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         # and the visible label is title-substituted to the workshop title.
         self.assertIn('[Demo Workshop](/workshops/ws)', next_page.body)
         self.assertNotIn(
-            '/workshops/ws/tutorial/intro', next_page.body,
+            '/workshops/ws/intro', next_page.body,
         )
 
     def test_readme_image_url_rewritten_on_landing(self):
@@ -2094,11 +2164,11 @@ class WorkshopSyncCrossWorkshopLinkRewriteTest(_WorkshopSyncFixtureBase):
         # Sub-page resolves through the target's pages map; anchor preserved.
         self.assertIn(
             '[setup details](/workshops/end-to-end-agent-deployment/'
-            'tutorial/overview#prerequisites)',
+            'overview#prerequisites)',
             page.body,
         )
         self.assertIn(
-            'href="/workshops/end-to-end-agent-deployment/tutorial/'
+            'href="/workshops/end-to-end-agent-deployment/'
             'overview#prerequisites"',
             page.body_html,
         )

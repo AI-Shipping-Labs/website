@@ -206,7 +206,7 @@ class TestWorkshopMermaidDiagramRenders:
         )
         page.goto(
             f'{django_server}'
-            f'/workshops/architecture-walk-through/tutorial/architecture',
+            f'/workshops/architecture-walk-through/architecture',
             wait_until='domcontentloaded',
         )
 
@@ -289,7 +289,7 @@ class TestPagesWithoutDiagramsSkipMermaidDownload:
 
         page.goto(
             f'{django_server}'
-            f'/workshops/architecture-walk-through/tutorial/setup',
+            f'/workshops/architecture-walk-through/setup',
             wait_until='domcontentloaded',
         )
         # The assertion below is "no CDN requests fired"; wait for the
@@ -386,7 +386,7 @@ class TestMermaidEscapesHtmlSpecialCharacters:
         page.on('dialog', _on_dialog)
 
         page.goto(
-            f'{django_server}/workshops/xss-walkthrough/tutorial/xss',
+            f'{django_server}/workshops/xss-walkthrough/xss',
             wait_until='domcontentloaded',
         )
 
@@ -466,7 +466,7 @@ class TestWorkshopMermaidBrTagInLabel:
         diagnostics = _install_mermaid_diagnostics(page)
 
         page.goto(
-            f'{django_server}/workshops/br-tag-walkthrough/tutorial/arch',
+            f'{django_server}/workshops/br-tag-walkthrough/arch',
             wait_until='domcontentloaded',
         )
 

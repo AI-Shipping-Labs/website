@@ -241,7 +241,7 @@ class TestWorkshopAuthorRepliedTo:
         member_ctx = _auth_context(browser, 'main@test.com')
         member_page = member_ctx.new_page()
         member_page.goto(
-            f'{django_server}/workshops/rag-workshop/tutorial/setup',
+            f'{django_server}/workshops/rag-workshop/setup',
             wait_until='networkidle',
         )
         member_page.wait_for_selector('.qa-reply-toggle', timeout=8000)
@@ -271,7 +271,7 @@ class TestWorkshopAuthorRepliedTo:
         )
         assert target.count() >= 1
         target.first.click()
-        inst_page.wait_for_url('**/workshops/**/tutorial/setup**')
+        inst_page.wait_for_url('**/workshops/**/setup**')
         assert 'id="qa-section"' in inst_page.content()
         inst_ctx.close()
 
@@ -366,7 +366,7 @@ class TestCoTaughtFanOut:
         carol_page = carol_ctx.new_page()
         _post_question(
             carol_page, django_server,
-            '/workshops/rag-workshop/tutorial/setup',
+            '/workshops/rag-workshop/setup',
             'A shared question for both instructors.',
         )
         carol_ctx.close()
@@ -419,7 +419,7 @@ class TestCoAuthorCommenterSkipped:
         alice_page = alice_ctx.new_page()
         _post_question(
             alice_page, django_server,
-            '/workshops/rag-workshop/tutorial/setup',
+            '/workshops/rag-workshop/setup',
             'Alice asks her co-author.',
         )
         # Alice sees no badge for her own comment.

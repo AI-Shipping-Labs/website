@@ -331,7 +331,7 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
 
     def test_workshop_sidebar_row_uses_same_padding_tokens(self):
         response = self.client.get(
-            "/workshops/parity-ws/tutorial/p1",
+            "/workshops/parity-ws/p1",
         )
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
@@ -353,7 +353,7 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
         completion icon vocabulary is shared between course unit and
         workshop tutorial."""
         response = self.client.get(
-            "/workshops/parity-ws/tutorial/p1",
+            "/workshops/parity-ws/p1",
         )
         body = response.content.decode()
         # The current page is "p1"; the not-yet-completed sibling row
@@ -372,7 +372,7 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
         """Workshop tutorial pages share the bottom-nav include and
         therefore get the same mobile + desktop completion split."""
         response = self.client.get(
-            "/workshops/parity-ws/tutorial/p1",
+            "/workshops/parity-ws/p1",
         )
         self.assertContains(
             response,
@@ -505,6 +505,6 @@ class TestNoDjangoCommentLeak(TierSetupMixin, TestCase):
 
     def test_workshop_tutorial_reader_has_no_comment_leak(self):
         self._assert_no_comment_leak(
-            self.client.get("/workshops/leak-ws/tutorial/lp"),
+            self.client.get("/workshops/leak-ws/lp"),
             "workshop tutorial reader",
         )

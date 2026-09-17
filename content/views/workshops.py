@@ -9,8 +9,10 @@ Renders the user-facing surface for the ``Workshop`` content type:
   gated by ``landing_required_level``.
 - ``/workshops/<slug>/video`` — recording panel + materials,
   gated by ``recording_required_level``.
-- ``/workshops/<slug>/tutorial/<page_slug>`` — single tutorial page
-  gated by ``pages_required_level`` with prev/next navigation.
+- ``/workshops/<slug>/<page_slug>`` — single tutorial page
+  gated by ``pages_required_level`` with prev/next navigation. The
+  ``/tutorial/`` segment was dropped from this shape (issue #1720); there
+  is no redirect from the old shape.
 
 Every section gates against its own field, so a Workshop with
 ``landing=0, pages=10, recording=20`` lets free visitors see the landing,

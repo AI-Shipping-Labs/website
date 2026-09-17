@@ -150,7 +150,7 @@ class TestAnonymousPreviewsPageOne:
 
         # Page 1 — full body renders for anonymous (override 0).
         response = page.goto(
-            f'{django_server}/workshops/{url_key}/tutorial/page-one',
+            f'{django_server}/workshops/{url_key}/page-one',
             wait_until='domcontentloaded',
         )
         assert response.status == 200
@@ -162,11 +162,11 @@ class TestAnonymousPreviewsPageOne:
         next_btn = page.locator('[data-testid="page-next-btn"]')
         assert next_btn.count() >= 1
         next_href = next_btn.first.get_attribute('href')
-        assert f'/workshops/{url_key}/tutorial/page-two' in next_href
+        assert f'/workshops/{url_key}/page-two' in next_href
 
         # Page 2 — registered wall, sign-in CTA.
         response2 = page.goto(
-            f'{django_server}/workshops/{url_key}/tutorial/page-two',
+            f'{django_server}/workshops/{url_key}/page-two',
             wait_until='domcontentloaded',
         )
         assert response2.status == 403
@@ -212,7 +212,7 @@ class TestFreeMemberCompletesWorkshop:
             p = ctx.new_page()
             # Page 1 — full body.
             r = p.goto(
-                f'{django_server}/workshops/free-end-to-end/tutorial/page-one',
+                f'{django_server}/workshops/free-end-to-end/page-one',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -220,7 +220,7 @@ class TestFreeMemberCompletesWorkshop:
 
             # Page 2 — full body (registered wall passes a verified free user).
             r = p.goto(
-                f'{django_server}/workshops/free-end-to-end/tutorial/page-two',
+                f'{django_server}/workshops/free-end-to-end/page-two',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -230,7 +230,7 @@ class TestFreeMemberCompletesWorkshop:
 
             # Page 3 — full body.
             r = p.goto(
-                f'{django_server}/workshops/free-end-to-end/tutorial/page-three',
+                f'{django_server}/workshops/free-end-to-end/page-three',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -260,7 +260,7 @@ class TestAnonymousOnPaidWorkshopUpgradeWall:
         )
 
         response = page.goto(
-            f'{django_server}/workshops/paid-ws/tutorial/lesson-one',
+            f'{django_server}/workshops/paid-ws/lesson-one',
             wait_until='domcontentloaded',
         )
         assert response.status == 403
@@ -304,7 +304,7 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
             p = ctx.new_page()
             # Open page — full body.
             r = p.goto(
-                f'{django_server}/workshops/paid-preview/tutorial/intro',
+                f'{django_server}/workshops/paid-preview/intro',
                 wait_until='domcontentloaded',
             )
             assert r.status == 200
@@ -312,7 +312,7 @@ class TestFreeMemberOnPaidWorkshopWithOpenPreview:
 
             # Inherited page — upgrade card.
             r = p.goto(
-                f'{django_server}/workshops/paid-preview/tutorial/part-two',
+                f'{django_server}/workshops/paid-preview/part-two',
                 wait_until='domcontentloaded',
             )
             assert r.status == 403
@@ -351,8 +351,8 @@ class TestLandingPageStaysOpen:
         # No paywall card on the landing itself.
         assert 'data-testid="page-paywall"' not in body
         # Pages list links to tutorial URLs.
-        assert f'/workshops/{url_key}/tutorial/page-one' in body
-        assert f'/workshops/{url_key}/tutorial/page-two' in body
+        assert f'/workshops/{url_key}/page-one' in body
+        assert f'/workshops/{url_key}/page-two' in body
 
 
 # ---------------------------------------------------------------------
@@ -375,7 +375,7 @@ class TestSignInRoundTrip:
         )
 
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
-        gated_path = f'/workshops/{workshop.url_key}/tutorial/page-two'
+        gated_path = f'/workshops/{workshop.url_key}/page-two'
 
         # Visit gated page 2 anonymously.
         page.goto(

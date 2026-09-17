@@ -148,7 +148,7 @@ class TestMarkdownLinkifyParity:
         workshop = _create_workshop()
 
         page.goto(
-            f'{django_server}{workshop.get_absolute_url()}/tutorial/setup',
+            f'{django_server}{workshop.get_absolute_url()}/setup',
             wait_until='domcontentloaded',
         )
 

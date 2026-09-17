@@ -98,11 +98,11 @@ class TestCanonicalUrlsRenderDirectly:
         _create_workshop()
 
         response = page.goto(
-            f'{django_server}/workshops/{WORKSHOP_SLUG}/tutorial/intro',
+            f'{django_server}/workshops/{WORKSHOP_SLUG}/intro',
             wait_until='domcontentloaded',
         )
         assert page.url == (
-            f'{django_server}/workshops/{WORKSHOP_SLUG}/tutorial/intro'
+            f'{django_server}/workshops/{WORKSHOP_SLUG}/intro'
         )
         assert response is not None and response.status == 200
         assert 'Introduction' in page.content()
@@ -144,13 +144,16 @@ class TestLegacyDatedUrlsRedirect:
         _clear_workshops()
         _create_workshop()
 
+        # The dated legacy route still matches its own `/tutorial/` shape
+        # (issue #1720 leaves it unchanged); only its resolved target
+        # (via WorkshopPage.get_absolute_url()) drops the segment.
         response = page.goto(
             f'{django_server}/workshops/{DATE_SLUG}/tutorial/intro',
             wait_until='domcontentloaded',
         )
         assert response is not None and response.status == 200
         assert page.url == (
-            f'{django_server}/workshops/{WORKSHOP_SLUG}/tutorial/intro'
+            f'{django_server}/workshops/{WORKSHOP_SLUG}/intro'
         )
         assert 'Introduction' in page.content()
 
@@ -171,7 +174,7 @@ class TestSitemapShape:
         body = response.text()
 
         assert f'/workshops/{WORKSHOP_SLUG}' in body
-        assert f'/workshops/{WORKSHOP_SLUG}/tutorial/intro' in body
+        assert f'/workshops/{WORKSHOP_SLUG}/intro' in body
         assert f'<loc>https://aishippinglabs.com/workshops/{DATE_SLUG}</loc>' not in body
 
 

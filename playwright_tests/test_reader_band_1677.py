@@ -199,7 +199,7 @@ class TestAnonymousFreeWorkshopTutorial:
         self._setup()
         page.set_viewport_size({'width': 1280, 'height': 900})
         page.goto(
-            f'{django_server}/workshops/free-tutorial-ws/tutorial/intro',
+            f'{django_server}/workshops/free-tutorial-ws/intro',
             wait_until='domcontentloaded',
         )
 
@@ -213,7 +213,7 @@ class TestAnonymousFreeWorkshopTutorial:
 
         page.set_viewport_size({'width': 390, 'height': 844})
         page.goto(
-            f'{django_server}/workshops/free-tutorial-ws/tutorial/intro',
+            f'{django_server}/workshops/free-tutorial-ws/intro',
             wait_until='domcontentloaded',
         )
         toggle = page.locator('[data-testid="reader-mobile-drawer-toggle"]')
@@ -258,7 +258,7 @@ class TestGatedWorkshopTutorial:
             page = ctx.new_page()
             page.set_viewport_size({'width': 1280, 'height': 900})
             page.goto(
-                f'{django_server}/workshops/gated-tutorial-ws/tutorial/intro',
+                f'{django_server}/workshops/gated-tutorial-ws/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -290,7 +290,7 @@ class TestGatedWorkshopTutorial:
             page = ctx.new_page()
             page.set_viewport_size({'width': 390, 'height': 844})
             page.goto(
-                f'{django_server}/workshops/gated-tutorial-ws/tutorial/intro',
+                f'{django_server}/workshops/gated-tutorial-ws/intro',
                 wait_until='domcontentloaded',
             )
 

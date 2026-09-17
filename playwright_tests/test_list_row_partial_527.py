@@ -195,7 +195,7 @@ class TestLandingAndDrawerRowsMatchAnonymous:
 
             # Now navigate to the tutorial page and open the drawer.
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/agent-skills-527/intro",
                 wait_until="domcontentloaded",
             )
             toggle = page.locator(
@@ -280,7 +280,7 @@ class TestLoggedInCompletionGlyphsNoTypographyDrift:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/agent-skills-527/intro",
                 wait_until="domcontentloaded",
             )
             page.locator(
@@ -416,7 +416,7 @@ class TestAnonAndLoggedInDrawerRowsMatch:
         page_anon = ctx_anon.new_page()
         try:
             page_anon.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/agent-skills-527/intro",
                 wait_until="domcontentloaded",
             )
             page_anon.locator(
@@ -433,7 +433,7 @@ class TestAnonAndLoggedInDrawerRowsMatch:
         page_auth = ctx_auth.new_page()
         try:
             page_auth.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/agent-skills-527/intro",
                 wait_until="domcontentloaded",
             )
             page_auth.locator(
@@ -562,7 +562,7 @@ class TestDesktopSidebarRhythm:
         page = ctx.new_page()
         try:
             page.goto(
-                f"{django_server}/workshops/agent-skills-527/tutorial/intro",
+                f"{django_server}/workshops/agent-skills-527/intro",
                 wait_until="domcontentloaded",
             )
             # On desktop the sidebar nav is always visible (lg:block).

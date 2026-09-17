@@ -56,7 +56,7 @@ class WorkshopPageGetAbsoluteUrlTest(TestCase):
         )
         self.assertEqual(
             page.get_absolute_url(),
-            '/workshops/pg-ws/tutorial/intro',
+            '/workshops/pg-ws/intro',
         )
 
 
@@ -161,7 +161,7 @@ class CanonicalUrlsResolveTest(TestCase):
         self.assertContains(response, 'Build It')
 
     def test_canonical_tutorial_returns_200(self):
-        response = self.client.get('/workshops/build-it/tutorial/intro')
+        response = self.client.get('/workshops/build-it/intro')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Intro')
 
@@ -184,13 +184,16 @@ class CanonicalUrlsResolveTest(TestCase):
         self.assertEqual(response['Location'], '/workshops/build-it/video?t=300')
 
     def test_valid_dated_tutorial_redirects_to_slug_only(self):
+        # The dated legacy route still matches its own `/tutorial/` shape
+        # (issue #1720 leaves it unchanged); only the resolved target
+        # (via WorkshopPage.get_absolute_url()) drops the segment.
         response = self.client.get(
             '/workshops/2026-05-14-build-it/tutorial/intro?utm=x',
         )
         self.assertEqual(response.status_code, 301)
         self.assertEqual(
             response['Location'],
-            '/workshops/build-it/tutorial/intro?utm=x',
+            '/workshops/build-it/intro?utm=x',
         )
 
     def test_date_slug_mismatch_returns_404(self):
@@ -228,7 +231,7 @@ class ReverseWorkshopUrlTest(TestCase):
                 'slug': 'build', 'page_slug': 'intro',
             },
         )
-        self.assertEqual(url, '/workshops/build/tutorial/intro')
+        self.assertEqual(url, '/workshops/build/intro')
 
 
 class SitemapEmitsSlugOnlyUrlsTest(TestCase):
@@ -256,7 +259,7 @@ class SitemapEmitsSlugOnlyUrlsTest(TestCase):
 
     def test_sitemap_contains_canonical_tutorial(self):
         response = self.client.get('/sitemap.xml')
-        self.assertContains(response, '/workshops/sit-ws/tutorial/intro')
+        self.assertContains(response, '/workshops/sit-ws/intro')
 
     def test_sitemap_omits_dated_landing(self):
         response = self.client.get('/sitemap.xml')

@@ -1047,6 +1047,28 @@ def _sync_workshop_pages(
             # repository edit error.
             seen_paths.add(rel_path)
 
+            # Issue #1720: `video` is a reserved WorkshopPage slug. Now that
+            # the `/tutorial/` segment is gone, a page's canonical URL is
+            # `/workshops/<slug>/<page_slug>` — the same shape as the
+            # workshop's own `/workshops/<slug>/video` recording route.
+            # `workshop_video` stays declared ahead of the page catch-all in
+            # content/urls.py as a defense-in-depth backstop, but a
+            # silently-shadowed page is a worse failure mode than a loud
+            # sync error, so this is the primary defense: fail the file
+            # explicitly, naming the path and the reason, rather than
+            # relying on route ordering alone.
+            if slug == 'video':
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        "WorkshopPage slug 'video' is reserved — it would "
+                        "collide with the workshop's /video route. Rename "
+                        "the file or set an explicit `slug:` override in "
+                        "frontmatter. Skipped."
+                    ),
+                })
+                continue
+
             # Issue #571: per-page ``access:`` override. Absent = NULL
             # column = inherit Workshop.pages_required_level. When the
             # override drops below the workshop landing gate the page

@@ -151,7 +151,7 @@ class WorkshopReaderSidebarGitHubIconTest(TierSetupMixin, TestCase):
         )
 
     def test_sidebar_github_button_renders_inline_svg(self):
-        response = self.client.get('/workshops/reader-ws/tutorial/intro')
+        response = self.client.get('/workshops/reader-ws/intro')
         self.assertEqual(response.status_code, 200)
         button = _isolate_repo_button(
             response.content.decode(), 'sidebar-code-repo-link',

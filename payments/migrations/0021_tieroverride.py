@@ -7,7 +7,7 @@ images reading and writing the same physical table throughout, which a copy
 between two tables could not offer.
 
 Reversible: reverting removes the model from the ``payments`` state and
-``accounts.0031`` puts it back under ``accounts``. No row is read or written
+``accounts.0033`` puts it back under ``accounts``. No row is read or written
 in either direction.
 """
 
@@ -19,7 +19,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
     dependencies = [
         ("payments", "0020_alter_monthlypaymentgracedelivery_status"),
-        ("accounts", "0030_move_contacttag_and_accountsession"),
+        ("accounts", "0032_move_contacttag_and_accountsession"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

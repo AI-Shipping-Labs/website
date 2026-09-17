@@ -13,7 +13,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("accounts", "0030_move_contacttag_and_accountsession"),
+        ("accounts", "0032_move_contacttag_and_accountsession"),
         ("payments", "0021_tieroverride"),
         # triggers.0003 is a frozen R1 reconciliation that resolves
         # ("accounts", "TierOverride", "source") through the historical app

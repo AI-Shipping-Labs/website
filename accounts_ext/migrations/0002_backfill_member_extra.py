@@ -76,7 +76,7 @@ def copy_backward(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("accounts_ext", "0001_initial"),
-        ("accounts", "0030_move_contacttag_and_accountsession"),
+        ("accounts", "0032_move_contacttag_and_accountsession"),
     ]
 
     operations = [

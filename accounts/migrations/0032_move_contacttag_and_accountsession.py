@@ -18,7 +18,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("accounts", "0029_privacycompletiondelivery_and_more"),
+        ("accounts", "0031_backfill_maven_webhook_signup_source"),
         ("accounts_ext", "0001_initial"),
     ]
 

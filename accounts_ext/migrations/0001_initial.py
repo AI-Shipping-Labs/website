@@ -26,7 +26,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0029_privacycompletiondelivery_and_more"),
+        ("accounts", "0031_backfill_maven_webhook_signup_source"),
         ("sessions", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]

@@ -53,7 +53,7 @@ Always `--dry-run` a merge first and confirm identity (same Slack/Stripe id or n
 ## Contacts
 
 - `asl contacts import --data '{"contacts":[...]}'` — bulk upsert.
-- `asl contacts export [--format json|csv]`
+- `asl contacts export [-f json|table|raw|csv]` — default JSON envelope; `uv run asl contacts export -f csv > contacts.csv` writes the server's CSV verbatim (no unescaping step).
 - `asl contacts set-tags <email> --tags tag1,tag2` — replaces (not additive).
 
 ## Recording people from Slack

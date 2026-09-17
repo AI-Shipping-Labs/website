@@ -46,13 +46,40 @@ class TierLevel(click.ParamType):
             self.fail(f"{value!r} is not a valid tier name or integer", param, ctx)
 
 
+def _format_help(choices: list[str]) -> str:
+    labelled = [f"{c} (default)" if c == "json" else c for c in choices]
+    return "Output format: " + ", ".join(labelled[:-1]) + f", or {labelled[-1]}."
+
+
+def format_option_with(*extra_choices: str):
+    """Build the shared ``-f`` / ``--format`` option with extra choices.
+
+    The standard ``json`` / ``table`` / ``raw`` set comes first, then the
+    endpoint-specific extras (e.g. ``csv`` for endpoints that serve
+    ``text/csv``). Commands must never stack a second ``--format`` option on
+    top of :func:`format_option`; Click only warns about the duplicate and
+    silently drops one of them.
+    """
+    choices = list(FORMAT_CHOICES)
+    for choice in extra_choices:
+        if choice not in choices:
+            choices.append(choice)
+    help_text = _format_help(choices)
+
+    def decorator(func):
+        return click.option(
+            "-f", "--format", "fmt",
+            type=click.Choice(choices),
+            default="json",
+            help=help_text,
+        )(func)
+
+    return decorator
+
+
 def format_option(func):
-    return click.option(
-        "-f", "--format", "fmt",
-        type=click.Choice(FORMAT_CHOICES),
-        default="json",
-        help="Output format: json (default), table, or raw.",
-    )(func)
+    """Standard output-format option: json (default), table, or raw."""
+    return format_option_with()(func)
 
 
 def emit(data: Any, fmt: str, columns: list[str] | None = None) -> None:

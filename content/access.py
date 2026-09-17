@@ -99,6 +99,7 @@ CONTENT_TYPE_COPY = {
     'poll': ('vote in this poll', 'poll'),
     # Issue #1688: member wiki topic pages (hub and topic detail).
     'topic': ('read this topic guide', 'topic guide'),
+    'company_interview': ('read this company interview', 'company interview'),
 }
 DEFAULT_CONTENT_TYPE_COPY = ('access this content', 'content')
 

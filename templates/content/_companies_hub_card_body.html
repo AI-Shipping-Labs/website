@@ -1,0 +1,9 @@
+<p class="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground sm:text-base" data-testid="companies-hub-description">
+  How AI companies run their interview processes, step by step, from real job descriptions.
+</p>
+{% if companies_count %}
+<div class="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground" data-testid="companies-hub-metadata">
+  <i data-lucide="building-2" class="h-4 w-4 flex-shrink-0"></i>
+  {{ companies_count }} compan{{ companies_count|pluralize:"y,ies" }}
+</div>
+{% endif %}

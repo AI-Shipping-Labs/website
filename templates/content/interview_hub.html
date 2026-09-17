@@ -32,6 +32,8 @@
         {% include "content/_content_card.html" with card_url='/interview/'|add:cat.slug card_testid="interview-card" card_anchor_testid="interview-card-link" card_body_template="content/_interview_card_body.html" card_badge_template="content/_interview_card_badges.html" card_editorial=True card_title=cat.title card_title_testid="interview-card-title" card_aria_label=cat.title %}
         {% endif %}
         {% endfor %}
+        {# Issue #1712: company-by-company interview pages #}
+        {% include "content/_content_card.html" with card_url='/interview/companies' card_testid="companies-card" card_anchor_testid="companies-card-link" card_body_template="content/_companies_hub_card_body.html" card_badge_template="content/_companies_hub_card_badges.html" card_editorial=True card_title="Company interviews" card_title_testid="companies-card-title" card_aria_label="Company interviews" %}
       </div>
       {% else %}
       {% member_empty_state title='No interview questions yet' body='Check back soon for interview prep across theory, coding, system design, behavioral, and more.' icon='help-circle' kind='fresh' %}

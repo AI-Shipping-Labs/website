@@ -19,12 +19,11 @@ documented in the OpenAPI spec:
 from django.utils import timezone
 
 from accounts.lifecycle import lifecycle_payload
-from accounts.models import TierOverride
 from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
 from api.serializers.datetime import isoformat_or_none
 from email_app.services.ses_identity import event_identity_summary
-from payments.models import Membership
+from payments.models import Membership, TierOverride
 
 BOUNCE_STATE_NONE = "none"
 BOUNCE_STATE_SOFT = "soft"

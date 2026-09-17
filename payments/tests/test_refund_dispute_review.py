@@ -11,12 +11,13 @@ from unittest.mock import Mock, patch
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from content.models import Course, CourseAccess
 from payments.models import (
     MonthlyPaymentGrace,
     StripeWebhookDeliveryAttempt,
     Tier,
+    TierOverride,
     WebhookEvent,
 )
 from tests.fixtures import set_membership

@@ -68,8 +68,8 @@ def _set_subscription(email, subscription_id):
 
 def _grant_override(email, tier_slug):
     """Apply an active tier override at the given tier."""
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=email)
     free = Tier.objects.get(slug="free")

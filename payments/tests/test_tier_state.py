@@ -6,8 +6,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from payments.tier_state import build_tier_state, format_period_end
 from tests.fixtures import set_membership
 

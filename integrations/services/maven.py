@@ -13,7 +13,6 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.models.user import SIGNUP_SOURCE_MAVEN_WEBHOOK
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
@@ -29,7 +28,7 @@ from integrations.maven_config import (
     maven_override_tier_slug,
 )
 from integrations.models import MavenEnrollmentEvent
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 
 logger = logging.getLogger(__name__)
 User = get_user_model()

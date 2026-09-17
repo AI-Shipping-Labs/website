@@ -26,9 +26,8 @@ from django.db import transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.utils.tags import normalize_tag, set_tags
-from payments.models import Membership, Tier
+from payments.models import Membership, Tier, TierOverride
 from payments.services.backfill_tiers import backfill_user_from_stripe
 
 User = get_user_model()

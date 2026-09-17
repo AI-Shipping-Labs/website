@@ -13,9 +13,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.tier_audience import effective_level_at_least_q
 from content.access import LEVEL_MAIN
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()

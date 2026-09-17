@@ -43,8 +43,8 @@ def _seed_users():
     """
     from django.db import connection
 
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
     from playwright_tests.conftest import ensure_tiers
 
     ensure_tiers()

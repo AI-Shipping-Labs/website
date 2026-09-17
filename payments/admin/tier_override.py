@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from accounts.models import TierOverride
+from payments.models import TierOverride
 
 
 @admin.register(TierOverride)

@@ -19,7 +19,7 @@ def expire_tier_overrides():
     Returns:
         dict with count of deactivated overrides.
     """
-    from accounts.models import TierOverride
+    from payments.models import TierOverride
 
     now = timezone.now()
     count = TierOverride.objects.filter(

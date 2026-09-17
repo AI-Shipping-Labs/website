@@ -20,7 +20,6 @@ from django.urls import Resolver404, resolve
 from django.utils import timezone
 from freezegun import freeze_time
 
-from accounts.models import TierOverride
 from bookclub.models import BOOK_STATUS_CURRENT, Book
 from content.access import LEVEL_PREMIUM
 from content.models import (
@@ -38,6 +37,7 @@ from content.models import (
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from events.models import Event, EventRegistration, EventSeries
 from notifications.models import Notification
+from payments.models import TierOverride
 from plans.models import Plan, Sprint, SprintEnrollment
 from tests.fixtures import TierSetupMixin, set_membership
 from voting.models import Poll

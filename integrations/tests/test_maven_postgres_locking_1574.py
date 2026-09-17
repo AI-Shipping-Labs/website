@@ -26,10 +26,9 @@ from django.contrib.auth import get_user_model
 from django.db import connection, transaction
 from django.test import TestCase, tag
 
-from accounts.models import TierOverride
 from community.models import CommunityAuditLog
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 
 User = get_user_model()
 

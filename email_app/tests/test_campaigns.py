@@ -17,11 +17,11 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import Resolver404, resolve, reverse
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.tests.test_email_service import assert_no_internal_footer_text
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, create_user_with_membership, set_membership
 
 User = get_user_model()

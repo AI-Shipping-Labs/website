@@ -7,7 +7,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase, override_settings
 from django_q.models import Schedule
 
-from accounts.models import IMPORT_SOURCE_SLACK, ImportBatch, TierOverride
+from accounts.models import IMPORT_SOURCE_SLACK, ImportBatch
 from accounts.services.import_users import get_import_adapter, run_import_batch
 from community.services.import_slack import (
     register_slack_import_adapter,
@@ -17,6 +17,7 @@ from community.services.slack import SlackAPIError
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
 from integrations.config import clear_config_cache
+from payments.models import TierOverride
 
 User = get_user_model()
 

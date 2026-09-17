@@ -20,7 +20,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from accounts.tasks.remind_onboarding import (
     REMINDER_EMAIL_TYPE,
     remind_onboarding_incomplete,
@@ -35,7 +35,7 @@ from email_app.services.email_classification import (
     get_sender_for_email_type,
 )
 from email_app.testing import StubSESClient, deliver_pending_mail
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from questionnaires.models import Questionnaire, Response
 from tests.fixtures import set_membership
 

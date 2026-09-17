@@ -2133,7 +2133,7 @@ def _retire_redundant_override(user, tier):
     """
     from django.utils import timezone as _timezone
 
-    from accounts.models import TierOverride
+    from payments.models import TierOverride
 
     override = (
         TierOverride.objects

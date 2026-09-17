@@ -9,8 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.views import users as users_view
 from tests.fixtures import set_membership
 

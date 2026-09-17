@@ -51,8 +51,7 @@ def _seed_pricing_user(email, tier_slug="free", subscription_id=""):
 
 
 def _seed_override_pricing_user(email):
-    from accounts.models import TierOverride
-    from payments.models import Tier
+    from payments.models import Tier, TierOverride
     from playwright_tests.conftest import ensure_tiers
 
     ensure_tiers()

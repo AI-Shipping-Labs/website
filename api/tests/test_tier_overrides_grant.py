@@ -14,9 +14,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token
+from accounts.models import Token
 from community.models import CommunityAuditLog
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.services.contacts_import import OVERRIDE_DURATION
 
 User = get_user_model()

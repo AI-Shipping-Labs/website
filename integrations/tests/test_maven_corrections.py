@@ -15,14 +15,14 @@ from django.test import Client, TestCase, TransactionTestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import ImportBatch, TierOverride
+from accounts.models import ImportBatch
 from accounts.utils.tokens import generate_user_action_token
 from community.models import CommunityAuditLog
 from content.access import get_user_level
 from content.models import Cohort, Course
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import _run_step
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from website.release_phase import R1_EXPAND_COMPATIBILITY
 
 User = get_user_model()

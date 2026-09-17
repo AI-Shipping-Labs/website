@@ -12,7 +12,7 @@ from django_q.models import Schedule
 
 from accounts.admin.import_batch import ImportBatchAdmin
 from accounts.admin.user import UserAdmin
-from accounts.models import ImportBatch, TierOverride
+from accounts.models import ImportBatch
 from accounts.services import import_users
 from accounts.services.import_users import (
     ImportRow,
@@ -21,7 +21,7 @@ from accounts.services.import_users import (
 )
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 User = get_user_model()

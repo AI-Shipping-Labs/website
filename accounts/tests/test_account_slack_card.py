@@ -17,9 +17,10 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 SLACK_TEAM_ID_KEY = "SLACK_TEAM_ID"

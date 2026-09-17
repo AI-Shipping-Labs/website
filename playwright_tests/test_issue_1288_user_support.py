@@ -262,8 +262,8 @@ class TestIssue1288UserSupport:
 
     @pytest.mark.manual_visual
     def test_light_dark_desktop_mobile_changed_workflows(self, django_server, browser):
-        from accounts.models import EmailAlias, TierOverride, User
-        from payments.models import Tier
+        from accounts.models import EmailAlias, User
+        from payments.models import Tier, TierOverride
 
         member_pk, crm_pk = _seed()
         member = User.objects.get(pk=member_pk)

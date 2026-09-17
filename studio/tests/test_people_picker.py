@@ -16,8 +16,7 @@ from django.test import TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from plans.models import Plan, Sprint, SprintEnrollment
 from tests.fixtures import set_membership
 

@@ -14,7 +14,6 @@ from django.test import TestCase, TransactionTestCase, tag
 from django.utils import timezone
 from django_q.models import Schedule
 
-from accounts.models import TierOverride
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
 from email_app.services.campaign_dispatch import retry_delivery
 from email_app.services.campaign_repermission import (
@@ -37,6 +36,7 @@ from email_app.tasks.send_campaign import (
     send_campaign_batch,
 )
 from events.models import Event, EventRegistration
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()

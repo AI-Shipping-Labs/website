@@ -20,11 +20,10 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
-from accounts.models import TierOverride
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
-from payments.models import Membership, WebhookEvent
+from payments.models import Membership, TierOverride, WebhookEvent
 from payments.services import subscription_reconciliation as _recon
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from payments.services.import_stripe import _price_to_tier_map

@@ -16,8 +16,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.services.contacts_import import (
     MAX_UPLOAD_BYTES,
     NO_TIER_CHANGE,
@@ -326,7 +325,7 @@ class RunImportTest(TestCase):
             call_counter['count'] += 1
             if call_counter['count'] == 2:
                 raise RuntimeError('simulated mid-import failure')
-            from accounts.models import TierOverride as _TO
+            from payments.models import TierOverride as _TO
             _TO.objects.create(
                 user=user, override_tier=override_tier,
                 expires_at=timezone.now() + timezone.timedelta(days=1),

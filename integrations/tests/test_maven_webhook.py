@@ -8,11 +8,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import EmailAlias, TierOverride
+from accounts.models import EmailAlias
 from community.models import CommunityAuditLog
 from content.models import Cohort, Course
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 
 User = get_user_model()
 

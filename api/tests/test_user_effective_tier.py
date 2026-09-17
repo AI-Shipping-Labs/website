@@ -12,9 +12,9 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token, User
+from accounts.models import Token, User
 from api.serializers.users import serialize_user_state
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 

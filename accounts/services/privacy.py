@@ -579,7 +579,7 @@ def _membership_payment(user):
         "stripe_customer_id": membership.stripe_customer_id,
         "subscription_id": membership.subscription_id,
         "tier_overrides": _values(
-            _model("accounts", "TierOverride"),
+            _model("payments", "TierOverride"),
             Q(user=user),
             [
                 "id",
@@ -1329,7 +1329,7 @@ def _tier_snapshot(tier):
 def _effective_tier(user):
     # Issue #1579: the base tier lives on payments.Membership.
     base_tier = Membership.for_user(user).tier
-    override_model = _model("accounts", "TierOverride")
+    override_model = _model("payments", "TierOverride")
     if override_model is None:
         return base_tier
     active = (

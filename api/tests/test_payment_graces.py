@@ -5,10 +5,10 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token, User
+from accounts.models import Token, User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 

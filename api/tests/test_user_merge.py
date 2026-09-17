@@ -22,7 +22,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import EmailAlias, MemberAPIKey, TierOverride, Token
+from accounts.models import EmailAlias, MemberAPIKey, Token
 from analytics.models import UserAttribution
 from bookclub.models import Book, Chapter, Note
 from comments.models import Comment
@@ -31,7 +31,7 @@ from content.models import Course, Enrollment
 from crm.models import CRMRecord
 from email_app.models import EmailCampaign, EmailLog
 from events.models import Event, EventRegistration
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 User = get_user_model()

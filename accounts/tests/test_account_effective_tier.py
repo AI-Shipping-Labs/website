@@ -11,8 +11,8 @@ import datetime
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
-from payments.models import Tier
+from accounts.models import User
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 

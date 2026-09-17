@@ -168,7 +168,7 @@ def _get_override_level(user):
     """
     from django.utils import timezone
 
-    from accounts.models import TierOverride
+    from payments.models import TierOverride
 
     override = (
         TierOverride.objects
@@ -192,7 +192,7 @@ def get_active_override(user):
         return None
     from django.utils import timezone
 
-    from accounts.models import TierOverride
+    from payments.models import TierOverride
 
     return (
         TierOverride.objects

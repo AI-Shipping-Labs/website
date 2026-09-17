@@ -21,9 +21,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token
+from accounts.models import Token
 from api.views import tier_reconcile as tier_reconcile_module
-from payments.models import Tier, WebhookEvent
+from payments.models import Tier, TierOverride, WebhookEvent
 from tests.fixtures import set_membership
 
 User = get_user_model()

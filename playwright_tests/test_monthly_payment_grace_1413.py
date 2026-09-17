@@ -290,8 +290,7 @@ class TestMonthlyPaymentGrace1413:
         expect(summary).to_contain_text("Effective tierfree")
 
     def test_scenario_6_strongest_courtesy_access_survives_expiry(self, django_server, browser):
-        from accounts.models import TierOverride
-        from payments.models import Tier
+        from payments.models import Tier, TierOverride
         from payments.services import monthly_payment_grace as service
 
         _ensure_tiers()

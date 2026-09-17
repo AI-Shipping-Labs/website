@@ -7,10 +7,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.templatetags import studio_filters
 from tests.fixtures import set_membership
 

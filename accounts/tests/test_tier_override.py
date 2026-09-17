@@ -11,7 +11,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 from freezegun import freeze_time
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from content.access import (
     LEVEL_BASIC,
     LEVEL_MAIN,
@@ -21,7 +21,7 @@ from content.access import (
     get_active_override,
     get_user_level,
 )
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 

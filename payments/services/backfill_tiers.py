@@ -12,9 +12,8 @@ from dataclasses import dataclass, field
 import stripe
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from integrations.config import get_config
-from payments.models import Membership, WebhookEvent
+from payments.models import Membership, TierOverride, WebhookEvent
 from payments.services import tier_resolution as _tier_resolution
 from payments.services.import_stripe import (
     CONFIGURATION_ERRORS,

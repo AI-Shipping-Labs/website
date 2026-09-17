@@ -49,7 +49,7 @@ from accounts.lifecycle import (
     lifecycle_label,
     normalize_account_lifecycle,
 )
-from accounts.models import EmailAlias, PrivacyRequestLog, TierOverride
+from accounts.models import EmailAlias, PrivacyRequestLog
 from accounts.services.email_resolution import normalize_email
 from accounts.services.privacy import normalized_privacy_email_hash
 from accounts.services.slack_identity import (
@@ -91,6 +91,7 @@ from payments.models import (
     MonthlyPaymentGrace,
     PaymentAccountMismatch,
     Tier,
+    TierOverride,
 )
 from payments.services.backfill_tiers import backfill_user_from_stripe
 from plans.models import Plan, SprintEnrollment

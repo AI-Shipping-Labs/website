@@ -41,11 +41,11 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import EmailAlias, TierOverride
+from accounts.models import EmailAlias
 from accounts.services.email_resolution import normalize_email
 from accounts.utils.tags import normalize_tags, set_tags
 from community.models import CommunityAuditLog
-from payments.models import Membership
+from payments.models import Membership, TierOverride
 
 logger = logging.getLogger(__name__)
 

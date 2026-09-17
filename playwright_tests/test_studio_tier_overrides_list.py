@@ -46,7 +46,7 @@ def _clear_users_except_staff(staff_email):
 
 def _clear_overrides():
     """Reset the TierOverride table so the list starts empty."""
-    from accounts.models import TierOverride
+    from payments.models import TierOverride
 
     TierOverride.objects.all().delete()
     connection.close()
@@ -56,8 +56,8 @@ def _make_override(
     user_email, tier_slug, granted_by_email, *, days=30, is_active=True,
 ):
     """Create a TierOverride row with the given parameters."""
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=user_email)
     tier = Tier.objects.get(slug=tier_slug)
@@ -76,8 +76,8 @@ def _make_override(
 
 def _make_expired_override(user_email, tier_slug, granted_by_email):
     """Create a TierOverride row with is_active=True but expires_at in the past."""
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=user_email)
     tier = Tier.objects.get(slug=tier_slug)
@@ -104,7 +104,8 @@ def _user_id_for(email):
 
 def _active_override_for(email):
     """Return the most recent active TierOverride row for ``email`` (or None)."""
-    from accounts.models import TierOverride, User
+    from accounts.models import User
+    from payments.models import TierOverride
 
     user = User.objects.get(email=email)
     override = (

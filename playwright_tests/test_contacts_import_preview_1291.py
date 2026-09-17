@@ -94,7 +94,8 @@ class TestContactImportOutcomePreview:
         assert page.get_by_test_id('import-confirm-submit').is_disabled()
         _capture_matrix(page, tmp_path, 'zero-valid')
 
-        from accounts.models import TierOverride, User
+        from accounts.models import User
+        from payments.models import TierOverride
 
         assert list(User.objects.values_list('email', flat=True)) == [staff_email]
         assert TierOverride.objects.count() == 0

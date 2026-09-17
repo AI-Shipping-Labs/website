@@ -62,8 +62,8 @@ def _set_tags(email, tags):
 
 def _grant_premium_override(email):
     """Apply an active premium tier override to the named user."""
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=email)
     free = Tier.objects.get(slug="free")

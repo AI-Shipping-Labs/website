@@ -17,9 +17,10 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from content.access import LEVEL_REGISTERED
 from content.access_policy import TierAccessPolicy
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 POLICY = TierAccessPolicy()

@@ -8,7 +8,7 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 from django_q.models import Schedule
 
-from accounts.models import IMPORT_SOURCE_COURSE_DB, ImportBatch, TierOverride
+from accounts.models import IMPORT_SOURCE_COURSE_DB, ImportBatch
 from accounts.services.import_course_db import (
     build_course_db_import_adapter,
     register_course_db_import_adapter,
@@ -16,7 +16,7 @@ from accounts.services.import_course_db import (
 from accounts.services.import_users import run_import_batch
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 User = get_user_model()

@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()

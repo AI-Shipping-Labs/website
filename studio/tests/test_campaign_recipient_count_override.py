@@ -13,9 +13,9 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from content.access import LEVEL_MAIN
 from email_app.models import EmailCampaign
+from payments.models import TierOverride
 from studio.views.campaigns import _recipient_count_for_level
 from tests.fixtures import TierSetupMixin, set_membership
 

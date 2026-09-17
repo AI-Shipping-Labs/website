@@ -5,7 +5,6 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from accounts.models import TierOverride
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess
 from events.models import EventSeries, SeriesRegistration
 from integrations.models import MavenEnrollmentEvent
@@ -18,7 +17,7 @@ from integrations.services.maven import (
     retry_occurrence_step,
     run_occurrence_steps,
 )
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 
 User = get_user_model()
 

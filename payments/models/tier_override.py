@@ -8,8 +8,7 @@ class TierOverride(models.Model):
     Allows admins to grant time-limited access to a higher tier for trials,
     promotions, or courtesy access. The override sits on top of the real
     subscription tier (the tier on the users ``payments.Membership`` row) so
-    there are no conflicts with Stripe
-    webhooks.
+    there are no conflicts with Stripe webhooks.
 
     Normal staff tooling keeps one manual override active. Source-specific
     grants (such as Maven) may coexist; effective access uses the strongest
@@ -64,6 +63,10 @@ class TierOverride(models.Model):
     )
 
     class Meta:
+        # Pinned: A3.2 (#1692) moved this model from the ``accounts`` label to
+        # ``payments`` with SeparateDatabaseAndState. The table, its rows, its
+        # primary keys and its index all predate the move and are untouched.
+        db_table = "accounts_tieroverride"
         ordering = ["-created_at"]
         indexes = [
             models.Index(
@@ -78,3 +81,6 @@ class TierOverride(models.Model):
             f"TierOverride({self.user_id} -> "
             f"{self.override_tier_id}, {status})"
         )
+
+
+__all__ = ["TierOverride"]

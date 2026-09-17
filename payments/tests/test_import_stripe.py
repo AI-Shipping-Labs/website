@@ -8,9 +8,9 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import ImportBatch, TierOverride
+from accounts.models import ImportBatch
 from accounts.services.import_users import get_import_adapter, run_import_batch
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from payments.services import handle_subscription_updated
 from payments.services.import_stripe import (
     register_stripe_import_adapter,

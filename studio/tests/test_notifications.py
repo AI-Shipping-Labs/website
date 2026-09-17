@@ -17,10 +17,10 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from content.models import Article, Course, Download, Workshop
 from events.models import Event
 from notifications.models import Notification
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()

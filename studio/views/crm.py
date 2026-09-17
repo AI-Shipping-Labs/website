@@ -26,7 +26,6 @@ from accounts.lifecycle import (
     lifecycle_label,
     normalize_account_lifecycle,
 )
-from accounts.models import TierOverride
 from accounts.utils.tags import list_all_tags, normalize_tag, user_ids_with_exact_tag
 from community.models import STATUS_BOOKED, BookedCall
 from community.slack_config import get_slack_plan_sprints_user_token
@@ -51,6 +50,7 @@ from crm.services.markdown_export import (
 )
 from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
+from payments.models import TierOverride
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
 from questionnaires.onboarding import (

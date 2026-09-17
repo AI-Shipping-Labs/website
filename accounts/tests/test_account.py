@@ -9,12 +9,12 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
 from accounts.services import timezones
 from accounts.services.timezones import build_timezone_options
 from email_app.models import EmailLog
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 

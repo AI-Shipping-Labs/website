@@ -117,6 +117,18 @@ class MavenEnrollmentEvent(models.Model):
     notification_attempted_at = models.DateTimeField(null=True, blank=True)
     notification_completed_at = models.DateTimeField(null=True, blank=True)
     notification_error = models.CharField(max_length=255, blank=True, default="", db_default="")
+    # Issue #1732: CRM contact tags applied to the enrollee. Defaults to
+    # ``skipped`` at the database level so occurrences that pre-date the step
+    # (cohorts 1-4, tagged by an operator import) are terminal and are never
+    # re-tagged; ``_handle_enrolled`` sets ``pending`` explicitly on every new
+    # enrolled occurrence.
+    tagging_status = models.CharField(
+        max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
+    )
+    tagging_attempts = models.PositiveSmallIntegerField(default=0, db_default=0)
+    tagging_attempted_at = models.DateTimeField(null=True, blank=True)
+    tagging_completed_at = models.DateTimeField(null=True, blank=True)
+    tagging_error = models.CharField(max_length=255, blank=True, default="", db_default="")
     removal_status = models.CharField(
         max_length=16, choices=STEP_CHOICES, default=STEP_SKIPPED, db_default=STEP_SKIPPED,
     )

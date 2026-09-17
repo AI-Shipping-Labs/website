@@ -17,7 +17,7 @@ from django.utils import timezone
 from accounts.models import EmailAlias, Token
 from community.models import CommunityAuditLog
 from integrations.models import MavenEnrollmentEvent
-from integrations.services.maven import MAX_STEP_ATTEMPTS
+from integrations.services.maven import MAX_STEP_ATTEMPTS, STEP_NAMES
 
 pytestmark = [
     pytest.mark.django_db(transaction=True),
@@ -71,8 +71,18 @@ def _headers(key):
     return {"Authorization": f"Token {key}"}
 
 
+def _step(payload, name):
+    """Return one serialized step by name.
+
+    Deliberately not positional: the ledger gained ``tagging`` at index 0 in
+    issue #1732, and an eighth step must not break these journeys again. The
+    canonical ORDER is still asserted once, against ``STEP_NAMES``.
+    """
+    return next(step for step in payload["steps"] if step["name"] == name)
+
+
 @browser_journey
-def test_staff_finds_alias_linked_failure_and_reads_five_step_detail(
+def test_staff_finds_alias_linked_failure_and_reads_the_step_ledger(
     django_server, browser
 ):
     staff_email = "maven-browser-diagnose-staff@example.com"
@@ -115,15 +125,8 @@ def test_staff_finds_alias_linked_failure_and_reads_five_step_detail(
     )
     assert detail_response.status == 200
     detail = detail_response.json()
-    assert [step["name"] for step in detail["steps"]] == [
-        "override",
-        "enrollment",
-        "notification",
-        "welcome",
-        "slack",
-        "removal",
-    ]
-    welcome = detail["steps"][3]
+    assert [step["name"] for step in detail["steps"]] == list(STEP_NAMES)
+    welcome = _step(detail, "welcome")
     assert welcome["needs_attention"] is True
     assert welcome["last_error"] == "RuntimeError"
     context.close()
@@ -169,7 +172,7 @@ def test_staff_retries_exhausted_welcome_and_attention_list_clears(
         "outcome": "succeeded",
         "attempted": True,
     }
-    assert payload["occurrence"]["steps"][3]["attempts"] == MAX_STEP_ATTEMPTS + 1
+    assert _step(payload["occurrence"], "welcome")["attempts"] == MAX_STEP_ATTEMPTS + 1
     assert send.call_count == 1
 
     remaining = context.request.get(
@@ -219,8 +222,9 @@ def test_staff_gets_conflict_instead_of_duplicate_fresh_running_attempt(
         f"{django_server}/api/integrations/maven/occurrences/{occurrence.pk}",
         headers=_headers(key),
     ).json()
-    assert current["steps"][3]["attempts"] == 2
-    assert current["steps"][3]["status"] == "running"
+    current_welcome = _step(current, "welcome")
+    assert current_welcome["attempts"] == 2
+    assert current_welcome["status"] == "running"
     context.close()
 
 

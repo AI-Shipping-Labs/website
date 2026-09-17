@@ -47,6 +47,11 @@ SIGNUP_SOURCE_SIGNUP = "signup"
 SIGNUP_SOURCE_OAUTH = "oauth"
 SIGNUP_SOURCE_IMPORTED = "imported"
 SIGNUP_SOURCE_STAFF_CREATE = "staff_create"
+# Issue #1732: accounts the Maven enrollment webhook creates. Deliberately
+# NOT in ``accounts.lifecycle.ACCOUNT_CREATING_SIGNUP_SOURCES`` — the person
+# did not create this account themselves, so the derived
+# ``Imported / unknown`` lifecycle bucket is unchanged for them.
+SIGNUP_SOURCE_MAVEN_WEBHOOK = "maven_webhook"
 
 SIGNUP_SOURCE_CHOICES = [
     (SIGNUP_SOURCE_UNKNOWN, "Unknown (pre-existing row)"),
@@ -56,6 +61,7 @@ SIGNUP_SOURCE_CHOICES = [
     (SIGNUP_SOURCE_OAUTH, "OAuth signup"),
     (SIGNUP_SOURCE_IMPORTED, "Bulk import (Stripe / CSV / course DB)"),
     (SIGNUP_SOURCE_STAFF_CREATE, "Staff-created (Studio)"),
+    (SIGNUP_SOURCE_MAVEN_WEBHOOK, "Maven enrollment webhook"),
 ]
 
 

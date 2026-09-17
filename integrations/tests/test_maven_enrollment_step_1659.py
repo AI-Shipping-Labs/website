@@ -28,9 +28,19 @@ class MavenEnrollmentStepOrderingTest(TestCase):
         # Issue #1665: ``welcome`` runs before ``slack`` — the ``slack`` step
         # mirrors ``welcome_status`` instead of calling the Slack API, so the
         # welcome outcome must exist by the time ``slack`` is evaluated.
+        # Issue #1732: ``tagging`` leads, because the CRM facts it records
+        # must survive a failed entitlement.
         self.assertEqual(
             STEP_NAMES,
-            ("override", "enrollment", "notification", "welcome", "slack", "removal"),
+            (
+                "tagging",
+                "override",
+                "enrollment",
+                "notification",
+                "welcome",
+                "slack",
+                "removal",
+            ),
         )
 
 

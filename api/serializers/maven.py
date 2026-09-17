@@ -5,6 +5,9 @@ import re
 from api.serializers.datetime import isoformat_or_none
 from content.models import CohortEnrollment, CourseAccess
 from integrations.services.maven import (
+    MAVEN_TAGS_APPLIED_NOTE,
+    MAVEN_TAGS_NO_PREFIX_NOTE,
+    MAVEN_TAGS_NO_USER_NOTE,
     SLACK_JOIN_LINK_DELIVERED_NOTE,
     SLACK_JOIN_LINK_SUPPRESSED_NOTE,
     SLACK_JOIN_LINK_WELCOME_FAILED_NOTE,
@@ -23,6 +26,9 @@ _SAFE_EXCEPTION_CLASS = re.compile(
     r"^[A-Za-z_][A-Za-z0-9_]{0,254}(?:Error|Exception|DoesNotExist)$"
 )
 _SAFE_CONTROLLED_REASONS = {
+    MAVEN_TAGS_APPLIED_NOTE,
+    MAVEN_TAGS_NO_PREFIX_NOTE,
+    MAVEN_TAGS_NO_USER_NOTE,
     SLACK_JOIN_LINK_DELIVERED_NOTE,
     SLACK_JOIN_LINK_SUPPRESSED_NOTE,
     SLACK_JOIN_LINK_WELCOME_FAILED_NOTE,

@@ -647,8 +647,12 @@ class MavenOccurrenceRetryTest(MavenOccurrenceApiTestBase):
                 occurrence.refresh_from_db()
                 self.assertEqual(getattr(occurrence, f"{step}_attempts"), 1)
                 # ``slack`` makes no provider call of its own — it mirrors
-                # the already-terminal ``welcome_status`` set above.
-                self.assertEqual(calls, [] if step == "slack" else [step])
+                # the already-terminal ``welcome_status`` set above. Nor does
+                # ``tagging`` (#1732): it writes contact tags directly, so
+                # there is no provider to count.
+                self.assertEqual(
+                    calls, [] if step in ("slack", "tagging") else [step]
+                )
 
     def test_controlled_skip_and_caught_provider_failure_are_truthful_200s(self):
         self.member.email_preferences = {"maven_emails": False}

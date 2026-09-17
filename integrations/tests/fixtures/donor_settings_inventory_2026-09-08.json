@@ -1151,6 +1151,14 @@
     "optional": true,
     "description": "Slack channel name shown in the maven_welcome email, e.g. \"#ai-engineering-buildcamp\". Names where the cohort talks so a new enrollee knows exactly where to go. Optional: when blank the welcome copy reads cleanly without it and no channel is named.",
     "docs_url": "_docs/integrations/maven.md#maven_course_slack_channel"
+   },
+   {
+    "key": "MAVEN_COURSE_TAG_PREFIXES",
+    "is_secret": false,
+    "optional": true,
+    "default": "{\"from-rag-to-agents\": \"ai-buildcamp\"}",
+    "description": "JSON object mapping each Maven course_key to the CRM contact-tag prefix applied to its enrollees, e.g. {\"from-rag-to-agents\": \"ai-buildcamp\"} tags them maven, ai-buildcamp, and ai-buildcamp-<cohort_key>. A course_key with no entry gets the broad maven tag only.",
+    "docs_url": "_docs/integrations/maven.md#maven_course_tag_prefixes"
    }
   ]
  },

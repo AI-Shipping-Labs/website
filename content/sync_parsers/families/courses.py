@@ -1684,7 +1684,7 @@ def _count_real_errors(errors, start_index):
     the gate exists to stop a sync from reaping content while any of
     those are unresolved. Do not assume every entry carries the key.
     """
-    return sum(1 for e in errors[start_index:] if e.get('severity', 'info') != 'info')
+    return sum(1 for e in errors[start_index:] if e.get('severity') != 'info')
 
 
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,

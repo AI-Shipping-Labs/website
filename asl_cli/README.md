@@ -46,6 +46,19 @@ uv run asl events list --format raw      # compact JSON (for piping)
 uv run asl events list                   # pretty JSON (default)
 ```
 
+A few commands add `csv` to the same `-f` / `--format` option, but only where the
+endpoint itself serves `text/csv`. `asl contacts export` is the one today:
+
+```bash
+uv run asl contacts export -f csv > contacts.csv       # or --format csv
+```
+
+The server's CSV body is written to stdout verbatim — no JSON quoting, original
+line terminators, one trailing newline, and nothing else on stdout — so the
+redirected file parses directly with `csv.reader` (first row is the export
+header). `json` (default), `raw`, and `table` still return the
+`{"contacts": [...]}` payload; `table` renders one row per contact.
+
 ### Shared comments
 
 List discussions with generic filters or concise owner shortcuts:

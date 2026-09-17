@@ -59,6 +59,7 @@ markers = [
 relative_files = true
 source = [
     "accounts",
+    "accounts_ext",
     "analytics",
     "api",
     "bookclub",

@@ -1019,7 +1019,7 @@ encoded as `ESCALATION_TRIGGERS` in `scripts/affected_tests.py` and pinned by
 | `content/access.py`, `content/tier_config.py`, `accounts/gating.py`, `playwright_tests/test_access_control.py` | access-control matrix |
 | `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` (webhook handlers live under `payments/services/`) | payments wiring |
 | `templates/includes/**`, `templates/_partials/**`, `templates/base.html` | shared template fragments |
-| `website/**` (settings, urls, middleware, context processors), `accounts/context_processors.py` | every-request/every-page surface |
+| `website/**` (settings, urls, middleware, context processors), `accounts/context_processors.py`, `accounts_ext/session_backend.py` (backs `SESSION_ENGINE`) | every-request/every-page surface |
 | `tailwind.config.js` | content-purge config, can strip classes on any page |
 | `integrations/middleware.py` | every request |
 | `pyproject.toml`, `uv.lock` | soft trigger -- note only, does not force full local Playwright |
@@ -1040,6 +1040,8 @@ every key still exists on disk, so the map cannot rot silently.
 | `tests/fixtures.py` | `make test-core` (+ full Playwright) |
 | `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` | `payments` + `accounts` + `api` (+ full Playwright) |
 | `accounts/models/**`, `accounts/auth.py`, `accounts/adapters.py`, `accounts/signals.py` | `accounts` + `make test-core` |
+| `accounts_ext/models/**`, `accounts_ext/signals.py` | `accounts_ext` + `accounts` + `make test-core` |
+| `accounts_ext/session_backend.py` | `accounts_ext` + `accounts` + `jobs` + `make test-core` (+ full Playwright, via the escalation table) |
 
 ### One-hop reverse-import expansion and the 6-app cap
 

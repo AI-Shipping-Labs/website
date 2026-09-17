@@ -26,14 +26,27 @@ class SecureTriggerMigrationTest(TransactionTestCase):
             executor.migrate([accounts_leaf])
 
             executor = MigrationExecutor(connection)
-            migrate_from = [("triggers", "0001_initial"), accounts_leaf]
+            # A3.2 (#1692) handed accounts.TierOverride to payments, and that
+            # state move has to order after triggers.0003, which resolves
+            # ("accounts", "TierOverride", "source") through the historical
+            # registry. So the accounts side cannot stay at its leaf while
+            # triggers rewinds to 0001: target the furthest accounts node that
+            # does not depend on triggers. The guard that matters is unchanged
+            # -- the plan must still be purely backwards.
+            graph = executor.loader.graph
+            accounts_target = [
+                node
+                for node in graph.forwards_plan(accounts_leaf)
+                if node[0] == "accounts"
+                and not any(
+                    ancestor[0] == "triggers" for ancestor in graph.forwards_plan(node)
+                )
+            ][-1]
+            migrate_from = [("triggers", "0001_initial"), accounts_target]
             rewind_plan = executor.migration_plan(migrate_from)
             self.assertTrue(rewind_plan)
             self.assertTrue(
-                all(
-                    migration.app_label == "triggers" and backwards
-                    for migration, backwards in rewind_plan
-                ),
+                all(backwards for _migration, backwards in rewind_plan),
             )
             executor.migrate(migrate_from)
             old_apps = executor.loader.project_state(migrate_from).apps
@@ -57,7 +70,7 @@ class SecureTriggerMigrationTest(TransactionTestCase):
             executor = MigrationExecutor(connection)
             migrate_to = [
                 ("triggers", "0002_secure_delivery_state"),
-                accounts_leaf,
+                accounts_target,
             ]
             forward_plan = executor.migration_plan(migrate_to)
             self.assertEqual(

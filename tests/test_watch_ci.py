@@ -40,8 +40,9 @@ def run_payload(
     workflow="Deploy Dev",
     branch="main",
     created_at="2026-07-25T10:00:00Z",
+    head_sha=None,
 ):
-    return {
+    payload = {
         "databaseId": run_id,
         "status": status,
         "conclusion": conclusion,
@@ -50,6 +51,9 @@ def run_payload(
         "createdAt": created_at,
         "jobs": jobs,
     }
+    if head_sha is not None:
+        payload["headSha"] = head_sha
+    return payload
 
 
 def all_required_success():
@@ -424,6 +428,9 @@ class CompactOutputTest(SimpleTestCase):
             "result",
             "exit_code",
             "run_id",
+            "workflow",
+            "branch",
+            "head_sha",
             "required",
             "failing_jobs",
             "signature",
@@ -473,3 +480,71 @@ class RequiredCheckDefaultsTest(SimpleTestCase):
             workflow="Scheduled Playwright",
         )
         self.assertEqual(watcher.required, [])
+
+
+@tag("core")
+class HeadShaAttributionTest(SimpleTestCase):
+    """Every verdict names the commit it watched (issue #1690).
+
+    A verdict that cannot be tied to a commit is unactionable: the #1690
+    incident produced a plausible-looking red verdict for a five-day-old
+    commit. These tests pin the watched SHA into Run, Verdict, the summary,
+    and the final JSON line.
+    """
+
+    HEAD = "763443b7c9d2e1f0a3b4c5d6e7f8091a2b3c4d5e"
+
+    def test_poll_payload_records_head_sha_on_the_run(self):
+        run = watch_ci.parse_run_payload(
+            run_payload(
+                status="completed",
+                conclusion="success",
+                jobs=all_required_success(),
+                head_sha=self.HEAD,
+            )
+        )
+        self.assertEqual(run.head_sha, self.HEAD)
+
+    def test_green_verdict_carries_the_watched_commit(self):
+        gh = FakeGh(
+            views=[
+                run_payload(
+                    status="completed",
+                    conclusion="success",
+                    jobs=all_required_success(),
+                    head_sha=self.HEAD,
+                )
+            ]
+        )
+        verdict = make_watcher(gh).watch(run_id="100")
+
+        self.assertEqual(verdict.result, watch_ci.GREEN)
+        self.assertEqual(verdict.head_sha, self.HEAD)
+        json_payload = json.loads(watch_ci.render_json_line(verdict))
+        self.assertEqual(json_payload["head_sha"], self.HEAD)
+
+    def test_summary_names_the_watched_commit(self):
+        run = watch_ci.parse_run_payload(
+            run_payload(
+                status="completed",
+                conclusion="success",
+                jobs=all_required_success(),
+                head_sha=self.HEAD,
+            )
+        )
+        verdict = watch_ci.classify(run, list(REQUIRED))
+        verdict.head_sha = run.head_sha
+
+        summary = "\n".join(watch_ci.render_summary(verdict, run))
+        self.assertIn(f"Commit: {self.HEAD[:12]}", summary)
+
+    def test_verdict_without_head_sha_reports_unknown_commit(self):
+        run = watch_ci.parse_run_payload(
+            run_payload(status="completed", conclusion="success", jobs=all_required_success())
+        )
+        self.assertEqual(run.head_sha, "")
+        verdict = watch_ci.classify(run, list(REQUIRED))
+        verdict.head_sha = run.head_sha
+
+        summary = "\n".join(watch_ci.render_summary(verdict, run))
+        self.assertIn("Commit: ?", summary)

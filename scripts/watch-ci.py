@@ -182,6 +182,7 @@ class Run:
     workflow: str = ""
     branch: str = ""
     created_at: str = ""
+    head_sha: str = ""
     jobs: tuple[Job, ...] = ()
 
     @property
@@ -203,6 +204,7 @@ class Verdict:
     run_id: str = ""
     workflow: str = ""
     branch: str = ""
+    head_sha: str = ""
     required: list[str] = field(default_factory=list)
     failing_jobs: list[str] = field(default_factory=list)
     signature: str | None = None
@@ -222,6 +224,7 @@ class Verdict:
             "run_id": self.run_id,
             "workflow": self.workflow,
             "branch": self.branch,
+            "head_sha": self.head_sha,
             "required": self.required,
             "failing_jobs": self.failing_jobs,
             "signature": self.signature,
@@ -315,6 +318,7 @@ def parse_run_payload(payload: dict[str, Any], *, fallback_run_id: str = "") -> 
         workflow=str(payload.get("workflowName") or ""),
         branch=str(payload.get("headBranch") or ""),
         created_at=str(payload.get("createdAt") or ""),
+        head_sha=str(payload.get("headSha") or ""),
         jobs=jobs,
     )
 
@@ -585,7 +589,7 @@ class CIWatcher:
             "view",
             str(run_id),
             "--json",
-            "status,conclusion,jobs,workflowName,headBranch,databaseId,createdAt",
+            "status,conclusion,jobs,workflowName,headBranch,databaseId,createdAt,headSha",
         ]
         payload = self._gh_json(args)
         return parse_run_payload(payload, fallback_run_id=str(run_id))
@@ -772,6 +776,8 @@ class CIWatcher:
             verdict.workflow = self.workflow
         if not verdict.branch and self.branch:
             verdict.branch = self.branch
+        if not verdict.head_sha and self.last_run is not None:
+            verdict.head_sha = self.last_run.head_sha
         return verdict
 
 
@@ -783,7 +789,7 @@ class CIWatcher:
 def render_summary(verdict: Verdict, run: Run | None) -> list[str]:
     lines = [
         f"CI watch result: {verdict.result} (exit {verdict.exit_code})",
-        f"Workflow: {verdict.workflow or '?'} | Branch: {verdict.branch or '?'} | Run: {verdict.run_id or '?'}",
+        f"Workflow: {verdict.workflow or '?'} | Branch: {verdict.branch or '?'} | Run: {verdict.run_id or '?'} | Commit: {verdict.head_sha[:12] or '?'}",
         f"Reason: {verdict.reason}",
     ]
     if verdict.required:

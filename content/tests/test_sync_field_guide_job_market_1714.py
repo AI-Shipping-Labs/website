@@ -446,9 +446,9 @@ class JobMarketArticleSyncViewTest(TestCase):
 
     def test_anonymous_page_renders_provenance_and_links(self):
         response = self.client.get('/blog/ai-engineering-job-market')
-        self.assertEqual(response.status_code, 200)
+        # assertContains requires a 200 response, covering the status contract.
+        self.assertContains(response, 'Data through February 2026')
         content = response.content.decode()
-        self.assertIn('Data through February 2026', content)
         self.assertIn('Gamma', content)
         self.assertIn(
             'https://github.com/alexeygrigorev/'
@@ -460,11 +460,12 @@ class JobMarketArticleSyncViewTest(TestCase):
 
     def test_anonymous_page_is_not_gated(self):
         response = self.client.get('/blog/ai-engineering-job-market')
-        self.assertEqual(response.status_code, 200)
+        # assertContains requires a 200 response, covering the status contract.
+        self.assertContains(response, 'Skill trends by scrape')
         self.assertNotContains(
             response, 'gated-create-free-account-link')
 
     def test_article_appears_in_sitemap(self):
         response = self.client.get('/sitemap.xml')
-        self.assertEqual(response.status_code, 200)
+        # assertContains requires a 200 response, covering the status contract.
         self.assertContains(response, '/blog/ai-engineering-job-market')

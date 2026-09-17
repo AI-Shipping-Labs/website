@@ -86,9 +86,20 @@ class HostManagementActionTest(TestCase):
                     self.assertNotContains(
                         response, 'Private location marker', status_code=404,
                     )
-                    self.assertNotContains(
-                        response, self.host.email, status_code=404,
-                    )
+                    if user is not self.host:
+                        # #1724 gave every 404 the same full site chrome as
+                        # any other page (issue text: "include the normal
+                        # header/footer exactly like any other page"). That
+                        # chrome's account menu shows the signed-in
+                        # visitor's own email -- expected on every page,
+                        # site-wide, not a disclosure to guard against here.
+                        # The host seeing their own email in their own menu
+                        # is that same universal behavior, not a leak of
+                        # someone else's data; every other role must still
+                        # never see it.
+                        self.assertNotContains(
+                            response, self.host.email, status_code=404,
+                        )
                     self.assertNotContains(
                         response, 'stale-value', status_code=404,
                     )

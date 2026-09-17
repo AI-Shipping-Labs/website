@@ -24,6 +24,14 @@ from website.robots import robots_txt
 _ = admin.site.name
 admin.site.final_catch_all_view = False
 
+# Friendly, fully-chromed 404 page with a workshop-aware secondary CTA
+# (#1724). Dotted-path string so Django resolves it lazily (avoiding an
+# "unused import" lint false positive on a name only referenced by Django's
+# URLconf loader). `500.html` needs no handler override: Django's default
+# `server_error` already renders it, and it must stay context-free (see
+# `website/error_views.py` and `templates/500.html`).
+handler404 = 'website.error_views.handler404'
+
 urlpatterns = [
     # /ping is served by website.middleware.HealthCheckMiddleware so the
     # ALB's IP-based health checks don't trip ALLOWED_HOSTS.

@@ -43,6 +43,7 @@ class RepoClassification:
         download_files,
         marketing_page_files,
         interview_files,
+        company_interview_files,
         wiki_page_files,
         docs_page_files,
         member_wiki_page_files,
@@ -57,6 +58,7 @@ class RepoClassification:
         self.download_files = download_files
         self.marketing_page_files = marketing_page_files
         self.interview_files = interview_files
+        self.company_interview_files = company_interview_files
         self.wiki_page_files = wiki_page_files
         self.docs_page_files = docs_page_files
         self.member_wiki_page_files = member_wiki_page_files
@@ -109,6 +111,7 @@ class RepoFileClassifier:
         self.download_files = []
         self.marketing_page_files = []
         self.interview_files = []
+        self.company_interview_files = []
         self.wiki_page_files = []
         self.docs_page_files = []
         self.member_wiki_page_files = []
@@ -127,6 +130,7 @@ class RepoFileClassifier:
             download_files=self.download_files,
             marketing_page_files=self.marketing_page_files,
             interview_files=self.interview_files,
+            company_interview_files=self.company_interview_files,
             wiki_page_files=self.wiki_page_files,
             docs_page_files=self.docs_page_files,
             member_wiki_page_files=self.member_wiki_page_files,
@@ -205,6 +209,13 @@ class RepoFileClassifier:
             and ext in ('.yaml', '.yml', '.md')
         ):
             self.event_files.append(rel_path)
+            return True
+        # Issue #1712: company interview data lives in the content repo's
+        # `interview-companies/` directory as one YAML per company. Any
+        # extension outside .yaml/.yml falls through to the markdown and
+        # default rules below.
+        if 'interview-companies' in parts and ext in ('.yaml', '.yml'):
+            self.company_interview_files.append(rel_path)
             return True
         # Issue #1685: knowledge base sections live in the checkout's
         # top-level `wiki/` and `docs/` directories. Anchored to the first

@@ -401,15 +401,25 @@ def compute_aggregates(postings_by_month, months):
 
 
 def _markdown_table(headers, rows):
-    """Render a pipe table; rows are lists of pre-formatted cells."""
+    """Render a pipe table; rows are lists of pre-formatted cells.
+
+    Pipe characters inside cells are escaped: the dataset contains
+    employer names like ``Holiday Channel | My Holiday World``, and an
+    unescaped pipe would split the row.
+    """
+    def cell(value):
+        return str(value).replace('|', '\\|')
+
     lines = [
-        '| ' + ' | '.join(headers) + ' |',
+        '| ' + ' | '.join(cell(header) for header in headers) + ' |',
         '| ' + ' | '.join(
             '---:' if alignment == 'right' else '---'
             for alignment in ('left', *(['right'] * (len(headers) - 1)))
         ) + ' |',
     ]
-    lines.extend('| ' + ' | '.join(cells) + ' |' for cells in rows)
+    lines.extend(
+        '| ' + ' | '.join(cell(value) for value in cells) + ' |'
+        for cells in rows)
     return '\n'.join(lines)
 
 
@@ -636,15 +646,16 @@ def refresh(guide_root, content_repo, *, write=False):
     existing = read_existing(article_path)
     # Generated even on dry runs: a dry run must be able to render the
     # full file text for a brand-new target without writing anything.
-    new_uuid = str(uuid.uuid4()) if existing is None else None
-    build_article_file(aggregates, existing=existing, new_uuid=new_uuid)
+    existing_id = (existing or {}).get('content_id')
+    new_uuid = str(uuid.uuid4()) if not existing_id else None
+    article_text = build_article_file(
+        aggregates, existing=existing, new_uuid=new_uuid)
 
     written = False
     if write:
         os.makedirs(os.path.dirname(article_path), exist_ok=True)
         with open(article_path, 'w', encoding='utf-8') as handle:
-            handle.write(build_article_file(
-                aggregates, existing=existing, new_uuid=new_uuid))
+            handle.write(article_text)
         for widget_target, widget_name in (
             (SKILLS_WIDGET_TARGET, SKILLS_WIDGET_NAME),
             (TRENDS_WIDGET_TARGET, TRENDS_WIDGET_NAME),

@@ -479,6 +479,21 @@ class Module(SourceMetadataMixin, models.Model):
         return f'/courses/{self.course.slug}/{self.parent.slug}/{self.slug}'
 
     def clean(self):
+        """Validate parent/child + mixed-content invariants.
+
+        Issue #1721: a submodule being created under a parent that still
+        holds its OLD direct units mid-restructure (same slug kept, now
+        gaining submodules) would otherwise always fail here, even though
+        the sync is about to reparent those units onto this run's new
+        submodules. ``_allow_parent_with_pending_units`` is a private,
+        transient, sync-only escape hatch for that one check —
+        ``content.sync_parsers.families.courses._upsert_module_row`` sets
+        it on the in-memory instance for the duration of one submodule
+        creation call; it is never persisted and every non-sync caller
+        (Studio admin, any other ``full_clean()``) leaves it unset, so the
+        check still raises for a genuine, permanent mixed-content
+        violation.
+        """
         super().clean()
         if self.parent_id is not None:
             if self.pk is not None and self.parent_id == self.pk:
@@ -497,7 +512,9 @@ class Module(SourceMetadataMixin, models.Model):
                 raise ValidationError({
                     'parent': 'Parent module must belong to the same course.',
                 })
-            if parent.units.exists():
+            if parent.units.exists() and not getattr(
+                self, '_allow_parent_with_pending_units', False,
+            ):
                 raise ValidationError({
                     'parent': (
                         f'"{parent.title}" already has direct units and '

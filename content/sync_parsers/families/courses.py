@@ -1282,6 +1282,7 @@ def _has_direct_unit_files(module_dir, course_ignore_patterns, module_ignore_pat
 def _upsert_module_row(
     course, parent_module, entry, module_data, rel_path, repo_name,
     commit_sha, stats, seen_module_slugs=None,
+    allow_parent_with_pending_units=False,
 ):
     """Create or update the ``Module`` row for one module directory.
 
@@ -1304,6 +1305,18 @@ def _upsert_module_row(
     ``stats['errors']``) turns that silent merge into a visible error
     naming both offending source paths, without ever reaching
     ``module.save()``.
+
+    Issue #1721: ``allow_parent_with_pending_units`` is set by
+    :func:`_sync_module_dir` for every submodule entry whose parent is
+    mid-transition — kept its slug across a restructure while gaining
+    submodules this sync, so its own new submodules are being created
+    while it still holds its OLD direct units (nothing has reparented
+    them yet at this point in the walk). When true, sets the private,
+    transient ``_allow_parent_with_pending_units`` attribute on the
+    in-memory ``module`` instance before ``full_clean()`` so
+    ``Module.clean()``'s "parent already has direct units" check is
+    bypassed for THIS submodule only. The bypass is never persisted and
+    never applies to any other caller.
     """
     from content.models import Module
 
@@ -1375,6 +1388,9 @@ def _upsert_module_row(
             setattr(module, k, v)
         created = False
 
+    if allow_parent_with_pending_units:
+        module._allow_parent_with_pending_units = True
+
     try:
         module.full_clean()
     except ValidationError as exc:
@@ -1411,6 +1427,7 @@ def _sync_module_dir(
     course, entry, parent_module, repo_dir, repo_name, commit_sha, stats,
     known_images, course_dir, course_ignore_patterns, course_slug,
     unit_lookup, seen_module_paths, seen_module_slugs, unit_sync_state,
+    allow_parent_with_pending_units=False,
 ):
     """Sync one module directory: the module row, then either its
     submodules (parent) or its units (leaf) — never both (issue #1674).
@@ -1419,6 +1436,15 @@ def _sync_module_dir(
     course-wide accumulators threaded through the whole recursive tree
     walk (issue #1681) — see :func:`_upsert_module_row` and
     :func:`_sync_module_units` for what they track and why.
+
+    ``allow_parent_with_pending_units`` (issue #1721) is passed down by
+    THIS call's caller when ``parent_module`` (the module directory being
+    synced one level up) is itself mid-transition — kept its slug while
+    gaining submodules this sync, so it still holds its old direct units
+    at this point in the walk. When true, it is forwarded to
+    :func:`_upsert_module_row` for THIS entry (a submodule of that
+    transitioning parent) so its own creation isn't blocked by
+    ``Module.clean()``'s "parent already has direct units" check.
     """
     module_yaml_path = os.path.join(entry.path, 'module.yaml')
     module_data = _parse_yaml_file(module_yaml_path)
@@ -1458,6 +1484,7 @@ def _sync_module_dir(
     module = _upsert_module_row(
         course, parent_module, entry, module_data, rel_path, repo_name,
         commit_sha, stats, seen_module_slugs=seen_module_slugs,
+        allow_parent_with_pending_units=allow_parent_with_pending_units,
     )
 
     if submodule_entries:
@@ -1473,6 +1500,20 @@ def _sync_module_dir(
             unit_lookup=unit_lookup,
             unit_sync_state=unit_sync_state,
         )
+
+        # Issue #1721: a module that keeps its slug across a restructure
+        # while gaining submodules this sync still holds its OLD direct
+        # units at this point — the immediate sweep just above correctly
+        # declined to delete them (their content_id is claimed elsewhere
+        # in the course-wide precompute), and nothing has reparented them
+        # onto the new submodules yet. This is a live check: the parent
+        # row and its currently-attached units already exist in the DB
+        # here. When true, bypass Module.clean()'s "parent already has
+        # direct units" check for every one of this parent's own
+        # submodule entries this run (not just the first), since a later
+        # sibling may be the one that ends up claiming a given unit.
+        parent_has_pending_units = bool(submodule_entries) and module.units.exists()
+
         for submodule_entry in submodule_entries:
             try:
                 _sync_module_dir(
@@ -1480,6 +1521,7 @@ def _sync_module_dir(
                     commit_sha, stats, known_images, course_dir,
                     course_ignore_patterns, course_slug, unit_lookup,
                     seen_module_paths, seen_module_slugs, unit_sync_state,
+                    allow_parent_with_pending_units=parent_has_pending_units,
                 )
             except Exception as e:
                 raise_if_checkout_error(e)
@@ -1489,6 +1531,40 @@ def _sync_module_dir(
                         repo_dir,
                     ),
                     'error': str(e),
+                })
+
+        if parent_has_pending_units:
+            # Re-validate WITHOUT the bypass, purely to invoke the
+            # existing symmetric "cannot have both submodules and direct
+            # units" check (Module.clean(), belt-and-braces branch). If
+            # some of the parent's original direct units were never
+            # claimed by any of its own new submodules this run, that is
+            # a genuine content gap (not a sync-ordering artifact): name
+            # it as one error and move on rather than aborting the rest
+            # of the course's sync.
+            try:
+                module.full_clean()
+            except ValidationError as exc:
+                stuck_units = list(module.units.order_by('source_path')[:5])
+                remaining_count = module.units.count()
+                stuck_desc = ', '.join(
+                    f'{u.title!r} ({u.source_path})' for u in stuck_units
+                )
+                if remaining_count > len(stuck_units):
+                    stuck_desc += (
+                        f', and {remaining_count - len(stuck_units)} more'
+                    )
+                stats['errors'].append({
+                    'file': rel_path,
+                    'error': (
+                        f'Module "{module.title}" ({rel_path}) gained '
+                        f'submodules this sync but still has direct '
+                        f'unit(s) not claimed by any of them: {stuck_desc}. '
+                        'These units have no matching content_id anywhere '
+                        'else in the course. Move them into one of the new '
+                        'submodules or remove them, then re-sync. '
+                        f'({"; ".join(exc.messages)})'
+                    ),
                 })
     else:
         # Leaf module (today's two-level shape, unchanged behaviour).
@@ -1661,6 +1737,17 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         'new_hashes': {},
         'precomputed_seen_paths': precomputed_seen_paths,
         'precomputed_seen_content_ids': precomputed_seen_content_ids,
+        # Issue #1721: baseline error count captured right before the
+        # module/unit tree walk begins (below), deliberately excluding
+        # errors recorded before this function runs (e.g. instructor
+        # resolution in ``_sync_course_children``) — those are unrelated
+        # to what the stale-content sweeps reason about and must not
+        # block cleanup by themselves. Every sweep call site re-derives
+        # ``walk_has_errors`` from this baseline fresh, rather than
+        # caching a single before/after snapshot, so a module processed
+        # cleanly before the first error in the walk still swept as
+        # normal at its own immediate-sweep point.
+        'errors_at_walk_start': len(stats['errors']),
     }
 
     # Build the course-wide unit lookup once before processing any unit so the
@@ -1705,28 +1792,54 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
                 'error': str(e),
             })
 
-    # Issue #1681: course-end fallback sweep, BEFORE sweeping stale
-    # modules — a unit that moved to a new (possibly newly created)
-    # module earlier in the walk must already have been reparented off
-    # its old module by the time that old module is deleted below, or
-    # its ``UserCourseProgress`` would cascade-delete along with it. Most
-    # stale units are already gone by now via the per-module immediate
-    # sweep inside ``_sync_module_units`` (informed by the course-wide
-    # precompute above); this catches what that sweep deliberately left
-    # behind — legacy content-hash rename-migration candidates whose
-    # target `Unit` row didn't exist yet at immediate-sweep time — using
-    # the REAL, now-complete, accumulated course state.
-    _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state)
+    # Issue #1721: the shared "did this walk record any error" gate,
+    # evaluated once here reflecting the WHOLE walk (every top-level
+    # module and its submodules), guards all three destructive sweeps —
+    # the immediate per-module sweep inside ``_sync_module_units``
+    # already checked its own fresh snapshot as it went; these two
+    # course-end sweeps check the final state. An aborted walk means some
+    # unit files were never read, so their identities never entered
+    # ``unit_sync_state``/``seen_module_paths`` — reasoning from that
+    # incomplete picture is what deleted 31 live units in the #1721
+    # incident. Nothing is trusted to reap content while any error from
+    # this walk is unresolved.
+    walk_has_errors = len(stats['errors']) > unit_sync_state['errors_at_walk_start']
 
-    # Remove stale modules (top-level and submodules — seen_module_paths
-    # includes every level).
-    stale_modules = Module.objects.filter(
-        course=course,
-        source_repo=repo_name,
-    ).exclude(source_path__in=seen_module_paths)
-    deleted_count = stale_modules.count()
-    stale_modules.delete()
-    stats['deleted'] += deleted_count
+    if not walk_has_errors:
+        # Issue #1681: course-end fallback sweep, BEFORE sweeping stale
+        # modules — a unit that moved to a new (possibly newly created)
+        # module earlier in the walk must already have been reparented off
+        # its old module by the time that old module is deleted below, or
+        # its ``UserCourseProgress`` would cascade-delete along with it. Most
+        # stale units are already gone by now via the per-module immediate
+        # sweep inside ``_sync_module_units`` (informed by the course-wide
+        # precompute above); this catches what that sweep deliberately left
+        # behind — legacy content-hash rename-migration candidates whose
+        # target `Unit` row didn't exist yet at immediate-sweep time — using
+        # the REAL, now-complete, accumulated course state.
+        _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state)
+
+        # Remove stale modules (top-level and submodules — seen_module_paths
+        # includes every level).
+        stale_modules = Module.objects.filter(
+            course=course,
+            source_repo=repo_name,
+        ).exclude(source_path__in=seen_module_paths)
+        deleted_count = stale_modules.count()
+        stale_modules.delete()
+        stats['deleted'] += deleted_count
+    else:
+        error_count = len(stats['errors']) - unit_sync_state['errors_at_walk_start']
+        stats['errors'].append({
+            'file': course.slug,
+            'error': (
+                f'Course "{course.title}": the stale-content sweep was '
+                f'skipped because {error_count} module/unit error(s) were '
+                'recorded during this sync. Nothing was deleted as a '
+                'result. Fix the error(s) above and re-sync to clean up '
+                'genuinely removed content.'
+            ),
+        })
 
 
 def _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state):
@@ -1858,6 +1971,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             'new_hashes': {},
             'precomputed_seen_paths': None,
             'precomputed_seen_content_ids': None,
+            'errors_at_walk_start': len(stats.get('errors', [])),
         }
     seen_unit_paths = unit_sync_state['seen_paths']
     content_id_sources = unit_sync_state['content_id_sources']
@@ -2290,7 +2404,18 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     #
     # ``None`` precompute (standalone/test call with no
     # ``unit_sync_state``, see above) skips the sweep outright.
-    if unit_sync_state['precomputed_seen_paths'] is not None:
+    #
+    # Issue #1721: also skip once any module/unit error has been recorded
+    # anywhere in this course's walk so far (``walk_has_errors``,
+    # evaluated fresh here rather than cached — a module processed
+    # cleanly before the first error in the walk still swept normally at
+    # its own point in time). An aborted directory walk means some unit
+    # files were never read, so their identities never entered the
+    # accumulators this sweep — and the course-end fallback sweep below —
+    # reason from; sweeping on an error-degraded picture is exactly what
+    # deleted 31 live units in the #1721 incident.
+    walk_has_errors = len(stats['errors']) > unit_sync_state['errors_at_walk_start']
+    if unit_sync_state['precomputed_seen_paths'] is not None and not walk_has_errors:
         stale_units = Unit.objects.filter(
             module=module,
             source_repo=repo_name,

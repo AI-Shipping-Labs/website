@@ -439,6 +439,22 @@ def _strategy_membership(
     return
 
 
+def _strategy_member_extra(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Keep both MemberExtra rows (issue #1692).
+
+    ``accounts_ext.MemberExtra`` has the same shape as ``payments.Membership``:
+    a post-create OneToOne, exactly one per User, so the secondary's row is
+    neither repointed to canonical nor dropped. Its only content is the
+    contact-tag relation, and that is already reconciled in
+    ``_reconcile_scalars``, which unions the two ``tags`` JSON lists and calls
+    ``set_tags`` on canonical -- that write resynchronises canonical's
+    relation through ``User.save()``.
+    """
+    return
+
+
 # Keyed by ``(app_label.ModelName, field_name)``.
 #
 # These cover the cases the generic unique-key walker cannot express correctly:
@@ -460,6 +476,7 @@ _SPECIAL_STRATEGIES = {
     ("accounts.Token", "user"): _strategy_operator_token,
     ("cb_api.APIKey", "user"): _strategy_package_api_key,
     ("payments.Membership", "user"): _strategy_membership,
+    ("accounts_ext.MemberExtra", "user"): _strategy_member_extra,
     ("analytics.UserAttribution", "user"): _strategy_user_attribution,
     ("crm.CRMRecord", "user"): _strategy_crm_record,
     ("content.UserCourseProgress", "user"): _strategy_course_progress,

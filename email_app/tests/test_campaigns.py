@@ -314,7 +314,7 @@ class EmailCampaignTagTargetingTest(TierSetupMixin, TestCase):
 
         self.assertEqual(emails, {'alice@test.com'})
         sql = ' '.join(query['sql'] for query in queries).lower()
-        self.assertIn('accounts_user_contact_tags', sql)
+        self.assertIn('accounts_ext_memberextra_contact_tags', sql)
         self.assertNotIn('"accounts_user"."tags"', sql)
 
     def test_tag_filter_ands_with_target_min_level(self):

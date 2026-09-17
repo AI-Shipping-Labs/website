@@ -4,6 +4,7 @@ import json
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
 
 from accounts.utils.tags import set_tags
 from accounts_ext.models import ContactTag, MemberExtra
@@ -22,7 +23,7 @@ class MemberExtraCreationInvariantTest(TestCase):
 
     def test_registration_entry_point_creates_the_row(self):
         response = self.client.post(
-            "/accounts/register",
+            reverse("api_register"),
             data=json.dumps(
                 {
                     "email": "extra-register@test.com",

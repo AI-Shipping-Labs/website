@@ -70,6 +70,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 #: ``INSTALLED_APPS`` so a new app cannot be added without updating the map.
 APP_LABELS: tuple[str, ...] = (
     "accounts",
+    "accounts_ext",
     "analytics",
     "api",
     "bookclub",
@@ -145,6 +146,8 @@ ESCALATION_TRIGGERS: tuple[tuple[str, str], ...] = (
     ("templates/base.html", "shared template fragments"),
     ("website/*", "every-request/every-page surface"),
     ("accounts/context_processors.py", "every-request/every-page surface"),
+    # The session store backs SESSION_ENGINE, so it runs on every request.
+    ("accounts_ext/session_backend.py", "every-request/every-page surface"),
     ("tailwind.config.js", "content-purge config, can strip classes on any page"),
     ("integrations/middleware.py", "every request"),
 )
@@ -255,6 +258,11 @@ HUB_MODULE_MAP: tuple[tuple[str, tuple[str, ...], bool], ...] = (
     ("payments/services/*", ("payments", "accounts", "api"), False),
     ("payments/views/*", ("payments", "accounts", "api"), False),
     ("accounts/models/*", ("accounts",), True),
+    # accounts_ext owns the contact-tag relation (segmentation across studio,
+    # api and email_app) and the session row, so its models are hub modules.
+    ("accounts_ext/models/*", ("accounts_ext", "accounts"), True),
+    ("accounts_ext/session_backend.py", ("accounts_ext", "accounts", "jobs"), True),
+    ("accounts_ext/signals.py", ("accounts_ext", "accounts"), True),
     ("accounts/auth.py", ("accounts",), True),
     ("accounts/adapters.py", ("accounts",), True),
     ("accounts/signals.py", ("accounts",), True),

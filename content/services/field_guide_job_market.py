@@ -429,20 +429,21 @@ def render_article_body(aggregates):
     latest_label = full_month_label(provenance['latest_scrape'])
 
     intro = (
-        'The AI engineering job market, measured. This page aggregates '
+        'The AI engineering job market, measured. Here are '
         f"{provenance['total_postings']:,} AI engineering job postings from "
-        f"builtin.com, collected in {provenance['scrape_count']} monthly "
-        f"scrapes ({provenance['window']}) and structured in the AI "
-        'Engineering Field Guide. Every table below is generated from those '
-        'postings: which skills employers ask for, how demand moves month to '
-        'month, who is hiring, and where the jobs are.'
+        'builtin.com, aggregated for the AI Engineering Field Guide. The '
+        f"postings come from {provenance['scrape_count']} monthly scrapes "
+        f"({provenance['window']}). We break them into skill demand, monthly "
+        'trends, top employers, and job locations.'
     )
 
     demand_intro = (
-        f"Share of postings that mention each skill, per category, in the "
-        f"latest scrape ({latest_label}, {provenance['latest_postings']:,} "
-        'postings). A skill is counted once per posting, and only when the '
-        'description spells it out, so shares are a floor, not a ceiling.'
+        'Each category lists the skills that appear most often in the '
+        f"latest scrape of {latest_label} "
+        f"({provenance['latest_postings']:,} postings). A skill's share is "
+        'the percentage of postings that mention it. A skill is counted '
+        'once per posting, and only when the description spells it out, so '
+        'shares are a floor, not a ceiling.'
     )
 
     trends_intro = (
@@ -483,7 +484,7 @@ def render_article_body(aggregates):
         ['Scrape', 'Postings'],
         [
             *[
-                (scrape['label'], str(scrape['postings']))
+                (scrape['label'], f"{scrape['postings']:,}")
                 for scrape in provenance['scrapes']
             ],
             ('Total', f"{provenance['total_postings']:,}"),
@@ -492,36 +493,36 @@ def render_article_body(aggregates):
 
     methodology = (
         'The raw dataset lives in the guide repo\'s '
-        f"[job-market directory]({provenance['guide_url']}); each monthly "
+        f"[job-market directory]({provenance['guide_url']}). Each monthly "
         'directory holds one YAML file per posting with the extracted '
-        'skills, role type, and locations. Shares are within-scrape '
-        'percentages of postings, rounded to one decimal place. There is no '
-        'cross-month deduplication: a company hiring in several months '
-        'appears in each month\'s cross-section. This page is regenerated '
-        'from the scrapes by a converter, so the numbers update whenever a '
-        f"new monthly scrape lands. Data through {provenance['data_through']}."
+        'skills, role type, and locations.\n\n'
+        'Shares are within-scrape percentages of postings, rounded to one '
+        'decimal place. We don\'t deduplicate across months, so a company '
+        'hiring in several months appears in each month\'s cross-section. '
+        'The converter regenerates this page from the scrapes, and the '
+        f"numbers update after every monthly scrape. Data through "
+        f"{provenance['data_through']}."
     )
 
     footer = (
-        'This page is part of [The AI Engineering Field Guide]'
-        '(/blog/ai-engineering-field-guide) series, which turns the same '
-        'dataset into a practical read about the AI engineer role. If you '
-        'want the structured path - interview prep, projects, and a '
-        'community that builds - [become a member](/membership).'
+        'Read [The AI Engineering Field Guide](/blog/ai-engineering-field-'
+        'guide) for the practical version of this data. For the structured '
+        'path with interview prep, projects, and a community that builds, '
+        '[become a member](/membership).'
     )
 
     parts = [
         intro,
-        '## What job postings ask for',
+        '## The skills employers ask for',
         demand_intro,
         '<!-- include:widgets/job_market_skills.html -->',
-        '## How demand is moving',
+        '## Month-over-month trends',
         trends_intro,
         '<!-- include:widgets/job_market_trends.html -->',
         '## Top employers',
         companies_intro,
         companies_table,
-        '## Where the jobs are',
+        '## Job locations by city',
         locations_intro,
         locations_table,
         '## Dataset and methodology',

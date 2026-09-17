@@ -203,7 +203,7 @@ class TestPrevNextReaderNavigation:
     def test_next_and_prev_links_use_new_shape(self, django_server, browser):
         _clear_workshops()
         _create_workshop(
-            slug='nav-ws', pages=LEVEL_MAIN,
+            slug='nav-ws', pages=LEVEL_MAIN, recording=LEVEL_MAIN,
             pages_data=[
                 ('one', 'Page One', '# Page One\n\nBody one.'),
                 ('two', 'Page Two', '# Page Two\n\nBody two.'),

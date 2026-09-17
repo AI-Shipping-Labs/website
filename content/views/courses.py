@@ -72,9 +72,10 @@ def _course_grid_classes(count):
     """Return the canonical listing-grid class string.
 
     Issue #1719: previously special-cased 1- and 2-item counts with
-    ``lg:mx-auto lg:max-w-*``, which centred the grid under a left-aligned
-    heading. A CSS grid item that doesn't span columns already left-aligns
-    and doesn't stretch below the column count, so the unconditional
+    ``lg:mx-auto lg:max-w-*``, which centred the grid under a heading that
+    starts at the left edge. A CSS grid item that doesn't span columns
+    already starts at that same edge and doesn't stretch below the column
+    count, so the unconditional
     class string is correct for any ``count`` — matching the documented
     listing-grid pattern (``_docs/design-system.md``) and the Projects
     grid (``templates/content/projects_list.html``).

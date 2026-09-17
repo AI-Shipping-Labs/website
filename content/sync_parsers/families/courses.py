@@ -1091,6 +1091,7 @@ def _build_workshop_page_lookup(
 def _resolve_workshop_landing_copy(
     workshop_dir, data, rel_path, page_lookup, workshop_slug, repo_name,
     sync_errors, cross_workshop_lookup=None, workshops_repo_name=None,
+    known_images=None,
 ):
     """Resolve the markdown body for a workshop's landing description.
 
@@ -1132,6 +1133,10 @@ def _resolve_workshop_landing_copy(
         workshop_slug: ``Workshop.slug`` for the link rewriter.
         repo_name: Source repo name for image CDN URL rewriting.
         sync_errors: Mutable list to append error / info records to.
+        known_images: Optional frozenset of repo-relative image paths the
+            uploader saw. Passed through to ``rewrite_image_urls`` so a
+            figure with a ``<stem>.dark<ext>`` sibling becomes a
+            theme-swapped pair (issue #1725).
 
     Returns:
         str: Fully-processed markdown body, or empty string when no source
@@ -1206,7 +1211,9 @@ def _resolve_workshop_landing_copy(
 
     # Rewrite relative image URLs using the workshop folder as the base
     # path (same as tutorial pages would).
-    body = rewrite_image_urls(body, repo_name, rel_path)
+    body = rewrite_image_urls(
+        body, repo_name, rel_path, known_images=known_images,
+    )
 
     # Rewrite intra-workshop ``.md`` links (including the README virtual
     # entry that points back at the landing — useful when copy_file is a

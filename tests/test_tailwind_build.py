@@ -46,6 +46,12 @@ DYNAMIC_CLASSES = {
     # Sole operator-authored runtime token family.
     "from-accent/30",
     "from-blue-500/30",
+    # Issue #1725: the workshop light/dark figure swap. These two variants
+    # only ever reach a page through markdown stored in the database, so the
+    # scanner sees them exclusively via the literals in
+    # content/sync_parsers/media.py.
+    "dark:hidden",
+    "dark:block",
     # First-party JavaScript-only state classes.
     "bg-amber-500",
     "bg-emerald-500",

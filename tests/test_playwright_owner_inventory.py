@@ -1051,6 +1051,39 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
     })
 
+    issue_1725_owners = frozenset({
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestDarkModeFirstLoad::"
+        "test_dark_reader_sees_the_dark_figure",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestLightModeFirstLoad::"
+        "test_light_reader_sees_the_light_figure",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestToggleToDarkKeepsThePage::"
+        "test_toggle_swaps_figure_with_no_reload",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestToggleBackToLightPersists::"
+        "test_toggle_back_and_reload_keeps_light",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestTutorialPageFigureSwaps::"
+        "test_tutorial_figure_swaps_in_place",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestUnpairedScreenshotIgnoresTheme::"
+        "test_single_screenshot_is_untouched",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestMixedFigureAndScreenshot::"
+        "test_two_images_visible_in_each_theme",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestFigureKeepsAuthoredSize::"
+        "test_figure_is_not_stretched_to_the_reading_column",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestColdDarkLoadHasNoWhiteFlash::"
+        "test_light_figure_is_hidden_the_moment_it_enters_the_dom",
+        "playwright_tests/test_workshop_theme_figures_1725.py::"
+        "TestOperatorResyncThemesStoredWorkshop::"
+        "test_resync_replaces_the_stored_single_image_body",
+    })
+
     issue_1720_owners = frozenset({
         "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
         "TestAnonymousFollowsOpenPageFromLanding::"
@@ -1361,8 +1394,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2615)
-        self.assertEqual(len(inventory.owners), 2413)
+        self.assertEqual(inventory.item_count, 2625)
+        self.assertEqual(len(inventory.owners), 2423)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1398,7 +1431,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1688_owners
             | self.issue_1720_owners
             | self.issue_1719_owners
-            | self.issue_1724_owners,
+            | self.issue_1724_owners
+            | self.issue_1725_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1446,6 +1480,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1677_owners
             | self.issue_1720_owners
             | self.issue_1724_owners
+            | self.issue_1725_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

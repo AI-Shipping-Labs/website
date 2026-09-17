@@ -455,6 +455,7 @@ def _sync_single_workshop(
             source.repo_name, stats['errors'],
             cross_workshop_lookup=cross_workshop_lookup,
             workshops_repo_name=workshops_repo_name,
+            known_images=known_images,
         )
 
         workshop_defaults = {
@@ -1111,7 +1112,13 @@ def _sync_workshop_pages(
                     body, rel_path, repo_name, base_dir,
                     known_images, stats['errors'],
                 )
-            body = rewrite_image_urls(body, repo_name, base_dir)
+            # Issue #1725: pass ``known_images`` so a figure with a
+            # ``<stem>.dark<ext>`` sibling in the checkout is emitted as a
+            # theme-swapped pair. Workshops are the only family that opts
+            # in; every other call site keeps the single-image output.
+            body = rewrite_image_urls(
+                body, repo_name, base_dir, known_images=known_images,
+            )
             # Issue #301: rewrite intra-workshop ``.md`` links to platform
             # URLs. Run on the raw markdown (before WorkshopPage.save() calls
             # markdown.markdown()) so the rewriter doesn't have to parse HTML.

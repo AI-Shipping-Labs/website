@@ -1084,6 +1084,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_sitemap_contains_new_shape_and_omits_tutorial_and_dated",
     })
 
+    issue_1724_owners = frozenset({
+        "playwright_tests/test_friendly_404_page_1724.py::"
+        "TestDeadWorkshopTutorialUrlShowsWorkshopLink::"
+        "test_dead_tutorial_url_links_to_the_still_live_workshop",
+        "playwright_tests/test_friendly_404_page_1724.py::"
+        "TestArbitraryDeadUrlShowsGenericHomepageCta::"
+        "test_arbitrary_dead_url_has_no_workshop_link_and_returns_home",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1352,8 +1361,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2613)
-        self.assertEqual(len(inventory.owners), 2411)
+        self.assertEqual(inventory.item_count, 2615)
+        self.assertEqual(len(inventory.owners), 2413)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1388,7 +1397,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1677_owners
             | self.issue_1688_owners
             | self.issue_1720_owners
-            | self.issue_1719_owners,
+            | self.issue_1719_owners
+            | self.issue_1724_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1435,6 +1445,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1572_owners
             | self.issue_1677_owners
             | self.issue_1720_owners
+            | self.issue_1724_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

@@ -68,6 +68,10 @@ urlpatterns = [
     # Storage, hierarchy and views come from the package; the Tailwind
     # templates under templates/knowledge_base/ are this site's own (D18).
     path('', include('community_base.knowledge_base.urls')),
+    # Issue #1688: member topic pages synced from the private wiki repo,
+    # registered before the marketing-page fallback so CMS slugs cannot
+    # shadow /topics/.
+    path('', include('topics.urls')),
 ]
 
 if settings.DEBUG:

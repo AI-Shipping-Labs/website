@@ -7,7 +7,9 @@ from content.nav_availability import (
     refresh_knowledge_base_nav_cache,
     refresh_marketing_pages_nav_cache,
     refresh_published_downloads_nav_cache,
+    refresh_topics_nav_cache,
 )
+from topics.models import TopicPage
 
 
 @receiver(
@@ -52,6 +54,22 @@ def refresh_knowledge_base_nav_availability(**kwargs):
     refresh_knowledge_base_nav_cache()
 
 
+@receiver(
+    post_save,
+    sender=TopicPage,
+    dispatch_uid='content.refresh_topics_nav_availability_on_save',
+)
+@receiver(
+    post_delete,
+    sender=TopicPage,
+    dispatch_uid='content.refresh_topics_nav_availability_on_delete',
+)
+def refresh_topics_nav_availability(**kwargs):
+    # Issue #1688: the sync family's cleanup refreshes the same flag; this
+    # covers Studio, admin, and fixture writes outside the sync engine.
+    refresh_topics_nav_cache()
+
+
 @receiver(post_migrate, dispatch_uid='content.warm_downloads_nav_availability')
 def warm_downloads_nav_availability(app_config, **kwargs):
     if getattr(app_config, 'label', None) == 'content':
@@ -68,3 +86,9 @@ def warm_marketing_pages_nav(app_config, **kwargs):
 def warm_knowledge_base_nav_availability(app_config, **kwargs):
     if getattr(app_config, 'label', None) == 'cb_knowledge_base':
         refresh_knowledge_base_nav_cache()
+
+
+@receiver(post_migrate, dispatch_uid='content.warm_topics_nav_availability')
+def warm_topics_nav_availability(app_config, **kwargs):
+    if getattr(app_config, 'label', None) == 'topics':
+        refresh_topics_nav_cache()

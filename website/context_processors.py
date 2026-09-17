@@ -14,6 +14,7 @@ from content.nav_availability import (
     get_marketing_pages_nav,
     has_published_downloads_for_nav,
     has_published_kb_pages_for_nav,
+    has_published_topics_for_nav,
 )
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
@@ -195,11 +196,17 @@ def _build_env_mismatch_payload(request):
     }
 
 
-def _build_primary_nav(marketing_nav, has_published_downloads, kb_nav=None):
+def _build_primary_nav(
+    marketing_nav,
+    has_published_downloads,
+    kb_nav=None,
+    topics_available=False,
+):
     """Assemble the ordered primary-nav structure rendered in the header.
 
     ``kb_nav`` is optional; existing two-argument callers (and tests) mean
-    "no knowledge base sections available".
+    "no knowledge base sections available". ``topics_available`` (issue
+    #1688) defaults to False the same way.
 
     Single source of truth for the public primary navigation. Both the
     desktop dropdown block and the mobile accordion drawer in
@@ -274,6 +281,12 @@ def _build_primary_nav(marketing_nav, has_published_downloads, kb_nav=None):
     if kb_nav.get('wiki'):
         learning_items.append(
             {'label': 'Wiki', 'href': '/wiki/', 'slug': 'wiki'}
+        )
+    # Issue #1688: the member Topics hub surfaces on its cached nav
+    # availability flag, mirroring the KB sections above.
+    if topics_available:
+        learning_items.append(
+            {'label': 'Topics', 'href': '/topics/', 'slug': 'topics'}
         )
     learning_items.extend(marketing_items('resources'))
 
@@ -400,6 +413,7 @@ def site_context(request):
         'wiki': has_published_kb_pages_for_nav('wiki'),
         'docs': has_published_kb_pages_for_nav('docs'),
     }
+    topics_available = has_published_topics_for_nav()
     try:
         marketing_nav = get_marketing_pages_nav()
     except Exception:
@@ -436,9 +450,10 @@ def site_context(request):
         'has_published_downloads': has_published_downloads,
         'has_published_wiki': kb_nav['wiki'],
         'has_published_docs': kb_nav['docs'],
+        'has_published_topics': topics_available,
         'marketing_nav': marketing_nav,
         'primary_nav': _build_primary_nav(
-            marketing_nav, has_published_downloads, kb_nav
+            marketing_nav, has_published_downloads, kb_nav, topics_available,
         ),
         'footer_social': {
             'youtube': get_config('SOCIAL_YOUTUBE_URL', ''),

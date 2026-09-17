@@ -21,15 +21,16 @@ MEMBER_API_DESCRIPTION = (
     "Member API for AI Shipping Labs. All endpoints accept JSON in and "
     "return JSON out. Authentication is via the ``Authorization: Token "
     "<key>`` header where ``<key>`` is a member-owned API key starting "
-    "with ``asl_member_``. Every valid key has the same deployed member API "
-    "capabilities and acts only as its owner against that member's own data. "
-    "Keys cannot access Studio or staff APIs."
+    "with ``asl_member_``. A key carries the capabilities it was issued "
+    "with -- a key created today covers every deployed member endpoint -- "
+    "and acts only as its owner against that member's own data. Keys cannot "
+    "access Studio or staff APIs."
 )
 
 MEMBER_TOKEN_DESCRIPTION = (
     "Send the header ``Authorization: Token <asl_member_...>``. Keys are "
-    "member-owned, use fixed capabilities, and cannot authenticate "
-    "against the staff/operator ``/api/`` surface."
+    "member-owned, carry the capabilities they were issued with, and cannot "
+    "authenticate against the staff/operator ``/api/`` surface."
 )
 
 

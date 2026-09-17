@@ -14,7 +14,7 @@ Authentication:
 Authorization: Token <asl_member_...>
 ```
 
-The key belongs to the signed-in member who created it. Every valid key has the same capabilities and acts only as that member. It cannot access Studio or staff APIs.
+The key belongs to the signed-in member who created it. A key carries the capabilities it was issued with and acts only as that member. It cannot access Studio or staff APIs.
 
 ## Create A Key
 
@@ -165,7 +165,7 @@ Send only the collections you want to update. Validation failures roll back the 
 
 ## Key Capabilities
 
-Every active member key can use every deployed member endpoint. You do not choose permissions when creating a key and do not need to replace an existing key when a new endpoint family is added. All member endpoints remain owner-only.
+A key can use the endpoint families it was issued for. You do not choose permissions when creating a key: a key created today covers every deployed endpoint family. A key created before a family was added does not reach that family, so create a fresh key at `/account/#api-keys` to pick up the current capabilities. All member endpoints remain owner-only.
 
 ## Book Club Reading
 

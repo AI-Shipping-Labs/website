@@ -116,7 +116,7 @@ class MemberAPIKeyAccountViewTest(TestCase):
         self.assertNotIn("books:write_notes", body)
         self.assertContains(
             response,
-            "Every key has the same capabilities, acts only as you against your own member data, and cannot access Studio or staff APIs.",
+            "A new key covers every member endpoint, acts only as you against your own member data, and cannot access Studio or staff APIs.",
         )
 
     def test_newsletter_only_account_does_not_show_api_keys(self):

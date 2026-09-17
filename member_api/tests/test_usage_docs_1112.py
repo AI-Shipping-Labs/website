@@ -45,7 +45,7 @@ class MemberApiUsageDocsArtifactTest(TestCase):
             "edit narrative fields",
             "cohort teammates' plans",
             "/member-api/v1/events/{event_id}",
-            "Every active member key can use every deployed member endpoint",
+            "A key can use the endpoint families it was issued for",
             "attendee_count",
             "never return a roster",
         ]
@@ -80,7 +80,7 @@ class MemberApiUsageDocsArtifactTest(TestCase):
         self.assertIn("plans.md", text)
         self.assertIn("books.md", text)
         self.assertIn("events.md", text)
-        self.assertIn("Every active key has the same deployed", text)
+        self.assertIn("A key carries the capabilities it was issued with", text)
         # Shared safe-surface rules live in the catalog.
         self.assertIn("Do not call `/api/`, `/studio/`, Django admin", text)
         self.assertIn("CRM notes", text)

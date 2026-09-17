@@ -193,7 +193,10 @@ class MemberOpenApiSpecTest(TestCase):
 
         self.assertEqual(document["info"]["title"], "AI Shipping Labs Member API")
         self.assertEqual(document["info"]["version"], "1.0.0")
-        self.assertIn("same deployed member API capabilities", document["info"]["description"])
+        self.assertIn(
+            "carries the capabilities it was issued with",
+            document["info"]["description"],
+        )
         self.assertEqual(
             document["externalDocs"]["description"],
             "Member API usage guide",

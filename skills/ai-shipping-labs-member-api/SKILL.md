@@ -44,7 +44,7 @@ https://aishippinglabs.com/member-api/docs
 ```
 
 Members create and manage their keys at `/account/#api-keys`.
-Every active key has the same deployed member API capabilities. Members do not choose permissions and existing keys automatically work with newly added endpoint families.
+A key carries the capabilities it was issued with. Members do not choose permissions: a key created today covers every deployed endpoint family, while an older key reaches only the families that existed when it was created. If a valid key is refused on one family, create a fresh key at `/account/#api-keys`.
 
 ## Key Setup
 

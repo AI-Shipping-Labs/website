@@ -14,7 +14,9 @@ Covers:
 
 import datetime
 import json
+import re
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
@@ -434,6 +436,37 @@ class CoursesListEntitlementSectionTest(TierSetupMixin, TestCase):
         section_index = body.index('data-testid="sold-separately-section"')
         standard_grid_markup = body[:section_index]
         self.assertIn('data-testid="course-access-badge"', standard_grid_markup)
+
+
+@tag('visual_regression')
+class CoursesListEntitlementSectionGridClassTest(TierSetupMixin, TestCase):
+    """Issue #1719: exact Tailwind class-string contract for the single-card
+    "External courses" grid — a visual contract, not a `core` smoke path, so
+    kept in its own class deliberately without `@tag('core')` (orthogonal
+    per _docs/testing-guidelines.md, "Policy for class / Tailwind / layout
+    assertions")."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.entitlement = _make_entitlement_course(tags=['maven-exclusive'])
+
+    @pytest.mark.visual_regression
+    def test_sold_separately_grid_uses_canonical_uncentered_grid(self):
+        """The single-card "External courses" grid (Maven buildcamp) must
+        not carry the ``lg:mx-auto lg:max-w-*`` classes that previously
+        centred it under the left-aligned heading."""
+        response = self.client.get('/courses')
+        body = response.content.decode()
+        match = re.search(
+            r'<div class="mt-6 ([^"]*)" data-testid="sold-separately-grid">',
+            body,
+        )
+        self.assertIsNotNone(match)
+        classes = match.group(1)
+        self.assertEqual(classes, "grid gap-6 sm:grid-cols-2 lg:grid-cols-3")
+        self.assertNotIn("mx-auto", classes)
+        self.assertNotIn("max-w-", classes)
 
 
 class CoursesListNoEntitlementCoursesTest(TestCase):

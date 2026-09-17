@@ -3,7 +3,8 @@
 import re
 from datetime import date
 
-from django.test import TestCase
+import pytest
+from django.test import TestCase, tag
 
 from content.models import Article, Course, CuratedLink, Workshop
 
@@ -107,7 +108,18 @@ class GuestLayoutPolish1190Test(TestCase):
         self.assertIn("grid items-start gap-6", html)
         self.assertIn("self-start overflow-hidden", html)
 
-    def test_courses_low_count_grid_is_centered_and_capped(self):
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_courses_low_count_grid_uses_canonical_uncentered_grid(self):
+        """Issue #1719: a low card count must not re-introduce the
+        ``lg:mx-auto lg:max-w-*`` centring/capping classes that previously
+        pulled the grid out from under the left-aligned heading.
+
+        Visual contract (exact Tailwind class string) — tagged
+        ``visual_regression`` per _docs/testing-guidelines.md ("Policy for
+        class / Tailwind / layout assertions"), excluded from push/core CI,
+        caught by the scheduled visual-regression run instead.
+        """
         Course.objects.create(
             title="Small Catalog One",
             slug="small-catalog-one-1190",
@@ -130,16 +142,15 @@ class GuestLayoutPolish1190Test(TestCase):
         response = self.client.get("/courses?tag=small")
         html = response.content.decode()
 
-        self.assertEqual(response.status_code, 200)
         match = re.search(
             r'<div class="([^"]*)" data-testid="courses-grid">',
             html,
         )
         self.assertIsNotNone(match)
         classes = match.group(1)
-        self.assertIn("sm:grid-cols-2", classes)
-        self.assertIn("lg:max-w-4xl", classes)
-        self.assertNotIn("lg:grid-cols-3", classes)
+        self.assertEqual(classes, "grid gap-6 sm:grid-cols-2 lg:grid-cols-3")
+        self.assertNotIn("mx-auto", classes)
+        self.assertNotIn("max-w-", classes)
 
     def test_courses_three_plus_keep_existing_three_column_grid(self):
         for index in range(3):

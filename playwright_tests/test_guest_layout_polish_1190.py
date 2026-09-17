@@ -8,6 +8,8 @@ import pytest
 from django.utils import timezone
 from playwright.sync_api import expect
 
+from scripts.browser_journey_policy import browser_journey
+
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 pytestmark = pytest.mark.local_only
@@ -64,6 +66,23 @@ def _create_course(title, slug, tags=None):
         status="published",
         description=f"{title} description.",
         tags=tags or [],
+    )
+    connection.close()
+
+
+def _create_entitlement_course(title, slug):
+    from django.db import connection
+
+    from content.models import Course
+
+    Course.objects.create(
+        title=title,
+        slug=slug,
+        status="published",
+        description=f"{title} description.",
+        access_mode="entitlement",
+        enroll_url="https://maven.com/alexey-grigorev/from-rag-to-agents",
+        program_label="Maven",
     )
     connection.close()
 
@@ -225,9 +244,18 @@ def test_resources_cards_drop_category_pills_and_keep_gated_cta(
     _shot(page, "resources-compact-gated")
 
 
-@pytest.mark.core
+@pytest.mark.visual_regression
 @pytest.mark.django_db(transaction=True)
-def test_courses_two_card_catalog_uses_two_column_row(django_server, page):
+@browser_journey
+def test_courses_two_card_catalog_grid_stays_left_aligned(django_server, page):
+    """Issue #1719: a 2-card filtered catalog must render the canonical
+    grid, flush with the left-aligned heading above it — not centred and
+    width-capped as the old low-count special case did.
+
+    Visual contract (exact Tailwind class string) — `visual_regression`,
+    not `core`, per _docs/testing-guidelines.md ("Policy for class /
+    Tailwind / layout assertions"); the two markers are orthogonal.
+    """
     _reset_guest_content()
     _create_course("Small 1190 Course One", "small-1190-course-one", ["small"])
     _create_course("Small 1190 Course Two", "small-1190-course-two", ["small"])
@@ -238,13 +266,128 @@ def test_courses_two_card_catalog_uses_two_column_row(django_server, page):
     grid = page.get_by_test_id("courses-grid")
     expect(grid).to_be_visible()
     classes = grid.get_attribute("class") or ""
-    assert "lg:max-w-4xl" in classes
-    assert "lg:grid-cols-3" not in classes
+    assert classes == "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+    assert "mx-auto" not in classes
+    assert "max-w-" not in classes
+
+    heading = page.get_by_role("heading", name="Structured Learning Paths")
+    heading_box = heading.bounding_box()
+    grid_box = grid.bounding_box()
+    assert heading_box is not None
+    assert grid_box is not None
+    assert grid_box["x"] == pytest.approx(heading_box["x"], abs=1)
+    _shot(page, "courses-two-card-grid")
+
+
+@pytest.mark.visual_regression
+@pytest.mark.django_db(transaction=True)
+@browser_journey
+def test_courses_one_card_filtered_catalog_grid_stays_left_aligned(django_server, page):
+    """Issue #1719: a tag filter narrowing the standard catalog to a
+    single card must not centre/cap that lone card either.
+
+    Visual contract — `visual_regression`, not `core` (see above).
+    """
+    _reset_guest_content()
+    _create_course("Lone 1190 Course", "lone-1190-course", ["lonely"])
+    _create_course("Other 1190 Course", "other-1190-course-2", ["other"])
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(f"{django_server}/courses?tag=lonely", wait_until="domcontentloaded")
+    grid = page.get_by_test_id("courses-grid")
+    expect(grid).to_be_visible()
+    classes = grid.get_attribute("class") or ""
+    assert classes == "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+    assert "mx-auto" not in classes
+    assert "max-w-" not in classes
+
+    heading = page.get_by_role("heading", name="Structured Learning Paths")
+    heading_box = heading.bounding_box()
+    grid_box = grid.bounding_box()
+    assert heading_box is not None
+    assert grid_box is not None
+    assert grid_box["x"] == pytest.approx(heading_box["x"], abs=1)
+    _shot(page, "courses-one-card-grid")
+
+
+@pytest.mark.visual_regression
+@pytest.mark.django_db(transaction=True)
+@browser_journey
+def test_courses_sold_separately_single_card_grid_stays_left_aligned(django_server, page):
+    """Issue #1719 (the reported bug): the single-card "External courses"
+    section (Maven buildcamp) must render flush with its own
+    left-aligned heading, not centred under a capped width.
+
+    Visual contract — `visual_regression`, not `core` (see above).
+    """
+    _reset_guest_content()
+    _create_course("Standard 1190 Course", "standard-1190-course")
+    _create_entitlement_course("Maven 1190 Buildcamp", "maven-1190-buildcamp")
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(f"{django_server}/courses", wait_until="domcontentloaded")
+    grid = page.get_by_test_id("sold-separately-grid")
+    expect(grid).to_be_visible()
+    classes = grid.get_attribute("class") or ""
+    assert "grid gap-6 sm:grid-cols-2 lg:grid-cols-3" in classes
+    assert "mx-auto" not in classes
+    assert "max-w-" not in classes
+
+    heading = page.get_by_role("heading", name="External courses")
+    heading_box = heading.bounding_box()
+    grid_box = grid.bounding_box()
+    assert heading_box is not None
+    assert grid_box is not None
+    assert grid_box["x"] == pytest.approx(heading_box["x"], abs=1)
+    _shot(page, "courses-sold-separately-single-card-grid")
+
+
+@pytest.mark.visual_regression
+@pytest.mark.django_db(transaction=True)
+@browser_journey
+def test_courses_six_card_catalog_keeps_three_column_grid(django_server, page):
+    """Regression: a full catalog above the column count still renders
+    the same canonical three-column grid (unaffected by the fix).
+
+    Visual contract — `visual_regression`, not `core` (see above).
+    """
+    _reset_guest_content()
+    for index in range(6):
+        _create_course(f"Full 1190 Course {index}", f"full-1190-course-{index}")
+
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(f"{django_server}/courses", wait_until="domcontentloaded")
+    grid = page.get_by_test_id("courses-grid")
+    expect(grid).to_be_visible()
+    classes = grid.get_attribute("class") or ""
+    assert classes == "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
     column_count = grid.evaluate(
         "(el) => getComputedStyle(el).gridTemplateColumns.split(' ').length"
     )
-    assert column_count == 2
-    _shot(page, "courses-two-card-grid")
+    assert column_count == 3
+    _shot(page, "courses-six-card-grid")
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+@browser_journey
+def test_courses_low_count_grid_unaffected_on_mobile_viewport(django_server, page):
+    """Regression: the fix only touched the ``lg:`` classes, so a
+    low-count grid on a mobile viewport (below the ``sm:`` breakpoint)
+    keeps rendering as a single column, same as before the fix."""
+    _reset_guest_content()
+    _create_course("Mobile 1190 Course One", "mobile-1190-course-one", ["small"])
+    _create_course("Mobile 1190 Course Two", "mobile-1190-course-two", ["small"])
+
+    page.set_viewport_size({"width": 390, "height": 900})
+    page.goto(f"{django_server}/courses?tag=small", wait_until="domcontentloaded")
+    grid = page.get_by_test_id("courses-grid")
+    expect(grid).to_be_visible()
+    column_count = grid.evaluate(
+        "(el) => getComputedStyle(el).gridTemplateColumns.split(' ').length"
+    )
+    assert column_count == 1
+    _shot(page, "courses-low-count-grid-mobile")
 
 
 @pytest.mark.core

@@ -1211,6 +1211,19 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_gated_topics_stay_out_of_the_sitemap",
     })
 
+    issue_1719_owners = frozenset({
+        "playwright_tests/test_guest_layout_polish_1190.py::"
+        "test_courses_two_card_catalog_grid_stays_left_aligned",
+        "playwright_tests/test_guest_layout_polish_1190.py::"
+        "test_courses_one_card_filtered_catalog_grid_stays_left_aligned",
+        "playwright_tests/test_guest_layout_polish_1190.py::"
+        "test_courses_sold_separately_single_card_grid_stays_left_aligned",
+        "playwright_tests/test_guest_layout_polish_1190.py::"
+        "test_courses_six_card_catalog_keeps_three_column_grid",
+        "playwright_tests/test_guest_layout_polish_1190.py::"
+        "test_courses_low_count_grid_unaffected_on_mobile_viewport",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1273,7 +1286,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2246)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2245)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 0)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -1339,8 +1352,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2609)
-        self.assertEqual(len(inventory.owners), 2407)
+        self.assertEqual(inventory.item_count, 2613)
+        self.assertEqual(len(inventory.owners), 2411)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1374,7 +1387,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1556_owners
             | self.issue_1677_owners
             | self.issue_1688_owners
-            | self.issue_1720_owners,
+            | self.issue_1720_owners
+            | self.issue_1719_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

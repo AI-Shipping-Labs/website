@@ -5,8 +5,8 @@ Three journeys:
 1. A brand-new Maven enrollee follows the Slack link in their welcome email
    through the login gate and lands on the workspace invite.
 2. Staff previews ``maven_welcome`` in Studio before the cohort goes out.
-3. Support opens a Maven occurrence and reads why the enrollee never reached
-   Slack.
+3. Support opens a Maven occurrence and reads that the join link went out
+   through the welcome email rather than a direct Slack invite (#1665).
 """
 
 import os
@@ -41,8 +41,10 @@ def _enrol(email):
     from integrations.services.maven import handle_maven_event
 
     ensure_tiers()
-    # Not in the Slack workspace: the real invite path runs and produces the
-    # real ledger note, so the Studio journey asserts production copy. The
+    # Issue #1665 retired the direct Slack lookup/invite call for Maven
+    # enrollees: the ``slack`` ledger step mirrors ``welcome_status`` instead,
+    # so this patch is a no-op guard against an accidental real API call
+    # rather than a fixture for a "not in the workspace" code path. The
     # welcome mail is queued as a durable delivery and the session's sync
     # jobs backend drains it against the installed SES stub (A1.2).
     with patch(
@@ -185,16 +187,21 @@ def test_staff_preview_shows_the_ordered_steps_and_the_slack_link(
 
 
 @browser_journey
-def test_support_reads_why_an_enrollee_never_reached_slack(
+def test_support_reads_the_join_link_note_on_the_slack_step(
     django_server, browser,
 ):
+    """Issue #1665: the ``slack`` step mirrors ``welcome_status`` and never
+    calls the Slack API, so a successful welcome makes it succeed too — with
+    a note explaining the join link travelled by email, not a direct invite.
+    """
     from django.db import connection
 
     from integrations.models import MavenEnrollmentEvent
 
-    user = _enrol("maven-skipped-1565@example.com")
+    user = _enrol("maven-slack-note-1565@example.com")
     event = MavenEnrollmentEvent.objects.get(user=user)
-    assert event.slack_status == MavenEnrollmentEvent.STEP_SKIPPED
+    assert event.welcome_status == MavenEnrollmentEvent.STEP_SUCCEEDED
+    assert event.slack_status == MavenEnrollmentEvent.STEP_SUCCEEDED
     create_staff_user("staff-support-1565@example.com")
     connection.close()
 
@@ -205,7 +212,7 @@ def test_support_reads_why_an_enrollee_never_reached_slack(
     page.wait_for_url(re.compile(rf".*/studio/maven-events/{event.pk}/"))
 
     note = page.get_by_test_id("maven-step-note-slack")
-    expect(note).to_contain_text("not in the Slack workspace")
-    expect(note).to_contain_text("delivered in the welcome email")
+    expect(note).to_contain_text("Join link delivered via the maven_welcome email")
+    expect(note).to_contain_text("direct Slack invite is not attempted")
     expect(note).not_to_contain_text("Last error")
     context.close()

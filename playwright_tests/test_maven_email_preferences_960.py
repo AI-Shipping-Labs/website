@@ -95,9 +95,16 @@ def test_account_maven_toggle_persists_without_changing_access(browser, django_s
 
 def test_signed_opt_out_confirmation_and_account_reenable(browser, django_server):
     user = _user("maven-link@example.com")
-    from integrations.services.maven import _welcome_context
-    path = urlparse(_welcome_context(user, "Agents Course")["opt_out_url"]).path
-    query = urlparse(_welcome_context(user, "Agents Course")["opt_out_url"]).query
+    # A1.2 slice 3 moved link minting out of ``_welcome_context`` (now a pure
+    # ``(course, cohort) -> {"course_name": ...}`` scalar) and into
+    # ``email_app.hooks._resolve_maven_welcome_context``, which mints this
+    # token with the same helper at delivery time (#1613, #1647).
+    from accounts.utils.tokens import generate_user_action_token
+
+    token = generate_user_action_token(user.pk, "maven_email_opt_out")
+    opt_out_url = f"/api/maven-email-opt-out?token={token}"
+    path = urlparse(opt_out_url).path
+    query = urlparse(opt_out_url).query
     page = browser.new_page()
     page.goto(f"{django_server}{path}?{query}")
     expect(page.get_by_text("Your course and community access are unchanged", exact=False)).to_be_visible()

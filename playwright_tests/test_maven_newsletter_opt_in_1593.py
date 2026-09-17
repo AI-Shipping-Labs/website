@@ -51,9 +51,22 @@ def _relative(url):
 
 
 def _opt_in_path(user):
-    from integrations.services.maven import _welcome_context
+    """Mint the same token the welcome worker resolver mints at delivery.
 
-    return _relative(_welcome_context(user, "Agents Course")["newsletter_opt_in_url"])
+    A1.2 slice 3 moved link minting out of ``_welcome_context`` (now a pure
+    ``(course, cohort) -> {"course_name": ...}`` scalar) and into
+    ``email_app.hooks._resolve_maven_welcome_context``, which mints this
+    token with the same helper at delivery time (#1613, #1647).
+    """
+    from accounts.utils.tokens import generate_user_action_token
+    from integrations.services.maven import NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS
+
+    token = generate_user_action_token(
+        user.pk,
+        "verify_and_subscribe",
+        expiry_hours=NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
+    )
+    return _relative(f"/api/verify-and-subscribe?token={token}")
 
 
 @browser_journey

@@ -479,6 +479,51 @@ so a second run over unchanged data is a byte-identical diff. The
 `data_through` stamp in the article shows which month the data covers, so
 staleness is visible.
 
+### Company Interview
+
+`interview-companies/<slug>.yaml`. One file per company (`nearform.yaml`,
+`speechify.yaml`, ...), synced by the `company_interviews` family into the
+`InterviewCompany` model and served at `/interview/companies` (open list)
+and `/interview/companies/<slug>` (detail gated at `required_level`, Basic
+by default). Detail URLs stay out of `sitemap.xml` (open-only convention).
+
+Refresh from the field guide: the data originates in the
+`ai-engineering-field-guide` repo's per-posting
+`interview/data/job-descriptions/` YAMLs; postings for the same company
+(Nearform currently appears twice) merge into one file. To regenerate from
+a local guide checkout:
+
+```bash
+uv run python manage.py sync_field_guide_companies \
+    --from-disk ~/git/ai-engineering-field-guide \
+    --content-repo ~/git/ai-shipping-labs-content --write
+```
+
+Dry run by default (drop `--write` to preview). Review the diff, commit and
+push the content repo, then let the webhook sync run. The converter never
+touches the database and reuses the existing `content_id`, `status`, and
+`required_level` values (new files default to `status: published` and
+`required_level: 10`; the reviewed diff is the publish gate).
+    --from-disk ~/git/ai-engineering-field-guide \
+    --content-repo ~/git/ai-shipping-labs-content --write
+```
+
+<<<<<<< HEAD
+Dry run by default (drop `--write` to preview the per-scrape summary).
+Review the diff, commit and push the content repo, then let the webhook sync
+run. The converter reads posting YAML files only: it never touches the
+database and never runs git. It reuses the generated article's `content_id`,
+so a second run over unchanged data is a byte-identical diff. The
+`data_through` stamp in the article shows which month the data covers, so
+staleness is visible.
+=======
+Dry run by default (drop `--write` to preview). Review the diff, commit and
+push the content repo, then let the webhook sync run. The converter never
+touches the database and reuses the existing `content_id`, `status`, and
+`required_level` values (new files default to `status: published` and
+`required_level: 10`; the reviewed diff is the publish gate).
+>>>>>>> cff8ef1f (Sitemap the companies list and document the content type)
+
 ### Repo-level files
 
 | File | Purpose |

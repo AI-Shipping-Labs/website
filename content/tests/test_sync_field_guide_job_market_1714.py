@@ -1,5 +1,6 @@
 """Tests for the sync_field_guide_job_market converter command (issue #1714)."""
 
+import re
 import tempfile
 import uuid
 from contextlib import redirect_stdout
@@ -222,6 +223,29 @@ class JobMarketAggregateMathTest(TestCase):
             ['S01', 'S02'] + [f'S{i:02d}' for i in range(3, 9)],
         )
         self.assertEqual(len(trends['skills']), converter.TREND_TOP['genai'])
+
+
+class MarkdownTableCellEscapingTest(TestCase):
+    """A pipe in a data value must not split its markdown table row.
+
+    The dataset contains employer names like ``Holiday Channel | My
+    Holiday World``; an unescaped pipe would corrupt the companies
+    table on the rendered page.
+    """
+
+    def test_pipe_in_cell_is_escaped_and_row_stays_two_columns(self):
+        table = converter._markdown_table(
+            ['Company', 'Postings'],
+            [('Holiday Channel | My Holiday World', 3)],
+        )
+        self.assertIn('Holiday Channel \\| My Holiday World', table)
+        row = table.splitlines()[-1]
+        cells = re.split(r'(?<!\\)\|', row)
+        # Splitting on unescaped pipes leaves exactly the two columns.
+        self.assertEqual(
+            [cell.strip() for cell in cells[1:-1]],
+            ['Holiday Channel \\| My Holiday World', '3'],
+        )
 
 
 class SyncFieldGuideJobMarketCommandTest(TestCase):

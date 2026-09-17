@@ -69,11 +69,17 @@ def _build_live_session_entries(events_qs, user):
 
 
 def _course_grid_classes(count):
-    """Return the 1/2/3-column grid class string for ``count`` cards."""
-    if count == 1:
-        return "grid gap-6 sm:grid-cols-1 lg:mx-auto lg:max-w-md"
-    if count == 2:
-        return "grid gap-6 sm:grid-cols-2 lg:mx-auto lg:max-w-4xl"
+    """Return the canonical listing-grid class string.
+
+    Issue #1719: previously special-cased 1- and 2-item counts with
+    ``lg:mx-auto lg:max-w-*``, which centred the grid under a left-aligned
+    heading. A CSS grid item that doesn't span columns already left-aligns
+    and doesn't stretch below the column count, so the unconditional
+    class string is correct for any ``count`` — matching the documented
+    listing-grid pattern (``_docs/design-system.md``) and the Projects
+    grid (``templates/content/projects_list.html``).
+    """
+    del count
     return "grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
 
 

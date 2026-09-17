@@ -832,7 +832,6 @@
     "playwright_tests/test_guest_layout_polish_1190.py::test_about_linkedin_mobile_tap_targets",
     "playwright_tests/test_guest_layout_polish_1190.py::test_auth_and_subscribe_pages_suppress_footer_newsletter",
     "playwright_tests/test_guest_layout_polish_1190.py::test_blog_cards_are_text_first_with_one_topic_eyebrow",
-    "playwright_tests/test_guest_layout_polish_1190.py::test_courses_two_card_catalog_uses_two_column_row",
     "playwright_tests/test_guest_layout_polish_1190.py::test_discovery_pages_keep_footer_newsletter",
     "playwright_tests/test_guest_layout_polish_1190.py::test_event_inline_dash_agenda_renders_as_list",
     "playwright_tests/test_guest_layout_polish_1190.py::test_resources_cards_drop_category_pills_and_keep_gated_cta",

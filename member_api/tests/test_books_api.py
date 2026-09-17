@@ -173,7 +173,6 @@ class MemberBooksApiTest(TestCase):
         self.assertFalse(second.json()["read"])
 
     def test_write_requires_write_progress_scope(self):
-        # Historical stored permission metadata does not narrow a valid key.
         get_ok = self.client.get(
             "/member-api/v1/books/inference-engineering/reading",
             **self._auth(self.readonly_plaintext),
@@ -182,6 +181,21 @@ class MemberBooksApiTest(TestCase):
         put_response = self.client.put(
             "/member-api/v1/books/inference-engineering/chapters/0/read",
             **self._auth(self.readonly_plaintext),
+        )
+        self.assertEqual(put_response.status_code, 401)
+        self.assertEqual(put_response.json()["code"], "insufficient_scope")
+        self.assertEqual(
+            put_response.json()["details"]["required_scope"],
+            "books:write_progress",
+        )
+        self.assertFalse(
+            ChapterRead.objects.filter(user=self.member).exists(),
+        )
+
+    def test_write_progress_scope_still_writes(self):
+        put_response = self.client.put(
+            "/member-api/v1/books/inference-engineering/chapters/0/read",
+            **self._auth(self.plaintext),
         )
         self.assertTrue(put_response.json()["read"])
         self.assertTrue(

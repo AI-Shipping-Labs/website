@@ -11,12 +11,12 @@ from django.utils.crypto import salted_hmac
 
 
 class MemberAPIKey(models.Model):
-    """A hashed API key owned by one member.
+    """A scoped, hashed API key owned by one member.
 
     This is deliberately separate from ``accounts.Token``. Operator tokens
-    back the staff API surface; member keys authenticate only through the
-    member API helper in ``accounts.auth``. ``scopes`` remains internal
-    compatibility metadata, but every valid key has the same capabilities.
+    back the staff API surface; member keys are scoped and authenticate only
+    through the member API helper in ``accounts.auth``. ``scopes`` is the
+    key's permission grant: a route the key was not issued for is refused.
     """
 
     KEY_PREFIX = "asl_member_"
@@ -101,13 +101,22 @@ class MemberAPIKey(models.Model):
         key.save()
         return key, plaintext_key
 
-    @classmethod
-    def authenticate(cls, plaintext_key, *, required_scopes=()):
-        """Authenticate an active key regardless of stored scope metadata.
+    def missing_scopes(self, required_scopes):
+        """Return the required scopes this key does not carry, in order.
 
-        ``required_scopes`` is retained for source compatibility with existing
-        decorators. Member API capabilities are deployment-defined, so a
-        historical key is never narrowed by its stored JSON list.
+        A list rather than a boolean because the caller names the first
+        missing scope in its error body.
+        """
+        available = set(self.scopes or [])
+        return [scope for scope in required_scopes if scope not in available]
+
+    @classmethod
+    def authenticate(cls, plaintext_key):
+        """Return the active key matching ``plaintext_key``, or None.
+
+        Scope checking is deliberately not done here: a genuine credential
+        that lacks a scope is a different answer than an unknown credential,
+        and only the caller knows which scopes its route needs.
         """
         if not plaintext_key or not plaintext_key.startswith(cls.KEY_PREFIX):
             return None

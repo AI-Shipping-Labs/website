@@ -67,21 +67,38 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
         defaults.update(overrides)
         return Event.objects.create(**defaults)
 
-    def test_existing_keys_with_old_metadata_get_every_member_capability(self):
-        historical_keys = [
-            MemberAPIKey.create_for_user(
-                user=self.member,
-                name="plans era",
-                scopes=["plans:read"],
-            )[1],
-            MemberAPIKey.create_for_user(
-                user=self.member,
-                name="books era",
-                scopes=["books:read"],
-            )[1],
-            self.plaintext,
+    def test_existing_keys_reach_only_the_families_they_were_issued_for(self):
+        """A key issued before ``events`` existed cannot read events.
+
+        The three keys stand for the three eras of ``DEFAULT_SCOPES``: plans
+        only (2026-07), plans plus books (2026-08), and the current full set
+        that also carries ``events:read``.
+        """
+        _, plans_era = MemberAPIKey.create_for_user(
+            user=self.member,
+            name="plans era",
+            scopes=["plans:read"],
+        )
+        _, books_era = MemberAPIKey.create_for_user(
+            user=self.member,
+            name="books era",
+            scopes=["books:read"],
+        )
+        empty_plans_page = {
+            "plans": [],
+            "pagination": {
+                "page": 1,
+                "page_size": 20,
+                "total": 0,
+                "total_pages": 0,
+            },
+        }
+        expectations = [
+            (plans_era, {"plans": 200, "books": 401, "events": 401}),
+            (books_era, {"plans": 401, "books": 200, "events": 401}),
+            (self.plaintext, {"plans": 200, "books": 200, "events": 200}),
         ]
-        for plaintext in historical_keys:
+        for plaintext, expected in expectations:
             with self.subTest(prefix=plaintext[:24]):
                 plans = self.client.get(
                     "/member-api/v1/plans",
@@ -95,20 +112,21 @@ class MemberEventsApiTest(TierSetupMixin, TestCase):
                     "/member-api/v1/events",
                     **self._auth(plaintext),
                 )
-                self.assertEqual(
-                    plans.json(),
-                    {
-                        "plans": [],
-                        "pagination": {
-                            "page": 1,
-                            "page_size": 20,
-                            "total": 0,
-                            "total_pages": 0,
-                        },
-                    },
-                )
-                self.assertIn("visibility", books.json())
-                self.assertEqual(events.json()["events"], [])
+                self.assertEqual(plans.status_code, expected["plans"])
+                self.assertEqual(books.status_code, expected["books"])
+                self.assertEqual(events.status_code, expected["events"])
+                if expected["plans"] == 200:
+                    self.assertEqual(plans.json(), empty_plans_page)
+                else:
+                    self.assertEqual(plans.json()["code"], "insufficient_scope")
+                if expected["books"] == 200:
+                    self.assertIn("visibility", books.json())
+                else:
+                    self.assertEqual(books.json()["code"], "insufficient_scope")
+                if expected["events"] == 200:
+                    self.assertEqual(events.json()["events"], [])
+                else:
+                    self.assertEqual(events.json()["code"], "insufficient_scope")
 
     def test_invalid_credentials_keep_member_401_contract(self):
         event = self._event("auth-event")

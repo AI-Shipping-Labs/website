@@ -609,12 +609,16 @@ class WeekNoteWriteTest(MemberPlansWriteApiTestBase):
 class ScopeEnforcementTest(MemberPlansWriteApiTestBase):
     def test_progress_only_key_is_rejected_from_content_endpoints(self):
         plan = self._make_plan(self.member, weeks=1)
+        original_title = plan.title
         response = self._patch(
             f"/member-api/v1/plans/{plan.id}",
-            {"title": "Historical key can write"},
+            {"title": "Progress key must not rename a plan"},
             plaintext=self.progress_plaintext,
         )
-        self.assertEqual(response.json()["title"], "Historical key can write")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["code"], "insufficient_scope")
+        plan.refresh_from_db()
+        self.assertEqual(plan.title, original_title)
 
     def test_progress_only_key_can_still_toggle_progress(self):
         plan = self._make_plan(self.member, weeks=1)

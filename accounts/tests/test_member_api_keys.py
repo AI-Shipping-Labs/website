@@ -403,6 +403,60 @@ class MemberAPIKeyAuthHelperTest(TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertFalse(hasattr(request, "member_api_key"))
 
+    def test_key_without_the_route_scope_is_refused_and_not_marked_used(self):
+        user = User.objects.create_user(email="narrow-member-key@test.com")
+        member_key, plaintext = MemberAPIKey.create_for_user(
+            user=user,
+            name="books only",
+            scopes=["books:read"],
+        )
+        request = self.factory.get(
+            "/member-api/plans",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+            REMOTE_ADDR="203.0.113.10",
+        )
+
+        response = self.view(request)
+
+        self.assertEqual(response.status_code, 401)
+        self.assertJSONEqual(
+            response.content,
+            {
+                "error": "Member API key is missing the required scope",
+                "code": "insufficient_scope",
+                "details": {"required_scope": "plans:read"},
+            },
+        )
+        self.assertFalse(hasattr(request, "member_api_key"))
+        self.assertFalse(hasattr(request, "member_api_scopes"))
+        member_key.refresh_from_db()
+        self.assertIsNone(member_key.last_used_at)
+        self.assertIsNone(member_key.revoked_at)
+
+    def test_key_carrying_the_route_scope_is_admitted_with_its_own_scopes(self):
+        user = User.objects.create_user(email="scoped-member-key@test.com")
+        _, plaintext = MemberAPIKey.create_for_user(
+            user=user,
+            name="plans reader",
+            scopes=["plans:read", "books:read"],
+        )
+        request = self.factory.get(
+            "/member-api/plans",
+            HTTP_AUTHORIZATION=f"Token {plaintext}",
+        )
+
+        response = self.view(request)
+
+        self.assertJSONEqual(
+            response.content,
+            {"user": user.email, "key": "plans reader"},
+        )
+        self.assertEqual(request.user, user)
+        self.assertEqual(
+            request.member_api_scopes,
+            {"plans:read", "books:read"},
+        )
+
     def test_missing_or_wrong_scheme_returns_json_401(self):
         request = self.factory.get("/member-api/plans")
         response = self.view(request)

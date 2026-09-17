@@ -17,8 +17,11 @@ from accounts.models import MemberAPIKey, Token
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 
 
-def _json_auth_error(message, code):
-    return JsonResponse({"error": message, "code": code}, status=401)
+def _json_auth_error(message, code, details=None):
+    body = {"error": message, "code": code}
+    if details:
+        body["details"] = details
+    return JsonResponse(body, status=401)
 
 
 def token_required(view_func=None, *, structured_errors=False):
@@ -177,12 +180,20 @@ def staff_session_or_token_required(view_func):
 
 
 def member_api_key_required(*required_scopes):
-    """Require a valid ``Authorization: Token <key>`` member API key.
+    """Require a member API key that carries every scope in ``required_scopes``.
 
     This helper intentionally does not consult ``accounts.Token``. Staff
     operator tokens therefore cannot authenticate against member API routes,
     and member keys cannot authenticate against the existing staff ``/api/``
     routes because those keep using ``token_required``.
+
+    A key's stored scope list is its permission grant, so a key that does not
+    carry the route's scopes is rejected with ``insufficient_scope`` rather
+    than the ``invalid_member_api_key`` shape: the credential is genuine and
+    the caller needs to know the difference between a bad key and a key that
+    was issued for less. ``request.member_api_scopes`` carries the key's own
+    scopes so the per-method guards in ``member_api.views`` decide the same
+    way for routes whose read and write scopes diverge.
     """
 
     def decorator(view_func):
@@ -196,10 +207,7 @@ def member_api_key_required(*required_scopes):
                     "member_api_key_required",
                 )
 
-            member_key = MemberAPIKey.authenticate(
-                parts[1].strip(),
-                required_scopes=required_scopes,
-            )
+            member_key = MemberAPIKey.authenticate(parts[1].strip())
             if (
                 member_key is None
                 or not is_authenticated_user(member_key.user)
@@ -209,13 +217,18 @@ def member_api_key_required(*required_scopes):
                     "invalid_member_api_key",
                 )
 
+            missing = member_key.missing_scopes(required_scopes)
+            if missing:
+                return _json_auth_error(
+                    "Member API key is missing the required scope",
+                    "insufficient_scope",
+                    details={"required_scope": missing[0]},
+                )
+
             member_key.mark_used(request)
             request.user = member_key.user
             request.member_api_key = member_key
-            # Stored scope lists are compatibility metadata only. Expose the
-            # deployment's complete capability set to legacy per-method
-            # guards until those internal guards are retired.
-            request.member_api_scopes = set(MemberAPIKey.SUPPORTED_SCOPES)
+            request.member_api_scopes = set(member_key.scopes or [])
             return view_func(request, *args, **kwargs)
 
         return wrapper

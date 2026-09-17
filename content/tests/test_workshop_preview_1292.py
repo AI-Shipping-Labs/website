@@ -90,6 +90,6 @@ class WorkshopPreviewTest(TestCase):
         self.assertContains(response, 'content="noindex,nofollow,noarchive"')
         self.assertNotContains(response, '<link rel="canonical"')
         self.assertEqual(
-            self.client.get(f"/workshops/{self.workshop.slug}/tutorial/secret-page").status_code,
+            self.client.get(f"/workshops/{self.workshop.slug}/secret-page").status_code,
             404,
         )

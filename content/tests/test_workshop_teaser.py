@@ -210,7 +210,7 @@ class RegisteredTutorialAnonymousTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='intro', title='Intro',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/reg-tut/tutorial/intro'
+        cls.url = '/workshops/reg-tut/intro'
 
     def test_returns_403(self):
         response = self.client.get(self.url)
@@ -245,14 +245,14 @@ class RegisteredTutorialAnonymousTest(TierSetupMixin, TestCase):
         # Sign-in (primary) link with next= preserved.
         self.assertContains(
             response,
-            'href="/accounts/login/?next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro"',
+            'href="/accounts/login/?next=%2Fworkshops%2Freg-tut%2Fintro"',
             status_code=403,
         )
         self.assertContains(response, 'Sign in', status_code=403)
         # Create-a-free-account (secondary) link with next= preserved.
         self.assertContains(
             response,
-            'href="/accounts/signup/?next=%2Fworkshops%2Freg-tut%2Ftutorial%2Fintro"',
+            'href="/accounts/signup/?next=%2Fworkshops%2Freg-tut%2Fintro"',
             status_code=403,
         )
         self.assertContains(
@@ -292,7 +292,7 @@ class FreeUserOnPaidTierTutorialTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='lesson', title='Lesson',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/paid-tut/tutorial/lesson'
+        cls.url = '/workshops/paid-tut/lesson'
         # Issue #532: the test user is read-only — no test mutates it.
         cls.user = User.objects.create_user(email='free-paid@x.com', password='pw', email_verified=True)
         set_membership(cls.user, tier=cls.free_tier)
@@ -353,7 +353,7 @@ class EligibleUserTutorialTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='lesson', title='Lesson',
             sort_order=1, body=_LONG_BODY,
         )
-        cls.url = '/workshops/eligible-tut/tutorial/lesson'
+        cls.url = '/workshops/eligible-tut/lesson'
         # Issue #532: read-only test user.
         cls.user = User.objects.create_user(email='main-eligible@x.com', password='pw', email_verified=True)
         set_membership(cls.user, tier=cls.main_tier)
@@ -389,7 +389,7 @@ class EmptyBodyTutorialFallbackTest(TierSetupMixin, TestCase):
             workshop=cls.workshop, slug='empty', title='Empty Page',
             sort_order=1, body='',
         )
-        cls.url = '/workshops/empty-body/tutorial/empty'
+        cls.url = '/workshops/empty-body/empty'
         # Issue #532: read-only test user.
         cls.user = User.objects.create_user(email='empty-body-free@x.com', password='pw', email_verified=True)
         set_membership(cls.user, tier=cls.free_tier)
@@ -437,7 +437,7 @@ class UnverifiedEmailTutorialTest(TierSetupMixin, TestCase):
         member_user_1 = User.objects.create_user(email='unverified@x.com', password='pw', email_verified=False)
         set_membership(member_user_1, tier=self.free_tier)
         self.client.login(email='unverified@x.com', password='pw')
-        response = self.client.get('/workshops/verify-tut/tutorial/intro')
+        response = self.client.get('/workshops/verify-tut/intro')
         # Verify-email path returns 200 (the user can resolve it without
         # leaving the page).
         self.assertEqual(response.status_code, 200)
@@ -466,7 +466,7 @@ class TutorialWithVideoStartNoThumbnailTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_sees_no_locked_thumbnail(self):
-        response = self.client.get('/workshops/thumb-tut/tutorial/step')
+        response = self.client.get('/workshops/thumb-tut/step')
         self.assertEqual(response.status_code, 403)
         # Teaser body still renders...
         self.assertContains(

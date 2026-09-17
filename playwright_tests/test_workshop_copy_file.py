@@ -241,7 +241,7 @@ class TestCopyFileOverrideAndLink:
         ctx = _auth_context(browser, 'basic@test.com')
         tut_page = ctx.new_page()
         tut_page.goto(
-            f'{django_server}{landing_url}/tutorial/next',
+            f'{django_server}{landing_url}/next',
             wait_until='domcontentloaded',
         )
         body = tut_page.content()
@@ -253,7 +253,7 @@ class TestCopyFileOverrideAndLink:
             f'Expected link to landing {landing_url}, got {href!r}'
         )
         # The tutorial URL for 01-intro.md must NOT appear in the link.
-        assert '/tutorial/intro' not in href
+        assert '/intro' not in href
 
         # Click the link and verify we land on the workshop landing.
         link.click()
@@ -313,7 +313,7 @@ class TestReadmeLinkRoutesBackToLanding:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}{landing_url}/tutorial/qa',
+            f'{django_server}{landing_url}/qa',
             wait_until='domcontentloaded',
         )
 

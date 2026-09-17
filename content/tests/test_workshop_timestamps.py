@@ -294,7 +294,7 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
 
     def test_main_user_sees_watch_bar_when_video_start_set(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/setup')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="watch-this-section"')
         # Bar links to the video page with the same ?t= value.
@@ -304,7 +304,7 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
 
     def test_main_user_no_bar_when_video_start_empty(self):
         self.client.force_login(self.user_main)
-        response = self.client.get('/workshops/wb/tutorial/no-ts')
+        response = self.client.get('/workshops/wb/no-ts')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="watch-this-section"')
 
@@ -312,14 +312,14 @@ class WatchBarVisibilityTest(TierSetupMixin, TestCase):
         # Basic = level 10, pages gate = 10, recording gate = 20.
         # Page renders, but watch bar must not (recording gate fails).
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/setup')
         self.assertContains(response, 'data-testid="page-body"')
         self.assertNotContains(response, 'data-testid="watch-this-section"')
 
     def test_anon_no_bar_even_if_video_start_set(self):
         # Anonymous = level 0, fails both gates => paywall + no bar.
         # Issue #515: gated tutorial pages return 403.
-        response = self.client.get('/workshops/wb/tutorial/setup')
+        response = self.client.get('/workshops/wb/setup')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
@@ -370,10 +370,10 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         )
         # Both linked pages are reachable from the timestamps panel.
         self.assertContains(
-            response, 'href="/workshops/vl/tutorial/intro"',
+            response, 'href="/workshops/vl/intro"',
         )
         self.assertContains(
-            response, 'href="/workshops/vl/tutorial/setup-page"',
+            response, 'href="/workshops/vl/setup-page"',
         )
         self.assertContains(response, 'Tutorial: Intro Page')
         self.assertContains(response, 'Tutorial: Setup Page')
@@ -466,9 +466,9 @@ class WorkshopVideoDuplicateVideoStartTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/dup/video')
         # First page link rendered, second page is silently ignored.
-        self.assertContains(response, 'href="/workshops/dup/tutorial/first"')
+        self.assertContains(response, 'href="/workshops/dup/first"')
         self.assertNotContains(
-            response, 'href="/workshops/dup/tutorial/second"',
+            response, 'href="/workshops/dup/second"',
         )
         self.assertContains(
             response, 'data-testid="timestamp-tutorial-link"', count=1,
@@ -502,7 +502,7 @@ class WorkshopVideoCanonicalTimestampShapeTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/leg/video')
         # The 960s timestamp matches video_start="16:00".
         self.assertContains(
-            response, 'href="/workshops/leg/tutorial/setup"',
+            response, 'href="/workshops/leg/setup"',
         )
         self.assertContains(response, 'Tutorial: Setup Page')
 

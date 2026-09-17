@@ -150,7 +150,7 @@ class TestWorkshopExternalLinkOpensInNewTab:
         page = ctx.new_page()
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         page.goto(
-            f'{django_server}/workshops/{workshop.url_key}/tutorial/qa',
+            f'{django_server}/workshops/{workshop.url_key}/qa',
             wait_until='domcontentloaded',
         )
 
@@ -174,7 +174,7 @@ class TestWorkshopExternalLinkOpensInNewTab:
         page = ctx.new_page()
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
         page.goto(
-            f'{django_server}/workshops/{workshop.url_key}/tutorial/qa',
+            f'{django_server}/workshops/{workshop.url_key}/qa',
             wait_until='domcontentloaded',
         )
 
@@ -207,7 +207,7 @@ class TestWorkshopExternalLinkOpensInNewTab:
         _create_user('free@test.com', tier_slug='free')
 
         # Issue #750: workshop URL is /workshops/<YYYY-MM-DD>-<slug>.
-        tutorial_path = f'/workshops/{workshop.url_key}/tutorial/qa'
+        tutorial_path = f'/workshops/{workshop.url_key}/qa'
 
         ctx = _auth_context(browser, 'free@test.com')
         page = ctx.new_page()

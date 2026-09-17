@@ -165,7 +165,7 @@ class TestSelfHostedCuePausedThenPlays:
 
         # Reader is on the section page; click "Watch this section (16:00)".
         page.goto(
-            f'{django_server}/workshops/{url_key}/tutorial/page-c',
+            f'{django_server}/workshops/{url_key}/page-c',
             wait_until='domcontentloaded',
         )
         bar = page.locator('[data-testid="watch-this-section"]')
@@ -421,7 +421,7 @@ class TestGatedReaderCannotDeepLinkPastPaywall:
         # Reading page: body accessible (Basic passes the pages gate) but
         # no watch bar (Basic is below the recording gate).
         page.goto(
-            f'{django_server}/workshops/{url_key}/tutorial/page-c',
+            f'{django_server}/workshops/{url_key}/page-c',
             wait_until='domcontentloaded',
         )
         assert page.locator('[data-testid="watch-this-section"]').count() == 0

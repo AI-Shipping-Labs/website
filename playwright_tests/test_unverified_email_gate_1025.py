@@ -184,7 +184,7 @@ class TestIssue1025UnverifiedEmailUX:
         email = "free-unverified-1025@test.com"
         context, page = _open_as(browser, email, viewport=MOBILE, theme="dark")
         page.goto(
-            f"{django_server}{free_workshop.get_absolute_url()}/tutorial/intro",
+            f"{django_server}{free_workshop.get_absolute_url()}/intro",
             wait_until="domcontentloaded",
         )
         expect(page.locator('[data-testid="verify-email-required-card"]')).to_have_count(0)

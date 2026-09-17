@@ -641,7 +641,7 @@ class RootWorkshopYamlPageLookupTest(_LookupFixtureBase):
         self.assertEqual(lookup['01-intro.md']['slug'], 'intro')
         self.assertEqual(
             lookup['01-intro.md']['url'],
-            '/workshops/test-workshop/tutorial/intro',
+            '/workshops/test-workshop/intro',
         )
         # Virtual README entry points at the workshop landing URL.
         self.assertEqual(

@@ -104,7 +104,7 @@ class TestAnonymousDesktopOutlinePreview:
         page = ctx.new_page()
         try:
             resp = page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/intro',
+                f'{django_server}/workshops/{slug}/intro',
                 wait_until='domcontentloaded',
             )
             # Gated page is served with a 403 status (SEO-indexable teaser).
@@ -145,9 +145,9 @@ class TestAnonymousDesktopOutlinePreview:
             # Click a different (locked) page row -> lands on that page's
             # own teaser + paywall.
             page.locator(
-                f'#sidebar-nav a[href="/workshops/{slug}/tutorial/deploy"]',
+                f'#sidebar-nav a[href="/workshops/{slug}/deploy"]',
             ).click()
-            page.wait_for_url(f'**/workshops/{slug}/tutorial/deploy')
+            page.wait_for_url(f'**/workshops/{slug}/deploy')
             assert page.locator('[data-testid="page-paywall"]').count() == 1
             assert page.locator('[data-testid="page-body"]').count() == 0
         finally:
@@ -171,7 +171,7 @@ class TestAnonymousMobileDrawer:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/intro',
+                f'{django_server}/workshops/{slug}/intro',
                 wait_until='domcontentloaded',
             )
 
@@ -235,9 +235,9 @@ class TestAnonymousMobileDrawer:
 
             # Tapping a page navigates to that (still gated) tutorial page.
             nav.locator(
-                f'a[href="/workshops/{slug}/tutorial/build"]',
+                f'a[href="/workshops/{slug}/build"]',
             ).click()
-            page.wait_for_url(f'**/workshops/{slug}/tutorial/build')
+            page.wait_for_url(f'**/workshops/{slug}/build')
             assert page.locator('[data-testid="page-paywall"]').count() == 1
             assert page.locator('[data-testid="page-body"]').count() == 0
         finally:
@@ -261,7 +261,7 @@ class TestFreeMemberPreviewsOutline:
         page = ctx.new_page()
         try:
             resp = page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/build',
+                f'{django_server}/workshops/{slug}/build',
                 wait_until='domcontentloaded',
             )
             # Free member lacks the Basic tier -> gated (403).
@@ -308,7 +308,7 @@ class TestMemberWithAccessUnchanged:
         page = ctx.new_page()
         try:
             resp = page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/intro',
+                f'{django_server}/workshops/{slug}/intro',
                 wait_until='domcontentloaded',
             )
             assert resp.status == 200
@@ -335,7 +335,7 @@ class TestMemberWithAccessUnchanged:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/intro',
+                f'{django_server}/workshops/{slug}/intro',
                 wait_until='domcontentloaded',
             )
             bar = page.locator('[data-testid="reader-mobile-progress-bar"]')
@@ -377,24 +377,24 @@ class TestLockedRowIsRealTeaserLink:
         try:
             # Start on the last tutorial page (gated).
             page.goto(
-                f'{django_server}/workshops/{slug}/tutorial/deploy',
+                f'{django_server}/workshops/{slug}/deploy',
                 wait_until='domcontentloaded',
             )
             first_row = page.locator(
-                f'#sidebar-nav a[href="/workshops/{slug}/tutorial/intro"]',
+                f'#sidebar-nav a[href="/workshops/{slug}/intro"]',
             )
             first_row.wait_for(state='visible')
 
             # Following the row is a real navigation whose response is a
             # 403 teaser, not a 404.
             with page.expect_response(
-                f'**/workshops/{slug}/tutorial/intro',
+                f'**/workshops/{slug}/intro',
             ) as resp_info:
                 first_row.click()
             resp = resp_info.value
             assert resp.status == 403
 
-            page.wait_for_url(f'**/workshops/{slug}/tutorial/intro')
+            page.wait_for_url(f'**/workshops/{slug}/intro')
             assert page.locator('[data-testid="page-paywall"]').count() == 1
             assert page.locator('[data-testid="page-body"]').count() == 0
         finally:

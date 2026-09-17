@@ -45,7 +45,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 |------|--------------|---------------------------|
 | Community | Umbrella for membership and active participation. It includes membership tiers and benefits, community sprints, Slack/community access, and scheduled live events. | `/membership`, `/membership#activities`, `/sprints`, `/events`, Slack access |
 | Events | Scheduled live/community sessions with registration, calendar, and join flows. Events are not the umbrella home for all recordings, workshops, or resources. | `/events`, `/events/calendar`, `/events/<id>/<slug>` |
-| Workshops | Durable hands-on learning artifacts. A workshop can originate from a live event, but after publication the canonical learning surface is the workshop landing/video/tutorial pages. | `/workshops`, `/workshops/<slug>`, `/workshops/<slug>/video`, `/workshops/<slug>/tutorial/<page_slug>` |
+| Workshops | Durable hands-on learning artifacts. A workshop can originate from a live event, but after publication the canonical learning surface is the workshop landing/video/tutorial pages. | `/workshops`, `/workshops/<slug>`, `/workshops/<slug>/video`, `/workshops/<slug>/<page_slug>` |
 | Recordings | Recorded learning resources created from events. The Past events history includes every public published finished event and highlights recordings when available. Workshop-linked recordings point to the workshop; legacy standalone event recordings stay discoverable through the past filter and event detail URLs until a future recording-library decision. | `/events?filter=past`, `/events/<id>/<slug>`, workshop video pages |
 | Resources | Passive or self-serve content. The Resources navigation group contains learning/content destinations. The `/resources` route itself is the curated-links collection, not a catch-all hub. | Resources dropdown; `/resources` for Curated Links |
 | Member benefit | An entitlement or participation mode owned by a paid tier. Compact and extended versions are presented together on Membership. | `/membership` and `/membership#activities`; `/activities` is a permanent legacy redirect |
@@ -95,7 +95,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Workshops listing | `/workshops` | Catalog of published hands-on workshop learning artifacts with access filters, skill/tool/tag filters, instructor/date metadata, and tier badges | Everyone (listing visible) | Shipped |
 | Workshop detail | `/workshops/<slug>` | Durable workshop landing page with description, tools, tutorial pages, materials, code repository link, and recording action | Landing may be open or tier-dependent; pages/recording are separately gated | Shipped |
 | Workshop recording | `/workshops/<slug>/video` | Canonical recording page for workshop-linked events, with gated playback, timestamps, transcript, and materials when available | Open recordings: everyone; gated: tier-dependent | Shipped |
-| Workshop tutorial page | `/workshops/<slug>/tutorial/<page_slug>` | Step-by-step tutorial page in the workshop reader with breadcrumbs, navigation, progress controls, and paywall teaser when gated | Open pages: everyone; gated pages: tier-dependent | Shipped |
+| Workshop tutorial page | `/workshops/<slug>/<page_slug>` | Step-by-step tutorial page in the workshop reader with breadcrumbs, navigation, progress controls, and paywall teaser when gated | Open pages: everyone; gated pages: tier-dependent | Shipped |
 
 ### Content -- Tutorials
 

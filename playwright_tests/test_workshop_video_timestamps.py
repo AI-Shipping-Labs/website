@@ -134,7 +134,7 @@ class TestWatchBarRoundTrip:
 
         # Step 1: Land on Page C; expect the watch bar.
         page.goto(
-            f'{django_server}/workshops/{url_key}/tutorial/page-c',
+            f'{django_server}/workshops/{url_key}/page-c',
             wait_until='domcontentloaded',
         )
         bar = page.locator('[data-testid="watch-this-section"]')
@@ -169,12 +169,12 @@ class TestWatchBarRoundTrip:
         # on Page B with the watch bar reading "0:00".
         page_b_link = page.locator(
             '[data-testid="timestamp-tutorial-link"]'
-            f'[href="/workshops/{url_key}/tutorial/page-b"]'
+            f'[href="/workshops/{url_key}/page-b"]'
         )
         assert page_b_link.count() == 1
         page_b_link.click()
         page.wait_for_load_state('domcontentloaded')
-        assert page.url.endswith(f'/workshops/{url_key}/tutorial/page-b')
+        assert page.url.endswith(f'/workshops/{url_key}/page-b')
         bar = page.locator('[data-testid="watch-this-section"]')
         assert bar.count() == 1
         assert 'Watch this section (0:00)' in bar.inner_text()
@@ -191,7 +191,7 @@ class TestWatchBarRoundTrip:
         ctx = _auth_context(browser, 'main@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/page-a',
+            f'{django_server}/workshops/ws/page-a',
             wait_until='domcontentloaded',
         )
         # Page A has no video_start -> no bar.
@@ -213,7 +213,7 @@ class TestWatchBarRoundTrip:
         ctx = _auth_context(browser, 'basic@test.com')
         page = ctx.new_page()
         page.goto(
-            f'{django_server}/workshops/ws/tutorial/page-c',
+            f'{django_server}/workshops/ws/page-c',
             wait_until='domcontentloaded',
         )
         # Body renders (Basic tier passes pages gate).

@@ -173,8 +173,9 @@
                         render inline on category indexes).
                       - instructor: no public instructor profile page.
                       - workshop_page: would need parent workshop date + slug
-                        to build ``/workshops/<date>-<workshop>/tutorial/<page>``;
-                        the entry currently lacks both, deferred.
+                        to build ``/workshops/<date>-<workshop>/<page>`` (the
+                        ``/tutorial/`` segment was dropped, issue #1720); the
+                        entry currently lacks both, deferred.
                   {% endcomment %}
                   {% else %}
                   <span class="text-foreground">{{ item.title }}</span>

@@ -59,7 +59,7 @@ class TestThemeScreenshots:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/shot-walkthrough/tutorial/arch',
+                f'{django_server}/workshops/shot-walkthrough/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -78,7 +78,7 @@ class TestThemeScreenshots:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/shot-walkthrough/tutorial/arch',
+                f'{django_server}/workshops/shot-walkthrough/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)
@@ -97,7 +97,7 @@ class TestThemeScreenshots:
         page = ctx.new_page()
         try:
             page.goto(
-                f'{django_server}/workshops/shot-walkthrough/tutorial/arch',
+                f'{django_server}/workshops/shot-walkthrough/arch',
                 wait_until='domcontentloaded',
             )
             _wait_for_mermaid_ready(page)

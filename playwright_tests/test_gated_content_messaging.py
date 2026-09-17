@@ -260,7 +260,7 @@ class TestGatedContentMessaging:
         free_ctx = _auth_context(browser, "free-workshop-gate@test.com")
         page = free_ctx.new_page()
         page.goto(
-            f"{django_server}/workshops/gated-workshop/tutorial/intro",
+            f"{django_server}/workshops/gated-workshop/intro",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -277,7 +277,7 @@ class TestGatedContentMessaging:
         basic_ctx = _auth_context(browser, "basic-workshop-gate@test.com")
         page = basic_ctx.new_page()
         page.goto(
-            f"{django_server}/workshops/gated-workshop/tutorial/intro",
+            f"{django_server}/workshops/gated-workshop/intro",
             wait_until="domcontentloaded",
         )
         body = page.content()

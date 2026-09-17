@@ -111,7 +111,7 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
 
     def test_anonymous_visitor_gets_progress_text_without_completion(self):
         """Anonymous get position text + drawer toggle but no fill bar."""
-        url = '/workshops/regional-setup/tutorial/regional-setup'
+        url = '/workshops/regional-setup/regional-setup'
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['reader_progress_current'], 3)
@@ -142,7 +142,7 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
         set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
-        url = '/workshops/regional-setup/tutorial/regional-setup'
+        url = '/workshops/regional-setup/regional-setup'
         response = client.get(url)
         self.assertEqual(response.status_code, 200)
         # Fill bar present for an authenticated visitor.
@@ -152,14 +152,14 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Page 3 of 5')
 
     def test_first_page_progress_is_one(self):
-        url = '/workshops/regional-setup/tutorial/intro'
+        url = '/workshops/regional-setup/intro'
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['reader_progress_current'], 1)
         self.assertContains(response, 'Page 1 of 5')
 
     def test_last_page_progress_matches_total(self):
-        url = '/workshops/regional-setup/tutorial/verify'
+        url = '/workshops/regional-setup/verify'
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['reader_progress_current'], 5)
@@ -172,7 +172,7 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
             pages_required_level=LEVEL_OPEN,
             page_data=[('only', 'Only Page', 'body')],
         )
-        response = self.client.get('/workshops/only-one/tutorial/only')
+        response = self.client.get('/workshops/only-one/only')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Page 1 of 1')
 
@@ -205,7 +205,7 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         set_membership(free_user, tier=self.free_tier)
         client = Client()
         client.force_login(free_user)
-        response = client.get('/workshops/main-only/tutorial/intro')
+        response = client.get('/workshops/main-only/intro')
         self.assertEqual(response.status_code, 403)
         self.assertTrue(response.context['is_gated'])
         # The progress-carrying bar is NOT rendered on the gated page.
@@ -237,7 +237,7 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         )
 
     def test_anonymous_on_gated_page_does_not_see_progress_bar(self):
-        response = self.client.get('/workshops/main-only/tutorial/intro')
+        response = self.client.get('/workshops/main-only/intro')
         # Anonymous on a paid-tier wall returns 403 with the teaser.
         self.assertEqual(response.status_code, 403)
         self.assertNotContains(
@@ -261,7 +261,7 @@ class WorkshopMobileProgressBarHiddenWhenGatedTest(TierSetupMixin, TestCase):
         set_membership(main_user, tier=self.main_tier)
         client = Client()
         client.force_login(main_user)
-        response = client.get('/workshops/main-only/tutorial/intro')
+        response = client.get('/workshops/main-only/intro')
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['is_gated'])
         self.assertContains(
@@ -345,7 +345,7 @@ class ReaderMobileProgressBarMarkupContractTest(TierSetupMixin, TestCase):
         )
 
     def test_toggle_keeps_shared_id_and_aria_contract(self):
-        response = self.client.get('/workshops/contract/tutorial/intro')
+        response = self.client.get('/workshops/contract/intro')
         self.assertEqual(response.status_code, 200)
         # Single sidebar-toggle-btn (the new mobile bar's button) — NOT
         # duplicated across the layout, otherwise the JS handler would
@@ -358,7 +358,7 @@ class ReaderMobileProgressBarMarkupContractTest(TierSetupMixin, TestCase):
         )
 
     def test_progress_bar_wrapper_is_hidden_on_lg_viewports(self):
-        response = self.client.get('/workshops/contract/tutorial/intro')
+        response = self.client.get('/workshops/contract/intro')
         self.assertContains(response, 'lg:hidden')
         # The wrapper element holds the lg:hidden class; assert it is
         # adjacent to the testid attribute so we know the class lives
@@ -373,7 +373,7 @@ class ReaderMobileProgressBarMarkupContractTest(TierSetupMixin, TestCase):
         """Per ``feedback_django_comment_leak.md`` regression guard:
         ``{# ... #}`` is single-line; multi-line uses
         ``{% comment %}...{% endcomment %}`` so no opening ``{#`` leaks."""
-        response = self.client.get('/workshops/contract/tutorial/intro')
+        response = self.client.get('/workshops/contract/intro')
         body = response.content.decode()
         # If a multi-line {# #} ever leaks the literal opening "{#"
         # appears in the rendered HTML.
@@ -386,7 +386,7 @@ class ReaderMobileProgressBarMarkupContractTest(TierSetupMixin, TestCase):
         be inside the persistent sidebar column anymore (the bug that
         motivated this issue is exactly that the toggle lived below the
         body on mobile)."""
-        response = self.client.get('/workshops/contract/tutorial/intro')
+        response = self.client.get('/workshops/contract/intro')
         body = response.content.decode()
         aside_open = body.find('id="content-sidebar-aside"')
         # The aside's closing tag is the next "</aside>" after the open.
@@ -429,7 +429,7 @@ class ReaderMobileProgressBarFillProportionTest(TierSetupMixin, TestCase):
 
         client = Client()
         client.force_login(user)
-        response = client.get('/workshops/fill/tutorial/p3')
+        response = client.get('/workshops/fill/p3')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['reader_progress_completed'], 2)
         body = response.content.decode()
@@ -441,7 +441,7 @@ class ReaderMobileProgressBarFillProportionTest(TierSetupMixin, TestCase):
         set_membership(user, tier=self.main_tier)
         client = Client()
         client.force_login(user)
-        response = client.get('/workshops/fill/tutorial/p1')
+        response = client.get('/workshops/fill/p1')
         self.assertEqual(response.status_code, 200)
         body = response.content.decode()
         # 0/5 = 0%; the fill div renders but with width: 0%.

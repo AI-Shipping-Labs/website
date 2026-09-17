@@ -323,7 +323,7 @@ class MermaidScriptTagInclusionTest(TestCase):
         )
 
         response = self.client.get(
-            '/workshops/mermaid-layout-workshop/tutorial/diagram',
+            '/workshops/mermaid-layout-workshop/diagram',
         )
 
         self.assertEqual(response.status_code, 200)

@@ -8,7 +8,7 @@ Covers:
   always rendered, landing-level paywall, pages list with locks).
 - ``/workshops/<slug>/video`` recording page (gates by recording level,
   anonymous gets a paywall not a 403, recording embeds when accessible).
-- ``/workshops/<slug>/tutorial/<page_slug>`` page detail (404 on bad
+- ``/workshops/<slug>/<page_slug>`` page detail (404 on bad
   page slug, prev/next ordering, gated visitors get the paywall not a
   403, body rendered when accessible).
 - Sitemap includes workshops + pages, draft workshops excluded.
@@ -1120,8 +1120,8 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
 
     def test_landing_page_rows_link_to_tutorial(self):
         response = self.client.get('/workshops/ws')
-        self.assertContains(response, '/workshops/ws/tutorial/intro')
-        self.assertContains(response, '/workshops/ws/tutorial/setup')
+        self.assertContains(response, '/workshops/ws/intro')
+        self.assertContains(response, '/workshops/ws/setup')
         self.assertContains(response, 'min-h-[44px]')
         self.assertContains(response, 'focus-visible:ring-2')
 
@@ -1428,18 +1428,18 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         WorkshopPage.objects.create(
             workshop=ws, slug='one', title='One', sort_order=1, body='x',
         )
-        response = self.client.get(f'{ws.get_absolute_url()}/tutorial/one')
+        response = self.client.get(f'{ws.get_absolute_url()}/one')
         self.assertEqual(response.status_code, 404)
 
     def test_page_404_for_unknown_page(self):
-        response = self.client.get('/workshops/ws/tutorial/nope')
+        response = self.client.get('/workshops/ws/nope')
         self.assertEqual(response.status_code, 404)
 
     def test_page_anon_returns_403_with_paywall(self):
         # Issue #515 ports the course-unit teaser pattern: gated tutorial
         # pages now return 403 (mirroring course units) and render the
         # title, breadcrumb, ~150-word teaser body, and paywall card.
-        response = self.client.get('/workshops/ws/tutorial/one')
+        response = self.client.get('/workshops/ws/one')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-title"', status_code=403,
@@ -1478,7 +1478,7 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         user_free = User.objects.create_user(email='free-page@x.com', password='pw')
         set_membership(user_free, tier=self.free_tier)
         self.client.force_login(user_free)
-        response = self.client.get('/workshops/ws/tutorial/one')
+        response = self.client.get('/workshops/ws/one')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
@@ -1489,37 +1489,37 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
 
     def test_page_basic_renders_body(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/one')
+        response = self.client.get('/workshops/ws/one')
         self.assertContains(response, 'data-testid="page-body"')
         self.assertContains(response, '<h1>First page</h1>')
 
     def test_page_breadcrumb_links_to_landing(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/one')
+        response = self.client.get('/workshops/ws/one')
         self.assertContains(response, 'data-testid="page-breadcrumb"')
         self.assertContains(response, 'href="/workshops/ws"')
 
     def test_page_first_page_has_no_prev(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/one')
+        response = self.client.get('/workshops/ws/one')
         self.assertNotContains(response, 'data-testid="page-prev-btn"')
         self.assertContains(response, 'data-testid="page-next-btn"')
 
     def test_page_middle_page_has_both(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/two')
+        response = self.client.get('/workshops/ws/two')
         self.assertContains(response, 'data-testid="page-prev-btn"')
         self.assertContains(response, 'data-testid="page-next-btn"')
 
     def test_page_last_page_has_no_next(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/three')
+        response = self.client.get('/workshops/ws/three')
         self.assertContains(response, 'data-testid="page-prev-btn"')
         self.assertNotContains(response, 'data-testid="page-next-btn"')
 
     def test_page_sidebar_highlights_current(self):
         self.client.force_login(self.user_basic)
-        response = self.client.get('/workshops/ws/tutorial/two')
+        response = self.client.get('/workshops/ws/two')
         self.assertContains(response, 'data-testid="sidebar-current-page"')
         # The 'aria-current="page"' attribute is rendered on the active row
         self.assertContains(response, 'aria-current="page"')
@@ -1593,13 +1593,16 @@ class LegacyDatedWorkshopUrlRedirectsTest(TierSetupMixin, TestCase):
         self.assertEqual(response['Location'], f'{self.canonical}/video?t=16:00')
 
     def test_dated_tutorial_for_published_workshop_redirects(self):
+        # The dated legacy route still matches its own `/tutorial/` shape
+        # (issue #1720 leaves it unchanged); only its resolved target
+        # (via WorkshopPage.get_absolute_url()) drops the segment.
         response = self.client.get(
             f'{self.legacy}/tutorial/starting-notebook',
         )
         self.assertEqual(response.status_code, 301)
         self.assertEqual(
             response['Location'],
-            f'{self.canonical}/tutorial/starting-notebook',
+            f'{self.canonical}/starting-notebook',
         )
 
     def test_date_mismatched_dated_url_404s(self):
@@ -1620,7 +1623,7 @@ class LegacyDatedWorkshopUrlRedirectsTest(TierSetupMixin, TestCase):
 
     def test_bare_slug_tutorial_for_unknown_workshop_404s(self):
         response = self.client.get(
-            '/workshops/missing-workshop/tutorial/starting-notebook',
+            '/workshops/missing-workshop/starting-notebook',
         )
         self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
@@ -1635,7 +1638,7 @@ class LegacyDatedWorkshopUrlRedirectsTest(TierSetupMixin, TestCase):
         # returns 403 with the teaser layout. The point of the test is
         # that the canonical URL still serves a gated render (no redirect).
         response = self.client.get(
-            f'{self.canonical}/tutorial/starting-notebook',
+            f'{self.canonical}/starting-notebook',
         )
         self.assertEqual(response.status_code, 403)
         self.assertNotIn('Location', response)
@@ -1684,7 +1687,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
 
     def test_anonymous_on_open_override_sees_full_body(self):
         # Page-level open override beats the workshop-default LEVEL_REGISTERED.
-        response = self.client.get('/workshops/gated-ws/tutorial/intro')
+        response = self.client.get('/workshops/gated-ws/intro')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="page-body"')
         self.assertContains(response, 'Open body content.')
@@ -1693,7 +1696,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
     def test_anonymous_on_inherited_page_sees_signin_paywall(self):
         # No override → inherits workshop's pages_required_level=5 →
         # anonymous gets the registration wall (Sign In CTA).
-        response = self.client.get('/workshops/gated-ws/tutorial/deep-dive')
+        response = self.client.get('/workshops/gated-ws/deep-dive')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'data-testid="page-paywall"', status_code=403,
@@ -1702,8 +1705,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
         # CTA preserves the return URL (URL-encoded in href).
         self.assertContains(
             response,
-            '/accounts/login/?next=%2Fworkshops%2Fgated-ws%2F'
-            'tutorial%2Fdeep-dive',
+            '/accounts/login/?next=%2Fworkshops%2Fgated-ws%2Fdeep-dive',
             status_code=403,
         )
         # Anonymous on a registration wall also gets the "Create a free
@@ -1715,7 +1717,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
     def test_free_member_on_registered_inherited_page_sees_body(self):
         # Workshop default 5 (registered) — a verified free user passes.
         self.client.force_login(self.user_free)
-        response = self.client.get('/workshops/gated-ws/tutorial/deep-dive')
+        response = self.client.get('/workshops/gated-ws/deep-dive')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="page-body"')
         self.assertContains(response, 'Inherited body content.')
@@ -1724,7 +1726,7 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
         # Workshop default 10 (Basic) and no override → free user gets
         # the upgrade-to-Basic CTA.
         self.client.force_login(self.user_free)
-        response = self.client.get('/workshops/basic-ws/tutorial/lesson')
+        response = self.client.get('/workshops/basic-ws/lesson')
         self.assertEqual(response.status_code, 403)
         self.assertContains(
             response, 'Upgrade to Basic to access this workshop',
@@ -1757,26 +1759,28 @@ class WorkshopPagePerPageOverrideViewTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Gated Workshop')
 
     def test_draft_workshop_page_stays_404(self):
-        # Issue #750: draft workshops can't be reached via the legacy
-        # tutorial URL either (the legacy redirect only matches published
-        # workshops; an unmatched legacy URL falls through to 404).
+        # Issue #750/#1720: draft workshops can't be reached via the
+        # canonical page URL either — a draft workshop 404s regardless of
+        # URL shape.
         draft = _make_workshop(
             slug='draft-legacy', title='Draft Legacy', status='draft',
         )
         _make_page(draft, 'starting-notebook', 'Starting Notebook', 1)
         response = self.client.get(
-            '/workshops/draft-legacy/tutorial/starting-notebook',
+            '/workshops/draft-legacy/starting-notebook',
         )
         self.assertEqual(response.status_code, 404)
         self.assertNotIn('Location', response)
 
-    def test_reserved_tutorial_child_path_stays_404(self):
-        # ``/workshops/<slug>/tutorial`` (no page slug) doesn't match
-        # any URL pattern — the bare ``/tutorial`` suffix isn't a slug
-        # and there's no slug-only route below the legacy patterns.
-        _make_page(self.workshop, 'tutorial', 'Reserved Tutorial', 2)
-        response = self.client.get('/workshops/legacy-ws/tutorial')
-        self.assertEqual(response.status_code, 404)
+    def test_page_slugged_tutorial_resolves_as_a_normal_page(self):
+        # Issue #1720: only ``video`` is a reserved WorkshopPage slug — a
+        # page slugged ``tutorial`` is not special. The two-segment
+        # canonical shape (``/workshops/<slug>/<page_slug>``) resolves it
+        # through the normal page gate, same as any other page slug (not
+        # a 404 and not a route collision).
+        _make_page(self.workshop, 'tutorial', 'Reserved Tutorial', 3)
+        response = self.client.get('/workshops/gated-ws/tutorial')
+        self.assertEqual(response.status_code, 403)
         self.assertNotIn('Location', response)
 
 
@@ -1886,10 +1890,10 @@ class WorkshopSitemapTest(TierSetupMixin, TestCase):
     def test_sitemap_contains_published_workshop_page(self):
         response = self.client.get('/sitemap.xml')
         self.assertContains(
-            response, '/workshops/ws-pub/tutorial/page-one',
+            response, '/workshops/ws-pub/page-one',
         )
         self.assertNotContains(
-            response, '/workshops/2026-04-21-ws-pub/tutorial/page-one',
+            response, '/workshops/2026-04-21-ws-pub/page-one',
         )
 
     def test_sitemap_excludes_draft_workshop(self):
@@ -1920,7 +1924,7 @@ class WorkshopPageGetAbsoluteUrlTest(TestCase):
     def test_workshop_page_get_absolute_url(self):
         self.assertEqual(
             self.page.get_absolute_url(),
-            '/workshops/abs-url/tutorial/page',
+            '/workshops/abs-url/page',
         )
 
 

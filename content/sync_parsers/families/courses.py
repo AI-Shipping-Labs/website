@@ -1038,7 +1038,8 @@ def _build_workshop_page_lookup(
 
         slug = metadata.get('slug') or derive_slug(filename)
         path_key = workshop_url_key or workshop_slug
-        url = f'/workshops/{path_key}/tutorial/{slug}'
+        # Issue #1720: canonical page URL dropped the /tutorial/ segment.
+        url = f'/workshops/{path_key}/{slug}'
         lookup[filename] = {
             'slug': slug,
             'title': title,

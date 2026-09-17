@@ -317,8 +317,9 @@ def rewrite_workshop_md_links(
     Workshops live in flat folders (``YYYY-MM-DD-<slug>/<NN-page>.md``), so
     valid intra-workshop links are sibling references only — no ``..`` or
     nested subfolders. The rewriter resolves each sibling ``.md`` filename to
-    ``/workshops/<workshop_url_key>/tutorial/<page_slug>`` (no trailing
-    slash). ``workshop_url_key`` is the slug-only canonical public key. When
+    ``/workshops/<workshop_url_key>/<page_slug>`` (no trailing
+    slash; issue #1720 dropped the ``/tutorial/`` segment).
+    ``workshop_url_key`` is the slug-only canonical public key. When
     unset, the rewriter falls back to ``workshop_slug``.
 
     Beyond URL resolution, when the link's visible text equals the bare
@@ -431,8 +432,9 @@ def rewrite_workshop_md_links(
             return match.group(0)
         page_meta, fragment, canonical = resolved
         path_key = workshop_url_key or workshop_slug
+        # Issue #1720: canonical page URL dropped the /tutorial/ segment.
         url = page_meta.get('url') or (
-            f'/workshops/{path_key}/tutorial/{page_meta["slug"]}'
+            f'/workshops/{path_key}/{page_meta["slug"]}'
         )
         title = match.group('title') or ''
         label = match.group('label')
@@ -497,7 +499,8 @@ def rewrite_cross_workshop_md_links(
     Resolution rules (see issue #526):
 
     - ``../<folder>(/?)`` -> ``/workshops/<target-slug>``.
-    - ``../<folder>/<page>.md`` -> ``/workshops/<target-slug>/tutorial/<page-slug>``.
+    - ``../<folder>/<page>.md`` -> ``/workshops/<target-slug>/<page-slug>``
+      (issue #1720 dropped the ``/tutorial/`` segment).
     - ``../<folder>/<page>.md#frag`` -> the same with the fragment preserved.
     - GitHub ``tree``/``blob`` URLs into the workshops repo: same outcome.
     - Folder not in the lookup: leave the URL untouched, emit a warning.
@@ -604,8 +607,9 @@ def rewrite_cross_workshop_md_links(
             )
             return None
 
+        # Issue #1720: canonical page URL dropped the /tutorial/ segment.
         return (
-            f'/workshops/{target_key}/tutorial/{page["slug"]}{frag}'
+            f'/workshops/{target_key}/{page["slug"]}{frag}'
         )
 
     def _replace(match):

@@ -107,7 +107,7 @@ class ContentCommentNotifyTest(TestCase):
         note = Notification.objects.get(notification_type='content_comment')
         self.assertEqual(note.user, self.author)
         self.assertEqual(note.title, 'New reply on Setup')
-        self.assertTrue(note.url.endswith('/tutorial/setup#qa-section'))
+        self.assertTrue(note.url.endswith('/setup#qa-section'))
         self.assertEqual(note.thread_content_id, self.page.content_id)
 
     def test_reply_notifies_parent_author_and_linked_content_author(self):

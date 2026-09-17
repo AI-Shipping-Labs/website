@@ -1051,6 +1051,39 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
     })
 
+    issue_1720_owners = frozenset({
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestAnonymousFollowsOpenPageFromLanding::"
+        "test_landing_page_row_click_lands_on_new_shape",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestPrevNextReaderNavigation::"
+        "test_next_and_prev_links_use_new_shape",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestOldBookmarkedUrl404s::"
+        "test_bare_slug_tutorial_path_404s_with_no_redirect",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestDatedLegacyLinkStillRedirects::"
+        "test_dated_tutorial_link_redirects_to_new_shape",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestGatedVisitorTeaserAndUpgradePath::"
+        "test_basic_member_on_main_gated_page_sees_upgrade_cta",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestSyncFailsLoudlyOnVideoSlug::"
+        "test_video_slugged_page_is_skipped_and_reported",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestCourseUnitLinksToWorkshopPage::"
+        "test_course_unit_link_to_workshop_page_uses_new_shape",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestSiblingPageLinkResolution::"
+        "test_sibling_md_link_resolves_to_new_shape",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestSignInRoundTripOnNewShape::"
+        "test_signin_returns_to_same_new_shape_url",
+        "playwright_tests/test_workshop_tutorial_url_drop_1720.py::"
+        "TestSitemapUsesNewShape::"
+        "test_sitemap_contains_new_shape_and_omits_tutorial_and_dated",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1306,8 +1339,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2599)
-        self.assertEqual(len(inventory.owners), 2397)
+        self.assertEqual(inventory.item_count, 2609)
+        self.assertEqual(len(inventory.owners), 2407)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1340,7 +1373,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1544_owners
             | self.issue_1556_owners
             | self.issue_1677_owners
-            | self.issue_1688_owners,
+            | self.issue_1688_owners
+            | self.issue_1720_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1386,6 +1420,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1568_owners
             | self.issue_1572_owners
             | self.issue_1677_owners
+            | self.issue_1720_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

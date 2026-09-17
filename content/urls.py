@@ -130,9 +130,21 @@ urlpatterns = [
         name='legacy_workshop_page_redirect',
     ),
     path('workshops/<slug:slug>', workshop_detail, name='workshop_detail'),
+    # workshop_video must stay declared ahead of the workshop_page_detail
+    # catch-all below — Django resolves the first matching pattern, so
+    # this ordering is a defense-in-depth backstop against a page ever
+    # being synced with slug "video" (issue #1720; the primary defense is
+    # the reserved-slug check in the content sync pipeline, which fails
+    # loudly per-file rather than relying on route order alone).
     path('workshops/<slug:slug>/video', workshop_video, name='workshop_video'),
+    # Issue #1720: the `/tutorial/` segment was dropped from the canonical
+    # shape. No redirect is issued for the old `/tutorial/<page_slug>`
+    # shape per owner instruction — it now 404s. The dated legacy redirect
+    # above is unaffected: it matches its own `/tutorial/` pattern and
+    # resolves its target via WorkshopPage.get_absolute_url(), which now
+    # returns the tutorial-less shape.
     path(
-        'workshops/<slug:slug>/tutorial/<slug:page_slug>',
+        'workshops/<slug:slug>/<slug:page_slug>',
         workshop_page_detail,
         name='workshop_page_detail',
     ),

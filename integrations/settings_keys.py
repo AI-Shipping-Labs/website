@@ -123,6 +123,7 @@ _KEY_ORDER = {
         "MAVEN_OVERRIDE_TIER_SLUG",
         "MAVEN_OVERRIDE_DURATION_DAYS",
         "MAVEN_COURSE_SLACK_CHANNEL",
+        "MAVEN_COURSE_TAG_PREFIXES",
     ),
     "observability": ("LOGFIRE_ENABLED", "LOGFIRE_TOKEN", "LOGFIRE_ENVIRONMENT"),
     "s3_content": ("AWS_S3_CONTENT_BUCKET", "AWS_S3_CONTENT_REGION", "CONTENT_CDN_BASE", "S3_ENABLED"),
@@ -1954,6 +1955,17 @@ MAVEN_COURSE_SLACK_CHANNEL = declare(
     secret=False,
     optional=True,
     docs_url="_docs/integrations/maven.md#maven_course_slack_channel",
+)
+MAVEN_COURSE_TAG_PREFIXES = declare(
+    key="MAVEN_COURSE_TAG_PREFIXES",
+    group="maven",
+    label="Maven Course Tag Prefixes",
+    description='JSON object mapping each Maven course_key to the CRM contact-tag prefix applied to its enrollees, e.g. {"from-rag-to-agents": "ai-buildcamp"} tags them maven, ai-buildcamp, and ai-buildcamp-<cohort_key>. A course_key with no entry gets the broad maven tag only.',
+    value_type="json",
+    default='{"from-rag-to-agents": "ai-buildcamp"}',
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/maven.md#maven_course_tag_prefixes",
 )
 
 # --- Event triggers (triggers) ---

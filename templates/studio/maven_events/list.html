@@ -11,7 +11,7 @@
 <div class="{% studio_list_class 'wrapper' %}" data-testid="maven-occurrence-list">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}"><tr>
-      <th class="{% studio_list_class 'th' %}">Occurrence</th><th class="{% studio_list_class 'th' %}">Course / cohort</th><th class="{% studio_list_class 'th' %}">Lifecycle</th><th class="{% studio_list_class 'th' %}">State</th><th class="{% studio_list_class 'th' %}">Entitlement</th><th class="{% studio_list_class 'th' %}">Enrollment</th><th class="{% studio_list_class 'th' %}">Notification</th><th class="{% studio_list_class 'th' %}">Slack</th><th class="{% studio_list_class 'th' %}">Welcome</th><th class="{% studio_list_class 'th' %}">Removal</th><th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      <th class="{% studio_list_class 'th' %}">Occurrence</th><th class="{% studio_list_class 'th' %}">Course / cohort</th><th class="{% studio_list_class 'th' %}">Lifecycle</th><th class="{% studio_list_class 'th' %}">State</th><th class="{% studio_list_class 'th' %}">Tagging</th><th class="{% studio_list_class 'th' %}">Entitlement</th><th class="{% studio_list_class 'th' %}">Enrollment</th><th class="{% studio_list_class 'th' %}">Notification</th><th class="{% studio_list_class 'th' %}">Slack</th><th class="{% studio_list_class 'th' %}">Welcome</th><th class="{% studio_list_class 'th' %}">Removal</th><th class="{% studio_list_class 'th' 'right' %}">Actions</th>
     </tr></thead>
     <tbody class="{% studio_list_class 'tbody' %}">
     {% for event in events %}<tr class="{% studio_list_class 'row' %}">
@@ -19,6 +19,7 @@
       <td class="px-6 py-3 text-sm" data-label="Course / cohort">{{ event.course|default:'—' }}<div class="text-xs text-muted-foreground">{{ event.cohort|default:'—' }}</div></td>
       <td class="px-6 py-3 text-sm" data-label="Lifecycle">{% studio_status_badge event.lifecycle event.get_lifecycle_display %}</td>
       <td class="px-6 py-3 text-sm" data-label="State">{% if event.needs_attention %}{% studio_status_badge 'needs_attention' 'Needs attention' %}{% else %}—{% endif %}</td>
+      <td class="px-6 py-3 text-sm" data-label="Tagging">{% studio_status_badge event.tagging_status event.get_tagging_status_display %}</td>
       <td class="px-6 py-3 text-sm" data-label="Entitlement">{% studio_status_badge event.override_status event.get_override_status_display %}</td>
       <td class="px-6 py-3 text-sm" data-label="Enrollment">{% studio_status_badge event.enrollment_status event.get_enrollment_status_display %}</td>
       <td class="px-6 py-3 text-sm" data-label="Notification">{% studio_status_badge event.notification_status event.get_notification_status_display %}</td>
@@ -27,7 +28,7 @@
       <td class="px-6 py-3 text-sm" data-label="Removal">{% studio_status_badge event.removal_status event.get_removal_status_display %}</td>
       <td class="px-6 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions"><div class="{% studio_list_class 'action_group' %}">{% url 'studio_maven_event_detail' event.pk as detail_url %}{% studio_list_action detail_url 'View' 'secondary' %}</div></td>
     </tr>{% empty %}
-      {% studio_empty_state 'filter' entity_label='Maven occurrence' entity_label_plural='Maven occurrences' clear_url=clear_url colspan=11 empty_message='No Maven occurrences match your filters.' testid_suffix='maven-occurrences' %}
+      {% studio_empty_state 'filter' entity_label='Maven occurrence' entity_label_plural='Maven occurrences' clear_url=clear_url colspan=12 empty_message='No Maven occurrences match your filters.' testid_suffix='maven-occurrences' %}
     {% endfor %}
     </tbody>
   </table>

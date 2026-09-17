@@ -910,7 +910,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
     })
     issue_1568_owners = frozenset({
         "playwright_tests/test_maven_occurrences_api_1568.py::"
-        "test_staff_finds_alias_linked_failure_and_reads_five_step_detail",
+        "test_staff_finds_alias_linked_failure_and_reads_the_step_ledger",
         "playwright_tests/test_maven_occurrences_api_1568.py::"
         "test_staff_retries_exhausted_welcome_and_attention_list_clears",
         "playwright_tests/test_maven_occurrences_api_1568.py::"
@@ -1049,6 +1049,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
     issue_1592_owners = frozenset({
         "playwright_tests/test_operator_comments_1592.py::"
         "test_operator_reply_is_escaped_and_idempotent_in_course_discussion",
+    })
+
+    issue_1732_owners = frozenset({
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_ops_lead_segments_the_new_cohort_in_the_crm",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_support_sees_where_a_maven_member_came_from",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_marketing_scopes_a_cohort_only_campaign_from_the_tag",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_ops_removes_a_student_mid_cohort_and_the_cohort_comms_stop",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_returning_student_keeps_their_earlier_cohort_history",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_support_inspects_the_ledger_to_confirm_the_crm_tags_went_out",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_operator_recovers_an_occurrence_whose_tagging_step_failed",
+        "playwright_tests/test_maven_contact_tags_1732.py::"
+        "test_operator_onboards_a_second_maven_course_from_studio_settings",
     })
 
     issue_1725_owners = frozenset({
@@ -1394,8 +1413,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2625)
-        self.assertEqual(len(inventory.owners), 2423)
+        self.assertEqual(inventory.item_count, 2633)
+        self.assertEqual(len(inventory.owners), 2431)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1432,7 +1451,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1720_owners
             | self.issue_1719_owners
             | self.issue_1724_owners
-            | self.issue_1725_owners,
+            | self.issue_1725_owners
+            | self.issue_1732_owners,
         )
         self.assertNotIn(
             self.migrated_owner,

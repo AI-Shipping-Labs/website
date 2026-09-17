@@ -149,7 +149,7 @@ class MavenEnrolledTest(TestCase):
         self.assertEqual(response.json(), {"status": "onboarded"})
 
         user = User.objects.get(email="new.enrollee@test.com")
-        self.assertEqual(user.signup_source, "imported")
+        self.assertEqual(user.signup_source, "maven_webhook")
         self.assertFalse(user.email_verified)
 
         override = TierOverride.objects.get(user=user, is_active=True)
@@ -528,6 +528,8 @@ class MavenSettingsRegistryTest(TestCase):
                 "MAVEN_OVERRIDE_DURATION_DAYS",
                 # Optional; ships unset and is filled in from Studio (#1565).
                 "MAVEN_COURSE_SLACK_CHANNEL",
+                # Course -> contact-tag prefix map (#1732).
+                "MAVEN_COURSE_TAG_PREFIXES",
             },
         )
         for key in group["keys"]:

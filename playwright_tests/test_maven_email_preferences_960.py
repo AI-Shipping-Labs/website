@@ -17,6 +17,7 @@ pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.local_only]
 
 def _user(email):
     from accounts.models import User
+    from accounts.models.user import SIGNUP_SOURCE_MAVEN_WEBHOOK
     from integrations.models import MavenEnrollmentEvent
     from integrations.services.maven import handle_maven_event
 
@@ -37,7 +38,7 @@ def _user(email):
             }
         )
     user = User.objects.get(pk=result.user_id)
-    assert user.signup_source == "imported"
+    assert user.signup_source == SIGNUP_SOURCE_MAVEN_WEBHOOK
     assert user.membership.tier.level == 0
     assert MavenEnrollmentEvent.objects.filter(user=user, lifecycle="active").count() == 1
     return user

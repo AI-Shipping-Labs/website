@@ -17,7 +17,7 @@ to choose (issue #1593).
 
 ## Settings
 
-All five settings live in the `Maven` group in Studio settings
+All six settings live in the `Maven` group in Studio settings
 (`/studio/settings/`). Read via `get_config` / `is_enabled`, never raw env.
 
 ### MAVEN_ENROLLMENT_ENABLED
@@ -50,6 +50,43 @@ e.g. `#ai-engineering-buildcamp`. It names where the cohort actually talks, so
 a new enrollee knows exactly where to go. When blank, the welcome sentence
 reads cleanly without it and no channel is named — that is the shipping
 default, and it is editable from Studio afterwards with no redeploy.
+
+### MAVEN_COURSE_TAG_PREFIXES
+
+JSON object mapping each Maven `course_key` to the CRM contact-tag prefix its
+enrollees get (default `{"from-rag-to-agents": "ai-buildcamp"}`). Renders as a
+textarea in Studio settings and takes effect on the next enrollment with no
+redeploy, so a second Maven course is onboarded by editing this value.
+
+```json
+{"from-rag-to-agents": "ai-buildcamp", "agentic-evals": "ai-evals"}
+```
+
+`course_key` is matched case-insensitively, exactly as Maven delivers it.
+A `course_key` with no entry is not an error: the enrollee still gets the
+broad `maven` tag and the `tagging` step finishes `succeeded` with a
+"no tag prefix configured for this course" note on
+`/studio/maven-events/<pk>/`. Invalid JSON, a non-object payload, or
+non-string members log a warning and fall back to the built-in default map
+rather than leaving enrollees untagged.
+
+## Contact tags
+
+Enrollees are tagged so they can be segmented in `/studio/users/`,
+`/studio/tags/`, and campaign audiences. The convention predates the webhook
+and is reused exactly:
+
+| Tag | Meaning |
+|---|---|
+| `maven` | The person arrived via Maven |
+| `<prefix>` (e.g. `ai-buildcamp`) | The person is a student of that Maven course |
+| `<prefix>-<cohort_key>` (e.g. `ai-buildcamp-4`) | Cohort membership; additive, so a returning student carries several |
+
+Every name is built from the stable `course_key` / `cohort_key` fields and
+normalized through `accounts.utils.tags.normalize_tag`, never from the
+display labels — production deliveries carry both `4` and `4/11` as the
+`cohort` label for the same cohort while `cohort_key` stays `4`, so the tag
+is `ai-buildcamp-4` either way.
 
 ## Webhook setup
 
@@ -178,7 +215,12 @@ given row and a person needs a manual nudge.
 `user_cohort.enrolled`:
 
 - Resolves the account (primary login, then email alias) or creates a Free
-  imported account (`signup_source=imported`, `email_verified=False`). A newly
+  account stamped `signup_source=maven_webhook` (`email_verified=False`), which
+  Studio shows as `Maven enrollment webhook` rather than
+  `Bulk import (Stripe / CSV / course DB)` (issue #1732). It is deliberately
+  NOT in `accounts.lifecycle.ACCOUNT_CREATING_SIGNUP_SOURCES` — the person did
+  not create this account themselves, so the derived `Imported / unknown`
+  account-lifecycle bucket is unchanged. A newly
   created account is marketing-excluded — `unsubscribed=True` and
   `email_preferences={"newsletter": False, "maven_emails": True}` — and stays
   that way until the enrollee opts in themselves. Existing accounts are
@@ -221,6 +263,18 @@ given row and a person needs a manual nudge.
     default `verified_only` nor `everyone`, since `unsubscribed=True` excludes
     them unconditionally at `eligible_campaign_recipients`. That is the
     intended outcome, not a gap.
+- Applies the CRM contact tags (issue #1732): `maven`, plus `<prefix>` and
+  `<prefix>-<cohort_key>` when `MAVEN_COURSE_TAG_PREFIXES` maps the
+  occurrence's `course_key`. This is the `tagging` ledger step and it runs
+  FIRST, before `override`, because "this person arrived via Maven" stays
+  true whether or not the entitlement lands — a failed `tagging` step never
+  blocks `override`, `enrollment`, `notification`, `welcome`, or `slack`.
+  Tags are applied to resolved pre-existing accounts exactly as to newly
+  created ones, including `already_member` occurrences. `add_tag` is
+  idempotent, so a redelivery cannot duplicate anything, and a `succeeded`
+  step is never re-run. The step sends no email, writes no
+  `CommunityAuditLog` row (the ledger step is the audit trail), and never
+  removes a tag. An occurrence with no linked account is `skipped`.
 - Grants or extends a source-specific `main` entitlement. It never lowers,
   replaces, or shortens a stronger base/staff/billing grant; Maven access keeps
   its own expiry and becomes effective if a temporary stronger grant expires.
@@ -294,6 +348,17 @@ given row and a person needs a manual nudge.
   `enrollment` step, but an occurrence whose course/cohort key never resolved
   has nothing to revoke — this is best-effort and never fails the `removal`
   step or blocks the staff heads-up.
+- Retracts the cohort tags (issue #1732), inside the same `removal` step and
+  beside the grant revocation: removes `<prefix>-<cohort_key>`, and removes
+  `<prefix>` only when the member carries no remaining `<prefix>-*` tag, so a
+  returning student who is still in an earlier cohort keeps `ai-buildcamp`.
+  `maven` is always kept — they did arrive via Maven. This runs regardless of
+  `tagging_status`, because cohorts 1-4 were tagged by an operator import
+  outside the ledger and their occurrences are `tagging_status=skipped` yet
+  must still retract. A missing account, an unmapped `course_key`, or tags
+  that are already absent are no-ops, not errors. Re-enrolling afterwards
+  creates a fresh occurrence with `tagging_status=pending`, so the tags come
+  back.
 
 Lifecycle and idempotency: identity is a SHA-256 hash of normalized email plus
 course and cohort identity. Provider IDs are preferred; normalized labels are
@@ -303,8 +368,8 @@ database constraint. Removal closes the occurrence and revokes the course
 grant and cohort membership it created, but never the tier override or Slack
 membership; a later enrollment creates a genuine new occurrence.
 
-The entitlement, course-access enrollment, staff heads-up notification,
-welcome, slack, and removal each persist their own status,
+The CRM tagging, entitlement, course-access enrollment, staff heads-up
+notification, welcome, slack, and removal steps each persist their own status,
 attempted/completed timestamps, bounded attempt count (three automatic
 attempts), and a safe error class. A five-minute scheduled recovery job
 retries pending, failed, or stale-running work only while the selected step
@@ -350,7 +415,7 @@ The three slashless routes are:
 | Method | Route | Result |
 |---|---|---|
 | `GET` | `/api/integrations/maven/occurrences` | Filtered occurrence summaries |
-| `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and all six current steps |
+| `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and every current step |
 | `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/steps/<step>/retry` | One forced safe retry and the refreshed occurrence |
 
 List filters combine with AND. `email` is a case-insensitive exact lookup that
@@ -358,8 +423,8 @@ matches the short-lived occurrence email and, when the canonical primary/alias
 resolver finds an account, every occurrence linked to that user. `course` and
 `cohort` match a label substring or their exact provider key. `lifecycle`
 accepts `active`, `removed`, or `legacy`; `status` accepts `all`, `failed`, or
-`needs_attention`; and `failed_step` accepts `override`, `enrollment`,
-`notification`, `welcome`, `slack`, or `removal`.
+`needs_attention`; and `failed_step` accepts `tagging`, `override`,
+`enrollment`, `notification`, `welcome`, `slack`, or `removal`.
 
 Pages default to `limit=50&offset=0`. Positive limits above 200 are clamped to
 200, and `total_count` reports all filtered rows while `count` reports rows in
@@ -379,8 +444,8 @@ curl -sS \
   "https://aishippinglabs.com/api/integrations/maven/occurrences/123"
 ```
 
-The detail response always includes `override`, `enrollment`, `notification`,
-`welcome`, `slack`, and `removal` in dependency order. Each row reports
+The detail response always includes `tagging`, `override`, `enrollment`,
+`notification`, `welcome`, `slack`, and `removal` in dependency order. Each row reports
 status, attempts, timestamps, whether it needs attention, and a safe error
 class or controlled reason. Unsafe legacy errors appear as
 `last_error: "redacted"` with `error_redacted: true`. The detail response also
@@ -408,6 +473,14 @@ its mirrored `welcome` step has resolved returns
 is left unchanged, so retry `welcome` first. A successful forced `override`
 retry resumes only currently eligible downstream enrollment steps once in
 their normal order.
+
+Two steps are exempt from the `skipped` -> `not_retryable` rule under a forced
+retry: `enrollment` (the documented roster-replay path) and, on a
+`lifecycle=active` occurrence only, `tagging`. `tagging_status` is `skipped`
+for every occurrence that pre-dates the step, so an operator must be able to
+force it; a forced `tagging` retry on a `lifecycle=removed` occurrence is
+declined with `409 maven_step_not_retryable` and applies no tags, because
+re-tagging a removed member would undo the removal's retraction.
 
 The API never returns webhook payloads, dedupe or identity hashes, names,
 Slack IDs, provider bodies, audit details, or token values. After the 30-day

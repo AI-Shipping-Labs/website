@@ -7506,6 +7506,7 @@
             "required": false,
             "schema": {
               "enum": [
+                "tagging",
                 "override",
                 "enrollment",
                 "notification",
@@ -7578,6 +7579,7 @@
                           "failed_steps": {
                             "items": {
                               "enum": [
+                                "tagging",
                                 "override",
                                 "enrollment",
                                 "notification",
@@ -7603,6 +7605,7 @@
                           "needs_attention_steps": {
                             "items": {
                               "enum": [
+                                "tagging",
                                 "override",
                                 "enrollment",
                                 "notification",
@@ -7746,7 +7749,7 @@
     },
     "/api/integrations/maven/occurrences/{occurrence_id}": {
       "get": {
-        "description": "Return the current persisted occurrence and all six ledger steps. This operation is read-only and makes no provider calls.",
+        "description": "Return the current persisted occurrence and every ledger step. This operation is read-only and makes no provider calls.",
         "parameters": [
           {
             "in": "path",
@@ -7797,6 +7800,7 @@
                     "failed_steps": {
                       "items": {
                         "enum": [
+                          "tagging",
                           "override",
                           "enrollment",
                           "notification",
@@ -7822,6 +7826,7 @@
                     "needs_attention_steps": {
                       "items": {
                         "enum": [
+                          "tagging",
                           "override",
                           "enrollment",
                           "notification",
@@ -7882,6 +7887,7 @@
                           },
                           "name": {
                             "enum": [
+                              "tagging",
                               "override",
                               "enrollment",
                               "notification",
@@ -8140,6 +8146,7 @@
                         "failed_steps": {
                           "items": {
                             "enum": [
+                              "tagging",
                               "override",
                               "enrollment",
                               "notification",
@@ -8165,6 +8172,7 @@
                         "needs_attention_steps": {
                           "items": {
                             "enum": [
+                              "tagging",
                               "override",
                               "enrollment",
                               "notification",
@@ -8225,6 +8233,7 @@
                               },
                               "name": {
                                 "enum": [
+                                  "tagging",
                                   "override",
                                   "enrollment",
                                   "notification",
@@ -8328,6 +8337,7 @@
                         },
                         "step": {
                           "enum": [
+                            "tagging",
                             "override",
                             "enrollment",
                             "notification",
@@ -8429,6 +8439,7 @@
                       "override",
                       "removal",
                       "slack",
+                      "tagging",
                       "welcome"
                     ]
                   },

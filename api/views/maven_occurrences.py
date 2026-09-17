@@ -296,8 +296,8 @@ def maven_occurrences_collection(request):
     methods={
         "GET": {
             "description": (
-                "Return the current persisted occurrence and all six ledger "
-                "steps. This operation is read-only and makes no provider calls."
+                "Return the current persisted occurrence and every ledger "
+                "step. This operation is read-only and makes no provider calls."
             ),
             "responses": {
                 200: {"description": "Full Maven occurrence detail.", "schema": _DETAIL_SCHEMA},

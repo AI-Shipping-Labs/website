@@ -6,6 +6,7 @@ validated values. Never read raw env / ``settings`` for these — go through
 here so Studio settings overrides take effect with no redeploy.
 """
 
+import json
 import logging
 
 from integrations.config import get_config, is_enabled
@@ -14,6 +15,12 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_OVERRIDE_TIER_SLUG = "main"
 DEFAULT_OVERRIDE_DURATION_DAYS = 1825
+
+# Course-key -> contact-tag prefix. The broad ``maven`` tag is a module
+# constant in ``integrations.services.maven`` because it is true of every
+# Maven enrollee; this map is configuration because a second Maven course
+# would need its own prefix (issue #1732).
+DEFAULT_COURSE_TAG_PREFIXES = {"from-rag-to-agents": "ai-buildcamp"}
 
 
 def maven_enabled():
@@ -90,3 +97,56 @@ def maven_override_duration_days():
         )
         return DEFAULT_OVERRIDE_DURATION_DAYS
     return days
+
+
+def maven_course_tag_prefixes():
+    """Return the ``course_key`` -> tag-prefix map, lowercased and validated.
+
+    Reads the raw ``MAVEN_COURSE_TAG_PREFIXES`` value through ``get_config``
+    (the config shim hands back a dict-typed DB value as a JSON string) and
+    parses it. Invalid JSON, a non-object payload, or non-string members are
+    logged once and fall back to the built-in default map rather than
+    leaving enrollees untagged — same defensive shape as
+    :func:`maven_override_duration_days`.
+    """
+    raw = get_config("MAVEN_COURSE_TAG_PREFIXES", "")
+    if raw in ("", None):
+        return dict(DEFAULT_COURSE_TAG_PREFIXES)
+    parsed = raw
+    if isinstance(parsed, str):
+        try:
+            parsed = json.loads(parsed)
+        except ValueError:
+            logger.warning(
+                "MAVEN_COURSE_TAG_PREFIXES is not valid JSON; using the "
+                "built-in default course tag prefixes",
+            )
+            return dict(DEFAULT_COURSE_TAG_PREFIXES)
+    if not isinstance(parsed, dict) or not all(
+        isinstance(key, str) and isinstance(value, str)
+        for key, value in parsed.items()
+    ):
+        logger.warning(
+            "MAVEN_COURSE_TAG_PREFIXES must be a JSON object of "
+            "course_key -> tag prefix strings; using the built-in default "
+            "course tag prefixes",
+        )
+        return dict(DEFAULT_COURSE_TAG_PREFIXES)
+    return {
+        key.strip().lower(): value.strip()
+        for key, value in parsed.items()
+        if key.strip()
+    }
+
+
+def maven_course_tag_prefix(course_key):
+    """Return the configured tag prefix for ``course_key``, or ``""``.
+
+    ``course_key`` is matched case-insensitively, as Maven delivers it. An
+    unmapped course is not an error: the caller still applies the broad
+    ``maven`` tag and records that the mapping is missing.
+    """
+    key = (course_key or "").strip().lower()
+    if not key:
+        return ""
+    return maven_course_tag_prefixes().get(key, "")

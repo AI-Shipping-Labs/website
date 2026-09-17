@@ -14,7 +14,9 @@ from django.db import IntegrityError, OperationalError, connection, transaction
 from django.utils import timezone
 
 from accounts.models import TierOverride
+from accounts.models.user import SIGNUP_SOURCE_MAVEN_WEBHOOK
 from accounts.services.email_resolution import normalize_email, resolve_user_by_email
+from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
 from content.models import Course, CourseAccess
@@ -22,6 +24,7 @@ from content.models.cohort import Cohort, CohortEnrollment
 from email_app.package_mail import send_package_mail
 from integrations.config import get_config, validate_email_config_value
 from integrations.maven_config import (
+    maven_course_tag_prefix,
     maven_override_duration_days,
     maven_override_tier_slug,
 )
@@ -36,7 +39,12 @@ EVENT_REMOVED = "user_cohort.removed"
 MAX_STEP_ATTEMPTS = 3
 MAX_DATABASE_CONTENTION_RETRIES = 10
 RUNNING_STEP_LEASE = timedelta(minutes=15)
-STEP_NAMES = ("override", "enrollment", "notification", "welcome", "slack", "removal")
+# ``tagging`` runs first and gates nothing: "this person arrived via Maven"
+# is a member-invisible CRM fact that must survive a failed entitlement
+# (issue #1732).
+STEP_NAMES = (
+    "tagging", "override", "enrollment", "notification", "welcome", "slack", "removal",
+)
 _SQLITE_DELIVERY_LOCK = threading.Lock()
 
 
@@ -319,6 +327,7 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
                     payload=_safe_payload(payload),
                     welcome_eligible=not already_member,
                     account_created=created_user,
+                    tagging_status=MavenEnrollmentEvent.STEP_PENDING,
                     enrollment_status=MavenEnrollmentEvent.STEP_PENDING,
                     notification_status=MavenEnrollmentEvent.STEP_PENDING,
                     slack_status=(MavenEnrollmentEvent.STEP_SKIPPED if already_member else MavenEnrollmentEvent.STEP_PENDING),
@@ -349,7 +358,7 @@ def _handle_enrolled(payload, email, course, cohort, course_key, cohort_key, ide
     status = "already_member" if not occurrence.welcome_eligible else "onboarded"
     if not created_occurrence and all(
         getattr(occurrence, f"{name}_status") in {MavenEnrollmentEvent.STEP_SUCCEEDED, MavenEnrollmentEvent.STEP_SKIPPED}
-        for name in ("override", "enrollment", "notification", "slack", "welcome")
+        for name in ("tagging", "override", "enrollment", "notification", "slack", "welcome")
     ):
         status = "already_processed"
     return MavenResult(
@@ -451,7 +460,9 @@ def _resolve_or_create(email, first_name="", last_name=""):
         # affirmatively opts in from the welcome email (issue #1593). No
         # branch here ever writes these fields on an account we resolved
         # rather than created.
-        signup_source="imported", unsubscribed=True,
+        # Issue #1732: a webhook-created account is not a bulk import, and
+        # Studio must not label it "Bulk import (Stripe / CSV / course DB)".
+        signup_source=SIGNUP_SOURCE_MAVEN_WEBHOOK, unsubscribed=True,
         email_preferences={"newsletter": False, "maven_emails": True},
     )
 
@@ -542,6 +553,102 @@ SLACK_JOIN_LINK_WELCOME_FAILED_NOTE = (
 )
 
 
+# Issue #1732: the CRM contact tags the webhook applies. ``maven`` is a
+# module constant because it is true of every enrollee regardless of course;
+# the per-course prefix is configuration (``MAVEN_COURSE_TAG_PREFIXES``).
+# These three notes are persisted into ``tagging_error`` and rendered
+# verbatim on /studio/maven-events/<pk>/, so they are registered in
+# ``api.serializers.maven._SAFE_CONTROLLED_REASONS`` — the operator API
+# redacts any persisted note that is not on that allowlist. Variable detail
+# (which tags, which course key) goes to ``actions`` and a structured log
+# line, never into the 255-character error column.
+MAVEN_TAG = "maven"
+MAVEN_TAGS_APPLIED_NOTE = "Maven CRM contact tags applied."
+MAVEN_TAGS_NO_PREFIX_NOTE = (
+    "No tag prefix configured for this course in MAVEN_COURSE_TAG_PREFIXES; "
+    "applied the broad maven tag only."
+)
+MAVEN_TAGS_NO_USER_NOTE = (
+    "No account is linked to this occurrence, so no contact tags were applied."
+)
+
+
+def _maven_tag_names(course_key, cohort_key):
+    """Return ``(prefix, tags)`` for one occurrence's course/cohort keys.
+
+    ``tags`` always starts with the broad ``maven`` tag. A configured course
+    prefix adds ``<prefix>`` and, when the cohort key contributes anything of
+    its own, ``<prefix>-<cohort_key>``. Every name is built from the stable
+    ``*_key`` fields and normalized — never from the display labels, which
+    Maven delivers inconsistently (``4`` and ``4/11`` for the same cohort).
+    """
+    tags = [MAVEN_TAG]
+    prefix = normalize_tag(maven_course_tag_prefix(course_key))
+    if not prefix:
+        return "", tags
+    tags.append(prefix)
+    cohort_tag = normalize_tag(f"{prefix}-{cohort_key or ''}")
+    if cohort_tag and cohort_tag != prefix:
+        tags.append(cohort_tag)
+    return prefix, tags
+
+
+def _run_tagging_step(row, actions):
+    """Apply the Maven CRM contact tags; return ``(status, persisted_note)``.
+
+    Never sends email, never writes a ``CommunityAuditLog`` row (the ledger
+    step is the audit trail), and never removes a tag. ``add_tag`` is
+    idempotent, so a redelivery cannot duplicate anything.
+    """
+    if row.user_id is None:
+        return MavenEnrollmentEvent.STEP_SKIPPED, MAVEN_TAGS_NO_USER_NOTE
+    prefix, tags = _maven_tag_names(row.course_key, row.cohort_key)
+    for tag in tags:
+        add_tag(row.user, tag)
+    actions.append(f"Applied contact tags: {', '.join(tags)}.")
+    logger.info(
+        "Maven tagging applied occurrence=%s course_key=%s cohort_key=%s tags=%s",
+        row.pk,
+        row.course_key or "(none)",
+        row.cohort_key or "(none)",
+        ",".join(tags),
+    )
+    if not prefix:
+        return MavenEnrollmentEvent.STEP_SUCCEEDED, MAVEN_TAGS_NO_PREFIX_NOTE
+    return MavenEnrollmentEvent.STEP_SUCCEEDED, MAVEN_TAGS_APPLIED_NOTE
+
+
+def _retract_maven_tags(row, actions):
+    """Drop the buildcamp tags on removal, keeping the broad ``maven`` tag.
+
+    Runs from the ``removal`` step regardless of ``tagging_status``: cohorts
+    1-4 were tagged by an operator import outside the ledger and their
+    occurrences are ``tagging_status=skipped``, yet a later removal must
+    still retract. A missing user, an unmapped course, or tags that are
+    already absent are no-ops rather than errors.
+    """
+    if row.user_id is None:
+        return
+    prefix = normalize_tag(maven_course_tag_prefix(row.course_key))
+    if not prefix:
+        return
+    user = row.user
+    retracted = []
+    cohort_tag = normalize_tag(f"{prefix}-{row.cohort_key or ''}")
+    if cohort_tag and cohort_tag != prefix and cohort_tag in (user.tags or []):
+        remove_tag(user, cohort_tag)
+        retracted.append(cohort_tag)
+    # The course-level tag survives only while the member still carries some
+    # other cohort under it — a returning student keeps ``ai-buildcamp``.
+    if prefix in (user.tags or []) and not any(
+        tag.startswith(f"{prefix}-") for tag in (user.tags or [])
+    ):
+        remove_tag(user, prefix)
+        retracted.append(prefix)
+    if retracted:
+        actions.append(f"Retracted contact tags: {', '.join(retracted)}.")
+
+
 def _staff_welcome_bcc():
     """Return the staff address that gets a hidden copy of the welcome.
 
@@ -622,6 +729,11 @@ def run_occurrence_steps(occurrence, *, step=None, force=False):
     if occurrence.lifecycle == MavenEnrollmentEvent.LIFECYCLE_REMOVED:
         _run_step(occurrence.pk, "removal", actions, force=force)
         return actions
+    # Issue #1732: CRM tagging runs first and gates nothing. The tags record
+    # that this person arrived via Maven, which stays true whether or not the
+    # entitlement lands, so a failed ``tagging`` step must never stop
+    # ``override`` or anything after it.
+    _run_step(occurrence.pk, "tagging", actions, force=force)
     # Access is the durable core. Do not send visible onboarding actions until
     # it has succeeded; concurrent duplicate deliveries will observe RUNNING
     # and leave those later steps for the winning worker.
@@ -694,7 +806,19 @@ def _run_step(pk, name, actions, *, force=False):
                 reason="not_retryable",
             )
         if status == row.STEP_SKIPPED and not (
-            force and name == "enrollment"
+            force
+            and (
+                name == "enrollment"
+                # Issue #1732: ``tagging_status`` defaults to ``skipped`` for
+                # every occurrence that pre-dates the step, so an operator must
+                # be able to force it on a still-active occurrence. A removed
+                # occurrence declines — re-tagging someone who was removed
+                # would undo the retraction the removal step performed.
+                or (
+                    name == "tagging"
+                    and row.lifecycle == MavenEnrollmentEvent.LIFECYCLE_ACTIVE
+                )
+            )
         ):
             # A skipped step is normally terminal: re-running a
             # preference-suppressed welcome would re-send member-visible
@@ -765,7 +889,15 @@ def _run_step(pk, name, actions, *, force=False):
             ]
         )
     try:
-        if name == "override":
+        if name == "tagging":
+            tagging_status, tagging_note = _run_tagging_step(row, actions)
+            _finish_step(pk, name, tagging_status, tagging_note)
+            return MavenStepRetryResult(
+                step=name,
+                outcome=tagging_status,
+                attempted=True,
+            )
+        elif name == "override":
             tier = Tier.objects.get(slug=maven_override_tier_slug())
             expiry = row.created_at + timedelta(days=maven_override_duration_days())
             actions.append(_grant_or_refresh_override(row.user, tier, expiry, row.cohort, row.course, source=f"maven:{row.identity_hash}"))
@@ -841,6 +973,7 @@ def _run_step(pk, name, actions, *, force=False):
             notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)
             actions.append("Sent staff removal heads-up.")
             _revoke_maven_grants(row, actions)
+            _retract_maven_tags(row, actions)
     except Exception as exc:
         # Provider exception messages can contain addresses, response bodies,
         # or tokens. Persist and log only the safe exception class.

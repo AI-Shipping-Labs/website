@@ -11,7 +11,6 @@ from community_base.content_sync.provenance import (
     SourceProvenanceMixin,
     provenance_constraint,
 )
-from community_base.knowledge_base.models import SLUG_PATTERN
 from django.core.validators import RegexValidator
 from django.db import models
 
@@ -20,6 +19,10 @@ from topics.rendering import render_topic_body
 
 SLUG_MAX_LENGTH = 300
 TITLE_MAX_LENGTH = 300
+# TopicPage is site-owned and its migration contract is the flat slug format.
+# The shared knowledge-base model now also supports slash-separated paths, but
+# that broader package validator must not change this site's existing schema.
+TOPIC_SLUG_PATTERN = r'^[-a-zA-Z0-9_.]+$'
 
 # Denied renders expose this many leading plain-text characters of the
 # body as the teaser; real topic bodies are far longer, so the teaser is
@@ -38,7 +41,8 @@ STATUS_CHOICES = (
 )
 
 slug_validator = RegexValidator(
-    SLUG_PATTERN, 'Enter a slug: letters, digits, dots, dashes or underscores.'
+    TOPIC_SLUG_PATTERN,
+    'Enter a slug: letters, digits, dots, dashes or underscores.',
 )
 
 

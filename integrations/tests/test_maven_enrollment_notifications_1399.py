@@ -33,7 +33,7 @@ def configure(**values):
     clear_config_cache()
 
 
-@patch("integrations.services.maven._send_welcome", lambda user, course, cohort, actions: actions.append("welcome"))
+@patch("integrations.services.maven._send_welcome", lambda occurrence, actions: actions.append("welcome"))
 class MavenEnrollmentNotificationTest(TestCase):
     def setUp(self):
         configure(STAFF_SIGNUP_NOTIFY_EMAIL="staff@example.com")

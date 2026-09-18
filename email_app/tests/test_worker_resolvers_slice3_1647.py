@@ -249,11 +249,11 @@ def _verify_url_from_html(html):
 @tag("core")
 @override_settings(SITE_BASE_URL=BASE_URL)
 class MavenWelcomeResolverTest(TestCase):
-    def _send(self, user, course="Buildcamp", cohort=""):
+    def _send(self, user, course="Buildcamp"):
         return send_package_mail(
             user,
             "maven_welcome",
-            _welcome_context(course, cohort),
+            _welcome_context(course),
         )
 
     def test_worker_mints_every_welcome_link_and_token(self):
@@ -335,16 +335,29 @@ class MavenWelcomeResolverTest(TestCase):
 
         self.assertIn("Hi Ada Lovelace,", html)
 
-    def test_cohort_fallback_flows_through_the_scalar(self):
+    def test_a_cohort_label_can_no_longer_reach_member_facing_copy(self):
+        """Issue #1682: this helper used to fall back to the Maven cohort
+        label when the course label was empty, which is how "You're
+        enrolled in Cohort 1" reached real enrollees. There is no cohort
+        channel into the durable context any more — re-wiring the producer
+        back to ``_welcome_context(row.course, row.cohort)`` raises here
+        rather than shipping an integration identifier as display copy —
+        and a course-less welcome sends the generic subject instead.
+        """
+        with self.assertRaises(TypeError):
+            _welcome_context("", "Cohort 1")
+
         user = User.objects.create_user(
             email="cohort-fallback@test.com", password="pw",
         )
 
-        delivery = self._send(user, course="", cohort="Cohort 1")
+        delivery = self._send(user, course="")
 
-        self.assertEqual(delivery.context_data, {"course_name": "Cohort 1"})
-        subject, _html = _drain_html(delivery)
-        self.assertIn("You're enrolled in Cohort 1", subject)
+        self.assertEqual(delivery.context_data, {"course_name": ""})
+        subject, html = _drain_html(delivery)
+        self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
+        self.assertNotIn("Cohort 1", subject)
+        self.assertNotIn("Cohort 1", html)
 
     def test_course_channel_setting_is_read_at_delivery_time(self):
         user = User.objects.create_user(

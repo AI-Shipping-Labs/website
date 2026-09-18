@@ -765,6 +765,25 @@ def _resolve_maven_welcome_context(delivery, context):
     if user is None or not getattr(user, "pk", None):
         raise PermanentJobError("maven_welcome_user_missing")
 
+    # Issue #1682: the member-facing course name is the linked Course's
+    # title, read from the delivery's ``content.course`` relation at
+    # delivery time so the title is always fresh at send. The producer
+    # persists no course identifier — Maven's raw course/cohort labels are
+    # integration identifiers, not display copy. A relation row missing
+    # here (course deleted between queue and delivery) degrades to the
+    # stored (empty) context and delivers: this relation is display copy,
+    # not a link target, so the #1613 fail-closed rule for URL-minting
+    # relations does not apply. Deliveries with no relation at all (legacy
+    # in-flight rows) keep rendering their stored ``course_name`` scalar.
+    if delivery.related_object_type == "content.course":
+        from content.models import Course  # noqa: PLC0415
+
+        course = Course.objects.filter(
+            pk=delivery.related_object_id,
+        ).first()
+        if course is not None:
+            context["course_name"] = course.title
+
     _member_greeting(delivery, context)
     base_url = site_base_url().rstrip("/")
     context["course_channel"] = maven_course_slack_channel()

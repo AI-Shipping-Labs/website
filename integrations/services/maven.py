@@ -666,17 +666,27 @@ def _staff_welcome_bcc():
     ) or None
 
 
-def _send_welcome(user, course, cohort, actions):
+def _send_welcome(occurrence, actions):
     # A1.2 slice 3: the welcome goes through the durable package delivery.
-    # The stored context carries the course scalar only (#1613); the worker
-    # resolver mints every link and token at delivery time. ``sent`` means
-    # the durable delivery exists — the SES outcome and the ``EmailLog``
-    # audit row land from the worker.
+    # The stored context carries no course identifier (issue #1682): the
+    # member-facing name is the linked Course's title, attached as the
+    # delivery's natural relation and re-read by the worker resolver at
+    # delivery time. The worker also mints every link and token then.
+    # ``sent`` means the durable delivery exists — the SES outcome and the
+    # ``EmailLog`` audit row land from the worker.
+    try:
+        course = resolve_maven_course(occurrence.course_key)
+    except MavenUnknownCourseError:
+        # Same soft handling as ``_revoke_maven_grants``: an unconfigured
+        # or unknown key never fails or suppresses the welcome step. The
+        # mail degrades to the template's generic course-free copy.
+        course = None
     delivery = send_package_mail(
-        user,
+        occurrence.user,
         "maven_welcome",
-        _welcome_context(course, cohort),
+        _welcome_context(),
         bcc=_staff_welcome_bcc(),
+        related=course,
     )
     if delivery.state == EmailDelivery.State.SUPPRESSED:
         # Honest action for the suppressed case; the welcome step itself
@@ -703,8 +713,24 @@ def _send_welcome(user, course, cohort, actions):
 NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
 
 
-def _welcome_context(course, cohort=""):
-    """Durable send context: the course scalar only (issues #1613, #1647).
+def _welcome_context(course=""):
+    """Durable send context: no course identifier since issue #1682.
+
+    The production welcome (``_send_welcome``) persists ``course_name``
+    empty: Maven's raw course label and cohort label are integration
+    identifiers, not display copy, so the member-facing name is resolved
+    at delivery time from the delivery's ``content.course`` relation —
+    the linked course's title, else this empty scalar, which renders the
+    template's generic course-free copy.
+
+    There is deliberately no ``cohort`` parameter. Before #1682 this
+    helper fell back to the Maven cohort label when the course label was
+    empty, which is how "You're enrolled in Cohort 1" reached enrollees.
+    Re-wiring the producer to pass a cohort now raises instead of
+    shipping an integration identifier as display copy. The ``course``
+    parameter is the legacy scalar shape only: relation-less deliveries
+    (rows queued before #1682) keep rendering whatever scalar was stored
+    at queue time.
 
     No ``user_name`` key here on purpose (issue #1591): the worker resolver
     resolves the greeting with ``greeting_name`` so a nameless enrollee gets
@@ -712,11 +738,11 @@ def _welcome_context(course, cohort=""):
     by ``email_app.hooks._resolve_maven_welcome_context`` at delivery time,
     which also starts the token expiry clocks then — a worker backlog or a
     retry loop never shortens the recipient's usable window (#1593). No
-    placeholder ever reaches an enrollee: course, else cohort, else the
+    placeholder ever reaches an enrollee: a resolved course title, else the
     template's generic, course-free copy.
     """
     return {
-        "course_name": (course or "").strip() or (cohort or "").strip(),
+        "course_name": (course or "").strip(),
     }
 
 
@@ -967,7 +993,7 @@ def _run_step(pk, name, actions, *, force=False):
                     outcome=MavenEnrollmentEvent.STEP_SKIPPED,
                     attempted=True,
                 )
-            _send_welcome(row.user, row.course, row.cohort, actions)
+            _send_welcome(row, actions)
         elif name == "removal":
             from community.services.staff_notifications import notify_maven_cohort_removal
             notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)

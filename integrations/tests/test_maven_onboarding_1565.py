@@ -115,11 +115,11 @@ def _sent_messages(calls):
     ]
 
 
-def _drain_welcome_html(user, course, cohort):
+def _drain_welcome_html(user, course):
     """Queue one welcome through the package, drain it, return its HTML."""
 
     delivery = send_package_mail(
-        user, "maven_welcome", _welcome_context(course, cohort),
+        user, "maven_welcome", _welcome_context(course),
     )
     stub = StubSESClient()
     with patch(
@@ -509,14 +509,14 @@ class MavenRejectionLoggingTest(MavenWebhookMixin):
 
 
 class MavenCourseFallbackTest(MavenWebhookMixin):
-    def _render(self, course, cohort):
+    def _render(self, course):
         user = User.objects.create_user(
-            email=f"fallback-{course or 'x'}-{cohort or 'y'}@example.com",
+            email=f"fallback-{course or 'x'}@example.com",
             password="x",
             first_name="Sam",
         )
         delivery = send_package_mail(
-            user, "maven_welcome", _welcome_context(course, cohort),
+            user, "maven_welcome", _welcome_context(course),
         )
         stub = StubSESClient()
         with patch(
@@ -530,20 +530,20 @@ class MavenCourseFallbackTest(MavenWebhookMixin):
             simple["Body"]["Html"]["Data"],
         )
 
-    def test_cohort_is_used_when_the_payload_has_no_course(self):
-        subject, body = self._render("", "Cohort 1")
-        self.assertIn("Cohort 1", subject)
-        self.assertNotIn("your course", subject)
-        self.assertNotIn("your course", body)
-
-    def test_neither_course_nor_cohort_falls_back_to_the_generic_subject(self):
-        subject, body = self._render("", "")
+    def test_no_course_name_falls_back_to_the_generic_subject(self):
+        # Issue #1682 removed the cohort fallback that used to frame this
+        # subject with a Maven cohort label, so an empty course name is
+        # now the generic-copy case rather than "You're enrolled in
+        # Cohort 1". The cohort label has no route into this context.
+        subject, body = self._render("")
         self.assertEqual(subject, "Welcome to the AI Shipping Labs community")
+        self.assertNotIn("Cohort 1", subject)
+        self.assertNotIn("Cohort 1", body)
         self.assertNotIn("your course", body)
         self.assertIn("the course you just enrolled in", body)
 
     def test_course_framed_subject_is_unchanged_when_a_course_is_present(self):
-        subject, body = self._render("Buildcamp", "Cohort 1")
+        subject, body = self._render("Buildcamp")
         self.assertIn("You're enrolled in Buildcamp", subject)
         self.assertNotIn("your course", body)
 
@@ -581,7 +581,7 @@ class MavenCourseChannelTest(MavenWebhookMixin):
                 key="MAVEN_COURSE_SLACK_CHANNEL"
             ).delete()
         clear_config_cache()
-        return _drain_welcome_html(user, "Buildcamp", "Cohort 1")
+        return _drain_welcome_html(user, "Buildcamp")
 
     def test_channel_is_named_when_the_setting_is_configured(self):
         body = self._render("chan-on@example.com", "#ai-engineering-buildcamp")

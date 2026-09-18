@@ -807,6 +807,9 @@ def _package_github_app_private_key():
 
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
+    # Canonical origin used by shared public-resource API URLs. Keep this
+    # aligned with SITE_BASE_URL so request hosts cannot change API links.
+    'SITE_URL': SITE_BASE_URL,
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'JOBS_BACKEND': 'django_q',
     'MAIL_BACKEND': 'ses_local',

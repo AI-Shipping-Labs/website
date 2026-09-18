@@ -10,6 +10,7 @@ Source-of-truth contract:
 import logging
 from datetime import timedelta
 
+from community_base.api.public_urls import public_url
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator, validate_email
 from django.db import IntegrityError, transaction
@@ -41,6 +42,7 @@ from events.models.event import (
     EVENT_PLATFORM_CHOICES,
     EVENT_STATUS_CHOICES,
     EXTERNAL_HOST_CHOICES,
+    PUBLIC_EVENT_STATUSES,
 )
 from events.services.calendar_lifecycle import (
     enqueue_cancellation_update,
@@ -242,6 +244,7 @@ _EVENT_EXAMPLE = {
     "tags": ["sprint:may-2026"],
     "required_level": 0,
     "status": "scheduled",
+    "public_url": "https://aishippinglabs.com/events/42/office-hours-2026-05-05",
     "event_series": None,
     "external_host": "",
     "published": True,
@@ -348,6 +351,10 @@ def serialize_event(event):
         "tags": event.tags or [],
         "required_level": event.required_level,
         "status": event.status,
+        "public_url": public_url(
+            event,
+            is_public=event.published and event.status in PUBLIC_EVENT_STATUSES,
+        ),
         "series_position": event.series_position,
         "event_series": _serialize_event_series_ref(event),
         "external_host": event.external_host,

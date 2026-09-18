@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.test import TestCase, tag
+from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
 from accounts.models import Token
@@ -200,6 +200,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "tags",
                 "required_level",
                 "status",
+                "public_url",
                 "series_position",
                 "event_series",
                 "external_host",
@@ -293,6 +294,10 @@ class EventsListAndDetailTest(EventsApiTestBase):
         self.assertEqual(body["materials"], [])
         self.assertFalse(body["editable"])
         self.assertEqual(
+            body["public_url"],
+            f"https://aishippinglabs.com/events/{self.github_event.pk}/{self.github_event.slug}",
+        )
+        self.assertEqual(
             [(host["slug"], host["title"]) for host in body["hosts"]],
             [("alpha-host", "Alpha Facilitator")],
         )
@@ -300,6 +305,96 @@ class EventsListAndDetailTest(EventsApiTestBase):
         missing = self.client.get("/api/events/nope", **self._auth())
         self.assertEqual(missing.status_code, 404)
         self.assertEqual(missing.json()["code"], "unknown_event")
+
+    @override_settings(
+        COMMUNITY_BASE={
+            **settings.COMMUNITY_BASE,
+            "SITE_URL": "https://configured.example.test/",
+        },
+    )
+    def test_public_url_uses_configured_origin_for_list_detail_create_and_update(self):
+        expected = (
+            f"https://configured.example.test/events/"
+            f"{self.github_event.pk}/{self.github_event.slug}"
+        )
+
+        listing = self.client.get(
+            "/api/events",
+            HTTP_HOST="testserver",
+            **self._auth(),
+        )
+        by_slug = {event["slug"]: event for event in listing.json()["events"]}
+        self.assertEqual(by_slug["github-synced-event"]["public_url"], expected)
+        self.assertIsNone(by_slug["studio-event"]["public_url"])
+
+        detail = self.client.get(
+            f"/api/events/{self.github_event.slug}",
+            HTTP_HOST="testserver",
+            **self._auth(),
+        )
+        self.assertEqual(detail.json()["public_url"], expected)
+
+        created = self.client.post(
+            "/api/events",
+            data=json.dumps(
+                {
+                    "title": "Public API Event",
+                    "start_datetime": (self.start + timedelta(days=10)).isoformat(),
+                    "status": "upcoming",
+                    "description": "A public event.",
+                },
+            ),
+            content_type="application/json",
+            HTTP_HOST="testserver",
+            **self._auth(),
+        )
+        self.assertEqual(created.status_code, 201)
+        created_body = created.json()
+        created_event = Event.objects.get(slug=created_body["slug"])
+        created_expected = (
+            f"https://configured.example.test/events/"
+            f"{created_event.pk}/{created_event.slug}"
+        )
+        self.assertEqual(created_body["public_url"], created_expected)
+
+        updated = self.client.patch(
+            f"/api/events/{created_event.slug}",
+            data=json.dumps({"title": "Updated Public API Event"}),
+            content_type="application/json",
+            HTTP_HOST="testserver",
+            **self._auth(),
+        )
+        self.assertEqual(updated.json()["public_url"], created_expected)
+
+    @override_settings(
+        COMMUNITY_BASE={
+            **settings.COMMUNITY_BASE,
+            "SITE_URL": "https://configured.example.test",
+        },
+    )
+    def test_public_url_is_null_for_non_public_event_states(self):
+        cancelled = Event.objects.create(
+            title="Cancelled API Event",
+            slug="cancelled-api-event",
+            description="No longer happening.",
+            start_datetime=self.start,
+            status="cancelled",
+            origin="studio",
+        )
+        unpublished = Event.objects.create(
+            title="Unpublished API Event",
+            slug="unpublished-api-event",
+            description="Not visible yet.",
+            start_datetime=self.start,
+            status="upcoming",
+            published=False,
+            origin="studio",
+        )
+
+        for event in (self.studio_event, cancelled, unpublished):
+            with self.subTest(status=event.status):
+                response = self.client.get(f"/api/events/{event.slug}", **self._auth())
+                self.assertIsNone(response.json()["public_url"])
 
     def test_event_host_summaries_include_title_in_list_and_detail_order(self):
         EventHost.objects.create(

@@ -116,6 +116,10 @@ class BuildSpecTest(TestCase):
             ["responses"]["200"]["content"]["application/json"]["example"]
         )
         self.assertIn("title", example["events"][0]["hosts"][0])
+        self.assertEqual(
+            example["events"][0]["public_url"],
+            "https://aishippinglabs.com/events/42/office-hours-2026-05-05",
+        )
 
     def test_events_openapi_documents_timestamps_requests_and_examples(self):
         post_props = self._request_body_properties("/api/events", "post")

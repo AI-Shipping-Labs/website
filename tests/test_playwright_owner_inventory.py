@@ -1070,6 +1070,36 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_onboards_a_second_maven_course_from_studio_settings",
     })
 
+    issue_1737_owners = frozenset({
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestOperatorMintsAKeyAndCopiesItOnce::"
+        "test_empty_state_to_one_shot_plaintext_to_masked_row",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestMintedKeyWorksAgainstTheApiItWasMintedFor::"
+        "test_scope_box_constrains_real_bearer_access",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestRevokeCutsRealAccess::"
+        "test_revoking_through_the_list_kills_the_bearer_credential",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestRevokeIsReachableOnAnOperatorLaptop::"
+        "test_revoke_is_on_screen_at_1280_and_1366",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestMemberKeysNeverSurfaceOnTheStaffPage::"
+        "test_member_key_is_absent_and_its_revoke_url_404s",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestSidebarDiscovery::"
+        "test_operations_sidebar_lists_api_keys_and_marks_it_current",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestCredentialPagesCrossReference::"
+        "test_keys_and_tokens_link_to_each_other_in_both_directions",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestOperatorFixesARejectedKey::"
+        "test_invalid_scope_keeps_the_typed_name_and_creates_nothing",
+        "playwright_tests/test_studio_api_keys.py::"
+        "TestStaffWithoutSuperuserCannotReachThePage::"
+        "test_no_sidebar_entry_no_page_no_revoke",
+    })
+
     issue_1725_owners = frozenset({
         "playwright_tests/test_workshop_theme_figures_1725.py::"
         "TestDarkModeFirstLoad::"
@@ -1419,8 +1449,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2634)
-        self.assertEqual(len(inventory.owners), 2432)
+        self.assertEqual(inventory.item_count, 2643)
+        self.assertEqual(len(inventory.owners), 2441)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1459,7 +1489,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1724_owners
             | self.issue_1725_owners
             | self.issue_1732_owners
-            | self.issue_1736_owners,
+            | self.issue_1736_owners
+            | self.issue_1737_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1509,6 +1540,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1724_owners
             | self.issue_1725_owners
             | self.issue_1736_owners
+            | self.issue_1737_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

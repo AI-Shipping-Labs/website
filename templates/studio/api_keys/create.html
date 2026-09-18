@@ -1,0 +1,62 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}New API key{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_api_key_list' as api_key_list_url %}
+{% studio_header_title_meta as api_key_create_meta %}
+  <p class="text-sm text-muted-foreground">
+    Mint a scoped key for yourself. The plaintext value is shown exactly once
+    on the next screen — save it then. Keys authenticate staff automation
+    against <code class="font-mono text-xs">/api/v1/</code>.
+  </p>
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="New API key" title_meta=api_key_create_meta back_url=api_key_list_url back_label="Back to API keys" %}{% endstudio_header_actions %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form method="post" action="{% url 'studio_api_key_create' %}">
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="mb-6 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700 dark:text-red-400"
+         data-testid="form-error-non-field">
+      {{ form.non_field_errors|join:", " }}
+    </div>
+    {% endif %}
+
+    <p class="text-sm text-muted-foreground mb-6" data-testid="key-owner-note">
+      Key will be issued to <code class="font-mono text-foreground">{{ request.user.email }}</code>.
+    </p>
+
+    <div class="mb-6">
+      <label for="{{ form.name.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Name</label>
+      {{ form.name }}
+      <p class="text-xs text-muted-foreground mt-1">Helps you tell keys apart on the list page.</p>
+      {% if form.name.errors %}
+      <p class="text-xs text-red-400 mt-1" data-testid="form-error-name">{{ form.name.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <div class="mb-6">
+      <label for="{{ form.scopes.id_for_label }}" class="block text-sm font-medium text-foreground mb-1">Scopes</label>
+      {{ form.scopes }}
+      <p class="text-xs text-muted-foreground mt-1">{{ form.scopes.help_text }}</p>
+      {% if form.scopes.errors %}
+      <p class="text-xs text-red-400 mt-1" data-testid="form-error-scopes">{{ form.scopes.errors|join:", " }}</p>
+      {% endif %}
+    </div>
+
+    <div class="flex items-center gap-3">
+      <button type="submit"
+              data-testid="api-key-create-submit"
+              class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+        Create key
+      </button>
+      <a href="{% url 'studio_api_key_list' %}" class="text-sm text-muted-foreground hover:text-foreground transition-colors">
+        Cancel
+      </a>
+    </div>
+  </form>
+</div>
+{% endblock %}

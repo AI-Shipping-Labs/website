@@ -118,6 +118,14 @@ class SidebarRouteMapTest(TestCase):
             'studio_trigger_delivery_list': ('operations', 'trigger_deliveries'),
             'studio_settings_save': ('operations', 'settings'),
             'studio_api_token_created': ('operations', 'api_tokens'),
+            # Issue #1737: all four API-key routes plus the package-era
+            # aliases share one Operations home.
+            'studio_api_key_list': ('operations', 'api_keys'),
+            'studio_api_key_create': ('operations', 'api_keys'),
+            'studio_api_key_created': ('operations', 'api_keys'),
+            'studio_api_key_revoke': ('operations', 'api_keys'),
+            'community_base_api_keys': ('operations', 'api_keys'),
+            'community_base_api_key_revoke': ('operations', 'api_keys'),
             'studio_maven_event_detail': ('operations', 'maven_events'),
             'studio_dashboard': ('', 'dashboard'),
         }
@@ -315,6 +323,21 @@ class SidebarRenderedActiveStateTest(TestCase):
         self.client.force_login(superuser)
         nav = self._sidebar_html(reverse('studio_api_token_list'))
         self._assert_single_current(nav, '/studio/api-tokens/', 'operations')
+
+    def test_superuser_only_api_keys_page_marks_its_own_link(self):
+        superuser = User.objects.create_user(
+            email='root-1737@test.com', password='pw',
+            is_staff=True, is_superuser=True,
+        )
+        self.client.force_login(superuser)
+        nav = self._sidebar_html(reverse('studio_api_key_list'))
+        self._assert_single_current(nav, '/studio/api-keys/', 'operations')
+        # The neighbouring API tokens link must not also read as active.
+        self._assert_active_link_absent(nav, '/studio/api-tokens/')
+
+    def test_api_keys_link_is_absent_for_staff_without_superuser(self):
+        nav = self._sidebar_html(reverse('studio_dashboard'))
+        self.assertNotIn('/studio/api-keys/', nav)
 
     def test_active_section_attribute_matches_the_expanded_group(self):
         response = self.client.get(reverse('studio_assistant'))

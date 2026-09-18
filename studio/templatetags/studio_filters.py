@@ -333,7 +333,7 @@ def studio_user_status_pill_classes(status):
 def studio_list_class(part='wrapper', align='left', density='default'):
     """Return shared class names for Studio content list tables.
 
-    ``density='dense'`` returns the tighter px-4/py-2.5 cell padding for
+    ``density='dense'`` returns the tighter ``px-4 py-2.5`` cell padding for
     column-heavy tables that would otherwise overflow the content well at
     1280px. See ``LIST_TABLE_DENSE_CELL_PADDING`` (issue #1737).
     """

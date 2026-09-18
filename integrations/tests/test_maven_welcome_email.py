@@ -34,11 +34,11 @@ from integrations.services.maven import (
 User = get_user_model()
 
 
-def _welcome_html(user, course="Course", cohort=""):
+def _welcome_html(user, course="Course"):
     """Send one welcome through the package and drain the worker."""
 
     delivery = send_package_mail(
-        user, "maven_welcome", _welcome_context(course, cohort),
+        user, "maven_welcome", _welcome_context(course),
     )
     stub = StubSESClient()
     with patch(

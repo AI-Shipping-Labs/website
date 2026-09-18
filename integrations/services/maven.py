@@ -713,7 +713,7 @@ def _send_welcome(occurrence, actions):
 NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS = 24 * 30
 
 
-def _welcome_context(course="", cohort=""):
+def _welcome_context(course=""):
     """Durable send context: no course identifier since issue #1682.
 
     The production welcome (``_send_welcome``) persists ``course_name``
@@ -721,8 +721,14 @@ def _welcome_context(course="", cohort=""):
     identifiers, not display copy, so the member-facing name is resolved
     at delivery time from the delivery's ``content.course`` relation —
     the linked course's title, else this empty scalar, which renders the
-    template's generic course-free copy. The ``course``/``cohort``
-    parameters are the legacy scalar shape: relation-less deliveries
+    template's generic course-free copy.
+
+    There is deliberately no ``cohort`` parameter. Before #1682 this
+    helper fell back to the Maven cohort label when the course label was
+    empty, which is how "You're enrolled in Cohort 1" reached enrollees.
+    Re-wiring the producer to pass a cohort now raises instead of
+    shipping an integration identifier as display copy. The ``course``
+    parameter is the legacy scalar shape only: relation-less deliveries
     (rows queued before #1682) keep rendering whatever scalar was stored
     at queue time.
 
@@ -736,7 +742,7 @@ def _welcome_context(course="", cohort=""):
     template's generic, course-free copy.
     """
     return {
-        "course_name": (course or "").strip() or (cohort or "").strip(),
+        "course_name": (course or "").strip(),
     }
 
 

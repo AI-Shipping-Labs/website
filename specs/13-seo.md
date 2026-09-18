@@ -84,14 +84,14 @@ Every page includes:
 
 ### Sitemap
 
-Generate `/sitemap.xml` that includes all public (open) pages:
-- All published articles with `required_level = 0`
+Generate `/sitemap.xml` that includes all indexable pages:
+- All published articles, open and gated (#1723)
 - All course catalog and detail pages (always public)
 - All events
 - Tag pages
 - Static pages (home, pricing, about)
 
-Gated content (required_level > 0) detail pages are NOT included in the sitemap (they show a gated response to crawlers). Course detail pages ARE included because they always show public content.
+Gated article, course, and event detail pages ARE included: a crawler gets HTTP 200 with a real teaser page (title, meta description, canonical, JSON-LD, teaser text, upgrade CTA) and no `noindex`, so they are exactly the kind of page a sitemap should advertise. Gated projects and tutorials (`required_level > 0`) remain excluded pending their own decision.
 
 ## Requirements
 

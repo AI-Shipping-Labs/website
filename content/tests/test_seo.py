@@ -5,8 +5,10 @@ Tests for SEO features: structured data, meta tags, OpenGraph tags, and sitemap.
 import html
 import json
 import re
+import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from datetime import timezone as dt_tz
+from urllib.parse import urlsplit
 
 from django.template import Context, Template
 from django.test import RequestFactory, TestCase
@@ -45,6 +47,25 @@ def _jsonld_objects(content):
         flags=re.S,
     )
     return [json.loads(script) for script in scripts]
+
+
+def _sitemap_entries_by_path(response):
+    """Map /sitemap.xml entry paths to their rendered metadata.
+
+    Returns ``{path: {child_tag: text}}`` where the child tags are the
+    non-``loc`` children of each ``<url>`` entry (``lastmod``,
+    ``changefreq``, ``priority``). Same parsing style as
+    ``content/tests/test_sitemap_origin.py``.
+    """
+    entries = {}
+    for url in ET.fromstring(response.content).findall('.//{*}url'):
+        path = urlsplit(url.find('{*}loc').text).path
+        entries[path] = {
+            tag: child.text
+            for child in url
+            if (tag := child.tag.rsplit('}', 1)[-1]) != 'loc'
+        }
+    return entries
 
 
 class StructuredDataArticleTest(TestCase):
@@ -1587,15 +1608,35 @@ class SitemapTest(TestCase):
             published=True,
             required_level=0,
         )
-        # Gated article (should NOT be in sitemap)
-        cls.gated_article = Article.objects.create(
-            title='Gated Article',
-            slug='gated-article',
-            description='A gated article.',
+        # Gated article at the Basic tier (in sitemap per #1723)
+        cls.gated_article_basic = Article.objects.create(
+            title='Gated Article Basic',
+            slug='gated-article-basic',
+            description='A Basic-tier gated article.',
             content_markdown='# Content',
             date=date(2025, 6, 14),
             published=True,
-            required_level=1,
+            required_level=10,
+        )
+        # Gated article at the Main tier (in sitemap per #1723)
+        cls.gated_article_main = Article.objects.create(
+            title='Gated Article Main',
+            slug='gated-article-main',
+            description='A Main-tier gated article.',
+            content_markdown='# Content',
+            date=date(2025, 6, 12),
+            published=True,
+            required_level=20,
+        )
+        # Gated article at the Premium tier (in sitemap per #1723)
+        cls.gated_article_premium = Article.objects.create(
+            title='Gated Article Premium',
+            slug='gated-article-premium',
+            description='A Premium-tier gated article.',
+            content_markdown='# Content',
+            date=date(2025, 6, 11),
+            published=True,
+            required_level=30,
         )
         # Draft article (should NOT be in sitemap)
         cls.draft_article = Article.objects.create(
@@ -1680,10 +1721,38 @@ class SitemapTest(TestCase):
         content = response.content.decode()
         self.assertIn('/blog/open-article', content)
 
-    def test_sitemap_excludes_gated_article(self):
+    def test_sitemap_includes_gated_articles_at_every_tier(self):
+        # #1723: published gated articles are sitemap members, pinned per
+        # tier so a future Basic (10), Main (20), or Premium (30) chapter
+        # cannot silently drop out. Matched on the parsed <loc> path, not a
+        # substring, so a missing entry cannot be masked by a sibling slug.
         response = self.client.get('/sitemap.xml')
-        content = response.content.decode()
-        self.assertNotIn('/blog/gated-article', content)
+        paths = set(_sitemap_entries_by_path(response))
+        for slug in (
+            'gated-article-basic',
+            'gated-article-main',
+            'gated-article-premium',
+        ):
+            with self.subTest(slug=slug):
+                self.assertIn(f'/blog/{slug}', paths)
+
+    def test_sitemap_gated_article_metadata_is_uniform(self):
+        # #1723: gated entries carry the exact same metadata treatment as
+        # open ones - changefreq weekly, priority 0.8, lastmod updated_at.
+        response = self.client.get('/sitemap.xml')
+        entries = _sitemap_entries_by_path(response)
+        self.assertIn('/blog/gated-article-basic', entries)
+        self.assertIn('/blog/open-article', entries)
+        gated = entries['/blog/gated-article-basic']
+        open_entry = entries['/blog/open-article']
+        self.assertEqual(gated['changefreq'], 'weekly')
+        self.assertEqual(gated['priority'], '0.8')
+        self.assertEqual(gated['changefreq'], open_entry['changefreq'])
+        self.assertEqual(gated['priority'], open_entry['priority'])
+        self.assertEqual(
+            gated['lastmod'],
+            timezone.localdate(self.gated_article_basic.updated_at).isoformat(),
+        )
 
     def test_sitemap_excludes_draft_article(self):
         response = self.client.get('/sitemap.xml')
@@ -1755,7 +1824,11 @@ class SitemapTest(TestCase):
 
 
 class SitemapGatedContentExclusionTest(TestCase):
-    """Specifically test that gated content is excluded from sitemap."""
+    """Gated projects and tutorials remain excluded from the sitemap.
+
+    Articles are sitemap members since #1723, including gated ones; these
+    exclusions cover only the other gated content types.
+    """
 
     def test_gated_project_excluded(self):
         Project.objects.create(

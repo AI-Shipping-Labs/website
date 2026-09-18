@@ -130,9 +130,18 @@ def _next_tag_is_table(snippet: str) -> bool:
 
 
 def _clean_snippet(snippet: str) -> str:
-    """Strip HTML and Django comments out of a forward-looking snippet."""
+    """Strip HTML and Django comments out of a forward-looking snippet.
+
+    The ``{# #}`` pattern deliberately omits ``re.DOTALL`` to mirror Django's
+    own tokenizer: ``django.template.base.tag_re`` is compiled without it, so
+    a ``{# ... #}`` spanning a newline is NOT a comment and renders as page
+    content (issue #1737). Stripping multi-line ``{# #}`` here would make this
+    walker more permissive than the template engine and blind it to exactly
+    the leak it should surface. ``{% comment %}`` really is multi-line, so it
+    keeps ``re.DOTALL``.
+    """
     cleaned = re.sub(r'<!--.*?-->', '', snippet, flags=re.DOTALL)
-    cleaned = re.sub(r'{#.*?#}', '', cleaned, flags=re.DOTALL)
+    cleaned = re.sub(r'{#.*?#}', '', cleaned)
     cleaned = re.sub(
         r'{%\s*comment\s*%}.*?{%\s*endcomment\s*%}',
         '', cleaned, flags=re.DOTALL,

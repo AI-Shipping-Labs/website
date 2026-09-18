@@ -219,6 +219,9 @@ class StudioSidebarStructureTest(TestCase):
     SUPERUSER_ONLY_LINKS = [
         ('/studio/users/new/', 'New user'),
         ('/studio/api-tokens/', 'API tokens'),
+        # Issue #1737: /api/v1/ bearer keys, superuser-only like the tokens
+        # page next to it.
+        ('/studio/api-keys/', 'API keys'),
     ]
 
     def test_all_expected_nav_links_render_for_staff(self):
@@ -249,7 +252,7 @@ class StudioSidebarStructureTest(TestCase):
                 )
 
     def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
-        for superuser, expected_count in ((False, 48), (True, 50)):
+        for superuser, expected_count in ((False, 48), (True, 51)):
             with self.subTest(superuser=superuser):
                 response = self._get_studio_dashboard(superuser=superuser)
                 anchors = self._sidebar_anchors(response)
@@ -267,9 +270,11 @@ class StudioSidebarStructureTest(TestCase):
                 if superuser:
                     self.assertIn('href="/studio/users/new/"', rendered)
                     self.assertIn('href="/studio/api-tokens/"', rendered)
+                    self.assertIn('href="/studio/api-keys/"', rendered)
                 else:
                     self.assertNotIn('href="/studio/users/new/"', rendered)
                     self.assertNotIn('href="/studio/api-tokens/"', rendered)
+                    self.assertNotIn('href="/studio/api-keys/"', rendered)
 
     # ------------------------------------------------------------------
     # Preserved test-id hooks
@@ -282,6 +287,10 @@ class StudioSidebarStructureTest(TestCase):
     def test_api_tokens_testid_preserved_for_superuser(self):
         response = self._get_studio_dashboard(superuser=True)
         self.assertContains(response, 'data-testid="api-tokens-nav-link"')
+
+    def test_api_keys_testid_preserved_for_superuser(self):
+        response = self._get_studio_dashboard(superuser=True)
+        self.assertContains(response, 'data-testid="api-keys-nav-link"')
 
     def test_api_docs_link_opens_swagger_in_new_tab(self):
         # Issue #862: the Operations shortcut to the Swagger UI must open

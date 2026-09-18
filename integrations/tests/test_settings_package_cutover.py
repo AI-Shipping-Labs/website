@@ -167,11 +167,29 @@ class PackageSettingsRouteTest(TestCase):
         self.assertEqual(reverse("studio_settings"), "/studio/settings/")
 
     def test_package_api_key_management_is_mounted_in_studio(self):
+        """The Studio API-key page is site-owned; the package name still works.
+
+        A0.2 mounted ``community_base.api.urls`` wholesale and this test
+        pinned the package view module. #1737 moved the Studio page to
+        ``studio.views.api_keys`` because the package list view queries every
+        ``APIKey`` with no owner or kind scoping, and a site template override
+        cannot scope a queryset that lives in package code. What A0.2 actually
+        cared about -- that the page is reachable at its established URL and
+        that ``community_base_api_keys`` still reverses -- is unchanged, so
+        that is what this asserts now. ``APIKey`` itself, its auth, and the
+        whole ``/api/v1/`` surface stay package-owned; the test below pins
+        that half.
+        """
         self.assertEqual(reverse("community_base_api_keys"), "/studio/api-keys/")
         self.assertEqual(
-            resolve("/studio/api-keys/").func.__module__,
-            "community_base.api.views",
+            reverse("community_base_api_key_revoke", args=[self.api_key.pk]),
+            f"/studio/api-keys/{self.api_key.pk}/revoke/",
         )
+        self.assertEqual(
+            resolve("/studio/api-keys/").func.__module__,
+            "studio.views.api_keys",
+        )
+        self.assertEqual(APIKey.objects.model.__module__, "community_base.api.models")
 
     def test_package_operator_routes_are_mounted_under_versioned_api_prefix(self):
         self.assertEqual(

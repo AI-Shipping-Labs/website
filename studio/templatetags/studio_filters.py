@@ -40,6 +40,22 @@ LIST_TABLE_HEAD_CELL_RIGHT_CLASS = (
     'text-right px-6 py-3 text-xs font-medium text-muted-foreground '
     'uppercase tracking-wider'
 )
+#: Issue #1737: the default px-6/py-3 density fits roughly six columns in the
+#: 958px content well a 1280px-wide operator screen leaves. Wider tables push
+#: their Actions column off-screen with no scrollbar track to hint at it, so a
+#: column-dense list opts into this tighter padding. Same density the
+#: ``api_tokens`` sibling already uses; named here so it has one owner instead
+#: of a second hand-rolled copy per template.
+LIST_TABLE_DENSE_CELL_PADDING = 'px-4 py-2.5'
+LIST_TABLE_DEFAULT_CELL_PADDING = 'px-6 py-3'
+LIST_TABLE_HEAD_CELL_DENSE_CLASS = (
+    'text-left px-4 py-2.5 text-xs font-medium text-muted-foreground '
+    'uppercase tracking-wider'
+)
+LIST_TABLE_HEAD_CELL_RIGHT_DENSE_CLASS = (
+    'text-right px-4 py-2.5 text-xs font-medium text-muted-foreground '
+    'uppercase tracking-wider'
+)
 LIST_TABLE_BODY_CLASS = 'divide-y divide-border'
 LIST_TABLE_ROW_CLASS = 'hover:bg-secondary/50 transition-colors'
 ACTION_CELL_CLASS = 'studio-actions-cell text-right'
@@ -99,6 +115,9 @@ STATUS_BADGE_CLASSES = {
     'recovered': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'expired': 'bg-secondary text-muted-foreground',
     'superseded': 'bg-secondary text-muted-foreground',
+    # Issue #1737: a revoked API key is a deliberately retired credential,
+    # not a fault -- grey-muted like ``expired``, never red and never green.
+    'revoked': 'bg-secondary text-muted-foreground',
     'review': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
     'pending': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
     # Issue #1653: a preference-suppressed grace send never attempted SES
@@ -311,18 +330,35 @@ def studio_user_status_pill_classes(status):
 
 
 @register.simple_tag
-def studio_list_class(part='wrapper', align='left'):
-    """Return shared class names for Studio content list tables."""
+def studio_list_class(part='wrapper', align='left', density='default'):
+    """Return shared class names for Studio content list tables.
+
+    ``density='dense'`` returns the tighter px-4/py-2.5 cell padding for
+    column-heavy tables that would otherwise overflow the content well at
+    1280px. See ``LIST_TABLE_DENSE_CELL_PADDING`` (issue #1737).
+    """
+    dense = density == 'dense'
     if part == 'wrapper':
         return LIST_TABLE_WRAPPER_CLASS
     if part == 'table':
         return LIST_TABLE_CLASS
     if part == 'thead':
         return LIST_TABLE_HEAD_CLASS
+    if part == 'cell_padding':
+        return (
+            LIST_TABLE_DENSE_CELL_PADDING if dense
+            else LIST_TABLE_DEFAULT_CELL_PADDING
+        )
     if part == 'th':
         if align == 'right':
-            return LIST_TABLE_HEAD_CELL_RIGHT_CLASS
-        return LIST_TABLE_HEAD_CELL_CLASS
+            return (
+                LIST_TABLE_HEAD_CELL_RIGHT_DENSE_CLASS if dense
+                else LIST_TABLE_HEAD_CELL_RIGHT_CLASS
+            )
+        return (
+            LIST_TABLE_HEAD_CELL_DENSE_CLASS if dense
+            else LIST_TABLE_HEAD_CELL_CLASS
+        )
     if part == 'tbody':
         return LIST_TABLE_BODY_CLASS
     if part == 'row':

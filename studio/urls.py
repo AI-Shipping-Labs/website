@@ -2,6 +2,12 @@ from community_base.config import views as package_settings_views
 from django.urls import include, path
 
 from studio.views.announcement import announcement_banner_edit
+from studio.views.api_keys import (
+    studio_api_key_create,
+    studio_api_key_created,
+    studio_api_key_list,
+    studio_api_key_revoke,
+)
 from studio.views.api_tokens import (
     studio_api_token_create,
     studio_api_token_created,
@@ -1482,10 +1488,34 @@ urlpatterns = [
     path('redirects/<int:redirect_id>/delete', redirect_delete, name='studio_redirect_delete'),
     path('redirects/<int:redirect_id>/toggle', redirect_toggle, name='studio_redirect_toggle'),
 
-    # Package API key management and runtime settings are mounted directly in
-    # Studio. The package owns the view, forms, encryption, audit trail, and
-    # import/export behavior; the site only preserves established URL names.
-    path('', include('community_base.api.urls')),
+    # API keys for the versioned /api/v1/ surface (issue #1737). The site
+    # owns these views: the package list view is unscoped, and scoping a
+    # queryset that lives in package code is not something a site template
+    # override can do. The package keeps the model, auth, and /api/v1/.
+    # The community_base_* names stay registered as aliases so anything
+    # reversing them keeps working -- same dual-name shape as settings below.
+    path('api-keys/', studio_api_key_list, name='studio_api_key_list'),
+    path('api-keys/', studio_api_key_list, name='community_base_api_keys'),
+    path('api-keys/new/', studio_api_key_create, name='studio_api_key_create'),
+    path(
+        'api-keys/created/',
+        studio_api_key_created,
+        name='studio_api_key_created',
+    ),
+    path(
+        'api-keys/<str:key_id>/revoke/',
+        studio_api_key_revoke,
+        name='studio_api_key_revoke',
+    ),
+    path(
+        'api-keys/<str:key_id>/revoke/',
+        studio_api_key_revoke,
+        name='community_base_api_key_revoke',
+    ),
+
+    # Package runtime settings are mounted directly in Studio. The package
+    # owns the view, forms, encryption, audit trail, and import/export
+    # behavior; the site only preserves established URL names.
     path('settings/', package_settings_views.settings_list, name='studio_settings'),
     path(
         'settings/',

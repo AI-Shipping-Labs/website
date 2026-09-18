@@ -57,11 +57,26 @@ infrastructure-facing tooling. Current root entries:
   - Event emissions (`/studio/triggers/emissions/`)
   - Webhook deliveries (`/studio/triggers/deliveries/`)
 - Settings (`/studio/settings/`)
+- API tokens (`/studio/api-tokens/`)
+- API keys (`/studio/api-keys/`)
 - API docs (`/api/docs`, opens in a new tab)
 
-API tokens (`/studio/api-tokens/`) intentionally remains superuser-only and
-is hidden from non-superuser staff. The same is true for the People section's
-New user link.
+API tokens (`/studio/api-tokens/`) and API keys (`/studio/api-keys/`)
+intentionally remain superuser-only and are hidden from non-superuser staff.
+The same is true for the People section's New user link.
+
+The two credential pages are adjacent but separate, and each states which API
+it authenticates and links to the other:
+
+| Page | Model | Authenticates | Vocabulary |
+|---|---|---|---|
+| `/studio/api-tokens/` | `accounts.Token` | the site's own `/api/...` endpoints | token |
+| `/studio/api-keys/` | `community_base.api.APIKey` | the versioned `/api/v1/` API | key |
+
+API keys lists `kind="staff"` rows only. A staff-kind key's owner is
+`is_staff` by model constraint, so every listed row is an operator
+credential. Member-kind package keys are member credentials and never appear
+on a Studio surface; `revoke` returns 404 for a member-kind id.
 
 ## List Page Baseline
 

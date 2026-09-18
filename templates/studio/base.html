@@ -777,6 +777,15 @@ double-rendering. See issue #347.
                 <span>API tokens</span>
               </a>
             </li>
+            <li>
+              <a href="{% url 'studio_api_key_list' %}"
+                 data-testid="api-keys-nav-link"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'api_keys' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'api_keys' %}aria-current="page"{% endif %}>
+                <i data-lucide="key-round" class="w-4 h-4"></i>
+                <span>API keys</span>
+              </a>
+            </li>
             {% endif %}
             {% if request.user.is_staff %}
             <li>

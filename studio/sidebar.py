@@ -525,6 +525,17 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_api_token_revoke',
         'studio_api_token_rotate',
     )),
+    # API keys for /api/v1/ (issue #1737). The community_base_* aliases are
+    # the package-era route names the site still registers; they resolve to
+    # the same site views, so they share this sidebar home.
+    ('operations', 'api_keys', (
+        'studio_api_key_list',
+        'studio_api_key_create',
+        'studio_api_key_created',
+        'studio_api_key_revoke',
+        'community_base_api_keys',
+        'community_base_api_key_revoke',
+    )),
 )
 
 #: Routes that belong to a section but have no sidebar link of their own.
@@ -543,15 +554,14 @@ ROUTES_WITHOUT_SIDEBAR_HOME = frozenset({
     'studio_user_search',
     'studio_impersonate',
     'studio_stop_impersonate',
-    # Package-owned settings/API-key forms render their own shell and do not
-    # expose a donor sidebar destination. The established settings dashboard
-    # above remains the navigable Studio home.
+    # Package-owned settings save/export/import endpoints render their own
+    # shell or return files, and do not expose a donor sidebar destination.
+    # The established settings dashboard above remains the navigable Studio
+    # home.
     'community_base_settings',
     'community_base_settings_save_group',
     'community_base_settings_export',
     'community_base_settings_import',
-    'community_base_api_keys',
-    'community_base_api_key_revoke',
 })
 
 

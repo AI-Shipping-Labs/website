@@ -1,0 +1,85 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}API key created{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_api_key_list' as api_key_list_url %}
+{% studio_header_title_meta as api_key_created_meta %}
+  <p class="text-sm text-muted-foreground">
+    Key <span class="font-mono text-foreground">{{ api_key.name }}</span> for
+    <span class="font-mono text-foreground">{{ api_key.user.email }}</span> is ready.
+  </p>
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="API key created" title_meta=api_key_created_meta back_url=api_key_list_url back_label="Back to API keys" %}{% endstudio_header_actions %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl space-y-6">
+  <div class="px-4 py-3 rounded-lg bg-yellow-500/15 border border-yellow-500/40 text-sm text-yellow-900 dark:text-yellow-200">
+    <p class="font-medium text-yellow-900 dark:text-yellow-300">Copy this key now — it will not be shown again.</p>
+    <p class="mt-1 text-yellow-900/90 dark:text-yellow-200/80" data-testid="api-key-warning">
+      This is the only time this key will be shown. Save it now; once you
+      navigate away from this page the value cannot be retrieved. Revoke it
+      and mint a new one if it is lost.
+    </p>
+  </div>
+
+  <div>
+    <label class="block text-sm font-medium text-foreground mb-1">Key</label>
+    <div class="flex items-stretch gap-2">
+      <code id="api-key-value"
+            data-testid="api-key-value"
+            class="flex-1 bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground font-mono break-all select-all">{{ plaintext_key }}</code>
+      <button type="button"
+              id="copy-key-btn"
+              data-copy-target="api-key-value"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity shrink-0">
+        Copy
+      </button>
+    </div>
+    <p class="text-xs text-muted-foreground mt-2">
+      Use it in the <code class="font-mono">Authorization: Bearer &lt;key&gt;</code> request header
+      against <code class="font-mono">/api/v1/</code>.
+    </p>
+    <p class="text-xs text-muted-foreground mt-1" data-testid="api-key-scopes-note">
+      Scopes: <span class="font-mono">{{ api_key.scopes|join:", " }}</span>
+    </p>
+  </div>
+
+  <div class="pt-2 border-t border-border flex flex-wrap items-center gap-3">
+    <a href="{% url 'studio_api_key_list' %}"
+       data-testid="api-key-back-to-list"
+       class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+      Back to API keys
+    </a>
+  </div>
+</div>
+
+<script>
+(function() {
+  document.querySelectorAll('[data-copy-target]').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var targetId = btn.getAttribute('data-copy-target');
+      var el = document.getElementById(targetId);
+      if (!el) { return; }
+      var text = el.textContent || '';
+      var done = function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(function() { btn.textContent = original; }, 1500);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(done);
+      } else {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand('copy'); } catch (e) {}
+        document.body.removeChild(ta);
+        done();
+      }
+    });
+  });
+})();
+</script>
+{% endblock %}

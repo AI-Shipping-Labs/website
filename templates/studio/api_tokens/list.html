@@ -9,6 +9,11 @@
     Long-lived tokens authenticate scripts hitting <code class="font-mono text-xs">/api/contacts/...</code>.
     Tokens are full-power — rotate or revoke any token whose script no longer needs access.
   </p>
+  <a href="{% url 'studio_api_key_list' %}"
+     data-testid="api-tokens-cross-link"
+     class="text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    Looking for /api/v1/ keys?
+  </a>
 {% endstudio_header_title_meta %}
 {% studio_header_actions title="API tokens" title_meta=api_token_header_meta %}
     <a href="{% url 'studio_api_token_create' %}"

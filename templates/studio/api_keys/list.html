@@ -1,0 +1,112 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}API keys{% endblock %}
+
+{% block studio_content %}
+{% studio_header_title_meta as api_key_header_meta %}
+  <p class="text-sm text-muted-foreground">
+    Scoped keys authenticate staff automation against the versioned
+    <code class="font-mono text-xs">/api/v1/</code> API. Keys are bound to the
+    operator who mints them and shown once.
+  </p>
+  <a href="{% url 'studio_api_token_list' %}"
+     data-testid="api-keys-cross-link"
+     class="text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+    Looking for /api/... tokens?
+  </a>
+{% endstudio_header_title_meta %}
+{% studio_header_actions title="API keys" title_meta=api_key_header_meta %}
+    <a href="{% url 'studio_api_key_create' %}"
+       data-testid="api-key-create-link"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      <i data-lucide="plus" class="h-4 w-4"></i>
+      <span>New key</span>
+    </a>
+{% endstudio_header_actions %}
+
+{% if api_keys %}
+<div class="{% studio_list_class 'wrapper' %}" data-testid="api-keys-list">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Name</th>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Owner</th>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Scopes</th>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Status</th>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Created</th>
+        <th class="{% studio_list_class 'th' 'left' 'dense' %}">Last used</th>
+        <th class="{% studio_list_class 'th' 'right' 'dense' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for api_key in api_keys %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="api-key-row">
+        {% comment %}
+          Name and key prefix are one identity: stacking them drops a whole
+          column so the Actions cell stays on-screen at 1280 (issue #1737).
+        {% endcomment %}
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top text-sm text-foreground"
+            data-label="Name">
+          <span class="block">{{ api_key.name }}</span>
+          <span class="block text-xs text-muted-foreground font-mono"
+                data-testid="api-key-prefix">{{ api_key.masked_prefix|truncatechars:14 }}</span>
+        </td>
+        {% comment %}
+          Emails and scope lists have no spaces to wrap at, so they set a hard
+          minimum column width and push Actions off-screen on narrow laptops
+          unless they are allowed to break (issue #1737).
+        {% endcomment %}
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top text-sm text-foreground break-all"
+            data-label="Owner">
+          {{ api_key.user.email }}
+        </td>
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top text-xs text-muted-foreground font-mono break-all"
+            data-label="Scopes"
+            data-testid="api-key-scopes">
+          {{ api_key.scopes|join:", " }}
+        </td>
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top"
+            data-label="Status" data-testid="api-key-status">
+          {% if api_key.is_revoked %}
+            {% studio_status_badge 'revoked' 'Revoked' %}
+          {% else %}
+            {% studio_status_badge 'active' 'Active' %}
+          {% endif %}
+        </td>
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top text-xs text-muted-foreground whitespace-nowrap"
+            data-label="Created">
+          {{ api_key.created_at|operator_date }}
+        </td>
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top text-xs text-muted-foreground whitespace-nowrap"
+            data-label="Last used">
+          {% if api_key.last_used_at %}{{ api_key.last_used_at|operator_datetime }}{% else %}Never{% endif %}
+        </td>
+        <td class="{% studio_list_class 'cell_padding' 'left' 'dense' %} align-top {% studio_list_class 'action_cell' %}"
+            data-label="Actions">
+          {% if api_key.is_revoked %}
+          <span class="text-xs text-muted-foreground">&mdash;</span>
+          {% else %}
+          <form method="post"
+                action="{% url 'studio_api_key_revoke' api_key.pk %}"
+                class="{% studio_list_class 'action_form' %}"
+                onsubmit="return confirm('Revoke this key? Any script using it will start failing.');">
+            {% csrf_token %}
+            <button type="submit"
+                    data-testid="api-key-revoke"
+                    class="{% studio_action_class 'destructive' %}">
+              Revoke
+            </button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  {% url 'studio_api_key_create' as api_keys_create_url %}
+  {% studio_empty_state 'fresh' entity_label='key' entity_label_plural='API keys' create_url=api_keys_create_url cta_label='Create key' testid_suffix='api-keys-empty' %}
+{% endif %}
+{% endblock %}

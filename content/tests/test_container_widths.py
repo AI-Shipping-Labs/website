@@ -61,6 +61,31 @@ FRAME_DELEGATED_TO_INCLUDE = {
     "templates/content/workshop_page_detail.html": "templates/content/reader/_layout.html",
 }
 
+# Templates that extend base.html only to rename its blocks, and render nothing
+# of their own.  A community-base seam override
+# (`templates/community_base/public/base.html`) maps the package's contracted
+# block names onto this site's; it is an adapter in the inheritance chain, not a
+# page, so it has no body, no markup and no container to audit.  The pages that
+# render through it are the package's own templates, which live outside
+# `templates/` and are not discovered here.
+#
+# This is deliberately not a FRAME_DELEGATED_TO_INCLUDE entry: that registry
+# names a page whose frame is owned by an include in this repo, and every entry
+# is checked against that include below.  A block map has no such include.
+#
+# The staleness check below keeps the exemption honest: a listed template must
+# exist, must own no container, and must contain no HTML markup at all, so a
+# real page can never be parked here to dodge the width contract.
+BLOCK_MAP_TEMPLATES = frozenset(
+    {
+        "templates/community_base/public/base.html",
+    }
+)
+
+# Any literal HTML tag: `<div`, `</p`, `<!-- `.  Django tag and variable syntax
+# never produces one, so a template with no match renders no markup of its own.
+HTML_TAG_RE = re.compile(r"<[a-zA-Z/!]")
+
 # Pages the width audits pinned to a specific tier.
 #
 # The 2026-07-21 audit moved everything to Frame on the rule "an index page must
@@ -188,7 +213,7 @@ class ContainerWidthContractTest(SimpleTestCase):
     def test_page_containers_use_a_sanctioned_width(self):
         offenders = []
         for relative, source in self.pages.items():
-            if relative in FRAME_DELEGATED_TO_INCLUDE:
+            if relative in FRAME_DELEGATED_TO_INCLUDE or relative in BLOCK_MAP_TEMPLATES:
                 continue
             container = _page_container(source)
             if container is None:
@@ -237,7 +262,11 @@ class ContainerWidthContractTest(SimpleTestCase):
         """Catch the `px-6 lg:px-8` drift: wider mobile gutters than sibling pages."""
         offenders = []
         for relative, source in self.pages.items():
-            if relative in CHROME_GUTTER_EXEMPT or relative in FRAME_DELEGATED_TO_INCLUDE:
+            if (
+                relative in CHROME_GUTTER_EXEMPT
+                or relative in FRAME_DELEGATED_TO_INCLUDE
+                or relative in BLOCK_MAP_TEMPLATES
+            ):
                 continue
             container = _page_container(source)
             if container is None:
@@ -273,6 +302,21 @@ class ContainerWidthContractTest(SimpleTestCase):
         for relative in sorted(CHROME_GUTTER_EXEMPT):
             if not (self.base_dir / relative).exists():
                 problems.append(f"CHROME_GUTTER_EXEMPT/{relative}: template is missing; delete this entry")
+        for relative in sorted(BLOCK_MAP_TEMPLATES):
+            path = self.base_dir / relative
+            if not path.exists():
+                problems.append(f"BLOCK_MAP_TEMPLATES/{relative}: template is missing; delete this entry")
+                continue
+            source = path.read_text(encoding="utf-8")
+            if HTML_TAG_RE.search(source):
+                problems.append(
+                    f"BLOCK_MAP_TEMPLATES/{relative}: template renders HTML markup, so it is a page "
+                    f"and owes a sanctioned container; delete this entry"
+                )
+            elif _page_container(source) is not None:
+                problems.append(
+                    f"BLOCK_MAP_TEMPLATES/{relative}: template now owns a container; delete this entry"
+                )
 
         self.assertEqual(problems, [], "Stale width-contract registry entries:\n" + "\n".join(problems))
 

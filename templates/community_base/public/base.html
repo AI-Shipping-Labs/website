@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block body %}{% block content %}{% endblock %}{% endblock %}
+{% block extra_scripts %}{% block extra_js %}{% endblock %}{% endblock %}
+{% comment %}
+Site override of the community-base public seam (community-base A7.4).
+
+Shared public templates in community-base extend "community_base/public/base.html"
+and fill five blocks: content, title, meta_description, page_head_metadata and
+extra_js. The package ships that path as a pass-through to "base.html", so a site
+whose own base names all five needs no override.
+
+This site's templates/base.html names three of them the same way (title,
+meta_description, page_head_metadata) but calls its body slot "body" and its
+script slot "extra_scripts". Django resolves blocks by name across the whole
+inheritance chain rather than by lexical nesting, so wrapping the contracted name
+in the site name above is what makes content and extra_js reachable from a
+package page template. Only those two are remapped; remapping the other three
+would be a no-op at best and would shadow the site defaults at worst.
+
+Without this file, Django drops content and extra_js in silence: the mounted
+public unsubscribe page returns 200 with ~21kB of site chrome and no form at all.
+community_base.kernel.checks reports that at `manage.py check` time as
+community_base.kernel.E001 (content) and W004 (extra_js).
+
+This file is a block map, not a page: it has no markup and owns no container.
+It is registered in BLOCK_MAP_TEMPLATES in content/tests/test_container_widths.py
+for that reason.
+{% endcomment %}

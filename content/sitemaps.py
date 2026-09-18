@@ -2,7 +2,7 @@
 Django sitemaps for all public content.
 
 Includes:
-- Published articles with required_level=0
+- All published articles (open and gated)
 - All published courses (always public)
 - All events (upcoming/completed, including recordings) at /events/<id>/<slug>
 - Published projects with required_level=0
@@ -34,14 +34,13 @@ from events.models import Event
 
 
 class ArticleSitemap(Sitemap):
-    """Sitemap for published, open (non-gated) articles."""
+    """Sitemap for all published articles, open and gated."""
     changefreq = 'weekly'
     priority = 0.8
 
     def items(self):
         return Article.objects.filter(
             published=True,
-            required_level=0,
         ).order_by('-date')
 
     def lastmod(self, obj):

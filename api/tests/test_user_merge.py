@@ -23,6 +23,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import EmailAlias, MemberAPIKey, Token
+from accounts_ext.models import MemberExtra
 from analytics.models import UserAttribution
 from bookclub.models import Book, Chapter, Note
 from comments.models import Comment
@@ -655,6 +656,17 @@ class ScalarReconcileTest(UserMergeTestBase):
 
         canonical.refresh_from_db()
         self.assertEqual(canonical.tags, ["a", "b", "c"])
+        # A3.2 (#1692) made ``accounts_ext.MemberExtra.contact_tags`` the
+        # authoritative relation; ``User.contact_tags`` stays dual-written for
+        # the expand window. Assert BOTH, so an old image and a new image are
+        # pinned to the same post-merge answer for as long as the window lasts.
+        self.assertEqual(
+            set(
+                MemberExtra.for_user(canonical)
+                .contact_tags.values_list("slug", flat=True)
+            ),
+            {"a", "b", "c"},
+        )
         self.assertEqual(
             set(canonical.contact_tags.values_list("slug", flat=True)),
             {"a", "b", "c"},

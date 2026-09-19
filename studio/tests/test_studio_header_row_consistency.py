@@ -158,21 +158,33 @@ FORBIDDEN_HEADER_TOKENS = (
     'space-x-',
 )
 
-IGNORED_SOURCE_REGIONS = re.compile(
-    r'{#.*?#}'
-    r'|{%\s*comment\s*%}.*?{%\s*endcomment\s*%}'
+# Split into two passes on purpose. The four block regions below genuinely
+# span lines, so they need `re.DOTALL`. A `{# #}` comment does not: Django's
+# `tag_re` lexes it only when the closer sits on the opening line, so a `{#`
+# that closes later is plain rendered text. Blanking such a region would exempt
+# a real, visible header row from these rules. Keep the flag off the comment
+# pattern — `content/tests/test_template_comment_lint.py` guarantees the tree
+# carries no multi-line `{# #}` to begin with.
+IGNORED_BLOCK_REGIONS = re.compile(
+    r'{%\s*comment\s*%}.*?{%\s*endcomment\s*%}'
     r'|<!--.*?-->'
     r'|<script\b.*?</script\s*>'
     r'|<style\b.*?</style\s*>',
     re.DOTALL | re.IGNORECASE,
 )
+IGNORED_LINE_COMMENTS = re.compile(r'{#[^\n]*?#}')
 FULL_PAGE_EXTENDS = re.compile(
     r'{%\s*extends\s+["\']studio/base\.html["\']\s*%}',
     re.DOTALL,
 )
-HEADER_OPEN = re.compile(r'{%\s*studio_header_actions\b.*?%}', re.DOTALL)
+# The opening tag must not match across a newline: Django would not lex such a
+# tag either, so a `{% studio_header_actions` whose `%}` lands on a later line
+# is rendered text, not a header owner. `[^\n]` keeps the opener single-line
+# while the surrounding `re.DOTALL` stays on for `body`, which legitimately
+# spans lines. Do not swap these back to `.` — see `_mask_ignored_regions`.
+HEADER_OPEN = re.compile(r'{%[^\S\n]*studio_header_actions\b[^\n]*?%}')
 HEADER_BLOCK = re.compile(
-    r'{%\s*studio_header_actions\b(?P<opening>.*?)%}'
+    r'{%[^\S\n]*studio_header_actions\b(?P<opening>[^\n]*?)%}'
     r'(?P<body>.*?)'
     r'{%\s*endstudio_header_actions\s*%}',
     re.DOTALL,
@@ -181,13 +193,21 @@ MAX_DIAGNOSTICS = 25
 HEADER_OWNER = '{% studio_header_actions %}'
 
 
-def _mask_ignored_regions(source: str) -> str:
-    """Hide source-only lookalikes while preserving their line positions."""
+def _blank(match: re.Match) -> str:
+    return re.sub(r'[^\n]', ' ', match.group(0))
 
-    return IGNORED_SOURCE_REGIONS.sub(
-        lambda match: re.sub(r'[^\n]', ' ', match.group(0)),
-        source,
-    )
+
+def _mask_ignored_regions(source: str) -> str:
+    """Hide source-only lookalikes while preserving their line positions.
+
+    Two passes because the constructs differ: the block regions span lines and
+    are matched with `re.DOTALL`, while `{# #}` comments are single-line by
+    Django's own tokenizer and are matched without it. A multi-line `{#` is
+    therefore left visible, because Django renders it.
+    """
+
+    masked = IGNORED_BLOCK_REGIONS.sub(_blank, source)
+    return IGNORED_LINE_COMMENTS.sub(_blank, masked)
 
 
 def _line_number(source: str, offset: int) -> int:
@@ -344,6 +364,77 @@ def _conforming_pages() -> dict[str, str]:
 
 
 @tag('core')
+class IgnoredRegionMaskingTest(SimpleTestCase):
+    """The masking must mirror Django's tokenizer, not a permissive superset."""
+
+    def test_multiline_comment_region_stays_visible(self):
+        source = (
+            '{# note about the row\n'
+            '<div>visible-marker</div>\n'
+            'end of note #}\n'
+        )
+
+        masked = _mask_ignored_regions(source)
+
+        # Django never lexes that comment, so the markup inside it really
+        # renders and the header rules must still evaluate it.
+        self.assertIn('visible-marker', masked)
+
+    def test_single_line_comment_is_still_masked(self):
+        masked = _mask_ignored_regions('{# scrubbed-marker #}\n<p>kept</p>')
+
+        self.assertNotIn('scrubbed-marker', masked)
+        self.assertIn('<p>kept</p>', masked)
+
+    def test_block_regions_are_still_masked(self):
+        sources = (
+            '{% comment %}\ncomment-marker\n{% endcomment %}',
+            '<!--\nhtml-marker\n-->',
+            '<script>\nscript-marker\n</script>',
+            '<style>\nstyle-marker\n</style>',
+        )
+
+        for source in sources:
+            with self.subTest(source=source.splitlines()[0]):
+                self.assertNotIn('-marker', _mask_ignored_regions(source))
+
+    def test_masking_preserves_line_positions(self):
+        masked = _mask_ignored_regions('<!--\nx\n-->\nlast')
+
+        self.assertEqual(masked.splitlines()[3], 'last')
+
+
+class HeaderOpenerTokenizerTest(SimpleTestCase):
+    """The opening tag is single-line, exactly as Django would lex it."""
+
+    def test_opener_does_not_match_across_a_newline(self):
+        source = '{% studio_header_actions\n   title="Plans" %}'
+
+        self.assertIsNone(HEADER_OPEN.search(source))
+        self.assertIsNone(HEADER_BLOCK.search(
+            source + 'body{% endstudio_header_actions %}'
+        ))
+
+    def test_single_line_opener_still_matches(self):
+        source = '{% studio_header_actions title="Plans" %}'
+
+        self.assertIsNotNone(HEADER_OPEN.search(source))
+
+    def test_block_body_still_spans_lines(self):
+        source = (
+            '{% studio_header_actions title="Plans" %}\n'
+            'first\n'
+            'second\n'
+            '{% endstudio_header_actions %}'
+        )
+
+        match = HEADER_BLOCK.search(source)
+
+        self.assertIsNotNone(match)
+        self.assertIn('first', match.group('body'))
+        self.assertIn('second', match.group('body'))
+
+
 class StudioHeaderOwnerRatchetTest(SimpleTestCase):
     def test_every_working_tree_full_page_is_guarded(self):
         pages = _discover_full_page_sources()
@@ -369,7 +460,7 @@ class StudioHeaderOwnerRatchetTest(SimpleTestCase):
         sources = {
             'synthetic/new.html': (
                 '{% extends "studio/base.html" %}\n'
-                '{% studio_header_actions\n title="New"\n%}'
+                '{% studio_header_actions title="New" %}'
                 '{% endstudio_header_actions %}'
             ),
         }
@@ -377,6 +468,26 @@ class StudioHeaderOwnerRatchetTest(SimpleTestCase):
             _scan_header_sources(sources, exceptions={}, ceiling={}),
             [],
         )
+
+    def test_opener_split_across_lines_is_not_the_owner(self):
+        """Django never lexes a tag whose closer is on a later line.
+
+        Such a page renders `{% studio_header_actions` as literal text and has
+        no header owner at all, so the ratchet must report it instead of
+        crediting it with a header block it does not have.
+        """
+        sources = {
+            'synthetic/new.html': (
+                '{% extends "studio/base.html" %}\n'
+                '{% studio_header_actions\n title="New"\n%}'
+                '{% endstudio_header_actions %}'
+            ),
+        }
+        diagnostics = _scan_header_sources(sources, exceptions={}, ceiling={})
+
+        self.assertEqual(len(diagnostics), 1)
+        self.assertIn('rule=studio-header-owner', diagnostics[0])
+        self.assertIn('path=synthetic/new.html', diagnostics[0])
 
     def test_cleaned_up_exception_is_stale_until_removed(self):
         sources = {
@@ -417,7 +528,8 @@ class StudioHeaderOwnerRatchetTest(SimpleTestCase):
                 r'rule=\S+ path=\S+ line=\d+ allowed=\d+ actual=\d+ remediation=',
             )
 
-    def test_matcher_boundaries_and_multiline_tags(self):
+    def test_matcher_boundaries_and_single_line_tag_rule(self):
+        """Lookalike regions are ignored; a real single-line owner is found."""
         sources = {
             'comment-lookalikes.html': (
                 '{% extends "studio/base.html" %}\n'
@@ -431,9 +543,9 @@ class StudioHeaderOwnerRatchetTest(SimpleTestCase):
                 '{% extends "studio/base.html" %}\n'
                 '{% studio_header_actions_extra %}'
             ),
-            'multiline.html': (
-                '{%\n extends\n "studio/base.html"\n%}\n'
-                '{%\n studio_header_actions\n title="Good"\n%}'
+            'wrapped-attributes.html': (
+                '{% extends "studio/base.html" %}\n'
+                '{% studio_header_actions title="Good" subtitle="Also good" %}'
                 '{% endstudio_header_actions %}'
             ),
             '_partial.html': '{% studio_header_actions title="Partial" %}',
@@ -443,7 +555,7 @@ class StudioHeaderOwnerRatchetTest(SimpleTestCase):
         self.assertEqual(len(diagnostics), 2)
         self.assertTrue(any('path=comment-lookalikes.html' in row for row in diagnostics))
         self.assertTrue(any('path=substring.html' in row for row in diagnostics))
-        self.assertFalse(any('path=multiline.html' in row for row in diagnostics))
+        self.assertFalse(any('path=wrapped-attributes.html' in row for row in diagnostics))
         self.assertFalse(any('path=_partial.html' in row for row in diagnostics))
         self.assertFalse(any('path=base.html' in row for row in diagnostics))
 

@@ -1175,6 +1175,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_arbitrary_dead_url_has_no_workshop_link_and_returns_home",
     })
 
+    template_comment_guard_owners = frozenset({
+        "playwright_tests/test_studio_email_template_comment_guard.py::"
+        "TestStudioEmailTemplateCommentGuard::"
+        "test_split_note_is_rejected_then_accepted_once_rewritten",
+        "playwright_tests/test_studio_email_template_comment_guard.py::"
+        "TestStudioEmailTemplateCommentGuard::"
+        "test_single_line_note_saves",
+        "playwright_tests/test_studio_email_template_comment_guard.py::"
+        "TestStudioEmailTemplateCommentGuard::"
+        "test_rejected_save_leaves_the_stored_copy_untouched",
+        "playwright_tests/test_studio_email_template_comment_guard.py::"
+        "TestStudioEmailTemplateCommentGuard::"
+        "test_reset_to_default_still_works_after_a_rejected_save",
+    })
+
     issue_1736_owners = frozenset({
         "playwright_tests/test_studio_user_merge.py::"
         "TestRevokedPackageApiKeyIsReported::"
@@ -1449,8 +1464,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2643)
-        self.assertEqual(len(inventory.owners), 2441)
+        self.assertEqual(inventory.item_count, 2647)
+        self.assertEqual(len(inventory.owners), 2445)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1490,7 +1505,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1725_owners
             | self.issue_1732_owners
             | self.issue_1736_owners
-            | self.issue_1737_owners,
+            | self.issue_1737_owners
+            | self.template_comment_guard_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -1541,6 +1557,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1725_owners
             | self.issue_1736_owners
             | self.issue_1737_owners
+            | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

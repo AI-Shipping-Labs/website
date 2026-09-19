@@ -23,6 +23,7 @@ from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
 from accounts.utils.display import GREETING_FALLBACK, greeting_name
+from content.utils.template_comments import describe_offender, find_token_offenders
 from email_app.models import EmailTemplateOverride
 from email_app.package_mail import send_package_mail
 from email_app.services.context_guard import looks_like_url
@@ -314,6 +315,22 @@ def email_template_list(request):
     )
 
 
+def _template_syntax_errors(subject, body_markdown, footer_note):
+    """Return operator-facing errors for any construct Django cannot lex.
+
+    Shares ``content.utils.template_comments`` with the repository file lint, so
+    the rule applied to ``email_app/email_templates/*.md`` on disk and the rule
+    applied to operator-authored ``EmailTemplateOverride`` copy are literally
+    the same function. Fields are checked in form order and every offender is
+    reported, so one save surfaces every problem.
+    """
+    return [
+        describe_offender(offender)
+        for field_source in (subject, body_markdown, footer_note)
+        for offender in find_token_offenders(field_source)
+    ]
+
+
 @staff_required
 def email_template_edit(request, template_name):
     """Edit one template: GET prefills the form, POST upserts the row."""
@@ -326,34 +343,35 @@ def email_template_edit(request, template_name):
         body_markdown = request.POST.get('body_markdown', '')
         footer_note = request.POST.get('footer_note', '').strip()
 
+        def reject(errors):
+            """Re-render the form with the operator's text intact, writing nothing."""
+            for error in errors:
+                messages.error(request, error)
+            initial['subject'] = subject
+            initial['body_markdown'] = body_markdown
+            initial['footer_note'] = footer_note
+            return render(
+                request,
+                'studio/email_templates/edit.html',
+                {
+                    'template_name': template_name,
+                    'initial': initial,
+                    'sent_when': _sent_when(template_name),
+                },
+            )
+
         if not subject:
-            messages.error(request, 'Subject is required.')
-            initial['subject'] = subject
-            initial['body_markdown'] = body_markdown
-            initial['footer_note'] = footer_note
-            return render(
-                request,
-                'studio/email_templates/edit.html',
-                {
-                    'template_name': template_name,
-                    'initial': initial,
-                    'sent_when': _sent_when(template_name),
-                },
-            )
+            return reject(['Subject is required.'])
         if not body_markdown.strip():
-            messages.error(request, 'Body is required.')
-            initial['subject'] = subject
-            initial['body_markdown'] = body_markdown
-            initial['footer_note'] = footer_note
-            return render(
-                request,
-                'studio/email_templates/edit.html',
-                {
-                    'template_name': template_name,
-                    'initial': initial,
-                    'sent_when': _sent_when(template_name),
-                },
-            )
+            return reject(['Body is required.'])
+
+        # Operator copy is compiled by the same ``django.template.Template``
+        # call as the shipped ``.md`` files, so it needs the same single-line
+        # rule the file lint enforces. A multi-line or unclosed construct is
+        # not lexed by Django and its raw source ships to the recipient.
+        syntax_errors = _template_syntax_errors(subject, body_markdown, footer_note)
+        if syntax_errors:
+            return reject(syntax_errors)
 
         EmailTemplateOverride.objects.update_or_create(
             template_name=template_name,

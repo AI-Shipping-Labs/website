@@ -618,21 +618,34 @@ GitHub). Even then, pin the arg shape that proves the call was correct.
 
 ---
 
-## Rule 21: Django `{# #}` comments are single-line only
+## Rule 21: Django template constructs are single-line only
 
-Django's `{# ... #}` comment token is recognized only when the closing `#}`
-is on the same line as the opening `{#`. A `{# #}` block that spans more than
-one line is not a comment: Django's lexer never sees a comment token, so the
-raw `{# ... #}` text renders as visible page content. This has leaked to
-production pages repeatedly, caught only at design review.
+Django's lexer uses one non-DOTALL alternation, `({%.*?%}|{{.*?}}|{#.*?#})`, so
+all three constructs are recognized only when the closing marker is on the same
+line as the opening one. A construct that spans more than one line is not
+lexed at all: its raw text renders as visible page content, or ships inside a
+transactional email. This has leaked to production pages repeatedly, caught
+only at design review.
 
-Use `{% comment %} ... {% endcomment %}` for anything spanning more than one
-line. Reserve `{# #}` for single-line comments.
+A single-line `{# ... #}` is correct and stays fully supported — roughly 300
+of them are in the tree. This is a rule about span, not a deprecation of the
+construct.
 
-Bad — renders as visible text:
+The remedy differs by construct, which is why the failure message names the
+one you hit. A comment has a block form to move to:
+`{% comment %} ... {% endcomment %}`. A tag or a variable does not — put its
+opening and closing markers back on one line.
+
+Bad — all three render as visible text:
 ```html
 {# This explains the block below
    and continues on a second line #}
+
+{% if user.is_staff
+      and user.is_active %}
+
+{{ user.profile.display_name
+   |default:user.email }}
 ```
 
 Good:
@@ -642,13 +655,41 @@ This explains the block below
 and continues on a second line.
 {% endcomment %}
 {# single-line note #}
+
+{% if user.is_staff and user.is_active %}
+
+{{ user.profile.display_name|default:user.email }}
 ```
 
-This is enforced repository-wide by
-`content/tests/test_template_comment_lint.py`, a `@tag("core")` lint that
-scans every `templates/**/*.html` file as raw text and fails on any multi-line
-or unclosed `{# #}`. It replaces the reactive per-page
-`assertNotContains(response, '{#')` guards, which missed untested branches.
+Three surfaces are covered, because all three are compiled by
+`django.template.Template`:
+
+| Surface | Enforced by |
+|---|---|
+| `templates/**/*.html` | `content/tests/test_template_comment_lint.py` |
+| `email_app/email_templates/*.md` | `content/tests/test_template_comment_lint.py` |
+| Operator-authored `EmailTemplateOverride` rows | `studio/views/email_templates.py` rejects the save |
+
+The lint is a `@tag("core")` hard gate with no baseline. It scans both file
+trees as raw text and fails on any multi-line or unclosed `{# #}`, `{% %}` or
+`{{ }}`, naming the token form so the failure says which construct to fix. It
+replaces the reactive per-page `assertNotContains` guards on the opening
+marker, which missed untested branches. Nothing else is scanned: `.py`,
+`_docs/`, `specs/`, `.claude/` and `skills/` carry legitimate lone opening
+markers in prose and string literals.
+
+Operator copy in `EmailTemplateOverride` cannot be reached by a file lint, so
+the Studio email-template editor applies the identical rule from
+`content/utils/template_comments.py` — the single implementation both callers
+import — and rejects the save with a line-numbered message instead of writing
+the row.
+
+Helpers that scan template source must mirror the same tokenizer. Do not add
+`re.DOTALL` to a `{# #}` or opening-tag pattern: a permissive pattern masks a
+region Django really renders, which makes the helper structurally blind to this
+bug. See `_clean_snippet` in `studio/tests/test_studio_table_responsive.py`,
+`_strip_non_control_regions` in `studio/tests/test_form_components.py`, and
+`_mask_ignored_regions` in `studio/tests/test_studio_header_row_consistency.py`.
 
 ---
 
@@ -1008,7 +1049,8 @@ commands) that run it, and any exclusions.
 | Row | Scan set | Selects |
 |---|---|---|
 | `tailwind-producers` | all four families `_producer_classes()` reads: `verify_tailwind_build.PRODUCER_FILES`, `studio/views/*.py`, any `forms`/`widgets` directory anywhere in the tree, and first-party `static/js/**/*.js` (plus the checker itself) | `make check-tailwind` |
-| `repo-wide-template-lints` | `templates/**/*.html` | the eight template lints |
+| `repo-wide-template-lints` | `templates/**/*.html` | the seven lints that read only that tree |
+| `template-comment-lint` | `templates/**/*.html` and `email_app/email_templates/*.md` | `content.tests.test_template_comment_lint` |
 | `tailwind-source-scan` | `templates/**/*.html`, `static/js/**/*.js`, `**/*.py` minus the shared exclusion set | `tests.test_tailwind_build.TailwindSourceScanTest` |
 | `admin-link-scan` | every `*.py` and `*.html`, test trees and migrations included | `studio.tests.test_admin_links` |
 | `legacy-template-reference-scan` | every `*.py`, `*.html` and `*.js`, `static/vendor/**` included | `tests.test_unreachable_legacy_templates_1543` |
@@ -1021,8 +1063,11 @@ table got them wrong:
 
 - An exclusion belongs to a checker, not to a row that happens to group
   several. Grouping labels in one row is only legal when the checkers read the
-  same files -- true for the eight template lints, false for anything that
-  walks `*.py`. The first cut applied the Tailwind lint's exclusion set to six
+  same files -- true for the seven pure-`templates/` lints, false for anything
+  that walks `*.py`. It is also why the single-line-token lint has its own row:
+  it reads `email_app/email_templates/*.md` as well, and grouping it with the
+  other seven would declare all eight as reading a tree seven of them never
+  open. The first cut applied the Tailwind lint's exclusion set to six
   labels at once, which declared `studio.tests.test_admin_links` as skipping
   `tests/**` when it in fact scans it and pins per-file content hashes there.
   Appending a line containing a Django admin URL to a test module reddened that

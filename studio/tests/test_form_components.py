@@ -9,6 +9,29 @@ from django.test import SimpleTestCase
 
 from studio.views.form_helpers import parse_comma_separated_tags
 
+# `re.DOTALL` lets `.` match newlines so multi-line `<select>` opening tags
+# (attributes wrapped across lines) are captured as one string.
+SELECT_TAG_RE = re.compile(r'<select\b[^>]*?>', re.DOTALL)
+COMMENT_BLOCK_RE = re.compile(
+    r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', re.DOTALL,
+)
+SCRIPT_RE = re.compile(r'<script\b[^>]*>.*?</script>', re.DOTALL | re.IGNORECASE)
+# No `re.DOTALL` on this one, and none may be re-added: it mirrors Django's
+# `tag_re`, which lexes `{# #}` only when the closer sits on the opening line.
+# A `{#` that closes on a later line is NOT a comment — Django renders it, so a
+# `<select>` inside it is a real control on a real page and must stay visible
+# to this lint instead of being scrubbed away.
+# `content/tests/test_template_comment_lint.py` keeps the tree free of such
+# regions in the first place.
+LINE_COMMENT_RE = re.compile(r'\{#[^\n]*?#\}')
+
+
+def _strip_non_control_regions(text):
+    """Blank regions where a `<select>` substring is not a real form control."""
+    scrubbed = COMMENT_BLOCK_RE.sub('', text)
+    scrubbed = SCRIPT_RE.sub('', scrubbed)
+    return LINE_COMMENT_RE.sub('', scrubbed)
+
 
 class StudioFormHelperTest(SimpleTestCase):
     """Test shared helpers used by hand-rendered Studio forms."""
@@ -145,7 +168,7 @@ class GlobalSelectStyleTest(SimpleTestCase):
 
         The scan walks every `.html` file under `templates/`, strips out
         regions where a `<select>` substring is not a real form control
-        (`{% comment %}` blocks, `{# ... #}` single-line tags, and
+        (`{% comment %}` blocks, genuinely single-line `{# ... #}` tags, and
         `<script>...</script>` bodies), then locates each `<select` opening
         tag with a multi-line aware regex so tags whose attributes wrap
         across lines (see `templates/studio/_partials/datetime_picker.html`)
@@ -158,25 +181,12 @@ class GlobalSelectStyleTest(SimpleTestCase):
         Form Controls section for the canonical class string.
         """
         templates_root = Path(settings.BASE_DIR, 'templates')
-        # `re.DOTALL` lets `.` match newlines so multi-line opening tags
-        # (attributes wrapped across lines) are captured as one string.
-        tag_re = re.compile(r'<select\b[^>]*?>', re.DOTALL)
-        comment_block_re = re.compile(
-            r'\{%\s*comment\s*%\}.*?\{%\s*endcomment\s*%\}', re.DOTALL,
-        )
-        script_re = re.compile(
-            r'<script\b[^>]*>.*?</script>', re.DOTALL | re.IGNORECASE,
-        )
-        line_comment_re = re.compile(r'\{#.*?#\}', re.DOTALL)
 
         violations = []
         for path in sorted(templates_root.rglob('*.html')):
             text = path.read_text()
-            # Strip non-control regions before scanning for <select> tags.
-            scrubbed = comment_block_re.sub('', text)
-            scrubbed = script_re.sub('', scrubbed)
-            scrubbed = line_comment_re.sub('', scrubbed)
-            for match in tag_re.finditer(scrubbed):
+            scrubbed = _strip_non_control_regions(text)
+            for match in SELECT_TAG_RE.finditer(scrubbed):
                 tag = match.group(0)
                 if 'app-select' in tag or 'studio-select' in tag:
                     continue
@@ -204,6 +214,36 @@ class GlobalSelectStyleTest(SimpleTestCase):
                 '_docs/design-system.md Form Controls.'
             )
             self.fail('\n'.join(lines))
+
+
+class NonControlRegionStripTest(SimpleTestCase):
+    """The scrub must mirror Django's tokenizer, not a permissive superset."""
+
+    def test_select_inside_a_multiline_comment_survives_stripping(self):
+        source = (
+            '{# note about the control\n'
+            '<select name="reminder"></select>\n'
+            'end of note #}\n'
+        )
+
+        # Django never lexes that comment, so the control really renders and
+        # the canonical-class lint must still see it.
+        self.assertIn('<select name="reminder">', _strip_non_control_regions(source))
+
+    def test_select_inside_a_single_line_comment_is_stripped(self):
+        source = '{# <select name="reminder"></select> #}'
+
+        self.assertNotIn('<select', _strip_non_control_regions(source))
+
+    def test_block_regions_are_still_stripped(self):
+        sources = (
+            '{% comment %}\n<select name="reminder"></select>\n{% endcomment %}',
+            '<script>\nvar x = "<select name=\'reminder\'>";\n</script>',
+        )
+
+        for source in sources:
+            with self.subTest(source=source.splitlines()[0]):
+                self.assertNotIn('<select', _strip_non_control_regions(source))
 
 
 class GlobalIframeTitleTest(SimpleTestCase):

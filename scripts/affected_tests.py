@@ -417,11 +417,13 @@ TAILWIND_PRODUCER_GLOBS: tuple[str, ...] = (
     "scripts/verify_tailwind_build.py",
 )
 
-#: Rule 14. The eight template lints, grouped because they share one scan set:
-#: every ``*.html`` below ``templates/``, with no exclusions. Grouping labels in
-#: one row is only legal when the checkers read the same files -- an exclusion
-#: belongs to a checker, not to a row that happens to collect several
-#: (``tests/test_affected_tests.py`` enforces both halves).
+#: Rule 14. The seven template lints that share ONE scan set: every ``*.html``
+#: below ``templates/``, with no exclusions. Grouping labels in one row is only
+#: legal when the checkers read the same files -- an exclusion belongs to a
+#: checker, not to a row that happens to collect several
+#: (``tests/test_affected_tests.py`` enforces both halves). That is why
+#: ``content.tests.test_template_comment_lint`` is NOT in this tuple: it also
+#: reads ``email_app/email_templates/*.md``, so it gets its own row below.
 #:
 #: Selected by explicit label, not through ``make test-core``: three of these
 #: are not ``core``-tagged, and the tagged ones could lose the tag in an
@@ -433,7 +435,6 @@ REPO_WIDE_TEMPLATE_LINT_LABELS: tuple[str, ...] = (
     "content.tests.test_design_system_lint",
     "content.tests.test_internal_copy_lint",
     "content.tests.test_status_contrast_1279",
-    "content.tests.test_template_comment_lint",
     "studio.tests.test_form_components",
 )
 
@@ -458,6 +459,20 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         name="repo-wide-template-lints",
         globs=("templates/*.html",),
         labels=REPO_WIDE_TEMPLATE_LINT_LABELS,
+    ),
+    RepoWideGuard(
+        # The one template lint whose scan set is wider than ``templates/**``:
+        # it also reads the transactional email bodies, which are compiled by
+        # the same ``django.template.Template`` call in
+        # ``email_app/services/email_rendering.py`` and carry the same
+        # single-line-token defect. A separate row rather than a glob bolted
+        # onto the group above -- the other seven never open a ``.md``, and a
+        # grouped row must read the same files for every label it carries.
+        # ``discover_all_sources()`` is the enumerator evidence binding this
+        # row to what the lint really reads.
+        name="template-comment-lint",
+        globs=("templates/*.html", "email_app/email_templates/*.md"),
+        labels=("content.tests.test_template_comment_lint",),
     ),
     RepoWideGuard(
         # Exclusions imported from the lint's own policy module, so the two

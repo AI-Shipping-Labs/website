@@ -49,6 +49,7 @@ from scripts.affected_tests import (
     PLAYWRIGHT_CORE_COMMAND,
     PLAYWRIGHT_FULL_COMMAND,
     REPO_WIDE_GUARDS,
+    REPO_WIDE_TEMPLATE_LINT_LABELS,
     REVERSE_IMPORT_APP_CAP,
     TAILWIND_PRODUCER_GLOBS,
     TEST_TREE_CONTRACTS,
@@ -314,10 +315,15 @@ class RuleChainTest(SimpleTestCase):
     def test_email_template_markdown_maps_to_its_app(self):
         # email_app/email_templates/*.md are shipped email bodies asserted by
         # email_app tests -- an email-template-only diff must not report
-        # "NO TESTS REQUIRED".
+        # "NO TESTS REQUIRED". Since #1750 the rule-14 comment lint rides
+        # along, because it compiles this tree too (pinned in detail by
+        # test_email_template_markdown_selects_the_template_comment_lint).
         plan = plan_for(["email_app/email_templates/welcome_paid.md"])
         self.assertFalse(plan.no_tests_required)
-        self.assertEqual(plan.django_labels, ["email_app"])
+        self.assertEqual(
+            plan.django_labels,
+            collapsed("email_app", *guards("email_app/email_templates/welcome_paid.md")),
+        )
 
     def test_readme_inside_an_app_maps_to_its_app(self):
         plan = plan_for(["integrations/services/ai_eval/README.md"])
@@ -650,6 +656,28 @@ class RuleChainTest(SimpleTestCase):
         self.assertEqual(plan.django_labels, collapsed("plans", *TEMPLATE_GUARD_LABELS))
         self.assertEqual(plan.playwright, "core")
         self.assertIn(PLAYWRIGHT_CORE_COMMAND, plan.commands())
+
+    def test_email_template_markdown_selects_the_template_comment_lint(self):
+        """The one compiled-template tree that is not ``templates/**`` (#1750).
+
+        ``email_app/email_templates/*.md`` is compiled by
+        ``django.template.Template`` in
+        ``email_app/services/email_rendering.py``, so the single-line-token
+        lint reads it. Until this row existed the plan for such a diff was
+        ``email_app`` alone -- the lint that guards the file could not run on
+        the diff that changed it.
+        """
+        plan = plan_for(["email_app/email_templates/welcome.md"])
+
+        self.assertIn("content.tests.test_template_comment_lint", plan.django_labels)
+        self.assertEqual(
+            plan.django_labels,
+            collapsed("email_app", "content.tests.test_template_comment_lint"),
+        )
+        # Only that lint: the other six template lints read `*.html` and never
+        # open a `.md`, so a grouped row would have over-selected here.
+        for label in REPO_WIDE_TEMPLATE_LINT_LABELS:
+            self.assertNotIn(label, plan.django_labels)
 
     def test_shared_template_fragment_adds_content_core_and_full_playwright(self):
         plan = plan_for(["templates/includes/header.html"])
@@ -1765,8 +1793,13 @@ def _enumerated_files():
         ],
         "repo-wide-template-lints": [
             _relative(path)
-            for module in (test_design_system_lint, test_template_comment_lint)
-            for path in module.discover_templates(REPO_ROOT / "templates")
+            for path in test_design_system_lint.discover_templates(REPO_ROOT / "templates")
+        ],
+        # Both trees, from the lint's own enumerator: this is what binds the
+        # row's `email_app/email_templates/*.md` glob to the files the lint
+        # really opens, rather than to a glob someone believed was right.
+        "template-comment-lint": [
+            _relative(path) for path in test_template_comment_lint.discover_all_sources(REPO_ROOT)
         ],
     }
 
@@ -1874,8 +1907,11 @@ class RepoWideGuardEvidenceTest(SimpleTestCase):
 
     def test_rows_group_labels_only_when_the_checkers_share_a_scan_set(self):
         # Every label in a multi-label row must be a discovered scanner of the
-        # same tree with no exclusions of its own; the eight template lints are
-        # the only group that qualifies today.
+        # same tree with no exclusions of its own; the seven pure-`templates/`
+        # lints are the only group that qualifies today. The comment lint is
+        # deliberately outside it -- it also reads
+        # `email_app/email_templates/*.md`, so grouping it here would declare
+        # seven checkers as reading a tree they never open.
         grouped = [guard for guard in REPO_WIDE_GUARDS if len(guard.labels) > 1]
         self.assertEqual([guard.name for guard in grouped], ["repo-wide-template-lints"])
         row = _row("repo-wide-template-lints")
@@ -1960,6 +1996,11 @@ class RepoWideGuardTest(SimpleTestCase):
                 "templates/plans/my_plan_detail.html",
                 "templates/community_base/public/base.html",
                 "templates/includes/header.html",
+            ),
+            "template-comment-lint": (
+                "templates/plans/my_plan_detail.html",
+                "email_app/email_templates/welcome.md",
+                "email_app/email_templates/event_registration_confirmation.md",
             ),
             "tailwind-source-scan": (
                 "events/views/detail.py",

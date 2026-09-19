@@ -282,6 +282,174 @@ class EmailTemplateEditPostTest(TestCase):
         )
 
 
+class EmailTemplateSyntaxRejectionTest(TestCase):
+    """Operator copy is compiled by Django, so it obeys the single-line rule.
+
+    `EmailTemplateOverride` bodies are rendered by the same
+    `django.template.Template` call as the shipped `.md` files, and a construct
+    whose closing marker lands on a later line is never lexed — its raw source
+    ships to the recipient. The file lint cannot see database rows, so the view
+    applies the identical rule from `content.utils.template_comments`.
+    """
+
+    MULTILINE_NOTE_BODY = (
+        'Hi {{ user_name }}\n'
+        '{# note about the CTA\n'
+        '   continued here #}\n'
+        'Thanks'
+    )
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff@test.com', password='pw', is_staff=True,
+        )
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff@test.com', password='pw')
+
+    def test_multiline_comment_in_body_is_rejected_and_writes_nothing(self):
+        response = self.client.post(
+            '/studio/email-templates/welcome/edit/',
+            {
+                'subject': 'Welcome aboard',
+                'body_markdown': self.MULTILINE_NOTE_BODY,
+                'footer_note': '',
+            },
+        )
+
+        self.assertTemplateUsed(response, 'studio/email_templates/edit.html')
+        self.assertFalse(
+            EmailTemplateOverride.objects.filter(template_name='welcome').exists(),
+        )
+
+    def test_rejected_save_preserves_the_operator_text_and_names_the_line(self):
+        response = self.client.post(
+            '/studio/email-templates/welcome/edit/',
+            {
+                'subject': 'Welcome aboard',
+                'body_markdown': self.MULTILINE_NOTE_BODY,
+                'footer_note': '',
+            },
+        )
+
+        self.assertTemplateUsed(response, 'studio/email_templates/edit.html')
+        self.assertEqual(
+            response.context['initial']['body_markdown'],
+            self.MULTILINE_NOTE_BODY,
+        )
+        errors = [str(message) for message in response.context['messages']]
+        self.assertEqual(
+            errors,
+            [
+                'Line 2: a "{# #}" comment must open and close on the same line '
+                '— use {% comment %} ... {% endcomment %} for notes spanning '
+                'more than one line. Django renders an unclosed comment to the '
+                'recipient.'
+            ],
+        )
+
+    def test_rejected_save_leaves_an_existing_override_untouched(self):
+        existing = EmailTemplateOverride.objects.create(
+            template_name='welcome',
+            subject='Original',
+            body_markdown='Original body',
+        )
+
+        self.client.post(
+            '/studio/email-templates/welcome/edit/',
+            {
+                'subject': 'Welcome aboard',
+                'body_markdown': self.MULTILINE_NOTE_BODY,
+                'footer_note': '',
+            },
+        )
+
+        existing.refresh_from_db()
+        self.assertEqual(existing.body_markdown, 'Original body')
+        self.assertEqual(existing.subject, 'Original')
+
+    def test_multiline_construct_in_subject_or_footer_is_rejected(self):
+        # The noun matters: the Subject field's own help text on this screen
+        # says "Supports Django variables, e.g. {{ tier_name }}", so calling a
+        # broken `{{ }}` a "tag" would contradict the label beside it.
+        cases = {
+            'subject': (
+                {
+                    'subject': 'Welcome {{ user_name\n   }}',
+                    'body_markdown': 'Body',
+                    'footer_note': '',
+                },
+                'a "{{ }}" variable must open and close on the same line',
+            ),
+            'footer_note': (
+                {
+                    'subject': 'Welcome aboard',
+                    'body_markdown': 'Body',
+                    'footer_note': '{% if member\n %}note{% endif %}',
+                },
+                'a "{% %}" tag must open and close on the same line',
+            ),
+        }
+
+        for field, (payload, expected) in cases.items():
+            with self.subTest(field=field):
+                response = self.client.post(
+                    '/studio/email-templates/welcome/edit/', payload,
+                )
+                self.assertTemplateUsed(
+                    response, 'studio/email_templates/edit.html',
+                )
+                self.assertFalse(
+                    EmailTemplateOverride.objects.filter(
+                        template_name='welcome',
+                    ).exists(),
+                )
+                errors = [str(message) for message in response.context['messages']]
+                self.assertEqual(len(errors), 1)
+                self.assertIn(expected, errors[0])
+                # No block form to redirect to for these two constructs.
+                self.assertNotIn('{% comment %}', errors[0])
+
+    def test_unclosed_comment_is_rejected(self):
+        response = self.client.post(
+            '/studio/email-templates/welcome/edit/',
+            {
+                'subject': 'Welcome aboard',
+                'body_markdown': 'Hi\n{# note that never closes\nThanks',
+                'footer_note': '',
+            },
+        )
+
+        self.assertTemplateUsed(response, 'studio/email_templates/edit.html')
+        self.assertFalse(
+            EmailTemplateOverride.objects.filter(template_name='welcome').exists(),
+        )
+
+    def test_single_line_comment_and_comment_block_save_successfully(self):
+        body = (
+            'Hi {{ user_name }}\n'
+            '{# short note #}\n'
+            '{% comment %}\nnote about the CTA\ncontinued here\n{% endcomment %}\n'
+            'Thanks'
+        )
+
+        response = self.client.post(
+            '/studio/email-templates/welcome/edit/',
+            {
+                'subject': 'Welcome aboard {# internal note #}',
+                'body_markdown': body,
+                'footer_note': '',
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], '/studio/email-templates/')
+        override = EmailTemplateOverride.objects.get(template_name='welcome')
+        self.assertEqual(override.body_markdown, body)
+
+
 class EmailTemplateResetTest(TestCase):
     """POST to /reset/ deletes the override row."""
 

@@ -2,7 +2,7 @@
 """Map the current git diff to the tests it can plausibly break.
 
 Agent verification used to default to the entire local Django suite
-(~14,800 tests) for every issue, which is pure contention with no coverage
+(~17,200 tests) for every issue, which is pure contention with no coverage
 benefit: CI already runs the full Django suite on every push to main and
 blocks the deploy, and the full Playwright suite runs every 3 hours.
 
@@ -28,15 +28,27 @@ section "Affected-tests selection"):
  9. App source files target their app plus a one-hop reverse-import
     expansion (``git grep``), capped at 6 extra app labels.
 10. Templates map to their owning app (+ core Playwright) or, for shared
-    fragments, to ``make test-core`` + full Playwright.
+    fragments, to ``make test-core`` + full Playwright. Every template also
+    picks up the repo-wide template guards from rule 14, by explicit label.
 11. ``static/**`` runs core Playwright; ``tailwind.config.js`` escalates.
 12. Migrations map to their own app; 2+ apps in one diff adds core.
 13. Anything unmatched fails closed to ``make test-core`` with a
     ``WARN unmapped:`` line -- never silently dropped.
+14. ``REPO_WIDE_GUARDS``: checkers whose scan set is a whole tree rather than
+    the directory they live in (the template lints, the Tailwind source scan
+    and producer verification, the repo-wide Python inventories). Applied the
+    way rule 7 is -- first, supplementing whatever other rule claims the path,
+    never consuming it -- so a producer file still selects its owning app and
+    still gets its reverse-import expansion. ``tests/test_affected_tests.py``
+    discovers tree scanners on disk and fails when one has no table entry, so
+    the map cannot drift away from the checkers it is meant to select.
 
 Stdlib only, and deliberately does NOT import Django: it has to run in well
-under a second without loading settings. It never runs tests itself unless
-``--run`` is passed (that is what ``make test-affected`` does).
+under a second without loading settings. The one cross-module import
+(``scripts.verify_tailwind_build`` for its ``PRODUCER_FILES`` list) is
+stdlib-only too and imports Django lazily, inside a function this file never
+calls. It never runs tests itself unless ``--run`` is passed (that is what
+``make test-affected`` does).
 
 Usage::
 
@@ -59,6 +71,20 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# The checker that owns the Tailwind producer list has to be importable from a
+# plain ``python scripts/affected_tests.py`` invocation, whose sys.path[0] is
+# ``scripts/``, not the repository root.
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from scripts.verify_tailwind_build import (  # noqa: E402  (needs the sys.path fix above)
+    PRODUCER_FILES,
+    PRODUCER_JS_FAMILY,
+    PRODUCER_PART_FAMILIES,
+    PRODUCER_VIEW_FAMILY,
+)
+from tests.source_scan_policy import excluded_path_globs  # noqa: E402  (same)
 
 # ---------------------------------------------------------------------------
 # Mapping tables (module-level constants on purpose: tests/test_affected_tests.py
@@ -99,6 +125,11 @@ CORE_COMMAND = "make test-core"
 PLAYWRIGHT_CORE_COMMAND = "make test-playwright-core"
 PLAYWRIGHT_FULL_COMMAND = "make test-playwright"
 ASL_CLI_COMMAND = "uv run pytest asl_cli/tests"
+#: Rule 14. The local reproduction of the Deploy Gates Tailwind check:
+#: ``css-build`` + ``verify_tailwind_build.py --rebuild``. ``--collected`` is
+#: deliberately NOT part of it -- that half needs ``collectstatic`` and asserts
+#: manifest/compression/serving, which no producer-file edit can break.
+CHECK_TAILWIND_COMMAND = "make check-tailwind"
 
 DJANGO_COMMAND_PREFIX = "uv run python manage.py test"
 #: ``--parallel 4`` (not bare ``--parallel``): bare spawns one worker per core,
@@ -155,16 +186,34 @@ DEPENDENCY_MANIFESTS: tuple[str, ...] = ("pyproject.toml", "uv.lock")
 #: Focused tooling/data contracts with exact top-level Django test owners.
 #: These entries are checked before the broader ``scripts/*`` contract rule so
 #: policy-only changes do not expand to every module under ``tests``.
+#: ``.claude/skills`` is a symlink to ``.agents/skills``, so a real diff only
+#: ever spells these paths ``.agents/...`` -- but ``.claude/agents/**`` is a
+#: real directory, and both spellings have to map identically (pinned by
+#: ``tests/test_affected_tests.py``). Every agent-tree glob is therefore
+#: declared once and emitted for both spellings.
+AGENT_TREE_SPELLINGS: tuple[str, ...] = (".agents", ".claude")
+
+
+def _agent_tree_globs(suffix: str) -> tuple[str, ...]:
+    return tuple(f"{spelling}/{suffix}" for spelling in AGENT_TREE_SPELLINGS)
+
+
 FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    (
-        ".agents/skills/ai-shipping-labs-events/*",
-        ("api.tests.test_events.EventsSkillDocSyncTest",),
+    *(
+        (glob, ("api.tests.test_events.EventsSkillDocSyncTest",))
+        for glob in _agent_tree_globs("skills/ai-shipping-labs-events/*")
     ),
-    (
-        ".agents/skills/ai-shipping-labs-event-recaps/*",
-        ("api.tests.test_events.EventsSkillDocSyncTest",),
+    *(
+        (glob, ("api.tests.test_events.EventsSkillDocSyncTest",))
+        for glob in _agent_tree_globs("skills/ai-shipping-labs-event-recaps/*")
     ),
     ("scripts/affected_tests.py", ("tests.test_affected_tests",)),
+    # The shared scan-set policy: the Tailwind source lint reads it, and rule
+    # 14 imports it. Editing it changes both, so both run.
+    (
+        "tests/source_scan_policy.py",
+        ("tests.test_affected_tests", "tests.test_tailwind_build"),
+    ),
     ("scripts/capture_screenshots.py", ("tests.test_capture_screenshots",)),
     ("_docs/testing-guidelines.md", ("tests.test_affected_tests",)),
     ("scripts/retire-agent-branches.py", ("tests.test_retire_agent_branches",)),
@@ -215,7 +264,9 @@ CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("deploy/*", (TESTS_PACKAGE,)),
     ("package.json", (TESTS_PACKAGE,)),
     ("package-lock.json", (TESTS_PACKAGE,)),
-    (".claude/*", (TESTS_PACKAGE,)),
+    # Agent definitions and skills: content guards live in ``tests/`` (the
+    # ``.agents`` spelling is the one a real diff produces -- issue #1735).
+    *((glob, (TESTS_PACKAGE,)) for glob in _agent_tree_globs("*")),
     ("manage.py", (TESTS_PACKAGE,)),
     # Agent instructions and process docs with rot guards in tests/.
     ("CLAUDE.md", (TESTS_PACKAGE,)),
@@ -302,6 +353,179 @@ TEST_TREE_CONTRACTS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
         ),
     ),
 )
+
+
+@dataclass(frozen=True)
+class RepoWideGuard:
+    """A checker whose scan set is a whole tree, not the directory it lives in.
+
+    ``labels`` are Django test labels (module- or class-level) and ``commands``
+    are extra shell commands. Both are *supplements*: matching a guard never
+    consumes the path, so the owning-app rules still apply on top.
+    """
+
+    name: str
+    globs: tuple[str, ...]
+    labels: tuple[str, ...] = ()
+    commands: tuple[str, ...] = ()
+    excludes: tuple[str, ...] = ()
+    #: Repo-relative module implementing the scan, when the checker is not a
+    #: Django test module. The discovery census in
+    #: ``tests/test_affected_tests.py`` reaches non-test checkers through this:
+    #: without it, a checker living outside ``tests/**`` is invisible to the
+    #: census by construction, which is how the producer row stayed unaudited.
+    checker: str = ""
+
+    def matches(self, path: str) -> bool:
+        return _matches(path, self.globs) and not _matches(path, self.excludes)
+
+
+def producer_globs(producer_files, *, repo_root: Path = REPO_ROOT) -> tuple[str, ...]:
+    """Repo-relative globs for the checker's absolute ``PRODUCER_FILES`` list.
+
+    Derived, never copied: ``scripts/verify_tailwind_build.py`` owns the list,
+    so adding a producer there changes this plan with no edit here.
+    """
+    globs: list[str] = []
+    for path in producer_files:
+        try:
+            relative = Path(path).resolve().relative_to(repo_root).as_posix()
+        except ValueError:  # pragma: no cover - a producer outside the repo
+            continue
+        if relative not in globs:
+            globs.append(relative)
+    return tuple(globs)
+
+
+#: Rule 14. ``verify_bundle()`` scans complete-string class producers in FOUR
+#: families, every one of which has to select ``make check-tailwind``:
+#: ``PRODUCER_FILES``, the ``studio/views`` directory, any ``forms``/``widgets``
+#: directory anywhere in the tree, and first-party ``static/js``. All four are
+#: derived from the checker's own constants -- restating two of them by hand is
+#: how `studio/forms/*.py` and `static/js/*.js` came to be unguarded while the
+#: checker had been reading them all along.
+TAILWIND_PRODUCER_GLOBS: tuple[str, ...] = (
+    *producer_globs(PRODUCER_FILES),
+    f"{PRODUCER_VIEW_FAMILY}/*.py",
+    # ``fnmatch``'s ``*`` spans ``/``, so these cover any depth. The checker's
+    # part exclusions (tests/migrations/.venv) are deliberately NOT restated:
+    # a row is declared wide unless the narrowing is evidenced.
+    *(f"*/{family}/*.py" for family in PRODUCER_PART_FAMILIES),
+    *(f"{family}/*.py" for family in PRODUCER_PART_FAMILIES),
+    f"{PRODUCER_JS_FAMILY}/*.js",
+    # Editing the gate itself runs the gate.
+    "scripts/verify_tailwind_build.py",
+)
+
+#: Rule 14. The eight template lints, grouped because they share one scan set:
+#: every ``*.html`` below ``templates/``, with no exclusions. Grouping labels in
+#: one row is only legal when the checkers read the same files -- an exclusion
+#: belongs to a checker, not to a row that happens to collect several
+#: (``tests/test_affected_tests.py`` enforces both halves).
+#:
+#: Selected by explicit label, not through ``make test-core``: three of these
+#: are not ``core``-tagged, and the tagged ones could lose the tag in an
+#: unrelated commit and silently drop out of the plan (#1758).
+REPO_WIDE_TEMPLATE_LINT_LABELS: tuple[str, ...] = (
+    "accounts.tests.test_button_class_lint",
+    "accounts.tests.test_template_date_vocabulary",
+    "content.tests.test_container_widths",
+    "content.tests.test_design_system_lint",
+    "content.tests.test_internal_copy_lint",
+    "content.tests.test_status_contrast_1279",
+    "content.tests.test_template_comment_lint",
+    "studio.tests.test_form_components",
+)
+
+#: Rule 14. The declarative guard table: one row per checker scan set. There is
+#: deliberately no way to suppress or narrow a row -- no flag, environment
+#: variable, allowlist or annotation. A wrong selection is fixed here.
+#:
+#: ``excludes`` may only be declared with evidence from the checker itself:
+#: a shared constant (``tests/source_scan_policy.py``), an importable
+#: enumerator of the files it reads, or its own skip predicate. A checker that
+#: offers none of those is declared with NO exclusions -- fail wide, never
+#: narrow. ``tests/test_affected_tests.py`` fails a row whose checker reads a
+#: file the row excludes.
+REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
+    RepoWideGuard(
+        name="tailwind-producers",
+        globs=TAILWIND_PRODUCER_GLOBS,
+        commands=(CHECK_TAILWIND_COMMAND,),
+        checker="scripts/verify_tailwind_build.py",
+    ),
+    RepoWideGuard(
+        name="repo-wide-template-lints",
+        globs=("templates/*.html",),
+        labels=REPO_WIDE_TEMPLATE_LINT_LABELS,
+    ),
+    RepoWideGuard(
+        # Exclusions imported from the lint's own policy module, so the two
+        # cannot diverge.
+        name="tailwind-source-scan",
+        globs=("templates/*.html", "static/js/*.js", "*.py"),
+        excludes=excluded_path_globs(),
+        labels=("tests.test_tailwind_build.TailwindSourceScanTest",),
+    ),
+    RepoWideGuard(
+        # ``SCANNED_ROOTS`` covers every app root plus ``tests``,
+        # ``playwright_tests`` and ``templates``: test files and migrations are
+        # in scope, and it pins per-file content hashes for them.
+        name="admin-link-scan",
+        globs=("*.py", "*.html"),
+        labels=("studio.tests.test_admin_links",),
+    ),
+    RepoWideGuard(
+        # ``rglob('*')`` at the repo root over .html/.js/.py, skipping only
+        # ``.git``/``.tmp``/``.venv``/``node_modules`` and ``_docs/audits``.
+        # That includes ``static/vendor/**``.
+        name="legacy-template-reference-scan",
+        globs=("*.py", "*.html", "*.js"),
+        labels=("tests.test_unreachable_legacy_templates_1543",),
+    ),
+    RepoWideGuard(
+        # ``_iter_python_files`` skips any path with a ``tests`` part; it does
+        # NOT skip ``playwright_tests`` or ``migrations``.
+        name="async-task-name-scan",
+        globs=("*.py",),
+        excludes=("tests/*", "*/tests/*"),
+        labels=("jobs.tests.test_async_task_names",),
+    ),
+    RepoWideGuard(
+        # ``_is_test_path`` skips ``tests`` parts and ``playwright_tests``;
+        # migrations are scanned.
+        name="emailservice-inventory-scan",
+        globs=("*.py",),
+        excludes=("tests/*", "*/tests/*", "playwright_tests/*"),
+        labels=("email_app.tests.test_email_service_shim_1651",),
+    ),
+    RepoWideGuard(
+        # The scan filter is inline in the test method, so there is no evidence
+        # to narrow against: declared wide.
+        name="package-mail-boundary-scan",
+        globs=("*.py",),
+        labels=("email_app.tests.test_package_mail_context.DirectPackageSendContractTest",),
+    ),
+)
+
+
+def repo_wide_guard_labels(path: str) -> tuple[str, ...]:
+    """Every rule-14 label that guards ``path``."""
+    labels: set[str] = set()
+    for guard in REPO_WIDE_GUARDS:
+        if guard.matches(path):
+            labels.update(guard.labels)
+    return tuple(sorted(labels))
+
+
+def repo_wide_guard_commands(path: str) -> tuple[str, ...]:
+    """Every rule-14 extra command that guards ``path``."""
+    commands: list[str] = []
+    for guard in REPO_WIDE_GUARDS:
+        if guard.matches(path):
+            commands.extend(command for command in guard.commands if command not in commands)
+    return tuple(commands)
+
 
 #: Rule 9. Where the reverse-import grep looks.
 GREP_PATHSPECS: tuple[str, ...] = tuple(
@@ -562,6 +786,8 @@ def build_plan(
     unmapped: list[str] = []
     expansion_modules: list[str] = []
     migration_apps: set[str] = set()
+    repo_wide_labels: set[str] = set()
+    repo_wide_commands: list[str] = []
 
     def add_extra(command: str) -> None:
         if command not in extras:
@@ -587,6 +813,16 @@ def build_plan(
         # later mapping, including focused/hub exceptions such as
         # ``tests/fixtures.py``. They never replace the path's existing owner.
         labels.update(test_tree_contract_labels(path))
+
+        # Rule 14 -- repo-wide guards. Like rule 7 they supplement every later
+        # mapping and never consume the path, so a Tailwind producer still
+        # selects its owning app (and its reverse-import expansion) as well.
+        guard_labels = repo_wide_guard_labels(path)
+        labels.update(guard_labels)
+        repo_wide_labels.update(guard_labels)
+        for command in repo_wide_guard_commands(path):
+            add_extra(command)
+            repo_wide_commands.append(command) if command not in repo_wide_commands else None
 
         focused_contract = next(
             (labels_for_path for glob, labels_for_path in FOCUSED_CONTRACT_PATHS if fnmatch.fnmatchcase(path, glob)),
@@ -678,7 +914,17 @@ def build_plan(
                 labels.add(template_app)
                 continue
             add_extra(CORE_COMMAND)
-            add_note(f"NOTE template-fallback: {path} has no owning app -- added {CORE_COMMAND}.")
+            add_note(
+                f"NOTE template-fallback: {path} has no owning app -- added {CORE_COMMAND}; "
+                + (
+                    f"repo-wide template guards selected by label ({', '.join(guard_labels)})."
+                    if (guard_labels := repo_wide_guard_labels(path))
+                    # The template lints read *.html only, so a .txt or .md
+                    # template legitimately matches none -- say that instead of
+                    # printing empty parentheses.
+                    else "no repo-wide template guard matches this suffix."
+                )
+            )
             continue
 
         # Rule 11 -- static assets and the Tailwind purge config.
@@ -692,6 +938,23 @@ def build_plan(
         # Rule 13 -- fail closed.
         unmapped.append(path)
         add_extra(CORE_COMMAND)
+
+    # Rule 14 -- one line saying where the tree-scanning labels came from. The
+    # count jumps from 1 to 12 on an ordinary app-owned template edit, and
+    # without this nothing in the output explains why.
+    if repo_wide_labels:
+        count = len(repo_wide_labels)
+        suffix = f" plus {', '.join(repo_wide_commands)}" if repo_wide_commands else ""
+        add_note(
+            f"NOTE repo-wide-guards: rule 14 selected {count} tree-scanning "
+            f"checker{'' if count == 1 else 's'}{suffix} -- see REPO_WIDE_GUARDS in "
+            "scripts/affected_tests.py."
+        )
+    elif repo_wide_commands:
+        add_note(
+            f"NOTE repo-wide-guards: rule 14 added {', '.join(repo_wide_commands)} "
+            "-- see REPO_WIDE_GUARDS in scripts/affected_tests.py."
+        )
 
     # Rule 12 -- migrations across 2+ apps in one diff.
     if len(migration_apps) >= 2:
@@ -860,7 +1123,13 @@ def run_commands(plan: Plan, *, repo_root: Path = REPO_ROOT) -> int:
     return worst
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
+    """The complete CLI surface.
+
+    There is deliberately no option that suppresses, skips or narrows a
+    ``REPO_WIDE_GUARDS`` entry: a wrong selection is fixed by editing the
+    table. ``tests/test_affected_tests.py`` pins this option set.
+    """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--base", default="origin/main", help="base ref (default: origin/main)")
     parser.add_argument("--json", action="store_true", help="emit the plan as JSON")
@@ -871,6 +1140,11 @@ def main(argv: list[str] | None = None) -> int:
         help="union untracked files into the diff (default: enabled)",
     )
     parser.add_argument("--run", action="store_true", help="execute the emitted commands")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_arg_parser()
     args = parser.parse_args(argv)
 
     try:

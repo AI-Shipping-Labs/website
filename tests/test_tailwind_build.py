@@ -5,6 +5,8 @@ from pathlib import Path
 import yaml
 from django.test import SimpleTestCase
 
+from tests.source_scan_policy import SOURCE_SCAN_EXCLUDED_PARTS
+
 ROOT = Path(__file__).resolve().parents[1]
 CSS_PATH = ROOT / "static/css/tailwind.css"
 
@@ -125,42 +127,6 @@ class TailwindSourceContractTest(SimpleTestCase):
         self.assertIn("def cover_accent_class", models)
         self.assertIn("'from-blue-500/30': 'from-blue-500/30'", models)
 
-    def test_no_tailwind_utility_is_built_from_a_runtime_fragment(self):
-        utility = r"(?:bg|text|border|ring|from|to|via|grid|col|row|p[trblxy]?|m[trblxy]?|w|h|gap|rounded|shadow|opacity|translate|scale|rotate)-"
-        offenders = []
-        for path in (ROOT / "templates").rglob("*.html"):
-            text = path.read_text(errors="ignore")
-            class_values = [
-                double or single
-                for double, single in re.findall(r'class\s*=\s*"([^"]*)"|class\s*=\s*\'([^\']*)\'', text)
-            ]
-            if any(re.search(r"(?:^|\s)(?:[a-z-]+:)*" + utility + r"[^\s]*\{\{", value) for value in class_values):
-                offenders.append(str(path.relative_to(ROOT)))
-        excluded_parts = {
-            "tests",
-            "playwright_tests",
-            "migrations",
-            ".tmp",
-            ".venv",
-            "venv",
-            "node_modules",
-            "staticfiles",
-        }
-        for path in ROOT.rglob("*.py"):
-            if excluded_parts.intersection(path.relative_to(ROOT).parts):
-                continue
-            text = path.read_text(errors="ignore")
-            if re.search(rf'f["\'][^"\']*(?<![A-Za-z0-9_-]){utility}\{{', text):
-                offenders.append(str(path.relative_to(ROOT)))
-        for path in (ROOT / "static/js").rglob("*.js"):
-            if "vendor" in path.relative_to(ROOT / "static").parts:
-                continue
-            text = path.read_text(errors="ignore")
-            if re.search(r"(?<![A-Za-z0-9_-])" + utility + r"[^`]*\$\{", text):
-                offenders.append(str(path.relative_to(ROOT)))
-
-        self.assertEqual(offenders, [])
-
     def test_build_and_delivery_are_wired_into_supported_paths(self):
         makefile = (ROOT / "Makefile").read_text()
         procfile = (ROOT / "Procfile.dev").read_text()
@@ -199,3 +165,43 @@ class TailwindSourceContractTest(SimpleTestCase):
         self.assertIn("static/css/tailwind.css", gitignore)
         self.assertIn("node_modules/", gitignore)
         self.assertIn("whitenoise[brotli]", pyproject)
+
+
+class TailwindSourceScanTest(SimpleTestCase):
+    """Repo-wide source lint over templates, first-party JS and Python.
+
+    Split out of ``TailwindSourceContractTest`` by issue #1755: this class
+    reads no build artifact, so ``REPO_WIDE_GUARDS`` in
+    ``scripts/affected_tests.py`` can select it for every template, non-test
+    Python and ``static/js`` edit without requiring Node or a compiled
+    ``static/css/tailwind.css``. The assertions that DO read the compiled
+    bundle stay in ``TailwindSourceContractTest``, selected by their own
+    build inputs (``Dockerfile``, ``tailwind.config.js``, ``package.json``).
+    """
+
+    def test_no_tailwind_utility_is_built_from_a_runtime_fragment(self):
+        utility = r"(?:bg|text|border|ring|from|to|via|grid|col|row|p[trblxy]?|m[trblxy]?|w|h|gap|rounded|shadow|opacity|translate|scale|rotate)-"
+        offenders = []
+        for path in (ROOT / "templates").rglob("*.html"):
+            text = path.read_text(errors="ignore")
+            class_values = [
+                double or single
+                for double, single in re.findall(r'class\s*=\s*"([^"]*)"|class\s*=\s*\'([^\']*)\'', text)
+            ]
+            if any(re.search(r"(?:^|\s)(?:[a-z-]+:)*" + utility + r"[^\s]*\{\{", value) for value in class_values):
+                offenders.append(str(path.relative_to(ROOT)))
+        excluded_parts = set(SOURCE_SCAN_EXCLUDED_PARTS)
+        for path in ROOT.rglob("*.py"):
+            if excluded_parts.intersection(path.relative_to(ROOT).parts):
+                continue
+            text = path.read_text(errors="ignore")
+            if re.search(rf'f["\'][^"\']*(?<![A-Za-z0-9_-]){utility}\{{', text):
+                offenders.append(str(path.relative_to(ROOT)))
+        for path in (ROOT / "static/js").rglob("*.js"):
+            if "vendor" in path.relative_to(ROOT / "static").parts:
+                continue
+            text = path.read_text(errors="ignore")
+            if re.search(r"(?<![A-Za-z0-9_-])" + utility + r"[^`]*\$\{", text):
+                offenders.append(str(path.relative_to(ROOT)))
+
+        self.assertEqual(offenders, [])

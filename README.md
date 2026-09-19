@@ -120,7 +120,7 @@ auth, access-control, payments, sync, and critical model paths -- and is the
 fail-closed fallback the affected-tests plan uses.
 
 Do not run the full Django suite locally (`make test`, `make test-all`, `make coverage`).
-It is ~14,800 tests. Deploy Dev runs the Django suite sharded on every push to `main`
+It is ~17,200 tests. Deploy Dev runs the Django suite sharded on every push to `main`
 and blocks the deploy on failure, including an 85% Coverage.py gate from those shards
 (combined; the exhaustive `make coverage` target is not what CI invokes), and the full
 Playwright suite runs every 3 hours, so a local repeat only costs you wall time. See

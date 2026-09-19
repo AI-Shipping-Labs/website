@@ -160,7 +160,7 @@ make test-affected                          # run exactly what the plan emitted
 
 Inner loop while editing: `uv run python manage.py test {touched_app} --parallel 4`, plus `make test-core` for cross-cutting changes.
 
-Do NOT run the full Django suite locally (`make test`, `make test-all`, `make coverage`, or `manage.py test` with no labels). It is ~14,800 tests and starves everything else on the box, for no coverage gain: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours. Run it locally only if Alexey explicitly asks.
+Do NOT run the full Django suite locally (`make test`, `make test-all`, `make coverage`, or `manage.py test` with no labels). It is ~17,200 tests and starves everything else on the box, for no coverage gain: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours. Run it locally only if Alexey explicitly asks.
 
 See [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) ("Affected-tests selection") for the rule chain, the authoritative escalation table, and what to do when the plan looks wrong (fix the map — never widen the run by hand).
 

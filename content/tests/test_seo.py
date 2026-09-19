@@ -14,7 +14,13 @@ from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
 
-from content.access import LEVEL_BASIC, LEVEL_OPEN
+from content.access import (
+    LEVEL_BASIC,
+    LEVEL_MAIN,
+    LEVEL_OPEN,
+    LEVEL_PREMIUM,
+    LEVEL_REGISTERED,
+)
 from content.models import (
     Article,
     Course,
@@ -135,6 +141,150 @@ class StructuredDataArticleTest(TestCase):
         )
         end = html.index('</script>')
         return json.loads(html[start:end])
+
+
+class GatedArticlePaywallJsonLdTest(TestCase):
+    """Issue #1726: gated Article JSON-LD carries ``isAccessibleForFree: false``.
+
+    The marking is viewer-conditioned per the grooming decision: it appears
+    exactly when the render shows the gated access card (``is_gated`` in the
+    template context), so Googlebot's anonymous crawl always gets the
+    marking while entitled members get plain Article markup. Scope is
+    articles only — projects/tutorials share the builder but the paywall
+    marking was deferred for them by the grooming decision.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.free_article = Article.objects.create(
+            title='Free JSON-LD Article',
+            slug='free-jsonld-article',
+            description='An open article used to assert unchanged JSON-LD output.',
+            content_markdown='# Free JSON-LD Article\n\nOpen body.',
+            date=date(2025, 6, 15),
+            author='Jane Doe',
+            published=True,
+            required_level=LEVEL_OPEN,
+        )
+        cls.gated_articles = {}
+        for level in (LEVEL_REGISTERED, LEVEL_BASIC, LEVEL_MAIN, LEVEL_PREMIUM):
+            cls.gated_articles[level] = Article.objects.create(
+                title=f'Gated JSON-LD Article {level}',
+                slug=f'gated-jsonld-article-{level}',
+                description='A gated article used to assert paywall markup.',
+                content_markdown='# Gated JSON-LD Article\n\nGated body.',
+                date=date(2025, 6, 16),
+                author='Jane Doe',
+                published=True,
+                required_level=level,
+            )
+        cls.gated_project = Project.objects.create(
+            title='Gated JSON-LD Project',
+            slug='gated-jsonld-project',
+            description='A gated project built with the shared Article builder.',
+            content_markdown='# Gated JSON-LD Project\n\nGated project body.',
+            date=date(2025, 6, 17),
+            published=True,
+            required_level=LEVEL_BASIC,
+        )
+        cls.gated_tutorial = Tutorial.objects.create(
+            title='Gated JSON-LD Tutorial',
+            slug='gated-jsonld-tutorial',
+            description='A gated tutorial built with the shared Article builder.',
+            content_markdown='# Gated JSON-LD Tutorial\n\nGated tutorial body.',
+            date=date(2025, 6, 18),
+            published=True,
+            required_level=LEVEL_PREMIUM,
+        )
+
+    def _render_structured_data(self, obj, **extra):
+        rendered = Template(
+            '{% load seo_tags %}{% structured_data obj %}',
+        ).render(Context({'obj': obj, **extra}))
+        return _jsonld_objects(rendered)[0]
+
+    def test_gated_levels_mark_is_accessible_for_free_false(self):
+        for level, article in self.gated_articles.items():
+            with self.subTest(required_level=level):
+                data = self._render_structured_data(article, is_gated=True)
+                self.assertIs(data['isAccessibleForFree'], False)
+
+    def test_paywall_marking_includes_has_part_web_page_element(self):
+        data = self._render_structured_data(
+            self.gated_articles[LEVEL_BASIC],
+            is_gated=True,
+        )
+        self.assertIsInstance(data['isAccessibleForFree'], bool)
+        self.assertIs(data['isAccessibleForFree'], False)
+        self.assertEqual(data['hasPart']['@type'], 'WebPageElement')
+        self.assertIs(data['hasPart']['isAccessibleForFree'], False)
+        self.assertEqual(
+            data['hasPart']['cssSelector'],
+            '[data-testid="gated-access-card"]',
+        )
+
+    def test_paywall_marking_keeps_existing_article_fields(self):
+        data = self._render_structured_data(
+            self.gated_articles[LEVEL_MAIN],
+            is_gated=True,
+        )
+        self.assertEqual(data['@type'], 'Article')
+        self.assertEqual(data['headline'], 'Gated JSON-LD Article 20')
+        self.assertIn('description', data)
+        self.assertEqual(data['datePublished'], '2025-06-16')
+        self.assertEqual(data['author']['name'], 'Jane Doe')
+        self.assertEqual(data['publisher']['name'], 'AI Shipping Labs')
+        self.assertIn('mainEntityOfPage', data)
+
+    def test_open_render_has_no_paywall_marking(self):
+        data = self._render_structured_data(self.free_article)
+        self.assertNotIn('isAccessibleForFree', data)
+        self.assertNotIn('hasPart', data)
+
+    def test_entitled_render_has_no_paywall_marking(self):
+        data = self._render_structured_data(
+            self.gated_articles[LEVEL_MAIN],
+            is_gated=False,
+        )
+        self.assertNotIn('isAccessibleForFree', data)
+        self.assertNotIn('hasPart', data)
+
+    def test_gated_project_and_tutorial_stay_unmarked(self):
+        # Articles-only scope: the shared builder must not leak the card
+        # marking into content types the grooming decision deferred.
+        for obj in (self.gated_project, self.gated_tutorial):
+            with self.subTest(model=type(obj).__name__):
+                data = self._render_structured_data(obj, is_gated=True)
+                self.assertNotIn('isAccessibleForFree', data)
+                self.assertNotIn('hasPart', data)
+
+    def test_anonymous_gated_blog_detail_carries_paywall_jsonld(self):
+        article = self.gated_articles[LEVEL_BASIC]
+        response = self.client.get(article.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn('data-testid="gated-access-card"', content)
+        data_list = _jsonld_objects(content)
+        self.assertEqual(len(data_list), 1, data_list)
+        data = data_list[0]
+        self.assertEqual(data['@type'], 'Article')
+        self.assertIs(data['isAccessibleForFree'], False)
+        self.assertEqual(
+            data['hasPart']['cssSelector'],
+            '[data-testid="gated-access-card"]',
+        )
+        self.assertEqual(data['headline'], 'Gated JSON-LD Article 10')
+        self.assertIn('mainEntityOfPage', data)
+
+    def test_free_blog_detail_jsonld_has_no_paywall_flag(self):
+        response = self.client.get(self.free_article.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        data_list = _jsonld_objects(response.content.decode())
+        self.assertEqual(len(data_list), 1, data_list)
+        self.assertNotIn('isAccessibleForFree', data_list[0])
+        self.assertNotIn('hasPart', data_list[0])
 
 
 class StructuredDataCourseTest(TestCase):

@@ -54,6 +54,9 @@ CONTENT_TYPE_LABELS = {
 }
 
 
+GATED_ARTICLE_CSS_SELECTOR = '[data-testid="gated-access-card"]'
+
+
 def _get_site_url():
     """Return the site URL, honoring the Studio DB override."""
     return site_base_url()
@@ -297,6 +300,29 @@ def _build_article_jsonld(article):
     }
     if getattr(article, 'cover_image_url', ''):
         data['image'] = article.cover_image_url
+    return data
+
+
+def _apply_paywall_markup(data, context):
+    """Mark Article JSON-LD as paywalled for viewers who see the gated card.
+
+    Issue #1726: emitted exactly when the render shows the gated access
+    card (``is_gated`` from ``build_gating_context``). Googlebot crawls
+    anonymously and always gets the marking; entitled members and staff
+    get plain Article markup, so no response ever lies about itself.
+    Required-property-only per Google's paywalled-content guidance plus
+    the optional ``hasPart`` granularity — the cssSelector points at the
+    canonical gated card partial, the one stable in-DOM anchor every
+    gated article render contains.
+    """
+    if not context.get('is_gated'):
+        return data
+    data['isAccessibleForFree'] = False
+    data['hasPart'] = {
+        '@type': 'WebPageElement',
+        'isAccessibleForFree': False,
+        'cssSelector': GATED_ARTICLE_CSS_SELECTOR,
+    }
     return data
 
 
@@ -707,6 +733,8 @@ def structured_data(context, content=None, content_type=None):
                 )
             else:
                 data = builder(content)
+            if content_type == 'article':
+                data = _apply_paywall_markup(data, context)
         else:
             data = _build_organization_jsonld()
 

@@ -1,13 +1,22 @@
 {% extends "base.html" %}
-{% block body %}{% block content %}{% endblock %}{% endblock %}
+{% block body %}
+{% include "includes/header.html" %}
+<div class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+      {% block content %}{% endblock %}
+    </div>
+  </section>
+</div>
+{% include "includes/footer.html" %}
+{% endblock %}
 {% block extra_scripts %}{% block extra_js %}{% endblock %}{% endblock %}
 {% comment %}
 Site override of the community-base public seam (community-base A7.4).
 
 Shared public templates in community-base extend "community_base/public/base.html"
 and fill five blocks: content, title, meta_description, page_head_metadata and
-extra_js. The package ships that path as a pass-through to "base.html", so a site
-whose own base names all five needs no override.
+extra_js. A site whose own base names all five needs no override.
 
 This site's templates/base.html names three of them the same way (title,
 meta_description, page_head_metadata) but calls its body slot "body" and its
@@ -15,14 +24,37 @@ script slot "extra_scripts". Django resolves blocks by name across the whole
 inheritance chain rather than by lexical nesting, so wrapping the contracted name
 in the site name above is what makes content and extra_js reachable from a
 package page template. Only those two are remapped; remapping the other three
-would be a no-op at best and would shadow the site defaults at worst.
+would be a no-op at best and would shadow the site defaults at worst -- and
+Django rejects a template that nests a same-named block inside its own
+redefinition, so it is not even expressible.
 
 Without this file, Django drops content and extra_js in silence: the mounted
 public unsubscribe page returns 200 with ~21kB of site chrome and no form at all.
-community_base.kernel.checks reports that at `manage.py check` time as
-community_base.kernel.E001 (content) and W004 (extra_js).
 
-This file is a block map, not a page: it has no markup and owns no container.
-It is registered in BLOCK_MAP_TEMPLATES in content/tests/test_container_widths.py
-for that reason.
+Chrome. templates/base.html deliberately renders no header and no footer -- every
+page on this site supplies its own inside its own "body" block override. A seam
+that mapped content straight onto body would therefore hand every shared public
+page a navless, unbranded, container-less page.
+The frame here is the one the three forked package pages in templates/knowledge_base/
+already use: the header include, a pt-24 offset for the fixed header, the
+py-8 sm:py-16 lg:py-24 section rhythm, the Frame-tier container
+"mx-auto max-w-7xl px-4 sm:px-6 lg:px-8", and the footer include.
+
+One deliberate deviation from those three: they open <main>, this opens a <div>.
+Package public templates bring their own <main class="cb-page"> inside content
+(community_base/mail/unsubscribe.html, accounts/login.html,
+events/registration_result.html all do), and nesting <main> inside <main> is
+invalid HTML and breaks the landmark. Everything else -- the two includes, the
+offset, the rhythm and the container -- is copied from templates/knowledge_base/.
+
+Frame tier rather than a narrower one because this is a generic frame for every
+shared public page, not one page: max-w-7xl is the tier that matches the header
+and footer chrome (_docs/design-system.md -> Spacing and Layout), which is what
+templates/knowledge_base/ picked for the same reason. A package page that wants
+to be narrower narrows itself inside content.
+
+This file owns a real container, so it is an ordinary audited page for
+content/tests/test_container_widths.py -- discovered automatically, pinned to no
+tier, and held to the sanctioned width and the standard gutter like any other.
+Its block contract is pinned by tests/test_community_base_public_seam.py.
 {% endcomment %}

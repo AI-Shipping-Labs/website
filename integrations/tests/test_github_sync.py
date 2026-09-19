@@ -2703,6 +2703,51 @@ class SeedContentSourcesCommandTest(TestCase):
         self.assertEqual(source.webhook_secret, 'test-secret-alpha')
         self.assertTrue(source.is_enabled)
 
+    def test_seed_keeps_package_secret_when_legacy_row_blank(self):
+        """A blank legacy mirror row must not wipe an operator-set package
+        secret (the pre-#1766 clobber) nor disable the row."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            slug='content',
+            webhook_secret='test-secret-keep',
+            is_enabled=True,
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            webhook_secret='',
+        )
+
+        call_command('seed_content_sources', stdout=StringIO())
+
+        source = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/content',
+        )
+        self.assertEqual(source.webhook_secret, 'test-secret-keep')
+        self.assertTrue(source.is_enabled)
+
+    def test_seed_copies_secret_from_legacy_mirror_row(self):
+        """Resolution order 2: a blank package row copies the secret from
+        the legacy ``integrations.ContentSource`` mirror and becomes
+        enabled (existing behavior, regression-tested)."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+            webhook_secret='test-secret-legacy',
+        )
+
+        call_command('seed_content_sources', stdout=StringIO())
+
+        source = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/workshops-content',
+        )
+        self.assertEqual(source.webhook_secret, 'test-secret-legacy')
+        self.assertTrue(source.is_enabled)
+
     def test_seed_inheritance_is_idempotent(self):
         """A second run changes nothing: same secret, still enabled, no
         duplicate rows and no disagreement warning."""

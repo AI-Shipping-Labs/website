@@ -34,8 +34,56 @@ from payments.models import Membership
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = "2026-08-27.1"
+SCHEMA_VERSION = "2026-09-19.1"
 REDACTED = "[privacy-redacted]"
+
+#: ``(app label, model name)`` -> ``(auth_security key, exported fields)`` for
+#: every user-owned credential model (issue #1744). ``_auth_security`` builds
+#: its credential entries from this table, so an entry removed here really
+#: disappears from the export -- and a structural guard in
+#: ``accounts/tests/test_cb_api_key_lifecycle_1744.py`` fails if a user-owned
+#: model with a concrete ``key_hash`` field is missing from it (or from
+#: ``credentials.DEACTIVATION_CREDENTIAL_HANDLERS``).
+#:
+#: Secrets are excluded deliberately: ``key_hash`` is the secret digest, and
+#: ``last_used_ip_hash`` is a salted HMAC of an IP -- unreadable by the
+#: subject, disclosing nothing they do not already know, and not portability
+#: data. Revoked rows ARE included: the export is the record of the
+#: credentials the account has held, not only the live ones.
+CREDENTIAL_EXPORT_SECTIONS = {
+    ("accounts", "MemberAPIKey"): (
+        "member_api_keys",
+        (
+            "id",
+            "name",
+            "lookup_prefix",
+            "scopes",
+            "created_at",
+            "revoked_at",
+            "last_used_at",
+        ),
+    ),
+    ("accounts", "Token"): (
+        "staff_api_tokens",
+        ("id", "name", "lookup_prefix", "created_at", "last_used_at"),
+    ),
+    # ``kind`` is the one field beyond the MemberAPIKey set: it is the only
+    # thing distinguishing an operator automation credential from a member
+    # credential in this table, and the subject should see which they hold.
+    ("cb_api", "APIKey"): (
+        "package_api_keys",
+        (
+            "id",
+            "name",
+            "kind",
+            "lookup_prefix",
+            "scopes",
+            "created_at",
+            "revoked_at",
+            "last_used_at",
+        ),
+    ),
+}
 SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
 SENSITIVE_METADATA_KEY_PARTS = (
     "access_token",
@@ -643,7 +691,7 @@ def _membership_payment(user):
 def _auth_security(user):
     social = _model("socialaccount", "SocialAccount")
     allauth_email = _model("account", "EmailAddress")
-    return {
+    sections = {
         "email_aliases": _values(
             _model("accounts", "EmailAlias"),
             Q(user=user),
@@ -655,25 +703,20 @@ def _auth_security(user):
             ["email", "verified", "primary"],
         ),
         "oauth_social_accounts": _social_account_values(social, user),
-        "member_api_keys": _values(
-            _model("accounts", "MemberAPIKey"),
-            Q(user=user),
-            [
-                "id",
-                "name",
-                "lookup_prefix",
-                "scopes",
-                "created_at",
-                "revoked_at",
-                "last_used_at",
-            ],
-        ),
-        "staff_api_tokens": _values(
-            _model("accounts", "Token"),
-            Q(user=user),
-            ["id", "name", "lookup_prefix", "created_at", "last_used_at"],
-        ),
     }
+    for (app_label, model_name), (
+        section,
+        fields,
+    ) in CREDENTIAL_EXPORT_SECTIONS.items():
+        # ``_model`` returns None for an app that is not installed, and
+        # ``_values`` degrades that to [] -- a missing app must not break a
+        # subject-access export.
+        sections[section] = _values(
+            _model(app_label, model_name),
+            Q(user=user),
+            list(fields),
+        )
+    return sections
 
 
 def _social_account_values(model, user):

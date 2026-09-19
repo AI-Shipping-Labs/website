@@ -45,10 +45,30 @@ def _iter_mapping_keys(value, path=()):
             yield from _iter_mapping_keys(child, path)
 
 
-def _assert_export_excludes_secrets(payload, *, plaintext, key_hash):
+def _assert_export_excludes_secrets(
+    payload,
+    *,
+    plaintext,
+    key_hash,
+    package_plaintext=None,
+    package_key_hash=None,
+):
+    """Fail if the delivered file carries any credential secret (#1210, #1744).
+
+    ``package_plaintext`` / ``package_key_hash`` cover ``cb_api.APIKey``: the
+    export lists those keys under ``auth_security.package_api_keys`` with
+    metadata only, so neither the plaintext the member was shown once nor the
+    stored digest may appear anywhere in the payload.
+    """
     rendered = json.dumps(payload)
     assert plaintext not in rendered
     assert key_hash not in rendered
+    if package_plaintext is not None:
+        assert package_plaintext not in rendered
+    if package_key_hash is not None:
+        assert package_key_hash not in rendered
+    assert "key_hash" not in rendered
+    assert "last_used_ip_hash" not in rendered
     assert "password" not in rendered.lower()
 
     payment = payload["membership_payment"]
@@ -73,6 +93,8 @@ def _download_export(page, email):
 
 
 def _seed_member_export_data(email):
+    from community_base.api.models import APIKey
+
     from accounts.models import MemberAPIKey
     from content.models.course import Course, Module, Unit, UserCourseProgress
     from content.models.enrollment import Enrollment
@@ -126,7 +148,13 @@ def _seed_member_export_data(email):
         name="portable export",
         scopes=["plans:read"],
     )
-    return user, api_key, plaintext
+    package_key, package_plaintext = APIKey.create_for_user(
+        user=user,
+        name="portable package export",
+        scopes=["users.read"],
+        kind=APIKey.Kind.MEMBER,
+    )
+    return user, api_key, plaintext, package_key, package_plaintext
 
 
 @pytest.mark.django_db(transaction=True)
@@ -136,8 +164,15 @@ class TestAccountPrivacyExport1210:
     ):
         email = "privacy-main-1210@test.com"
         with django_db_blocker.unblock():
-            _, api_key, plaintext = _seed_member_export_data(email)
+            (
+                _,
+                api_key,
+                plaintext,
+                package_key,
+                package_plaintext,
+            ) = _seed_member_export_data(email)
             key_hash = api_key.key_hash
+            package_key_hash = package_key.key_hash
 
         context = auth_context(browser, email)
         try:
@@ -158,11 +193,21 @@ class TestAccountPrivacyExport1210:
             keys = payload["auth_security"]["member_api_keys"]
             assert keys[0]["name"] == "portable export"
             assert keys[0]["lookup_prefix"] == api_key.lookup_prefix
+            # The community-base key the member holds is listed too (#1744),
+            # with the metadata that identifies it and nothing else.
+            package_keys = payload["auth_security"]["package_api_keys"]
+            assert [row["name"] for row in package_keys] == [
+                "portable package export"
+            ]
+            assert package_keys[0]["kind"] == "member"
+            assert package_keys[0]["lookup_prefix"] == package_key.lookup_prefix
             assert "4242" in payload["sprints_plans"]["plans"][0]["created_at"]
             _assert_export_excludes_secrets(
                 payload,
                 plaintext=plaintext,
                 key_hash=key_hash,
+                package_plaintext=package_plaintext,
+                package_key_hash=package_key_hash,
             )
 
             payment_leak = copy.deepcopy(payload)
@@ -190,6 +235,19 @@ class TestAccountPrivacyExport1210:
                     key_hash_leak,
                     plaintext=plaintext,
                     key_hash=key_hash,
+                )
+
+            package_leak = copy.deepcopy(payload)
+            package_leak["auth_security"]["package_api_keys"][0]["key"] = (
+                package_plaintext
+            )
+            with pytest.raises(AssertionError):
+                _assert_export_excludes_secrets(
+                    package_leak,
+                    plaintext=plaintext,
+                    key_hash=key_hash,
+                    package_plaintext=package_plaintext,
+                    package_key_hash=package_key_hash,
                 )
 
             password_leak = copy.deepcopy(payload)

@@ -1,0 +1,17 @@
+{% if company.process_summary %}
+<p class="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground sm:text-base" data-testid="company-card-summary">
+  {{ company.process_summary }}
+</p>
+{% endif %}
+<div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="company-card-metadata">
+  {% if company.roles_display %}
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="briefcase" class="h-4 w-4 flex-shrink-0"></i>
+    {{ company.roles_display }}
+  </span>
+  {% endif %}
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="list" class="h-4 w-4 flex-shrink-0"></i>
+    {{ company.step_count }} step{{ company.step_count|pluralize }}
+  </span>
+</div>

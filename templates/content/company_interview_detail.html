@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}{{ company.company }} interview process | AI Shipping Labs{% endblock %}
+{% block meta_description %}{% if company.process_summary %}{{ company.process_summary }}{% else %}How {{ company.company }} runs its AI engineering interview process, step by step.{% endif %}{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24">
+  <section class="py-8 sm:py-16 lg:py-24">
+    <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
+      <a href="/interview/companies" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to company interviews
+      </a>
+
+      <div class="mb-12">
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Interview Prep</p>
+        <h1 class="mt-4 text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;">
+          {{ company.company }}
+        </h1>
+        {% if company.roles_display %}
+        <p class="mt-4 text-lg text-muted-foreground" data-testid="company-roles">{{ company.roles_display }}</p>
+        {% endif %}
+        <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="company-teaser-metadata">
+          <span class="inline-flex items-center gap-1.5">
+            <i data-lucide="list" class="h-4 w-4 flex-shrink-0"></i>
+            {{ company.step_count }} step{{ company.step_count|pluralize }}
+          </span>
+        </div>
+        {% if company.process_summary %}
+        <p class="mt-4 text-lg text-muted-foreground" data-testid="company-teaser-summary">{{ company.process_summary }}</p>
+        {% endif %}
+      </div>
+
+      {% if is_gated %}
+        {% if gated_reason == "unverified_email" %}
+          {% include "content/_verify_email_required.html" %}
+        {% else %}
+          {% include "content/_gated_access_card.html" with signup_cta_testid="gated-create-free-account-link" signin_cta_testid="gated-sign-in-link" %}
+        {% endif %}
+      {% else %}
+        {% if company.steps_json %}
+        <div class="rounded-lg border border-border bg-card p-6 lg:p-8 mb-8" data-testid="company-steps">
+          <h2 class="text-xl font-semibold text-foreground">Interview process</h2>
+          <ol class="mt-6 space-y-5">
+            {% for step in company.steps_json %}
+            <li class="flex gap-3 text-foreground">
+              <span class="flex-shrink-0 flex items-center justify-center h-6 w-6 rounded-full bg-accent/10 text-accent text-xs font-medium">{{ forloop.counter }}</span>
+              <div class="min-w-0 pt-0.5">
+                <p class="font-medium">{{ step.name }}</p>
+                {% if step.duration %}
+                <p class="text-sm text-muted-foreground">{{ step.duration }}</p>
+                {% endif %}
+                {% if step.details %}
+                <p class="mt-1 text-sm leading-relaxed text-muted-foreground">{{ step.details }}</p>
+                {% endif %}
+              </div>
+            </li>
+            {% endfor %}
+          </ol>
+        </div>
+        {% endif %}
+
+        {% if company.notable %}
+        <div class="prose prose-invert max-w-none mb-8" data-testid="company-notable">
+          <h2>Notable</h2>
+          {{ company.notable|linebreaks }}
+        </div>
+        {% endif %}
+
+        <p class="text-sm text-muted-foreground" data-testid="company-provenance">
+          Source: <a href="{{ provenance_url }}" target="_blank" rel="noopener noreferrer" class="transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">AI Engineering Field Guide</a>
+          (interview/data/job-descriptions)
+        </p>
+      {% endif %}
+    </div>
+  </section>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

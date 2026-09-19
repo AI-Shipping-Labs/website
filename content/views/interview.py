@@ -1,6 +1,8 @@
 from django.http import Http404
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, render
 
+from content.access import LEVEL_BASIC, build_gating_context
+from content.services.field_guide_companies import GUIDE_PROVENANCE_URL
 from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown
 
@@ -80,8 +82,14 @@ def interview_hub(request):
     """Hub page listing all interview question categories."""
     categories = _get_categories_from_db()
 
+    from content.models import InterviewCompany
+
     context = {
         'categories': categories,
+        'companies_count': InterviewCompany.objects.exclude(
+            status='coming-soon',
+        ).count(),
+        'companies_required_level': LEVEL_BASIC,
     }
     return render(request, 'content/interview_hub.html', context)
 
@@ -134,3 +142,40 @@ def interview_detail(request, slug):
         'after_questions_html': after_questions_html,
     }
     return render(request, 'content/interview_detail.html', context)
+
+
+def company_interviews_list(request):
+    """Open hub listing every published company interview (issue #1712)."""
+    from content.models import InterviewCompany
+
+    companies = InterviewCompany.objects.exclude(
+        status='coming-soon',
+    ).order_by('company')
+    context = {
+        'companies': companies,
+    }
+    return render(request, 'content/company_interviews_list.html', context)
+
+
+def company_interview_detail(request, slug):
+    """Detail page for one company's interview process (issue #1712).
+
+    The teaser (company, roles, step count, process summary) is open;
+    the full steps, notable notes, and provenance are gated at the
+    company's ``required_level`` (Basic by default) via the standard
+    gated-access card.
+    """
+    from content.models import InterviewCompany
+
+    company = get_object_or_404(InterviewCompany, slug=slug)
+    if company.status == 'coming-soon':
+        raise Http404(f"Interview company '{slug}' is coming soon.")
+
+    context = {
+        'company': company,
+        'provenance_url': GUIDE_PROVENANCE_URL,
+    }
+    context.update(build_gating_context(
+        request.user, company, 'company_interview',
+    ))
+    return render(request, 'content/company_interview_detail.html', context)

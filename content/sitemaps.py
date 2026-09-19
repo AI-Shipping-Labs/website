@@ -217,6 +217,10 @@ class StaticViewSitemap(Sitemap):
             'workshops_list',
             'collection_list',
             'tags_index',
+            # Issue #1712: the company-interviews list is open; the gated
+            # /interview/companies/<slug> detail pages stay out (open-only
+            # sitemap convention; #1723 owns the gated-URL policy).
+            'company_interviews_list',
             'terms',
             'privacy',
             'impressum',

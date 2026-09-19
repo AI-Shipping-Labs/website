@@ -20,7 +20,12 @@ from content.views.courses import (
 )
 from content.views.faq import faq
 from content.views.home import home
-from content.views.interview import interview_detail, interview_hub
+from content.views.interview import (
+    company_interview_detail,
+    company_interviews_list,
+    interview_detail,
+    interview_hub,
+)
 from content.views.legal import impressum, privacy, terms
 from content.views.marketing_pages import marketing_page_preview
 from content.views.membership import membership
@@ -94,6 +99,10 @@ urlpatterns = [
     path('downloads/<slug:slug>', download_detail, name='download_detail'),
     # Interview questions
     path('interview', interview_hub, name='interview_hub'),
+    # Issue #1712: company interview pages — must precede the
+    # interview/<slug> catch-all so "companies" resolves to the list.
+    path('interview/companies', company_interviews_list, name='company_interviews_list'),
+    path('interview/companies/<slug:slug>', company_interview_detail, name='company_interview_detail'),
     path('interview/<slug:slug>', interview_detail, name='interview_detail'),
     # Learning path (redirect old URL to article)
     path('learning-path/ai-engineer', RedirectView.as_view(url='/blog/ai-engineer-learning-path', permanent=True), name='learning_path_ai_engineer_redirect'),

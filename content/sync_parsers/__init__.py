@@ -6,6 +6,7 @@ are preserved under the package orchestration.
 """
 
 from content.sync_parsers.families.articles import ArticlesParser
+from content.sync_parsers.families.company_interviews import CompanyInterviewsParser
 from content.sync_parsers.families.courses import CoursesParser
 from content.sync_parsers.families.curated_links import CuratedLinksParser
 from content.sync_parsers.families.downloads import DownloadsParser
@@ -33,6 +34,9 @@ _PARSER_ORDER = (
     DownloadsParser,
     MarketingPagesParser,
     InterviewQuestionsParser,
+    # Company interviews (issue #1712) depend on nothing from the other
+    # families; they sit next to the question banks they extend.
+    CompanyInterviewsParser,
     TiersParser,
     # Knowledge base pages fill package-owned storage (issue #1685) and
     # depend on nothing from the other families.

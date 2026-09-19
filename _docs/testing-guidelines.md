@@ -935,7 +935,19 @@ failed.
 
 ### Why not just run everything locally
 
-The full Django suite is ~14,800 tests. CI already runs it on every push to
+The full Django suite is ~17,200 tests. That figure is a rationale, so re-derive
+it rather than copying it forward -- it was quoted as "~14,800" for months after
+it stopped being true. Discovery only, no run, no database:
+
+```bash
+DJANGO_SETTINGS_MODULE=website.settings uv run python -c "
+import django; django.setup()
+from django.conf import settings
+from django.test.utils import get_runner
+print(get_runner(settings)(verbosity=0).build_suite([]).countTestCases())"
+```
+
+CI already runs that suite on every push to
 main (`.github/workflows/deploy-dev.yml`) and blocks the deploy on failure, and
 the full Playwright suite runs every 3 hours
 (`.github/workflows/scheduled-playwright.yml`). Repeating either locally adds
@@ -951,9 +963,9 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 
 | # | Changed path | Target |
 |---|---|---|
-| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 9 -> `email_app`), and `.claude/**` has content guards in `tests/` (rule 3). |
+| 1 | `_docs/**`, `docs/**`, `specs/**`, and top-level markdown (`README.md`) -- minus anything claimed by rule 3 | nothing -- a docs-only diff short-circuits to `NO TESTS REQUIRED`. Markdown anywhere else is treated as code, because a lot of it is asserted by real tests: `email_app/email_templates/*.md` are the shipped email bodies (rule 9 -> `email_app`), and `.agents/**` (equivalently `.claude/**`) has content guards in `tests/` (rule 3). |
 | 2 | escalation triggers (table below) | sets Playwright to `full`, then falls through to the remaining rules |
-| 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.claude/**`, `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
+| 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.agents/**` and `.claude/**` (both spellings map identically -- `.claude/skills` is a symlink, so `.agents/**` is what a real diff produces), `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
 | 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
 | 4 | `website/**` | `tests` + `website` + `make test-core` + full Playwright (every-request blast radius) |
 | 5 | `pyproject.toml`, `uv.lock` | `make test-core` plus a note -- soft trigger, rely on CI for the full suite |
@@ -961,10 +973,11 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 | 7 | Python under `tests/**`, any app's `tests/**`, `asl_cli/tests/**`, or `playwright_tests/**` | all four repository-wide lexical ratchets that scan these trees. A Playwright-tree change also selects the Playwright owner-inventory and browser-journey policy modules. These labels supplement the next rule. |
 | 8 | test files | the exact dotted test module (`studio/tests/test_events.py` -> `studio.tests.test_events`), not the whole app. `playwright_tests/test_X.py` also runs that file directly; `asl_cli/**` runs `uv run pytest asl_cli/tests` |
 | 9 | app source under one of the 20 project apps | that app, plus a one-hop reverse-import expansion (below) |
-| 10 | `templates/<app>/**` | that app (+ core Playwright). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. Any other template dir -> `make test-core` |
-| 11 | `static/**` | core Playwright only. `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
+| 10 | `templates/<app>/**` | that app (+ core Playwright), *plus every repo-wide template guard by explicit label* (rule 14). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. A template dir with no owning app -> `make test-core` as the unknown-owner fallback, and the `NOTE template-fallback:` line names the guard labels it added |
+| 11 | `static/**` | core Playwright. `static/js/**/*.js` also selects the first-party JavaScript guards (rule 14); `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
 | 12 | `<app>/migrations/**` | that app only. Migrations touching 2+ apps in one diff also add `make test-core` |
 | 13 | anything unmatched | fails closed to `make test-core`, printed as `WARN unmapped: <path>` -- never silently dropped |
+| 14 | repo-wide guards (`REPO_WIDE_GUARDS`, table below) | the checkers that scan a whole tree rather than the directory they live in. Applied like rule 7: first, supplementing whatever other rule claims the path, never consuming it |
 
 The Django targets compose into a single invocation:
 
@@ -978,6 +991,172 @@ trigger fired. When the plan escalates to the full suite, the per-file
 `uv run pytest playwright_tests/test_X.py -v` commands from rule 8 are dropped
 (with a `NOTE playwright-full-supersedes:` line) -- the full run already covers
 them, and keeping them would boot another server and browser per changed file.
+
+### Repo-wide guards (`REPO_WIDE_GUARDS`, rule 14)
+
+Some checkers are not owned by the directory they live in: they walk a whole
+tree. `content/tests/test_design_system_lint.py` lints every template,
+`tests/test_tailwind_build.py`'s `TailwindSourceScanTest` scans every template,
+every non-test `*.py` and every first-party `static/js/**/*.js`, and
+`scripts/verify_tailwind_build.py` scans string literals in a fixed producer
+list. Mapping a changed path to "the app that owns it" therefore misses them.
+
+Rule 14 is a declarative table in `scripts/affected_tests.py`. Each row is one
+checker's scan set: the path globs it reads, the Django labels (or extra
+commands) that run it, and any exclusions.
+
+| Row | Scan set | Selects |
+|---|---|---|
+| `tailwind-producers` | all four families `_producer_classes()` reads: `verify_tailwind_build.PRODUCER_FILES`, `studio/views/*.py`, any `forms`/`widgets` directory anywhere in the tree, and first-party `static/js/**/*.js` (plus the checker itself) | `make check-tailwind` |
+| `repo-wide-template-lints` | `templates/**/*.html` | the eight template lints |
+| `tailwind-source-scan` | `templates/**/*.html`, `static/js/**/*.js`, `**/*.py` minus the shared exclusion set | `tests.test_tailwind_build.TailwindSourceScanTest` |
+| `admin-link-scan` | every `*.py` and `*.html`, test trees and migrations included | `studio.tests.test_admin_links` |
+| `legacy-template-reference-scan` | every `*.py`, `*.html` and `*.js`, `static/vendor/**` included | `tests.test_unreachable_legacy_templates_1543` |
+| `async-task-name-scan` | every `*.py` outside a `tests` directory (`playwright_tests/**` and migrations included) | `jobs.tests.test_async_task_names` |
+| `emailservice-inventory-scan` | every `*.py` outside `tests/**` and `playwright_tests/**` | `email_app.tests.test_email_service_shim_1651` |
+| `package-mail-boundary-scan` | every `*.py` | `email_app.tests.test_package_mail_context.DirectPackageSendContractTest` |
+
+Two rules keep the rows honest, and both exist because the first cut of this
+table got them wrong:
+
+- An exclusion belongs to a checker, not to a row that happens to group
+  several. Grouping labels in one row is only legal when the checkers read the
+  same files -- true for the eight template lints, false for anything that
+  walks `*.py`. The first cut applied the Tailwind lint's exclusion set to six
+  labels at once, which declared `studio.tests.test_admin_links` as skipping
+  `tests/**` when it in fact scans it and pins per-file content hashes there.
+  Appending a line containing a Django admin URL to a test module reddened that
+  lint while the plan selected nothing that runs it -- the drift had simply
+  moved from "missing table entry" to "wrong table entry".
+- A row may only be narrower than the tree its checker walks with evidence from
+  the checker: a shared constant (`tests/source_scan_policy.py`), an importable
+  enumerator of the files it reads (`producer_paths()`, `_scanned_files()`,
+  `_iter_python_files()`), or its own skip predicate (`_is_test_path()`). A
+  checker that offers none of those is declared with no exclusions -- fail
+  wide, never narrow. `tests/test_affected_tests.py` fails any row that narrows
+  without evidence, and fails any row whose enumerator yields a file the row
+  excludes.
+- "Narrower" binds on what the checker reads, not on how the narrowing is
+  written: an `excludes` key, a glob set missing a suffix, or positive globs
+  that simply do not reach a family the checker scans. And a row with no
+  Django labels always requires evidence, because nothing else can bind it --
+  the producer row was the only label-less row in the table, its narrowing was
+  expressed entirely in positive globs, and it named its own derivation in a
+  comment. All three of those put it outside the controls at once. A comment
+  asserting a structural property is not a control.
+
+Four properties keep the table bound to the checkers it selects:
+
+- The producer set is *imported*, not copied:
+  `from scripts.verify_tailwind_build import PRODUCER_FILES`. Adding a producer
+  to the checker changes the plan with no edit to the helper. The Tailwind
+  source lint's exclusion set is shared the same way, through the stdlib-only
+  `tests/source_scan_policy.py` that both the lint and the map import. (Those
+  two are the only imports available -- the helper never imports Django, while
+  every lint is a Django `SimpleTestCase`; everything else binds through the
+  evidence rules above.)
+- `tests/test_affected_tests.py` asserts the strong per-guard property: for
+  every declared entry, a representative path from each glob produces a plan
+  that selects that entry's labels and commands. Reachability counts only via
+  an explicit Django label or extra command -- a guard that is reachable purely
+  because it carries `@tag('core')` does not count.
+- A discovery self-test parses every Django test module (tracked and untracked)
+  *and* the non-test gates -- `scripts/**`, management commands, `asl_cli/**` --
+  looking for `glob`/`rglob` calls rooted at the repo root, `settings.BASE_DIR`
+  or a `PROJECT_ROOT` anchor over `templates/`, `static/` or the root itself,
+  and fails when a discovered scanner has no table entry -- naming the module,
+  the tree it scans, and the table to edit. A new repo-wide lint is fixed by
+  adding a table entry, never by annotating the lint. A checker that is not a
+  Django test module is claimed by a row through `checker="<module path>"`;
+  parsing only `tests/**` is how `scripts/verify_tailwind_build.py` -- the
+  checker behind `make check-tailwind` -- stayed outside the census while its
+  row was wrong.
+- The probe paths that self-test uses deliberately reach inside the regions
+  rows exclude (test trees, migrations, `static/vendor/**`), so an over-narrow
+  row is observable rather than invisible, and a mutation control re-declares a
+  row with the wrong exclusion set to prove the guard still notices.
+
+Discovery is a floor, not a census. The scanner is a static AST resolver over
+`glob`/`rglob`, so a repo-wide checker that enumerates some other way is
+invisible to it: through a subprocess (`git ls-files` -- a real instance today
+is `integrations/tests/test_google_analytics_loader.py` -- or `find`), through
+`os.walk` / `glob.glob`, or from a root the resolver cannot fold to a constant.
+A green `tests.test_affected_tests` therefore means "no *discoverable* scanner
+is unmapped", not "every repo-wide checker has a row". If you write a checker
+that walks a tree by any other means, add its `REPO_WIDE_GUARDS` row by hand --
+nothing will remind you.
+
+There is deliberately no escape hatch: no flag, environment variable,
+allowlist or annotation can suppress or narrow an entry, the CLI option set is
+pinned to `--base`, `--json`, `--include-untracked` / `--no-include-untracked`
+and `--run`, and rule 13 still fails closed. A wrong selection is a bug in the
+table; fix the table.
+
+#### What rule 14 actually costs
+
+Read the wall clock, not the label count -- the two are barely related, and
+"my edit now selects six more labels" is the wrong thing to optimise away.
+
+A `manage.py test` invocation pays a fixed cost before any test runs:
+interpreter and Django boot plus four test databases under `--parallel 4`.
+Measured on this box (12 cores, load ~16, so treat these as upper bounds):
+
+| Command | Tests | Test time | Wall |
+|---|---|---|---|
+| the six repo-wide Python guards alone | 22 | 4.1s | 41.9s |
+| `events` alone | 1171 | 97.4s | 131.0s |
+| `events` + the six guards | 1193 | 116.7s | 152.4s |
+| `make check-tailwind`, warm | -- | -- | 11.0s |
+
+So roughly 30-40s of every invocation is boot and database setup, paid once no
+matter how many labels follow it. Every ordinary Python or app-template edit
+already selects its app label and therefore already pays that, which makes the
+marginal cost of rule 14 the guards' own runtime -- seconds. (The `events` A/B
+pair above shows +21s wall for the same 22 tests that take 4.1s standalone;
+that gap is `--parallel 4` packing plus box load, not the guards, and a single
+pair on a box this busy cannot resolve it more precisely than "seconds".)
+
+Two cases really do pay more:
+
+- a `static/js/**`-only edit, which previously selected zero Django labels, now
+  pays a whole invocation (~40s) plus `make check-tailwind`. That is the point:
+  before rule 14 those edits had no local gate at all.
+- an edit inside a Tailwind producer family adds `make check-tailwind` (11s
+  warm, two `npm run css:build` runs).
+
+Both are cheaper than one round trip through CI, which is the alternative that
+was actually being used -- twice, as `6a489fdc` and `bdbb65a5`.
+
+#### Why `make check-tailwind` and not `tests.test_tailwind_build`
+
+The Deploy Gates failure that producer edits cause (`compiled CSS is missing
+producer selectors`, commits `6a489fdc` and `bdbb65a5`) comes from
+`verify_bundle()` in `scripts/verify_tailwind_build.py`, which scans string
+literals in four families: `PRODUCER_FILES`, the `studio/views` directory, any
+`forms`/`widgets` directory anywhere in the tree, and first-party
+`static/js/**/*.js`. All four are derived in the map from the checker's own
+constants -- restating a subset by hand is how `studio/forms/*.py` and
+`static/js/*.js` stayed unguarded while the checker had been reading them all
+along. `tests/test_tailwind_build.py`
+asserts a separate hand-maintained `DYNAMIC_CLASSES` set against the compiled
+bundle; the two share no code, so selecting that Django label would not have
+caught either commit. The producer gate is the existing Makefile target:
+
+```
+check-tailwind: css-build
+	uv run python scripts/verify_tailwind_build.py --rebuild
+```
+
+`--collected` stays out of the local plan: it needs `collectstatic` and asserts
+manifest/compression/serving, which no producer-file edit can break. The cost
+(`npm run css:build` twice) lands only on edits inside those four families.
+
+`tests/test_tailwind_build.py` is split at class granularity for this reason:
+`TailwindSourceScanTest` reads no build artifact, so a template, JavaScript or
+Python edit can select it on a checkout with no `node_modules` and no
+`static/css/tailwind.css`, while the bundle-reading assertions stay in
+`TailwindSourceContractTest`, selected by their own build inputs (`Dockerfile`,
+`tailwind.config.js`, `package.json`).
 
 ### Guarded doc artifacts
 
@@ -1078,7 +1257,7 @@ would name a dozen apps and silently reconstruct a full-suite-equivalent run.
 
 ## Core test subset (`make test-core`)
 
-The full Django suite is ~14,800 tests. For the inner loop (TDD, quick sanity
+The full Django suite is ~17,200 tests. For the inner loop (TDD, quick sanity
 checks) we maintain a tagged subset that runs in well under a minute, and the
 affected-tests plan above uses it as its fail-closed fallback.
 

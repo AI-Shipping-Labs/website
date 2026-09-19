@@ -30,6 +30,17 @@ PRODUCER_FILES = [
     ROOT / "email_app/ses_explain.py",
 ]
 
+#: The directory families ``_producer_classes()`` scans on top of
+#: ``PRODUCER_FILES``. ``scripts/affected_tests.py`` imports these to derive
+#: rule 14's producer scan set, so the map cannot be narrower than the checker
+#: (issue #1755: `studio/forms/*.py` and `static/js/*.js` were missing from the
+#: map while the checker had been reading them all along).
+PRODUCER_VIEW_FAMILY = "studio/views"
+PRODUCER_PART_FAMILIES = ("forms", "widgets")
+PRODUCER_PART_EXCLUSIONS = ("tests", "migrations", ".venv")
+PRODUCER_JS_FAMILY = "static/js"
+PRODUCER_JS_EXCLUDED_PART = "vendor"
+
 PREFIXES = (
     "accent-",
     "align-",
@@ -178,23 +189,47 @@ def _python_string_literals(path):
             yield node.value
 
 
-def _producer_classes():
-    values = []
-    files = [*PRODUCER_FILES, *(ROOT / "studio/views").glob("*.py")]
+def producer_python_files(root=ROOT):
+    """Every Python file whose complete-string literals are class producers.
+
+    Three families, and the whole set matters to
+    ``scripts/affected_tests.py``: editing any of these files can add a class
+    that the compiled bundle then has to contain. The families are named by
+    the constants above so the affected-tests map can be derived from them
+    instead of restating them (issue #1755).
+    """
+    files = [*PRODUCER_FILES, *(root / PRODUCER_VIEW_FAMILY).glob("*.py")]
     # Form/widget constants can live in any first-party app. Scanning files
     # named forms/widgets is intentionally narrower than all Python prose.
     files.extend(
         path
-        for path in ROOT.rglob("*.py")
-        if any(part in {"forms", "widgets"} for part in path.relative_to(ROOT).parts)
-        and not {"tests", "migrations", ".venv"}.intersection(path.relative_to(ROOT).parts)
+        for path in root.rglob("*.py")
+        if any(part in PRODUCER_PART_FAMILIES for part in path.relative_to(root).parts)
+        and not set(PRODUCER_PART_EXCLUSIONS).intersection(path.relative_to(root).parts)
     )
-    for path in sorted(set(files)):
+    return sorted(set(files))
+
+
+def producer_javascript_files(root=ROOT):
+    """First-party JavaScript whose quoted literals are class producers."""
+    return sorted(
+        path
+        for path in (root / PRODUCER_JS_FAMILY).rglob("*.js")
+        if PRODUCER_JS_EXCLUDED_PART not in path.relative_to(root / "static").parts
+    )
+
+
+def producer_paths(root=ROOT):
+    """Every file ``_producer_classes()`` reads, in stable order."""
+    return [*producer_python_files(root), *producer_javascript_files(root)]
+
+
+def _producer_classes():
+    values = []
+    for path in producer_python_files():
         values.extend(_python_string_literals(path))
 
-    for path in (ROOT / "static/js").rglob("*.js"):
-        if "vendor" in path.relative_to(ROOT / "static").parts:
-            continue
+    for path in producer_javascript_files():
         # Class strings in first-party JS are simple quoted/backtick literals;
         # interpolated fragments are rejected separately by the source test.
         values.extend(match[1] for match in re.findall(r"(['\"`])((?:\\.|(?!\1).)*)\1", path.read_text()))

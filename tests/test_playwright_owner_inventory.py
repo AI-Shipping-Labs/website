@@ -1196,6 +1196,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_preview_warns_then_confirm_kills_the_key",
     })
 
+    issue_1745_owners = frozenset({
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestPreviewWarnsBeforeConfirming::"
+        "test_preview_explains_the_cost_of_the_revoked_keys",
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestResultTellsOperatorToReplaceTheKey::"
+        "test_confirm_flips_the_warning_to_the_past_tense",
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestOrdinaryDuplicatesAreNotWarned::"
+        "test_all_zero_counters_render_no_warning",
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestDeletedOperatorTokenLeavesNoTrace::"
+        "test_deleted_note_replaces_the_security_history_note",
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestAllThreeFamiliesShareOneWarning::"
+        "test_one_consequence_block_before_and_after_the_merge",
+        "playwright_tests/test_merge_credential_consequence_1745.py::"
+        "TestAdminActiveCheckboxWarning::"
+        "test_superuser_reads_the_help_text_then_proves_it_true",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1464,8 +1485,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2647)
-        self.assertEqual(len(inventory.owners), 2445)
+        self.assertEqual(inventory.item_count, 2653)
+        self.assertEqual(len(inventory.owners), 2451)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1506,6 +1527,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1732_owners
             | self.issue_1736_owners
             | self.issue_1737_owners
+            | self.issue_1745_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(
@@ -1557,6 +1579,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1725_owners
             | self.issue_1736_owners
             | self.issue_1737_owners
+            | self.issue_1745_owners
             | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

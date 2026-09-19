@@ -158,6 +158,9 @@ class _TestSnapshot:
 # computed from the sorted, stripped matching lines including duplicates.
 # Any new, removed, or replaced match invalidates the entry.
 ALLOWED_TEST_SNAPSHOTS = {
+    "accounts/tests/test_admin_is_active_help_1745.py": _TestSnapshot(
+        3, "86f607096c303f1a21c02de245e899e441e0fbe9b43054c27a841d66a793b7bd"
+    ),
     "accounts/tests/test_auth.py": _TestSnapshot(2, "30b0eaf358ae5aac495b09e5e761bc7d7153c6e724ab15f9e935b4c5cb981e82"),
     "accounts/tests/test_email_auth.py": _TestSnapshot(
         1, "029fc63111c72ae18bbb447ad47fb60a8fa172f4638f292902c3f050816336fe"
@@ -264,6 +267,9 @@ ALLOWED_TEST_SNAPSHOTS = {
     ),
     "playwright_tests/test_legacy_url_guard_595.py": _TestSnapshot(
         1, "e57eed001d0b537e54a0c185ca07870a354b2b4331a69d46854c7a15a601ac17"
+    ),
+    "playwright_tests/test_merge_credential_consequence_1745.py": _TestSnapshot(
+        2, "928065e908151249f0f970bf568a010ab0ddf3dff78604b63e738f9c3de4d1ea"
     ),
     "playwright_tests/test_onboarding_notification_studio_983.py": _TestSnapshot(
         7, "7a9610bf1eb3a14a4f92508d1667570e8a6efc6535e67643787176079968c73a"

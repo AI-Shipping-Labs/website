@@ -7,6 +7,8 @@ no-op, that confirm runs the real merge on the previewed pair, the signed
 the friendly already-merged state, and the user-detail pre-fill.
 """
 
+from html.parser import HTMLParser
+
 from community_base.api.models import APIKey
 from django.contrib.auth import get_user_model
 from django.core import signing
@@ -23,6 +25,53 @@ from studio.views.merge import _CONFIRM_SALT, _sign_pair
 from tests.fixtures import set_membership
 
 User = get_user_model()
+
+
+_VOID_TAGS = frozenset({
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
+    "meta", "source", "track", "wbr",
+})
+
+
+class _TestIdTextParser(HTMLParser):
+    """Collect the visible text of every element carrying one ``data-testid``."""
+
+    def __init__(self, testid):
+        super().__init__(convert_charrefs=True)
+        self.testid = testid
+        self.texts = []
+        self._capturing = False
+        self._depth = 0
+        self._buffer = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in _VOID_TAGS:
+            return
+        if self._capturing:
+            self._depth += 1
+        elif dict(attrs).get("data-testid") == self.testid:
+            self._capturing = True
+            self._depth = 0
+            self._buffer = []
+
+    def handle_endtag(self, tag):
+        if tag in _VOID_TAGS or not self._capturing:
+            return
+        if self._depth:
+            self._depth -= 1
+            return
+        self.texts.append(" ".join("".join(self._buffer).split()))
+        self._capturing = False
+
+    def handle_data(self, data):
+        if self._capturing:
+            self._buffer.append(data)
+
+
+def testid_texts(source, testid):
+    parser = _TestIdTextParser(testid)
+    parser.feed(source)
+    return parser.texts
 
 
 class MergeUITestBase(TestCase):
@@ -530,3 +579,216 @@ class PackageApiKeyCredentialRowTest(MergeUITestBase):
         )
         self.assertIsNone(APIKey.authenticate(secondary_plaintext))
         self.assertIsNotNone(APIKey.authenticate(canonical_plaintext))
+
+
+class CredentialConsequenceTest(MergeUITestBase):
+    """The counters are told what they cost the operator (issue #1745).
+
+    Copy assertions run against the extracted text of the specific testid, not
+    the whole response, so unrelated page copy can never satisfy them.
+    """
+
+    CONSEQUENCE = "merge-plan-credentials-consequence"
+    REVOKED_NOTE = "merge-plan-credentials-revoked-note"
+    DELETED_NOTE = "merge-plan-credentials-deleted-note"
+
+    PREVIEW_SENTENCE = (
+        "These credentials stop working the moment you confirm. They do not "
+        "transfer to keep@test.com and cannot be restored. If a person or an "
+        "integration is still using one, they need a replacement key — "
+        "check before you confirm."
+    )
+    RESULT_SENTENCE = (
+        "These credentials stopped working when the merge ran. They did not "
+        "transfer to keep@test.com and cannot be restored. If a person or an "
+        "integration was still using one, a replacement key must be issued now."
+    )
+    REVOKED_SENTENCE = (
+        "Revoked keys stay on the merged-in account as security history."
+    )
+    DELETED_SENTENCE = (
+        "Operator tokens have no revoked state, so they are deleted outright "
+        "and leave no record behind."
+    )
+
+    COUNTER_ROW_TEMPLATE = (
+        '<div class="flex justify-between gap-4" data-testid="{testid}">'
+        '<dt class="text-muted-foreground">{label}</dt>'
+        '<dd class="text-foreground">{count}</dd>'
+        "</div>"
+    )
+
+    def _blocks(self, response, testid):
+        """Return the visible text of every element carrying ``testid``."""
+        return testid_texts(response.content.decode(), testid)
+
+    def _occurrences(self, response, testid):
+        return response.content.decode().count(f'data-testid="{testid}"')
+
+    def _make_member_key(self, user):
+        return MemberAPIKey.create_for_user(user=user, name="member key")
+
+    def _make_package_key(self, user):
+        return APIKey.create_for_user(
+            user=user,
+            name="package key",
+            scopes=["users.read"],
+            kind=APIKey.Kind.MEMBER,
+        )
+
+    def _make_operator_token(self, user):
+        """Give a demoted ex-operator the token they were issued while staff.
+
+        ``Token.clean()`` refuses to mint a token for a non-staff user, so the
+        only way to own one as a mergeable (non-staff) secondary is the real
+        one: issued while staff, kept after the demotion.
+        """
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        token, plaintext = Token.create_for_user(user=user, name="while staff")
+        user.is_staff = False
+        user.save(update_fields=["is_staff"])
+        return token, plaintext
+
+    def test_preview_warns_that_the_keys_die_on_confirm(self):
+        self._login_staff()
+        _, secondary = self._make_pair()
+        self._make_member_key(secondary)
+        self._make_package_key(secondary)
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+
+        self.assertEqual(self._occurrences(preview, self.CONSEQUENCE), 1)
+        self.assertIn(self.PREVIEW_SENTENCE, self._blocks(preview, self.CONSEQUENCE)[0])
+        self.assertEqual(
+            self._blocks(preview, self.REVOKED_NOTE), [self.REVOKED_SENTENCE]
+        )
+        # Nothing was deleted, so the deleted-outright note stays silent.
+        self.assertEqual(self._occurrences(preview, self.DELETED_NOTE), 0)
+        self.assertNotContains(preview, "deleted outright")
+
+    def test_result_switches_to_past_tense_and_tells_the_operator_what_to_do(self):
+        self._login_staff()
+        canonical, secondary = self._make_pair()
+        self._make_member_key(secondary)
+
+        result = self._confirm(canonical.pk, secondary.pk)
+
+        self.assertEqual(self._occurrences(result, self.CONSEQUENCE), 1)
+        block = self._blocks(result, self.CONSEQUENCE)[0]
+        self.assertIn(self.RESULT_SENTENCE, block)
+        self.assertNotIn("check before you confirm", block)
+
+    def test_no_warning_when_the_pair_owns_no_credentials(self):
+        self._login_staff()
+        canonical, secondary = self._make_pair()
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+        self.assertEqual(self._occurrences(preview, self.CONSEQUENCE), 0)
+        self.assertNotContains(preview, "cannot be restored")
+        self.assertInHTML(
+            self.COUNTER_ROW_TEMPLATE.format(
+                testid="merge-plan-member-api-keys-revoked",
+                label="Member API keys revoked",
+                count=0,
+            ),
+            preview.content.decode(),
+        )
+
+        result = self._confirm(canonical.pk, secondary.pk)
+        self.assertEqual(self._occurrences(result, self.CONSEQUENCE), 0)
+        self.assertNotContains(result, "cannot be restored")
+
+    def test_deleted_token_note_replaces_the_revoked_note(self):
+        self._login_staff()
+        _, secondary = self._make_pair()
+        self._make_operator_token(secondary)
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+
+        self.assertIn(self.PREVIEW_SENTENCE, self._blocks(preview, self.CONSEQUENCE)[0])
+        self.assertEqual(
+            self._blocks(preview, self.DELETED_NOTE), [self.DELETED_SENTENCE]
+        )
+        # Nothing was revoked, so the security-history note stays silent.
+        self.assertEqual(self._occurrences(preview, self.REVOKED_NOTE), 0)
+        self.assertNotContains(preview, "security history")
+
+    def test_package_key_alone_still_gets_the_revoked_note(self):
+        self._login_staff()
+        _, secondary = self._make_pair()
+        self._make_package_key(secondary)
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+
+        self.assertEqual(
+            self._blocks(preview, self.REVOKED_NOTE), [self.REVOKED_SENTENCE]
+        )
+        self.assertEqual(self._occurrences(preview, self.DELETED_NOTE), 0)
+
+    def test_all_three_families_render_one_warning_and_unchanged_counters(self):
+        self._login_staff()
+        canonical, secondary = self._make_pair()
+        self._make_member_key(secondary)
+        self._make_package_key(secondary)
+        self._make_operator_token(secondary)
+
+        preview = self._preview("keep@test.com", "dupe@test.com")
+
+        # One block, one of each note -- never repeated per counter row.
+        self.assertEqual(self._occurrences(preview, self.CONSEQUENCE), 1)
+        self.assertEqual(self._occurrences(preview, self.REVOKED_NOTE), 1)
+        self.assertEqual(self._occurrences(preview, self.DELETED_NOTE), 1)
+        block = self._blocks(preview, self.CONSEQUENCE)[0]
+        self.assertIn(self.PREVIEW_SENTENCE, block)
+        self.assertIn(self.REVOKED_SENTENCE, block)
+        self.assertIn(self.DELETED_SENTENCE, block)
+
+        # Preview: the counters and their rows render unchanged. This half
+        # says nothing about merge ordering -- a dry run never reaches the
+        # deactivation block, so these read 1 under either ordering.
+        for testid, label, key in (
+            (
+                "merge-plan-member-api-keys-revoked",
+                "Member API keys revoked",
+                "member_api_keys_revoked",
+            ),
+            (
+                "merge-plan-operator-tokens-deleted",
+                "Operator tokens deleted",
+                "operator_tokens_deleted",
+            ),
+            (
+                "merge-plan-package-api-keys-revoked",
+                "API keys revoked (community-base)",
+                "package_api_keys_revoked",
+            ),
+        ):
+            with self.subTest(counter=key):
+                self.assertEqual(preview.context["plan"]["credentials"][key], 1)
+                self.assertInHTML(
+                    self.COUNTER_ROW_TEMPLATE.format(
+                        testid=testid, label=label, count=1
+                    ),
+                    preview.content.decode(),
+                )
+
+        result = self._confirm(canonical.pk, secondary.pk)
+
+        self.assertEqual(self._occurrences(result, self.CONSEQUENCE), 1)
+        result_block = self._blocks(result, self.CONSEQUENCE)[0]
+        self.assertIn(self.RESULT_SENTENCE, result_block)
+        self.assertIn(self.REVOKED_SENTENCE, result_block)
+        self.assertIn(self.DELETED_SENTENCE, result_block)
+        # This is the ordering guard: after a REAL merge, all three counters
+        # are still complete. `_repoint_relations` has to run before
+        # `secondary.save(is_active=False)` for that to hold -- deactivate
+        # first and the `User.save()` hook consumes the credentials, leaving
+        # every counter at 0.
+        for key in (
+            "member_api_keys_revoked",
+            "operator_tokens_deleted",
+            "package_api_keys_revoked",
+        ):
+            with self.subTest(counter=key):
+                self.assertEqual(result.context["result"]["credentials"][key], 1)

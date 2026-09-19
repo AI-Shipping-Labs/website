@@ -52,6 +52,29 @@ the post-merge result. Expects ``plan`` in context.
         <dd class="text-foreground">{{ plan.credentials.package_api_keys_revoked }}</dd>
       </div>
     </dl>
+    {% comment %}
+    What a killed credential costs the operator (issue #1745). Gated on a
+    nonzero counter: a warning that fires on every merge stops being read.
+    One block for all three counters -- the four facts are identical -- plus
+    one separately gated note per family for the single thing that differs,
+    which is what the merge leaves behind.
+    {% endcomment %}
+    {% if plan.credentials.member_api_keys_revoked or plan.credentials.operator_tokens_deleted or plan.credentials.package_api_keys_revoked %}
+    <div class="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300"
+         data-testid="merge-plan-credentials-consequence">
+      {% if plan.secondary_deactivated %}
+      <p>These credentials stopped working when the merge ran. They did not transfer to {{ plan.canonical_email }} and cannot be restored. If a person or an integration was still using one, a replacement key must be issued now.</p>
+      {% else %}
+      <p>These credentials stop working the moment you confirm. They do not transfer to {{ plan.canonical_email }} and cannot be restored. If a person or an integration is still using one, they need a replacement key &mdash; check before you confirm.</p>
+      {% endif %}
+      {% if plan.credentials.member_api_keys_revoked or plan.credentials.package_api_keys_revoked %}
+      <p class="mt-1" data-testid="merge-plan-credentials-revoked-note">Revoked keys stay on the merged-in account as security history.</p>
+      {% endif %}
+      {% if plan.credentials.operator_tokens_deleted %}
+      <p class="mt-1" data-testid="merge-plan-credentials-deleted-note">Operator tokens have no revoked state, so they are deleted outright and leave no record behind.</p>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   {# Scalar reconciliation. #}

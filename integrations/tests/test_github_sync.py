@@ -2601,6 +2601,138 @@ class SeedContentSourcesCommandTest(TestCase):
         call_command('seed_content_sources', stdout=StringIO())
         self.assertEqual(PackageContentSource.objects.count(), 5)
 
+    # -- Webhook secret resolution (issue #1766) --------------------------
+
+    def test_seed_inherits_secret_from_configured_sibling(self):
+        """A blank row inherits the secret database-to-database from a
+        configured sibling package row and becomes enabled."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            slug='python-course',
+            webhook_secret='test-secret-alpha',
+            is_enabled=True,
+        )
+
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+
+        wiki = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+        self.assertEqual(wiki.webhook_secret, 'test-secret-alpha')
+        self.assertTrue(wiki.is_enabled)
+        self.assertNotIn('DISABLED: AI-Shipping-Labs/wiki', out.getvalue())
+
+    def test_seed_leaves_disabled_when_no_donor_exists(self):
+        """With no configured row anywhere, the row stays disabled and the
+        actionable DISABLED message is printed."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+
+        wiki = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+        self.assertEqual(wiki.webhook_secret, '')
+        self.assertFalse(wiki.is_enabled)
+        self.assertIn('DISABLED: AI-Shipping-Labs/wiki', out.getvalue())
+
+    def test_seed_fails_closed_when_siblings_disagree(self):
+        """Configured siblings holding different values inherit nothing:
+        the blank row stays disabled and a warning naming the affected
+        repos is printed without any secret material."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            slug='python-course',
+            webhook_secret='test-secret-alpha',
+            is_enabled=True,
+        )
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+            slug='workshops-content',
+            webhook_secret='test-secret-beta',
+            is_enabled=True,
+        )
+
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+
+        wiki = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+        self.assertEqual(wiki.webhook_secret, '')
+        self.assertFalse(wiki.is_enabled)
+        output = out.getvalue()
+        self.assertIn('disagree', output)
+        self.assertIn('AI-Shipping-Labs/python-course', output)
+        self.assertIn('AI-Shipping-Labs/workshops-content', output)
+        # Never any secret material in the output, not even a preview.
+        self.assertNotIn('test-secret-alpha', output)
+        self.assertNotIn('test-secret-beta', output)
+
+    def test_seed_never_overwrites_existing_secret(self):
+        """An operator-set package secret wins over the legacy mirror row:
+        it is kept as-is and the enabled state is preserved."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            slug='content',
+            webhook_secret='test-secret-alpha',
+            is_enabled=True,
+        )
+        ContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/content',
+            webhook_secret='test-secret-beta',
+        )
+
+        call_command('seed_content_sources', stdout=StringIO())
+
+        source = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/content',
+        )
+        self.assertEqual(source.webhook_secret, 'test-secret-alpha')
+        self.assertTrue(source.is_enabled)
+
+    def test_seed_inheritance_is_idempotent(self):
+        """A second run changes nothing: same secret, still enabled, no
+        duplicate rows and no disagreement warning."""
+        from io import StringIO
+
+        from django.core.management import call_command
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            slug='python-course',
+            webhook_secret='test-secret-alpha',
+            is_enabled=True,
+        )
+        call_command('seed_content_sources', stdout=StringIO())
+        first = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+        second = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+
+        self.assertEqual(first.pk, second.pk)
+        self.assertEqual(second.webhook_secret, 'test-secret-alpha')
+        self.assertTrue(second.is_enabled)
+        self.assertEqual(PackageContentSource.objects.count(), 5)
+        self.assertNotIn('disagree', out.getvalue())
+        self.assertNotIn('Created content source', out.getvalue())
+
 
 # ===========================================================================
 # Direct Admin Edit Flag Test

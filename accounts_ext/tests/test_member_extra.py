@@ -59,14 +59,20 @@ class MemberExtraCreationInvariantTest(TestCase):
 
 class MemberExtraMissingTableTest(TransactionTestCase):
     def test_user_create_skips_when_the_extension_table_is_missing(self):
-        from django.db import connection
+        from django.db import close_old_connections, connection
 
+        def restore_table():
+            close_old_connections()
+            if MemberExtra._meta.db_table not in connection.introspection.table_names():
+                with connection.schema_editor() as editor:
+                    editor.create_model(MemberExtra)
+            close_old_connections()
+
+        self.addCleanup(restore_table)
         with connection.schema_editor() as editor:
             editor.delete_model(MemberExtra)
         user = User.objects.create_user(email="extra-pre-migrate@test.com")
         self.assertTrue(User.objects.filter(pk=user.pk).exists())
-        with connection.schema_editor() as editor:
-            editor.create_model(MemberExtra)
 
 
 class MovedModelTableTest(TestCase):

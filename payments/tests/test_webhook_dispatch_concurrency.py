@@ -30,6 +30,12 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
+        from accounts_ext.models import MemberExtra
+
+        if MemberExtra._meta.db_table not in connection.introspection.table_names():
+            with connection.schema_editor() as editor:
+                editor.create_model(MemberExtra)
+            close_old_connections()
         Tier.objects.get_or_create(
             slug="free",
             defaults={"name": "Free", "level": 0},

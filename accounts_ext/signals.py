@@ -7,7 +7,7 @@ that predate the receiver.
 """
 
 from django.conf import settings
-from django.db import connection
+from django.db import OperationalError, ProgrammingError, transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -19,7 +19,10 @@ def create_member_extra(sender, instance, created, **kwargs):
     if not created:
         return
     # Historical-migration tests create User rows before accounts_ext tables
-    # exist. Raising here poisons the caller's transaction; skip instead.
-    if MemberExtra._meta.db_table not in connection.introspection.table_names():
+    # exist. A nested atomic rolls the lookup back to a savepoint so SQLite
+    # does not poison the caller's transaction.
+    try:
+        with transaction.atomic():
+            MemberExtra.objects.get_or_create(user_id=instance.pk)
+    except (OperationalError, ProgrammingError):
         return
-    MemberExtra.objects.get_or_create(user_id=instance.pk)

@@ -30,10 +30,6 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
-        if connection.vendor == "sqlite":
-            # Two threads sharing one SQLite file otherwise surface
-            # "database is locked" as failed_transient inside process_event.
-            connection.cursor().execute("PRAGMA busy_timeout=30000")
         Tier.objects.get_or_create(
             slug="free",
             defaults={"name": "Free", "level": 0},
@@ -51,6 +47,12 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
             for retry in range(4):
                 close_old_connections()
                 try:
+                    if connection.vendor == "sqlite":
+                        # Worker threads open a fresh connection after
+                        # close_old_connections(); a setUp PRAGMA would not
+                        # apply. Without a busy timeout SQLite raises
+                        # immediately and process_event records failed_transient.
+                        connection.cursor().execute("PRAGMA busy_timeout=5000")
                     kwargs = {
                         "event_id": event_id,
                         "event_type": self.event_type,
@@ -76,7 +78,7 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             futures = [pool.submit(deliver) for _ in range(2)]
-            return [future.result(timeout=20) for future in futures]
+            return [future.result(timeout=30) for future in futures]
 
     def test_terminal_winner_runs_handler_once_and_loser_short_circuits(self):
         member = User.objects.create_user(
@@ -111,6 +113,7 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
                 StripeWebhookDeliveryAttempt.OUTCOME_PROCESSED,
                 StripeWebhookDeliveryAttempt.OUTCOME_ALREADY_PROCESSED,
             ],
+            [attempt.error_message for attempt in attempts],
         )
         self.assertCountEqual(
             results,

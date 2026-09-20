@@ -7,9 +7,8 @@ that predate the receiver.
 """
 
 from django.conf import settings
-from django.db import transaction
+from django.db import connection
 from django.db.models.signals import post_save
-from django.db.utils import OperationalError, ProgrammingError
 from django.dispatch import receiver
 
 from accounts_ext.models import MemberExtra
@@ -19,11 +18,8 @@ from accounts_ext.models import MemberExtra
 def create_member_extra(sender, instance, created, **kwargs):
     if not created:
         return
-    try:
-        with transaction.atomic():
-            MemberExtra.objects.get_or_create(user_id=instance.pk)
-    except (OperationalError, ProgrammingError):
-        # Historical-migration tests and migrate itself can create User rows
-        # before accounts_ext tables exist. Membership.for_user is the
-        # fallback once the table is there.
+    # Historical-migration tests create User rows before accounts_ext tables
+    # exist. Raising here poisons the caller's transaction; skip instead.
+    if MemberExtra._meta.db_table not in connection.introspection.table_names():
         return
+    MemberExtra.objects.get_or_create(user_id=instance.pk)

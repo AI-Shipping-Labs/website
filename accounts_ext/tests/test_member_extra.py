@@ -3,7 +3,7 @@
 import json
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase
 from django.urls import reverse
 
 from accounts.utils.tags import set_tags
@@ -55,6 +55,18 @@ class MemberExtraCreationInvariantTest(TestCase):
         user.delete()
 
         self.assertFalse(MemberExtra.objects.filter(user_id=user_pk).exists())
+
+
+class MemberExtraMissingTableTest(TransactionTestCase):
+    def test_user_create_skips_when_the_extension_table_is_missing(self):
+        from django.db import connection
+
+        with connection.schema_editor() as editor:
+            editor.delete_model(MemberExtra)
+        user = User.objects.create_user(email="extra-pre-migrate@test.com")
+        self.assertTrue(User.objects.filter(pk=user.pk).exists())
+        with connection.schema_editor() as editor:
+            editor.create_model(MemberExtra)
 
 
 class MovedModelTableTest(TestCase):

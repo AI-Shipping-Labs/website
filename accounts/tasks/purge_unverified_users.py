@@ -46,6 +46,12 @@ _PURGE_IGNORED_RELATIONS = frozenset({
     # bookkeeping — not user-driven activity — and must not block the
     # purge of an abandoned account.
     "activities",
+    # accounts_ext.MemberExtra (issue #1692): the same shape as
+    # ``membership`` -- a OneToOne created by a ``post_save`` receiver, so
+    # every user has exactly one. It holds the site-owned contact-tag
+    # relation; an empty extension row is signup bookkeeping and must not
+    # block the purge.
+    "member_extra",
 })
 
 # Verification mail and its SES event are evidence of a dead address in the

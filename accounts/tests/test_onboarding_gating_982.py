@@ -30,8 +30,7 @@ from django.test import TestCase, override_settings, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from questionnaires.models import OnboardingConversation, Questionnaire, Response
 from questionnaires.onboarding import (
     GENERIC_ONBOARDING_SLUG,

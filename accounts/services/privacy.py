@@ -22,7 +22,8 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.crypto import salted_hmac
 
-from accounts.models import AccountSession, PrivacyRequestLog
+from accounts.models import PrivacyRequestLog
+from accounts_ext.models import AccountSession
 from email_app.package_mail import send_package_mail
 from integrations.config import (
     get_config,
@@ -626,7 +627,7 @@ def _membership_payment(user):
         "stripe_customer_id": membership.stripe_customer_id,
         "subscription_id": membership.subscription_id,
         "tier_overrides": _values(
-            _model("accounts", "TierOverride"),
+            _model("payments", "TierOverride"),
             Q(user=user),
             [
                 "id",
@@ -1371,7 +1372,7 @@ def _tier_snapshot(tier):
 def _effective_tier(user):
     # Issue #1579: the base tier lives on payments.Membership.
     base_tier = Membership.for_user(user).tier
-    override_model = _model("accounts", "TierOverride")
+    override_model = _model("payments", "TierOverride")
     if override_model is None:
         return base_tier
     active = (

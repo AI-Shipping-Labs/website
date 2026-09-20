@@ -12,8 +12,9 @@ from datetime import timedelta
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from analytics.models import UserActivity
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 INVITE_URL = "https://join.slack.com/t/test/shared_invite/abc123"

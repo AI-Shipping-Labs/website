@@ -9,8 +9,7 @@ from django.core.management import call_command
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride
-from payments.models import Tier, WebhookEvent
+from payments.models import Tier, TierOverride, WebhookEvent
 from tests.fixtures import set_membership
 
 User = get_user_model()

@@ -64,7 +64,9 @@ def contact_tags(user):
     tags = []
     if user.tier_id and user.tier.slug:
         tags.append(f"tier:{user.tier.slug}")
-    tags.extend(sorted(user.contact_tags.values_list("slug", flat=True)))
+    member_extra = getattr(user, "member_extra", None)
+    if member_extra is not None:
+        tags.extend(sorted(member_extra.contact_tags.values_list("slug", flat=True)))
     return tags
 
 

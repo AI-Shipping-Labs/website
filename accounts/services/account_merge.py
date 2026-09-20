@@ -41,11 +41,11 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import EmailAlias, TierOverride
+from accounts.models import EmailAlias
 from accounts.services.email_resolution import normalize_email
 from accounts.utils.tags import normalize_tags, set_tags
 from community.models import CommunityAuditLog
-from payments.models import Membership
+from payments.models import Membership, TierOverride
 
 logger = logging.getLogger(__name__)
 
@@ -439,6 +439,46 @@ def _strategy_membership(
     return
 
 
+def _strategy_member_extra(
+    plan, related_model, field_name, canonical, secondary
+):
+    """Keep both MemberExtra rows, but move the contact tags (issue #1692).
+
+    ``accounts_ext.MemberExtra`` has the same shape as ``payments.Membership``:
+    a post-create OneToOne, exactly one per User, so the secondary's ROW is
+    neither repointed to canonical nor dropped.
+
+    Its contents are a different question. A3.2 made
+    ``MemberExtra.contact_tags`` the authoritative contact-tag relation -- every
+    read in ``accounts/utils/tags.py`` goes through it -- while the legacy
+    ``User.contact_tags`` stays dual-written for the expand window. The legacy
+    relation is declared ON ``User``, so ``_repoint_m2m`` finds it in
+    ``canonical._meta.get_fields()`` and unions-then-clears it. The
+    authoritative relation is declared on ``MemberExtra``, so that walk cannot
+    reach it: leaving this strategy a no-op left the merged-away secondary
+    still carrying its tags in the relation everything now reads, and Studio /
+    CRM / export counted the retired row (issue #1692 follow-up).
+
+    Keeping the row therefore means this strategy owns the row's contents: the
+    same union-then-clear ``_repoint_m2m`` performs, applied to the M2M one hop
+    away. ``_reconcile_scalars`` later re-runs ``set_tags`` on canonical when
+    the union added anything, which resynchronises canonical's two relations
+    from the JSON payload; it never touches the secondary, which is why the
+    clear has to happen here.
+    """
+    sec_extra = related_model.objects.filter(**{field_name: secondary}).first()
+    if sec_extra is None or not sec_extra.contact_tags.exists():
+        return
+    canon_extra = related_model.for_user(canonical)
+    _union_and_clear_m2m(
+        plan,
+        sec_extra.contact_tags.model._meta.label,
+        f"{related_model._meta.model_name}.contact_tags",
+        canon_extra.contact_tags,
+        sec_extra.contact_tags,
+    )
+
+
 # Keyed by ``(app_label.ModelName, field_name)``.
 #
 # These cover the cases the generic unique-key walker cannot express correctly:
@@ -460,6 +500,7 @@ _SPECIAL_STRATEGIES = {
     ("accounts.Token", "user"): _strategy_operator_token,
     ("cb_api.APIKey", "user"): _strategy_package_api_key,
     ("payments.Membership", "user"): _strategy_membership,
+    ("accounts_ext.MemberExtra", "user"): _strategy_member_extra,
     ("analytics.UserAttribution", "user"): _strategy_user_attribution,
     ("crm.CRMRecord", "user"): _strategy_crm_record,
     ("content.UserCourseProgress", "user"): _strategy_course_progress,
@@ -669,15 +710,37 @@ def _repoint_relations(plan, canonical, secondary):
 def _repoint_m2m(plan, field, canonical, secondary):
     """Union secondary's M2M set into canonical's, then clear secondary's.
 
-    Handles M2M declared ON User (``groups``, ``user_permissions``) via the
-    field name, and reverse M2M (none on User today) via the accessor name.
+    Handles M2M declared ON User (``groups``, ``user_permissions``,
+    ``contact_tags``) via the field name, and reverse M2M (none on User today)
+    via the accessor name.
+
+    This walk only sees relations reachable from ``User._meta.get_fields()``.
+    An M2M declared on a related model (``accounts_ext.MemberExtra``) is NOT
+    reachable here and is NOT generically reachable either: for a related row
+    that gets repointed, its own M2M travels with the row and must not be
+    touched. Such a relation belongs to whichever ``_SPECIAL_STRATEGIES`` entry
+    decided to keep the row -- see ``_strategy_member_extra``.
     """
     if field.auto_created:
         accessor = field.get_accessor_name()
     else:
         accessor = field.name
-    canon_manager = getattr(canonical, accessor)
-    sec_manager = getattr(secondary, accessor)
+    _union_and_clear_m2m(
+        plan,
+        field.related_model._meta.label,
+        accessor,
+        getattr(canonical, accessor),
+        getattr(secondary, accessor),
+    )
+
+
+def _union_and_clear_m2m(plan, model_label, accessor, canon_manager, sec_manager):
+    """Add secondary's missing M2M rows to canonical, then clear secondary's.
+
+    The one implementation of "the surviving account keeps the union, the
+    retired one keeps nothing", shared by the generic User-level M2M walk and
+    by the kept-row strategies that own an M2M one hop away.
+    """
     sec_objs = list(sec_manager.all())
     if not sec_objs:
         return
@@ -686,9 +749,7 @@ def _repoint_m2m(plan, field, canonical, secondary):
     if added:
         canon_manager.add(*added)
     sec_manager.clear()
-    plan.record_move(
-        field.related_model._meta.label, accessor, added=len(added),
-    )
+    plan.record_move(model_label, accessor, added=len(added))
 
 
 # --------------------------------------------------------------------------- #

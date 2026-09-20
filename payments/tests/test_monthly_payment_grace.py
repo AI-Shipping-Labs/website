@@ -27,11 +27,11 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
-from payments.models import Membership, Tier
+from payments.models import Membership, Tier, TierOverride
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
 from payments.models import SubscriptionReconciliationFinding as Finding

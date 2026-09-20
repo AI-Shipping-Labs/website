@@ -59,7 +59,7 @@ class Command(BaseCommand):
                 User.objects.filter(pk__gt=after_id)
                 .order_by("pk")
                 .select_related("tier")
-                .prefetch_related("contact_tags")
+                .prefetch_related("member_extra__contact_tags")
                 .iterator(chunk_size=batch_size)
             )
             for user in users:

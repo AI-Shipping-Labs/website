@@ -54,8 +54,8 @@ def _grant_override(email, override_tier_slug, *, expires_in_days=7,
     """Give ``email`` a TierOverride to ``override_tier_slug``."""
     from django.utils import timezone
 
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=email)
     override_tier = Tier.objects.get(slug=override_tier_slug)

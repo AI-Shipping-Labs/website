@@ -22,9 +22,9 @@ from unittest.mock import patch
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from content.access import get_user_level
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from payments.services import (
     handle_subscription_deleted,
     handle_subscription_updated,

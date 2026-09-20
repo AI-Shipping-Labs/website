@@ -88,8 +88,8 @@ def _add_override(email, override_slug="main", *, days=14, is_active=True):
     """Attach a TierOverride to the member, expiring ``days`` from now."""
     from django.utils import timezone
 
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=email)
     TierOverride.objects.create(

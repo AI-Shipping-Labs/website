@@ -9,13 +9,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from accounts.models import EmailAlias, TierOverride
+from accounts.models import EmailAlias
 from content.models import Cohort, Course
 from integrations.config import clear_config_cache
 from integrations.maven_config import maven_override_duration_days
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from jobs.tasks.cleanup import retry_maven_enrollment_steps
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()

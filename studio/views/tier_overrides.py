@@ -9,10 +9,9 @@ from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.utils.display import display_name
 from content.access import LEVEL_MAIN, get_user_level
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from plans.models import Plan, Sprint, SprintEnrollment
 from studio.decorators import staff_required
 

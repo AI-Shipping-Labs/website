@@ -33,13 +33,14 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from integrations.config import get_config
 from payments.models import (
     Membership,
     StripeWebhookDeliveryAttempt,
     SubscriptionReconciliationFinding,
     SubscriptionReconciliationRun,
+    TierOverride,
     WebhookEvent,
 )
 from payments.services import tier_resolution as _tier_resolution

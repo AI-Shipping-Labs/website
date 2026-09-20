@@ -59,8 +59,8 @@ def _user_id_for(email):
 
 
 def _make_override(user_email, tier_slug, granted_by_email, days=30):
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=user_email)
     tier = Tier.objects.get(slug=tier_slug)

@@ -881,6 +881,7 @@ class EscalationTriggerTest(SimpleTestCase):
             "templates/base.html": "templates/base.html",
             "website/*": "website/settings.py",
             "accounts/context_processors.py": "accounts/context_processors.py",
+            "accounts_ext/session_backend.py": "accounts_ext/session_backend.py",
             "tailwind.config.js": "tailwind.config.js",
             "integrations/middleware.py": "integrations/middleware.py",
         }

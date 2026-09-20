@@ -14,10 +14,10 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from payments.models import (
     StripeWebhookDeliveryAttempt,
     Tier,
+    TierOverride,
     WebhookEvent,
 )
 from payments.models import (

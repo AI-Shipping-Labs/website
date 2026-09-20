@@ -4,8 +4,9 @@ from unittest.mock import patch
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import AccountSession, User
-from accounts.session_backend import SessionStore
+from accounts.models import User
+from accounts_ext.models import AccountSession
+from accounts_ext.session_backend import SessionStore
 from jobs.tasks.cleanup import (
     EXPIRED_SESSION_BATCH_SIZE,
     EXPIRED_SESSION_TIME_BUDGET_SECONDS,

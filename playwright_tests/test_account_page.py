@@ -47,8 +47,8 @@ def _create_test_users():
     Must be called within django_db_blocker.unblock() context.
     Returns a dict of created users keyed by email prefix.
     """
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
     from playwright_tests.conftest import ensure_tiers
 
     ensure_tiers()

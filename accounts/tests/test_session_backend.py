@@ -4,13 +4,14 @@ from django.conf import settings
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import AccountSession, User
+from accounts.models import User
+from accounts_ext.models import AccountSession
 
 
 @tag("core")
 class SessionBackendTest(TestCase):
     def test_session_engine_is_database_backed(self):
-        self.assertEqual(settings.SESSION_ENGINE, "accounts.session_backend")
+        self.assertEqual(settings.SESSION_ENGINE, "accounts_ext.session_backend")
         self.assertNotIn("cache", settings.SESSION_ENGINE)
         self.assertNotIn("redis", settings.SESSION_ENGINE.lower())
         self.assertNotIn("user_sessions", settings.INSTALLED_APPS)

@@ -57,9 +57,10 @@ SLACK_KEY = "SLACK_TEAM_ID"
 def _reset_state(staff_email):
     """Drop every non-staff user + clear Slack settings so each test
     starts from a deterministic state."""
-    from accounts.models import TierOverride, User
+    from accounts.models import User
     from integrations.config import clear_config_cache
     from integrations.models import IntegrationSetting
+    from payments.models import TierOverride
 
     TierOverride.objects.all().delete()
     User.objects.exclude(email=staff_email).delete()
@@ -123,8 +124,8 @@ def _create_member(
 
 
 def _make_override(email, tier_slug, granted_by_email, days=30):
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=email)
     tier = Tier.objects.get(slug=tier_slug)

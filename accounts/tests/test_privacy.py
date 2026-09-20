@@ -12,7 +12,6 @@ from django.utils import timezone
 
 from accounts.models import (
     SIGNUP_SOURCE_NEWSLETTER,
-    AccountSession,
     EmailAlias,
     MemberAPIKey,
     PrivacyRequestLog,
@@ -29,6 +28,7 @@ from accounts.services.privacy import (
     build_user_data_export,
     delete_account_for_privacy,
 )
+from accounts_ext.models import AccountSession
 from analytics.models import UserActivity
 from bookclub.models import Book, Chapter, ChapterRead, Note, ReaderProfile
 from comments.models import Comment

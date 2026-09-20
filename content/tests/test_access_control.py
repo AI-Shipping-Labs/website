@@ -6,7 +6,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import Client, TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from accounts.signals import mark_email_verified_on_social_login
 from content.access import (
     LEVEL_BASIC,
@@ -35,6 +35,7 @@ from content.models import (
     WorkshopPage,
 )
 from events.models import Event
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
 
 # --- Unit Tests for access.py utilities ---

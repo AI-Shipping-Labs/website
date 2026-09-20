@@ -27,10 +27,9 @@ from accounts.models import (
     IMPORT_SOURCE_MANUAL,
     IMPORT_SOURCE_STRIPE,
     ImportBatch,
-    TierOverride,
 )
 from accounts.utils.tags import normalize_tags, set_tags
-from payments.models import Membership, Tier
+from payments.models import Membership, Tier, TierOverride
 
 User = get_user_model()
 

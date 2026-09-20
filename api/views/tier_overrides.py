@@ -38,12 +38,11 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
-from accounts.models import TierOverride
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.services.contacts_import import import_contact_rows
 
 User = get_user_model()

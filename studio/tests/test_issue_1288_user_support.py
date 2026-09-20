@@ -6,9 +6,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from crm.models import CRMRecord
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from plans.models import InterviewNote
 from tests.fixtures import set_membership
 

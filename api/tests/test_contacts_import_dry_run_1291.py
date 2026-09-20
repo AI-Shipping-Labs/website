@@ -6,7 +6,8 @@ from unittest import mock
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from accounts.models import TierOverride, Token
+from accounts.models import Token
+from payments.models import TierOverride
 
 User = get_user_model()
 

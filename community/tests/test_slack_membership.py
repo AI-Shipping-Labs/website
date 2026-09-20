@@ -17,7 +17,7 @@ import requests
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.slack import SlackAPIError, SlackCommunityService
 from community.tasks import slack_membership as task_module
@@ -28,7 +28,7 @@ from community.tasks.slack_membership import (
     check_user_slack_membership,
     refresh_slack_membership,
 )
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import create_user_with_membership, set_membership
 
 

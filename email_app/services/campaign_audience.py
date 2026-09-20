@@ -50,9 +50,9 @@ def eligible_campaign_recipients(
         return base_qs
 
     if include_set:
-        base_qs = base_qs.filter(contact_tags__slug__in=include_set)
+        base_qs = base_qs.filter(member_extra__contact_tags__slug__in=include_set)
     if exclude_set:
-        base_qs = base_qs.exclude(contact_tags__slug__in=exclude_set)
+        base_qs = base_qs.exclude(member_extra__contact_tags__slug__in=exclude_set)
     return base_qs.distinct()
 
 

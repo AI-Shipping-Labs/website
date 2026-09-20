@@ -5,11 +5,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from email_app.models import EmailCampaign
 from email_app.services.campaign_audience import campaign_recipient_count
 from email_app.services.campaign_recipients import build_campaign_recipient_rows
 from events.models import Event, EventRegistration
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()

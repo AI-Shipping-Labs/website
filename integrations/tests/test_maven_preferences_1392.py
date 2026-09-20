@@ -7,13 +7,12 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.utils.tokens import generate_user_action_token
 from content.access import get_user_level
 from content.models import Course, Enrollment
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven_preferences import is_maven_relevant
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()

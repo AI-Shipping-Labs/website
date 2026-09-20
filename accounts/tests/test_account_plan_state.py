@@ -25,12 +25,11 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from accounts.views.account import (
     _STEADY_STATE_PAIRS,
     _suppress_steady_state_plan_state,
 )
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
 User = get_user_model()

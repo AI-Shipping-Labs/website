@@ -1,3 +1,10 @@
+"""Database session row with a queryable user mapping (plan issue A3.2, #1692).
+
+``django.contrib.sessions`` owns ``django_session``; AISL only adds the
+``account_id`` column (``accounts.0027``) and the session store that fills it.
+The model is unmanaged, so moving its app label here changes no schema.
+"""
+
 from django.contrib.sessions.base_session import AbstractBaseSession
 from django.db import models
 
@@ -14,6 +21,9 @@ class AccountSession(AbstractBaseSession):
 
     @classmethod
     def get_session_store_class(cls):
-        from accounts.session_backend import SessionStore
+        from accounts_ext.session_backend import SessionStore
 
         return SessionStore
+
+
+__all__ = ["AccountSession"]

@@ -12,14 +12,14 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token
+from accounts.models import Token
 from payments.models import (
     SubscriptionReconciliationFinding as Finding,
 )
 from payments.models import (
     SubscriptionReconciliationRun as Run,
 )
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from payments.services import subscription_reconciliation as recon
 from payments.tests.test_subscription_reconciliation import make_sub
 from tests.fixtures import set_membership

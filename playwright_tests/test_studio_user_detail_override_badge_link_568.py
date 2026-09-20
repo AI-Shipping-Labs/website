@@ -55,8 +55,8 @@ def _clear_users_except_staff(staff_email):
 
 def _make_override(user_email, tier_slug, granted_by_email, days=30):
     """Create an active TierOverride for the test fixtures."""
-    from accounts.models import TierOverride, User
-    from payments.models import Tier
+    from accounts.models import User
+    from payments.models import Tier, TierOverride
 
     user = User.objects.get(email=user_email)
     tier = Tier.objects.get(slug=tier_slug)

@@ -31,8 +31,7 @@ from django.test import TestCase
 from django.utils import timezone
 from django.utils.html import strip_tags
 
-from accounts.models import TierOverride
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from studio.views.users import _row_tooltip
 from tests.fixtures import set_membership
 

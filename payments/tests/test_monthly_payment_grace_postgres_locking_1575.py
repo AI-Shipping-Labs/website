@@ -15,9 +15,10 @@ from django.test import TestCase, override_settings, tag
 from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
-from accounts.models import TierOverride, User
+from accounts.models import User
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
+from payments.models import TierOverride
 from payments.services import monthly_payment_grace as service
 from tests.fixtures import TierSetupMixin, set_membership
 

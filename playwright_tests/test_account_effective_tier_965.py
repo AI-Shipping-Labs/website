@@ -36,9 +36,9 @@ def _seed_users_and_content():
     """
     from django.db import connection
 
-    from accounts.models import TierOverride, User
+    from accounts.models import User
     from content.models import Article
-    from payments.models import Tier
+    from payments.models import Tier, TierOverride
     from playwright_tests.conftest import ensure_tiers
 
     ensure_tiers()

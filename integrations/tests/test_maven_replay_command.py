@@ -7,9 +7,9 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
 
-from accounts.models import TierOverride
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
+from payments.models import TierOverride
 
 User = get_user_model()
 

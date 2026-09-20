@@ -13,9 +13,9 @@ from django.db.models.query import QuerySet
 from django.test import TestCase
 from django.utils import timezone
 
-from accounts.models import TierOverride, Token
+from accounts.models import Token
 from email_app.models import EmailLog, SesEvent
-from payments.models import Tier
+from payments.models import Tier, TierOverride
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()

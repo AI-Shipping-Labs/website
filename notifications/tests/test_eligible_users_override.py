@@ -12,7 +12,6 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
 
-from accounts.models import TierOverride
 from content.access import LEVEL_MAIN
 from content.models import Article
 from notifications.models import Notification
@@ -20,6 +19,7 @@ from notifications.services.notification_service import (
     NotificationService,
     _get_eligible_users,
 )
+from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()

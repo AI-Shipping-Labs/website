@@ -58,6 +58,54 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Package public pages (A7.5): structural cb- hooks. Primary action and
+   field first so the unsubscribe submit is a real button, not inline text. */
+.cb-button-primary {
+  @apply inline-flex items-center justify-center min-h-11 px-4 rounded-lg bg-primary text-primary-foreground font-semibold;
+}
+.cb-field {
+  @apply block w-full min-h-11 px-3 py-2 rounded-lg border border-input bg-background text-foreground;
+}
+.cb-button {
+  @apply inline-flex items-center justify-center min-h-11 px-4 rounded-lg border border-border bg-secondary text-secondary-foreground font-semibold;
+}
+.cb-page {
+  @apply block max-w-3xl mx-auto px-4 py-10;
+}
+.cb-page-header {
+  @apply mb-6;
+}
+.cb-page-title {
+  @apply text-3xl font-semibold tracking-tight m-0 mb-2;
+}
+.cb-list {
+  @apply grid gap-4 list-none m-0 p-0;
+}
+.cb-card {
+  @apply rounded-xl border border-border bg-card p-4;
+}
+.cb-card-title {
+  @apply text-lg font-semibold m-0 mb-1;
+}
+.cb-card-meta {
+  @apply text-sm text-muted-foreground;
+}
+.cb-badge {
+  @apply inline-flex items-center rounded-full border border-border px-2 py-0.5 text-xs font-semibold;
+}
+.cb-form {
+  @apply grid gap-3 m-0;
+}
+.cb-alert {
+  @apply rounded-lg border border-border bg-secondary px-3 py-2;
+}
+.cb-empty {
+  @apply m-0 text-muted-foreground;
+}
+.cb-pager {
+  @apply flex flex-wrap gap-2 mt-6;
+}
+
 /* Hero gradient that responds to theme */
 .hero-gradient {
   background: radial-gradient(ellipse at top, hsl(var(--hero-gradient-mid)), hsl(var(--hero-gradient-end)), hsl(var(--hero-gradient-end)));

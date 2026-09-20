@@ -30,6 +30,10 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
+        if connection.vendor == "sqlite":
+            # Two threads sharing one SQLite file otherwise surface
+            # "database is locked" as failed_transient inside process_event.
+            connection.cursor().execute("PRAGMA busy_timeout=30000")
         Tier.objects.get_or_create(
             slug="free",
             defaults={"name": "Free", "level": 0},
@@ -84,12 +88,15 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
             subscription_id=self.event_obj["id"],
             tier=Tier.objects.get(slug="main"),
         )
-        with patch(
-            "payments.services.webhook_dispatch.run_handler",
-            wraps=webhook_dispatch.run_handler,
-        ) as run_handler, patch(
-            "payments.services._community_remove",
-        ) as community_remove:
+        with (
+            patch(
+                "payments.services.webhook_dispatch.run_handler",
+                wraps=webhook_dispatch.run_handler,
+            ) as run_handler,
+            patch(
+                "payments.services._community_remove",
+            ) as community_remove,
+        ):
             results = self._deliver_concurrently("evt_concurrent_terminal")
 
         attempts = list(
@@ -113,9 +120,7 @@ class WebhookDispatchConcurrencyTest(TransactionTestCase):
             ],
         )
         processed_attempt = next(
-            attempt
-            for attempt in attempts
-            if attempt.outcome == StripeWebhookDeliveryAttempt.OUTCOME_PROCESSED
+            attempt for attempt in attempts if attempt.outcome == StripeWebhookDeliveryAttempt.OUTCOME_PROCESSED
         )
         run_handler.assert_called_once_with(
             self.event_type,

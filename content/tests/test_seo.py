@@ -262,9 +262,8 @@ class GatedArticlePaywallJsonLdTest(TestCase):
         article = self.gated_articles[LEVEL_BASIC]
         response = self.client.get(article.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="gated-access-card"')
         content = response.content.decode()
-        self.assertIn('data-testid="gated-access-card"', content)
         data_list = _jsonld_objects(content)
         self.assertEqual(len(data_list), 1, data_list)
         data = data_list[0]
@@ -280,7 +279,7 @@ class GatedArticlePaywallJsonLdTest(TestCase):
     def test_free_blog_detail_jsonld_has_no_paywall_flag(self):
         response = self.client.get(self.free_article.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '"@type": "Article"')
         data_list = _jsonld_objects(response.content.decode())
         self.assertEqual(len(data_list), 1, data_list)
         self.assertNotIn('isAccessibleForFree', data_list[0])

@@ -413,7 +413,14 @@ class R1ProductionMigrationCompatibilityTest(
         )
         expected_columns = {}
         for app_label, model_name, field_name in reconciliation.DEFAULT_FIELDS:
-            model = r1_apps.get_model(app_label, model_name)
+            try:
+                model = r1_apps.get_model(app_label, model_name)
+            except LookupError:
+                # A3.2 moved TierOverride to payments; the physical table
+                # (accounts_tieroverride) and the source default are unchanged.
+                if (app_label, model_name) != ("accounts", "TierOverride"):
+                    raise
+                model = r1_apps.get_model("payments", "TierOverride")
             expected_columns[(model._meta.db_table, model._meta.get_field(field_name).column)] = (
                 app_label,
                 model_name,

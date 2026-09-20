@@ -66,6 +66,12 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
       # We use `--locked` so any drift between pyproject.toml and uv.lock
       # fails the install step loudly with "requirements are unsatisfiable"
       # rather than silently re-resolving (which `--frozen` would mask: it
@@ -78,6 +84,25 @@ jobs:
       # with `uv sync` and commit it. Refs #657.
       - name: Install dependencies
         run: uv sync --locked
+
+      # Issue #1769: collect static files BEFORE the system check. Under
+      # DEBUG=False the manifest staticfiles storage raises on any
+      # `{% static %}` whose asset is not in the manifest, and the
+      # community_base.studio.E001 probe render swallows that exception and
+      # misreports it as a missing Studio content block. The Deploy Dev
+      # gates job has always collected statics first; this restores that
+      # ordering here.
+      - name: Collect static files
+        env:
+          DEBUG: "False"
+          SECRET_KEY: "ci-static-build-only-not-a-real-secret"
+          ALLOWED_HOSTS: "localhost"
+        run: |
+          start=$(date +%s)
+          make collectstatic
+          uv run python scripts/verify_tailwind_build.py --rebuild --collected
+          end=$(date +%s)
+          echo "CI_TIMING phase=collectstatic seconds=$((end - start))"
 
       - name: Run Django system checks
         # Issue #529: verify the source tree being deployed passes its own

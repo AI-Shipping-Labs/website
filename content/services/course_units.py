@@ -332,23 +332,17 @@ def build_drip_locked_course_unit_context(course, module, unit, decision):
 def build_course_unit_navigation_context(user, course, module, unit):
     """Build navigation, completion, discussion, and mobile progress context."""
     modules = course.get_syllabus()
-    scoped_submodule = None
-    previous_submodule = None
-    next_submodule = None
-    if course.reader_navigation_scope == 'submodule' and module.parent_id:
-        scoped_submodule = module
-        # Follow the same order as the syllabus, including week boundaries.
-        submodules = [
-            child
-            for top_module in modules
-            for child in top_module.children.all()
-        ]
-        for index, child in enumerate(submodules):
-            if child.pk == module.pk:
-                previous_submodule = submodules[index - 1] if index else None
-                next_submodule = (
-                    submodules[index + 1] if index + 1 < len(submodules) else None
-                )
+    scoped_module = None
+    previous_module = None
+    next_module = None
+    if course.reader_navigation_scope in ('module', 'submodule'):
+        current_root_id = module.parent_id or module.pk
+        for index, top_module in enumerate(modules):
+            if top_module.pk == current_root_id:
+                scoped_module = top_module
+                previous_module = modules[index - 1] if index else None
+                next_module = modules[index + 1] if index + 1 < len(modules) else None
+                break
                 break
 
     completed_unit_ids = set()
@@ -406,9 +400,9 @@ def build_course_unit_navigation_context(user, course, module, unit):
         'module': module,
         'unit': unit,
         'modules': modules,
-        'scoped_submodule': scoped_submodule,
-        'previous_submodule': previous_submodule,
-        'next_submodule': next_submodule,
+        'scoped_module': scoped_module,
+        'previous_module': previous_module,
+        'next_module': next_module,
         'is_gated': False,
         'has_access': True,
         'completed_unit_ids': completed_unit_ids,

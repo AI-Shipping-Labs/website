@@ -21,7 +21,7 @@ class ReaderNavigationScopeTest(TestCase):
         )
         cls.course = Course.objects.create(
             title='Scoped course', slug='scoped-reader', status='published',
-            required_level=0, reader_navigation_scope='submodule',
+            required_level=0, reader_navigation_scope='module',
         )
         week1 = Module.objects.create(
             course=cls.course, title='Week 1', slug='week-1', sort_order=1,
@@ -55,35 +55,61 @@ class ReaderNavigationScopeTest(TestCase):
             f'/courses/scoped-reader/{module.parent.slug}/{module.slug}/lesson'
         )
 
-    def test_only_current_submodule_lessons_in_reader_sidebar(self):
+    def test_current_week_includes_all_its_topics_but_not_other_weeks(self):
         response = self.reader(self.middle)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="reader-scoped-submodule"')
+        self.assertContains(response, 'data-testid="reader-scoped-module"')
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
         self.assertIn('Middle topic lesson', sidebar)
-        self.assertNotIn('First topic lesson', sidebar)
+        self.assertIn('First topic lesson', sidebar)
         self.assertNotIn('Last topic lesson', sidebar)
+        self.assertLess(sidebar.index('First topic lesson'), sidebar.index('Middle topic lesson'))
+        self.assertIn('aria-current="page"', sidebar)
         self.assertIn('data-testid="reader-view-syllabus"', sidebar)
         self.assertEqual(response.context['prev_unit'].title, 'First topic lesson')
         self.assertEqual(response.context['next_unit'].title, 'Last topic lesson')
 
-    def test_adjacent_module_links_cross_week_boundary(self):
+    def test_adjacent_module_links_follow_top_level_weeks(self):
         response = self.reader(self.middle)
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
-        self.assertIn('href="/courses/scoped-reader/week-1/first"', sidebar)
-        self.assertIn('href="/courses/scoped-reader/week-2/last"', sidebar)
+        self.assertNotIn('data-testid="reader-previous-module"', sidebar)
+        self.assertIn('href="/courses/scoped-reader/week-2"', sidebar)
         self.assertIn('href="/courses/scoped-reader#syllabus"', sidebar)
         first = self.reader(self.first)
-        self.assertIsNone(first.context['previous_submodule'])
+        self.assertIsNone(first.context['previous_module'])
         last = self.reader(self.last)
-        self.assertIsNone(last.context['next_submodule'])
+        self.assertEqual(last.context['previous_module'].slug, 'week-1')
+        self.assertIsNone(last.context['next_module'])
+
+    def test_adjacent_module_navigation_preserves_explicit_cohort(self):
+        response = self.client.get(
+            '/courses/scoped-reader/week-1/middle/lesson?cohort=4',
+        )
+        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        self.assertIn('href="/courses/scoped-reader/week-2?cohort=4"', sidebar)
+        self.assertIn('href="/courses/scoped-reader/week-1/first/lesson?cohort=4"', sidebar)
+        self.assertIn('href="/courses/scoped-reader?cohort=4#syllabus"', sidebar)
+        self.assertEqual(response.context['prev_item_url'], '/courses/scoped-reader/week-1/first/lesson?cohort=4')
+        redirected = self.client.get('/courses/scoped-reader/week-2?cohort=4')
+        self.assertRedirects(
+            redirected, '/courses/scoped-reader/week-2/last/lesson?cohort=4',
+            fetch_redirect_response=False,
+        )
+
+    def test_legacy_submodule_value_uses_current_week(self):
+        self.course.reader_navigation_scope = 'submodule'
+        self.course.save(update_fields=['reader_navigation_scope'])
+        response = self.reader(self.middle)
+        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        self.assertIn('First topic lesson', sidebar)
+        self.assertNotIn('Last topic lesson', sidebar)
 
     def test_default_course_scope_preserves_full_outline(self):
         self.course.reader_navigation_scope = 'course'
         self.course.save(update_fields=['reader_navigation_scope'])
         response = self.reader(self.middle)
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
-        self.assertNotIn('data-testid="reader-scoped-submodule"', sidebar)
+        self.assertNotIn('data-testid="reader-scoped-module"', sidebar)
         self.assertIn('First topic lesson', sidebar)
         self.assertIn('Last topic lesson', sidebar)
 
@@ -94,9 +120,9 @@ class ReaderNavigationScopeTest(TestCase):
             '/nonexistent/course', 'course', source, 'a' * 40, [],
         )
         defaults = _build_course_defaults(
-            {'title': 'Scoped', 'description': 'A course', 'reader_navigation_scope': 'submodule'}, *args,
+            {'title': 'Scoped', 'description': 'A course', 'reader_navigation_scope': 'module'}, *args,
         )
-        self.assertEqual(defaults['reader_navigation_scope'], 'submodule')
+        self.assertEqual(defaults['reader_navigation_scope'], 'module')
         self.assertEqual(_build_course_defaults({'title': 'Default', 'description': 'A course'}, *args)['reader_navigation_scope'], 'course')
         with self.assertRaises(GitHubSyncError):
             _build_course_defaults(

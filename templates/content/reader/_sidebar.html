@@ -2,7 +2,7 @@
 <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
   <div class="lg:sticky lg:top-28">
     <div class="flex items-center justify-between gap-2">
-      <a href="{{ reader_back_url }}"
+      <a href="{{ reader_back_url }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
          title="{{ reader_back_title }}"
          class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0"
          {% if reader_back_testid %}data-testid="{{ reader_back_testid }}"{% endif %}>
@@ -32,11 +32,11 @@
       `_scripts.html` toggle handler works without changes.
     {% endcomment %}
 
-    <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block{% if scoped_submodule %} reader-scoped-nav{% endif %}"
+    <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block{% if scoped_module %} reader-scoped-nav{% endif %}"
          aria-label="{{ reader_nav_aria_label }}"
          {% if reader_nav_testid %}data-testid="{{ reader_nav_testid }}"{% endif %}>
       <h2 class="sr-only">{{ reader_nav_aria_label }}</h2>
-      {% if scoped_submodule %}
+      {% if scoped_module %}
       <div class="mb-2 flex items-center justify-between border-b border-border px-2 pb-2 lg:hidden">
         <span class="text-sm font-medium">Course navigation</span>
         <button type="button" id="reader-scoped-nav-close" aria-label="Close course navigation" class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
@@ -46,39 +46,76 @@
       {% endif %}
 
       {% if reader_nav_kind == "course" %}
-        {% if scoped_submodule %}
-        <div data-testid="reader-scoped-submodule">
+        {% if scoped_module %}
+        <div data-testid="reader-scoped-module" class="min-w-0">
           <div class="px-2 pb-2">
-            <p class="text-xs text-muted-foreground">{{ scoped_submodule.parent.title }}</p>
-            <p class="mt-0.5 text-sm font-semibold text-foreground">{{ scoped_submodule.title }}</p>
+            {% if course.slug == 'ai-buildcamp' and scoped_module.sort_order > 0 and scoped_module.sort_order < 10 %}<p class="text-xs font-medium text-muted-foreground">Week {{ scoped_module.sort_order }}</p>{% endif %}
+            <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm font-semibold leading-snug text-foreground break-words">{% if scoped_module.is_bonus and scoped_module.title == 'Bonus' %}Optional{% else %}{{ scoped_module.title }}{% endif %}{% if scoped_module.is_bonus and '(Optional)' not in scoped_module.title and scoped_module.title != 'Bonus' and scoped_module.title != 'Optional' %}<span class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}</p>
           </div>
+          {% for nav_child in scoped_module.children.all %}
+            {% with inline_unit=nav_child|inline_course_unit:course.slug %}
+            {% if inline_unit %}
+            <ul class="reader-nav-list">
+              <li>
+                {% if inline_unit.pk == unit.pk %}
+                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                {% elif inline_unit.pk in completed_unit_ids %}
+                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                {% else %}
+                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                {% endif %}
+              </li>
+            </ul>
+            {% else %}
+            <details class="sidebar-module mt-1" open>
+              <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm font-medium leading-snug text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-0 lg:py-1.5">
+                <i data-lucide="chevron-right" class="sidebar-chevron h-3 w-3 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+                <span class="min-w-0 break-words">{{ nav_child.title }}</span>
+                {% if nav_child.is_bonus and not scoped_module.is_bonus and '(Optional)' not in nav_child.title %}<span class="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}
+              </summary>
+              <ul class="reader-nav-list ml-4">
+                {% for nav_unit in nav_child.units.all %}
+                <li>
+                  {% if nav_unit.pk == unit.pk %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
+                  {% elif nav_unit.pk in completed_unit_ids %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
+                  {% else %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            </details>
+            {% endif %}
+            {% endwith %}
+          {% empty %}
           <ul class="reader-nav-list">
-            {% for nav_unit in scoped_submodule.units.all %}
+            {% for nav_unit in scoped_module.units.all %}
             <li>
               {% if nav_unit.pk == unit.pk %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
-              {% elif nav_unit.pk in completed_unit_ids %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus %}
               {% else %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus %}
               {% endif %}
             </li>
             {% endfor %}
           </ul>
-          <div class="mt-3 border-t border-border pt-2" data-testid="reader-submodule-navigation">
-            {% if previous_submodule %}
-            <a href="/courses/{{ course.slug }}/{{ previous_submodule.parent.slug }}/{{ previous_submodule.slug }}" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-previous-submodule">
+          {% endfor %}
+          <div class="mt-3 border-t border-border pt-2" data-testid="reader-module-navigation">
+            {% if previous_module %}
+            <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module">
               <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-              <span class="min-w-0 truncate">Previous module: {{ previous_submodule.title }}</span>
+              <span class="min-w-0 break-words">Previous module: {{ previous_module.title }}</span>
             </a>
             {% endif %}
-            {% if next_submodule %}
-            <a href="/courses/{{ course.slug }}/{{ next_submodule.parent.slug }}/{{ next_submodule.slug }}" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-next-submodule">
-              <span class="min-w-0 flex-1 truncate">Next module: {{ next_submodule.title }}</span>
+            {% if next_module %}
+            <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module">
+              <span class="min-w-0 flex-1 break-words">Next module: {{ next_module.title }}</span>
               <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
             </a>
             {% endif %}
-            <a href="{{ course.get_absolute_url }}#syllabus" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-view-syllabus">
+            <a href="{{ course.get_absolute_url }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}#syllabus" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-view-syllabus">
               <i data-lucide="list" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
               View full syllabus
             </a>

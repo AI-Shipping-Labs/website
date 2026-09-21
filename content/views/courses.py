@@ -640,7 +640,7 @@ def _render_module_overview(request, course, module):
     handles the per-lesson gating / teaser.
     """
     if (
-        course.reader_navigation_scope == 'submodule'
+        course.reader_navigation_scope in ('module', 'submodule')
         and not CourseProject.objects.filter(module=module).exists()
     ):
         child_ids = list(module.children.values_list('pk', flat=True))
@@ -655,7 +655,11 @@ def _render_module_overview(request, course, module):
             ordered_units[0] if ordered_units else None,
         )
         if first_unit is not None:
-            return redirect(first_unit.get_absolute_url())
+            destination = first_unit.get_absolute_url()
+            if request.GET.get('cohort'):
+                from urllib.parse import urlencode
+                destination += '?' + urlencode({'cohort': request.GET['cohort']})
+            return redirect(destination)
 
     user = request.user
 
@@ -805,6 +809,13 @@ def _render_course_unit_detail(request, course, module, unit):
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit,
     )
+    context['reader_cohort_param'] = request.GET.get('cohort', '')
+    if context['reader_cohort_param'] and context['scoped_module']:
+        from urllib.parse import urlencode
+        query = '?' + urlencode({'cohort': context['reader_cohort_param']})
+        for key in ('prev_item_url', 'next_item_url'):
+            if context[key]:
+                context[key] += query
     context.update(course_unit_service.build_homework_submission_context(user, unit))
     return render(request, 'content/course_unit_detail.html', context)
 

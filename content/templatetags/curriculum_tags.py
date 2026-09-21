@@ -70,7 +70,7 @@ def unit_kind_icon(kind):
 def unit_nav_marker_html(kind):
     """Use a type icon in reader navigation while preserving its row scale."""
     if kind == 'lesson':
-        return format_html('<i data-lucide="{}" class="h-4 w-4 opacity-40"></i>', 'circle')
+        return format_html('<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>', 'file-text')
     return format_html(
         '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" role="img" aria-label="{}"></i>',
         unit_kind_icon(kind),

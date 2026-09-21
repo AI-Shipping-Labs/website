@@ -501,7 +501,7 @@ def _build_course_defaults(
     )
     peer_review_enabled = course_data.get('peer_review_enabled', False)
     reader_navigation_scope = course_data.get('reader_navigation_scope', 'course')
-    if reader_navigation_scope not in ('course', 'submodule'):
+    if reader_navigation_scope not in ('course', 'module', 'submodule'):
         raise GitHubSyncError(
             f'Invalid reader_navigation_scope in {rel_path}/course.yaml: '
             "expected 'course' or 'submodule'"

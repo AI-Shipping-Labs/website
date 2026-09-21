@@ -69,7 +69,7 @@ discussion_url: https://...         # Slack channel URL or GitHub URL
 access_mode: entitlement            # optional; 'tier' (default, omit) or 'entitlement'
 enroll_url: https://maven.com/alexey-grigorev/from-rag-to-agents  # required when access_mode: entitlement
 program_label: Maven                # optional; shown on the "Sold separately" badge/CTA
-reader_navigation_scope: submodule  # optional; 'course' (default) or 'submodule'
+reader_navigation_scope: module  # optional; 'course' (default) or 'module'
 tags: [ai-agents, rag]
 testimonials:
   - quote: ...
@@ -170,7 +170,7 @@ Accepted values for `default_unit_access` and per-unit `access:` (case-insensiti
 
 `enroll_url` is required when `access_mode: entitlement` — the sync fails the course otherwise. It is the external signup page linked from the "Enroll via {program_label}" CTA. `program_label` is optional short copy for that CTA and the "Sold separately" badge (e.g. `Maven`); when blank, the CTA reads "Enroll" without a program name.
 
-`reader_navigation_scope: submodule` keeps the lesson reader's sidebar on the current submodule and adds links to adjacent submodules and the full syllabus. Module overview URLs open the first lesson when one exists, except where the overview holds course project attempts. Omit the key or set it to `course` to keep the full course outline and module overview pages.
+`reader_navigation_scope: module` keeps the lesson reader's sidebar on the current top-level module, including its submodules and lessons, and adds links to adjacent top-level modules and the full syllabus. Module overview URLs open the first lesson when one exists, except where the overview holds course project attempts. Omit the key or set it to `course` to keep the full course outline and module overview pages. The older `submodule` value remains accepted for synced courses and has the same behavior.
 
 ### Source-owned vs Studio-owned fields
 

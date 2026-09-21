@@ -18,6 +18,7 @@ Covers:
 """
 
 import datetime
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -65,11 +66,12 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
         self.assertContains(response, 'Bonus topic')
         self.assertContains(response, 'data-testid="syllabus-parent-module"')
 
-    def test_bonus_module_and_unit_carry_bonus_badge(self):
+    def test_bonus_is_labeled_at_group_level_without_repeated_badges(self):
         self.client.login(email='learner@test.com', password='pw')
         response = self.client.get('/courses/buildcamp-views')
-        self.assertContains(response, 'data-testid="module-bonus-badge"')
-        self.assertContains(response, 'data-testid="unit-bonus-badge"')
+        self.assertContains(response, 'data-testid="syllabus-bonus-divider"')
+        self.assertNotContains(response, 'data-testid="module-bonus-badge"')
+        self.assertNotContains(response, 'data-testid="unit-bonus-badge"')
 
     def test_bonus_content_grouped_with_divider(self):
         self.client.login(email='learner@test.com', password='pw')
@@ -445,6 +447,19 @@ class SyllabusIncludeContextLeakRegressionTest(TestCase):
             count=1, status_code=200,
         )
 
+    def test_top_level_bonus_has_no_position_chip(self):
+        Module.objects.create(
+            course=self.course, title='Bonus', slug='bonus', sort_order=2,
+            is_bonus=True,
+        )
+        self.client.login(email='leak@test.com', password='pw')
+        response = self.client.get('/courses/leak-regression-course')
+        self.assertNotContains(response, 'module-bonus-badge', status_code=200)
+        self.assertContains(
+            response, 'data-testid="syllabus-module-position-chip"',
+            count=1, status_code=200,
+        )
+
     def test_week_date_range_renders_exactly_once_for_the_top_level_module(self):
         """Not once per submodule — with a dated cohort, Week 1's derived
         range must not repeat under Docker/Kubernetes/Extra Tools."""
@@ -454,3 +469,67 @@ class SyllabusIncludeContextLeakRegressionTest(TestCase):
             response, 'data-testid="syllabus-module-week-range"',
             count=1, status_code=200,
         )
+
+
+class _SyllabusChipParser(HTMLParser):
+    """Read position chips from individual syllabus summary elements."""
+
+    def __init__(self):
+        super().__init__()
+        self.positions = []
+        self._summary_position = None
+        self._in_summary = False
+        self._in_chip = False
+
+    def handle_starttag(self, tag, attrs):
+        testid = dict(attrs).get('data-testid')
+        if tag == 'summary' and testid == 'syllabus-module-summary':
+            self._in_summary = True
+            self._summary_position = None
+        elif self._in_summary and testid == 'syllabus-module-position-chip':
+            self._in_chip = True
+
+    def handle_data(self, data):
+        if self._in_chip and data.strip():
+            self._summary_position = int(data.strip())
+
+    def handle_endtag(self, tag):
+        if tag == 'span' and self._in_chip:
+            self._in_chip = False
+        elif tag == 'summary' and self._in_summary:
+            self.positions.append(self._summary_position)
+            self._in_summary = False
+
+
+class SyllabusBuildcampPositionTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        for slug in ('ai-buildcamp', 'other-course'):
+            course = Course.objects.create(
+                title=slug, slug=slug, status='published', required_level=0,
+            )
+            for position, (title, module_slug, is_bonus) in enumerate((
+                ('Course Logistics', 'logistics', False),
+                ('Foundations', 'week-1', False),
+                ('RAG in practice', 'week-2', False),
+                ('Bonus', 'bonus', True),
+            )):
+                Module.objects.create(
+                    course=course, title=title, slug=module_slug,
+                    sort_order=position, is_bonus=is_bonus,
+                )
+
+    def _positions(self, slug):
+        response = self.client.get(f'/courses/{slug}')
+        parser = _SyllabusChipParser()
+        parser.feed(response.content.decode())
+        return parser.positions
+
+    def test_buildcamp_logistics_and_bonus_are_unnumbered(self):
+        self.assertEqual(self._positions('ai-buildcamp'), [None, None, None, None])
+        response = self.client.get('/courses/ai-buildcamp')
+        self.assertContains(response, 'Week 1 · ')
+        self.assertContains(response, 'Week 2 · ')
+
+    def test_other_courses_keep_their_position_numbers(self):
+        self.assertEqual(self._positions('other-course'), [1, 2, 3, None])

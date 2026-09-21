@@ -34,12 +34,12 @@
             <i data-lucide="book-open" class="h-4 w-4"></i>
             {% if module.parent %}Submodule{% else %}Module{% endif %}
           </span>
-          {% if module.is_bonus %}
+          {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
           {% member_label_badge "Bonus" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
           {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
-          {{ module.title }}
+          {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
         </h1>
       </header>
 
@@ -67,7 +67,7 @@
              data-testid="module-submodule-link">
             <i data-lucide="folder" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
             <span class="text-sm text-foreground flex-1 py-2">{{ submodule.title }}</span>
-            {% if submodule.is_bonus %}
+            {% if submodule.is_bonus and not module.is_bonus %}
             {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
             {% endif %}
             <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
@@ -102,7 +102,7 @@
                data-testid="module-lesson-link">
               {{ unit.title }}
             </a>
-            {% if unit.is_bonus %}
+            {% if unit.is_bonus and not module.is_bonus and not module.parent.is_bonus %}
             {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
             {% endif %}
             {% if unit.is_preview and not has_access %}

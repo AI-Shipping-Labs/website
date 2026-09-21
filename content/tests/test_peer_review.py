@@ -171,6 +171,17 @@ class ProjectSubmitViewTest(TestCase):
         self.assertEqual(sub.project_url, 'https://github.com/test/project')
         self.assertEqual(sub.description, 'My project')
 
+    def test_self_paced_enrollment_enters_review_pool(self):
+        cohort = Cohort.objects.create(
+            course=self.course, name='Self paced', mode='self_paced',
+        )
+        CohortEnrollment.objects.create(cohort=cohort, user=self.user)
+        self.client.post('/courses/test-course/submit', {
+            'project_url': 'https://github.com/test/project',
+        })
+        submission = ProjectSubmission.objects.get(user=self.user, course=self.course)
+        self.assertIsNone(submission.cohort_id)
+
     def test_update_submission_while_submitted(self):
         ProjectSubmission.objects.create(
             user=self.user, course=self.course,
@@ -274,6 +285,19 @@ class ReviewDashboardViewTest(TestCase):
         response = self.client.get('/courses/test-course/reviews')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Waiting for enough submissions')
+
+    def test_dated_cohort_dashboard_explains_review_timing(self):
+        cohort = Cohort.objects.create(
+            course=self.course, name='September cohort',
+            start_date=date.today(), end_date=date.today() + timedelta(days=30),
+        )
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course, cohort=cohort,
+            project_url='https://github.com/test/project',
+        )
+        response = self.client.get('/courses/test-course/reviews')
+        self.assertContains(response, 'Peer reviews will be assigned after your cohort ends')
+        self.assertNotContains(response, 'Waiting for enough submissions')
 
     def test_dashboard_shows_assigned_reviews(self):
         # Create submissions and assignments
@@ -488,6 +512,20 @@ class BatchFormationTest(TestCase):
             self.assertFalse(
                 sub.reviews.filter(reviewer=sub.user).exists()
             )
+
+    def test_existing_self_paced_cohort_submissions_enter_pool(self):
+        cohort = Cohort.objects.create(
+            course=self.course, name='Self paced', mode='self_paced',
+        )
+        users = [_create_user(f'pooled{i}@test.com') for i in range(3)]
+        for user in users:
+            ProjectSubmission.objects.create(
+                user=user, course=self.course, cohort=cohort,
+                project_url=f'https://github.com/{user.email}/project',
+            )
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result['batched'], 3)
+        self.assertEqual(result['reviews_assigned'], 6)
 
     def test_not_enough_submissions_no_batch(self):
         """No batch formed if fewer than peer_review_count + 1 submissions."""

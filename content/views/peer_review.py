@@ -99,6 +99,7 @@ def project_submit(request, slug):
                 user=user,
                 cohort__course=course,
                 cohort__is_active=True,
+                cohort__mode='cohort',
             ).select_related('cohort').first()
             if enrollment:
                 cohort = enrollment.cohort
@@ -296,6 +297,7 @@ def api_submit_project(request, slug):
             user=user,
             cohort__course=course,
             cohort__is_active=True,
+            cohort__mode='cohort',
         ).select_related('cohort').first()
         if enrollment:
             cohort = enrollment.cohort

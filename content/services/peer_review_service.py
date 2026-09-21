@@ -3,6 +3,7 @@
 import logging
 from datetime import timedelta
 
+from django.db.models import Q
 from django.utils import timezone
 
 from content.models import (
@@ -55,9 +56,8 @@ class PeerReviewService:
         waiting = list(
             ProjectSubmission.objects.filter(
                 course=course,
-                cohort__isnull=True,
                 status='submitted',
-            )
+            ).filter(Q(cohort__isnull=True) | Q(cohort__mode='self_paced'))
         )
         min_needed = course.peer_review_count + 1
         if len(waiting) >= min_needed:

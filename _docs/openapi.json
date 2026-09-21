@@ -15491,6 +15491,43 @@
         ]
       }
     },
+    "/api/sync/sources/{source_id}/webhook-secret": {
+      "get": {
+        "description": "Staff-only plaintext read of the ``webhook_secret`` stored on the source row. GitHub signs every App delivery with one secret and never displays it again after it is saved, so this row value is the only readable copy. Handle it like a password; the source inventory endpoint keeps reporting only a boolean ``webhook_secret_configured``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "source_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "id": "5b4c0e3f-1f3c-4f8f-9c9d-2e5d0e2c8a51",
+                  "repo_name": "AI-Shipping-Labs/content",
+                  "webhook_secret": "example-webhook-secret-value"
+                }
+              }
+            },
+            "description": "The stored secret (empty string when the source has none configured)."
+          },
+          "404": {
+            "description": "Sync source not found."
+          }
+        },
+        "summary": "Get the source's stored webhook secret",
+        "tags": [
+          "Sync Sources"
+        ]
+      }
+    },
     "/api/tier-overrides": {
       "post": {
         "description": "Grants the same long-lived ``TierOverride`` the Studio bulk contact-import gives non-paying members: a 10-year override (default tier ``main``) that deactivates any existing active override and records who granted it. A single grant is a one-element ``emails`` list. Missing users are created (``signup_source=imported``, ``email_verified=false``). Re-running an identical active grant is idempotent (``skipped_idempotent``, no new row). ``tier`` is validated against ``Tier`` -- unknown slug -> ``unknown_tier``; ``free`` / ``level==0`` -> ``invalid_tier``. Batch cap 1000.",

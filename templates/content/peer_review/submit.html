@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load member_badges %}
+{% load member_badges accounts_extras %}
 
 {% block title %}Submit Project - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -73,7 +73,7 @@
                   placeholder="Tell reviewers about your project...">{{ submission.description }}</textarea>
       </div>
     </div>
-    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <button type="submit" class="{% button_classes 'primary' size='md' %}">
       Update Submission
     </button>
   </form>
@@ -96,7 +96,7 @@
                   placeholder="Tell reviewers about your project..."></textarea>
       </div>
     </div>
-    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <button type="submit" class="{% button_classes 'primary' size='md' %}">
       Submit Project
     </button>
   </form>

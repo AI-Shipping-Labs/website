@@ -263,6 +263,8 @@ class ReviewDashboardViewTest(TestCase):
         response = self.client.get('/courses/test-course/reviews')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Submit Project')
+        self.assertContains(response, 'Test Course')
+        self.assertNotContains(response, 'Reviews to Complete')
 
     def test_dashboard_waiting_for_batch(self):
         ProjectSubmission.objects.create(

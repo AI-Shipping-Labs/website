@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras %}
 
 {% block title %}Review Submission - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -96,7 +97,7 @@
       </div>
     </div>
 
-    <button type="submit" class="bg-accent text-accent-foreground px-6 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <button type="submit" class="{% button_classes 'primary' size='md' %}">
       Submit Review
     </button>
   </form>

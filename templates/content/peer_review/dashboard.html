@@ -19,6 +19,7 @@
     <i data-lucide="users-round" class="h-5 w-5 text-muted-foreground" aria-hidden="true"></i>
     Peer Review Dashboard
   </h1>
+  <p class="-mt-6 mb-8 text-sm text-muted-foreground">{{ course.title }}</p>
 
   {% if certificate %}
   <!-- Certificate earned -->
@@ -81,17 +82,17 @@
 
     {% else %}
     <p class="text-muted-foreground text-sm mb-4">You haven't submitted a project yet.</p>
-    <a href="{% url 'project_submit' slug=course.slug %}" class="inline-block bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity">
+    <a href="{% url 'project_submit' slug=course.slug %}" class="{% button_classes 'primary' size='md' %}">
       Submit Project
     </a>
     {% endif %}
   </div>
 
+  {% if assigned_reviews %}
   <!-- Reviews to Complete -->
   <div class="bg-card border border-border rounded-lg p-6">
     <h2 class="text-lg font-semibold text-foreground mb-4">Reviews to Complete</h2>
 
-    {% if assigned_reviews %}
     <div class="divide-y divide-border">
       {% for review in assigned_reviews %}
       <div class="py-3 flex items-center justify-between">
@@ -110,10 +111,8 @@
       </div>
       {% endfor %}
     </div>
-    {% else %}
-    <p class="text-sm text-muted-foreground">No reviews assigned yet.</p>
-    {% endif %}
   </div>
+  {% endif %}
 
     </div>
   </section>

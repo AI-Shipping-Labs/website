@@ -269,8 +269,14 @@
         {% endif %}
         <div class="space-y-1">
           {% for module in modules %}
+          {% if course.slug == 'ai-buildcamp' and module.sort_order == 0 %}
+          <h3 class="px-1 pt-2 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-prework-group">Pre-work and logistics</h3>
+          {% endif %}
+          {% if course.slug == 'ai-buildcamp' and module.sort_order == 1 %}
+          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-main-content-group">Main content</h3>
+          {% endif %}
           {% if course.slug == 'ai-buildcamp' and module.sort_order == 7 %}
-          <p class="px-1 pt-4 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-capstone-group">Capstone · weeks 7–9</p>
+          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-capstone-group">Project · weeks 7–9</h3>
           {% endif %}
           {% if course.slug == 'ai-buildcamp' and module.is_bonus %}
           {% ifchanged module.is_bonus %}<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-optional-group">Optional</h3>{% endifchanged %}

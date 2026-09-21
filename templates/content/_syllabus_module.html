@@ -6,7 +6,7 @@
   cannot render distinct week/topic summaries or nested unit lists.
 {% endcomment %}
 {% with children=module.children.all %}
-<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic border-b border-border/70 last:border-b-0{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
+<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
   <summary class="cursor-pointer list-none flex min-h-[44px] items-center {% if counter %}gap-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4 sm:py-3{% else %}gap-2 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if counter and not module.is_bonus and course_slug != 'ai-buildcamp' %}
     <span class="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-xs font-semibold text-accent sm:h-6 sm:w-6" data-testid="syllabus-module-position-chip">{{ counter }}</span>

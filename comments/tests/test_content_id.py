@@ -6,7 +6,7 @@ import uuid
 from django.db import models
 from django.test import TestCase
 
-from content.models import Article, Course, Download, Project, Tutorial, Unit
+from content.models import Article, Course, Download, Module, Project, Tutorial, Unit
 from events.models import Event
 
 
@@ -14,9 +14,20 @@ class ContentIdFieldExistsTest(TestCase):
     """Verify content_id field exists on all required models."""
 
     def test_unit_has_content_id(self):
-        field = Unit._meta.get_field('content_id')
-        self.assertTrue(field.unique)
+        field = Unit._meta.get_field('source_content_id')
+        self.assertIsInstance(field, models.UUIDField)
         self.assertTrue(field.null)
+        course = Course.objects.create(slug='unit-id-course', title='Unit ID course')
+        module = Module.objects.create(
+            course=course, slug='unit-id-module', title='Unit ID module',
+        )
+        content_id = uuid.uuid4()
+        unit = Unit.objects.create(
+            module=module, slug='unit-id-lesson', title='Unit ID lesson',
+            content_id=content_id,
+        )
+        self.assertEqual(unit.source_content_id, content_id)
+        self.assertEqual(Unit.objects.get(content_id=content_id).content_id, content_id)
 
     def test_article_has_content_id(self):
         field = Article._meta.get_field('content_id')

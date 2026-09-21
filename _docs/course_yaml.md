@@ -69,6 +69,7 @@ discussion_url: https://...         # Slack channel URL or GitHub URL
 access_mode: entitlement            # optional; 'tier' (default, omit) or 'entitlement'
 enroll_url: https://maven.com/alexey-grigorev/from-rag-to-agents  # required when access_mode: entitlement
 program_label: Maven                # optional; shown on the "Sold separately" badge/CTA
+reader_navigation_scope: submodule  # optional; 'course' (default) or 'submodule'
 tags: [ai-agents, rag]
 testimonials:
   - quote: ...
@@ -168,6 +169,8 @@ Accepted values for `default_unit_access` and per-unit `access:` (case-insensiti
 `access_mode` (issue #1658) controls whether tier level grants access at all. Omit it (or set `access_mode: tier`) for every normal course — subscription tier / `TierOverride` comparison works exactly as described above. Set `access_mode: entitlement` for a course sold as an independent program (e.g. the Maven buildcamp): the tier comparison is skipped entirely, and only a `CourseAccess` grant or staff opens the course, for any subscription tier the visitor holds — but only once `required_level` and `default_unit_access` are Basic or above. Below Basic (`required_level: 0`/`registered`, or an inherited course default at that level), `can_access()` grants `LEVEL_OPEN`/`LEVEL_REGISTERED` content before the entitlement branch ever runs — that early return is intentional (free/sign-in-walled content stays free), which means an entitlement course must not be left at the free/registered levels. `required_level` and `default_unit_access` — the field that actually governs whether lesson content is readable — are both required to be Basic or above when `access_mode: entitlement`; the sync fails the course otherwise, so a placeholder value like `default_unit_access: registered` cannot silently ship as a paywall-free "Sold separately" page.
 
 `enroll_url` is required when `access_mode: entitlement` — the sync fails the course otherwise. It is the external signup page linked from the "Enroll via {program_label}" CTA. `program_label` is optional short copy for that CTA and the "Sold separately" badge (e.g. `Maven`); when blank, the CTA reads "Enroll" without a program name.
+
+`reader_navigation_scope: submodule` keeps the lesson reader's sidebar on the current submodule and adds links to adjacent submodules and the full syllabus. Module overview URLs open the first lesson when one exists. Omit the key or set it to `course` to keep the full course outline and module overview pages.
 
 ### Source-owned vs Studio-owned fields
 

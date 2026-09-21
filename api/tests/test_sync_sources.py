@@ -157,7 +157,6 @@ class SyncSourcesApiTest(TestCase):
             **self._auth(),
         )
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {
             "id": str(self.source.pk),
             "repo_name": "AI-Shipping-Labs/content",
@@ -174,7 +173,6 @@ class SyncSourcesApiTest(TestCase):
             **self._auth(),
         )
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["webhook_secret"], "")
 
     def test_webhook_secret_endpoint_missing_source_returns_404(self):

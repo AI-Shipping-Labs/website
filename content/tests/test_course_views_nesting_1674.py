@@ -66,17 +66,30 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
         self.assertContains(response, 'Bonus topic')
         self.assertContains(response, 'data-testid="syllabus-parent-module"')
 
-    def test_bonus_is_labeled_at_group_level_without_repeated_badges(self):
+    def test_optional_badge_appears_on_submodule_and_standalone_unit(self):
         self.client.login(email='learner@test.com', password='pw')
         response = self.client.get('/courses/buildcamp-views')
-        self.assertContains(response, 'data-testid="syllabus-bonus-divider"')
-        self.assertNotContains(response, 'data-testid="module-bonus-badge"')
-        self.assertNotContains(response, 'data-testid="unit-bonus-badge"')
+        self.assertContains(response, 'data-testid="syllabus-optional-badge"', count=1)
+        self.assertContains(response, 'data-testid="syllabus-unit-optional-badge"', count=1)
+        self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
-    def test_bonus_content_grouped_with_divider(self):
-        self.client.login(email='learner@test.com', password='pw')
+    def test_optional_parent_suppresses_descendant_badges(self):
+        optional_module = Module.objects.create(
+            course=self.course, title='Optional module', slug='optional-module',
+            sort_order=3, is_bonus=True,
+        )
+        optional_child = Module.objects.create(
+            course=self.course, parent=optional_module, title='Optional child',
+            slug='optional-child', sort_order=1, is_bonus=True,
+        )
+        Unit.objects.create(
+            module=optional_child, title='Optional unit', slug='optional-unit',
+            sort_order=1, is_bonus=True,
+        )
         response = self.client.get('/courses/buildcamp-views')
-        self.assertContains(response, 'data-testid="syllabus-bonus-divider"')
+        self.assertContains(response, 'data-testid="syllabus-optional-badge"', count=2)
+        self.assertContains(response, 'data-testid="syllabus-unit-optional-badge"', count=1)
+        self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
 
 class ModuleOverviewParentTest(ThreeLevelCourseViewMixin, TestCase):
@@ -530,6 +543,8 @@ class SyllabusBuildcampPositionTest(TestCase):
         response = self.client.get('/courses/ai-buildcamp')
         self.assertContains(response, 'Week 1 · ')
         self.assertContains(response, 'Week 2 · ')
+        self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>')
+        self.assertNotContains(response, 'data-testid="syllabus-optional-badge"')
 
     def test_other_courses_keep_their_position_numbers(self):
         self.assertEqual(self._positions('other-course'), [1, 2, 3, None])

@@ -4,6 +4,7 @@
 {% endcomment %}
 {% load access_tags %}
 {% load schedule_tags %}
+{% load member_badges %}
 <a href="{{ unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %}" data-testid="{% if not has_access and not unit.is_preview %}syllabus-locked-link{% else %}syllabus-unit-row{% endif %}" data-syllabus-unit-row>
   {% if unit.kind == 'event' %}
   <i data-lucide="calendar" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-event-icon" aria-hidden="true"></i>
@@ -22,6 +23,7 @@
       {% endwith %}
     {% endif %}
   </span>
+  {% if not parent_optional %}{% if unit.is_bonus or force_optional %}{% member_label_badge "Optional" tone="accent" size="xs" testid="syllabus-unit-optional-badge" %}{% endif %}{% endif %}
   {% if unit.pk in completed_unit_ids %}
     <i data-lucide="check-circle-2" class="h-4 w-4 flex-shrink-0 text-green-400" aria-hidden="true"></i>
   {% elif unit.is_preview and not has_access %}

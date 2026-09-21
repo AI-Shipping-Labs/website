@@ -8,7 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone as django_timezone
 
-from content.models import Cohort, CohortEnrollment, Course, Homework, Module, Unit
+from content.models import Cohort, CohortEnrollment, Course, CourseAccess, Homework, Module, Unit
 from content.models.peer_review import CourseProject
 
 
@@ -183,3 +183,22 @@ class CourseScheduleDisplayTest(TestCase):
             'slug': self.course.slug, 'attempt_slug': 'attempt-5',
         })
         self.assertNotContains(response, f'href="{submit_url}"')
+
+    def test_course_access_without_cohort_can_submit_global_attempt(self):
+        learner = get_user_model().objects.create_user(
+            email='course-access-only@example.com', password='pw',
+        )
+        self.course.required_level = 3
+        self.course.save(update_fields=['required_level'])
+        CourseAccess.objects.create(
+            user=learner, course=self.course, access_type='granted',
+        )
+        self.client.force_login(learner)
+        submit_url = reverse('course_project_submit', kwargs={
+            'slug': self.course.slug, 'attempt_slug': 'open-attempt',
+        })
+        for url in ('/courses/ai-buildcamp', self.topic.get_absolute_url()):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, f'href="{submit_url}"')
+                self.assertNotContains(response, 'Attempt 4')

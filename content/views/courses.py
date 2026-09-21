@@ -285,8 +285,9 @@ def course_detail(request, slug):
         preview_project_ids = {
             project.pk for project in course_projects
             if (
-                (project.cohort_id and project.cohort_id not in user_enrolled_cohort_ids)
-                or (project.cohort_id is None and not user_enrolled_cohort_ids)
+                not user.is_authenticated
+                or not has_access
+                or (project.cohort_id and project.cohort_id not in user_enrolled_cohort_ids)
             )
         }
     projects_by_module = {}
@@ -688,8 +689,8 @@ def _render_module_overview(request, course, module):
         ]
         preview_project_ids = {
             project.pk for project in course_projects
-            if ((project.cohort_id and project.cohort_id not in cohort_ids)
-                or (project.cohort_id is None and not cohort_ids))
+            if (not user.is_authenticated or not has_access
+                or (project.cohort_id and project.cohort_id not in cohort_ids))
         }
 
     completed_unit_ids: set[int] = set()

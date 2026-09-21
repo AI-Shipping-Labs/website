@@ -264,7 +264,7 @@
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Syllabus</h2>
         {% if schedule_cohort %}
         <p class="mb-3 text-xs text-muted-foreground" data-testid="syllabus-schedule-cohort">
-          {{ schedule_cohort.name }} schedule{% if schedule_is_preview %} · Preview{% endif %} · Times include timezone
+          {{ schedule_cohort.name }} schedule{% if schedule_is_preview %} · Preview{% endif %} · Times shown in {{ schedule_timezone }}
         </p>
         {% endif %}
         <div class="space-y-1">
@@ -275,7 +275,7 @@
           {% if course.slug == 'ai-buildcamp' and module.is_bonus %}
           <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-bonus-group">Bonus</h3>
           {% endif %}
-          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id bonus_group=module.is_bonus unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort %}
+          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id bonus_group=module.is_bonus unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone %}
           {% empty %}
           {% member_empty_state title='Syllabus coming soon' body='Lessons for this course will appear here when they are ready.' icon='book-open' kind='fresh' testid='syllabus-empty-state' %}
           {% endfor %}

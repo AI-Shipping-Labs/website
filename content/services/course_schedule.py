@@ -4,30 +4,53 @@ The cohort is selected from an enrollment or a validated public preview. Nothing
 in this module grants course access or changes submission permissions.
 """
 
-from django.utils import timezone
 from django.db.models import Q
+from django.utils import timezone
+
+from accounts.services.timezones import is_valid_timezone
 
 from content.models import Cohort, CohortEnrollment, Homework, Module, Unit
 from content.models.peer_review import CourseProject
 
 
 def select_display_cohort(course, user, requested_key=''):
-    """Prefer the learner's enrollment; accept an active cohort preview otherwise."""
+    """Resolve one schedule without letting a URL key override enrollment."""
     active = Cohort.objects.filter(
         course=course, mode='cohort', is_active=True,
     ).order_by('start_date', 'pk')
-    if user.is_authenticated and user.is_staff and requested_key:
+    if requested_key and user.is_authenticated and user.is_staff:
         cohort = active.filter(external_key__iexact=requested_key).first()
-        if cohort:
-            return cohort, True
+        return cohort, cohort is not None
+
     if user.is_authenticated:
-        enrollment = (
+        enrollments = list(
             CohortEnrollment.objects.filter(
                 user=user, cohort__course=course, cohort__mode='cohort',
-            ).select_related('cohort').order_by('cohort__start_date', 'pk').first()
+            ).select_related('cohort').order_by('cohort__start_date', 'pk')
         )
-        if enrollment:
-            return enrollment.cohort, False
+        if enrollments:
+            if requested_key:
+                cohort = next(
+                    (enrollment.cohort for enrollment in enrollments
+                     if enrollment.cohort.external_key.lower() == requested_key.lower()
+                     and enrollment.cohort.external_key),
+                    None,
+                )
+                return cohort, False
+            today = timezone.localdate()
+            cohorts = [enrollment.cohort for enrollment in enrollments]
+            current = [cohort for cohort in cohorts if cohort.is_active
+                       and cohort.start_date <= today <= cohort.end_date]
+            if current:
+                return max(current, key=lambda cohort: (cohort.start_date, cohort.pk)), False
+            upcoming = [cohort for cohort in cohorts if cohort.is_active
+                        and cohort.start_date > today]
+            if upcoming:
+                return min(upcoming, key=lambda cohort: (cohort.start_date, cohort.pk)), False
+            past = [cohort for cohort in cohorts if cohort.end_date < today]
+            if past:
+                return max(past, key=lambda cohort: (cohort.end_date, cohort.pk)), False
+            return max(cohorts, key=lambda cohort: (cohort.start_date, cohort.pk)), False
 
     if requested_key:
         cohort = active.filter(external_key__iexact=requested_key).first()
@@ -37,6 +60,14 @@ def select_display_cohort(course, user, requested_key=''):
         if len(cohorts) == 1:
             return cohorts[0], True
     return None, False
+
+
+def schedule_timezone_name(course, user):
+    """Use the learner's timezone, or the Buildcamp's Berlin schedule zone."""
+    preferred = getattr(user, 'preferred_timezone', '') if user.is_authenticated else ''
+    if preferred and is_valid_timezone(preferred):
+        return preferred
+    return 'Europe/Berlin' if course.slug == 'ai-buildcamp' else 'UTC'
 
 
 def build_deadline_context(course, cohort):

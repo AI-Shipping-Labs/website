@@ -1,11 +1,12 @@
 """Cohort selection and deadline isolation on the syllabus."""
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone as django_timezone
 
 from content.models import Cohort, CohortEnrollment, Course, Homework, Module, Unit
 from content.models.peer_review import CourseProject
@@ -93,14 +94,66 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertIsNone(invalid.context['schedule_cohort'])
         self.assertNotContains(invalid, 'Feb 1, 2027 18:00')
 
-    def test_enrollment_wins_over_query_and_deadlines_reach_parent_summary(self):
+    def test_enrolled_schedule_and_deadlines_reach_parent_summary(self):
         self.client.force_login(self.learner)
-        response = self.client.get('/courses/ai-buildcamp?cohort=5')
+        response = self.client.get('/courses/ai-buildcamp')
         self.assertEqual(response.context['schedule_cohort'], self.c4)
         self.assertFalse(response.context['schedule_is_preview'])
         self.assertEqual(response.context['unit_deadlines'][self.unit.pk], self.due4)
         self.assertEqual(response.context['module_deadline_summaries'][self.week.pk]['count'], 5)
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
+        self.assertContains(response, 'Oct 1, 2026 20:00 Europe/Berlin')
+
+    def test_dual_enrollment_prefers_current_then_requested_owned_cohort(self):
+        today = django_timezone.localdate()
+        self.c4.start_date = today - timedelta(days=7)
+        self.c4.end_date = today + timedelta(days=7)
+        self.c4.save(update_fields=['start_date', 'end_date'])
+        older = Cohort.objects.create(
+            course=self.course, name='Cohort 3', external_key='3',
+            start_date=today - timedelta(days=180),
+            end_date=today - timedelta(days=120),
+        )
+        CohortEnrollment.objects.create(user=self.learner, cohort=older)
+        self.client.force_login(self.learner)
+        current = self.client.get('/courses/ai-buildcamp')
+        self.assertEqual(current.context['schedule_cohort'], self.c4)
+        chosen = self.client.get('/courses/ai-buildcamp?cohort=3')
+        self.assertEqual(chosen.context['schedule_cohort'], older)
+
+    def test_unavailable_explicit_key_does_not_fall_back_to_enrollment(self):
+        other_course = Course.objects.create(
+            title='Other', slug='other-schedule-course', status='published',
+        )
+        Cohort.objects.create(
+            course=other_course, name='Other Cohort 6', external_key='6',
+            start_date=date(2026, 9, 21), end_date=date(2026, 11, 22),
+        )
+        self.client.force_login(self.learner)
+        for key in ('5', '6', 'missing'):
+            with self.subTest(key=key):
+                response = self.client.get(f'/courses/ai-buildcamp?cohort={key}')
+                self.assertIsNone(response.context['schedule_cohort'])
+                self.assertEqual(response.context['unit_deadlines'], {})
+
+    def test_dual_enrollment_uses_nearest_upcoming_then_latest_past(self):
+        today = django_timezone.localdate()
+        self.c4.start_date = today - timedelta(days=90)
+        self.c4.end_date = today - timedelta(days=60)
+        self.c4.save(update_fields=['start_date', 'end_date'])
+        self.c5.start_date = today + timedelta(days=14)
+        self.c5.end_date = today + timedelta(days=70)
+        self.c5.save(update_fields=['start_date', 'end_date'])
+        CohortEnrollment.objects.create(user=self.learner, cohort=self.c5)
+        self.client.force_login(self.learner)
+        upcoming = self.client.get('/courses/ai-buildcamp')
+        self.assertEqual(upcoming.context['schedule_cohort'], self.c5)
+
+        self.c5.start_date = today - timedelta(days=50)
+        self.c5.end_date = today - timedelta(days=20)
+        self.c5.save(update_fields=['start_date', 'end_date'])
+        past = self.client.get('/courses/ai-buildcamp')
+        self.assertEqual(past.context['schedule_cohort'], self.c5)
 
     def test_single_active_buildcamp_cohort_is_public_default(self):
         self.c5.is_active = False

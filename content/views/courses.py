@@ -27,7 +27,11 @@ from content.models import (
 from content.models.peer_review import CourseProject
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
-from content.services.course_schedule import build_deadline_context, select_display_cohort
+from content.services.course_schedule import (
+    build_deadline_context,
+    schedule_timezone_name,
+    select_display_cohort,
+)
 from content.services.enrollment import (
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
@@ -165,10 +169,9 @@ def course_detail(request, slug):
     total = course.total_units()
     completed = course.completed_units(user)
 
-    # Issue #1674: derived cohort week dates for top-level ("week")
-    # modules. Keyed by module.id -> a display-ready "Oct 12–18" string;
-    # empty for a self-paced/anonymous/no-cohort viewer (module heading
-    # shows title only, per the spec).
+    # Derived week dates and deliverable deadlines use the same selected
+    # schedule cohort. An enrolled learner sees only an owned cohort; a
+    # validated query key can select a public preview without granting access.
     viewer_cohort, schedule_is_preview = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
     )
@@ -358,6 +361,7 @@ def course_detail(request, slug):
         'module_week_ranges': module_week_ranges,
         'schedule_cohort': viewer_cohort,
         'schedule_is_preview': schedule_is_preview,
+        'schedule_timezone': schedule_timezone_name(course, user),
         'unit_deadlines': unit_deadlines,
         'module_deadline_summaries': module_deadline_summaries,
         'live_session_entries': live_session_entries,

@@ -5,15 +5,17 @@ fields on CourseExtension and historical URL shapes
 (``/courses/<slug>/<module>/<unit>`` and the four-segment submodule path).
 """
 
+# Imports in wrappers remain local to avoid app-initialization cycles.
+# ruff: noqa: PLC0415
+
 from __future__ import annotations
 
 import hashlib
 import uuid
 
+from community_base.curriculum.models import Course, Module, Unit
 from django.db import models
 from django.db.models import Prefetch
-
-from community_base.curriculum.models import Course, Module, Unit
 
 from content.access import get_required_tier_name
 from content.models.course import (
@@ -131,11 +133,8 @@ def _install_extension_fields() -> None:
 
 def _wrap_inits_and_saves() -> None:
     original_course_init = Course.__init__
-    original_course_save = Course.save
     original_module_init = Module.__init__
-    original_module_save = Module.save
     original_unit_init = Unit.__init__
-    original_unit_save = Unit.save
 
     def course_init(self, *args, **kwargs):
         extra = {k: kwargs.pop(k) for k in AISL_COURSE_FIELDS if k in kwargs}

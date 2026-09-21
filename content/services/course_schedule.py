@@ -8,7 +8,6 @@ from django.db.models import Q
 from django.utils import timezone
 
 from accounts.services.timezones import is_valid_timezone
-
 from content.models import Cohort, CohortEnrollment, Homework, Module, Unit
 from content.models.peer_review import CourseProject
 

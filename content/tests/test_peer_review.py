@@ -21,8 +21,8 @@ from datetime import date, timedelta
 from io import StringIO
 
 from django.contrib.auth import get_user_model
-from django.core.management import call_command
 from django.core.exceptions import ValidationError
+from django.core.management import call_command
 from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
 from django.utils import timezone

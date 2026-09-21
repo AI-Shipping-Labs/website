@@ -4,14 +4,12 @@ from django.test import SimpleTestCase
 
 from content.models import (
     Article,
-    Course,
     CuratedLink,
     Download,
     Instructor,
     InterviewCategory,
     Module,
     Project,
-    Unit,
     Workshop,
     WorkshopPage,
 )

@@ -16,11 +16,10 @@ running the entire migration graph.
 import importlib
 import logging
 import uuid
+from unittest import skipIf
 
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
-from unittest import skipIf
-
 from django.test import TestCase
 from django.utils import timezone
 

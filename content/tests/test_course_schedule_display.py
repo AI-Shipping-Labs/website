@@ -120,6 +120,7 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertEqual(current.context['schedule_cohort'], self.c4)
         chosen = self.client.get('/courses/ai-buildcamp?cohort=3')
         self.assertEqual(chosen.context['schedule_cohort'], older)
+        self.assertNotContains(chosen, 'Attempt 4')
 
     def test_unavailable_explicit_key_does_not_fall_back_to_enrollment(self):
         other_course = Course.objects.create(
@@ -135,6 +136,7 @@ class CourseScheduleDisplayTest(TestCase):
                 response = self.client.get(f'/courses/ai-buildcamp?cohort={key}')
                 self.assertIsNone(response.context['schedule_cohort'])
                 self.assertEqual(response.context['unit_deadlines'], {})
+                self.assertNotContains(response, 'Attempt 4')
 
     def test_dual_enrollment_uses_nearest_upcoming_then_latest_past(self):
         today = django_timezone.localdate()
@@ -169,3 +171,4 @@ class CourseScheduleDisplayTest(TestCase):
         response = self.client.get('/courses/ai-buildcamp?cohort=5')
         self.assertEqual(response.context['schedule_cohort'], self.c5)
         self.assertTrue(response.context['schedule_is_preview'])
+        self.assertNotContains(response, 'Attempt 4')

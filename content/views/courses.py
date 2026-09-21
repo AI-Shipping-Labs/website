@@ -266,6 +266,12 @@ def course_detail(request, slug):
 
     course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
     has_configured_projects = bool(course_projects)
+    if viewer_cohort is not None or request.GET.get('cohort'):
+        course_projects = [
+            project for project in course_projects
+            if project.cohort_id is None
+            or project.cohort_id == getattr(viewer_cohort, 'pk', None)
+        ]
     preview_project_ids = set()
     if not user.is_staff:
         course_projects = [

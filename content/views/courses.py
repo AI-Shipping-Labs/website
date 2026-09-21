@@ -643,12 +643,17 @@ def _render_module_overview(request, course, module):
         course.reader_navigation_scope == 'submodule'
         and not CourseProject.objects.filter(module=module).exists()
     ):
-        first_unit = module.units.order_by('sort_order', 'pk').first()
-        if first_unit is None:
-            for child in module.children.order_by('sort_order', 'pk'):
-                first_unit = child.units.order_by('sort_order', 'pk').first()
-                if first_unit is not None:
-                    break
+        child_ids = list(module.children.values_list('pk', flat=True))
+        ordered_units = (
+            list(Unit.objects.filter(module_id__in=child_ids).order_by(
+                'module__sort_order', 'module__pk', 'sort_order', 'pk',
+            ))
+            if child_ids else list(module.units.order_by('sort_order', 'pk'))
+        )
+        first_unit = next(
+            (unit for unit in ordered_units if unit.kind == 'lesson'),
+            ordered_units[0] if ordered_units else None,
+        )
         if first_unit is not None:
             return redirect(first_unit.get_absolute_url())
 

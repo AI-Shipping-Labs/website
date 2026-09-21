@@ -115,6 +115,34 @@ class ReaderNavigationScopeTest(TestCase):
             fetch_redirect_response=False,
         )
 
+    def test_parent_overview_skips_event_for_first_lesson_page(self):
+        week = Module.objects.create(
+            course=self.course, title='Event then lesson',
+            slug='event-then-lesson', sort_order=4,
+        )
+        session = Module.objects.create(
+            course=self.course, parent=week, title='Session',
+            slug='session', sort_order=1,
+        )
+        event = Unit.objects.create(
+            module=session, title='Live session', slug='live-session',
+            sort_order=1, kind='event', session_position=1,
+        )
+        lesson_module = Module.objects.create(
+            course=self.course, parent=week, title='Overview',
+            slug='overview', sort_order=2,
+        )
+        lesson = Unit.objects.create(
+            module=lesson_module, title='Week overview',
+            slug='week-overview', sort_order=1, kind='lesson',
+        )
+        response = self.client.get('/courses/scoped-reader/event-then-lesson')
+        self.assertRedirects(response, lesson.get_absolute_url(), fetch_redirect_response=False)
+        # A module containing only events still has a usable destination.
+        lesson_module.delete()
+        response = self.client.get('/courses/scoped-reader/event-then-lesson')
+        self.assertRedirects(response, event.get_absolute_url(), fetch_redirect_response=False)
+
     def test_empty_scoped_modules_keep_overview(self):
         empty = Module.objects.create(
             course=self.course, title='Empty', slug='empty', sort_order=3,

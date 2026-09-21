@@ -125,6 +125,91 @@ class SyncSourcesApiTest(TestCase):
         self.assertNotIn("webhook_secret", example)
         self.assertNotIn("last_sync_log", example)
 
+    # -- Webhook secret retrieval (issue #1766) ---------------------------
+
+    def test_webhook_secret_endpoint_requires_valid_staff_token(self):
+        cases = [
+            ({}, {"error": "Authentication token required"}),
+            (
+                {"HTTP_AUTHORIZATION": self.staff_token.key},
+                {"error": "Authentication token required"},
+            ),
+            (
+                {"HTTP_AUTHORIZATION": "Token does-not-exist"},
+                {"error": "Invalid token"},
+            ),
+            (
+                self._auth(self.non_staff_token),
+                {"error": "Invalid token"},
+            ),
+        ]
+
+        url = f"/api/sync/sources/{self.source.pk}/webhook-secret"
+        for headers, expected_body in cases:
+            with self.subTest(headers=headers):
+                response = self.client.get(url, **headers)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json(), expected_body)
+
+    def test_webhook_secret_endpoint_returns_stored_secret_for_staff(self):
+        response = self.client.get(
+            f"/api/sync/sources/{self.source.pk}/webhook-secret",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {
+            "id": str(self.source.pk),
+            "repo_name": "AI-Shipping-Labs/content",
+            "webhook_secret": "configured-secret",
+        })
+
+    def test_webhook_secret_endpoint_returns_empty_string_when_not_configured(self):
+        blank = ContentSource.objects.create(
+            repo_name="AI-Shipping-Labs/blank-secret",
+            webhook_secret="   ",
+        )
+        response = self.client.get(
+            f"/api/sync/sources/{blank.pk}/webhook-secret",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["webhook_secret"], "")
+
+    def test_webhook_secret_endpoint_missing_source_returns_404(self):
+        import uuid
+
+        response = self.client.get(
+            f"/api/sync/sources/{uuid.uuid4()}/webhook-secret",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_openapi_documents_webhook_secret_endpoint(self):
+        from api.openapi import build_spec
+        from api.urls import urlpatterns
+
+        document = build_spec(urlpatterns)
+        operation = (
+            document["paths"]
+            ["/api/sync/sources/{source_id}/webhook-secret"]["get"]
+        )
+
+        self.assertEqual(operation["summary"], "Get the source's stored webhook secret")
+        self.assertNotIn("example", operation["responses"]["200"])
+
+    def test_delete_webhook_secret_returns_405_without_mutating(self):
+        response = self.client.delete(
+            f"/api/sync/sources/{self.source.pk}/webhook-secret",
+            **self._auth(),
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.source.refresh_from_db()
+        self.assertEqual(self.source.webhook_secret, "configured-secret")
+
     def test_delete_sources_collection_returns_guidance_without_mutating(self):
         response = self.client.delete("/api/sync/sources", **self._auth())
 

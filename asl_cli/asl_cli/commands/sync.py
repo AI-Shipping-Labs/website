@@ -57,6 +57,40 @@ def sync_history_detail(history_id, fmt):
     emit(get_client().get(f"{API}/sync/history/{history_id}"), fmt)
 
 
+@sync.command("webhook-secret")
+@click.argument("source")
+def sync_webhook_secret(source):
+    """Print the webhook secret stored for one content source.
+
+    SOURCE is the short name (e.g. wiki), the full repo name, or the UUID.
+    Prints only the secret value so it can be piped into tools like
+    `gh secret set`. Exits nonzero when the source is unknown or has no
+    secret configured.
+    """
+    client = get_client()
+    listing = client.get(f"{API}/sync/sources")
+    entries = listing.get("sources", []) if isinstance(listing, dict) else []
+    needle = source.strip().lower()
+    match = None
+    for entry in entries:
+        if (
+            entry.get("id") == source
+            or entry.get("short_name", "").lower() == needle
+            or entry.get("repo_name", "").lower() == needle
+        ):
+            match = entry
+            break
+    if match is None:
+        raise click.ClickException(f"Unknown content source: {source}")
+    detail = client.get(f"{API}/sync/sources/{match['id']}/webhook-secret")
+    secret = (detail.get("webhook_secret") or "").strip()
+    if not secret:
+        raise click.ClickException(
+            f"No webhook secret configured for {match['repo_name']}"
+        )
+    click.echo(secret)
+
+
 @sync.command("plan-sprints")
 @click.option("--since", default=None, help="ISO timestamp for retroactive backfill.")
 @click.option("--dry-run", is_flag=True, default=False)

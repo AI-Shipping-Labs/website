@@ -622,3 +622,80 @@ def test_tier_passthrough_of_none_and_int():
 def test_tier_rejects_unknown_value():
     with pytest.raises(click.exceptions.UsageError):
         TierLevel().convert("nonsense", None, None)
+
+
+# -- sync webhook-secret (issue #1766) -------------------------------------
+
+
+class SequencedSyncClient:
+    """Returns queued GET results in order and records the paths."""
+
+    def __init__(self, results):
+        self.calls = []
+        self.results = list(results)
+
+    def get(self, path, **kwargs):
+        self.calls.append(path)
+        return self.results.pop(0)
+
+
+SECRET_LISTING = {
+    "sources": [
+        {
+            "id": "uuid-wiki",
+            "repo_name": "AI-Shipping-Labs/wiki",
+            "short_name": "wiki",
+        },
+    ],
+}
+
+
+def test_sync_webhook_secret_resolves_short_name_and_prints_only_value(
+    monkeypatch,
+):
+    client = SequencedSyncClient([
+        SECRET_LISTING,
+        {"repo_name": "AI-Shipping-Labs/wiki", "webhook_secret": "whsec-test"},
+    ])
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(cli, ["sync", "webhook-secret", "wiki"])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        "/api/sync/sources",
+        "/api/sync/sources/uuid-wiki/webhook-secret",
+    ]
+    assert result.stdout == "whsec-test\n"
+
+
+def test_sync_webhook_secret_accepts_full_repo_name_and_uuid(monkeypatch):
+    client = SequencedSyncClient([
+        SECRET_LISTING,
+        {"webhook_secret": "whsec-test"},
+    ])
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(
+        cli, ["sync", "webhook-secret", "AI-Shipping-Labs/wiki"],
+    )
+    assert result.exit_code == 0, result.output
+    assert client.calls[-1] == "/api/sync/sources/uuid-wiki/webhook-secret"
+
+
+def test_sync_webhook_secret_fails_closed_on_unknown_source(monkeypatch):
+    client = SequencedSyncClient([SECRET_LISTING])
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(cli, ["sync", "webhook-secret", "nope"])
+    assert result.exit_code == 1
+    combined = result.output + (result.stderr or "")
+    assert "Unknown content source" in combined
+    assert "whsec" not in combined
+
+
+def test_sync_webhook_secret_fails_closed_on_blank_secret(monkeypatch):
+    client = SequencedSyncClient([
+        SECRET_LISTING,
+        {"repo_name": "AI-Shipping-Labs/wiki", "webhook_secret": "  "},
+    ])
+    monkeypatch.setattr(sync_module, "get_client", lambda: client)
+    result = CliRunner().invoke(cli, ["sync", "webhook-secret", "wiki"])
+    assert result.exit_code == 1
+    assert "No webhook secret configured" in result.output + (result.stderr or "")

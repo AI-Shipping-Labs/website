@@ -190,6 +190,7 @@ from api.views.sync_sources import (
     sync_history_collection,
     sync_history_detail,
     sync_source_trigger,
+    sync_source_webhook_secret,
     sync_sources_collection,
 )
 from api.views.tier_overrides import tier_overrides_grant
@@ -578,6 +579,11 @@ urlpatterns = [
         "sync/sources/<uuid:source_id>/trigger",
         sync_source_trigger,
         name="api_sync_source_trigger",
+    ),
+    path(
+        "sync/sources/<uuid:source_id>/webhook-secret",
+        sync_source_webhook_secret,
+        name="api_sync_source_webhook_secret",
     ),
     path(
         "sync/history",

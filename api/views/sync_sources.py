@@ -461,3 +461,47 @@ def sync_source_trigger(request, source_id):
         },
         status=202 if result.queued else 200,
     )
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Sync Sources",
+    summary="Get the stored webhook secret for one sync source",
+    methods={
+        "GET": {
+            "summary": "Get the source's stored webhook secret",
+            "description": (
+                "Staff-only plaintext read of the ``webhook_secret`` stored "
+                "on the source row. GitHub signs every App delivery with "
+                "one secret and never displays it again after it is saved, "
+                "so this row value is the only readable copy. Handle it "
+                "like a password; the source inventory endpoint keeps "
+                "reporting only a boolean ``webhook_secret_configured``."
+            ),
+            "responses": {
+                200: {
+                    "description": (
+                        "The stored secret (empty string when the source "
+                        "has none configured)."
+                    ),
+                    "example": {
+                        "id": _SYNC_SOURCE_EXAMPLE["id"],
+                        "repo_name": _SYNC_SOURCE_EXAMPLE["repo_name"],
+                        "webhook_secret": "example-webhook-secret-value",
+                    },
+                },
+                404: {"description": "Sync source not found."},
+            },
+        },
+    },
+)
+def sync_source_webhook_secret(request, source_id):
+    """GET ``/api/sync/sources/<uuid>/webhook-secret``."""
+    source = get_object_or_404(ContentSource, pk=source_id)
+    return JsonResponse({
+        "id": str(source.pk),
+        "repo_name": source.repo_name,
+        "webhook_secret": source.webhook_secret or "",
+    })

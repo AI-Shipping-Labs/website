@@ -822,7 +822,11 @@ def _render_course_unit_detail(request, course, module, unit):
     use_homework_steps = bool(
         homework and homework.stepper_enabled and homework.questions.exists()
     )
-    if request.method == 'POST' and not use_homework_steps:
+    # A learner may still submit a previously opened all-in-one form after
+    # source content enables the stepper. Keep that POST on the legacy path.
+    if request.method == 'POST' and (
+        not use_homework_steps or not request.POST.get('draft_token')
+    ):
         return _handle_homework_submission_post(request, unit)
 
     # Record a `lesson_open` activity row for the CRM timeline (issue #853),
@@ -950,6 +954,9 @@ def _handle_homework_submission_post(request, unit):
         homework_link=homework_link,
         answers_by_question_id=answers_by_question_id,
     )
+    if homework.stepper_enabled:
+        from community_base.homework_steps.services import clear_draft
+        clear_draft(request.user, f'aisl:homework:{homework.pk}')
     messages.success(
         request,
         'Your homework was submitted. You can update it anytime before the deadline.',

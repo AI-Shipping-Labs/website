@@ -7,6 +7,7 @@ from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
 from content.models.homework import Answer, Submission
+from content.services.homework_step_reader import option_key
 from content.services.homework_step_sections import validate_question_bindings
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
 
@@ -50,6 +51,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
     def save_answer(self, key, revision, answer, *, client=None):
         draft = HomeworkDraft.objects.get(user=self.student)
+        if key == self.mc_question.source_question_id and answer in ('1', '2', '3'):
+            answer = option_key(self.mc_question.options_list[int(answer) - 1])
         return (client or self.client).post(
             f'/api/homework-reader/drafts/{self.homework.pk}/questions/{key}',
             {
@@ -76,7 +79,10 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         response = self.save_answer(self.mc_question.source_question_id, 0, '2')
         self.assertEqual(response.json(), {'revision': 1, 'saved': True})
         self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
-        self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers, {'q1-lines': '2'})
+        self.assertEqual(
+            HomeworkDraft.objects.get(user=self.student).answers,
+            {'q1-lines': option_key('14')},
+        )
         resumed = self.client.get(self.unit_url)
         self.assertEqual(resumed.context['stepper']['step'], 'q2-reflect')
 
@@ -92,7 +98,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             {
                 'assignment_key': f'aisl:homework:{self.homework.pk}',
                 'draft_token': str(draft.token), 'homework_step': 'q1-lines',
-                'revision': '0', 'answer': '2', 'next_step': 'q2-reflect',
+                'revision': '0', 'answer': option_key('14'), 'next_step': 'q2-reflect',
             },
         )
         self.assertEqual(
@@ -109,7 +115,9 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             {'revision': '1', 'answer': '1'},
         )
         self.assertEqual(wrong.status_code, 404)
-        self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers['q1-lines'], '1')
+        self.assertEqual(
+            HomeworkDraft.objects.get(user=self.student).answers['q1-lines'], option_key('12'),
+        )
 
     def test_clear_one_answer_keeps_other_saved_answer(self):
         self.client.get(self.unit_url)
@@ -175,7 +183,10 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         })
         self.assertEqual(response.status_code, 403)
         self.assertContains(response, 'deadline', status_code=403)
-        self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers, {'q1-lines': '2'})
+        self.assertEqual(
+            HomeworkDraft.objects.get(user=self.student).answers,
+            {'q1-lines': option_key('14')},
+        )
         self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
 
     def test_existing_submission_seeds_draft_without_changing_submission(self):
@@ -191,5 +202,41 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             submission=submission, question=self.mc_question, answer_text='1',
         )
         opened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
-        self.assertContains(opened, 'value="1" checked')
+        self.assertContains(opened, f'value="{option_key("12")}" checked')
         self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '1')
+
+    def test_stale_all_in_one_post_still_submits_and_clears_stepper_draft(self):
+        self.client.get(self.unit_url)
+        self.save_answer('q1-lines', 0, '1')
+
+        response = self.client.post(self.unit_url, {
+            f'answer_{self.mc_question.pk}': '2',
+            'homework_link': 'https://github.com/example/legacy',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        submission = Submission.objects.get(homework=self.homework, student=self.student)
+        self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '2')
+        self.assertEqual(submission.homework_link, 'https://github.com/example/legacy')
+        self.assertFalse(HomeworkDraft.objects.filter(user=self.student).exists())
+
+    def test_reordered_options_preserve_draft_choice_and_submit_current_index(self):
+        self.client.get(self.unit_url)
+        self.save_answer('q1-lines', 0, '2')
+        saved_key = HomeworkDraft.objects.get(user=self.student).answers['q1-lines']
+
+        self.mc_question.possible_answers = '16\n12\n14'
+        self.mc_question.save(update_fields=['possible_answers'])
+
+        reopened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+        self.assertContains(reopened, f'value="{saved_key}" checked')
+        self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers['q1-lines'], saved_key)
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
+            'homework_step': 'review', 'revision': '1', 'intent': 'submit',
+            'final_homework_link': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        submission = Submission.objects.get(homework=self.homework, student=self.student)
+        self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '3')

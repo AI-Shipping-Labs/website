@@ -87,6 +87,8 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
             selected = [value.strip() for value in correct.split(',')]
             if (
                 not isinstance(options, list) or not options
+                or any(not str(option).strip() for option in options)
+                or len({str(option).strip() for option in options}) != len(options)
                 or (raw_type == 'multiple_choice' and len(selected) != 1)
                 or not correct or any(not value.isdigit() for value in selected)
                 or len(set(selected)) != len(selected)
@@ -94,7 +96,7 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
             ):
                 raise GitHubSyncError(
                     f'Invalid homework steps in {rel_path}: Question {index} '
-                    'needs approved answer keys within its options'
+                    'needs distinct options and approved answer keys within its options'
                 )
 
     cohort = _resolve_homework_cohort(course, rel_path)

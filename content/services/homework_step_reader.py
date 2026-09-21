@@ -1,5 +1,7 @@
 """AISL adapter for the shared, cohort-scoped homework draft reader."""
 
+import hashlib
+
 from community_base.homework_steps.types import (
     Assignment,
     Eligibility,
@@ -32,6 +34,36 @@ def question_key(question):
     return question.source_question_id or f'q-{question.pk}'
 
 
+def option_key(label):
+    """Keep a choice's draft identity stable when source options move."""
+    return 'option-' + hashlib.sha256(label.encode('utf-8')).hexdigest()[:24]
+
+
+def _option_keys(question):
+    keys = [option_key(label) for label in question.options_list]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f'Duplicate option labels in homework question {question_key(question)}')
+    return keys
+
+
+def _submitted_value_to_key(question, value):
+    """Convert the legacy numeric storage shape to stable draft keys."""
+    if question.question_type not in (QuestionType.MULTIPLE_CHOICE, QuestionType.CHECKBOXES):
+        return value
+    keys = _option_keys(question)
+
+    def resolve(index):
+        try:
+            position = int(index)
+        except (ValueError, IndexError):
+            return ''
+        return keys[position - 1] if 1 <= position <= len(keys) else ''
+
+    if question.question_type == QuestionType.CHECKBOXES:
+        return [key for item in value.split(',') if (key := resolve(item.strip()))]
+    return resolve(value) if value else ''
+
+
 def _render_safe(markdown):
     return mark_safe(sanitize_html(linkify_urls(render_markdown(markdown))))
 
@@ -56,10 +88,7 @@ def build_assignment(homework, unit, user, *, context=None):
             if question is None:
                 continue
             value = answer.answer_text or ''
-            existing_answers[question_key(question)] = (
-                [item.strip() for item in value.split(',') if item.strip()]
-                if question.question_type == QuestionType.CHECKBOXES else value
-            )
+            existing_answers[question_key(question)] = _submitted_value_to_key(question, value)
     step_questions = tuple(
         StepQuestion(
             key=question_key(question),
@@ -67,8 +96,8 @@ def build_assignment(homework, unit, user, *, context=None):
             if question_key(question) in rich_prompts else question.text,
             type=QUESTION_TYPES[question.question_type],
             options=tuple(
-                Option(str(index), text)
-                for index, text in enumerate(question.options_list, start=1)
+                Option(key, text)
+                for key, text in zip(_option_keys(question), question.options_list, strict=True)
             ),
         )
         for question in questions
@@ -122,8 +151,14 @@ class AISLHomeworkAdapter:
             question = questions.get(key)
             if question is None:
                 raise ValidationError('An answer no longer belongs to this homework.')
-            if isinstance(value, list):
-                answer = ','.join(sorted(value, key=lambda item: (len(item), item)))
+            if question.question_type in (QuestionType.MULTIPLE_CHOICE, QuestionType.CHECKBOXES):
+                positions = {item: str(index) for index, item in enumerate(
+                    _option_keys(question), start=1,
+                )}
+                selected = value if isinstance(value, list) else [value]
+                if any(item not in positions for item in selected):
+                    raise ValidationError('An answer option changed. Review and save it again.')
+                answer = ','.join(sorted((positions[item] for item in selected), key=int))
             else:
                 answer = value.strip()
             if answer:

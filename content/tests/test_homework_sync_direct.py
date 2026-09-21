@@ -110,6 +110,15 @@ class SyncUnitHomeworkDirectTest(TestCase):
             self._sync(_questions_metadata(homework_steps=True, questions=questions))
         self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
 
+    def test_activated_choice_rejects_duplicate_option_labels(self):
+        self.unit.homework = '## Question 1. Lines\nA\n## Question 2. Reflection\nB'
+        self.unit.save(update_fields=['homework'])
+        questions = _questions_metadata()['questions']
+        questions[0]['options'] = ['A', 'B', 'A']
+        with self.assertRaisesRegex(GitHubSyncError, 'approved answer keys'):
+            self._sync(_questions_metadata(homework_steps=True, questions=questions))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
     def test_no_op_when_neither_due_date_nor_questions_present(self):
         stats = self._sync({})
         self.assertEqual(stats['errors'], [])

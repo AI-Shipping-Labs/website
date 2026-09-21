@@ -32,7 +32,7 @@
     {% endif %}
     {% if counter %}<i data-lucide="chevron-down" class="module-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
   </summary>
-  <div class="px-1 pb-1{% if children %} border-t border-border/60 pl-3 pr-2 sm:pl-4 sm:pr-3{% endif %}">
+  <div class="pb-1{% if children %} px-1 border-t border-border/60 pl-3 pr-2 sm:pl-4 sm:pr-3{% elif counter %} px-1{% else %} pl-6 pr-1{% endif %}">
     {% if children %}
       {% for child in children|required_only %}
       {% include "content/_syllabus_module.html" with module=child completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module only %}

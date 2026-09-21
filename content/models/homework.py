@@ -74,6 +74,9 @@ class Homework(SourceMetadataMixin, models.Model):
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='', db_default='')
     due_date = models.DateTimeField()
+    # Activated only after the source has approved question keys and a
+    # deadline. Older homework keeps its all-in-one submission form.
+    stepper_enabled = models.BooleanField(default=False, db_default=False)
     state = models.CharField(
         max_length=2, choices=HomeworkState.choices,
         default=HomeworkState.OPEN, db_default=HomeworkState.OPEN,

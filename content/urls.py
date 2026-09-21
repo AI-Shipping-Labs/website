@@ -25,6 +25,7 @@ from content.views.courses import (
 )
 from content.views.faq import faq
 from content.views.home import home
+from content.views.homework_steps import save_homework_step_answer
 from content.views.interview import (
     company_interview_detail,
     company_interviews_list,
@@ -194,6 +195,10 @@ urlpatterns = [
     # Certificates
     path('certificates/<uuid:certificate_id>', certificate_page, name='certificate_page'),
     # API endpoints
+    path(
+        'api/homework-reader/drafts/<int:homework_id>/questions/<slug:question_id>',
+        save_homework_step_answer, name='save_homework_step_answer',
+    ),
     path('api/projects/submit', submit_project, name='submit_project'),
     path('api/downloads/<slug:slug>/file', download_file, name='download_file'),
     path('api/downloads/<slug:slug>/request', request_download, name='request_download'),

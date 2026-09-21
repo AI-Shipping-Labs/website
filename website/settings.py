@@ -201,6 +201,9 @@ INSTALLED_APPS = [
     # Package events stay uninstalled (label collision with this site's
     # events app); curriculum Studio/API surfaces therefore stay off.
     'community_base.curriculum',
+    # Cohort-specific homework draft persistence; AISL keeps its own
+    # assessment/submission tables and adapts them at the reader boundary.
+    'community_base.homework_steps',
     # Issue #1688: member topic pages synced from AI-Shipping-Labs/wiki,
     # rendered Basic-and-above gated under /topics/.
     'topics',

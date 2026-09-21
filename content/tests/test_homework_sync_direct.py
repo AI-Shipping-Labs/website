@@ -80,10 +80,44 @@ class SyncUnitHomeworkDirectTest(TestCase):
         ff = Question.objects.get(homework=homework, source_question_id='q2-reflect')
         self.assertEqual(ff.answer_type, AnswerType.ANY)
 
+    def test_steps_activate_only_when_explicitly_authored(self):
+        self.unit.homework = (
+            'Download the books.\n## Question 1. Lines\nRun `wc -l`.\n'
+            '## Question 2. Reflection\nDescribe the work.'
+        )
+        self.unit.save(update_fields=['homework'])
+        self._sync(_questions_metadata(homework_steps=True))
+        homework = Homework.objects.get(content_id=self.unit.content_id)
+        self.assertTrue(homework.stepper_enabled)
+        self._sync(_questions_metadata())
+        homework.refresh_from_db()
+        self.assertFalse(homework.stepper_enabled)
+
+    def test_mismatched_step_binding_rejects_before_homework_write(self):
+        self.unit.homework = '## Question 1. Lines\nA\n## Question 2. Reflection\nB'
+        self.unit.save(update_fields=['homework'])
+        questions = list(reversed(_questions_metadata()['questions']))
+        with self.assertRaisesRegex(GitHubSyncError, 'course/01-module/02-hw.md'):
+            self._sync(_questions_metadata(homework_steps=True, questions=questions))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
+    def test_activated_choice_requires_answer_key_in_options(self):
+        self.unit.homework = '## Question 1. Lines\nA\n## Question 2. Reflection\nB'
+        self.unit.save(update_fields=['homework'])
+        questions = _questions_metadata()['questions']
+        questions[0]['correct'] = ''
+        with self.assertRaisesRegex(GitHubSyncError, 'approved answer keys'):
+            self._sync(_questions_metadata(homework_steps=True, questions=questions))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
     def test_no_op_when_neither_due_date_nor_questions_present(self):
         stats = self._sync({})
         self.assertEqual(stats['errors'], [])
         self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
+    def test_step_activation_without_questions_or_deadline_is_rejected(self):
+        with self.assertRaisesRegex(GitHubSyncError, 'due_date'):
+            self._sync({'homework_steps': True})
 
     def test_questions_without_due_date_raises(self):
         with self.assertRaises(GitHubSyncError) as cm:

@@ -10,6 +10,7 @@ import datetime
 
 from django.utils.dateparse import parse_datetime
 
+from content.services.homework_step_sections import validate_question_bindings
 from content.sync_parsers.common import GitHubSyncError, logger
 
 _QUESTION_TYPE_MAP = {
@@ -45,7 +46,7 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
     raw_due_date = metadata.get('due_date')
     raw_questions = metadata.get('questions')
 
-    if raw_due_date is None and not raw_questions:
+    if raw_due_date is None and not raw_questions and not metadata.get('homework_steps'):
         return
 
     if raw_due_date is None:
@@ -60,6 +61,41 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
         raise GitHubSyncError(
             f'Invalid homework in {rel_path}: questions: must be a list'
         )
+
+    stepper_enabled = metadata.get('homework_steps', False)
+    if not isinstance(stepper_enabled, bool):
+        raise GitHubSyncError(
+            f'Invalid homework in {rel_path}: homework_steps must be true or false'
+        )
+    if stepper_enabled:
+        question_ids = [entry.get('id') if isinstance(entry, dict) else None
+                        for entry in raw_questions]
+        if not question_ids:
+            raise GitHubSyncError(
+                f'Invalid homework in {rel_path}: homework_steps needs questions'
+            )
+        try:
+            validate_question_bindings(unit.homework, question_ids, rel_path)
+        except ValueError as exc:
+            raise GitHubSyncError(str(exc)) from exc
+        for index, entry in enumerate(raw_questions, start=1):
+            raw_type = entry.get('type')
+            if raw_type not in ('multiple_choice', 'checkboxes'):
+                continue
+            options = entry.get('options')
+            correct = str(entry.get('correct') or '').strip()
+            selected = [value.strip() for value in correct.split(',')]
+            if (
+                not isinstance(options, list) or not options
+                or (raw_type == 'multiple_choice' and len(selected) != 1)
+                or not correct or any(not value.isdigit() for value in selected)
+                or len(set(selected)) != len(selected)
+                or any(int(value) < 1 or int(value) > len(options) for value in selected)
+            ):
+                raise GitHubSyncError(
+                    f'Invalid homework steps in {rel_path}: Question {index} '
+                    'needs approved answer keys within its options'
+                )
 
     cohort = _resolve_homework_cohort(course, rel_path)
     if cohort is None:
@@ -80,6 +116,7 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
         'content_id': unit.content_id,
         'source_repo': unit.source_repo,
         'source_path': rel_path,
+        'stepper_enabled': stepper_enabled,
     }
 
     homework = Homework.objects.filter(

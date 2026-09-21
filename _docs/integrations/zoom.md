@@ -472,8 +472,12 @@ orphaned `.vtt` objects before a schema rollback if they must later be removed.
 Studio settings key (S3 Recordings group), default `true`. When on, a
 stored transcript chains an LLM recap draft
 (`integrations.services.llm`). The draft is factual Markdown ("What we
-covered" / "Key takeaways"), generated only from the transcript with no
-attendee personal data. It is written to `Event.recap_notes` only when
+covered" / "Key takeaways" / "Try it yourself"), generated only from the
+transcript with no
+attendee personal data. The closing "Try it yourself" section turns the
+call into concrete next steps (tools, commands, links, homework named in
+the transcript) so the recap is actionable without watching the
+recording. It is written to `Event.recap_notes` only when
 `recap_notes` is still empty — operator-authored notes always win. The
 public recap page then goes live through the existing recap gate
 (`has_recap and is_past`): publication is automatic by design, while

@@ -38,8 +38,15 @@ provided, compose with `$fetch-youtube` and fetch the transcript once.
   `.tmp/event-recaps/<event-slug>.md`. Keep the file local and out of the
   content repository unless the event is GitHub-origin. Do not add YAML
   frontmatter, invented claims, unsupported speaker quotes, or attendee PII.
-- Prefer a concise title, what was covered, useful takeaways, and recording
-  chapters only when the timestamps are supported by the recording.
+- Make the recap actionable on its own. Assume the reader missed the call
+  and will not watch the recording: after a concise title and a brief
+  what-was-covered narrative, give concrete takeaways and end with a
+  `Try it yourself` (or `Next steps`) section listing the actual steps,
+  tools, commands, links, and homework named in the transcript, so a
+  member can act on the call without watching it. A recap that only
+  summarizes the discussion is not done.
+- Add recording chapters only when the timestamps are supported by the
+  recording.
 
 ## 3. Publish through the event’s source of truth
 

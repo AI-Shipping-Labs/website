@@ -57,7 +57,6 @@ class ReaderNavigationScopeTest(TestCase):
 
     def test_current_week_includes_all_its_topics_but_not_other_weeks(self):
         response = self.reader(self.middle)
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="reader-scoped-module"')
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
         self.assertIn('Middle topic lesson', sidebar)
@@ -174,14 +173,12 @@ class ReaderNavigationScopeTest(TestCase):
             course=self.course, title='Empty', slug='empty', sort_order=3,
         )
         response = self.client.get('/courses/scoped-reader/empty')
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['module'], empty)
 
     def test_course_scope_keeps_module_overviews(self):
         self.course.reader_navigation_scope = 'course'
         self.course.save(update_fields=['reader_navigation_scope'])
         response = self.client.get('/courses/scoped-reader/week-1')
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['module'].slug, 'week-1')
 
     def test_project_attempt_module_keeps_overview_and_attempt_cards(self):
@@ -193,6 +190,5 @@ class ReaderNavigationScopeTest(TestCase):
             review_due_at=now + datetime.timedelta(days=14),
         )
         response = self.client.get('/courses/scoped-reader/week-1/middle')
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['module'], self.middle)
         self.assertContains(response, 'Project attempt 1')

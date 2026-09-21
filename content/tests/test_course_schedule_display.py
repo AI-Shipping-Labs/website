@@ -175,7 +175,6 @@ class CourseScheduleDisplayTest(TestCase):
 
     def test_module_overview_uses_selected_schedule_timezone_and_preview_gate(self):
         response = self.client.get(f'{self.topic.get_absolute_url()}?cohort=5')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Attempt 5')
         self.assertContains(response, 'Feb 1, 2027 19:00 Europe/Berlin')
         self.assertNotContains(response, 'Attempt 4')

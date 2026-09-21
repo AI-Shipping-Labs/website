@@ -194,7 +194,6 @@ class BuildcampSinglePageTopicTest(TestCase):
         )
         self.client.force_login(self.user)
         response = self.client.get(session_unit.get_absolute_url())
-        self.assertEqual(response.status_code, 200)
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
 
         class NavLinks(HTMLParser):

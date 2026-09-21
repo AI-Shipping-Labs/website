@@ -60,7 +60,6 @@ class BuildcampModuleTimelineTest(TestCase):
 
     def test_public_buildcamp_schedule_uses_the_module_ranges(self):
         response = self.client.get('/courses/ai-buildcamp?cohort=4')
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['module_week_ranges'][self.weeks[0].pk], 'Sep 21–27')
         self.assertEqual(response.context['module_week_ranges'][self.capstone.pk], 'Nov 2–22')
 

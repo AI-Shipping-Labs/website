@@ -2,6 +2,11 @@ from django.urls import path, re_path
 from django.views.generic import RedirectView
 
 from content.views.api import download_file, request_download, submit_project
+from content.views.course_project_attempts import (
+    attempt_review_form,
+    attempt_reviews,
+    attempt_submit,
+)
 from content.views.courses import (
     api_cohort_enroll,
     api_cohort_unenroll,
@@ -164,6 +169,9 @@ urlpatterns = [
     path('courses/<slug:slug>/enroll', enroll_course, name='enroll_course'),
     path('courses/<slug:slug>/unenroll', unenroll_course, name='unenroll_course'),
     # Peer review (must be before the catch-all slug-based unit URL)
+    path('courses/<slug:slug>/projects/<slug:attempt_slug>/submit', attempt_submit, name='course_project_submit'),
+    path('courses/<slug:slug>/projects/<slug:attempt_slug>/reviews', attempt_reviews, name='course_project_reviews'),
+    path('courses/<slug:slug>/projects/<slug:attempt_slug>/reviews/<int:submission_id>', attempt_review_form, name='course_project_review_form'),
     path('courses/<slug:slug>/submit', project_submit, name='project_submit'),
     path('courses/<slug:slug>/reviews', review_dashboard, name='peer_review_dashboard'),
     path('courses/<slug:slug>/reviews/<int:submission_id>', review_form, name='peer_review_form'),

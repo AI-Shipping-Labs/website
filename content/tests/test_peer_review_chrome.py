@@ -217,7 +217,7 @@ class PeerReviewFormChromeTest(TestCase):
         _assert_header_chrome(self, response, url)
         # Page-specific markup still renders.
         self.assertContains(response, 'Peer Review')
-        self.assertContains(response, 'Back to Review Dashboard')
+        self.assertContains(response, 'Back to Peer Reviews')
 
 
 class CertificatePageChromeTest(TestCase):

@@ -84,6 +84,17 @@ cohorts:                               # optional; upserted into content.Cohort
   - key: self-paced                    # optional second entry; mode: self_paced
     name: Self-paced
     mode: self_paced                   # optional; 'cohort' (default) or 'self_paced'
+peer_review_enabled: true             # required when projects are listed
+peer_review_count: 3                  # default reviews per learner
+peer_review_criteria: |              # markdown shown during review
+  Explain what works and what to improve.
+projects:                              # optional dated project attempts
+  - slug: attempt-1                    # unique within the course
+    title: Attempt 1
+    module_path: capstone-project/capstone-project  # leaf syllabus module
+    cohort_key: cohort-4               # optional; must match a cohort key above
+    submission_due_at: '2030-11-08T23:59:00+01:00'
+    review_due_at: '2030-11-15T23:59:00+01:00'
 ```
 
 ### `maven_course_key` and `cohorts:`
@@ -119,6 +130,22 @@ test enrollment before relying on it (see `_docs/integrations/maven.md`,
 "Testing live"). A mismatch fails the enrollment `enrollment` step silently
 from the enrollee's perspective (they still get the community welcome, just
 not the course grant) — visible on `/studio/maven-events/<pk>/`.
+
+### Project attempts
+
+`projects:` defines separate submission and peer review windows within a
+curriculum module. Each entry needs a course-unique `slug`, a `title`, a
+`module_path` of one or two module slugs, and timezone-aware ISO 8601 values
+for `submission_due_at` and `review_due_at`. The review deadline must follow
+the submission deadline. Set `cohort_key` to restrict the attempt to learners
+enrolled in that cohort; omit it for a course-wide attempt. An optional
+`peer_review_count` overrides the course value for that attempt.
+
+`module_path` must identify a leaf module; the attempts appear in that module's
+syllabus and overview page. Sync upserts attempts by `(course, slug)` and never deletes an attempt removed
+from YAML, because it may already have submissions. Review assignments begin
+after the submission deadline and use the attempt's review deadline. Learners
+choose an attempt within the curriculum and submit separately to each one.
 
 ### Access levels
 
@@ -157,7 +184,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
 | `individual_price_eur` | DB only | Not yet editable for source-managed courses in Studio; use an explicit low-level maintenance change. Not in `course.yaml`. |
 | `stripe_product_id`, `stripe_price_id` | DB only | Created via "Create Stripe Product" button after a price is set. |
-| `peer_review_*` | DB only | Configured per-course in Studio (admin) once. |
+| `peer_review_*`, `projects:` | YAML | Source-managed course review settings and dated attempts. Edit in GitHub, then re-sync. |
 
 When a source-managed course shows `Not configured` next to `Individual price`, `Stripe product`, or `Stripe price`, the field is genuinely empty in the database — it has not been configured yet.
 

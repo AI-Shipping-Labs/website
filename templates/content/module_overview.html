@@ -117,6 +117,16 @@
         </p>
         {% endif %}
       </section>
+      {% if course_projects %}
+      <section class="mb-12" aria-labelledby="module-projects-heading" data-testid="module-project-attempts">
+        <h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>
+        <div class="rounded-lg border border-border bg-card divide-y divide-border">
+          {% for project in course_projects %}
+          {% include "content/_syllabus_project_row.html" with project=project course_slug=course.slug only %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
       {% endif %}
 
       {% if cta_message %}

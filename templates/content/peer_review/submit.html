@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load member_badges accounts_extras %}
+{% load member_badges accounts_extras date_formatting %}
 
-{% block title %}Submit Project - {{ course.title }} | {{ site_name }}{% endblock %}
+{% block title %}Submit project - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
@@ -17,9 +17,13 @@
 
   <h1 class="mb-2 flex items-center gap-2.5 text-2xl font-semibold text-foreground">
     <i data-lucide="folder-git-2" class="h-5 w-5 text-muted-foreground" aria-hidden="true"></i>
-    Submit Project
+    {% if course_project %}Submit project{% else %}Submit Project{% endif %}
   </h1>
-  <p class="text-muted-foreground mb-8">{{ course.title }}</p>
+  <p class="text-muted-foreground mb-8">{{ course.title }}{% if course_project %} · {{ course_project.title }} · Submit by {% user_event_datetime course_project.submission_due_at request.user "%b %d, %Y, %H:%M" %}{% endif %}</p>
+
+  {% if deadline_passed %}
+  <div class="rounded-lg border border-border bg-secondary/50 p-4 mb-6 text-sm text-muted-foreground">The submission deadline has passed. You can still see your submission and peer reviews.</div>
+  {% endif %}
 
   {% if just_submitted %}
   <div class="bg-green-500/10 border border-green-500/30 text-green-400 rounded-lg p-4 mb-6">
@@ -51,7 +55,7 @@
       {% member_status_badge submission.get_status_display status=submission.status extra_class="rounded px-2 py-1" testid="peer-submission-status" %}
     </div>
     <div class="pt-2">
-      <a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="text-accent hover:underline text-sm">Go to Review Dashboard &rarr;</a>
+      {% if course_project %}<a href="{% url 'course_project_reviews' slug=course.slug attempt_slug=course_project.slug %}" class="text-accent hover:underline text-sm">See peer reviews &rarr;</a>{% else %}<a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="text-accent hover:underline text-sm">Go to Review Dashboard &rarr;</a>{% endif %}
     </div>
   </div>
 
@@ -74,11 +78,11 @@
       </div>
     </div>
     <button type="submit" class="{% button_classes 'primary' size='md' %}">
-      Update Submission
+      Update submission
     </button>
   </form>
 
-  {% else %}
+  {% elif not deadline_passed %}
   <!-- New submission form -->
   <form method="post" class="space-y-6">
     {% csrf_token %}
@@ -97,7 +101,7 @@
       </div>
     </div>
     <button type="submit" class="{% button_classes 'primary' size='md' %}">
-      Submit Project
+      Submit project
     </button>
   </form>
   {% endif %}

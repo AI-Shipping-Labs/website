@@ -4,7 +4,9 @@ import datetime
 import os
 
 from django.core.exceptions import ValidationError
-from django.utils.dateparse import parse_date
+from django.core.validators import validate_slug
+from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from content.sync_parsers.base import FamilyParser
 from content.sync_parsers.checkout_view import (
@@ -415,6 +417,7 @@ def _sync_single_course(
             commit_sha, stats, known_images, course_ignore_patterns,
         )
         _sync_course_cohorts(course, course_data, rel_path)
+        _sync_course_projects(course, course_data, rel_path)
 
         # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
         # only on create/update. ``_enqueue_banner_if_missing`` itself
@@ -642,6 +645,82 @@ def _sync_course_children(
 _COHORT_REQUIRED_FIELDS = ('key', 'name', 'start_date', 'end_date')
 _COHORT_SELF_PACED_REQUIRED_FIELDS = ('key', 'name')
 _VALID_COHORT_MODES = frozenset({'cohort', 'self_paced'})
+
+
+def _sync_course_projects(course, course_data, rel_path):
+    """Import dated attempts without deleting attempts that may have submissions.
+
+    ``projects`` is a list of mappings with a course-unique ``slug``, title,
+    submission and review deadlines (ISO 8601 with timezone), and optional
+    ``cohort_key`` and ``peer_review_count``. A cohort key scopes an attempt to
+    learners enrolled in that cohort.
+    """
+    from content.models import Module
+    from content.models.peer_review import CourseProject
+
+    entries = course_data.get('projects', [])
+    if not isinstance(entries, list):
+        raise GitHubSyncError(f'Invalid projects in {rel_path}/course.yaml: expected a list')
+    if entries and not course.peer_review_enabled:
+        raise GitHubSyncError(f'Projects in {rel_path}/course.yaml require peer_review_enabled: true')
+
+    parsed = []
+    seen = set()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise GitHubSyncError(f'Invalid projects entry in {rel_path}/course.yaml: expected a mapping')
+        slug = entry.get('slug')
+        title = entry.get('title')
+        if not isinstance(slug, str) or not slug or not isinstance(title, str) or not title.strip():
+            raise GitHubSyncError(f'Projects in {rel_path}/course.yaml require slug and title')
+        try:
+            validate_slug(slug)
+        except ValidationError as exc:
+            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml has invalid slug') from exc
+        if len(slug) > 100 or len(title.strip()) > 200:
+            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml exceeds slug or title length')
+        if slug in seen:
+            raise GitHubSyncError(f'Duplicate project slug {slug!r} in {rel_path}/course.yaml')
+        seen.add(slug)
+        dates = {}
+        for field in ('submission_due_at', 'review_due_at'):
+            raw = entry.get(field)
+            value = raw if isinstance(raw, datetime.datetime) else parse_datetime(raw) if isinstance(raw, str) else None
+            if value is None or timezone.is_naive(value):
+                raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires timezone-aware {field}')
+            dates[field] = value
+        if dates['review_due_at'] <= dates['submission_due_at']:
+            raise GitHubSyncError(f'Project {slug!r} review_due_at must follow submission_due_at')
+        count = entry.get('peer_review_count')
+        if count is not None and (not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10):
+            raise GitHubSyncError(f'Project {slug!r} peer_review_count must be 1–10')
+        cohort = None
+        cohort_key = entry.get('cohort_key')
+        if cohort_key:
+            cohort = course.aisl_cohorts.filter(external_key=cohort_key).first()
+            if cohort is None:
+                raise GitHubSyncError(f'Project {slug!r} references unknown cohort_key {cohort_key!r}')
+        module_path = entry.get('module_path')
+        if not isinstance(module_path, str) or not module_path.strip():
+            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires module_path')
+        module = None
+        for component in module_path.split('/'):
+            if not component:
+                raise GitHubSyncError(f'Project {slug!r} has invalid module_path {module_path!r}')
+            module = Module.objects.filter(
+                course=course, parent=module, slug=component,
+            ).first()
+            if module is None:
+                raise GitHubSyncError(f'Project {slug!r} references unknown module_path {module_path!r}')
+        if module.children.exists():
+            raise GitHubSyncError(f'Project {slug!r} module_path must point to a leaf module')
+        parsed.append((slug, {
+            'title': title.strip(), 'cohort': cohort, 'module': module,
+            'peer_review_count': count, **dates,
+        }))
+
+    for slug, defaults in parsed:
+        CourseProject.objects.update_or_create(course=course, slug=slug, defaults=defaults)
 
 
 def _sync_course_cohorts(course, course_data, rel_path):

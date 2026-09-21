@@ -24,6 +24,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from content.models.peer_review import CourseProject
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.enrollment import (
@@ -254,6 +255,18 @@ def course_detail(request, slug):
             ).values_list('cohort_id', flat=True)
         )
 
+    course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
+    has_configured_projects = bool(course_projects)
+    if not user.is_staff:
+        course_projects = [
+            project for project in course_projects
+            if project.cohort_id is None or project.cohort_id in user_enrolled_cohort_ids
+        ]
+    projects_by_module = {}
+    for project in course_projects:
+        if project.module_id:
+            projects_by_module.setdefault(project.module_id, []).append(project)
+
     # Live-sessions block (issue #1660): resolves every EventSeries linked
     # via a Cohort of this course, then renders occurrences only when the
     # viewer is entitled (enrolled in one of those cohorts, or staff) to at
@@ -327,6 +340,9 @@ def course_detail(request, slug):
         'module_week_ranges': module_week_ranges,
         'live_session_entries': live_session_entries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
+        'course_projects': course_projects,
+        'projects_by_module': projects_by_module,
+        'has_configured_projects': has_configured_projects,
         'buy_individual': buy_individual,
         'buy_individual_price': buy_individual_price,
         'testimonials': course.testimonials,
@@ -599,6 +615,15 @@ def _render_module_overview(request, course, module):
     # Issue #1674: a parent module holds submodules, not units directly —
     # ``submodules`` is empty for a leaf module (today's two-level shape).
     submodules = list(module.children.order_by('sort_order', 'id'))
+    course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
+    if not user.is_staff:
+        cohort_ids = set(CohortEnrollment.objects.filter(
+            user=user, cohort__course=course,
+        ).values_list('cohort_id', flat=True)) if user.is_authenticated else set()
+        course_projects = [
+            project for project in course_projects
+            if project.cohort_id is None or project.cohort_id in cohort_ids
+        ]
 
     completed_unit_ids: set[int] = set()
     if user.is_authenticated:
@@ -635,6 +660,7 @@ def _render_module_overview(request, course, module):
         'module': module,
         'units': units,
         'submodules': submodules,
+        'course_projects': course_projects,
         'has_access': has_access,
         'user_authenticated': user.is_authenticated,
         'completed_unit_ids': completed_unit_ids,

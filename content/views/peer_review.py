@@ -13,6 +13,7 @@ from content.access import can_access
 from content.models import (
     Course,
     CourseCertificate,
+    CourseProject,
     PeerReview,
     ProjectSubmission,
 )
@@ -62,7 +63,9 @@ def project_submit(request, slug):
         return guard
 
     user = request.user
-    submission = ProjectSubmission.objects.filter(user=user, course=course).first()
+    submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
+    if submission is None and CourseProject.objects.filter(course=course).exists():
+        return redirect(f'{course.get_absolute_url()}#syllabus')
 
     if request.method == 'POST':
         project_url = request.POST.get('project_url', '').strip()
@@ -137,7 +140,9 @@ def review_dashboard(request, slug):
         return guard
 
     user = request.user
-    submission = ProjectSubmission.objects.filter(user=user, course=course).first()
+    submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
+    if submission is None and CourseProject.objects.filter(course=course).exists():
+        return redirect(f'{course.get_absolute_url()}#syllabus')
 
     # Reviews assigned to this student
     assigned_reviews = []
@@ -146,6 +151,7 @@ def review_dashboard(request, slug):
             PeerReview.objects.filter(
                 reviewer=user,
                 submission__course=course,
+                submission__course_project__isnull=True,
             ).select_related('submission', 'submission__user')
         )
 
@@ -192,6 +198,9 @@ def review_form(request, slug, submission_id):
     submission = get_object_or_404(
         ProjectSubmission, pk=submission_id, course=course,
     )
+    if submission.course_project_id:
+        return redirect('course_project_review_form', slug=course.slug,
+                        attempt_slug=submission.course_project.slug, submission_id=submission_id)
 
     # Check that the user is assigned to review this submission
     try:
@@ -280,7 +289,9 @@ def api_submit_project(request, slug):
         error = 'project_url is required' if not project_url else 'Enter a valid http or https project URL'
         return JsonResponse({'error': error}, status=400)
 
-    submission = ProjectSubmission.objects.filter(user=user, course=course).first()
+    submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
+    if submission is None and CourseProject.objects.filter(course=course).exists():
+        return JsonResponse({'error': 'Choose a project attempt on the course page'}, status=409)
 
     if submission:
         if submission.status != 'submitted':
@@ -330,7 +341,7 @@ def api_review_dashboard(request, slug):
         return JsonResponse({'error': 'Access denied'}, status=403)
 
     user = request.user
-    submission = ProjectSubmission.objects.filter(user=user, course=course).first()
+    submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
 
     data = {'submission': None, 'assigned_reviews': [], 'certificate': None}
 
@@ -347,6 +358,7 @@ def api_review_dashboard(request, slug):
         reviews = PeerReview.objects.filter(
             reviewer=user,
             submission__course=course,
+            submission__course_project__isnull=True,
         ).select_related('submission')
         data['assigned_reviews'] = [
             {
@@ -383,6 +395,9 @@ def api_submit_review(request, slug, submission_id):
     submission = get_object_or_404(
         ProjectSubmission, pk=submission_id, course=course,
     )
+
+    if submission.course_project_id:
+        return JsonResponse({'error': 'Use the project attempt review page'}, status=409)
 
     user = request.user
     try:

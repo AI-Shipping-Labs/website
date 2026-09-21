@@ -36,13 +36,13 @@
   <div class="px-1 pb-1{% if children %} border-t border-border/60 pl-3 pr-2 sm:pl-4 sm:pr-3{% endif %}">
     {% if children %}
       {% for child in children|required_only %}
-      {% include "content/_syllabus_module.html" with module=child completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access only %}
+      {% include "content/_syllabus_module.html" with module=child completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module only %}
       {% endfor %}
       {% with bonus_children=children|bonus_only %}
       {% if bonus_children %}
       <p class="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-bonus-divider">Bonus topics</p>
       {% for child in bonus_children %}
-      {% include "content/_syllabus_module.html" with module=child completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access only %}
+      {% include "content/_syllabus_module.html" with module=child completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module only %}
       {% endfor %}
       {% endif %}
       {% endwith %}
@@ -55,6 +55,14 @@
       <p class="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-bonus-divider">Bonus lessons</p>
       {% for unit in bonus_units %}
       {% include "content/_syllabus_unit_row.html" with unit=unit completed_unit_ids=completed_unit_ids has_access=has_access only %}
+      {% endfor %}
+      {% endif %}
+      {% endwith %}
+      {% with module_projects=projects_by_module|dict_get:module.id %}
+      {% if module_projects %}
+      <p class="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-project-group">Project attempts</p>
+      {% for project in module_projects %}
+      {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug only %}
       {% endfor %}
       {% endif %}
       {% endwith %}

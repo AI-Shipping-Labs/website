@@ -1,7 +1,7 @@
 {% extends "base.html" %}
-{% load accounts_extras member_badges %}
+{% load accounts_extras member_badges date_formatting %}
 
-{% block title %}Peer Reviews - {{ course.title }} | {{ site_name }}{% endblock %}
+{% block title %}Peer reviews{% if course_project %}: {{ course_project.title }}{% endif %} - {{ course.title }} | {{ site_name }}{% endblock %}
 
 {% block body %}
 <main class="min-h-screen">
@@ -17,14 +17,14 @@
 
   <h1 class="mb-8 flex items-center gap-2.5 text-2xl font-semibold text-foreground">
     <i data-lucide="users-round" class="h-5 w-5 text-muted-foreground" aria-hidden="true"></i>
-    Peer Review Dashboard
+    {% if course_project %}Peer reviews{% else %}Peer Review Dashboard{% endif %}
   </h1>
-  <p class="-mt-6 mb-8 text-sm text-muted-foreground">{{ course.title }}</p>
+  <p class="-mt-6 mb-8 text-sm text-muted-foreground">{{ course.title }}{% if course_project %} · {{ course_project.title }} · Reviews due {% user_event_datetime course_project.review_due_at request.user "%b %d, %Y, %H:%M" %}{% endif %}</p>
 
   {% if certificate %}
   <!-- Certificate earned -->
   <div class="bg-purple-500/10 border border-purple-500/30 rounded-lg p-6 mb-8">
-    <h2 class="text-lg font-semibold text-purple-400 mb-2">Certificate Earned</h2>
+    <h2 class="text-lg font-semibold text-purple-400 mb-2">Certificate earned</h2>
     <p class="text-foreground mb-4">Congratulations! You have earned your certificate of completion for {{ course.title }}.</p>
     <a href="{{ certificate.get_absolute_url }}" class="{% button_classes 'primary' extra='mt-4' %}" data-testid="peer-review-certificate-cta">
       View Certificate
@@ -34,7 +34,7 @@
 
   <!-- Your Submission -->
   <div class="bg-card border border-border rounded-lg p-6 mb-8">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Your Submission</h2>
+    <h2 class="text-lg font-semibold text-foreground mb-4">{% if course_project %}Your submission{% else %}Your Submission{% endif %}</h2>
 
     {% if submission %}
     <div class="space-y-3">
@@ -56,7 +56,9 @@
 
     {% if waiting_for_batch %}
     <div class="mt-4 rounded-lg border border-border bg-secondary/50 p-4 text-sm text-foreground">
-      {% if submission.cohort.mode == 'cohort' %}
+      {% if course_project %}
+      Your project is saved. Peer reviews will be assigned after the submission deadline on {% user_event_datetime course_project.submission_due_at request.user "%b %d, %Y, %H:%M" %}. We'll notify you when they're ready.
+      {% elif submission.cohort.mode == 'cohort' %}
       Your project is saved. Peer reviews will be assigned after your cohort ends on {{ submission.cohort.end_date|member_full_date }}. We'll notify you when they're ready.
       {% else %}
       Waiting for enough submissions to form a review group. We'll notify you when reviews are ready.
@@ -66,7 +68,7 @@
 
     {% if received_reviews %}
     <div class="mt-6">
-      <h3 class="text-sm font-semibold text-foreground mb-3">Reviews Received</h3>
+      <h3 class="text-sm font-semibold text-foreground mb-3">Reviews received</h3>
       <div class="space-y-3">
         {% for review in received_reviews %}
         <div class="bg-secondary/50 rounded-lg p-4">
@@ -86,22 +88,22 @@
 
     {% else %}
     <p class="text-muted-foreground text-sm mb-4">You haven't submitted a project yet.</p>
-    <a href="{% url 'project_submit' slug=course.slug %}" class="{% button_classes 'primary' size='md' %}">
-      Submit Project
-    </a>
+    {% if not deadline_passed %}<a href="{% if course_project %}{% url 'course_project_submit' slug=course.slug attempt_slug=course_project.slug %}{% else %}{% url 'project_submit' slug=course.slug %}{% endif %}" class="{% button_classes 'primary' size='md' %}">
+      {% if course_project %}Submit project{% else %}Submit Project{% endif %}
+    </a>{% elif course_project %}<p class="text-sm text-muted-foreground">The submission deadline has passed.</p>{% endif %}
     {% endif %}
   </div>
 
   {% if assigned_reviews %}
   <!-- Reviews to Complete -->
   <div class="bg-card border border-border rounded-lg p-6">
-    <h2 class="text-lg font-semibold text-foreground mb-4">Reviews to Complete</h2>
+    <h2 class="text-lg font-semibold text-foreground mb-4">Reviews to complete</h2>
 
     <div class="divide-y divide-border">
       {% for review in assigned_reviews %}
       <div class="py-3 flex items-center justify-between">
         <div>
-          <a href="{% url 'peer_review_form' slug=course.slug submission_id=review.submission.pk %}"
+          <a href="{% if course_project %}{% url 'course_project_review_form' slug=course.slug attempt_slug=course_project.slug submission_id=review.submission.pk %}{% else %}{% url 'peer_review_form' slug=course.slug submission_id=review.submission.pk %}{% endif %}"
              class="text-sm text-accent hover:underline">
             {{ review.submission.project_url }}
           </a>

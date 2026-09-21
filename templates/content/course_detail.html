@@ -135,7 +135,7 @@
       </div>
       {% endif %}
 
-      {% if course.peer_review_enabled %}
+      {% if course.peer_review_enabled and not has_configured_projects %}
       <section class="mb-8 rounded-lg border border-border bg-card p-5 sm:p-6" aria-labelledby="course-project-heading" data-testid="course-project">
         <div class="flex items-start gap-3">
           <i data-lucide="folder-git-2" class="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
@@ -256,11 +256,11 @@
           display: none;
         }
       </style>
-      <div class="mb-12">
+      <div class="mb-12" id="syllabus">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Syllabus</h2>
         <div class="space-y-1">
           {% for module in modules %}
-          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access module_week_range=module_week_ranges|dict_get:module.id %}
+          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module module_week_range=module_week_ranges|dict_get:module.id %}
           {% empty %}
           {% member_empty_state title='Syllabus coming soon' body='Lessons for this course will appear here when they are ready.' icon='book-open' kind='fresh' testid='syllabus-empty-state' %}
           {% endfor %}

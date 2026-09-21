@@ -65,7 +65,7 @@ def peer_review_management(request, course_id):
 
     submissions_qs = ProjectSubmission.objects.filter(
         course=course,
-    ).select_related('user', 'cohort').order_by('-submitted_at')
+    ).select_related('user', 'cohort', 'course_project').order_by('-submitted_at')
 
     if status_filter:
         submissions_qs = submissions_qs.filter(status=status_filter)
@@ -134,6 +134,7 @@ def peer_review_management(request, course_id):
 
     context = {
         'course': course,
+        'course_projects': list(course.course_projects.select_related('cohort')),
         'cohort_groups': cohort_groups,
         'has_any_cohorts': bool(cohorts),
         'status_filter': status_filter,
@@ -196,7 +197,7 @@ def peer_review_extend_deadline(request, course_id):
 
     updated = 0
     submissions = ProjectSubmission.objects.filter(
-        course=course, status='in_review',
+        course=course, course_project__isnull=True, status='in_review',
     )
     for sub in submissions:
         if sub.review_deadline:

@@ -35,7 +35,7 @@
             {% if module.parent %}Submodule{% else %}Module{% endif %}
           </span>
           {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
-          {% member_label_badge "Bonus" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
+          {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
           {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
@@ -68,7 +68,7 @@
             <i data-lucide="folder" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
             <span class="text-sm text-foreground flex-1 py-2">{{ submodule.title }}</span>
             {% if submodule.is_bonus and not module.is_bonus %}
-            {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
+            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
             {% endif %}
             <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
           </a>
@@ -103,7 +103,7 @@
               {{ unit.title }}
             </a>
             {% if unit.is_bonus and not module.is_bonus and not module.parent.is_bonus %}
-            {% member_label_badge "Bonus" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
+            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
             {% endif %}
             {% if unit.is_preview and not has_access %}
             <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>

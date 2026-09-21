@@ -831,6 +831,15 @@ COMMUNITY_BASE = {
     'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
     'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
+    # A7.2a: append, never replace. Package list already has fenced_code,
+    # tables, sane_lists and the mermaid/embed fences. codehilite plus the
+    # three AISL extensions are what synced content still needs from this site.
+    'MARKDOWN_EXTENSIONS': [
+        'codehilite',
+        'content.markdown_extensions.mermaid.MermaidExtension',
+        'content.markdown_extensions.external_links.ExternalLinksExtension',
+        'content.markdown_extensions.event_widget.EventWidgetExtension',
+    ],
     # Package content-sync GitHub client + S3 media store (A2.3 cutover
     # completion, website #1662): without these the sync worker fails every
     # source with "GitHub App credentials are required for a private

@@ -1,6 +1,7 @@
 {% load video_tags %}
 {% load member_badges %}
 {% load accounts_extras %}
+{% load curriculum_tags %}
 
 {% include "content/reader/_mobile_progress_bar.html" %}
 
@@ -21,7 +22,10 @@
 {% include "content/reader/_top_nav.html" %}
 
 <div class="mb-8 flex flex-wrap items-center gap-3">
-  <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl">{{ unit.title }}</h1>
+  <h1 class="flex items-start gap-2.5 text-2xl font-semibold tracking-tight sm:text-3xl">
+    <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+    <span>{{ unit.title }}</span>
+  </h1>
   {% if unit.is_bonus %}
   {% member_label_badge "Bonus" tone="accent" size="sm" testid="unit-detail-bonus-badge" %}
   {% endif %}

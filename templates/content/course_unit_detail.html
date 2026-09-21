@@ -2,6 +2,7 @@
 {% load video_tags %}
 {% load seo_tags %}
 {% load teaser_tags %}
+{% load curriculum_tags %}
 
 {% block title %}{{ unit.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description unit "unit" %}{% endblock %}
@@ -44,7 +45,10 @@
       </div>
       {% endif %}
 
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight" data-testid="teaser-title">{{ unit.title }}</h1>
+      <h1 class="mt-2 flex items-start gap-3 text-3xl font-semibold tracking-tight" data-testid="teaser-title">
+        <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+        <span>{{ unit.title }}</span>
+      </h1>
 
       {% if is_drip_locked %}
       <!-- Drip schedule path: keep the original simple lock card. -->

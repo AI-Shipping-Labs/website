@@ -1,3 +1,4 @@
+{% load curriculum_tags %}
 <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
   <div class="lg:sticky lg:top-28">
     <div class="flex items-center justify-between gap-2">
@@ -66,9 +67,9 @@
                         {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
                       {% else %}
                         {% if nav_unit.pk == unit.pk %}
-                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="circle" trailing_icon="" extra_attrs='aria-current="page"' %}
+                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
                         {% else %}
-                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="circle" trailing_icon="" extra_attrs="" %}
+                          {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
                         {% endif %}
                       {% endif %}
                     </li>
@@ -96,9 +97,9 @@
                   {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
                 {% else %}
                   {% if nav_unit.pk == unit.pk %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="circle" trailing_icon="" extra_attrs='aria-current="page"' %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
                   {% else %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="circle" trailing_icon="" extra_attrs="" %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
                   {% endif %}
                 {% endif %}
               </li>

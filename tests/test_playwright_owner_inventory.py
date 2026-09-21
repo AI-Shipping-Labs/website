@@ -1217,6 +1217,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_superuser_reads_the_help_text_then_proves_it_true",
     })
 
+    issue_1770_owners = frozenset({
+        "playwright_tests/test_course_syllabus_1770.py::"
+        "test_mobile_visitor_opens_nested_topic_and_lesson_with_keyboard",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1485,8 +1490,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2653)
-        self.assertEqual(len(inventory.owners), 2451)
+        self.assertEqual(inventory.item_count, 2654)
+        self.assertEqual(len(inventory.owners), 2452)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1528,6 +1533,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1736_owners
             | self.issue_1737_owners
             | self.issue_1745_owners
+            | self.issue_1770_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(
@@ -1580,6 +1586,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1736_owners
             | self.issue_1737_owners
             | self.issue_1745_owners
+            | self.issue_1770_owners
             | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

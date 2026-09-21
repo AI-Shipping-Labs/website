@@ -6,10 +6,15 @@ only (issue #1766):
 
 1. the row's existing nonblank value (never overwritten);
 2. the legacy ``integrations.ContentSource`` mirror copy (existing behavior);
-3. inheritance from sibling package rows that hold a configured secret,
-   only when every configured sibling holds the same value. On
-   disagreement nothing is inherited, a warning naming the affected repos
-   is printed (never any secret material), and the row stays disabled;
+3. inheritance from sibling package rows that hold a configured secret.
+   When every configured sibling holds the same value it is used. When
+   they disagree, the sibling whose ``last_webhook_at`` proves it
+   validated a real GitHub delivery most recently wins (one App signs
+   every delivery with one secret, so that value is the current one —
+   this resolves the stale-sibling case without touching it). Only when
+   no validated sibling can settle the disagreement nothing is
+   inherited, a warning naming the affected repos is printed (never any
+   secret material), and the row stays disabled;
 4. blank: the row is left disabled with an actionable message.
 
 Sources without a resolved secret are created (or left) disabled.
@@ -72,19 +77,42 @@ def derive_slug(repo_name):
 def configured_sibling_secrets(repo_name):
     """Stripped nonblank secrets held by sibling package rows.
 
-    Returns a list of ``(repo_name, secret)`` tuples for every other
-    package ``ContentSource`` row that holds a configured webhook secret.
+    Returns a list of ``(repo_name, secret, last_webhook_at)`` tuples for
+    every other package ``ContentSource`` row that holds a configured
+    webhook secret. ``last_webhook_at`` is stamped by the receiver only
+    after the HMAC signature check passes, so a non-null value proves that
+    row's secret matches the GitHub App's current webhook secret.
     Database-to-database only: no env vars, settings, or code literals.
     """
     siblings = []
     rows = PackageContentSource.objects.exclude(
         repo_name=repo_name,
-    ).values_list('repo_name', 'webhook_secret')
-    for sibling_repo, sibling_secret in rows:
+    ).values_list('repo_name', 'webhook_secret', 'last_webhook_at')
+    for sibling_repo, sibling_secret, last_webhook_at in rows:
         stripped = (sibling_secret or '').strip()
         if stripped:
-            siblings.append((sibling_repo, stripped))
+            siblings.append((sibling_repo, stripped, last_webhook_at))
     return siblings
+
+
+def inheritable_secret(siblings):
+    """Pick the sibling secret proven current by a validated delivery.
+
+    One GitHub App signs every delivery with one webhook secret, so the
+    sibling with the most recent ``last_webhook_at`` holds the value the
+    App is signing with right now (an older validated value only coexists
+    with it after a rotation, and is then legitimately stale). Returns
+    ``None`` — inherit nothing — when no sibling has a validated delivery
+    or when the most recent timestamp ties across different values.
+    """
+    proven = [entry for entry in siblings if entry[2] is not None]
+    if not proven:
+        return None
+    newest = max(entry[2] for entry in proven)
+    values = {secret for _, secret, at in proven if at == newest}
+    if len(values) == 1:
+        return next(iter(values))
+    return None
 
 
 class Command(BaseCommand):
@@ -116,15 +144,20 @@ class Command(BaseCommand):
                     secret = legacy_secret
                 else:
                     siblings = configured_sibling_secrets(repo_name)
-                    values = {s for _, s in siblings}
-                    if len(values) > 1:
-                        # Fail closed: configured siblings disagree, so
-                        # inherit nothing; a warning is emitted after the
-                        # loop (never any secret material).
-                        if disagreement_repos is None:
-                            disagreement_repos = sorted(r for r, _ in siblings)
-                    elif values:
+                    values = {s for _, s, _ in siblings}
+                    if len(values) == 1:
                         secret = next(iter(values))
+                    elif len(values) > 1:
+                        # Configured siblings disagree. Fall back to the
+                        # sibling proven current by a signature-validated
+                        # delivery; without that proof, fail closed (the
+                        # warning is emitted after the loop and never
+                        # carries secret material).
+                        secret = inheritable_secret(siblings)
+                        if secret is None and disagreement_repos is None:
+                            disagreement_repos = sorted(
+                                r for r, _, _ in siblings
+                            )
 
             if secret and not existing_secret:
                 # Only fill blanks; never overwrite an operator-set value.
@@ -152,8 +185,10 @@ class Command(BaseCommand):
         if disagreement_repos:
             self.stdout.write(self.style.WARNING(
                 '  WARNING: content sources disagree on the webhook secret '
-                f'({", ".join(disagreement_repos)}); blank sources were not '
-                'configured. Make the values match in Studio > Content sync, '
+                f'({", ".join(disagreement_repos)}) and none of them has a '
+                'delivery-validated timestamp to settle it; blank sources '
+                'were not configured. Trigger a sync via a signed GitHub '
+                'push or make the values match in Studio > Content sync, '
                 'then re-run seed_content_sources.'
             ))
 

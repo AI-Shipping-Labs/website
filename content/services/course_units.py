@@ -517,7 +517,7 @@ def resolve_viewer_dated_cohort(user, course):
     return enrollment.cohort if enrollment else None
 
 
-def build_module_week_dates(top_level_modules, cohort):
+def build_module_week_dates(top_level_modules, cohort, *, extend_final_to_cohort_end=False):
     """Return ``{module_id: (week_start, week_end)}`` for dated modules.
 
     Only top-level modules with ``available_after_days`` set get an
@@ -525,7 +525,9 @@ def build_module_week_dates(top_level_modules, cohort):
     ``week_end`` derives from the NEXT top-level sibling's own
     ``available_after_days`` (``next_offset - 1`` day) when the sibling
     has one set; otherwise (including the last week) defaults to a fixed
-    7-day block (``week_start + 6`` days).
+    7-day block (``week_start + 6`` days). For a course whose final module
+    spans multiple weeks, ``extend_final_to_cohort_end`` uses the cohort end
+    date for that final dated module.
 
     Returns ``{}`` when ``cohort`` is ``None`` or self-paced
     (``start_date`` is ``None``) — the caller shows no date range in
@@ -535,6 +537,7 @@ def build_module_week_dates(top_level_modules, cohort):
         return {}
     modules = list(top_level_modules)
     result = {}
+    dated_modules = [module for module in modules if module.available_after_days is not None]
     for idx, module in enumerate(modules):
         if module.available_after_days is None:
             continue
@@ -550,6 +553,13 @@ def build_module_week_dates(top_level_modules, cohort):
                 )
         if week_end is None:
             week_end = week_start + datetime.timedelta(days=6)
+            if (
+                extend_final_to_cohort_end
+                and module == dated_modules[-1]
+                and cohort.end_date is not None
+                and cohort.end_date > week_end
+            ):
+                week_end = cohort.end_date
         result[module.pk] = (week_start, week_end)
     return result
 

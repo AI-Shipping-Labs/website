@@ -183,6 +183,7 @@ def course_detail(request, slug):
         module_id: course_unit_service.format_week_range(*week_range)
         for module_id, week_range in course_unit_service.build_module_week_dates(
             modules, viewer_cohort,
+            extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
         ).items()
     }
 

@@ -101,6 +101,7 @@ class CourseAdminCRUDTest(TestCase):
             'aisl_extension-MIN_NUM_FORMS': '0',
             'aisl_extension-MAX_NUM_FORMS': '1',
             'aisl_extension-0-access_mode': 'tier',
+            'aisl_extension-0-reader_navigation_scope': 'course',
             'aisl_extension-0-enroll_url': '',
             'aisl_extension-0-program_label': '',
             'aisl_extension-0-peer_review_count': '3',
@@ -112,6 +113,7 @@ class CourseAdminCRUDTest(TestCase):
         course = Course.objects.get(slug='new-course')
         self.assertEqual(course.title, 'New Course')
         self.assertEqual(course.required_level, 0)
+        self.assertEqual(course.reader_navigation_scope, 'course')
 
     def test_admin_status_change_draft_to_published(self):
         course = Course.objects.create(

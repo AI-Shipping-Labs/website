@@ -9,26 +9,18 @@
   <i data-lucide="clipboard-list" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-homework-icon" aria-hidden="true"></i>
   {% elif unit.kind == 'checklist_item' %}
   <i data-lucide="list-checks" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-checklist-icon" aria-hidden="true"></i>
-  {% elif unit.pk in completed_unit_ids %}
-  <i data-lucide="check-circle-2" class="h-4 w-4 flex-shrink-0 text-green-400" aria-hidden="true"></i>
-  {% elif unit.is_preview %}
-  <i data-lucide="eye" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
-  {% elif not has_access %}
-  <i data-lucide="lock" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-lock-icon" aria-hidden="true"></i>
   {% else %}
-  <i data-lucide="circle" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+  <i data-lucide="file-text" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-lesson-icon" aria-hidden="true"></i>
   {% endif %}
   <span class="syllabus-title min-w-0 flex-1 break-words">
     <span class="sr-only">{{ unit.get_kind_display }}{% if unit.pk in completed_unit_ids %}, completed{% elif unit.is_preview and not has_access %}, preview{% elif not has_access %}, locked{% endif %}: </span>{{ unit.title }}
   </span>
-  {% if unit.kind != 'lesson' %}
-    {% if unit.pk in completed_unit_ids %}
+  {% if unit.pk in completed_unit_ids %}
     <i data-lucide="check-circle-2" class="h-4 w-4 flex-shrink-0 text-green-400" aria-hidden="true"></i>
-    {% elif unit.is_preview and not has_access %}
+  {% elif unit.is_preview and not has_access %}
     <i data-lucide="eye" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
-    {% elif not has_access %}
+  {% elif not has_access %}
     <i data-lucide="lock" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-lock-icon" aria-hidden="true"></i>
-    {% endif %}
   {% endif %}
   {% if unit.kind != 'lesson' and unit.kind != 'event' %}<span class="flex-shrink-0 text-xs text-muted-foreground">{{ unit.get_kind_display }}</span>{% endif %}
   {% if unit.is_preview and not has_access %}<span class="flex-shrink-0 text-xs text-accent">Preview</span>{% endif %}

@@ -157,18 +157,15 @@ class CollapsibleSyllabusAccessControlTest(TierSetupMixin, TestCase):
         content = response.content.decode()
         self.assertIn("eye", content)
 
-    def test_uncompleted_unit_shows_circle_icon_for_authorized_user(self):
-        """The empty circle icon marks an unfinished lesson for users who
-        already have access. (Locked rows now show a lock icon instead of
-        the circle — issue #248 — so the assertion subject is the
-        authorized user.)"""
-        user = User.objects.create_user(email="circle@collapsible.com", password="pass")
+    def test_uncompleted_lesson_shows_document_icon_for_authorized_user(self):
+        """An unfinished lesson retains its document marker."""
+        user = User.objects.create_user(email="document@collapsible.com", password="pass")
         set_membership(user, tier=self.main_tier)
         user.save()
-        self.client.login(email="circle@collapsible.com", password="pass")
+        self.client.login(email="document@collapsible.com", password="pass")
         response = self.client.get("/courses/access-course")
         content = response.content.decode()
-        self.assertIn('data-lucide="circle"', content)
+        self.assertIn('data-testid="syllabus-lesson-icon"', content)
 
     def test_anonymous_locked_unit_shows_lock_icon(self):
         """Issue #248: locked rows render the lock icon to signal gating."""

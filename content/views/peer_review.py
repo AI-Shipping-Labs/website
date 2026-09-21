@@ -324,6 +324,8 @@ def api_review_dashboard(request, slug):
     course = get_object_or_404(Course, slug=slug, status='published')
     if not course.peer_review_enabled:
         return JsonResponse({'error': 'Peer review not enabled'}, status=404)
+    if not can_access(request.user, course):
+        return JsonResponse({'error': 'Access denied'}, status=403)
 
     user = request.user
     submission = ProjectSubmission.objects.filter(user=user, course=course).first()
@@ -372,6 +374,10 @@ def api_submit_review(request, slug, submission_id):
         return JsonResponse({'error': 'Authentication required'}, status=401)
 
     course = get_object_or_404(Course, slug=slug, status='published')
+    if not course.peer_review_enabled:
+        return JsonResponse({'error': 'Peer review not enabled'}, status=404)
+    if not can_access(request.user, course):
+        return JsonResponse({'error': 'Access denied'}, status=403)
     submission = get_object_or_404(
         ProjectSubmission, pk=submission_id, course=course,
     )

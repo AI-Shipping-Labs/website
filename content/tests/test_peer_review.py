@@ -798,6 +798,13 @@ class APIReviewDashboardTest(TestCase):
         self.assertIsNotNone(data['submission'])
         self.assertEqual(data['submission']['status'], 'submitted')
 
+    def test_dashboard_denies_user_without_course_access(self):
+        self.course.required_level = 10
+        self.course.access_mode = 'entitlement'
+        self.course.save()
+        response = self.client.get('/api/courses/test-course/reviews')
+        self.assertEqual(response.status_code, 403)
+
 
 class APISubmitReviewTest(TestCase):
     """Test POST /api/courses/<slug>/reviews/<submission_id> endpoint."""
@@ -836,6 +843,19 @@ class APISubmitReviewTest(TestCase):
             content_type='application/json',
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_assigned_reviewer_without_course_access_cannot_submit(self):
+        self.course.required_level = 10
+        self.course.access_mode = 'entitlement'
+        self.course.save()
+        response = self.client.post(
+            f'/api/courses/test-course/reviews/{self.submission.pk}',
+            data=json.dumps({'score': 4, 'feedback': 'Good work'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 403)
+        self.review.refresh_from_db()
+        self.assertFalse(self.review.is_complete)
 
 
 # ============================================================

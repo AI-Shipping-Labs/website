@@ -22,8 +22,9 @@ from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
-from content.models import Cohort, CohortEnrollment, Course, Module, Unit
+from content.models import Cohort, CohortEnrollment, Course, Module, Unit, UserCourseProgress
 
 User = get_user_model()
 
@@ -95,6 +96,7 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
 class BuildcampSinglePageTopicTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        cls.user = User.objects.create_user(email='inline-reader@example.com', password='pw')
         cls.course = Course.objects.create(
             title='Buildcamp', slug='ai-buildcamp', status='published',
             required_level=0,
@@ -183,6 +185,44 @@ class BuildcampSinglePageTopicTest(TestCase):
         )
         week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
         self.assertEqual(week['units'][-1]['title'], 'Capstone Presentations')
+
+    def test_course_scope_reader_shows_inline_current_and_completed_rows(self):
+        session_unit = self.session.units.get()
+        overview_unit = self.overview.units.get()
+        UserCourseProgress.objects.create(
+            user=self.user, unit=overview_unit, completed_at=timezone.now(),
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(session_unit.get_absolute_url())
+        self.assertEqual(response.status_code, 200)
+        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+
+        class NavLinks(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.links = {}
+                self.current = None
+
+            def handle_starttag(self, tag, attrs):
+                if tag == 'a':
+                    attributes = dict(attrs)
+                    self.current = {'attrs': attributes, 'icons': []}
+                    self.links[attributes['href']] = self.current
+                elif tag == 'i' and self.current is not None:
+                    self.current['icons'].append(dict(attrs).get('data-lucide'))
+
+            def handle_endtag(self, tag):
+                if tag == 'a':
+                    self.current = None
+
+        links = NavLinks()
+        links.feed(sidebar)
+        self.assertEqual(
+            links.links[session_unit.get_absolute_url()]['attrs'].get('aria-current'),
+            'page',
+        )
+        self.assertIn('check-circle-2', links.links[overview_unit.get_absolute_url()]['icons'])
+        self.assertIn('Foundations Topic', sidebar)
 
 
 class ModuleOverviewParentTest(ThreeLevelCourseViewMixin, TestCase):

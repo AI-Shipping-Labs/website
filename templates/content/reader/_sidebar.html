@@ -138,6 +138,20 @@
             {% endcomment %}
             <div class="ml-4">
               {% for nav_child in nav_children %}
+              {% with inline_unit=nav_child|inline_course_unit:course.slug %}
+              {% if inline_unit %}
+              <ul class="reader-nav-list mt-1">
+                <li>
+                  {% if inline_unit.pk == unit.pk %}
+                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                  {% elif inline_unit.pk in completed_unit_ids %}
+                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                  {% else %}
+                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                  {% endif %}
+                </li>
+              </ul>
+              {% else %}
               <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_child.pk == unit.module.pk %}open{% endif %}>
                 <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
                   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
@@ -161,6 +175,8 @@
                   </ul>
                 </div>
               </details>
+              {% endif %}
+              {% endwith %}
               {% endfor %}
             </div>
             {% else %}

@@ -71,22 +71,33 @@
     var nav = document.getElementById('sidebar-nav');
     var chevron = document.getElementById('sidebar-toggle-chevron');
     var discussion = document.getElementById('sidebar-discussion');
+    var scopedClose = document.getElementById('reader-scoped-nav-close');
     if (!toggleBtn || !nav) return;
 
-    toggleBtn.addEventListener('click', function() {
-      var isHidden = nav.classList.contains('hidden');
-      if (isHidden) {
+    function setOpen(open) {
+      if (open) {
         nav.classList.remove('hidden');
         if (discussion) discussion.classList.remove('hidden');
         toggleBtn.setAttribute('aria-expanded', 'true');
         if (chevron) chevron.style.transform = 'rotate(180deg)';
+        if (scopedClose) scopedClose.focus();
       } else {
         nav.classList.add('hidden');
         if (discussion) discussion.classList.add('hidden');
         toggleBtn.setAttribute('aria-expanded', 'false');
         if (chevron) chevron.style.transform = 'rotate(0deg)';
+        if (scopedClose) toggleBtn.focus();
       }
+    }
+    toggleBtn.addEventListener('click', function() {
+      setOpen(nav.classList.contains('hidden'));
     });
+    if (scopedClose) {
+      scopedClose.addEventListener('click', function() { setOpen(false); });
+      document.addEventListener('keydown', function(event) {
+        if (event.key === 'Escape' && !nav.classList.contains('hidden')) setOpen(false);
+      });
+    }
   })();
 
   (function() {

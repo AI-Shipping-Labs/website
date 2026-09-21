@@ -606,6 +606,16 @@ def _render_module_overview(request, course, module):
     list are clickable for users with access; the unit detail view itself
     handles the per-lesson gating / teaser.
     """
+    if course.reader_navigation_scope == 'submodule':
+        first_unit = module.units.order_by('sort_order', 'pk').first()
+        if first_unit is None:
+            for child in module.children.order_by('sort_order', 'pk'):
+                first_unit = child.units.order_by('sort_order', 'pk').first()
+                if first_unit is not None:
+                    break
+        if first_unit is not None:
+            return redirect(first_unit.get_absolute_url())
+
     user = request.user
 
     has_access = can_access(user, course)

@@ -332,6 +332,24 @@ def build_drip_locked_course_unit_context(course, module, unit, decision):
 def build_course_unit_navigation_context(user, course, module, unit):
     """Build navigation, completion, discussion, and mobile progress context."""
     modules = course.get_syllabus()
+    scoped_submodule = None
+    previous_submodule = None
+    next_submodule = None
+    if course.reader_navigation_scope == 'submodule' and module.parent_id:
+        scoped_submodule = module
+        # Follow the same order as the syllabus, including week boundaries.
+        submodules = [
+            child
+            for top_module in modules
+            for child in top_module.children.all()
+        ]
+        for index, child in enumerate(submodules):
+            if child.pk == module.pk:
+                previous_submodule = submodules[index - 1] if index else None
+                next_submodule = (
+                    submodules[index + 1] if index + 1 < len(submodules) else None
+                )
+                break
 
     completed_unit_ids = set()
     is_completed = False
@@ -388,6 +406,9 @@ def build_course_unit_navigation_context(user, course, module, unit):
         'module': module,
         'unit': unit,
         'modules': modules,
+        'scoped_submodule': scoped_submodule,
+        'previous_submodule': previous_submodule,
+        'next_submodule': next_submodule,
         'is_gated': False,
         'has_access': True,
         'completed_unit_ids': completed_unit_ids,

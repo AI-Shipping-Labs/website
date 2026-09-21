@@ -72,6 +72,16 @@
   @media (max-width: 1023px) {
     #content-sidebar-collapse-btn,
     #content-sidebar-floating-toggle { display: none !important; }
+    #sidebar-nav.reader-scoped-nav:not(.hidden) {
+      position: fixed;
+      z-index: 60;
+      top: 5rem;
+      left: 1rem;
+      right: 1rem;
+      max-height: calc(100dvh - 6rem);
+      overflow-y: auto;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+    }
   }
   .sidebar-module > summary::-webkit-details-marker,
   .sidebar-module > summary::marker { display: none; }

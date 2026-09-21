@@ -30,6 +30,7 @@ AISL_COURSE_FIELDS = (
     'access_mode',
     'enroll_url',
     'program_label',
+    'reader_navigation_scope',
     'individual_price_eur',
     'stripe_product_id',
     'stripe_price_id',
@@ -103,6 +104,8 @@ def _install_extension_fields() -> None:
             if ext is None:
                 if field == 'access_mode':
                     return ACCESS_MODE_TIER
+                if field == 'reader_navigation_scope':
+                    return 'course'
                 if field == 'peer_review_enabled':
                     return False
                 if field == 'peer_review_count':

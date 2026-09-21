@@ -32,12 +32,59 @@
       `_scripts.html` toggle handler works without changes.
     {% endcomment %}
 
-    <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block"
+    <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block{% if scoped_submodule %} reader-scoped-nav{% endif %}"
          aria-label="{{ reader_nav_aria_label }}"
          {% if reader_nav_testid %}data-testid="{{ reader_nav_testid }}"{% endif %}>
       <h2 class="sr-only">{{ reader_nav_aria_label }}</h2>
+      {% if scoped_submodule %}
+      <div class="mb-2 flex items-center justify-between border-b border-border px-2 pb-2 lg:hidden">
+        <span class="text-sm font-medium">Course navigation</span>
+        <button type="button" id="reader-scoped-nav-close" aria-label="Close course navigation" class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+          <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+        </button>
+      </div>
+      {% endif %}
 
       {% if reader_nav_kind == "course" %}
+        {% if scoped_submodule %}
+        <div data-testid="reader-scoped-submodule">
+          <div class="px-2 pb-2">
+            <p class="text-xs text-muted-foreground">{{ scoped_submodule.parent.title }}</p>
+            <p class="mt-0.5 text-sm font-semibold text-foreground">{{ scoped_submodule.title }}</p>
+          </div>
+          <ul class="reader-nav-list">
+            {% for nav_unit in scoped_submodule.units.all %}
+            <li>
+              {% if nav_unit.pk == unit.pk %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
+              {% elif nav_unit.pk in completed_unit_ids %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
+              {% else %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
+              {% endif %}
+            </li>
+            {% endfor %}
+          </ul>
+          <div class="mt-3 border-t border-border pt-2" data-testid="reader-submodule-navigation">
+            {% if previous_submodule %}
+            <a href="/courses/{{ course.slug }}/{{ previous_submodule.parent.slug }}/{{ previous_submodule.slug }}" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-previous-submodule">
+              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+              <span class="min-w-0 truncate">Previous module: {{ previous_submodule.title }}</span>
+            </a>
+            {% endif %}
+            {% if next_submodule %}
+            <a href="/courses/{{ course.slug }}/{{ next_submodule.parent.slug }}/{{ next_submodule.slug }}" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-next-submodule">
+              <span class="min-w-0 flex-1 truncate">Next module: {{ next_submodule.title }}</span>
+              <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+            </a>
+            {% endif %}
+            <a href="{{ course.get_absolute_url }}#syllabus" class="flex items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground" data-testid="reader-view-syllabus">
+              <i data-lucide="list" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+              View full syllabus
+            </a>
+          </div>
+        </div>
+        {% else %}
         {% for nav_module in modules %}
         {% with nav_children=nav_module.children.all %}
         <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk or nav_module.pk == unit.module.parent_id %}open{% endif %}>
@@ -110,6 +157,7 @@
         </details>
         {% endwith %}
         {% endfor %}
+        {% endif %}
       {% elif reader_nav_kind == "workshop" %}
         {% comment %}
           Issue #527: workshop drawer rows use the shared `_list_row.html`

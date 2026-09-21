@@ -500,6 +500,12 @@ def _build_course_defaults(
         default_unit_required_level=default_unit_required_level,
     )
     peer_review_enabled = course_data.get('peer_review_enabled', False)
+    reader_navigation_scope = course_data.get('reader_navigation_scope', 'course')
+    if reader_navigation_scope not in ('course', 'submodule'):
+        raise GitHubSyncError(
+            f'Invalid reader_navigation_scope in {rel_path}/course.yaml: '
+            "expected 'course' or 'submodule'"
+        )
     if not isinstance(peer_review_enabled, bool):
         raise GitHubSyncError(f'Invalid peer_review_enabled in {rel_path}/course.yaml: expected boolean')
     peer_review_count = course_data.get('peer_review_count', 3)
@@ -524,6 +530,7 @@ def _build_course_defaults(
         'access_mode': access_mode,
         'enroll_url': course_data.get('enroll_url', '') or '',
         'program_label': course_data.get('program_label', '') or '',
+        'reader_navigation_scope': reader_navigation_scope,
         'peer_review_enabled': peer_review_enabled,
         'peer_review_count': peer_review_count,
         'peer_review_deadline_days': peer_review_deadline_days,

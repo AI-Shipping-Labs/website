@@ -33,6 +33,13 @@ ACCESS_MODE_CHOICES = [
     (ACCESS_MODE_ENTITLEMENT, 'Entitlement-only'),
 ]
 
+READER_NAVIGATION_SCOPE_COURSE = 'course'
+READER_NAVIGATION_SCOPE_SUBMODULE = 'submodule'
+READER_NAVIGATION_SCOPE_CHOICES = [
+    (READER_NAVIGATION_SCOPE_COURSE, 'Entire course'),
+    (READER_NAVIGATION_SCOPE_SUBMODULE, 'Current submodule'),
+]
+
 
 def non_bonus_units(queryset):
     """Exclude bonus units/modules from ``queryset`` (issue #1674)."""
@@ -61,6 +68,12 @@ class CourseExtension(models.Model):
     )
     enroll_url = models.URLField(max_length=500, blank=True, default='', db_default='')
     program_label = models.CharField(max_length=100, blank=True, default='', db_default='')
+    reader_navigation_scope = models.CharField(
+        max_length=20,
+        choices=READER_NAVIGATION_SCOPE_CHOICES,
+        default=READER_NAVIGATION_SCOPE_COURSE,
+        db_default=READER_NAVIGATION_SCOPE_COURSE,
+    )
     individual_price_eur = models.DecimalField(
         max_digits=8, decimal_places=2, null=True, blank=True,
     )

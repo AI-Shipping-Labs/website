@@ -327,6 +327,15 @@ class ReadingOrderTest(ThreeLevelFixtureMixin, TestCase):
         self.assertEqual(get_next_unit(self.course, self.u_deep_dive), self.u_extra)
         self.assertEqual(get_prev_unit(self.course, self.u_extra), self.u_deep_dive)
 
+    def test_bonus_lesson_follows_required_lesson_even_when_its_sort_order_is_earlier(self):
+        later_required = Unit.objects.create(
+            module=self.foundations, title='Visual summary', slug='visual-summary',
+            sort_order=3,
+        )
+        self.assertEqual(get_next_unit(self.course, self.u_intro), later_required)
+        self.assertEqual(get_next_unit(self.course, later_required), self.u_deep_dive)
+        self.assertEqual(get_prev_unit(self.course, self.u_deep_dive), later_required)
+
     def test_next_crosses_top_level_module_boundary(self):
         self.assertEqual(get_next_unit(self.course, self.u_extra), self.u_solo)
 

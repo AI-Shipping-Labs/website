@@ -419,13 +419,13 @@ def get_all_units_ordered(course):
     """Return all units in course reading order (issue #1674).
 
     Depth-first, per the documented contract: top-level modules in
-    ``(sort_order, id)`` order; a leaf module (no children) yields its
-    own units in ``(sort_order, id)`` order; a parent module yields each
-    child submodule's units in ``(sort_order, id)`` order. Mixed content
+    ``(sort_order, id)`` order; a leaf module yields its own units with
+    required lessons before bonus lessons; a parent module yields required
+    child submodules before bonus submodules. Mixed content
     (direct units alongside children) is forbidden by ``Module.clean()``,
-    so there is no interleaving case. Unaffected by ``kind`` or
-    ``is_bonus`` — reading order never changes based on either; only the
-    progress denominator does (:func:`non_bonus_units`).
+    so there is no interleaving case. This follows the syllabus grouping,
+    which also places bonus content after required content at each level.
+    ``kind`` does not affect reading order.
 
     This is the single ordering helper both ``get_next_unit``/
     ``get_prev_unit`` and the progress-percentage/``reader_progress_*``
@@ -433,14 +433,20 @@ def get_all_units_ordered(course):
     Reuses ``Course.get_syllabus()``'s prefetch: four queries total, one
     per tree level, not one per module.
     """
+    def syllabus_order(items):
+        items = list(items)
+        return [item for item in items if not item.is_bonus] + [
+            item for item in items if item.is_bonus
+        ]
+
     units = []
     for module in course.get_syllabus():
-        children = list(module.children.all())
+        children = syllabus_order(module.children.all())
         if children:
             for child in children:
-                units.extend(child.units.all())
+                units.extend(syllabus_order(child.units.all()))
         else:
-            units.extend(module.units.all())
+            units.extend(syllabus_order(module.units.all()))
     return units
 
 

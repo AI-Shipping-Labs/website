@@ -2,6 +2,7 @@
   The entire lesson row is its canonical link. This specialized row keeps
   the shared list-row scale while showing access/progress and unit kind.
 {% endcomment %}
+{% load access_tags %}
 <a href="{{ unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %}" data-testid="{% if not has_access and not unit.is_preview %}syllabus-locked-link{% else %}syllabus-unit-row{% endif %}" data-syllabus-unit-row>
   {% if unit.kind == 'event' %}
   <i data-lucide="calendar" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-event-icon" aria-hidden="true"></i>
@@ -14,6 +15,11 @@
   {% endif %}
   <span class="syllabus-title min-w-0 flex-1 break-words">
     <span class="sr-only">{{ unit.get_kind_display }}{% if unit.pk in completed_unit_ids %}, completed{% elif unit.is_preview and not has_access %}, preview{% elif not has_access %}, locked{% endif %}: </span>{{ unit.title }}
+    {% if unit.kind == 'homework' and schedule_cohort %}
+      {% with due=unit_deadlines|dict_get:unit.pk %}
+      <span class="block text-xs text-muted-foreground" data-testid="syllabus-homework-deadline">{% if due %}Due {{ due|date:"M j, Y H:i T" }}{% else %}Deadline to be announced{% endif %}</span>
+      {% endwith %}
+    {% endif %}
   </span>
   {% if unit.pk in completed_unit_ids %}
     <i data-lucide="check-circle-2" class="h-4 w-4 flex-shrink-0 text-green-400" aria-hidden="true"></i>

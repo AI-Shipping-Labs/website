@@ -27,6 +27,7 @@ from content.models import (
 from content.models.peer_review import CourseProject
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_schedule import build_deadline_context, select_display_cohort
 from content.services.enrollment import (
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
@@ -168,7 +169,12 @@ def course_detail(request, slug):
     # modules. Keyed by module.id -> a display-ready "Oct 12–18" string;
     # empty for a self-paced/anonymous/no-cohort viewer (module heading
     # shows title only, per the spec).
-    viewer_cohort = course_unit_service.resolve_viewer_dated_cohort(user, course)
+    viewer_cohort, schedule_is_preview = select_display_cohort(
+        course, user, request.GET.get('cohort', ''),
+    )
+    unit_deadlines, module_deadline_summaries = build_deadline_context(
+        course, viewer_cohort,
+    )
     module_week_ranges = {
         module_id: course_unit_service.format_week_range(*week_range)
         for module_id, week_range in course_unit_service.build_module_week_dates(
@@ -257,11 +263,23 @@ def course_detail(request, slug):
 
     course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
     has_configured_projects = bool(course_projects)
+    preview_project_ids = set()
     if not user.is_staff:
         course_projects = [
             project for project in course_projects
-            if project.cohort_id is None or project.cohort_id in user_enrolled_cohort_ids
+            if (
+                project.cohort_id is None
+                or project.cohort_id in user_enrolled_cohort_ids
+                or project.cohort_id == getattr(viewer_cohort, 'pk', None)
+            )
         ]
+        preview_project_ids = {
+            project.pk for project in course_projects
+            if (
+                (project.cohort_id and project.cohort_id not in user_enrolled_cohort_ids)
+                or (project.cohort_id is None and not user_enrolled_cohort_ids)
+            )
+        }
     projects_by_module = {}
     for project in course_projects:
         if project.module_id:
@@ -338,10 +356,15 @@ def course_detail(request, slug):
         'user_authenticated': user.is_authenticated,
         'active_cohorts': active_cohorts,
         'module_week_ranges': module_week_ranges,
+        'schedule_cohort': viewer_cohort,
+        'schedule_is_preview': schedule_is_preview,
+        'unit_deadlines': unit_deadlines,
+        'module_deadline_summaries': module_deadline_summaries,
         'live_session_entries': live_session_entries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
         'course_projects': course_projects,
         'projects_by_module': projects_by_module,
+        'preview_project_ids': preview_project_ids,
         'has_configured_projects': has_configured_projects,
         'buy_individual': buy_individual,
         'buy_individual_price': buy_individual_price,

@@ -132,7 +132,7 @@ class CourseUnitTouchTargetTest(TestCase):
     """Course unit rows have min-h-[44px] for touch targets."""
 
     def test_unit_row_has_min_height(self):
-        """Unit row container in the syllabus unit-row partial uses min-h-[44px].
+        """The full-row lesson link uses min-h-[44px].
 
         Issue #1674 extracted the unit row markup out of course_detail.html
         into content/_syllabus_unit_row.html so the three-level accordion can
@@ -142,21 +142,5 @@ class CourseUnitTouchTargetTest(TestCase):
 
         template = get_template("content/_syllabus_unit_row.html")
         source = template.template.source
-        # The unit row div has min-h-[44px]
+        # The unit row link has min-h-[44px]
         self.assertIn("min-h-[44px]", source)
-
-    def test_unit_link_uses_row_owned_padding(self):
-        """The compact row owns padding while the link fills its text lane."""
-        from django.template.loader import get_template
-
-        template = get_template("content/_syllabus_unit_row.html")
-        source = template.template.source
-        # Find the unit link (the one with get_absolute_url)
-        link_match = re.search(
-            r'get_absolute_url.*?class="([^"]*)"', source
-        )
-        self.assertIsNotNone(
-            link_match, "Unit link not found in _syllabus_unit_row.html"
-        )
-        self.assertIn("flex-1", link_match.group(1))
-        self.assertNotIn("py-2", link_match.group(1))

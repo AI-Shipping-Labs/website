@@ -172,3 +172,14 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertEqual(response.context['schedule_cohort'], self.c5)
         self.assertTrue(response.context['schedule_is_preview'])
         self.assertNotContains(response, 'Attempt 4')
+
+    def test_module_overview_uses_selected_schedule_timezone_and_preview_gate(self):
+        response = self.client.get(f'{self.topic.get_absolute_url()}?cohort=5')
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Attempt 5')
+        self.assertContains(response, 'Feb 1, 2027 19:00 Europe/Berlin')
+        self.assertNotContains(response, 'Attempt 4')
+        submit_url = reverse('course_project_submit', kwargs={
+            'slug': self.course.slug, 'attempt_slug': 'attempt-5',
+        })
+        self.assertNotContains(response, f'href="{submit_url}"')

@@ -662,14 +662,30 @@ def _render_module_overview(request, course, module):
     # ``submodules`` is empty for a leaf module (today's two-level shape).
     submodules = list(module.children.order_by('sort_order', 'id'))
     course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
+    viewer_cohort, _ = select_display_cohort(
+        course, user, request.GET.get('cohort', ''),
+    )
+    if viewer_cohort is not None or request.GET.get('cohort'):
+        course_projects = [
+            project for project in course_projects
+            if project.cohort_id is None
+            or project.cohort_id == getattr(viewer_cohort, 'pk', None)
+        ]
+    preview_project_ids = set()
     if not user.is_staff:
         cohort_ids = set(CohortEnrollment.objects.filter(
             user=user, cohort__course=course,
         ).values_list('cohort_id', flat=True)) if user.is_authenticated else set()
         course_projects = [
             project for project in course_projects
-            if project.cohort_id is None or project.cohort_id in cohort_ids
+            if (project.cohort_id is None or project.cohort_id in cohort_ids
+                or project.cohort_id == getattr(viewer_cohort, 'pk', None))
         ]
+        preview_project_ids = {
+            project.pk for project in course_projects
+            if ((project.cohort_id and project.cohort_id not in cohort_ids)
+                or (project.cohort_id is None and not cohort_ids))
+        }
 
     completed_unit_ids: set[int] = set()
     if user.is_authenticated:
@@ -707,6 +723,8 @@ def _render_module_overview(request, course, module):
         'units': units,
         'submodules': submodules,
         'course_projects': course_projects,
+        'preview_project_ids': preview_project_ids,
+        'schedule_timezone': schedule_timezone_name(course, user),
         'has_access': has_access,
         'user_authenticated': user.is_authenticated,
         'completed_unit_ids': completed_unit_ids,

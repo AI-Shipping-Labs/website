@@ -170,7 +170,7 @@ Accepted values for `default_unit_access` and per-unit `access:` (case-insensiti
 
 `enroll_url` is required when `access_mode: entitlement` — the sync fails the course otherwise. It is the external signup page linked from the "Enroll via {program_label}" CTA. `program_label` is optional short copy for that CTA and the "Sold separately" badge (e.g. `Maven`); when blank, the CTA reads "Enroll" without a program name.
 
-`reader_navigation_scope: submodule` keeps the lesson reader's sidebar on the current submodule and adds links to adjacent submodules and the full syllabus. Module overview URLs open the first lesson when one exists. Omit the key or set it to `course` to keep the full course outline and module overview pages.
+`reader_navigation_scope: submodule` keeps the lesson reader's sidebar on the current submodule and adds links to adjacent submodules and the full syllabus. Module overview URLs open the first lesson when one exists, except where the overview holds course project attempts. Omit the key or set it to `course` to keep the full course outline and module overview pages.
 
 ### Source-owned vs Studio-owned fields
 

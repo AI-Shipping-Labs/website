@@ -606,7 +606,10 @@ def _render_module_overview(request, course, module):
     list are clickable for users with access; the unit detail view itself
     handles the per-lesson gating / teaser.
     """
-    if course.reader_navigation_scope == 'submodule':
+    if (
+        course.reader_navigation_scope == 'submodule'
+        and not CourseProject.objects.filter(module=module).exists()
+    ):
         first_unit = module.units.order_by('sort_order', 'pk').first()
         if first_unit is None:
             for child in module.children.order_by('sort_order', 'pk'):

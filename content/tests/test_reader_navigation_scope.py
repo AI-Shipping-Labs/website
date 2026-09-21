@@ -1,11 +1,14 @@
 """A source-managed course can keep the reader focused on its submodule."""
 
+import datetime
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from content.models import Course, Module, Unit
+from content.models.peer_review import CourseProject
 from content.sync_parsers.common import GitHubSyncError
 from content.sync_parsers.families.courses import _build_course_defaults
 
@@ -126,3 +129,16 @@ class ReaderNavigationScopeTest(TestCase):
         response = self.client.get('/courses/scoped-reader/week-1')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['module'].slug, 'week-1')
+
+    def test_project_attempt_module_keeps_overview_and_attempt_cards(self):
+        now = timezone.now()
+        CourseProject.objects.create(
+            course=self.course, module=self.middle,
+            slug='attempt-1', title='Project attempt 1',
+            submission_due_at=now + datetime.timedelta(days=7),
+            review_due_at=now + datetime.timedelta(days=14),
+        )
+        response = self.client.get('/courses/scoped-reader/week-1/middle')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['module'], self.middle)
+        self.assertContains(response, 'Project attempt 1')

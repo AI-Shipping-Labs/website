@@ -77,10 +77,14 @@
       {% endwith %}
       {% with module_projects=projects_by_module|dict_get:module.id %}
       {% if module_projects %}
+      {% if module.slug != 'project-attempts' %}
       <p class="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-project-group">Project attempts</p>
+      {% endif %}
       {% for project in module_projects %}
       {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
       {% endfor %}
+      {% elif course_slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
+      <p class="px-3 py-2 text-xs text-muted-foreground" data-testid="syllabus-project-coming-soon">Attempt dates will be announced here.</p>
       {% endif %}
       {% endwith %}
     {% endif %}

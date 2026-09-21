@@ -23,14 +23,18 @@ class CourseProjectAttemptViewsTest(TestCase):
             course=cls.course, title='Capstone project', slug='capstone-project',
             sort_order=7,
         )
+        cls.project_module = Module.objects.create(
+            course=cls.course, parent=cls.module, title='Project Attempts',
+            slug='project-attempts', sort_order=3,
+        )
         now = timezone.now()
         cls.first = CourseProject.objects.create(
-            course=cls.course, module=cls.module, slug='first', title='First attempt',
+            course=cls.course, module=cls.project_module, slug='first', title='First attempt',
             submission_due_at=now + timedelta(days=1),
             review_due_at=now + timedelta(days=8),
         )
         cls.second = CourseProject.objects.create(
-            course=cls.course, module=cls.module, slug='second', title='Second attempt',
+            course=cls.course, module=cls.project_module, slug='second', title='Second attempt',
             submission_due_at=now + timedelta(days=15),
             review_due_at=now + timedelta(days=22),
         )
@@ -44,8 +48,33 @@ class CourseProjectAttemptViewsTest(TestCase):
         self.assertContains(response, 'Second attempt')
         self.assertContains(response, '/courses/attempt-course/projects/first/submit')
         self.assertContains(response, '/courses/attempt-course/projects/second/submit')
-        self.assertContains(response, 'data-testid="syllabus-project-group"')
+        self.assertContains(response, 'Project Attempts')
+        self.assertNotContains(response, 'data-testid="syllabus-project-group"')
         self.assertNotContains(response, 'data-testid="course-project"')
+
+    def test_review_links_appear_only_after_submission_of_that_attempt(self):
+        response = self.client.get('/courses/attempt-course')
+        self.assertNotContains(response, '/courses/attempt-course/projects/first/reviews')
+        self.assertNotContains(response, '/courses/attempt-course/projects/second/reviews')
+        self.assertNotContains(response, 'Reviews by')
+
+        self.client.post(
+            '/courses/attempt-course/projects/first/submit',
+            {'project_url': 'https://example.com/first'},
+        )
+        response = self.client.get('/courses/attempt-course')
+        self.assertContains(response, '/courses/attempt-course/projects/first/reviews')
+        self.assertNotContains(response, '/courses/attempt-course/projects/second/reviews')
+        self.assertContains(response, 'Reviews by', count=1)
+
+    def test_attempt_submodule_page_shows_attempts_without_empty_lesson_list(self):
+        response = self.client.get(
+            '/courses/attempt-course/capstone-project/project-attempts',
+        )
+        self.assertContains(response, 'First attempt')
+        self.assertContains(response, 'Second attempt')
+        self.assertNotContains(response, 'data-testid="module-lesson-list"')
+        self.assertNotContains(response, '/courses/attempt-course/projects/first/reviews')
 
     def test_submissions_are_isolated_per_attempt(self):
         for slug in ('first', 'second'):

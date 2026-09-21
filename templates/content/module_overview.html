@@ -100,6 +100,7 @@
         </div>
       </section>
       {% elif not submodules %}
+      {% if module.slug != 'project-attempts' %}
       <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
       <section class="mb-12" data-testid="module-lesson-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">
@@ -141,15 +142,18 @@
         </p>
         {% endif %}
       </section>
+      {% endif %}
       {% if course_projects %}
-      <section class="mb-12" aria-labelledby="module-projects-heading" data-testid="module-project-attempts">
-        <h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>
+      <section class="mb-12" {% if module.slug != 'project-attempts' %}aria-labelledby="module-projects-heading"{% else %}aria-label="Project attempts"{% endif %} data-testid="module-project-attempts">
+        {% if module.slug != 'project-attempts' %}<h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>{% endif %}
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
           {% for project in course_projects %}
           {% include "content/_syllabus_project_row.html" with project=project course_slug=course.slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
           {% endfor %}
         </div>
       </section>
+      {% elif course.slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
+      <p class="mb-12 text-sm text-muted-foreground" data-testid="module-project-coming-soon">Attempt dates will be announced here.</p>
       {% endif %}
       {% endif %}
 

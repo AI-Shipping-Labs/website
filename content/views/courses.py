@@ -24,7 +24,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from content.models.peer_review import CourseProject
+from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_inline import inline_units_and_topics
@@ -292,7 +292,16 @@ def course_detail(request, slug):
             )
         }
     projects_by_module = {}
+    submitted_project_ids = set()
+    if user.is_authenticated and course_projects:
+        submitted_project_ids = set(ProjectSubmission.objects.filter(
+            user=user, course_project__in=course_projects,
+        ).values_list('course_project_id', flat=True))
     for project in course_projects:
+        project.show_reviews = (
+            project.pk in submitted_project_ids
+            and project.pk not in preview_project_ids
+        )
         if project.module_id:
             projects_by_module.setdefault(project.module_id, []).append(project)
 
@@ -697,6 +706,16 @@ def _render_module_overview(request, course, module):
             if (not user.is_authenticated or not has_access
                 or (project.cohort_id and project.cohort_id not in cohort_ids))
         }
+    submitted_project_ids = set()
+    if user.is_authenticated and course_projects:
+        submitted_project_ids = set(ProjectSubmission.objects.filter(
+            user=user, course_project__in=course_projects,
+        ).values_list('course_project_id', flat=True))
+    for project in course_projects:
+        project.show_reviews = (
+            project.pk in submitted_project_ids
+            and project.pk not in preview_project_ids
+        )
 
     completed_unit_ids: set[int] = set()
     if user.is_authenticated:

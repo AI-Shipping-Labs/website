@@ -2778,6 +2778,85 @@ class SeedContentSourcesCommandTest(TestCase):
         self.assertNotIn('disagree', out.getvalue())
         self.assertNotIn('Created content source', out.getvalue())
 
+    def test_seed_resolves_disagreement_via_validated_sibling(self):
+        """When configured siblings disagree, the one whose last_webhook_at
+        proves it validated a real GitHub delivery most recently wins; the
+        stale sibling is left untouched."""
+        from datetime import timedelta
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            slug='python-course',
+            webhook_secret='test-secret-stale',
+            is_enabled=True,
+            last_webhook_at=timezone.now() - timedelta(days=90),
+        )
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+            slug='workshops-content',
+            webhook_secret='test-secret-current',
+            is_enabled=True,
+            last_webhook_at=timezone.now() - timedelta(days=2),
+        )
+
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+
+        wiki = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+        self.assertEqual(wiki.webhook_secret, 'test-secret-current')
+        self.assertTrue(wiki.is_enabled)
+        self.assertNotIn('disagree', out.getvalue())
+        # The stale sibling's value is never corrected or overwritten.
+        self.assertEqual(
+            PackageContentSource.objects.get(
+                repo_name='AI-Shipping-Labs/python-course',
+            ).webhook_secret,
+            'test-secret-stale',
+        )
+
+    def test_seed_fails_closed_on_validated_tie(self):
+        """Two validated siblings tied on the most recent last_webhook_at
+        but holding different values cannot settle the disagreement: the
+        blank row stays disabled and the warning is printed."""
+        from datetime import timedelta
+        from io import StringIO
+
+        from django.core.management import call_command
+        from django.utils import timezone
+        stamped = timezone.now() - timedelta(days=2)
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/python-course',
+            slug='python-course',
+            webhook_secret='test-secret-alpha',
+            is_enabled=True,
+            last_webhook_at=stamped,
+        )
+        PackageContentSource.objects.create(
+            repo_name='AI-Shipping-Labs/workshops-content',
+            slug='workshops-content',
+            webhook_secret='test-secret-beta',
+            is_enabled=True,
+            last_webhook_at=stamped,
+        )
+
+        out = StringIO()
+        call_command('seed_content_sources', stdout=out)
+
+        wiki = PackageContentSource.objects.get(
+            repo_name='AI-Shipping-Labs/wiki',
+        )
+        self.assertEqual(wiki.webhook_secret, '')
+        self.assertFalse(wiki.is_enabled)
+        output = out.getvalue()
+        self.assertIn('disagree', output)
+        self.assertNotIn('test-secret-alpha', output)
+        self.assertNotIn('test-secret-beta', output)
+
 
 # ===========================================================================
 # Direct Admin Edit Flag Test

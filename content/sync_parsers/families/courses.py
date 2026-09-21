@@ -1638,38 +1638,10 @@ def _sync_module_dir(
                 })
 
         if parent_has_pending_units:
-            # Re-validate WITHOUT the bypass, purely to invoke the
-            # existing symmetric "cannot have both submodules and direct
-            # units" check (Module.clean(), belt-and-braces branch). If
-            # some of the parent's original direct units were never
-            # claimed by any of its own new submodules this run, that is
-            # a genuine content gap (not a sync-ordering artifact): name
-            # it as one error and move on rather than aborting the rest
-            # of the course's sync.
-            try:
-                module.full_clean()
-            except ValidationError as exc:
-                stuck_units = list(module.units.order_by('source_path')[:5])
-                remaining_count = module.units.count()
-                stuck_desc = ', '.join(
-                    f'{u.title!r} ({u.source_path})' for u in stuck_units
-                )
-                if remaining_count > len(stuck_units):
-                    stuck_desc += (
-                        f', and {remaining_count - len(stuck_units)} more'
-                    )
-                stats['errors'].append({
-                    'file': rel_path,
-                    'error': (
-                        f'Module "{module.title}" ({rel_path}) gained '
-                        f'submodules this sync but still has direct '
-                        f'unit(s) not claimed by any of them: {stuck_desc}. '
-                        'These units have no matching content_id anywhere '
-                        'else in the course. Move them into one of the new '
-                        'submodules or remove them, then re-sync. '
-                        f'({"; ".join(exc.messages)})'
-                    ),
-                })
+            # Units may move to a different TOP-LEVEL module later in the
+            # course walk (for example, Week 5 lessons moving into Bonus).
+            # Validate after every module has had a chance to claim them.
+            unit_sync_state['pending_parent_modules'].append((module, rel_path))
     else:
         # Leaf module (today's two-level shape, unchanged behaviour).
         _sync_module_units(
@@ -1868,6 +1840,7 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         # cleanly before the first error in the walk still swept as
         # normal at its own immediate-sweep point.
         'errors_at_walk_start': len(stats['errors']),
+        'pending_parent_modules': [],
     }
 
     # Build the course-wide unit lookup once before processing any unit so the
@@ -1910,6 +1883,33 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
             stats['errors'].append({
                 'file': os.path.relpath(module_yaml_path, repo_dir),
                 'error': str(e),
+            })
+
+    # A leaf module can gain submodules while some of its former units move
+    # into a different top-level module. Checking immediately after its own
+    # children produces a false error before that destination is visited.
+    # Keep the invariant, but check against the completed course walk.
+    for module, rel_path in unit_sync_state['pending_parent_modules']:
+        try:
+            module.full_clean()
+        except ValidationError as exc:
+            stuck_units = list(module.units.order_by('source_path')[:5])
+            remaining_count = module.units.count()
+            stuck_desc = ', '.join(
+                f'{u.title!r} ({u.source_path})' for u in stuck_units
+            )
+            if remaining_count > len(stuck_units):
+                stuck_desc += f', and {remaining_count - len(stuck_units)} more'
+            stats['errors'].append({
+                'file': rel_path,
+                'error': (
+                    f'Module "{module.title}" ({rel_path}) gained '
+                    f'submodules this sync but still has direct unit(s) '
+                    f'not claimed by any of them: {stuck_desc}. These units '
+                    'have no matching content_id anywhere else in the '
+                    'course. Move them into one of the new submodules or '
+                    f'remove them, then re-sync. ({"; ".join(exc.messages)})'
+                ),
             })
 
     # Issue #1721: the shared "did this walk record any error" gate,

@@ -118,6 +118,52 @@ class ModuleTransitionClaimedUnitsTest(DirectSyncFixtureBase):
         super().setUp()
         self._write_course_yaml()
 
+    def test_leaf_units_can_move_to_later_top_level_bonus_module(self):
+        moved_id = str(uuid.uuid4())
+        user = User.objects.create_user(
+            email='bonus-learner@example.com', password='pw12345',
+        )
+        self._write_yaml('05-monitoring/module.yaml', {'title': 'Monitoring'})
+        self._write_markdown(
+            '05-monitoring/01-legacy.md',
+            {'title': 'Legacy lesson', 'content_id': moved_id}, 'Body.\n',
+        )
+        self._sync()
+        old_unit = Unit.objects.get(content_id=moved_id)
+        completed_at = timezone.now()
+        UserCourseProgress.objects.create(
+            user=user, unit=old_unit, completed_at=completed_at,
+        )
+
+        self._remove('05-monitoring/01-legacy.md')
+        self._write_yaml(
+            '05-monitoring/01-main/module.yaml', {'title': 'Main'},
+        )
+        self._write_markdown(
+            '05-monitoring/01-main/01-current.md',
+            {'title': 'Current lesson'}, 'Current.\n',
+        )
+        self._write_yaml('10-bonus/module.yaml', {'title': 'Bonus'})
+        self._write_yaml(
+            '10-bonus/01-optional/module.yaml', {'title': 'Optional'},
+        )
+        self._write_markdown(
+            '10-bonus/01-optional/01-legacy.md',
+            {'title': 'Legacy lesson', 'content_id': moved_id}, 'Body.\n',
+        )
+
+        stats = self._sync()
+
+        self.assertEqual(stats['errors'], [])
+        old_unit.refresh_from_db()
+        self.assertEqual(old_unit.pk, Unit.objects.get(content_id=moved_id).pk)
+        self.assertEqual(old_unit.module.slug, 'optional')
+        self.assertEqual(
+            UserCourseProgress.objects.get(user=user, unit=old_unit).completed_at,
+            completed_at,
+        )
+        self.assertFalse(Module.objects.get(slug='monitoring').units.exists())
+
     def test_module_keeps_slug_and_gains_submodules_units_all_claimed(self):
         c1, c2 = str(uuid.uuid4()), str(uuid.uuid4())
         self._write_yaml('01-monitoring/module.yaml', {'title': 'Monitoring'})

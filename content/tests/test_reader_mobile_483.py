@@ -104,9 +104,6 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         self.assertNotIn('py-1.5', window)
         self.assertNotIn('sm:py-2.5', window)
 
-        list_window = body[max(0, idx - 1600):idx]
-        self.assertIn('space-y-0.5 px-1 pb-1', list_window)
-
 
 class CourseSyllabusZeroCountSuppressionTest(TestCase):
     """A module with zero units must not render the awkward

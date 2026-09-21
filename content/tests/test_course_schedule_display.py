@@ -108,3 +108,11 @@ class CourseScheduleDisplayTest(TestCase):
         response = self.client.get('/courses/ai-buildcamp')
         self.assertEqual(response.context['schedule_cohort'], self.c4)
         self.assertTrue(response.context['schedule_is_preview'])
+
+    def test_staff_can_preview_another_cohort_when_enrolled(self):
+        self.learner.is_staff = True
+        self.learner.save(update_fields=['is_staff'])
+        self.client.force_login(self.learner)
+        response = self.client.get('/courses/ai-buildcamp?cohort=5')
+        self.assertEqual(response.context['schedule_cohort'], self.c5)
+        self.assertTrue(response.context['schedule_is_preview'])

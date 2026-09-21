@@ -13,6 +13,13 @@ from content.models.peer_review import CourseProject
 
 def select_display_cohort(course, user, requested_key=''):
     """Prefer the learner's enrollment; accept an active cohort preview otherwise."""
+    active = Cohort.objects.filter(
+        course=course, mode='cohort', is_active=True,
+    ).order_by('start_date', 'pk')
+    if user.is_authenticated and user.is_staff and requested_key:
+        cohort = active.filter(external_key__iexact=requested_key).first()
+        if cohort:
+            return cohort, True
     if user.is_authenticated:
         enrollment = (
             CohortEnrollment.objects.filter(
@@ -22,9 +29,6 @@ def select_display_cohort(course, user, requested_key=''):
         if enrollment:
             return enrollment.cohort, False
 
-    active = Cohort.objects.filter(
-        course=course, mode='cohort', is_active=True,
-    ).order_by('start_date', 'pk')
     if requested_key:
         cohort = active.filter(external_key__iexact=requested_key).first()
         return cohort, cohort is not None

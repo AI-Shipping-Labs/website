@@ -70,16 +70,16 @@ class CourseMobileSetupMixin(TierSetupMixin):
 
 
 class CourseDetailMobileSyllabusTest(CourseMobileSetupMixin, TestCase):
-    """Syllabus module rows use truncation and hide lesson count on mobile."""
+    """The syllabus sends full titles and counts to mobile readers."""
 
-    def test_module_title_has_truncate_class(self):
+    def test_module_title_is_not_truncated_in_rendered_content(self):
         response = self.client.get("/courses/long-course")
-        self.assertContains(response, 'class="flex-1 min-w-0 truncate"')
+        self.assertContains(response, "Module With A Very Long Title For Testing Overflow")
 
-    def test_lesson_count_hidden_on_mobile(self):
-        """Lesson count span uses hidden sm:inline to hide on small screens."""
+    def test_lesson_count_is_in_summary(self):
         response = self.client.get("/courses/long-course")
-        self.assertContains(response, 'class="hidden sm:inline text-xs text-muted-foreground')
+        self.assertContains(response, 'data-testid="module-lesson-count"')
+        self.assertContains(response, "2 lessons")
 
 
 class CourseDetailMobileCohortTest(CourseMobileSetupMixin, TestCase):

@@ -24,3 +24,9 @@ def required_only(items):
 def bonus_only(items):
     """Return the bonus items from ``items``, order preserved."""
     return [item for item in items if getattr(item, 'is_bonus', False)]
+
+
+@register.filter
+def leaf_unit_count(children):
+    """Count units below a parent module from its prefetched child modules."""
+    return sum(len(child.units.all()) for child in children)

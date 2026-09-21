@@ -73,7 +73,7 @@ class CollapsibleSyllabusStructureTest(TestCase):
 
     def test_module_lesson_count_shown(self):
         response = self.client.get("/courses/collapsible-course")
-        self.assertContains(response, "1 lessons")
+        self.assertContains(response, "1 lesson</span>")
 
     def test_module_chevron_icons_present(self):
         response = self.client.get("/courses/collapsible-course")

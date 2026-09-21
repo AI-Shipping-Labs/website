@@ -17,7 +17,9 @@ from django.views.decorators.http import require_POST
 
 from accounts.services.timezones import format_user_datetime, is_valid_timezone
 from bookclub.models import (
+    BOOK_STATUS_CANCELLED,
     BOOK_STATUS_CURRENT,
+    BOOK_STATUS_DRAFT,
     BOOK_STATUS_FINISHED,
     BOOK_STATUS_UPCOMING,
     Book,
@@ -1277,9 +1279,21 @@ def event_series_public(request, series_id, slug):
             if e.user_reg_state == 'no_access'
         ))
 
+    # Issue #1772: resolve one linked book for the series -> book
+    # cross-link. ``cancelled`` never surfaces; ``draft`` surfaces only in
+    # staff preview (mirroring ``book_detail`` in ``bookclub/views.py``).
+    # First in ``Book`` default ordering (``-start_date``, ``-created_at``)
+    # so multi-book links resolve deterministically. A single ``.first()``
+    # query; ``None`` when no visible book exists.
+    book_qs = series.books.exclude(status=BOOK_STATUS_CANCELLED)
+    if not request.user.is_staff:
+        book_qs = book_qs.exclude(status=BOOK_STATUS_DRAFT)
+    book = book_qs.first()
+
     return render(request, 'events/event_series.html', {
         'series': series,
         'events': events,
+        'book': book,
         'series_display_timezone': series_display_timezone,
         'is_series_registered': is_series_registered,
         'has_upcoming_to_register': has_upcoming_to_register,

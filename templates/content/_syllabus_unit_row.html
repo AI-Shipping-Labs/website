@@ -30,6 +30,6 @@
     <i data-lucide="lock" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-lock-icon" aria-hidden="true"></i>
     {% endif %}
   {% endif %}
-  {% if unit.kind != 'lesson' %}<span class="flex-shrink-0 text-xs text-muted-foreground">{{ unit.get_kind_display }}</span>{% endif %}
+  {% if unit.kind != 'lesson' and unit.kind != 'event' %}<span class="flex-shrink-0 text-xs text-muted-foreground">{{ unit.get_kind_display }}</span>{% endif %}
   {% if unit.is_preview and not has_access %}<span class="flex-shrink-0 text-xs text-accent">Preview</span>{% endif %}
 </a>

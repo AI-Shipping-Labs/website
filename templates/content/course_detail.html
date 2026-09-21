@@ -263,7 +263,10 @@
           {% if course.slug == 'ai-buildcamp' and module.sort_order == 7 %}
           <p class="px-1 pt-4 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-capstone-group">Capstone · weeks 7–9</p>
           {% endif %}
-          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module module_week_range=module_week_ranges|dict_get:module.id %}
+          {% if course.slug == 'ai-buildcamp' and module.is_bonus %}
+          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-bonus-group">Bonus</h3>
+          {% endif %}
+          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module module_week_range=module_week_ranges|dict_get:module.id bonus_group=module.is_bonus %}
           {% empty %}
           {% member_empty_state title='Syllabus coming soon' body='Lessons for this course will appear here when they are ready.' icon='book-open' kind='fresh' testid='syllabus-empty-state' %}
           {% endfor %}

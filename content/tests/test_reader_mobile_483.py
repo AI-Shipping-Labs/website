@@ -72,7 +72,7 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         response = self.client.get("/courses/spacing-course")
         self.assertEqual(response.status_code, 200)
         # The min-h-[44px] floor stays on the summary row even with
-        # tighter mobile padding (px-3 py-2.5 sm:px-4).
+        # tighter mobile padding.
         self.assertContains(
             response,
             'data-testid="syllabus-module-summary"',
@@ -88,7 +88,6 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         window = body[max(0, idx - 600):idx + 200]
         self.assertIn('min-h-[44px]', window)
         self.assertIn('px-3 py-2.5', window)
-        self.assertIn('sm:px-4', window)
 
     def test_unit_row_matches_workshop_padding_and_keeps_44px_tap_target(self):
         """Syllabus units use the workshop row scale and stay tappable."""

@@ -3,6 +3,7 @@ import os
 import tempfile
 import uuid
 
+from django.db import models
 from django.test import TestCase
 
 from content.models import Article, Course, Download, Project, Tutorial, Unit
@@ -23,9 +24,15 @@ class ContentIdFieldExistsTest(TestCase):
         self.assertTrue(field.null)
 
     def test_course_has_content_id(self):
-        field = Course._meta.get_field('content_id')
-        self.assertTrue(field.unique)
+        field = Course._meta.get_field('source_content_id')
+        self.assertIsInstance(field, models.UUIDField)
         self.assertTrue(field.null)
+        content_id = uuid.uuid4()
+        course = Course.objects.create(
+            slug='content-id-course', title='Content ID course', content_id=content_id,
+        )
+        self.assertEqual(course.source_content_id, content_id)
+        self.assertEqual(Course.objects.get(content_id=content_id).content_id, content_id)
 
     def test_event_has_content_id(self):
         field = Event._meta.get_field('content_id')

@@ -548,3 +548,13 @@ class SyllabusBuildcampPositionTest(TestCase):
 
     def test_other_courses_keep_their_position_numbers(self):
         self.assertEqual(self._positions('other-course'), [1, 2, 3, None])
+
+    def test_buildcamp_capstone_card_does_not_repeat_week_label(self):
+        course = Course.objects.get(slug='ai-buildcamp')
+        Module.objects.create(
+            course=course, title='Capstone Project', slug='capstone-project',
+            sort_order=7,
+        )
+        response = self.client.get('/courses/ai-buildcamp')
+        self.assertContains(response, 'Capstone Project')
+        self.assertNotContains(response, 'Week 7 · ')

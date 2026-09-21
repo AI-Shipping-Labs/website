@@ -1,8 +1,10 @@
 import uuid
 
 from django.conf import settings
-from django.core.validators import URLValidator
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator, URLValidator
 from django.db import models
+from django.db.models import Q
 
 SUBMISSION_STATUS_CHOICES = [
     ('submitted', 'Submitted'),
@@ -10,6 +12,57 @@ SUBMISSION_STATUS_CHOICES = [
     ('review_complete', 'Review Complete'),
     ('certified', 'Certified'),
 ]
+
+
+class CourseProject(models.Model):
+    """A dated project attempt within a course, optionally scoped to a cohort."""
+
+    course = models.ForeignKey(
+        'cb_curriculum.Course', on_delete=models.CASCADE,
+        related_name='course_projects',
+    )
+    cohort = models.ForeignKey(
+        'content.Cohort', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_projects',
+    )
+    module = models.ForeignKey(
+        'cb_curriculum.Module', on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='course_projects',
+    )
+    slug = models.SlugField(max_length=100)
+    title = models.CharField(max_length=200)
+    submission_due_at = models.DateTimeField()
+    review_due_at = models.DateTimeField()
+    peer_review_count = models.PositiveSmallIntegerField(
+        null=True, blank=True,
+        validators=[MinValueValidator(1)],
+        help_text='Reviews per learner; blank uses the course setting.',
+    )
+
+    class Meta:
+        ordering = ['submission_due_at', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['course', 'slug'],
+                name='course_project_course_slug_unique',
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.cohort_id and self.course_id and self.cohort.course_id != self.course_id:
+            errors['cohort'] = 'The cohort must belong to this course.'
+        if self.module_id and self.course_id and self.module.course_id != self.course_id:
+            errors['module'] = 'The module must belong to this course.'
+        if self.submission_due_at and self.review_due_at:
+            if self.review_due_at <= self.submission_due_at:
+                errors['review_due_at'] = 'Review deadline must follow submission deadline.'
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self):
+        return f'{self.course.title} - {self.title}'
 
 
 class ProjectSubmission(models.Model):
@@ -24,6 +77,13 @@ class ProjectSubmission(models.Model):
         'cb_curriculum.Course',
         on_delete=models.CASCADE,
         related_name='project_submissions',
+    )
+    course_project = models.ForeignKey(
+        CourseProject,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='submissions',
     )
     cohort = models.ForeignKey(
         'content.Cohort',
@@ -46,8 +106,30 @@ class ProjectSubmission(models.Model):
     certificate_issued_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = [('user', 'course')]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'course'],
+                condition=Q(course_project__isnull=True),
+                name='legacy_submission_user_course_unique',
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'course_project'],
+                name='submission_user_course_project_unique',
+            ),
+        ]
         ordering = ['-submitted_at']
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.course_project_id:
+            if self.course_id and self.course_project.course_id != self.course_id:
+                errors['course_project'] = 'The project attempt must belong to this course.'
+            if (self.course_project.cohort_id
+                    and self.course_project.cohort_id != self.cohort_id):
+                errors['cohort'] = 'The cohort must match the project attempt.'
+        if errors:
+            raise ValidationError(errors)
 
     def __str__(self):
         return f'{self.user} - {self.course.title} ({self.status})'

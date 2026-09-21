@@ -22,6 +22,8 @@ from io import StringIO
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import Client, TestCase
 from django.utils import timezone
 
@@ -29,6 +31,7 @@ from content.models import (
     Cohort,
     Course,
     CourseCertificate,
+    CourseProject,
     Module,
     PeerReview,
     ProjectSubmission,
@@ -95,6 +98,71 @@ class ProjectSubmissionModelTest(TestCase):
         self.assertIsNone(sub.batch_assigned_at)
         self.assertIsNone(sub.review_deadline)
         self.assertIsNone(sub.certificate_issued_at)
+
+    def test_one_submission_per_attempt_and_legacy_slot(self):
+        due = timezone.now() + timedelta(days=1)
+        attempts = [CourseProject.objects.create(
+            course=self.course, slug=f'attempt-{number}', title=f'Attempt {number}',
+            submission_due_at=due, review_due_at=due + timedelta(days=2),
+        ) for number in (1, 2)]
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course,
+            project_url='https://example.com/legacy',
+        )
+        for attempt in attempts:
+            ProjectSubmission.objects.create(
+                user=self.user, course=self.course, course_project=attempt,
+                project_url=f'https://example.com/{attempt.slug}',
+            )
+        self.assertEqual(ProjectSubmission.objects.filter(user=self.user).count(), 3)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            ProjectSubmission.objects.create(
+                user=self.user, course=self.course,
+                project_url='https://example.com/second-legacy',
+            )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            ProjectSubmission.objects.create(
+                user=self.user, course=self.course, course_project=attempts[0],
+                project_url='https://example.com/duplicate-attempt',
+            )
+
+
+class CourseProjectModelTest(TestCase):
+    def test_module_must_belong_to_project_course(self):
+        course = _create_course()
+        other_course = _create_course(slug='another-course', title='Another course')
+        own_module = Module.objects.create(
+            course=course, title='Projects', slug='projects', sort_order=0,
+        )
+        other_module = Module.objects.create(
+            course=other_course, title='Other projects', slug='other-projects', sort_order=0,
+        )
+        due = timezone.now() + timedelta(days=1)
+        project = CourseProject(
+            course=course, module=own_module, slug='first', title='First',
+            submission_due_at=due, review_due_at=due + timedelta(days=1),
+        )
+        project.full_clean()
+        project.module = other_module
+        with self.assertRaisesMessage(ValidationError, 'The module must belong to this course.'):
+            project.full_clean()
+
+    def test_slug_is_unique_per_course_even_across_cohorts(self):
+        course = _create_course()
+        due = timezone.now() + timedelta(days=1)
+        cohort = Cohort.objects.create(
+            course=course, name='Fall',
+            start_date=date.today(), end_date=date.today() + timedelta(days=10),
+        )
+        CourseProject.objects.create(
+            course=course, slug='first', title='First',
+            submission_due_at=due, review_due_at=due + timedelta(days=1),
+        )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            CourseProject.objects.create(
+                course=course, cohort=cohort, slug='first', title='Duplicate',
+                submission_due_at=due, review_due_at=due + timedelta(days=1),
+            )
 
 class PeerReviewModelTest(TestCase):
     """Test PeerReview model fields and constraints."""
@@ -275,7 +343,7 @@ class ReviewDashboardViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Submit Project')
         self.assertContains(response, 'Test Course')
-        self.assertNotContains(response, 'Reviews to Complete')
+        self.assertNotContains(response, 'Reviews to complete')
 
     def test_dashboard_waiting_for_batch(self):
         ProjectSubmission.objects.create(
@@ -576,6 +644,121 @@ class BatchFormationTest(TestCase):
         for sub in subs:
             self.assertEqual(sub.reviews.count(), 2)
 
+    def test_attempt_batches_wait_for_own_deadline_and_stay_separate(self):
+        now = timezone.now()
+        first = CourseProject.objects.create(
+            course=self.course, slug='first', title='First',
+            submission_due_at=now - timedelta(hours=1),
+            review_due_at=now + timedelta(days=2), peer_review_count=1,
+        )
+        second = CourseProject.objects.create(
+            course=self.course, slug='second', title='Second',
+            submission_due_at=now + timedelta(days=1),
+            review_due_at=now + timedelta(days=3), peer_review_count=1,
+        )
+        users = [_create_user(f'attempt{i}@test.com') for i in range(2)]
+        for project in (first, second):
+            for user in users:
+                sub = ProjectSubmission.objects.create(
+                    user=user, course=self.course, course_project=project,
+                    project_url=f'https://example.com/{project.slug}/{user.pk}',
+                )
+                ProjectSubmission.objects.filter(pk=sub.pk).update(
+                    submitted_at=now - timedelta(hours=2),
+                )
+
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result, {'batched': 2, 'reviews_assigned': 2})
+        self.assertEqual(
+            ProjectSubmission.objects.filter(course_project=first, status='in_review').count(), 2,
+        )
+        self.assertEqual(
+            ProjectSubmission.objects.filter(course_project=second, status='submitted').count(), 2,
+        )
+        for sub in ProjectSubmission.objects.filter(course_project=first):
+            self.assertEqual(sub.review_deadline, first.review_due_at)
+            self.assertEqual(sub.reviews.count(), 1)
+            self.assertEqual(sub.reviews.first().reviewer.project_submissions.get(
+                course_project=first,
+            ).course_project_id, first.pk)
+
+    def test_attempt_review_pools_are_separate_by_cohort(self):
+        now = timezone.now()
+        project = CourseProject.objects.create(
+            course=self.course, slug='shared', title='Shared attempt',
+            submission_due_at=now - timedelta(hours=1),
+            review_due_at=now + timedelta(days=1), peer_review_count=1,
+        )
+        cohorts = [Cohort.objects.create(
+            course=self.course, name=f'Group {i}',
+            start_date=date.today() - timedelta(days=10),
+            end_date=date.today() + timedelta(days=10),
+        ) for i in range(2)]
+        for cohort in cohorts:
+            for number in range(2):
+                user = _create_user(f'group{cohort.pk}-{number}@test.com')
+                sub = ProjectSubmission.objects.create(
+                    user=user, course=self.course, course_project=project,
+                    cohort=cohort, project_url=f'https://example.com/{user.pk}',
+                )
+                ProjectSubmission.objects.filter(pk=sub.pk).update(
+                    submitted_at=now - timedelta(hours=2),
+                )
+
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result, {'batched': 4, 'reviews_assigned': 4})
+        for sub in ProjectSubmission.objects.filter(course_project=project):
+            reviewer = sub.reviews.get().reviewer
+            self.assertTrue(ProjectSubmission.objects.filter(
+                user=reviewer, course_project=project, cohort=sub.cohort,
+            ).exists())
+
+    def test_late_submission_does_not_enter_attempt_batch(self):
+        now = timezone.now()
+        project = CourseProject.objects.create(
+            course=self.course, slug='cutoff', title='Cutoff',
+            submission_due_at=now - timedelta(hours=1),
+            review_due_at=now + timedelta(days=1), peer_review_count=1,
+        )
+        for number in range(2):
+            user = _create_user(f'cutoff{number}@test.com')
+            sub = ProjectSubmission.objects.create(
+                user=user, course=self.course, course_project=project,
+                project_url=f'https://example.com/{number}',
+            )
+            if number == 0:
+                ProjectSubmission.objects.filter(pk=sub.pk).update(
+                    submitted_at=now - timedelta(hours=2),
+                )
+
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result, {'batched': 0, 'reviews_assigned': 0})
+        self.assertFalse(PeerReview.objects.exists())
+
+    def test_expired_review_deadline_does_not_start_batch(self):
+        now = timezone.now()
+        project = CourseProject.objects.create(
+            course=self.course, slug='expired', title='Expired review window',
+            submission_due_at=now - timedelta(days=2),
+            review_due_at=now - timedelta(days=1), peer_review_count=1,
+        )
+        for number in range(2):
+            user = _create_user(f'expired{number}@test.com')
+            sub = ProjectSubmission.objects.create(
+                user=user, course=self.course, course_project=project,
+                project_url=f'https://example.com/{number}',
+            )
+            ProjectSubmission.objects.filter(pk=sub.pk).update(
+                submitted_at=now - timedelta(days=3),
+            )
+
+        result = PeerReviewService.form_batches_for_course(self.course)
+        self.assertEqual(result, {'batched': 0, 'reviews_assigned': 0})
+        self.assertEqual(
+            ProjectSubmission.objects.filter(course_project=project, status='submitted').count(), 2,
+        )
+        self.assertFalse(PeerReview.objects.exists())
+
 
 # ============================================================
 # Service Tests - Certificate Eligibility
@@ -712,6 +895,49 @@ class CertificateEligibilityTest(TestCase):
         self.assertEqual(
             CourseCertificate.objects.filter(course=self.course).count(), 2,
         )
+
+    def test_complete_attempt_qualifies_despite_other_incomplete_attempt(self):
+        now = timezone.now()
+        attempts = [CourseProject.objects.create(
+            course=self.course, slug=f'attempt-{i}', title=f'Attempt {i}',
+            submission_due_at=now + timedelta(days=i),
+            review_due_at=now + timedelta(days=i + 1),
+        ) for i in (1, 2)]
+        first_own = ProjectSubmission.objects.create(
+            user=self.user1, course=self.course, course_project=attempts[0],
+            project_url='https://example.com/unfinished', status='in_review',
+        )
+        first_peer = ProjectSubmission.objects.create(
+            user=self.user2, course=self.course, course_project=attempts[0],
+            project_url='https://example.com/first-peer', status='in_review',
+        )
+        PeerReview.objects.create(
+            submission=first_own, reviewer=self.user2, is_complete=True,
+        )
+        PeerReview.objects.create(submission=first_peer, reviewer=self.user1)
+        second_own = ProjectSubmission.objects.create(
+            user=self.user1, course=self.course, course_project=attempts[1],
+            project_url='https://example.com/finished', status='review_complete',
+        )
+        second_peer = ProjectSubmission.objects.create(
+            user=self.user2, course=self.course, course_project=attempts[1],
+            project_url='https://example.com/second-peer', status='review_complete',
+        )
+        PeerReview.objects.create(
+            submission=second_own, reviewer=self.user2, is_complete=True,
+        )
+        PeerReview.objects.create(
+            submission=second_peer, reviewer=self.user1, is_complete=True,
+        )
+        UserCourseProgress.objects.create(
+            user=self.user1, unit=self.unit, completed_at=now,
+        )
+
+        certificate = PeerReviewService.check_certificate_eligibility(
+            self.user1, self.course,
+        )
+        self.assertIsNotNone(certificate)
+        self.assertEqual(certificate.submission, second_own)
 
 
 # ============================================================

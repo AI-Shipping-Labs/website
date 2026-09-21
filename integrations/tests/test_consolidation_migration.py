@@ -31,13 +31,8 @@ EVENTS_LATEST = None
 
 
 def _content_leaf():
-    """Return the leaf migration node for the ``content`` app."""
-    executor = MigrationExecutor(connection)
-    executor.loader.build_graph()
-    for node in executor.loader.graph.leaf_nodes():
-        if node[0] == 'content':
-            return node
-    raise AssertionError('no content app leaf found')
+    """Content schema that still owns Course/Module (pre-curriculum cutover)."""
+    return ('content', '0069_interviewcompany')
 
 
 def _events_leaf():

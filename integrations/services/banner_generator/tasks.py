@@ -188,7 +188,7 @@ def _course_kicker(course):
 
     has_cohort = False
     try:
-        has_cohort = course.cohorts.filter(mode=COHORT_MODE_COHORT).exists()
+        has_cohort = course.aisl_cohorts.filter(mode=COHORT_MODE_COHORT).exists()
     except Exception:  # noqa: BLE001 — best-effort; missing relation
         # ``cohorts`` reverse relation may not exist in some test
         # fixtures. Default to the self-paced label so the render never

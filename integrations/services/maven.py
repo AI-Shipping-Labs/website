@@ -718,7 +718,7 @@ def _welcome_context(course=""):
     The production welcome (``_send_welcome``) persists ``course_name``
     empty: Maven's raw course label and cohort label are integration
     identifiers, not display copy, so the member-facing name is resolved
-    at delivery time from the delivery's ``content.course`` relation —
+    at delivery time from the delivery's course relation —
     the linked course's title, else this empty scalar, which renders the
     template's generic course-free copy.
 
@@ -1073,8 +1073,8 @@ def resolve_maven_course(course_key):
     if not course_key:
         raise MavenUnknownCourseError("course_key is blank")
     course = (
-        Course.objects.exclude(maven_course_key="")
-        .filter(maven_course_key__iexact=course_key)
+        Course.objects.exclude(aisl_extension__maven_course_key="")
+        .filter(aisl_extension__maven_course_key__iexact=course_key)
         .first()
     )
     if course is None:

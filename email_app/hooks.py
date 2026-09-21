@@ -29,6 +29,14 @@ from email_app.services.email_service import (
 
 logger = logging.getLogger(__name__)
 
+# Package Course rows store ``cb_curriculum.course``. Rows queued before
+# the curriculum cutover still say ``content.course``.
+_COURSE_RELATED_TYPES = frozenset({"cb_curriculum.course", "content.course"})
+
+
+def _is_course_related(delivery):
+    return delivery.related_object_type in _COURSE_RELATED_TYPES
+
 
 def preference_resolver(*, purpose, category, to, user):
     """Port of ``EmailService._delivery_decision`` as a package hook.
@@ -661,7 +669,7 @@ def _resolve_checkout_payment_failed_context(delivery, context):
     from integrations.config import site_base_url  # noqa: PLC0415
 
     _member_greeting(delivery, context)
-    if delivery.related_object_type == "content.course":
+    if _is_course_related(delivery):
         from content.models import Course  # noqa: PLC0415
 
         course = Course.objects.filter(
@@ -766,16 +774,18 @@ def _resolve_maven_welcome_context(delivery, context):
         raise PermanentJobError("maven_welcome_user_missing")
 
     # Issue #1682: the member-facing course name is the linked Course's
-    # title, read from the delivery's ``content.course`` relation at
-    # delivery time so the title is always fresh at send. The producer
-    # persists no course identifier — Maven's raw course/cohort labels are
-    # integration identifiers, not display copy. A relation row missing
-    # here (course deleted between queue and delivery) degrades to the
-    # stored (empty) context and delivers: this relation is display copy,
-    # not a link target, so the #1613 fail-closed rule for URL-minting
-    # relations does not apply. Deliveries with no relation at all (legacy
-    # in-flight rows) keep rendering their stored ``course_name`` scalar.
-    if delivery.related_object_type == "content.course":
+    # title, read from the delivery's course relation at delivery time so
+    # the title is always fresh at send. Package Course rows label as
+    # ``cb_curriculum.course``; in-flight rows queued before the cutover
+    # still say ``content.course``. The producer persists no course
+    # identifier — Maven's raw course/cohort labels are integration
+    # identifiers, not display copy. A relation row missing here (course
+    # deleted between queue and delivery) degrades to the stored (empty)
+    # context and delivers: this relation is display copy, not a link
+    # target, so the #1613 fail-closed rule for URL-minting relations does
+    # not apply. Deliveries with no relation at all (legacy in-flight
+    # rows) keep rendering their stored ``course_name`` scalar.
+    if _is_course_related(delivery):
         from content.models import Course  # noqa: PLC0415
 
         course = Course.objects.filter(

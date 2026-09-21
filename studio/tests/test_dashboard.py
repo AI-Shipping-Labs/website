@@ -179,7 +179,7 @@ class StudioDashboardTest(TestCase):
         self.assertEqual(response.status_code, 200)
         sqls = [query['sql'].lower() for query in queries.captured_queries]
         for table in (
-            'content_course', 'content_article', 'accounts_user', 'events_event',
+            'cb_curriculum_course', 'content_article', 'accounts_user', 'events_event',
         ):
             aggregate_queries = [
                 sql for sql in sqls

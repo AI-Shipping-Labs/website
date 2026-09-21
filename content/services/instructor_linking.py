@@ -109,8 +109,8 @@ def _comment_content_ids_for_instructor(instructor):
     from content.models import Unit, WorkshopPage
 
     unit_ids = Unit.objects.filter(
-        module__course__instructors=instructor,
-    ).values_list('content_id', flat=True)
+        module__course__aisl_instructor_links__instructor=instructor,
+    ).values_list('source_content_id', flat=True)
     page_ids = WorkshopPage.objects.filter(
         workshop__instructors=instructor,
     ).values_list('content_id', flat=True)

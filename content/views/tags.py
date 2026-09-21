@@ -99,11 +99,11 @@ def tags_detail(request, tag):
     # Collect all items with this tag
     results = []
     for ct in CONTENT_TYPES:
-        queryset = (
-            ct['model'].objects
-            .filter(**ct['filter'])
-            .only(*ct['only_fields'])
-        )
+        queryset = ct['model'].objects.filter(**ct['filter'])
+        if ct['model'] is Course:
+            queryset = queryset.select_related('aisl_extension')
+        else:
+            queryset = queryset.only(*ct['only_fields'])
         for obj in queryset:
             if obj.tags and tag in obj.tags:
                 date_val = getattr(obj, ct['date_field'])

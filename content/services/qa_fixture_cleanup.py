@@ -51,6 +51,12 @@ def unsynced_q(model):
     """Build a protection filter that excludes synced/source-owned rows."""
     query = Q()
     field_names = {field.name for field in model._meta.fields}
+    if model._meta.label == 'cb_curriculum.Course':
+        query &= Q(aisl_extension__source_repo__isnull=True) | Q(
+            aisl_extension__source_repo='',
+        )
+        query &= Q(source_content_id__isnull=True)
+        return query
     if 'source_repo' in field_names:
         query &= Q(source_repo__isnull=True) | Q(source_repo='')
     if 'content_id' in field_names:
@@ -100,5 +106,7 @@ def delete_cleanup_candidates(candidates):
     for candidate in candidates:
         model = models_by_label[candidate.model_label]
         deleted, _details = model.objects.filter(pk=candidate.pk).delete()
-        deleted_count += deleted
+        if deleted:
+            # Count the candidate row, not cascaded CourseExtension/FK rows.
+            deleted_count += 1
     return deleted_count

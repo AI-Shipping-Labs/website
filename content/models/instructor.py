@@ -117,7 +117,11 @@ class Instructor(SourceMetadataMixin, TimestampedModelMixin, models.Model):
 class CourseInstructor(models.Model):
     """Through model linking Course -> Instructor with display order."""
 
-    course = models.ForeignKey('content.Course', on_delete=models.CASCADE)
+    course = models.ForeignKey(
+        'cb_curriculum.Course',
+        on_delete=models.CASCADE,
+        related_name='aisl_instructor_links',
+    )
     instructor = models.ForeignKey(Instructor, on_delete=models.PROTECT)
     position = models.PositiveIntegerField(
         default=0,

@@ -45,7 +45,7 @@ CONTENT_TYPE_CONFIG = {
         'published_filter': {'published': True},
     },
     'course': {
-        'app_label': 'content',
+        'app_label': 'cb_curriculum',
         'model_name': 'Course',
         'title_template': 'New course: {title}',
         'level_field': 'required_level',
@@ -279,7 +279,7 @@ def _resolve_commented_content(content_id):
 
     unit = (
         Unit.objects
-        .filter(content_id=content_id)
+        .filter(source_content_id=content_id)
         .select_related('module__course')
         .first()
     )

@@ -1261,15 +1261,15 @@ def _comment_content_contexts(content_ids):
     if not content_ids:
         return contexts
 
-    unit_model = _model("content", "Unit")
+    unit_model = _model("cb_curriculum", "Unit") or _model("content", "Unit")
     if unit_model is not None:
         for unit in (
             unit_model.objects
-            .filter(content_id__in=content_ids)
+            .filter(source_content_id__in=content_ids)
             .select_related("module__course")
         ):
             contexts.setdefault(
-                unit.content_id,
+                unit.source_content_id,
                 {
                     "content_type": "course_unit",
                     "content_label": (

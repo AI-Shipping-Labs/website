@@ -1640,7 +1640,7 @@ def _build_buildcamp_checklist_item(*, user, checklist_item):
     """
     course = (
         Course.objects.filter(slug=AI_BUILDCAMP_COURSE_SLUG)
-        .only('id', 'program_label')
+        .select_related('aisl_extension')
         .first()
     )
     if course is None:

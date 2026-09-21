@@ -606,7 +606,7 @@ class CohortAdminTest(TestCase):
 
     def test_admin_cohort_inline_on_course(self):
         """Cohort inline should appear on course edit page."""
-        response = self.client.get(f'/admin/content/course/{self.course.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/course/{self.course.pk}/change/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'cohorts-')
 
@@ -632,6 +632,6 @@ class CohortAdminTest(TestCase):
         unit = Unit.objects.create(
             module=module, title='U1', slug='u1', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'available_after_days')

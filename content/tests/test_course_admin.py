@@ -33,7 +33,7 @@ class CourseAdminCRUDTest(TestCase):
         self.client.login(email='admin@test.com', password='testpass')
 
     def test_course_add_page_loads(self):
-        response = self.client.get('/admin/content/course/add/')
+        response = self.client.get('/admin/cb_curriculum/course/add/')
         self.assertEqual(response.status_code, 200)
 
     def test_course_list_shows_courses(self):
@@ -41,7 +41,7 @@ class CourseAdminCRUDTest(TestCase):
             title='Admin Test Course', slug='admin-test',
             status='published',
         )
-        response = self.client.get('/admin/content/course/')
+        response = self.client.get('/admin/cb_curriculum/course/')
         self.assertContains(response, 'Admin Test Course')
 
     def test_course_list_filterable_by_status(self):
@@ -54,7 +54,7 @@ class CourseAdminCRUDTest(TestCase):
             status='published',
         )
         # Filter by draft status
-        response = self.client.get('/admin/content/course/?status__exact=draft')
+        response = self.client.get('/admin/cb_curriculum/course/?status__exact=draft')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Draft Course')
 
@@ -62,19 +62,19 @@ class CourseAdminCRUDTest(TestCase):
         course = Course.objects.create(
             title='Edit Me', slug='edit-me', status='draft',
         )
-        response = self.client.get(f'/admin/content/course/{course.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/course/{course.pk}/change/')
         self.assertEqual(response.status_code, 200)
 
     def test_course_edit_has_module_inline(self):
         course = Course.objects.create(
             title='With Modules', slug='with-modules',
         )
-        response = self.client.get(f'/admin/content/course/{course.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/course/{course.pk}/change/')
         self.assertContains(response, 'modules-')
 
     def test_admin_create_course_via_post(self):
         """Test creating a course via admin form POST."""
-        response = self.client.post('/admin/content/course/add/', {
+        response = self.client.post('/admin/cb_curriculum/course/add/', {
             'title': 'New Course',
             'slug': 'new-course',
             'description': 'A new course description.',
@@ -83,29 +83,28 @@ class CourseAdminCRUDTest(TestCase):
             'required_level': 0,
             'status': 'draft',
             'discussion_url': 'https://github.com/test',
-            'access_mode': 'tier',
-            'enroll_url': '',
-            'program_label': '',
-            # Module inline management form
+            'visible': 'on',
             'modules-TOTAL_FORMS': '0',
             'modules-INITIAL_FORMS': '0',
             'modules-MIN_NUM_FORMS': '0',
             'modules-MAX_NUM_FORMS': '1000',
-            # Cohort inline management form
-            'cohorts-TOTAL_FORMS': '0',
-            'cohorts-INITIAL_FORMS': '0',
-            'cohorts-MIN_NUM_FORMS': '0',
-            'cohorts-MAX_NUM_FORMS': '1000',
-            # CourseInstructor through-model inline (issue #308)
-            'courseinstructor_set-TOTAL_FORMS': '0',
-            'courseinstructor_set-INITIAL_FORMS': '0',
-            'courseinstructor_set-MIN_NUM_FORMS': '0',
-            'courseinstructor_set-MAX_NUM_FORMS': '1000',
-            # Peer review fields
-            'peer_review_enabled': '',
-            'peer_review_count': '3',
-            'peer_review_deadline_days': '7',
-            'peer_review_criteria': '',
+            'aisl_cohorts-TOTAL_FORMS': '0',
+            'aisl_cohorts-INITIAL_FORMS': '0',
+            'aisl_cohorts-MIN_NUM_FORMS': '0',
+            'aisl_cohorts-MAX_NUM_FORMS': '1000',
+            'aisl_instructor_links-TOTAL_FORMS': '0',
+            'aisl_instructor_links-INITIAL_FORMS': '0',
+            'aisl_instructor_links-MIN_NUM_FORMS': '0',
+            'aisl_instructor_links-MAX_NUM_FORMS': '1000',
+            'aisl_extension-TOTAL_FORMS': '1',
+            'aisl_extension-INITIAL_FORMS': '0',
+            'aisl_extension-MIN_NUM_FORMS': '0',
+            'aisl_extension-MAX_NUM_FORMS': '1',
+            'aisl_extension-0-access_mode': 'tier',
+            'aisl_extension-0-enroll_url': '',
+            'aisl_extension-0-program_label': '',
+            'aisl_extension-0-peer_review_count': '3',
+            'aisl_extension-0-peer_review_deadline_days': '7',
         })
         # Should redirect after successful creation
         self.assertEqual(response.status_code, 302)
@@ -120,7 +119,7 @@ class CourseAdminCRUDTest(TestCase):
         )
         self.assertEqual(course.status, 'draft')
         # Use the publish action
-        self.client.post('/admin/content/course/', {
+        self.client.post('/admin/cb_curriculum/course/', {
             'action': 'publish_courses',
             '_selected_action': [course.pk],
         })
@@ -131,7 +130,7 @@ class CourseAdminCRUDTest(TestCase):
         course = Course.objects.create(
             title='Unpub Test', slug='unpub-test', status='published',
         )
-        self.client.post('/admin/content/course/', {
+        self.client.post('/admin/cb_curriculum/course/', {
             'action': 'unpublish_courses',
             '_selected_action': [course.pk],
         })
@@ -157,7 +156,7 @@ class CourseAdminCRUDTest(TestCase):
         self.assertEqual(Unit.objects.filter(module__course=course).count(), 2)
 
         # Delete via admin
-        self.client.post(f'/admin/content/course/{course.pk}/delete/', {
+        self.client.post(f'/admin/cb_curriculum/course/{course.pk}/delete/', {
             'post': 'yes',
         })
 
@@ -180,21 +179,21 @@ class ModuleAdminCRUDTest(TestCase):
         )
 
     def test_module_add_page_loads(self):
-        response = self.client.get('/admin/content/module/add/')
+        response = self.client.get('/admin/cb_curriculum/module/add/')
         self.assertEqual(response.status_code, 200)
 
     def test_module_edit_page_loads(self):
         module = Module.objects.create(
             course=self.course, title='Edit Module', slug='edit-module', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/module/{module.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/module/{module.pk}/change/')
         self.assertEqual(response.status_code, 200)
 
     def test_module_edit_has_unit_inline(self):
         module = Module.objects.create(
             course=self.course, title='With Units', slug='with-units', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/module/{module.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/module/{module.pk}/change/')
         self.assertContains(response, 'units-')
 
 
@@ -215,18 +214,18 @@ class UnitAdminCRUDTest(TestCase):
         )
 
     def test_unit_list_page_loads(self):
-        response = self.client.get('/admin/content/unit/')
+        response = self.client.get('/admin/cb_curriculum/unit/')
         self.assertEqual(response.status_code, 200)
 
     def test_unit_add_page_loads(self):
-        response = self.client.get('/admin/content/unit/add/')
+        response = self.client.get('/admin/cb_curriculum/unit/add/')
         self.assertEqual(response.status_code, 200)
 
     def test_unit_edit_page_loads(self):
         unit = Unit.objects.create(
             module=self.module, title='Edit Unit', slug='edit-unit', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertEqual(response.status_code, 200)
 
     def test_unit_edit_page_has_timestamps_field(self):
@@ -234,7 +233,7 @@ class UnitAdminCRUDTest(TestCase):
             module=self.module, title='TS Unit', slug='ts-unit', sort_order=1,
             timestamps=[{'time_seconds': 120, 'label': 'Intro'}],
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'timestamp-editor')
 
@@ -242,28 +241,28 @@ class UnitAdminCRUDTest(TestCase):
         unit = Unit.objects.create(
             module=self.module, title='Body Unit', slug='body-unit', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_body')
 
     def test_unit_edit_page_has_homework_field(self):
         unit = Unit.objects.create(
             module=self.module, title='HW Unit', slug='hw-unit', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_homework')
 
     def test_unit_edit_page_has_video_url_field(self):
         unit = Unit.objects.create(
             module=self.module, title='Video Unit', slug='video-unit', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_video_url')
 
     def test_unit_edit_page_has_is_preview_field(self):
         unit = Unit.objects.create(
             module=self.module, title='Preview Unit', slug='preview-unit', sort_order=1,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertContains(response, 'id_is_preview')
 
 

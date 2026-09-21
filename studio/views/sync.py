@@ -1062,9 +1062,9 @@ def sync_status(request, source_id):
 # driven from the parent workshop surface. Issue #281/#388.
 _OBJECT_TRIGGER_MODEL_ALLOWLIST = {
     'article': ('content', 'Article'),
-    'course': ('content', 'Course'),
-    'module': ('content', 'Module'),
-    'unit': ('content', 'Unit'),
+    'course': ('cb_curriculum', 'Course'),
+    'module': ('cb_curriculum', 'Module'),
+    'unit': ('cb_curriculum', 'Unit'),
     'project': ('content', 'Project'),
     'download': ('content', 'Download'),
     'curatedlink': ('content', 'CuratedLink'),

@@ -762,6 +762,6 @@ class CourseAccessAdminTest(TestCase):
             title='Admin Course', slug='admin-course',
             individual_price_eur=Decimal('19.99'),
         )
-        response = self.client.get(f'/admin/content/course/{course.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/course/{course.pk}/change/')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'individual_price_eur')

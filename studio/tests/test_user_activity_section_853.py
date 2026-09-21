@@ -194,7 +194,7 @@ class ActivitySectionTest(TestCase):
         self._add(
             UserActivity.EVENT_LESSON_OPEN,
             'Opened lesson: Missing',
-            target_url='/admin/content/unit/404/change/',
+            target_url='/admin/cb_curriculum/unit/404/change/',
             object_type='unit',
             object_id='not-an-int',
             minutes_ago=2,
@@ -211,7 +211,7 @@ class ActivitySectionTest(TestCase):
         self.assertContains(response, 'Clicked external dashboard')
         self.assertNotContains(response, 'href="/studio/courses/404/edit"')
         self.assertNotContains(
-            response, 'href="/admin/content/unit/404/change/"',
+            response, 'href="/admin/cb_curriculum/unit/404/change/"',
         )
         self.assertNotContains(response, 'href="https://dashboard.stripe.com')
 

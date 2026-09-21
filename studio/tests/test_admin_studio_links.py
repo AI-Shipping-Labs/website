@@ -165,7 +165,7 @@ class ContentAdminStudioLinkTest(_AdminBase):
             title='C-727', slug='c-727', status='draft',
         )
         response = self.client.get(
-            f'/admin/content/course/{course.pk}/change/',
+            f'/admin/cb_curriculum/course/{course.pk}/change/',
         )
         self.assertStudioLinkPresent(
             response, f'/studio/courses/{course.pk}/edit',
@@ -175,7 +175,7 @@ class ContentAdminStudioLinkTest(_AdminBase):
         course = Course.objects.create(
             title='C-list-727', slug='c-list-727', status='draft',
         )
-        response = self.client.get('/admin/content/course/')
+        response = self.client.get('/admin/cb_curriculum/course/')
         self.assertStudioLinkPresent(
             response, f'/studio/courses/{course.pk}/edit',
         )
@@ -190,7 +190,7 @@ class ContentAdminStudioLinkTest(_AdminBase):
         unit = Unit.objects.create(
             module=module, title='U', slug='u-727', sort_order=0,
         )
-        response = self.client.get(f'/admin/content/unit/{unit.pk}/change/')
+        response = self.client.get(f'/admin/cb_curriculum/unit/{unit.pk}/change/')
         self.assertStudioLinkPresent(
             response, f'/studio/units/{unit.pk}/edit',
         )
@@ -205,7 +205,7 @@ class ContentAdminStudioLinkTest(_AdminBase):
         unit = Unit.objects.create(
             module=module, title='U', slug='u-list-727', sort_order=0,
         )
-        response = self.client.get('/admin/content/unit/')
+        response = self.client.get('/admin/cb_curriculum/unit/')
         self.assertStudioLinkPresent(
             response, f'/studio/units/{unit.pk}/edit',
         )

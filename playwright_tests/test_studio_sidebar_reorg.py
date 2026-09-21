@@ -240,7 +240,7 @@ class TestStaffLandsInStudio:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 50)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 51)
         focus_page.close()
 
 

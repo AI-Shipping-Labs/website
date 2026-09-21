@@ -21,7 +21,7 @@ class ProjectSubmission(models.Model):
         related_name='project_submissions',
     )
     course = models.ForeignKey(
-        'content.Course',
+        'cb_curriculum.Course',
         on_delete=models.CASCADE,
         related_name='project_submissions',
     )
@@ -94,7 +94,7 @@ class CourseCertificate(models.Model):
         related_name='course_certificates',
     )
     course = models.ForeignKey(
-        'content.Course',
+        'cb_curriculum.Course',
         on_delete=models.CASCADE,
         related_name='certificates',
     )

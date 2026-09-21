@@ -372,10 +372,10 @@ def _resolve_threads(content_ids):
     from plans.models import Plan  # noqa: PLC0415
 
     resolved = {}
-    for unit in Unit.objects.filter(content_id__in=content_ids).select_related(
+    for unit in Unit.objects.filter(source_content_id__in=content_ids).select_related(
         'module__course'
     ):
-        resolved[unit.content_id] = ResolvedThread(
+        resolved[unit.source_content_id] = ResolvedThread(
             'course_unit', unit, _course_context(unit),
         )
     for page in WorkshopPage.objects.filter(content_id__in=content_ids).select_related(

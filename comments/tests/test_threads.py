@@ -65,7 +65,7 @@ class ThreadOwnerRegistryTest(TestCase):
             {
                 'bookclub.Note': ('comment_content_id', True, 'user'),
                 'plans.Plan': ('comment_content_id', True, 'member'),
-                'content.Unit': ('content_id', False, None),
+                'cb_curriculum.Unit': ('source_content_id', False, None),
                 'content.WorkshopPage': ('content_id', False, None),
             },
         )

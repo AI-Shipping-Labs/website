@@ -182,13 +182,13 @@ ALLOWED_TEST_SNAPSHOTS = {
     ),
     "content/tests/test_blog.py": _TestSnapshot(5, "73827bdca2964420abe8b341fe14cfb22128bda48cb7fd96f168d5a6a11d8114"),
     "content/tests/test_cohorts.py": _TestSnapshot(
-        3, "71eb7446fc969db3b2a5201176453d530e1c40e3295d88ad3e2a93a600b3e692"
+        3, "2df20bbe69a7b21c07acd1c71514d051eb46ae33a95f8fc703774eecb27e4949"
     ),
     "content/tests/test_course_admin.py": _TestSnapshot(
-        22, "347e453a29ae0dd113939fc23ceb923f1874a1fa38b48f1be0db7cabd4d3d4b3"
+        22, "005b6540d2aa35ebde734583393c1d683c451e7d235883bbaaddb105c3597fff"
     ),
     "content/tests/test_course_purchase.py": _TestSnapshot(
-        1, "ac11da78dae108fcc9dec351090bdbc24e76c1a5b7462fe260ab1c3c56f1b696"
+        1, "229eeaadd6b4596f7ff0a18a3d02b95369d713d7fd444281d966b8ce6a6f2977"
     ),
     "content/tests/test_curated_links.py": _TestSnapshot(
         4, "fa4c1b1629f9211dc0160cfbad96c348874d1351d84fbaf00eb86de1a74e839b"
@@ -197,7 +197,7 @@ ALLOWED_TEST_SNAPSHOTS = {
         5, "86cf3393bc4f039f8eff3cb86b21ddb2c698b5076fce0db1a5d2e2f3eb1ea208"
     ),
     "content/tests/test_entitlement_admin_1658.py": _TestSnapshot(
-        3, "bd2083036359b6ff1728f8e009f06e9b5597973452659df026f851ab5d15f09a"
+        3, "b96486ea815c2b16ea8c86c31141aa20069b576023c723840aff9fe7b9160621"
     ),
     "content/tests/test_projects.py": _TestSnapshot(
         5, "66f6d5828ee567bb3f2bb55fe7503a1a081ccd1f62883833c8eabb15ec1949b6"
@@ -305,7 +305,7 @@ ALLOWED_TEST_SNAPSHOTS = {
         1, "e29d25a3a92f1b7dc81fd2a4c68d429d86912a7ab5debfacfe9e98cb5c067a95"
     ),
     "studio/tests/test_admin_studio_links.py": _TestSnapshot(
-        36, "95e70f0de9444824f96e6bec1256281c97a751fc1a060393f390aac978cf12f6"
+        36, "f993caadc7bc1bdbe16e95924fa2b98fb6f412a5e8bb9f7a1030c54d391e6299"
     ),
     "studio/tests/test_impersonate.py": _TestSnapshot(
         1, "a7cf38f05467927c1a79a7384fc89adddcbc8ac761aeedacfd7395f2408d6f8e"
@@ -318,7 +318,7 @@ ALLOWED_TEST_SNAPSHOTS = {
         1, "1f2fe7db66c5309d215485c490eb1b21bdc00a83cf0a27e200f35abecd355541"
     ),
     "studio/tests/test_user_activity_section_853.py": _TestSnapshot(
-        2, "7c3ef065474e7bd03ff48860a06fe79fbfc7ecd8ed39f3cbc501f209e7b74d06"
+        2, "2547b79126b459eb5eb7864290b6c19a3860746ce20c385e71e9dc60c2a5095b"
     ),
     "studio/tests/test_user_crm_overview.py": _TestSnapshot(
         2, "667def5e0c6641c3dd21cd7dc6382b9930db8d6eb6a707c1f18c6cda85d4cbb4"

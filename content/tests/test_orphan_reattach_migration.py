@@ -19,6 +19,8 @@ import uuid
 
 from django.apps import apps as django_apps
 from django.contrib.auth import get_user_model
+from unittest import skipIf
+
 from django.test import TestCase
 from django.utils import timezone
 
@@ -46,6 +48,10 @@ def _run_migration():
     _migration_module.reattach_orphan_course_fks(django_apps, schema_editor=None)
 
 
+@skipIf(
+    'course' not in django_apps.get_app_config('content').models,
+    'content.Course was cut over to cb_curriculum; 0033 is historical.',
+)
 class ReattachOrphanCourseFksMigrationTest(TestCase):
     """Cover the migration's reattach-and-delete contract."""
 

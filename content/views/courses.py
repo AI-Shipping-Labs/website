@@ -95,9 +95,9 @@ def courses_list(request):
     and never filtered out by the selected tag.
     """
     published = Course.objects.filter(status='published')
-    standard_courses = published.filter(access_mode='tier')
+    standard_courses = published.filter(aisl_extension__access_mode='tier')
     entitlement_courses = list(
-        published.filter(access_mode='entitlement').order_by('-created_at')
+        published.filter(aisl_extension__access_mode='entitlement').order_by('-created_at')
     )
     selected_tags = _get_selected_tags(request)
 
@@ -241,7 +241,7 @@ def course_detail(request, slug):
     # Issue #1674: the self-enroll block is dated-cohort-only — a
     # self-paced cohort is never shown as something to manually join,
     # membership in it is implicit.
-    active_cohorts = course.cohorts.filter(
+    active_cohorts = course.aisl_cohorts.filter(
         is_active=True, mode='cohort',
     ).order_by('start_date')
     user_enrolled_cohort_ids = set()
@@ -263,7 +263,7 @@ def course_detail(request, slug):
     live_session_entries = []
     if user.is_authenticated:
         cohorts_with_series = list(
-            course.cohorts.exclude(event_series_id__isnull=True)
+            course.aisl_cohorts.exclude(event_series_id__isnull=True)
         )
         if cohorts_with_series:
             if user.is_staff:

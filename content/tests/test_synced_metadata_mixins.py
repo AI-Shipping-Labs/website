@@ -28,8 +28,6 @@ class SyncedMetadataMixinContractTest(SimpleTestCase):
 
     identity_models = [
         Article,
-        Course,
-        Unit,
         Download,
         Project,
         Workshop,
@@ -38,9 +36,6 @@ class SyncedMetadataMixinContractTest(SimpleTestCase):
     ]
     source_models = [
         Article,
-        Course,
-        Module,
-        Unit,
         CuratedLink,
         Download,
         Project,
@@ -52,7 +47,6 @@ class SyncedMetadataMixinContractTest(SimpleTestCase):
     ]
     timestamped_models = [
         Article,
-        Course,
         CuratedLink,
         Download,
         Project,
@@ -109,10 +103,14 @@ class SyncedMetadataMixinContractTest(SimpleTestCase):
                 self.assertTrue(updated.auto_now)
 
     def test_module_has_source_metadata_without_timestamps_or_uuid_identity(self):
-        self.assertTrue(issubclass(Module, SourceMetadataMixin))
+        self.assertFalse(issubclass(Module, SourceMetadataMixin))
         self.assertFalse(issubclass(Module, SyncedContentIdentityMixin))
         self.assertFalse(issubclass(Module, TimestampedModelMixin))
         with self.assertRaises(FieldDoesNotExist):
             Module._meta.get_field('content_id')
         with self.assertRaises(FieldDoesNotExist):
             Module._meta.get_field('created_at')
+        self.assertEqual(Module._meta.get_field('source_path').name, 'source_path')
+        self.assertEqual(
+            Module._meta.get_field('source_commit_sha').name, 'source_commit_sha',
+        )

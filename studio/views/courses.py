@@ -127,7 +127,7 @@ def course_edit(request, course_id):
     active_enrollment_count = Enrollment.objects.filter(
         course=course, unenrolled_at__isnull=True,
     ).count()
-    cohort_count = course.cohorts.count()
+    cohort_count = course.aisl_cohorts.count()
     course_instructor_rows = list(
         CourseInstructor.objects.filter(course=course)
         .select_related('instructor')

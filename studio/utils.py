@@ -121,7 +121,10 @@ def is_synced(obj):
     origin = getattr(obj, 'origin', None)
     if origin in ('github', 'studio'):
         return origin == 'github'
-    return bool(getattr(obj, 'source_repo', None))
+    return bool(
+        getattr(obj, 'source_repo', None)
+        or getattr(obj, 'source_path', None)
+    )
 
 
 def get_github_edit_url(obj):

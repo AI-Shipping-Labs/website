@@ -195,10 +195,12 @@ INSTALLED_APPS = [
     'community_base.content_sync',
     # A7.1 (#1685): the shared knowledge base app owns wiki/docs storage,
     # hierarchy and rendering. From community-base v0.4.6 its provenance
-    # mixin is app-neutral (community_base.content_sync.provenance), so the
-    # package curriculum and events apps stay uninstalled here; the site
-    # keeps its own content and events apps.
+    # mixin is app-neutral (community_base.content_sync.provenance).
     'community_base.knowledge_base',
+    # Public course catalog/detail/unit rows live in community_base.curriculum.
+    # Package events stay uninstalled (label collision with this site's
+    # events app); curriculum Studio/API surfaces therefore stay off.
+    'community_base.curriculum',
     # Issue #1688: member topic pages synced from AI-Shipping-Labs/wiki,
     # rendered Basic-and-above gated under /topics/.
     'topics',
@@ -215,6 +217,13 @@ INSTALLED_APPS = [
     'member_api',
     'triggers.apps.TriggersConfig',
 ]
+
+# v0.5.3 curriculum.0001 pins package events 0003_provisional_integration_attempt.
+# This site's events app already owns events.Host under a different graph.
+# The overlay is byte-identical except that dependency is ('events', '__latest__').
+MIGRATION_MODULES = {
+    'cb_curriculum': 'content.cb_curriculum_migrations',
+}
 
 # Community-base package settings are declared once, further down this file
 # (site key, access policy, jobs and mail backends, template dir and hooks).
@@ -815,6 +824,7 @@ COMMUNITY_BASE = {
     # aligned with SITE_BASE_URL so request hosts cannot change API links.
     'SITE_URL': SITE_BASE_URL,
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
+    'COURSE_ACCESS_GRANTS': 'content.curriculum_grants.course_access_grants',
     'JOBS_BACKEND': 'django_q',
     'MAIL_BACKEND': 'ses_local',
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',

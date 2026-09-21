@@ -51,7 +51,7 @@ def cohort_list(request, course_id):
     course = get_object_or_404(Course, pk=course_id)
     search = (request.GET.get('q') or '').strip()
 
-    cohorts = course.cohorts.select_related('event_series').order_by('-start_date')
+    cohorts = course.aisl_cohorts.select_related('event_series').order_by('-start_date')
     if search:
         cohorts = cohorts.filter(name__icontains=search)
 

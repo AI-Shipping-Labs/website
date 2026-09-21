@@ -107,7 +107,7 @@ class MavenWelcomeTitleRenderTest(_WelcomePipelineMixin, TestCase):
             occurrence.welcome_status, MavenEnrollmentEvent.STEP_SUCCEEDED,
         )
         delivery = self._welcome_delivery()
-        self.assertEqual(delivery.related_object_type, "content.course")
+        self.assertEqual(delivery.related_object_type, "cb_curriculum.course")
         self.assertEqual(str(delivery.related_object_id), str(course.pk))
 
         subject, html = _drain(delivery)
@@ -177,7 +177,7 @@ class MavenWelcomeGenericFallbackTest(_WelcomePipelineMixin, TestCase):
         occurrence = self._occurrence(user, "generic-2")
         run_occurrence_steps(occurrence)
         delivery = self._welcome_delivery()
-        self.assertEqual(delivery.related_object_type, "content.course")
+        self.assertEqual(delivery.related_object_type, "cb_curriculum.course")
 
         # The course disappears between queue and delivery (content sync,
         # admin cleanup): the send must degrade to the generic copy, not

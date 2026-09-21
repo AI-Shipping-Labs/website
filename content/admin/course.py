@@ -6,6 +6,7 @@ from content.models import (
     Cohort,
     Course,
     CourseAccess,
+    CourseExtension,
     CourseInstructor,
     Module,
     Unit,
@@ -80,6 +81,13 @@ class CourseInstructorInline(admin.TabularInline):
     raw_id_fields = ['instructor']
 
 
+class CourseExtensionInline(admin.StackedInline):
+    """AISL entitlement, Maven, purchase and peer-review overlay."""
+    model = CourseExtension
+    extra = 1
+    max_num = 1
+
+
 # ---------------------------------------------------------------------------
 # Admin actions
 # ---------------------------------------------------------------------------
@@ -113,15 +121,20 @@ class CourseAdmin(admin.ModelAdmin):
 
     list_display = [
         'title', 'slug', 'status', 'primary_instructor_name',
-        'required_level', 'access_mode', 'created_at', 'updated_at',
+        'required_level', 'access_mode_display', 'created_at', 'updated_at',
         'studio_link',
     ]
     list_display_links = ['title']
-    list_filter = ['status', 'required_level', 'access_mode']
-    search_fields = ['title', 'description', 'instructors__name']
+    list_filter = ['status', 'required_level', 'aisl_extension__access_mode']
+    search_fields = ['title', 'description']
     prepopulated_fields = {'slug': ('title',)}
     actions = [publish_courses, unpublish_courses]
-    inlines = [CourseInstructorInline, ModuleInline, CohortInline]
+    inlines = [
+        CourseExtensionInline,
+        CourseInstructorInline,
+        ModuleInline,
+        CohortInline,
+    ]
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'updated_at', 'studio_link']
@@ -133,22 +146,11 @@ class CourseAdmin(admin.ModelAdmin):
             ),
         }),
         ('Tags & Visibility', {
-            'fields': ('tags', 'required_level', 'access_mode'),
-        }),
-        ('Individual Purchase', {
-            'fields': ('individual_price_eur', 'stripe_product_id', 'stripe_price_id'),
-            'classes': ('collapse',),
-        }),
-        ('Peer Review', {
-            'fields': (
-                'peer_review_enabled', 'peer_review_count',
-                'peer_review_deadline_days', 'peer_review_criteria',
-            ),
-            'classes': ('collapse',),
+            'fields': ('tags', 'required_level'),
         }),
         ('Publishing', {
             'fields': (
-                'status', 'discussion_url', 'enroll_url', 'program_label',
+                'status', 'discussion_url',
             ),
         }),
         ('Timestamps', {
@@ -167,6 +169,10 @@ class CourseAdmin(admin.ModelAdmin):
             'studio_course_edit',
             lambda o: {'course_id': o.pk},
         )
+
+    @admin.display(description='Access mode')
+    def access_mode_display(self, obj):
+        return getattr(obj, 'access_mode', 'tier')
 
     def primary_instructor_name(self, obj):
         """Display the first instructor's name on the changelist.

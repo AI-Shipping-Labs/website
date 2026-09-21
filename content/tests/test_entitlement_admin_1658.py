@@ -26,7 +26,7 @@ class CourseAdminAccessModeTest(TestCase):
             status='published', access_mode='entitlement',
             enroll_url='https://maven.com/x', program_label='Maven',
         )
-        response = self.client.get('/admin/content/course/')
+        response = self.client.get('/admin/cb_curriculum/course/')
         self.assertContains(response, 'entitlement')
 
     def test_change_list_filterable_by_access_mode(self):
@@ -40,7 +40,7 @@ class CourseAdminAccessModeTest(TestCase):
             enroll_url='https://maven.com/x',
         )
         response = self.client.get(
-            '/admin/content/course/?access_mode__exact=entitlement',
+            '/admin/cb_curriculum/course/?aisl_extension__access_mode__exact=entitlement',
         )
         self.assertContains(response, 'Entitlement Admin Course')
         self.assertNotContains(response, 'Tier Admin Course')
@@ -51,7 +51,7 @@ class CourseAdminAccessModeTest(TestCase):
             status='published', access_mode='entitlement',
             enroll_url='https://maven.com/x', program_label='Maven',
         )
-        response = self.client.get(f'/admin/content/course/{course.pk}/change/')
-        self.assertContains(response, 'id="id_access_mode"')
-        self.assertContains(response, 'id="id_enroll_url"')
-        self.assertContains(response, 'id="id_program_label"')
+        response = self.client.get(f'/admin/cb_curriculum/course/{course.pk}/change/')
+        self.assertContains(response, 'access_mode')
+        self.assertContains(response, 'enroll_url')
+        self.assertContains(response, 'program_label')

@@ -16,9 +16,9 @@ class Cohort(models.Model):
     """A cohort is a time-bound group enrollment for a course."""
 
     course = models.ForeignKey(
-        'content.Course',
+        'cb_curriculum.Course',
         on_delete=models.CASCADE,
-        related_name='cohorts',
+        related_name='aisl_cohorts',
     )
     name = models.CharField(
         max_length=200,

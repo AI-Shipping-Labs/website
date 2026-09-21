@@ -240,7 +240,7 @@ def _cleanup_stale_courses_for_source(
     from content.models import Course
 
     stale_courses = list(Course.objects.filter(
-        source_repo=source.repo_name,
+        aisl_extension__source_repo=source.repo_name,
         status='published',
     ).exclude(slug__in=seen_course_slugs).exclude(slug__in=failed_course_slugs))
     return cleanup_stale_synced_objects(
@@ -265,7 +265,7 @@ def _apply_stale_course_cleanup(courses):
         sibling = None
         if course.content_id is not None:
             sibling = Course.objects.filter(
-                content_id=course.content_id,
+                source_content_id=course.content_id,
                 status='published',
             ).exclude(pk=course.pk).first()
 
@@ -316,7 +316,7 @@ def _reattach_course_fks(orphan_course, target_course):
         unit.content_id: unit
         for unit in Unit.objects.filter(
             module__course=target_course,
-        ).exclude(content_id__isnull=True)
+        ).exclude(source_content_id__isnull=True)
     }
 
     orphan_units = Unit.objects.filter(
@@ -448,7 +448,7 @@ def _course_slug_collision_blocked(
     Course, slug, course_content_id, repo_name, rel_path, stats,
 ):
     existing_with_slug = Course.objects.filter(slug=slug).exclude(
-        source_repo=repo_name,
+        aisl_extension__source_repo=repo_name,
     ).first()
     existing_cid = (
         str(existing_with_slug.content_id)
@@ -559,7 +559,7 @@ def _resolve_default_unit_required_level(course_data, rel_path):
 
 
 def _resolve_course_identity(Course, course_content_id, slug, repo_name):
-    candidates = list(Course.objects.filter(content_id=course_content_id))
+    candidates = list(Course.objects.filter(source_content_id=course_content_id))
     course_by_content_id = None
     if candidates:
         candidates.sort(key=lambda c: (
@@ -571,10 +571,7 @@ def _resolve_course_identity(Course, course_content_id, slug, repo_name):
 
     course = find_synced_object((
         lambda: course_by_content_id,
-        lambda: Course.objects.filter(
-            slug=slug,
-            source_repo=repo_name,
-        ).first(),
+        lambda: Course.objects.filter(slug=slug).first(),
     ))
     return candidates, course
 
@@ -1849,7 +1846,6 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         # includes every level).
         stale_modules = Module.objects.filter(
             course=course,
-            source_repo=repo_name,
         ).exclude(source_path__in=seen_module_paths)
         deleted_count = stale_modules.count()
         stale_modules.delete()
@@ -1902,13 +1898,12 @@ def _cleanup_stale_units_for_course(course, repo_name, stats, unit_sync_state):
 
     stale_units = Unit.objects.filter(
         module__course=course,
-        source_repo=repo_name,
     ).exclude(
         source_path__in=unit_sync_state['seen_paths'],
     ).exclude(
-        content_id__in=unit_sync_state['content_id_sources'].keys(),
+        source_content_id__in=unit_sync_state['content_id_sources'].keys(),
     ).exclude(
-        content_id__in=unit_sync_state['failed_content_ids'],
+        source_content_id__in=unit_sync_state['failed_content_ids'],
     )
 
     new_unit_hashes = unit_sync_state['new_hashes']
@@ -2310,7 +2305,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             # + rename in the same sync too, since it doesn't depend on
             # slug or path matching.
             unit = Unit.objects.filter(
-                content_id=unit_content_id,
+                source_content_id=unit_content_id,
                 module__course=module.course,
             ).first()
             # Issue #310/#311: fall back to the original module-scoped
@@ -2319,8 +2314,7 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
             # filename/slug.
             if unit is None:
                 unit = Unit.objects.filter(
-                    content_id=unit_content_id,
-                    source_repo=repo_name,
+                    source_content_id=unit_content_id,
                     module=module,
                 ).first()
             if unit is None:
@@ -2448,13 +2442,12 @@ def _sync_module_units(module, module_dir, repo_dir, repo_name, commit_sha, stat
     if unit_sync_state['precomputed_seen_paths'] is not None and not walk_has_errors:
         stale_units = Unit.objects.filter(
             module=module,
-            source_repo=repo_name,
         ).exclude(
             source_path__in=unit_sync_state['precomputed_seen_paths'],
         ).exclude(
-            content_id__in=unit_sync_state['precomputed_seen_content_ids'],
+            source_content_id__in=unit_sync_state['precomputed_seen_content_ids'],
         ).exclude(
-            content_id__in=failed_unit_content_ids,
+            source_content_id__in=failed_unit_content_ids,
         )
         for stale_unit in stale_units:
             # Legacy content-hash rename detection (Edge Case 1): a

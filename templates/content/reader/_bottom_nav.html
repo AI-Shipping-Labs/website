@@ -11,6 +11,9 @@
 {% endcomment %}
 {% if prev_item_url or next_item_url or user_authenticated %}
 <div class="border-t border-border pt-8 mt-8" data-testid="reader-bottom-nav">
+  {% if homework_stepper %}
+  <p class="mb-4 text-sm text-muted-foreground">This marks the course unit complete. Submit answers from Review &amp; submit.</p>
+  {% endif %}
   {% if user_authenticated %}
   {% comment %}
     Mobile-only stand-alone mark-complete row. Hidden on sm+ where the

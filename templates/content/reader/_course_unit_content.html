@@ -61,13 +61,15 @@
     <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
     Homework
   </h2>
-  {% if unit.homework_html %}
+  {% if homework_stepper %}
+    {% include "homework_steps/_stepper.html" %}
+  {% elif unit.homework_html %}
   <div class="prose">
     {{ unit.homework_html|safe }}
   </div>
   {% endif %}
 
-  {% if homework %}
+  {% if homework and not homework_stepper %}
   <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission">
     <p class="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="homework-due-date">
       <i data-lucide="calendar-clock" class="h-4 w-4 flex-shrink-0"></i>

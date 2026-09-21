@@ -1,0 +1,86 @@
+{% load accounts_extras %}
+
+<section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
+  <p class="mb-6 text-sm text-muted-foreground" aria-live="polite">Step {{ stepper.step_number|add:1 }} of {{ stepper.step_count }}</p>
+  {% if homework_due_date_display and not homework_is_self_paced %}<p class="mb-4 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }} &mdash; shown in your account timezone</p>{% endif %}
+  {% if stepper.submitted %}<p class="mb-4 text-sm text-green-400" role="status">Your homework was submitted. You can update it while submissions are open.</p>{% endif %}
+  {% if stepper.notice %}<p class="mb-4 text-sm text-muted-foreground" role="status">That question changed. Your saved answers are still here.</p>{% endif %}
+  {% if stepper.error %}<p class="mb-4 text-sm text-red-400" role="alert">{{ stepper.error }}</p>{% endif %}
+  {% if stepper.reason and not stepper.can_write %}<p class="mb-4 text-sm text-muted-foreground" role="status">{{ stepper.reason }}</p>{% endif %}
+
+  <nav class="mb-8" aria-label="Homework steps">
+    <ol class="reader-nav-list space-y-1">
+      {% for title, url, current in stepper.nav_steps %}
+      <li>{% if current %}{% include "includes/_list_row.html" with href=url title=title is_current=True marker_kind="number" marker_number=forloop.counter scoped_module='' extra_attrs='aria-current="step"' %}{% else %}{% include "includes/_list_row.html" with href=url title=title marker_kind="number" marker_number=forloop.counter scoped_module='' %}{% endif %}</li>
+      {% endfor %}
+    </ol>
+  </nav>
+
+  {% if stepper.step == 'intro' %}
+    <div class="prose max-w-none" data-testid="homework-introduction">{{ stepper.assignment.introduction }}</div>
+    <a href="{{ stepper.next_url }}" class="{% button_classes 'primary' %} mt-6">Start questions</a>
+  {% elif stepper.question %}
+    <div id="homework-question-prompt" class="prose max-w-none" data-testid="homework-question-prompt">{{ stepper.question.prompt }}</div>
+    <form method="post" action="{{ stepper.action }}" data-homework-autosave data-save-url="{{ stepper.save_url }}" data-testid="homework-step-form" class="mt-6">
+      {% csrf_token %}
+      <input type="hidden" name="assignment_key" value="{{ stepper.assignment.key }}">
+      <input type="hidden" name="draft_token" value="{{ stepper.draft_token }}">
+      <input type="hidden" name="{{ stepper.step_param }}" value="{{ stepper.step }}">
+      <input type="hidden" name="revision" value="{{ stepper.revision }}">
+      <fieldset aria-describedby="homework-question-prompt"{% if not stepper.can_write %} disabled{% endif %}>
+        <legend class="mb-3 text-sm font-medium text-foreground">Answer for question {{ stepper.step_number }}</legend>
+        {% if stepper.question.type == 'choice' %}
+          <div class="space-y-2">
+            <label class="flex items-center gap-2 text-sm text-foreground"><input type="radio" name="answer" value=""{% if not stepper.answer %} checked{% endif %} class="h-4 w-4 border-border text-accent">Leave unanswered</label>
+            {% for option, selected in stepper.options %}
+              <label class="flex items-center gap-2 text-sm text-foreground"><input type="radio" name="answer" value="{{ option.key }}"{% if selected %} checked{% endif %} class="h-4 w-4 border-border text-accent">{{ option.label }}</label>
+            {% endfor %}
+          </div>
+        {% elif stepper.question.type == 'checkbox' %}
+          <div class="space-y-2">
+            {% for option, selected in stepper.options %}
+              <label class="flex items-center gap-2 text-sm text-foreground"><input type="checkbox" name="answer" value="{{ option.key }}"{% if selected %} checked{% endif %} class="h-4 w-4 rounded border-border text-accent">{{ option.label }}</label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <label for="homework-answer" class="mb-2 block text-sm text-muted-foreground">Your answer</label>
+          <textarea id="homework-answer" name="answer" maxlength="10000" rows="{% if stepper.question.type == 'long_text' %}8{% else %}2{% endif %}" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ stepper.answer }}</textarea>
+        {% endif %}
+      </fieldset>
+      <p class="mt-3 text-sm text-muted-foreground" data-save-status role="status" aria-live="polite">{% if stepper.revision %}Saved{% endif %}</p>
+      <div class="mt-4 flex flex-wrap gap-3">
+        <button type="submit" name="next_step" value="{{ stepper.previous }}" class="{% button_classes 'secondary' %}"{% if not stepper.can_write %} disabled{% endif %}>Previous</button>
+        <button type="submit" name="next_step" value="{{ stepper.next }}" class="{% button_classes 'primary' %}"{% if not stepper.can_write %} disabled{% endif %}>Save &amp; continue</button>
+      </div>
+    </form>
+  {% else %}
+    <h4 class="mb-4 text-lg font-semibold text-foreground">Review &amp; submit</h4>
+    <ol class="mb-6 space-y-2" data-testid="homework-review-summary">
+      {% for prompt, answer, url in stepper.review_rows %}
+        <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
+          <a href="{{ url }}" class="font-medium text-accent hover:underline">Question {{ forloop.counter }}</a>
+          <p class="mt-1 text-foreground">{% if answer %}{{ answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
+        </li>
+      {% endfor %}
+    </ol>
+    {% if stepper.assignment.instructions %}<div class="prose max-w-none mb-6" data-testid="homework-closing-guidance">{{ stepper.assignment.instructions }}</div>{% endif %}
+    <form method="post" action="{{ stepper.action }}" data-homework-autosave data-testid="homework-review-form">
+      {% csrf_token %}
+      <input type="hidden" name="assignment_key" value="{{ stepper.assignment.key }}">
+      <input type="hidden" name="draft_token" value="{{ stepper.draft_token }}">
+      <input type="hidden" name="{{ stepper.step_param }}" value="review">
+      <input type="hidden" name="revision" value="{{ stepper.revision }}">
+      {% for field, value in stepper.final_field_rows %}
+        <label for="final-{{ field.key }}" class="mb-2 block text-sm font-medium text-foreground">{{ field.label }}</label>
+        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="{{ field.type }}" value="{{ value }}" class="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+      {% endfor %}
+      <p class="mb-3 text-sm text-muted-foreground" data-save-status role="status" aria-live="polite">{% if stepper.revision %}Saved{% endif %}</p>
+      <div class="flex flex-wrap gap-3">
+        <button type="submit" name="intent" value="save" class="{% button_classes 'secondary' %}"{% if not stepper.can_write %} disabled{% endif %}>Save draft</button>
+        <button type="submit" name="intent" value="submit" class="{% button_classes 'primary' %}" data-testid="homework-submit-button"{% if not stepper.can_submit %} disabled{% endif %}>Submit homework</button>
+      </div>
+    </form>
+  {% endif %}
+</section>
+{% load static %}
+<script defer src="{% static 'community_base/homework_steps.js' %}"></script>

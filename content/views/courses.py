@@ -1,6 +1,7 @@
 from collections import Counter
 from urllib.parse import urlencode
 
+from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
@@ -41,6 +42,7 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
+from content.services.homework_step_reader import AISLHomeworkAdapter, build_assignment, question_key
 from content.services.homework_submissions import (
     parse_submission_post,
     save_submission,
@@ -816,7 +818,15 @@ def _render_course_unit_detail(request, course, module, unit):
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
-    if request.method == 'POST':
+    homework = course_unit_service.resolve_homework_for_unit(unit, user)
+    use_homework_steps = bool(
+        homework and homework.stepper_enabled and homework.questions.exists()
+    )
+    # A learner may still submit a previously opened all-in-one form after
+    # source content enables the stepper. Keep that POST on the legacy path.
+    if request.method == 'POST' and (
+        not use_homework_steps or not request.POST.get('draft_token')
+    ):
         return _handle_homework_submission_post(request, unit)
 
     # Record a `lesson_open` activity row for the CRM timeline (issue #853),
@@ -837,6 +847,24 @@ def _render_course_unit_detail(request, course, module, unit):
             if context[key]:
                 context[key] += query
     context.update(course_unit_service.build_homework_submission_context(user, unit))
+    if use_homework_steps and user.is_authenticated:
+        context['homework_stepper'] = True
+        context['homework_save_urls'] = {
+            question_key(question): (
+                f'/api/homework-reader/drafts/{homework.pk}/questions/'
+                f'{question_key(question)}'
+            )
+            for question in homework.questions.all()
+        }
+        assignment = build_assignment(homework, unit, user, context=context)
+        return handle_stepper(
+            request, assignment, AISLHomeworkAdapter(homework, unit),
+            action=unit.get_absolute_url(),
+            template_name='content/course_unit_detail.html',
+            step_param='homework_step',
+            query_params={'cohort': request.GET['cohort']}
+            if request.GET.get('cohort') else None,
+        )
     return render(request, 'content/course_unit_detail.html', context)
 
 
@@ -926,6 +954,9 @@ def _handle_homework_submission_post(request, unit):
         homework_link=homework_link,
         answers_by_question_id=answers_by_question_id,
     )
+    if homework.stepper_enabled:
+        from community_base.homework_steps.services import clear_draft
+        clear_draft(request.user, f'aisl:homework:{homework.pk}')
     messages.success(
         request,
         'Your homework was submitted. You can update it anytime before the deadline.',

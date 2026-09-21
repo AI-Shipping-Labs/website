@@ -27,6 +27,7 @@ from content.models import (
 from content.models.peer_review import CourseProject
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_inline import inline_units_and_topics
 from content.services.course_schedule import (
     build_deadline_context,
     schedule_timezone_name,
@@ -519,10 +520,9 @@ def api_course_detail(request, slug):
     # prefetch cache. Adding an extra ``.order_by()`` here would force a
     # fresh SELECT per module (N+1) — see issue #287.
     #
-    # Issue #1674: a parent module has no direct units (mixed content is
-    # forbidden) — it gets a ``modules`` list of its submodules instead,
-    # each with the same shape as a top-level entry.
-    syllabus = [_module_json(module) for module in modules]
+    # AI Buildcamp presents selected one-page child modules as inline units
+    # while preserving their source IDs and canonical unit URLs.
+    syllabus = [_module_json(module, course.slug) for module in modules]
 
     # Single query: ordered_instructors fetches the full M2M; primary is
     # the first row. Avoids the additional .first() query primary_instructor
@@ -587,13 +587,11 @@ def _unit_json(unit):
     return data
 
 
-def _module_json(module):
+def _module_json(module, course_slug):
     """Issue #1674: shared module JSON shape for the public syllabus API.
 
-    A leaf module (no children) carries ``units``; a parent module
-    carries a ``modules`` list of its submodules (same shape,
-    recursively) instead — mixed content is forbidden, so exactly one of
-    the two is ever non-empty.
+    A leaf module carries ``units``. A parent normally carries ``modules``;
+    AI Buildcamp also exposes selected one-page children as inline ``units``.
     """
     data = {
         'id': module.pk,
@@ -604,8 +602,9 @@ def _module_json(module):
     }
     children = list(module.children.all())
     if children:
-        data['modules'] = [_module_json(child) for child in children]
-        data['units'] = []
+        inline_units, topics = inline_units_and_topics(children, course_slug)
+        data['modules'] = [_module_json(child, course_slug) for child in topics]
+        data['units'] = [_unit_json(unit) for unit in inline_units]
     else:
         data['units'] = [_unit_json(unit) for unit in module.units.all()]
     return data
@@ -666,7 +665,9 @@ def _render_module_overview(request, course, module):
     units = list(module.units.all())
     # Issue #1674: a parent module holds submodules, not units directly —
     # ``submodules`` is empty for a leaf module (today's two-level shape).
-    submodules = list(module.children.order_by('sort_order', 'id'))
+    children = list(module.children.order_by('sort_order', 'id').prefetch_related('units'))
+    inline_units, submodules = inline_units_and_topics(children, course.slug)
+    units.extend(inline_units)
     course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
     viewer_cohort, _ = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
@@ -728,6 +729,7 @@ def _render_module_overview(request, course, module):
         'module': module,
         'units': units,
         'submodules': submodules,
+        'display_children': children,
         'course_projects': course_projects,
         'preview_project_ids': preview_project_ids,
         'schedule_timezone': schedule_timezone_name(course, user),

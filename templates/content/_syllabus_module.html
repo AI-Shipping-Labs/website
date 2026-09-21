@@ -8,6 +8,7 @@
   cannot render distinct week/topic summaries or nested unit lists.
 {% endcomment %}
 {% with children=module.children.all %}
+{% with topic_children=children|topic_course_modules:course_slug %}
 {% firstof module.is_bonus parent_optional as optional_here %}
 <details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
   <summary class="cursor-pointer list-none flex min-h-[44px] items-center {% if counter %}gap-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4 sm:py-3{% else %}gap-2 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
@@ -23,7 +24,7 @@
       {% endwith %}
       {% if children %}
       {% with leaf_total=children|leaf_unit_count %}
-      <span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="module-submodule-count">{{ children|length }} topic{{ children|length|pluralize }}{% if leaf_total %} &middot; {{ leaf_total }} lesson{{ leaf_total|pluralize }}{% endif %}</span>
+      <span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="module-submodule-count">{{ topic_children|length }} topic{{ topic_children|length|pluralize }}{% if leaf_total %} &middot; {{ leaf_total }} lesson{{ leaf_total|pluralize }}{% endif %}</span>
       {% endwith %}
       {% elif counter %}
       {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
@@ -42,12 +43,24 @@
   <div class="pb-1{% if children %} px-1 border-t border-border/60 pl-3 pr-2 sm:pl-4 sm:pr-3{% elif counter %} px-1{% else %} pl-6 pr-1{% endif %}">
     {% if children %}
       {% for child in children|required_only %}
+      {% with inline_unit=child|inline_course_unit:course_slug %}
+      {% if inline_unit %}
+      {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% else %}
       {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% endif %}
+      {% endwith %}
       {% endfor %}
       {% with bonus_children=children|bonus_only %}
       {% if bonus_children %}
       {% for child in bonus_children %}
+      {% with inline_unit=child|inline_course_unit:course_slug %}
+      {% if inline_unit %}
+      {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% else %}
       {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% endif %}
+      {% endwith %}
       {% endfor %}
       {% endif %}
       {% endwith %}
@@ -73,4 +86,5 @@
     {% endif %}
   </div>
 </details>
+{% endwith %}
 {% endwith %}

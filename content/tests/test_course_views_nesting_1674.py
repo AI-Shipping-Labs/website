@@ -92,6 +92,99 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
         self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
 
+class BuildcampSinglePageTopicTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='Buildcamp', slug='ai-buildcamp', status='published',
+            required_level=0,
+        )
+        cls.week = Module.objects.create(
+            course=cls.course, title='Foundations', slug='foundations', sort_order=1,
+        )
+        cls.session = Module.objects.create(
+            course=cls.course, parent=cls.week, title='Session 1',
+            slug='session', sort_order=1,
+        )
+        Unit.objects.create(
+            module=cls.session, title='Session 1', slug='session',
+            sort_order=1, kind='event', session_position=1,
+        )
+        cls.overview = Module.objects.create(
+            course=cls.course, parent=cls.week, title='Week 1 Overview',
+            slug='week-1-overview', sort_order=2,
+        )
+        Unit.objects.create(
+            module=cls.overview, title='Week 1 Overview', slug='week-1-overview',
+            sort_order=1,
+        )
+        cls.topic = Module.objects.create(
+            course=cls.course, parent=cls.week, title='Foundations Topic',
+            slug='foundations-topic', sort_order=3,
+        )
+        Unit.objects.create(
+            module=cls.topic, title='Topic Lesson', slug='topic-lesson', sort_order=1,
+        )
+
+    def test_syllabus_and_overview_show_single_pages_as_lessons(self):
+        syllabus = self.client.get('/courses/ai-buildcamp')
+        self.assertContains(syllabus, 'data-testid="module-submodule-count">1 topic')
+        self.assertContains(syllabus, 'Session 1')
+        self.assertContains(syllabus, 'Week 1 Overview')
+        self.assertContains(syllabus, 'Foundations Topic')
+        overview = self.client.get('/courses/ai-buildcamp/foundations')
+        self.assertContains(overview, 'data-testid="module-content-list"')
+        self.assertEqual([module.title for module in overview.context['submodules']],
+                         ['Foundations Topic'])
+        self.assertEqual([unit.title for unit in overview.context['units']],
+                         ['Session 1', 'Week 1 Overview'])
+        class ContentLinks(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.hrefs = []
+
+            def handle_starttag(self, tag, attrs):
+                attributes = dict(attrs)
+                if tag == 'a' and attributes.get('data-testid') in {
+                    'module-lesson-link', 'module-submodule-link',
+                }:
+                    self.hrefs.append(attributes['href'])
+
+        links = ContentLinks()
+        links.feed(overview.content.decode())
+        self.assertEqual(links.hrefs, [
+            '/courses/ai-buildcamp/foundations/session/session',
+            '/courses/ai-buildcamp/foundations/week-1-overview/week-1-overview',
+            '/courses/ai-buildcamp/foundations/foundations-topic',
+        ])
+
+    def test_api_exposes_inline_units_and_remaining_topic(self):
+        week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
+        self.assertEqual([unit['title'] for unit in week['units']],
+                         ['Session 1', 'Week 1 Overview'])
+        self.assertEqual([module['title'] for module in week['modules']],
+                         ['Foundations Topic'])
+
+    def test_optional_single_page_topic_remains_visible_as_a_lesson(self):
+        bonus = Module.objects.create(
+            course=self.course, parent=self.week,
+            title='Capstone Presentations', slug='capstone-presentations',
+            sort_order=4, is_bonus=True,
+        )
+        unit = Unit.objects.create(
+            module=bonus, title='Capstone Presentations',
+            slug='capstone-presentations', sort_order=1,
+        )
+
+        syllabus = self.client.get('/courses/ai-buildcamp')
+        self.assertContains(syllabus, f'href="{unit.get_absolute_url()}"')
+        self.assertContains(
+            syllabus, 'data-testid="syllabus-unit-optional-badge"', count=1,
+        )
+        week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
+        self.assertEqual(week['units'][-1]['title'], 'Capstone Presentations')
+
+
 class ModuleOverviewParentTest(ThreeLevelCourseViewMixin, TestCase):
     def test_parent_module_overview_shows_submodules_section(self):
         response = self.client.get('/courses/buildcamp-views/week-1')

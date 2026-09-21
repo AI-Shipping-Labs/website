@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load seo_tags %}
 {% load member_badges %}
+{% load curriculum_tags %}
 
 {% block title %}{{ module.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description module "module" %}{% endblock %}
@@ -49,7 +50,30 @@
       </div>
       {% endif %}
 
-      {% if submodules %}
+      {% if units and submodules %}
+      <section class="mb-12" data-testid="module-content-list">
+        <h2 class="text-2xl font-semibold tracking-tight mb-4">Contents</h2>
+        <div class="rounded-lg border border-border bg-card divide-y divide-border">
+          {% for child in display_children %}
+          {% with inline_unit=child|inline_course_unit:course.slug %}
+          {% if inline_unit %}
+          <a href="{{ inline_unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-lesson-link">
+            <i data-lucide="{{ inline_unit.kind|unit_kind_icon }}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
+            {{ inline_unit.title }}
+          </a>
+          {% else %}
+          <a href="{{ child.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-submodule-link">
+            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
+            {{ child.title }}
+          </a>
+          {% endif %}
+          {% endwith %}
+          {% endfor %}
+        </div>
+      </section>
+      {% endif %}
+
+      {% if submodules and not units %}
       {% comment %}
         Issue #1674: a parent module holds submodules, not units — this
         section replaces "Lessons" and must never show "This module has
@@ -75,7 +99,7 @@
           {% endfor %}
         </div>
       </section>
-      {% else %}
+      {% elif not submodules %}
       <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
       <section class="mb-12" data-testid="module-lesson-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">

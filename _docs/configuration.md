@@ -355,6 +355,17 @@ Foot-gun: this is the GitHub APP for content sync, not the GitHub OAuth APP for 
 
 Test: in `Studio > Sync`, click "Sync now" on a content source; confirm the sync run completes and articles appear at `{SITE_BASE_URL}/blog/`.
 
+### 7.0.1 Reading the webhook secret for scripting
+
+The App's webhook secret lives on each content source row; GitHub never displays it again after it is saved, so the row is the only readable copy. To retrieve it for scripting (aligning the App's Webhook tab, or setting a GitHub Actions secret), use the staff-token CLI:
+
+```bash
+uv run asl sync webhook-secret <short-name-or-uuid>   # prints only the secret
+gh secret set GITHUB_WEBHOOK_SECRET --body "$(uv run asl sync webhook-secret wiki)"
+```
+
+`Studio > Sync` export contains the same values in plaintext. Handle the secret like a password: never print it in logs, issues, or comments.
+
 ### 7.1 Membership tiers and benefits (`tiers.yaml`)
 
 Edit the root `tiers.yaml` in the `AI-Shipping-Labs/content` repository for paid-plan names, levels, prices, descriptions, and benefits. Do not add a website migration or hardcode Membership benefit copy in a Django template.

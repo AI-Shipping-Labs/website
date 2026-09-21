@@ -15,7 +15,10 @@
     <a href="{{ course.get_absolute_url }}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to {{ course.title }}</a>
   </div>
 
-  <h1 class="text-2xl font-semibold text-foreground mb-2">Submit Project</h1>
+  <h1 class="mb-2 flex items-center gap-2.5 text-2xl font-semibold text-foreground">
+    <i data-lucide="folder-git-2" class="h-5 w-5 text-muted-foreground" aria-hidden="true"></i>
+    Submit Project
+  </h1>
   <p class="text-muted-foreground mb-8">{{ course.title }}</p>
 
   {% if just_submitted %}

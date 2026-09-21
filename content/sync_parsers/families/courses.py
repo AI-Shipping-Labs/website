@@ -496,6 +496,15 @@ def _build_course_defaults(
         required_level=required_level,
         default_unit_required_level=default_unit_required_level,
     )
+    peer_review_enabled = course_data.get('peer_review_enabled', False)
+    if not isinstance(peer_review_enabled, bool):
+        raise GitHubSyncError(f'Invalid peer_review_enabled in {rel_path}/course.yaml: expected boolean')
+    peer_review_count = course_data.get('peer_review_count', 3)
+    peer_review_deadline_days = course_data.get('peer_review_deadline_days', 7)
+    if not isinstance(peer_review_count, int) or isinstance(peer_review_count, bool) or not 1 <= peer_review_count <= 10:
+        raise GitHubSyncError(f'Invalid peer_review_count in {rel_path}/course.yaml: expected 1–10')
+    if not isinstance(peer_review_deadline_days, int) or isinstance(peer_review_deadline_days, bool) or not 1 <= peer_review_deadline_days <= 90:
+        raise GitHubSyncError(f'Invalid peer_review_deadline_days in {rel_path}/course.yaml: expected 1–90')
     return {
         'title': course_data.get('title', slug),
         'description': description,
@@ -512,6 +521,10 @@ def _build_course_defaults(
         'access_mode': access_mode,
         'enroll_url': course_data.get('enroll_url', '') or '',
         'program_label': course_data.get('program_label', '') or '',
+        'peer_review_enabled': peer_review_enabled,
+        'peer_review_count': peer_review_count,
+        'peer_review_deadline_days': peer_review_deadline_days,
+        'peer_review_criteria': course_data.get('peer_review_criteria', '') or '',
         'tags': course_data.get('tags', []),
         'testimonials': course_data.get('testimonials', []),
         'status': 'published',

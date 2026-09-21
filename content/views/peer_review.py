@@ -2,6 +2,8 @@
 
 import json
 
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -16,6 +18,18 @@ from content.models import (
 )
 from content.models.cohort import CohortEnrollment
 from content.services.peer_review_service import PeerReviewService
+
+_project_url_validator = URLValidator(schemes=['http', 'https'])
+
+
+def _valid_project_url(value):
+    if not value or len(value) > 500:
+        return False
+    try:
+        _project_url_validator(value)
+    except ValidationError:
+        return False
+    return True
 
 
 def _require_auth(request):
@@ -54,11 +68,14 @@ def project_submit(request, slug):
         project_url = request.POST.get('project_url', '').strip()
         description = request.POST.get('description', '').strip()
 
-        if not project_url:
+        if not _valid_project_url(project_url):
             context = {
                 'course': course,
                 'submission': submission,
-                'error': 'Project URL is required.',
+                'error': (
+                    'Project URL is required.' if not project_url
+                    else 'Enter a valid http or https project URL.'
+                ),
             }
             return render(request, 'content/peer_review/submit.html', context)
 
@@ -258,8 +275,9 @@ def api_submit_project(request, slug):
     project_url = data.get('project_url', '').strip()
     description = data.get('description', '').strip()
 
-    if not project_url:
-        return JsonResponse({'error': 'project_url is required'}, status=400)
+    if not _valid_project_url(project_url):
+        error = 'project_url is required' if not project_url else 'Enter a valid http or https project URL'
+        return JsonResponse({'error': error}, status=400)
 
     submission = ProjectSubmission.objects.filter(user=user, course=course).first()
 

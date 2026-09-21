@@ -135,6 +135,24 @@
       </div>
       {% endif %}
 
+      {% if course.peer_review_enabled %}
+      <section class="mb-8 rounded-lg border border-border bg-card p-5 sm:p-6" aria-labelledby="course-project-heading" data-testid="course-project">
+        <div class="flex items-start gap-3">
+          <i data-lucide="folder-git-2" class="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+          <div class="min-w-0 flex-1">
+            <h2 id="course-project-heading" class="text-lg font-semibold text-foreground">Course project</h2>
+            <p class="mt-1 text-sm text-muted-foreground">Submit your project, review {{ course.peer_review_count }} peer projects, and see the feedback on yours.</p>
+            {% if has_access and user_authenticated %}
+            <div class="mt-4 flex flex-wrap gap-3">
+              <a href="{% url 'project_submit' slug=course.slug %}" class="{% button_classes 'primary' size='sm' %}" data-testid="course-project-submit">Submit project</a>
+              <a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="{% button_classes 'secondary' size='sm' %}" data-testid="course-project-reviews">Peer reviews</a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+      {% endif %}
+
       <!-- Active Cohorts -->
       {% if active_cohorts %}
       <div class="mb-8">

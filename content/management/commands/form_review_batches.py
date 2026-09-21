@@ -17,7 +17,7 @@ class Command(BaseCommand):
     help = 'Form peer review batches for all courses with peer review enabled.'
 
     def handle(self, *args, **options):
-        courses = Course.objects.filter(peer_review_enabled=True)
+        courses = Course.objects.filter(aisl_extension__peer_review_enabled=True)
 
         if not courses.exists():
             self.stdout.write('No courses with peer review enabled.')

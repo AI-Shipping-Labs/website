@@ -221,6 +221,18 @@ class ProjectSubmitViewTest(TestCase):
             ProjectSubmission.objects.filter(user=self.user).exists()
         )
 
+    def test_submit_rejects_non_web_project_url(self):
+        response = self.client.post('/courses/test-course/submit', {
+            'project_url': 'javascript:alert(1)',
+        })
+        self.assertContains(response, 'Enter a valid http or https project URL')
+        self.assertFalse(ProjectSubmission.objects.filter(user=self.user).exists())
+
+    def test_course_page_links_to_project_and_reviews(self):
+        response = self.client.get('/courses/test-course')
+        self.assertContains(response, 'data-testid="course-project-submit"')
+        self.assertContains(response, 'data-testid="course-project-reviews"')
+
     def test_readonly_shows_status_and_no_form(self):
         ProjectSubmission.objects.create(
             user=self.user, course=self.course,

@@ -834,11 +834,13 @@ COMMUNITY_BASE = {
     # A7.2a: append, never replace. Package list already has fenced_code,
     # tables, sane_lists and the mermaid/embed fences. codehilite plus the
     # three AISL extensions are what synced content still needs from this site.
+    # python-markdown loads `path.to.module:ClassName` (colon). A dotted class
+    # path is treated as a module and raises ModuleNotFoundError on render.
     'MARKDOWN_EXTENSIONS': [
         'codehilite',
-        'content.markdown_extensions.mermaid.MermaidExtension',
-        'content.markdown_extensions.external_links.ExternalLinksExtension',
-        'content.markdown_extensions.event_widget.EventWidgetExtension',
+        'content.markdown_extensions.mermaid:MermaidExtension',
+        'content.markdown_extensions.external_links:ExternalLinksExtension',
+        'content.markdown_extensions.event_widget:EventWidgetExtension',
     ],
     # Package content-sync GitHub client + S3 media store (A2.3 cutover
     # completion, website #1662): without these the sync worker fails every

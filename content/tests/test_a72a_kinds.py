@@ -32,15 +32,23 @@ class AislKindRegistrationTests(SimpleTestCase):
         self.assertEqual(get_kind("wiki").route("intro"), "wiki/intro")
 
     def test_markdown_extensions_are_appended_not_replaced(self) -> None:
-        from community_base.content_sync.rendering import markdown_extensions
+        from community_base.content_sync.rendering import markdown_extensions, render_html
 
         extensions = markdown_extensions()
         self.assertEqual(extensions[0], "fenced_code")
         self.assertIn("codehilite", extensions)
-        self.assertTrue(
-            any("EventWidgetExtension" in str(item) for item in extensions)
-            or "content.markdown_extensions.event_widget.EventWidgetExtension" in extensions
+        self.assertIn(
+            "content.markdown_extensions.event_widget:EventWidgetExtension",
+            extensions,
         )
+        self.assertIn(
+            "content.markdown_extensions.mermaid:MermaidExtension",
+            extensions,
+        )
+        # Dotted class paths are not python-markdown module names; loading them
+        # during package render is what broke Deploy Dev after A7.2a.
+        html, _headings = render_html("Hello **world**.")
+        self.assertIn("world", html)
 
 
 class ConvertedFixtureCheckTests(SimpleTestCase):

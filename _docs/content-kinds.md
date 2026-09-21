@@ -27,6 +27,8 @@ Entitlement keys stay under `extra` (D29). `events/*.yaml` is untouched (D30).
 
 ## Markdown extensions
 
-`COMMUNITY_BASE["MARKDOWN_EXTENSIONS"]` appends `codehilite`,
-`MermaidExtension`, `ExternalLinksExtension` and `EventWidgetExtension` to the
-package list. Synced HTML still goes through the package sanitiser.
+`COMMUNITY_BASE["MARKDOWN_EXTENSIONS"]` appends `codehilite` and the three
+AISL extensions as python-markdown `path.to.module:ClassName` entries
+(`content.markdown_extensions.mermaid:MermaidExtension` and the matching
+external-links and event-widget classes) to the package list. Synced HTML
+still goes through the package sanitiser.

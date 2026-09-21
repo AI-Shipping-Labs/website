@@ -90,6 +90,19 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
+  /* The scoped outline mixes standalone unit lists with expandable topics.
+     Give every sibling the same gap, including the first lesson in a topic. */
+  #sidebar-nav.reader-scoped-nav [data-testid="reader-scoped-module"] {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  #sidebar-nav.reader-scoped-nav .sidebar-module {
+    margin-top: 0;
+  }
+  #sidebar-nav.reader-scoped-nav .sidebar-module > .reader-nav-list {
+    margin-top: 0.25rem;
+  }
   .sidebar-module[open] > div { animation: sidebarSlideDown 0.15s ease-out; }
   @media (prefers-reduced-motion: reduce) {
     #sidebar-nav.reader-scoped-nav .sidebar-module[open] > div { animation: none; }

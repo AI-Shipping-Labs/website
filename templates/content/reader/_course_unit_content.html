@@ -23,7 +23,7 @@
 
 <div class="mb-8 flex flex-wrap items-center gap-3">
   <h1 class="flex items-start gap-2.5 text-2xl font-semibold tracking-tight sm:text-3xl">
-    <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+    <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-0.5 h-6 w-6 flex-shrink-0 text-muted-foreground sm:h-7 sm:w-7" aria-hidden="true"></i>
     <span>{{ unit.title }}</span>
   </h1>
   {% if unit.is_bonus %}
@@ -58,7 +58,7 @@
 {% if unit.homework_html or homework %}
 <div class="mb-12 rounded-lg border border-border bg-card p-6">
   <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
-    <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
+    <i data-lucide="clipboard-list" class="h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
     Homework
   </h2>
   {% if homework_stepper %}

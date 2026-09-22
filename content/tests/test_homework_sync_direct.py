@@ -272,9 +272,11 @@ class MultiCohortHomeworkSyncTest(TestCase):
     def test_second_cohort_resyncing_the_same_unit_gets_its_own_homework_row(self):
         # Cohort 4 is the only cohort at first sync -- resolves via the
         # single-cohort fallback and gets its own Homework row.
+        today = datetime.date.today()
         cohort_4 = Cohort.objects.create(
             course=self.course, name='Cohort 4',
-            start_date='2026-09-21', end_date='2026-11-22',
+            start_date=today - datetime.timedelta(days=200),
+            end_date=today - datetime.timedelta(days=100),
         )
         stats = {'errors': []}
         sync_unit_homework(self.unit, self.course, _questions_metadata(), 'f.md', stats)
@@ -284,7 +286,6 @@ class MultiCohortHomeworkSyncTest(TestCase):
         # Cohort 5 launches, out-ranging cohort 4 (now the sole in-range
         # cohort) -- re-syncing the SAME unit file must create cohort 5's
         # own Homework row without disturbing cohort 4's.
-        today = datetime.date.today()
         cohort_5 = Cohort.objects.create(
             course=self.course, name='Cohort 5',
             start_date=today - datetime.timedelta(days=1),

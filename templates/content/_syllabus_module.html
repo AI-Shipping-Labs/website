@@ -44,7 +44,7 @@
     {% endif %}
     {% if counter %}<i data-lucide="chevron-down" class="module-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
   </summary>
-  <div class="pb-1{% if children %} px-1 border-t border-border/60 pl-3 pr-2 sm:pl-4 sm:pr-3{% elif counter %} px-1{% else %} pl-6 pr-1{% endif %}">
+  <div class="pb-1{% if children %} border-t border-border/60 pl-2 pr-2 sm:pr-3{% elif counter %} px-1{% else %} pl-6 pr-1{% endif %}">
     {% if children %}
       {% for child in children|required_only %}
       {% with inline_unit=child|inline_course_unit:course_slug %}

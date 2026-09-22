@@ -696,7 +696,7 @@ def build_unit_session_card_context(unit: Unit, user):
 # replaced by "has a ``Homework`` row for this unit's ``content_id``".
 
 
-def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
+def resolve_homework_for_unit(unit: Unit, user, *, cohort=None) -> Homework | None:
     """Resolve the ``Homework`` row backing a ``kind='homework'`` unit, or ``None``.
 
     A ``kind='homework'`` unit with no matching ``Homework`` row (not yet
@@ -719,6 +719,17 @@ def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
     if unit.kind != UNIT_KIND_HOMEWORK or not unit.content_id:
         return None
     course = unit.module.course
+
+    if cohort is not None:
+        if cohort.course_id != course.pk:
+            return None
+        if not user.is_staff and not CohortEnrollment.objects.filter(
+            user=user, cohort=cohort,
+        ).exists():
+            return None
+        return Homework.objects.filter(
+            content_id=unit.content_id, cohort=cohort,
+        ).select_related('cohort').first()
 
     if is_authenticated_user(user):
         enrollment = (
@@ -761,7 +772,7 @@ def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
     return None
 
 
-def build_homework_submission_context(user, unit):
+def build_homework_submission_context(user, unit, *, cohort=None):
     """Build homework submission form context for the unit detail page.
 
     Issue #1683 tranche 1. Returns ``{'homework': None}`` when no
@@ -770,7 +781,7 @@ def build_homework_submission_context(user, unit):
     explicit backward-compatibility contract: an unauthored or
     not-yet-matching homework unit stays prose-only, no form, no error).
     """
-    homework = resolve_homework_for_unit(unit, user)
+    homework = resolve_homework_for_unit(unit, user, cohort=cohort)
     if homework is None:
         return {'homework': None}
 

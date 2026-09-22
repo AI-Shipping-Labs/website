@@ -28,6 +28,7 @@ from content.models import (
 from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_commitments import build_course_commitments
 from content.services.course_home import build_course_home
 from content.services.course_inline import inline_units_and_topics
 from content.services.course_schedule import (
@@ -447,6 +448,7 @@ def course_home(request, slug):
         cohort = cohort.cohort if cohort else None
 
     context = build_course_home(course, request.user, cohort)
+    context.update(build_course_commitments(course, request.user, cohort))
     context['cohort_query'] = (
         f'?{urlencode({"cohort": cohort.external_key})}'
         if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
@@ -846,6 +848,8 @@ def _render_course_unit_detail(request, course, module, unit):
     selected_cohort, selected_is_preview = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
     )
+    if request.GET.get('cohort') and (selected_cohort is None or selected_is_preview):
+        raise Http404('Cohort not found')
     if selected_cohort is not None and not selected_is_preview:
         drip_decision = course_unit_service.decide_course_unit_drip_lock(
             user, unit, cohort=selected_cohort,
@@ -858,7 +862,10 @@ def _render_course_unit_detail(request, course, module, unit):
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 
-    homework = course_unit_service.resolve_homework_for_unit(unit, user)
+    owned_cohort = selected_cohort if not selected_is_preview else None
+    homework = course_unit_service.resolve_homework_for_unit(
+        unit, user, cohort=owned_cohort,
+    )
     use_homework_steps = bool(
         homework and homework.stepper_enabled and homework.questions.exists()
     )
@@ -867,7 +874,7 @@ def _render_course_unit_detail(request, course, module, unit):
     if request.method == 'POST' and (
         not use_homework_steps or not request.POST.get('draft_token')
     ):
-        return _handle_homework_submission_post(request, unit)
+        return _handle_homework_submission_post(request, unit, cohort=owned_cohort)
 
     # Record a `lesson_open` activity row for the CRM timeline (issue #853),
     # only for authenticated users who have access (this branch). Deduped:
@@ -886,7 +893,9 @@ def _render_course_unit_detail(request, course, module, unit):
         for key in ('prev_item_url', 'next_item_url'):
             if context[key]:
                 context[key] += query
-    context.update(course_unit_service.build_homework_submission_context(user, unit))
+    context.update(course_unit_service.build_homework_submission_context(
+        user, unit, cohort=owned_cohort,
+    ))
     if use_homework_steps and user.is_authenticated:
         context['homework_stepper'] = True
         context['homework_save_urls'] = {
@@ -898,7 +907,7 @@ def _render_course_unit_detail(request, course, module, unit):
         }
         assignment = build_assignment(homework, unit, user, context=context)
         return handle_stepper(
-            request, assignment, AISLHomeworkAdapter(homework, unit),
+            request, assignment, AISLHomeworkAdapter(homework, unit, cohort=owned_cohort),
             action=unit.get_absolute_url(),
             template_name='content/course_unit_detail.html',
             step_param='homework_step',
@@ -954,7 +963,7 @@ def course_submodule_unit_detail(
     return _render_course_unit_detail(request, course, submodule, unit)
 
 
-def _handle_homework_submission_post(request, unit):
+def _handle_homework_submission_post(request, unit, *, cohort=None):
     """Handle a homework submission POST on the unit detail page.
 
     Issue #1683 tranche 1. Reuses the same URL/view as the GET unit page —
@@ -966,11 +975,15 @@ def _handle_homework_submission_post(request, unit):
     same unit page (never a generic error, never a silent no-op).
     """
     unit_url = unit.get_absolute_url()
+    if cohort and cohort.external_key and request.GET.get('cohort'):
+        unit_url += '?' + urlencode({'cohort': cohort.external_key})
 
     if not request.user.is_authenticated:
         return redirect(f'/accounts/login/?next={unit_url}')
 
-    homework = course_unit_service.resolve_homework_for_unit(unit, request.user)
+    homework = course_unit_service.resolve_homework_for_unit(
+        unit, request.user, cohort=cohort,
+    )
     if homework is None:
         return redirect(unit_url)
 

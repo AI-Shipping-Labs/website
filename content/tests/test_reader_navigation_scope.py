@@ -1,6 +1,7 @@
 """A source-managed course can keep the reader focused on its submodule."""
 
 import datetime
+import re
 from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
@@ -67,6 +68,14 @@ class ReaderNavigationScopeTest(TestCase):
         self.assertIn('data-testid="reader-view-syllabus"', sidebar)
         self.assertEqual(response.context['prev_unit'].title, 'First topic lesson')
         self.assertEqual(response.context['next_unit'].title, 'Last topic lesson')
+
+    def test_only_current_submodule_is_open(self):
+        response = self.reader(self.middle)
+        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        details = re.findall(r'<details[^>]*data-reader-submodule[^>]*>.*?</summary>', sidebar, re.S)
+        self.assertEqual(len(details), 2)
+        self.assertNotIn(' open>', details[0].split('>', 1)[0] + '>')
+        self.assertIn(' open>', details[1].split('>', 1)[0] + '>')
 
     def test_adjacent_module_links_follow_top_level_weeks(self):
         response = self.reader(self.middle)

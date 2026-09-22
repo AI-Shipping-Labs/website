@@ -1,6 +1,6 @@
 {% load curriculum_tags %}
 <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1">
-  <div class="lg:sticky lg:top-28">
+  <div id="content-sidebar-sticky" class="lg:sticky lg:top-28">
     <div class="flex items-center justify-between gap-2">
       <a href="{{ reader_back_url }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
          title="{{ reader_back_title }}"
@@ -67,9 +67,9 @@
               </li>
             </ul>
             {% else %}
-            <details class="sidebar-module mt-1" open>
-              <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2 rounded-md px-2 py-2 text-sm font-medium leading-snug text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-0 lg:py-1.5">
-                <i data-lucide="chevron-right" class="sidebar-chevron h-3 w-3 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+            <details class="sidebar-module mt-1" data-reader-submodule {% if nav_child.pk == unit.module.pk %}open{% endif %}>
+              <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium leading-snug text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-0 lg:py-1">
+                <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center" aria-hidden="true"><i data-lucide="chevron-right" class="sidebar-chevron h-4 w-4 text-muted-foreground"></i></span>
                 <span class="min-w-0 break-words">{{ nav_child.title }}</span>
                 {% if nav_child.is_bonus and not scoped_module.is_bonus and '(Optional)' not in nav_child.title %}<span class="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}
               </summary>

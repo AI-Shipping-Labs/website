@@ -1,6 +1,7 @@
 """Browser coverage for the focused course reader navigation."""
 
 import os
+from pathlib import Path
 
 import pytest
 
@@ -10,7 +11,6 @@ from scripts.browser_journey_policy import browser_journey
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 
 from django.db import connection
-
 
 pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
@@ -63,6 +63,10 @@ def test_scoped_sidebar_opens_current_topic_and_scrolls_independently(
         assert page.locator('#sidebar-nav details[data-reader-submodule][open]').count() == 1
         assert "Topic 2" in topics.nth(1).locator("summary").inner_text()
         assert topics.nth(1).get_attribute("open") is not None
+        if os.environ.get("CAPTURE_READER_SCREENSHOT"):
+            screenshot_path = Path(__file__).resolve().parents[1] / ".tmp" / "scoped-reader-sidebar.png"
+            screenshot_path.parent.mkdir(exist_ok=True)
+            page.screenshot(path=str(screenshot_path))
 
         topics.nth(0).locator("summary").click()
         page.wait_for_function(

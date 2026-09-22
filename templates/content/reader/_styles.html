@@ -71,10 +71,14 @@
       transition-delay: 120ms, 120ms, 120ms;
     }
     #content-sidebar-collapse-btn { display: inline-flex; }
-    /* Keep the scoped curriculum dense on desktop while mobile retains
-       the 44px touch target from `_list_row.html`. */
-    #sidebar-nav.reader-scoped-nav .reader-list-row {
+    /* Course units and workshop pages share the module summaries' compact
+       desktop row; mobile keeps the 44px touch target. */
+    #sidebar-nav .reader-list-row {
       min-height: 0;
+      padding: 0.375rem 0.5rem;
+    }
+    /* Scoped course outlines use a tighter rhythm for long curricula. */
+    #sidebar-nav.reader-scoped-nav .reader-list-row {
       padding: 0.25rem 0.5rem;
     }
   }

@@ -46,7 +46,7 @@
       {% endif %}
 
       <h1 class="mt-2 flex items-start gap-3 text-3xl font-semibold tracking-tight" data-testid="teaser-title">
-        <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-1 h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+        <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-0.5 h-7 w-7 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
         <span>{{ unit.title }}</span>
       </h1>
 
@@ -96,7 +96,7 @@
       {% if homework_teaser %}
       <div class="mt-8 rounded-lg border border-border bg-card p-6" data-testid="teaser-homework">
         <h2 class="mb-3 flex items-center gap-2 text-xl font-semibold tracking-tight">
-          <i data-lucide="clipboard-list" class="h-5 w-5 text-accent"></i>
+          <i data-lucide="clipboard-list" class="h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
           Homework
         </h2>
         <p class="text-sm text-foreground">{{ homework_teaser }}</p>

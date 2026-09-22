@@ -42,6 +42,7 @@ from events.services.display_time import (
 )
 
 TEASER_WORD_LIMIT = 150
+_UNSPECIFIED_DRIP_COHORT = object()
 
 ACCESS_GRANTED = 'access_granted'
 ACCESS_GRANTED_PREVIEW = 'preview'
@@ -149,8 +150,13 @@ def decide_course_unit_drip_lock(
     unit: Unit,
     *,
     today: datetime.date | None = None,
+    cohort=_UNSPECIFIED_DRIP_COHORT,
 ) -> CourseUnitDripDecision:
-    """Return whether cohort drip scheduling currently locks ``unit``."""
+    """Return whether cohort drip scheduling currently locks ``unit``.
+
+    An explicit cohort keeps a selected learner schedule consistent with the
+    course home and reader URL. Omission preserves the existing lookup policy.
+    """
     if not is_authenticated_user(user):
         return CourseUnitDripDecision(is_locked=False)
 
@@ -158,16 +164,18 @@ def decide_course_unit_drip_lock(
     if offset_days is None:
         return CourseUnitDripDecision(is_locked=False)
 
-    enrollment = (
-        CohortEnrollment.objects
-        .filter(
-            user=user,
-            cohort__course=unit.module.course,
-            cohort__is_active=True,
+    if cohort is _UNSPECIFIED_DRIP_COHORT:
+        enrollment = (
+            CohortEnrollment.objects
+            .filter(
+                user=user,
+                cohort__course=unit.module.course,
+                cohort__is_active=True,
+            )
+            .select_related('cohort')
+            .first()
         )
-        .select_related('cohort')
-        .first()
-    )
+        cohort = enrollment.cohort if enrollment else None
     # No enrollment at all (today's implicit self-paced — a course that
     # predates mode='self_paced' Cohorts) OR a real self-paced
     # CohortEnrollment (``mode='self_paced'``, ``start_date=None`` by
@@ -176,10 +184,10 @@ def decide_course_unit_drip_lock(
     # #1674 bug fix: this used to only check ``enrollment is None``, which
     # would raise ``TypeError`` (``None + timedelta``) once self-paced
     # learners got real ``CohortEnrollment`` rows.
-    if enrollment is None or enrollment.cohort.start_date is None:
+    if cohort is None or cohort.start_date is None:
         return CourseUnitDripDecision(is_locked=False)
 
-    available_date = enrollment.cohort.start_date + datetime.timedelta(
+    available_date = cohort.start_date + datetime.timedelta(
         days=offset_days,
     )
     today = today or timezone.now().date()
@@ -688,7 +696,7 @@ def build_unit_session_card_context(unit: Unit, user):
 # replaced by "has a ``Homework`` row for this unit's ``content_id``".
 
 
-def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
+def resolve_homework_for_unit(unit: Unit, user, *, cohort=None) -> Homework | None:
     """Resolve the ``Homework`` row backing a ``kind='homework'`` unit, or ``None``.
 
     A ``kind='homework'`` unit with no matching ``Homework`` row (not yet
@@ -711,6 +719,17 @@ def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
     if unit.kind != UNIT_KIND_HOMEWORK or not unit.content_id:
         return None
     course = unit.module.course
+
+    if cohort is not None:
+        if cohort.course_id != course.pk:
+            return None
+        if not user.is_staff and not CohortEnrollment.objects.filter(
+            user=user, cohort=cohort,
+        ).exists():
+            return None
+        return Homework.objects.filter(
+            content_id=unit.content_id, cohort=cohort,
+        ).select_related('cohort').first()
 
     if is_authenticated_user(user):
         enrollment = (
@@ -753,7 +772,7 @@ def resolve_homework_for_unit(unit: Unit, user) -> Homework | None:
     return None
 
 
-def build_homework_submission_context(user, unit):
+def build_homework_submission_context(user, unit, *, cohort=None):
     """Build homework submission form context for the unit detail page.
 
     Issue #1683 tranche 1. Returns ``{'homework': None}`` when no
@@ -762,7 +781,7 @@ def build_homework_submission_context(user, unit):
     explicit backward-compatibility contract: an unauthored or
     not-yet-matching homework unit stays prose-only, no form, no error).
     """
-    homework = resolve_homework_for_unit(unit, user)
+    homework = resolve_homework_for_unit(unit, user, cohort=cohort)
     if homework is None:
         return {'homework': None}
 

@@ -6,7 +6,8 @@ from community_base.homework_steps.models import HomeworkDraft
 from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
-from content.models.homework import Answer, Submission
+from content.models.cohort import Cohort, CohortEnrollment
+from content.models.homework import Answer, Homework, Question, Submission
 from content.services.homework_step_reader import option_key
 from content.services.homework_step_sections import validate_question_bindings
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
@@ -87,6 +88,9 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(resumed.context['stepper']['step'], 'q2-reflect')
 
     def test_step_navigation_preserves_cohort_query_on_unit_url(self):
+        self.cohort.external_key = 'cohort-4'
+        self.cohort.save(update_fields=['external_key'])
+        CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
         page = self.client.get(f'{self.unit_url}?cohort=cohort-4&homework_step=q1-lines')
         self.assertEqual(
             page.context['stepper']['nav_steps'][2][1],
@@ -105,6 +109,89 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             response['Location'],
             f'{self.unit_url}?cohort=cohort-4&homework_step=q2-reflect',
         )
+
+    def test_selected_second_cohort_uses_its_own_stepper_draft_and_submission(self):
+        self.cohort.external_key = 'older'
+        self.cohort.save(update_fields=['external_key'])
+        CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
+        today = timezone.localdate()
+        selected = Cohort.objects.create(
+            course=self.course, name='Selected cohort', external_key='selected',
+            start_date=today - datetime.timedelta(days=2),
+            end_date=today + datetime.timedelta(days=60),
+        )
+        CohortEnrollment.objects.create(user=self.student, cohort=selected)
+        second_homework = Homework.objects.create(
+            cohort=selected, slug='hw1', title='Selected cohort homework',
+            content_id=self.unit.content_id, stepper_enabled=True,
+            due_date=timezone.now() + datetime.timedelta(days=7),
+        )
+        for question in self.homework.questions.all():
+            Question.objects.create(
+                homework=second_homework,
+                source_question_id=question.source_question_id,
+                text=question.text, question_type=question.question_type,
+                answer_type=question.answer_type,
+                possible_answers=question.possible_answers,
+                correct_answer=question.correct_answer,
+            )
+
+        selected_url = f'{self.unit_url}?cohort=selected'
+        response = self.client.get(selected_url)
+        self.assertEqual(response.context['homework'], second_homework)
+        draft = HomeworkDraft.objects.get(
+            user=self.student, assignment_key=f'aisl:homework:{second_homework.pk}',
+        )
+        saved = self.client.post(
+            f'/api/homework-reader/drafts/{second_homework.pk}/questions/q1-lines',
+            {'draft_token': str(draft.token), 'revision': '0',
+             'answer': option_key('14')},
+        )
+        self.assertEqual(saved.status_code, 200)
+        submitted = self.client.post(selected_url, {
+            'assignment_key': f'aisl:homework:{second_homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': '1', 'intent': 'submit', 'final_homework_link': '',
+        })
+        self.assertEqual(submitted.status_code, 302)
+        self.assertTrue(Submission.objects.filter(
+            homework=second_homework, student=self.student,
+        ).exists())
+        self.assertFalse(Submission.objects.filter(
+            homework=self.homework, student=self.student,
+        ).exists())
+
+    def test_unowned_cohort_query_cannot_open_or_seed_private_homework(self):
+        today = timezone.localdate()
+        unowned = Cohort.objects.create(
+            course=self.course, name='Private cohort', external_key='unowned',
+            start_date=today - datetime.timedelta(days=1),
+            end_date=today + datetime.timedelta(days=30),
+        )
+        private_homework = Homework.objects.create(
+            cohort=unowned, slug='private-homework', title='Private homework',
+            content_id=self.unit.content_id, stepper_enabled=True,
+            due_date=timezone.now() + datetime.timedelta(days=7),
+        )
+        Question.objects.create(
+            homework=private_homework, source_question_id='private-answer',
+            text='Private question', question_type='FF',
+        )
+
+        response = self.client.get(f'{self.unit_url}?cohort=unowned')
+        self.assertEqual(response.status_code, 404)
+        self.assertNotIn('Private question', response.content.decode())
+        self.assertFalse(HomeworkDraft.objects.filter(
+            user=self.student, assignment_key=f'aisl:homework:{private_homework.pk}',
+        ).exists())
+        post = self.client.post(f'{self.unit_url}?cohort=unowned', {
+            'assignment_key': f'aisl:homework:{private_homework.pk}',
+            'homework_step': 'private-answer', 'answer': 'secret',
+        })
+        self.assertEqual(post.status_code, 404)
+        self.assertFalse(Submission.objects.filter(
+            homework=private_homework, student=self.student,
+        ).exists())
 
     def test_save_rejects_stale_revision_and_question_from_another_assignment(self):
         self.client.get(self.unit_url)

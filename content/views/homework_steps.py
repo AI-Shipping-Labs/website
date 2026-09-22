@@ -10,6 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
 
 from content.models import Unit
+from content.models.cohort import CohortEnrollment
 from content.models.homework import Homework
 from content.services.homework_step_reader import (
     AISLHomeworkAdapter,
@@ -33,7 +34,12 @@ def save_homework_step_answer(request, homework_id, question_id):
         module__course__status='published',
         kind='homework',
     )
-    adapter = AISLHomeworkAdapter(homework, unit)
+    owned_cohort = CohortEnrollment.objects.filter(
+        user=request.user, cohort=homework.cohort,
+    ).exists()
+    adapter = AISLHomeworkAdapter(
+        homework, unit, cohort=homework.cohort if owned_cohort else None,
+    )
     # Access must be checked before constructing or seeding a draft.
     preliminary = adapter.eligibility(request, None)
     if not preliminary.read or not preliminary.write:

@@ -98,11 +98,12 @@
             <span class="text-sm text-muted-foreground truncate">You're taking this course.</span>
           </div>
           <div class="flex flex-wrap items-center gap-3">
+            <a href="{% url 'course_home' slug=course.slug %}" class="{% button_classes 'primary' size='md' %}" data-testid="course-detail-home-link">Course home</a>
             {% if next_unit_for_user %}
             <a href="{{ next_unit_for_user.get_absolute_url }}"
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+               class="{% button_classes 'secondary' size='md' %}"
                data-testid="continue-button">
-              Continue
+              Continue lesson
               <i data-lucide="play" class="h-4 w-4"></i>
             </a>
             {% endif %}

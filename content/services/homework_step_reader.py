@@ -118,9 +118,10 @@ def build_assignment(homework, unit, user, *, context=None):
 
 
 class AISLHomeworkAdapter:
-    def __init__(self, homework, unit):
+    def __init__(self, homework, unit, *, cohort=None):
         self.homework = homework
         self.unit = unit
+        self.cohort = cohort
 
     def eligibility(self, request, assignment):
         if not request.user.is_authenticated:
@@ -128,10 +129,17 @@ class AISLHomeworkAdapter:
         access = course_units.decide_course_unit_access(request.user, self.unit)
         if not access.has_access:
             return Eligibility(False, False, False, 'This course unit is locked.')
-        drip = course_units.decide_course_unit_drip_lock(request.user, self.unit)
+        if self.cohort is None:
+            drip = course_units.decide_course_unit_drip_lock(request.user, self.unit)
+        else:
+            drip = course_units.decide_course_unit_drip_lock(
+                request.user, self.unit, cohort=self.cohort,
+            )
         if drip.is_locked:
             return Eligibility(False, False, False, 'This course unit is not available yet.')
-        if course_units.resolve_homework_for_unit(self.unit, request.user) != self.homework:
+        if course_units.resolve_homework_for_unit(
+            self.unit, request.user, cohort=self.cohort,
+        ) != self.homework:
             return Eligibility(False, False, False, 'This homework belongs to another cohort.')
         if not self.homework.is_accepting_submissions:
             reason = (

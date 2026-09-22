@@ -15,7 +15,7 @@ the current user is enrolled in). Optional ``show_sold_separately``
 {% endcomment %}
 <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
   {% with course_primary_instructor=course.primary_instructor %}
-  <a href="/courses/{{ course.slug }}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
+  <a href="/courses/{{ course.slug }}{% if course.pk in enrolled_course_ids %}/home{% endif %}" class="{% include 'content/_clickable_card_classes.html' %} h-full">
     {% if course.is_free %}
       {% include "content/_content_preview.html" with preview_cover_url=course.cover_image_url preview_title=course.title preview_label="Course" preview_icon="book-open" preview_testid="course-card-preview" preview_access_label="Free" preview_instructor=course_primary_instructor.name preview_tags=course.tags preview_image_loading="lazy" preview_decorative_fallback=True %}
     {% elif course.required_level > 0 %}

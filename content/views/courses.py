@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -28,6 +28,7 @@ from content.models import (
 from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_home import build_course_home
 from content.services.course_inline import inline_units_and_topics
 from content.services.course_schedule import (
     build_deadline_context,
@@ -422,6 +423,37 @@ def course_detail(request, slug):
     return render(request, 'content/course_detail.html', context)
 
 
+@login_required(login_url='/accounts/login/')
+def course_home(request, slug):
+    """Private learner orientation; the public overview remains at the course URL."""
+    course = get_object_or_404(Course, slug=slug, status='published')
+    if not can_access(request.user, course):
+        return redirect(course.get_absolute_url())
+
+    ensure_self_paced_cohort_enrollment(request.user, course)
+    requested = request.GET.get('cohort', '')
+    cohort, is_preview = select_display_cohort(course, request.user, requested)
+    if requested and (cohort is None or is_preview):
+        raise Http404('Cohort not found')
+    if is_preview:
+        cohort = None
+    if cohort is None:
+        cohort = (
+            CohortEnrollment.objects.filter(
+                user=request.user, cohort__course=course,
+                cohort__mode='self_paced', cohort__is_active=True,
+            ).select_related('cohort').first()
+        )
+        cohort = cohort.cohort if cohort else None
+
+    context = build_course_home(course, request.user, cohort)
+    context['cohort_query'] = (
+        f'?{urlencode({"cohort": cohort.external_key})}'
+        if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
+    )
+    return render(request, 'content/course_home.html', context)
+
+
 # --- Enrollment endpoints (issue #236) ---
 
 
@@ -811,7 +843,15 @@ def _render_course_unit_detail(request, course, module, unit):
     # no-op for courses with no mode='self_paced' Cohort at all.
     ensure_self_paced_cohort_enrollment(user, course)
 
-    drip_decision = course_unit_service.decide_course_unit_drip_lock(user, unit)
+    selected_cohort, selected_is_preview = select_display_cohort(
+        course, user, request.GET.get('cohort', ''),
+    )
+    if selected_cohort is not None and not selected_is_preview:
+        drip_decision = course_unit_service.decide_course_unit_drip_lock(
+            user, unit, cohort=selected_cohort,
+        )
+    else:
+        drip_decision = course_unit_service.decide_course_unit_drip_lock(user, unit)
     if drip_decision.is_locked:
         context = course_unit_service.build_drip_locked_course_unit_context(
             course, module, unit, drip_decision,

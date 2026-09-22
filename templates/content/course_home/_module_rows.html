@@ -1,0 +1,17 @@
+<ul class="space-y-2">
+  {% for row in rows %}
+  <li>
+    <a href="{{ row.url }}{{ cohort_query }}" class="flex min-h-[44px] min-w-0 items-center gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm text-foreground hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-module-{{ row.module.pk }}">
+      <span class="flex min-w-0 flex-1 flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
+        <span class="min-w-0 break-words font-medium sm:min-w-[12rem] sm:flex-1">{{ row.module.title }}</span>
+        <span class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+          {% if row.week_range %}<span>{{ row.week_range }}</span>{% endif %}
+          {% if row.total %}<span>{{ row.completed }} / {{ row.total }} materials</span>{% endif %}
+          {% if row.next_available and row.completed < row.total %}<span>Available <time datetime="{{ row.next_available|form_date_value }}">{{ row.next_available|member_short_date }}</time></span>{% endif %}
+        </span>
+      </span>
+      <i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+    </a>
+  </li>
+  {% endfor %}
+</ul>

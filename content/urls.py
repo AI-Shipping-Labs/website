@@ -16,6 +16,7 @@ from content.views.courses import (
     api_course_unit_detail,
     api_courses_list,
     course_detail,
+    course_home,
     course_submodule_unit_detail,
     course_unit_detail,
     courses_list,
@@ -166,6 +167,7 @@ urlpatterns = [
     # Courses
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
+    path('courses/<slug:slug>/home', course_home, name='course_home'),
     # Enrollment (issue #236) — must be before the catch-all unit URL
     path('courses/<slug:slug>/enroll', enroll_course, name='enroll_course'),
     path('courses/<slug:slug>/unenroll', unenroll_course, name='unenroll_course'),

@@ -11,6 +11,8 @@
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
   <a href="/courses/{{ course.slug }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
   <a href="/courses/{{ course.slug }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden" data-testid="breadcrumb-course-short">...</a>
+  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+  <a href="{% url 'course_home' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex-shrink-0 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-course-home">Course home</a>
   {% if unit.module.parent_id %}
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
   <a href="{{ unit.module.parent.get_absolute_url }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-parent-module">{{ unit.module.parent.title }}</a>

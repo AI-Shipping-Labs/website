@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}{{ course.title }} course home | AI Shipping Labs{% endblock %}
+
+{% block body %}
+{% include "includes/header.html" %}
+<main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
+  <div class="mx-auto max-w-5xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8 lg:px-8">
+    <header class="mb-5 sm:mb-6">
+      <p class="text-sm font-medium text-muted-foreground">Course home</p>
+      <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
+      {% if cohort %}
+      <p class="mt-2 text-sm text-muted-foreground" data-testid="course-home-cohort">
+        {{ cohort.name }}
+        {% if cohort.start_date and cohort.end_date %}
+          <span aria-hidden="true">·</span>
+          <time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>
+        {% endif %}
+      </p>
+      {% endif %}
+    </header>
+
+    <nav class="mb-5 flex flex-wrap gap-x-6 border-b border-border text-sm font-medium" aria-label="Course pages">
+      <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" aria-current="page" class="inline-flex min-h-[44px] items-center border-b-2 border-accent text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Home</a>
+      <a href="{{ course.get_absolute_url }}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Course materials</a>
+      <a href="#course-help" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Help</a>
+    </nav>
+
+    {% include "content/course_home/_next_action.html" %}
+
+    <section class="mt-8" aria-labelledby="course-map-heading" data-testid="course-home-map">
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h2 id="course-map-heading" class="text-xl font-semibold text-foreground">Your course</h2>
+        {% if core_total %}<p class="text-sm text-muted-foreground" data-testid="course-home-progress">{{ core_completed }} of {{ core_total }} core materials marked complete</p>{% endif %}
+      </div>
+      {% if orientation_rows or core_rows or capstone_rows or optional_rows %}
+        {% if orientation_rows %}<h3 class="mb-2 mt-5 text-sm font-semibold text-foreground">Orientation and logistics</h3>{% include "content/course_home/_module_rows.html" with rows=orientation_rows %}{% endif %}
+        {% if core_rows %}<h3 class="mb-2 mt-5 text-sm font-semibold text-foreground">Core modules</h3>{% include "content/course_home/_module_rows.html" with rows=core_rows %}{% endif %}
+        {% if capstone_rows %}<h3 class="mb-2 mt-5 text-sm font-semibold text-foreground">Capstone</h3>{% include "content/course_home/_module_rows.html" with rows=capstone_rows %}{% endif %}
+        {% if optional_rows %}<h3 class="mb-2 mt-6 border-t border-border pt-5 text-sm font-semibold text-foreground">Optional material</h3><p class="mb-2 text-sm text-muted-foreground">These modules do not count toward core reader progress.</p>{% include "content/course_home/_module_rows.html" with rows=optional_rows %}{% endif %}
+      {% else %}
+        <p class="mt-4 rounded-lg border border-border bg-card p-5 text-sm text-muted-foreground">Course materials have not been published yet.</p>
+      {% endif %}
+    </section>
+
+    <section class="mt-10 scroll-mt-24 border-t border-border pt-6" id="course-help" aria-labelledby="course-help-heading" data-testid="course-home-help">
+      <h2 id="course-help-heading" class="text-xl font-semibold text-foreground">Help</h2>
+      <p class="mt-1 text-sm text-muted-foreground">Find course details and the links available for this course.</p>
+      <ul class="mt-3 grid gap-2 sm:grid-cols-2">
+        {% for label, url in help_links %}
+        <li><a href="{{ url }}" class="flex min-h-[44px] min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span class="break-words">{{ label }}</span><i data-lucide="arrow-up-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i></a></li>
+        {% endfor %}
+        <li><a href="{{ course.get_absolute_url }}{{ cohort_query }}" class="flex min-h-[44px] min-w-0 items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm font-medium text-foreground hover:border-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span>Course overview</span><i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i></a></li>
+      </ul>
+    </section>
+  </div>
+</main>
+{% include "includes/footer.html" %}
+{% endblock %}

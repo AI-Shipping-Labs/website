@@ -147,7 +147,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             {'draft_token': str(draft.token), 'revision': '0',
              'answer': option_key('14')},
         )
-        self.assertEqual(saved.status_code, 200)
+        self.assertEqual(saved.json(), {'revision': 1, 'saved': True})
         submitted = self.client.post(selected_url, {
             'assignment_key': f'aisl:homework:{second_homework.pk}',
             'draft_token': str(draft.token), 'homework_step': 'review',

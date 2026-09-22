@@ -1234,6 +1234,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_scoped_sidebar_opens_current_topic_and_scrolls_independently",
     })
 
+    issue_1782_owners = frozenset({
+        "playwright_tests/test_course_home_1783.py::"
+        "test_course_home_entry_reader_return_and_mobile_themes",
+        "playwright_tests/test_course_home_1784.py::"
+        "test_course_home_commitments_to_homework_event_and_reviews",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1502,8 +1509,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2657)
-        self.assertEqual(len(inventory.owners), 2455)
+        self.assertEqual(inventory.item_count, 2659)
+        self.assertEqual(len(inventory.owners), 2457)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1548,6 +1555,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1770_owners
             | self.issue_1778_owners
             | self.issue_1781_owners
+            | self.issue_1782_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(
@@ -1603,6 +1611,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1770_owners
             | self.issue_1778_owners
             | self.issue_1781_owners
+            | self.issue_1782_owners
             | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

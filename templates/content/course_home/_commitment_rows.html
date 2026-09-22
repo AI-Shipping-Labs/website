@@ -8,7 +8,7 @@
         {% if row.status %}{% member_label_badge row.status tone=row.status_tone size="xs" %}{% endif %}
       </p>
       <p class="mt-0.5 break-words text-sm font-semibold text-foreground">{{ row.title }}</p>
-      {% if row.when %}<p class="mt-0.5 text-xs text-muted-foreground"><time datetime="{{ row.when|date:'c' }}">{{ row.when_label }}</time></p>{% endif %}
+      {% if row.when %}<p class="mt-0.5 text-xs text-muted-foreground"><time datetime="{{ row.when.isoformat }}">{{ row.when_label }}</time></p>{% endif %}
     </div>
     {% if row.url and row.action %}<a href="{{ row.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ row.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
   </li>

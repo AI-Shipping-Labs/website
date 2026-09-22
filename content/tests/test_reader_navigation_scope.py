@@ -8,7 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Course, Module, Unit
+from content.models import Cohort, CohortEnrollment, Course, Module, Unit
 from content.models.peer_review import CourseProject
 from content.sync_parsers.common import GitHubSyncError
 from content.sync_parsers.families.courses import _build_course_defaults
@@ -56,10 +56,18 @@ class ReaderNavigationScopeTest(TestCase):
             f'/courses/scoped-reader/{module.parent.slug}/{module.slug}/lesson'
         )
 
+    def sidebar(self, response):
+        match = re.search(
+            r'<nav\b[^>]*\bid="sidebar-nav"[^>]*>.*?</nav>',
+            response.content.decode(), re.S,
+        )
+        self.assertIsNotNone(match, 'Reader sidebar navigation is missing')
+        return match.group()
+
     def test_current_week_includes_all_its_topics_but_not_other_weeks(self):
         response = self.reader(self.middle)
         self.assertContains(response, 'data-testid="reader-scoped-module"')
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         self.assertIn('Middle topic lesson', sidebar)
         self.assertIn('First topic lesson', sidebar)
         self.assertNotIn('Last topic lesson', sidebar)
@@ -71,7 +79,7 @@ class ReaderNavigationScopeTest(TestCase):
 
     def test_only_current_submodule_is_open(self):
         response = self.reader(self.middle)
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         details = re.findall(r'<details[^>]*data-reader-submodule[^>]*>.*?</summary>', sidebar, re.S)
         self.assertEqual(len(details), 2)
         self.assertNotIn(' open>', details[0].split('>', 1)[0] + '>')
@@ -79,7 +87,7 @@ class ReaderNavigationScopeTest(TestCase):
 
     def test_adjacent_module_links_follow_top_level_weeks(self):
         response = self.reader(self.middle)
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         self.assertNotIn('data-testid="reader-previous-module"', sidebar)
         self.assertIn('href="/courses/scoped-reader/week-2"', sidebar)
         self.assertIn('href="/courses/scoped-reader#syllabus"', sidebar)
@@ -90,10 +98,17 @@ class ReaderNavigationScopeTest(TestCase):
         self.assertIsNone(last.context['next_module'])
 
     def test_adjacent_module_navigation_preserves_explicit_cohort(self):
+        today = timezone.localdate()
+        cohort = Cohort.objects.create(
+            course=self.course, name='Cohort 4', external_key='4',
+            start_date=today - datetime.timedelta(days=1),
+            end_date=today + datetime.timedelta(days=60),
+        )
+        CohortEnrollment.objects.create(user=self.user, cohort=cohort)
         response = self.client.get(
             '/courses/scoped-reader/week-1/middle/lesson?cohort=4',
         )
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         self.assertIn('href="/courses/scoped-reader/week-2?cohort=4"', sidebar)
         self.assertIn('href="/courses/scoped-reader/week-1/first/lesson?cohort=4"', sidebar)
         self.assertIn('href="/courses/scoped-reader?cohort=4#syllabus"', sidebar)
@@ -108,7 +123,7 @@ class ReaderNavigationScopeTest(TestCase):
         self.course.reader_navigation_scope = 'submodule'
         self.course.save(update_fields=['reader_navigation_scope'])
         response = self.reader(self.middle)
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         self.assertIn('First topic lesson', sidebar)
         self.assertNotIn('Last topic lesson', sidebar)
 
@@ -116,7 +131,7 @@ class ReaderNavigationScopeTest(TestCase):
         self.course.reader_navigation_scope = 'course'
         self.course.save(update_fields=['reader_navigation_scope'])
         response = self.reader(self.middle)
-        sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+        sidebar = self.sidebar(response)
         self.assertNotIn('data-testid="reader-scoped-module"', sidebar)
         self.assertIn('First topic lesson', sidebar)
         self.assertIn('Last topic lesson', sidebar)

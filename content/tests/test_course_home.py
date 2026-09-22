@@ -156,7 +156,6 @@ class CourseHomeTests(TestCase):
         self.client.force_login(self.user)
         url = '/courses/course-home-test/home'
         response = self.client.get(f'{url}?cohort={owned.external_key}')
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['cohort'], owned)
         self.assertContains(response, f'?cohort={owned.external_key}')
         self.assertNotContains(response, other.name)
@@ -175,7 +174,6 @@ class CourseHomeTests(TestCase):
         )
         self.client.force_login(self.user)
         response = self.client.get('/courses/ai-buildcamp/home')
-        self.assertEqual(response.status_code, 200)
         self.assertIsNone(response.context['cohort'])
         self.assertNotContains(response, 'Public preview')
 
@@ -190,8 +188,8 @@ class CourseHomeTests(TestCase):
         lesson = self.client.get(
             f'{self.lesson1.get_absolute_url()}?cohort={active.external_key}',
         )
-        self.assertEqual(lesson.status_code, 200)
         self.assertNotContains(lesson, 'data-testid="drip-locked-card"')
+        self.assertContains(lesson, self.lesson1.title)
 
     def test_calendar_week_eight_is_not_replaced_by_capstone_module_index(self):
         self.course.slug = 'ai-buildcamp'
@@ -242,7 +240,6 @@ class CourseHomeTests(TestCase):
         CourseAccess.objects.create(user=self.user, course=self.course, access_type='granted')
         self.client.force_login(self.user)
         response = self.client.get('/courses/course-home-test/home')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.course.discussion_url)
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
 

@@ -30,7 +30,13 @@ from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
 from content.services.course_home import build_course_home
-from content.services.course_inline import inline_units_and_topics
+from content.services.course_inline import (
+    inline_homework_capstone_for_parent,
+    inline_homework_unit_for,
+    inline_unit_for,
+    inline_units_and_topics,
+    is_inline_homework_unit,
+)
 from content.services.course_schedule import (
     build_deadline_context,
     schedule_timezone_name,
@@ -884,7 +890,7 @@ def _render_course_unit_detail(request, course, module, unit):
     record_lesson_open(user, unit=unit)
 
     context = course_unit_service.build_course_unit_navigation_context(
-        user, course, module, unit,
+        user, course, module, unit, request=request,
     )
     context['reader_cohort_param'] = request.GET.get('cohort', '')
     if context['reader_cohort_param'] and context['scoped_module']:
@@ -936,10 +942,29 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     top_module = _resolve_top_level_module(course, module_slug)
 
     if top_module.children.exists():
-        submodule = get_object_or_404(
-            Module.objects.select_related('parent'), course=course,
-            parent=top_module, slug=unit_slug,
-        )
+        submodule = Module.objects.select_related('parent').filter(
+            course=course, parent=top_module, slug=unit_slug,
+        ).first()
+        if submodule is None:
+            capstone_unit = inline_homework_capstone_for_parent(
+                top_module, unit_slug, course.slug,
+            )
+            if capstone_unit is not None:
+                return _render_course_unit_detail(
+                    request, course, capstone_unit.module, capstone_unit,
+                )
+            raise Http404
+
+        inline_unit = inline_unit_for(submodule, course.slug)
+        if inline_unit is not None:
+            return _render_course_unit_detail(
+                request, course, submodule, inline_unit,
+            )
+        homework_unit = inline_homework_unit_for(submodule, course.slug)
+        if homework_unit is not None:
+            return _render_course_unit_detail(
+                request, course, submodule, homework_unit,
+            )
         return _render_module_overview(request, course, submodule)
 
     unit = get_object_or_404(Unit, module=top_module, slug=unit_slug)
@@ -960,6 +985,16 @@ def course_submodule_unit_detail(
         parent=parent_module, slug=module_slug,
     )
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
+    if is_inline_homework_unit(submodule, unit, course.slug):
+        raise Http404
+    inline_unit = inline_unit_for(submodule, course.slug)
+    if inline_unit is not None and inline_unit.pk == unit.pk:
+        if request.method in ('GET', 'HEAD'):
+            canonical_url = unit.get_absolute_url()
+            query_string = request.META.get('QUERY_STRING')
+            if query_string:
+                canonical_url = f'{canonical_url}?{query_string}'
+            return redirect(canonical_url, permanent=True)
     return _render_course_unit_detail(request, course, submodule, unit)
 
 
@@ -988,7 +1023,7 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
         return redirect(unit_url)
 
     if not homework.is_accepting_submissions:
-        if homework.is_self_paced:
+        if homework.is_self_paced or homework.due_date is None:
             messages.error(
                 request,
                 'This homework is closed; this answer was not saved.',
@@ -1008,6 +1043,7 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
         answers_by_question_id=answers_by_question_id,
     )
     if homework.stepper_enabled:
+        completion_service.mark_completed(request.user, unit)
         from community_base.homework_steps.services import clear_draft
         clear_draft(request.user, f'aisl:homework:{homework.pk}')
     messages.success(

@@ -75,29 +75,44 @@ def _create_assignment(email):
 
 @pytest.mark.core
 @browser_journey
-def test_failed_autosave_blocks_step_link_without_losing_choice(django_server, browser):
+@pytest.mark.parametrize(
+    ('failure_status', 'expected_error'),
+    [
+        (503, 'retry before leaving'),
+        (409, 'Reload this page'),
+    ],
+)
+def test_failed_autosave_blocks_step_link_without_losing_choice(
+    django_server, browser, failure_status, expected_error,
+):
     from content.models.homework import Submission
 
-    email = 'homework-step-failure@test.com'
+    email = f'homework-step-failure-{failure_status}@test.com'
     unit, homework = _create_assignment(email)
 
     context = _learner_context(browser, email)
     page = context.new_page()
     page.route(
         '**/api/homework-reader/drafts/**',
-        lambda route: route.fulfill(status=503, body='temporarily unavailable'),
+        lambda route: route.fulfill(status=failure_status, body='save unavailable'),
     )
     url = f'{django_server}{unit.get_absolute_url()}?homework_step=q1-first'
     page.goto(url, wait_until='domcontentloaded')
     page.get_by_role('radio', name='Alpha').check()
-    expect(page.locator('[data-save-status]')).to_contain_text('Save failed')
-    page.get_by_role('navigation', name='Homework steps').get_by_role(
+    expect(page.locator('[data-save-status]')).to_contain_text(expected_error)
+    step_link = page.get_by_role('group', name='Homework steps').get_by_role(
         'link', name='Question 2',
-    ).click()
+    )
+    with context.expect_page() as new_page_info:
+        step_link.click(modifiers=['Control'])
+    new_page = new_page_info.value
+    expect(new_page).to_have_url(f'{django_server}{unit.get_absolute_url()}?homework_step=q2-second')
+    new_page.close()
+    step_link.click()
 
     expect(page).to_have_url(url)
     expect(page.get_by_role('radio', name='Alpha')).to_be_checked()
-    expect(page.locator('[data-save-status]')).to_contain_text('Save failed')
+    expect(page.locator('[data-save-status]')).to_contain_text(expected_error)
     dialogs = []
 
     def dismiss_unload(dialog):
@@ -115,9 +130,38 @@ def test_failed_autosave_blocks_step_link_without_losing_choice(django_server, b
 
 @pytest.mark.core
 @browser_journey
+def test_sidebar_exit_saves_latest_dirty_choice_before_navigation(django_server, browser):
+    from accounts.models import User
+    from community_base.homework_steps.models import HomeworkDraft
+    from content.services.homework_step_reader import option_key
+
+    email = 'homework-step-sidebar-flush@test.com'
+    unit, homework = _create_assignment(email)
+    context = _learner_context(browser, email)
+    page = context.new_page()
+    unit_url = f'{django_server}{unit.get_absolute_url()}'
+    page.goto(f'{unit_url}?homework_step=q1-first', wait_until='domcontentloaded')
+    page.get_by_role('radio', name='Alpha').check()
+    page.get_by_role('radio', name='Beta').check()
+    page.get_by_role('group', name='Homework steps').get_by_role(
+        'link', name='Question 2',
+    ).click()
+
+    expect(page).to_have_url(f'{unit_url}?homework_step=q2-second')
+    user = User.objects.get(email=email)
+    draft = HomeworkDraft.objects.get(
+        user=user, assignment_key=f'aisl:homework:{homework.pk}',
+    )
+    assert draft.answers == {'q1-first': option_key('Beta')}
+    context.close()
+
+
+@pytest.mark.core
+@browser_journey
 def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     from accounts.models import User
     from content.models.homework import Submission
+    from content.services import completion as completion_service
 
     email = 'homework-step-success@test.com'
     unit, homework = _create_assignment(email)
@@ -125,7 +169,22 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     page = context.new_page()
     unit_url = f'{django_server}{unit.get_absolute_url()}'
     page.goto(unit_url, wait_until='domcontentloaded')
+    user = User.objects.get(email=email)
+    assert not completion_service.is_completed(user, unit)
     expect(page.locator('[data-testid="homework-introduction"]')).to_contain_text('Read this first.')
+    expect(page.locator('[data-testid="reader-bottom-nav"]')).to_have_count(0)
+    expect(page.locator('[data-testid="homework-stepper-container"] h2')).to_have_count(0)
+    step_nav = page.get_by_role('group', name='Homework steps')
+    intro_link = step_nav.get_by_role('link', name='Introduction')
+    question_link = step_nav.get_by_role('link', name='Question 1')
+    review_link = step_nav.get_by_role('link', name='Review & submit')
+    expect(intro_link).to_have_count(1)
+    expect(question_link).to_have_count(1)
+    expect(review_link).to_have_count(1)
+    expect(intro_link.locator('svg.lucide-book-open')).to_have_count(1)
+    expect(question_link.locator('svg.lucide-help-circle')).to_have_count(1)
+    expect(review_link.locator('svg.lucide-clipboard-check')).to_have_count(1)
+    expect(question_link.locator('span.rounded-full')).to_have_count(0)
     page.screenshot(path='.tmp/astra-homework-intro-desktop.png', full_page=True)
     page.get_by_role('link', name='Start questions').click()
     expect(page).to_have_url(f'{unit_url}?homework_step=q1-first')
@@ -139,10 +198,11 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     page.reload(wait_until='domcontentloaded')
     expect(page.locator('[data-testid="homework-question-prompt"]')).to_contain_text('Question 2')
     page.get_by_role('radio', name='Yes').check()
-    page.get_by_role('button', name='Save & continue').click()
+    page.get_by_role('button', name='Save & review').click()
     expect(page).to_have_url(f'{unit_url}?homework_step=review')
     expect(page.locator('[data-testid="homework-review-summary"]')).to_contain_text('Beta')
     expect(page.locator('[data-testid="homework-review-summary"]')).to_contain_text('Yes')
+    assert not completion_service.is_completed(user, unit)
     page.screenshot(path='.tmp/astra-homework-review-desktop.png', full_page=True)
     page.get_by_label('Homework link (optional)').fill('https://github.com/example/solution')
     page.get_by_role('button', name='Submit homework').click()
@@ -151,4 +211,9 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     submission = Submission.objects.get(homework=homework, student=User.objects.get(email=email))
     assert submission.homework_link == 'https://github.com/example/solution'
     assert submission.answers.count() == 2
+    assert completion_service.is_completed(user, unit)
+    page.goto(f'{unit_url}?homework_step=review', wait_until='domcontentloaded')
+    expect(page.locator('[data-testid="homework-submitted-status"]')).to_be_visible()
+    expect(page.get_by_role('button', name='Update submission')).to_be_visible()
+    expect(page.get_by_role('link', name='Back to course')).to_be_visible()
     context.close()

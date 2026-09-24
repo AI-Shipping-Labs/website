@@ -1,0 +1,55 @@
+{% if unit_session_entry %}
+  {% with entry=unit_session_entry %}
+  <div class="mb-8" data-testid="unit-session-content">
+    <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
+      <span class="font-medium text-foreground">{{ entry.event.title }}</span>
+      {% include "events/_event_time_display.html" with event_time_display=entry.time_display %}
+      <a href="{{ entry.event.get_absolute_url }}"
+         class="inline-flex min-h-[36px] items-center gap-1 text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+         data-testid="unit-session-event-details">
+        Event details
+        <i data-lucide="arrow-up-right" class="h-3.5 w-3.5" aria-hidden="true"></i>
+      </a>
+      {% if not entry.is_past and entry.maven_enrolled %}
+      <span class="text-xs text-muted-foreground" data-testid="unit-session-maven-registration">
+        Maven handles registration automatically; no separate registration is needed.
+      </span>
+      {% endif %}
+    </div>
+
+    {% if entry.description_html %}
+    <div class="prose reader-prose mb-8 max-w-full overflow-x-auto" data-testid="unit-session-description">
+      {{ entry.description_html|safe }}
+    </div>
+    {% elif not entry.is_past %}
+    <p class="mb-8 text-sm text-muted-foreground">This live session is part of your course schedule.</p>
+    {% endif %}
+
+    {% if entry.is_past %}
+      {% if entry.show_recording and entry.can_watch_recording %}
+      <div class="mb-8" data-testid="unit-session-recording">
+        {% include "events/_recording_embed.html" with event=entry.event recording_playback_url=entry.recording_playback_url %}
+      </div>
+      {% elif entry.show_recording %}
+      <p class="mb-8 text-sm text-muted-foreground" data-testid="unit-session-recording-locked">
+        The recording is available to members with access to this session.
+      </p>
+      {% else %}
+      <p class="mb-8 text-sm text-muted-foreground" data-testid="unit-session-recording-missing">
+        No recording is available for this session.
+      </p>
+      {% endif %}
+
+      {% if entry.show_recap %}
+      <div class="mb-12" data-testid="unit-session-recap-content">
+        {% include "events/_event_recap_body.html" with event=entry.event %}
+      </div>
+      {% else %}
+      <p class="mb-12 text-sm text-muted-foreground" data-testid="unit-session-recap-missing">
+        No recap has been published for this session yet.
+      </p>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endwith %}
+{% endif %}

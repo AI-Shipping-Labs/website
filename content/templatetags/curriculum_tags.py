@@ -12,7 +12,11 @@ and these filters just partition that cached Python list.
 from django import template
 from django.utils.html import format_html
 
-from content.services.course_inline import inline_unit_for, inline_units_and_topics
+from content.services.course_inline import (
+    inline_unit_for,
+    inline_units_and_topics,
+    inline_units_for,
+)
 
 register = template.Library()
 
@@ -47,6 +51,12 @@ def inline_course_unit(module, course_slug):
     return inline_unit_for(module, course_slug)
 
 
+@register.filter
+def inline_course_units(module, course_slug):
+    """Return lesson rows shown directly under a Buildcamp week."""
+    return inline_units_for(module, course_slug)
+
+
 UNIT_KIND_ICONS = {
     'lesson': 'book-open',
     'event': 'calendar',
@@ -75,4 +85,20 @@ def unit_nav_marker_html(kind):
         '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" role="img" aria-label="{}"></i>',
         unit_kind_icon(kind),
         UNIT_KIND_LABELS.get(kind, 'Lesson'),
+    )
+
+
+@register.filter
+def homework_step_nav_marker_html(title):
+    """Use a type icon; the visible link text supplies the accessible label."""
+    normalized_title = (title or '').strip().casefold()
+    if normalized_title == 'introduction':
+        icon = 'book-open'
+    elif normalized_title == 'review & submit':
+        icon = 'clipboard-check'
+    else:
+        icon = 'help-circle'
+    return format_html(
+        '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>',
+        icon,
     )

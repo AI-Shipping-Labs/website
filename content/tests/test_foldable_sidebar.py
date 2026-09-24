@@ -224,6 +224,8 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'id="sidebar-nav"')
         self.assertContains(response, 'data-testid="workshop-sidebar"')
         self.assertContains(response, "content-sidebar-collapsed")
+        self.assertContains(response, 'data-testid="reader-bottom-nav"')
+        self.assertNotContains(response, 'data-testid="top-nav-row"')
 
     def test_workshop_sidebar_marks_completed_pages(self):
         """Authenticated readers see completed workshop pages in the nav."""

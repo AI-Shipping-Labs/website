@@ -43,10 +43,6 @@
 </a>
 {% endif %}
 
-{% if not is_gated %}
-{% include "content/reader/_top_nav.html" %}
-{% endif %}
-
 <h1 class="mb-8 text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
 
 {% if is_gated %}

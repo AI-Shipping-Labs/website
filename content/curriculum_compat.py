@@ -683,6 +683,23 @@ def _install_module_unit_methods() -> None:
         course = self.module.course
         if self.module.parent_id is None:
             return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
+
+        from content.services.course_inline import canonical_inline_homework_url
+
+        homework_url = canonical_inline_homework_url(self)
+        if homework_url is not None:
+            return homework_url
+
+        # AI Buildcamp presents selected one-page child modules inline as
+        # first-level lessons. Keep their canonical URL at the child module
+        # path (the same path used to identify that first-level item), rather
+        # than exposing the presentation wrapper and its duplicate unit slug.
+        from content.services.course_inline import inline_unit_for
+
+        inline_unit = inline_unit_for(self.module, course.slug)
+        if inline_unit is not None and inline_unit.pk == self.pk:
+            return self.module.get_absolute_url()
+
         return (
             f'/courses/{course.slug}/{self.module.parent.slug}/'
             f'{self.module.slug}/{self.slug}'

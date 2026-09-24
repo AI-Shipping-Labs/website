@@ -88,6 +88,18 @@ class HomeworkFormRenderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(response, self.mc_question.text)
         self.assertContains(response, self.ff_question.text)
 
+    def test_stepper_without_deadline_renders_without_a_due_date(self):
+        self.homework.due_date = None
+        self.homework.stepper_enabled = True
+        self.homework.save(update_fields=['due_date', 'stepper_enabled'])
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.unit_url)
+
+        self.assertContains(response, 'homework-stepper-container')
+        self.assertNotContains(response, 'homework-due-date')
+        self.assertNotContains(response, 'Due  &mdash; shown in your account timezone')
+
     def test_unit_with_no_homework_row_renders_unchanged(self):
         """Backward compatibility: an is_homework unit with no matching
         Homework row keeps rendering prose-only, no form, no error."""
@@ -294,6 +306,22 @@ class HomeworkDeadlineTest(HomeworkUnitSetupMixin, TestCase):
         self.client.force_login(self.student)
         self.client.post(self.unit_url, {f'answer_{self.mc_question.pk}': '2'})
 
+        self.assertFalse(
+            Submission.objects.filter(homework=self.homework, student=self.student).exists()
+        )
+
+    def test_closed_no_deadline_post_uses_closed_copy(self):
+        self.homework.due_date = None
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['due_date', 'state'])
+        self.client.force_login(self.student)
+
+        response = self.client.post(self.unit_url, {
+            f'answer_{self.mc_question.pk}': '2',
+        }, follow=True)
+
+        self.assertContains(response, 'This homework is closed; this answer was not saved.')
+        self.assertNotContains(response, 'The deadline for this homework has passed')
         self.assertFalse(
             Submission.objects.filter(homework=self.homework, student=self.student).exists()
         )

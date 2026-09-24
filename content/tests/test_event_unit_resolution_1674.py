@@ -183,3 +183,93 @@ class EventUnitCompletionTest(TestCase):
         completion_service.mark_completed(self.user, self.unit)
         self.assertTrue(completion_service.is_completed(self.user, self.unit))
         self.assertEqual(self.course.completed_units(self.user), 1)
+
+
+class SessionUnitPresentationTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.course = Course.objects.create(
+            title='AI Engineering Buildcamp', slug='ai-buildcamp',
+            status='published', required_level=0,
+        )
+        cls.foundation = Module.objects.create(
+            course=cls.course, title='Foundations', slug='foundation',
+            sort_order=1,
+        )
+        cls.session_module = Module.objects.create(
+            course=cls.course, parent=cls.foundation, title='Session 1',
+            slug='session', sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.session_module, title='Session 1', slug='session',
+            sort_order=1, kind='event', session_position=1,
+        )
+        cls.user = User.objects.create_user(
+            email='session-presentation@test.com', password='pw',
+        )
+        cls.series = _make_series(
+            name='Buildcamp office hours', slug='session-presentation-series',
+            visibility='hidden',
+        )
+        cls.cohort = Cohort.objects.create(
+            course=cls.course, name='Cohort 4', mode='cohort',
+            start_date=datetime.date(2026, 9, 1),
+            end_date=datetime.date(2026, 12, 1), event_series=cls.series,
+            external_key='4',
+        )
+        CohortEnrollment.objects.create(user=cls.user, cohort=cls.cohort)
+        cls.event = _make_event(
+            series=cls.series, position=1,
+            when=datetime.datetime.now(tz=datetime.timezone.utc)
+                - datetime.timedelta(days=1),
+            status='completed',
+            title='AI Engineering Buildcamp — Office Hours — Session 1',
+            description=(
+                'Weekly office hours for cohort 4 of the AI Engineering '
+                'Buildcamp (Maven course). Mondays 17:00 Europe/Berlin. '
+                'Recordings and recaps are shared with enrolled cohort '
+                'members. Hidden series: occurrences render only on the '
+                'buildcamp course page for entitled members, never in public '
+                'event listings.'
+            ),
+            recap_notes='Session 1 recap: we reviewed retrieval quality.',
+            recording_url='https://www.youtube.com/watch?v=p64Pik3OeIA',
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_session_lesson_hides_internal_note_and_keeps_event_details(self):
+        response = self.client.get(self.unit.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-testid="unit-session-content"')
+        self.assertContains(response, 'data-testid="unit-session-event-metadata"')
+        self.assertNotContains(response, 'data-testid="unit-session-recording-section"')
+        self.assertNotContains(response, 'data-testid="unit-session-recap-section"')
+        self.assertContains(response, self.event.title)
+        self.assertContains(response, 'Weekly office hours for cohort 4')
+        self.assertContains(response, 'Mondays 17:00 Europe/Berlin')
+        self.assertContains(response, 'data-testid="unit-session-event-details"')
+        self.assertContains(response, f'href="{self.event.get_absolute_url()}"')
+        self.assertNotContains(response, 'Hidden series:')
+        self.assertNotContains(response, 'public event listings')
+        self.assertContains(response, 'Session 1 recap: we reviewed retrieval quality.')
+        self.assertContains(response, 'data-testid="unit-session-recording"')
+        self.assertContains(response, 'data-video-id="p64Pik3OeIA"')
+
+    def test_upcoming_session_keeps_maven_registration_note(self):
+        self.event.start_datetime = (
+            datetime.datetime.now(tz=datetime.timezone.utc)
+            + datetime.timedelta(days=3)
+        )
+        self.event.status = 'upcoming'
+        self.event.save(update_fields=['start_datetime', 'status'])
+
+        response = self.client.get(self.unit.get_absolute_url())
+
+        self.assertContains(response, 'data-testid="unit-session-maven-registration"')
+        self.assertContains(
+            response,
+            'Maven handles registration automatically; no separate registration is needed.',
+        )

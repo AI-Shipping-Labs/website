@@ -6,12 +6,7 @@
 {% include "content/reader/_mobile_progress_bar.html" %}
 
 <!-- Breadcrumb -->
-<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb>
-  <a href="/courses" class="flex-shrink-0 transition-colors hover:text-foreground">Courses</a>
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-  <a href="/courses/{{ course.slug }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-course">{{ course.title }}</a>
-  <a href="/courses/{{ course.slug }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden" data-testid="breadcrumb-course-short">...</a>
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
+<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
   <a href="{% url 'course_home' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex-shrink-0 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-course-home">Course home</a>
   {% if unit.module.parent_id %}
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
@@ -20,8 +15,6 @@
   <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
   <span class="truncate text-foreground">{{ unit.title }}</span>
 </div>
-
-{% include "content/reader/_top_nav.html" %}
 
 <div class="mb-8 flex flex-wrap items-center gap-3">
   <h1 class="flex items-start gap-2.5 text-2xl font-semibold tracking-tight sm:text-3xl">
@@ -34,11 +27,11 @@
 </div>
 
 {% if unit.kind == "event" %}
-<div class="mb-8" data-testid="unit-session-card">
+<div class="mb-8" data-testid="unit-session-reader-content">
   {% if unit_session_entry %}
-  {% include "content/_live_session_row.html" with entry=unit_session_entry user=user %}
+  {% include "content/reader/_unit_session_content.html" with entry=unit_session_entry %}
   {% else %}
-  <p class="rounded-lg border border-border bg-card px-4 py-3 text-sm text-muted-foreground" data-testid="unit-session-not-scheduled">
+  <p class="text-sm text-muted-foreground" data-testid="unit-session-not-scheduled">
     Session materials for this slot haven't been scheduled yet.
   </p>
   {% endif %}
@@ -57,15 +50,17 @@
 </div>
 {% endif %}
 
-{% if unit.homework_html or homework %}
+{% if homework_stepper %}
+<div class="mb-12" data-testid="homework-stepper-container">
+  {% include "homework_steps/_stepper.html" %}
+</div>
+{% elif unit.homework_html or homework %}
 <div class="mb-12 rounded-lg border border-border bg-card p-6">
   <h2 class="mb-4 flex items-center gap-2 text-xl font-semibold tracking-tight">
     <i data-lucide="clipboard-list" class="h-5 w-5 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
     Homework
   </h2>
-  {% if homework_stepper %}
-    {% include "homework_steps/_stepper.html" %}
-  {% elif unit.homework_html %}
+  {% if unit.homework_html %}
   <div class="prose">
     {{ unit.homework_html|safe }}
   </div>
@@ -157,7 +152,7 @@
 </div>
 {% endif %}
 
-{% include "content/reader/_bottom_nav.html" %}
+{% if not homework_stepper %}{% include "content/reader/_bottom_nav.html" %}{% endif %}
 
 {% if unit_content_id %}
 {% include "comments/_qa_section.html" with content_id=unit_content_id user_authenticated=user_authenticated %}

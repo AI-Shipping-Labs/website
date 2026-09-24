@@ -10,11 +10,12 @@ pages.
 import re
 import xml.etree.ElementTree as ET
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
-import pytest
 
+from accounts.templatetags.accounts_extras import button_classes
 from content.access import LEVEL_OPEN
 from tests.fixtures import TierSetupMixin, set_membership
 from topics.models import STATUS_DRAFT, TopicPage
@@ -243,8 +244,7 @@ class HubConversionSectionTest(_TopicsFixtureMixin, TestCase):
         self.assertIn('href="/workshops"', tag)
         self.assertIn('Browse workshops', content)
         # size='md' secondary chrome from the button_classes owner.
-        self.assertIn('px-4 py-2', tag)
-        self.assertIn('border border-border bg-transparent', tag)
+        self.assertIn(button_classes('secondary', size='md'), tag)
 
 
 class TopicPageOpenAccessTest(_TopicsFixtureMixin, TestCase):
@@ -298,14 +298,14 @@ class TopicConversionSectionTest(_TopicsFixtureMixin, TestCase):
         content = self.client.get('/topics/rag/').content.decode()
         tag = _anchor_tag(content, 'topics-cta-membership')
         self.assertIn('href="/membership"', tag)
-        self.assertIn('px-6 py-3', tag)
+        self.assertIn(button_classes('primary', size='lg'), tag)
 
     def test_buildcamp_cta_is_secondary_medium(self):
         content = self.client.get('/topics/rag/').content.decode()
         tag = _anchor_tag(content, 'topics-cta-buildcamp')
         self.assertIn('href="/courses/ai-buildcamp"', tag)
         self.assertIn('Explore the AI Buildcamp', content)
-        self.assertIn('px-4 py-2', tag)
+        self.assertIn(button_classes('secondary', size='md'), tag)
 
 
 class TopicRelatedLinksTest(_TopicsFixtureMixin, TestCase):
@@ -413,7 +413,8 @@ class TopicsSitemapInclusionTest(_TopicsFixtureMixin, TestCase):
 
     def test_sitemap_lists_hub_and_published_pages(self):
         response = self.client.get('/sitemap.xml')
-        self.assertEqual(response.status_code, 200)
+        root = ET.fromstring(response.content)
+        self.assertEqual(root.tag, f'{SITEMAP_NS}urlset')
         entries = _sitemap_paths_and_lastmods(response)
         self.assertIn('/topics/', entries)
         self.assertIn('/topics/rag/', entries)

@@ -109,8 +109,8 @@ class TopicsSitemapInclusionTest(TestCase):
     def _sitemap_entries(self):
         """Parse /sitemap.xml into {path: lastmod-text}."""
         response = self.client.get('/sitemap.xml')
-        self.assertEqual(response.status_code, 200)
         root = ET.fromstring(response.content)
+        self.assertEqual(root.tag, f'{SITEMAP_NS}urlset')
         entries = {}
         for url in root.findall(f'{SITEMAP_NS}url'):
             loc = url.findtext(f'{SITEMAP_NS}loc') or ''

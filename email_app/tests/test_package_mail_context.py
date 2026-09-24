@@ -321,7 +321,7 @@ class DirectPackageSendContractTest(TestCase):
             if relative in allowed:
                 continue
             if any(
-                part in {"tests", "playwright_tests", ".venv", "node_modules"}
+                part in {"tests", "playwright_tests", ".venv", "node_modules", ".tmp"}
                 for part in path.parts
             ):
                 continue

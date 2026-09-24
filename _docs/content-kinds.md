@@ -8,9 +8,11 @@ Site-owned kinds registered from `content.kinds` at app ready, and by
 Public `wiki/` pages are the package `wiki` kind. They fill
 `community_base.knowledge_base` and are public.
 
-Member-gated pages live under `_wiki/` in the private wiki repository. They
-are the site-owned `member_wiki` kind, stored in the `topics` app, gated at
-Basic and above (issue 1688). The C7.12 `aisl-wiki` conversion profile that
+Pages under `_wiki/` in the private wiki repository are the site-owned
+`member_wiki` kind, stored in the `topics` app. Originally gated at Basic
+and above (issue 1688), they are open to everyone since issue 1804 — the
+free top of the funnel with conversion CTAs in the site templates. The
+C7.12 `aisl-wiki` conversion profile that
 writes `kind: wiki, path: wiki` must not be pointed at `_wiki/`. A7.3 converts
 that section as `member_wiki`.
 

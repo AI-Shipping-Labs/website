@@ -207,8 +207,14 @@ class ReaderNavigationScopeTest(TestCase):
 
     def test_project_attempt_module_keeps_overview_and_attempt_cards(self):
         now = timezone.now()
+        cohort = Cohort.objects.create(
+            course=self.course, name='Scoped cohort', external_key='scoped',
+            start_date=timezone.localdate() - datetime.timedelta(days=1),
+            end_date=timezone.localdate() + datetime.timedelta(days=60),
+        )
+        CohortEnrollment.objects.get_or_create(user=self.user, cohort=cohort)
         CourseProject.objects.create(
-            course=self.course, module=self.middle,
+            course=self.course, cohort=cohort, module=self.middle,
             slug='attempt-1', title='Project attempt 1',
             submission_due_at=now + datetime.timedelta(days=7),
             review_due_at=now + datetime.timedelta(days=14),

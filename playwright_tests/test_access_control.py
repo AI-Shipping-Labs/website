@@ -1580,8 +1580,18 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
         unit_link = page.locator('a:has-text("Lesson One")')
         assert unit_link.count() >= 1
 
-        # Progress indicator visible
-        assert "Progress" in body or "completed" in body.lower()
+        # Progress indicator visible on the learner Home
+        page.goto(
+            f"{django_server}/courses/main-course/home",
+            wait_until="domcontentloaded",
+        )
+        home_body = page.content()
+        assert "Progress" in home_body or "completed" in home_body.lower()
+        page.goto(
+            f"{django_server}/courses/main-course",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
 
         # No upgrade CTAs
         assert "Upgrade" not in body

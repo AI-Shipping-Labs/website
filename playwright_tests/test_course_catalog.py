@@ -566,7 +566,11 @@ class TestScenario3FreeUserFreeCourseProgress:
         body = page.content()
         assert "1 of 3 completed" in body
 
-        # Completed unit shows a checkmark icon in the syllabus
+        # Completed unit shows a checkmark icon in the reader sidebar
+        page.goto(
+            f"{django_server}/courses/python-basics/fundamentals/variables",
+            wait_until="domcontentloaded",
+        )
         check_icons = page.locator(
             '[data-lucide="check-circle-2"]'
         )
@@ -633,10 +637,25 @@ class TestScenario4MainMemberPaidCourseProgress:
         )
         assert k8s_link.count() >= 1
 
-        # Progress shows "0 of 2 completed"
+        # Progress shows "0 of 2 completed" (progress card lives on Home)
+        page.goto(
+            f"{django_server}/courses/advanced-mlops/home",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
         assert "0 of 2 completed" in body
 
-        # Step 2: Click on the first unit
+        # Step 2: back to the overview, then click on the first unit
+        page.goto(
+            f"{django_server}/courses/advanced-mlops",
+            wait_until="domcontentloaded",
+        )
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+        docker_link = page.locator(
+            'a[href="/courses/advanced-mlops/deployment/docker-basics"]'
+        )
+
+        # Click on the first unit
         docker_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
@@ -685,9 +704,9 @@ class TestScenario4MainMemberPaidCourseProgress:
         mark_btn.click()
         pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
-        # Step 6: Navigate back to course detail
+        # Step 6: Home shows the updated progress summary
         page.goto(
-            f"{django_server}/courses/advanced-mlops",
+            f"{django_server}/courses/advanced-mlops/home",
             wait_until="domcontentloaded",
         )
         body = page.content()

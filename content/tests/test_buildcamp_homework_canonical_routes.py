@@ -57,7 +57,7 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
 
     def _assert_route_resolves_to(self, url, expected_unit):
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, expected_unit.title)
         self.assertEqual(response.context['unit'].pk, expected_unit.pk)
 
     def test_module_one_assignment_uses_the_homework_module_path(self):
@@ -103,5 +103,4 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
             '/courses/ai-buildcamp/foundation/homework/capstone-ai-project',
         )
         response = self.client.get('/courses/ai-buildcamp/foundation/homework-capstone')
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, colliding_unit.title)

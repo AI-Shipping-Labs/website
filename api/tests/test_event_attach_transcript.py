@@ -124,7 +124,7 @@ class EventAttachTranscriptApiTest(TestCase):
 
         response = self._post({'vtt': SAMPLE_VTT}, **self._auth())
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'stored')
         body = response.json()
         self.assertEqual(body['transcript_status'], 'stored')
         self.assertGreater(body['characters'], 0)

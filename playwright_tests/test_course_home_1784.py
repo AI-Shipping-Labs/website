@@ -94,7 +94,7 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     home_url = f'{django_server}/courses/{course.slug}/home?cohort=current'
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.goto(home_url, wait_until='domcontentloaded')
-    expect(page.locator('[data-testid="course-home-next-session"]')).to_contain_text(event.title)
+    expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text(event.title)
     expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text(homework.title)
     expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text('Due soon')
     expect(page.locator('[data-testid="course-home-focus"]')).not_to_contain_text(
@@ -111,7 +111,7 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['y'] < 844
     assert page.locator('[data-testid="course-home-weekly-work-link"]').bounding_box()['height'] >= 44
-    assert page.locator('[data-testid="course-home-session-link"]').bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-live-session-action"]').bounding_box()['height'] >= 44
     assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     page.screenshot(path=str(screenshots / 'mobile-light.png'), full_page=True)
     page.evaluate("localStorage.setItem('theme', 'dark')")
@@ -120,7 +120,7 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.screenshot(path=str(screenshots / 'desktop-dark.png'), full_page=True)
 
-    page.locator('[data-testid="course-home-next-session"]').get_by_role(
+    page.locator('[data-testid="course-home-live-sessions"]').get_by_role(
         'link', name='View session',
     ).click()
     expect(page).to_have_url(f'{django_server}{event.get_absolute_url()}')

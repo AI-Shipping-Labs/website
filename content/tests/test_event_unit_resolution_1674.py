@@ -278,7 +278,6 @@ class SessionUnitPresentationTest(TestCase):
     def test_session_lesson_hides_internal_note_and_keeps_event_details(self):
         response = self.client.get(self.unit.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="unit-session-content"')
         self.assertContains(response, 'data-testid="unit-session-event-metadata"')
         self.assertNotContains(response, 'data-testid="unit-session-recording-section"')

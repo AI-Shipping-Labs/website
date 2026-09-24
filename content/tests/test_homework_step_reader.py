@@ -288,7 +288,6 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         response = self.client.get(self.unit_url)
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['homework_due_date_display'], '')
         self.assertNotContains(response, 'data-testid="homework-due-date"')
 
@@ -299,7 +298,6 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         response = self.client.get(self.unit_url)
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
         self.assertNotContains(response, 'deadline has passed')
 

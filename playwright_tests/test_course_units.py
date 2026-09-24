@@ -669,9 +669,9 @@ class TestScenario7ProgressBar:
 
         context = _auth_context(browser, "premium-pb@test.com")
         page = context.new_page()
-        # Step 1: Check initial progress (0 of 3)
+        # Step 1: Check initial progress (0 of 3) on the learner Home
         page.goto(
-            f"{django_server}/courses/progress-course",
+            f"{django_server}/courses/progress-course/home",
             wait_until="domcontentloaded",
         )
         body = page.content()
@@ -697,9 +697,9 @@ class TestScenario7ProgressBar:
         complete_btn.click()
         pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
 
-        # Step 4: Navigate back to course detail
+        # Step 4: Home shows the updated progress summary
         page.goto(
-            f"{django_server}/courses/progress-course",
+            f"{django_server}/courses/progress-course/home",
             wait_until="domcontentloaded",
         )
         body = page.content()

@@ -28,6 +28,7 @@ instead.
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Value
 from django.utils import timezone
 
 from content.models.cohort import COHORT_MODE_SELF_PACED

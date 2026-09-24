@@ -86,6 +86,13 @@ def _build_live_session_entries(events_qs, user):
     return entries
 
 
+def _course_projects_for_cohort(projects, cohort):
+    """Return projects owned by the selected cohort, or none without one."""
+    if cohort is None:
+        return []
+    return [project for project in projects if project.cohort_id == cohort.pk]
+
+
 def _course_grid_classes(count):
     """Return the canonical listing-grid class string.
 
@@ -280,19 +287,16 @@ def course_detail(request, slug):
 
     course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
     has_configured_projects = bool(course_projects)
-    if viewer_cohort is not None or request.GET.get('cohort'):
-        course_projects = [
-            project for project in course_projects
-            if project.cohort_id is None
-            or project.cohort_id == getattr(viewer_cohort, 'pk', None)
-        ]
+    project_cohort = viewer_cohort
+    if not request.GET.get('cohort') and enrolled_cohort is not None:
+        project_cohort = enrolled_cohort
+    course_projects = _course_projects_for_cohort(course_projects, project_cohort)
     preview_project_ids = set()
     if not user.is_staff:
         course_projects = [
             project for project in course_projects
             if (
-                project.cohort_id is None
-                or project.cohort_id in user_enrolled_cohort_ids
+                project.cohort_id in user_enrolled_cohort_ids
                 or project.cohort_id == getattr(viewer_cohort, 'pk', None)
             )
         ]
@@ -749,12 +753,19 @@ def _render_module_overview(request, course, module):
     viewer_cohort, _ = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
     )
-    if viewer_cohort is not None or request.GET.get('cohort'):
-        course_projects = [
-            project for project in course_projects
-            if project.cohort_id is None
-            or project.cohort_id == getattr(viewer_cohort, 'pk', None)
-        ]
+    project_cohort = viewer_cohort
+    if user.is_authenticated and not request.GET.get('cohort'):
+        enrolled_cohort, enrolled_is_preview = select_display_cohort(course, user)
+        if enrolled_is_preview:
+            enrolled_cohort = None
+        if enrolled_cohort is None:
+            self_paced_enrollment = CohortEnrollment.objects.filter(
+                user=user, cohort__course=course, cohort__mode='self_paced',
+            ).select_related('cohort').first()
+            enrolled_cohort = self_paced_enrollment.cohort if self_paced_enrollment else None
+        if enrolled_cohort is not None:
+            project_cohort = enrolled_cohort
+    course_projects = _course_projects_for_cohort(course_projects, project_cohort)
     preview_project_ids = set()
     if not user.is_staff:
         cohort_ids = set(CohortEnrollment.objects.filter(
@@ -762,7 +773,7 @@ def _render_module_overview(request, course, module):
         ).values_list('cohort_id', flat=True)) if user.is_authenticated else set()
         course_projects = [
             project for project in course_projects
-            if (project.cohort_id is None or project.cohort_id in cohort_ids
+            if (project.cohort_id in cohort_ids
                 or project.cohort_id == getattr(viewer_cohort, 'pk', None))
         ]
         preview_project_ids = {

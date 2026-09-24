@@ -55,12 +55,14 @@
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Contents</h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
           {% for child in display_children %}
-          {% with inline_unit=child|inline_course_unit:course.slug %}
-          {% if inline_unit %}
+          {% with inline_units=child|inline_course_units:course.slug %}
+          {% if inline_units %}
+          {% for inline_unit in inline_units %}
           <a href="{{ inline_unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-lesson-link">
             <i data-lucide="{{ inline_unit.kind|unit_kind_icon }}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
             {{ inline_unit.title }}
           </a>
+          {% endfor %}
           {% else %}
           <a href="{{ child.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-submodule-link">
             <i data-lucide="folder" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
@@ -86,6 +88,11 @@
         </h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
           {% for submodule in submodules %}
+          {% if course.slug == 'ai-buildcamp' and module.slug == 'bonus' %}
+          {% with week=submodule|bonus_week %}
+          {% if week %}{% ifchanged week %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-bonus-week">Week {{ week }}</h3>{% endifchanged %}{% endif %}
+          {% endwith %}
+          {% endif %}
           <a href="{{ submodule.get_absolute_url }}"
              class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]"
              data-testid="module-submodule-link">

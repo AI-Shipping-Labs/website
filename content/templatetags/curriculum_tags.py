@@ -9,6 +9,8 @@ siblings, from the SAME prefetched list/queryset with no extra query —
 and these filters just partition that cached Python list.
 """
 
+import re
+
 from django import template
 from django.utils.html import format_html
 
@@ -31,6 +33,13 @@ def required_only(items):
 def bonus_only(items):
     """Return the bonus items from ``items``, order preserved."""
     return [item for item in items if getattr(item, 'is_bonus', False)]
+
+
+@register.filter
+def bonus_week(module):
+    """Read the source week from a Buildcamp Bonus topic title."""
+    match = re.match(r'^Week ([1-9][0-9]*): ', module.title)
+    return int(match.group(1)) if match else None
 
 
 @register.filter

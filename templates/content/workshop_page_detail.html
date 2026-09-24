@@ -12,7 +12,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 {% include "includes/_studio_edit_button.html" with obj=workshop %}
-<main class="min-h-screen pt-24">
+<main class="min-h-screen {% if request.user.is_staff %}pt-24{% else %}pt-16{% endif %}">
   {% include "content/reader/_layout.html" with reader_content_template="content/reader/_workshop_page_content.html" reader_back_url=workshop.get_absolute_url reader_back_title=workshop.title reader_back_testid="sidebar-back-to-workshop" reader_sidebar_label="workshop navigation" reader_mobile_label="Workshop Navigation" reader_nav_aria_label="Workshop pages" reader_nav_testid="workshop-sidebar" reader_nav_kind="workshop" %}
 </main>
 {% include "includes/footer.html" %}

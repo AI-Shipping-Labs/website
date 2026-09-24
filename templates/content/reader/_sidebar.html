@@ -53,6 +53,11 @@
             <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm font-semibold leading-snug text-foreground break-words">{% if scoped_module.is_bonus and scoped_module.title == 'Bonus' %}Optional{% else %}{{ scoped_module.title }}{% endif %}{% if scoped_module.is_bonus and '(Optional)' not in scoped_module.title and scoped_module.title != 'Bonus' and scoped_module.title != 'Optional' %}<span class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}</p>
           </div>
           {% for nav_child in scoped_module.children.all %}
+            {% if course.slug == 'ai-buildcamp' and scoped_module.slug == 'bonus' %}
+            {% with week=nav_child|bonus_week %}
+            {% if week %}{% ifchanged week %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-bonus-week">Week {{ week }}</p>{% endifchanged %}{% endif %}
+            {% endwith %}
+            {% endif %}
             {% with inline_units=nav_child|inline_course_units:course.slug %}
             {% if inline_units %}
             {% for inline_unit in inline_units %}
@@ -161,6 +166,11 @@
             {% endcomment %}
             <div class="ml-4">
               {% for nav_child in nav_children %}
+              {% if course.slug == 'ai-buildcamp' and nav_module.slug == 'bonus' %}
+              {% with week=nav_child|bonus_week %}
+              {% if week %}{% ifchanged week %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-bonus-week">Week {{ week }}</p>{% endifchanged %}{% endif %}
+              {% endwith %}
+              {% endif %}
               {% with inline_units=nav_child|inline_course_units:course.slug %}
               {% if inline_units %}
               {% for inline_unit in inline_units %}

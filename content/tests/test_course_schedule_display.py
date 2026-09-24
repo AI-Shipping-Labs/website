@@ -53,17 +53,17 @@ class CourseScheduleDisplayTest(TestCase):
             cohort=cls.c5, content_id=cls.unit.content_id, slug='hw1',
             title='Homework 1', due_date=cls.due5,
         )
-        CourseProject.objects.create(
+        cls.attempt4 = CourseProject.objects.create(
             course=cls.course, cohort=cls.c4, module=cls.topic,
             slug='attempt-4', title='Attempt 4',
             submission_due_at=cls.due4, review_due_at=cls.due4.replace(day=5),
         )
-        CourseProject.objects.create(
+        cls.attempt5 = CourseProject.objects.create(
             course=cls.course, cohort=cls.c5, module=cls.topic,
             slug='attempt-5', title='Attempt 5',
             submission_due_at=cls.due5, review_due_at=cls.due5.replace(day=5),
         )
-        CourseProject.objects.create(
+        cls.unscoped_attempt = CourseProject.objects.create(
             course=cls.course, module=cls.topic,
             slug='open-attempt', title='Open Attempt',
             submission_due_at=cls.due4, review_due_at=cls.due4.replace(day=5),
@@ -103,6 +103,56 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertEqual(response.context['module_deadline_summaries'][self.week.pk]['count'], 5)
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
         self.assertContains(response, 'Oct 1, 2026 20:00 Europe/Berlin')
+
+    def test_course_projects_are_scoped_to_the_selected_cohort(self):
+        self.client.force_login(self.learner)
+
+        course_response = self.client.get('/courses/ai-buildcamp')
+        self.assertEqual(
+            [project.pk for project in course_response.context['course_projects']],
+            [self.attempt4.pk],
+        )
+        self.assertContains(course_response, 'Attempt 4')
+        self.assertNotContains(course_response, 'Attempt 5')
+        self.assertNotContains(course_response, 'Open Attempt')
+
+        module_response = self.client.get(self.topic.get_absolute_url())
+        self.assertEqual(
+            [project.pk for project in module_response.context['course_projects']],
+            [self.attempt4.pk],
+        )
+        self.assertContains(module_response, 'Attempt 4')
+        self.assertNotContains(module_response, 'Attempt 5')
+        self.assertNotContains(module_response, 'Open Attempt')
+
+    def test_anonymous_project_preview_is_cohort_scoped_or_empty(self):
+        no_selection = self.client.get('/courses/ai-buildcamp')
+        self.assertEqual(no_selection.context['course_projects'], [])
+        self.assertNotContains(no_selection, 'Attempt 4')
+        self.assertNotContains(no_selection, 'Attempt 5')
+        self.assertNotContains(no_selection, 'Open Attempt')
+
+        preview = self.client.get('/courses/ai-buildcamp?cohort=4')
+        self.assertEqual(
+            [project.pk for project in preview.context['course_projects']],
+            [self.attempt4.pk],
+        )
+        self.assertEqual(
+            preview.context['preview_project_ids'], {self.attempt4.pk},
+        )
+        self.assertContains(preview, 'Attempt 4')
+        self.assertNotContains(preview, 'Attempt 5')
+        self.assertNotContains(preview, 'Open Attempt')
+
+        module_preview = self.client.get(
+            f'{self.topic.get_absolute_url()}?cohort=4',
+        )
+        self.assertEqual(
+            [project.pk for project in module_preview.context['course_projects']],
+            [self.attempt4.pk],
+        )
+        self.assertNotContains(module_preview, 'Attempt 5')
+        self.assertNotContains(module_preview, 'Open Attempt')
 
     def test_dual_enrollment_prefers_current_then_requested_owned_cohort(self):
         today = django_timezone.localdate()
@@ -183,7 +233,7 @@ class CourseScheduleDisplayTest(TestCase):
         })
         self.assertNotContains(response, f'href="{submit_url}"')
 
-    def test_course_access_without_cohort_can_submit_global_attempt(self):
+    def test_course_access_without_cohort_does_not_show_unscoped_project(self):
         learner = get_user_model().objects.create_user(
             email='course-access-only@example.com', password='pw',
         )
@@ -193,11 +243,9 @@ class CourseScheduleDisplayTest(TestCase):
             user=learner, course=self.course, access_type='granted',
         )
         self.client.force_login(learner)
-        submit_url = reverse('course_project_submit', kwargs={
-            'slug': self.course.slug, 'attempt_slug': 'open-attempt',
-        })
         for url in ('/courses/ai-buildcamp', self.topic.get_absolute_url()):
             with self.subTest(url=url):
                 response = self.client.get(url)
-                self.assertContains(response, f'href="{submit_url}"')
+                self.assertEqual(response.context['course_projects'], [])
+                self.assertNotContains(response, 'Open Attempt')
                 self.assertNotContains(response, 'Attempt 4')

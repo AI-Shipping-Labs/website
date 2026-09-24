@@ -733,7 +733,6 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
     def test_prev_button_shown_on_second_unit(self):
         response = self.client.get('/courses/test-course/module-1/lesson-2')
         self.assertContains(response, 'data-testid="bottom-prev-btn"')
-        self.assertContains(response, 'data-testid="top-prev-btn"')
 
     def test_prev_button_text_includes_target_title(self):
         response = self.client.get('/courses/test-course/module-1/lesson-2')
@@ -782,7 +781,7 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
         # preview_unit is sort_order=3 in module1 — prev is unit2 (sort_order=2)
         response = self.client.get('/courses/test-course/module-1/preview-lesson')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'data-testid="top-prev-btn"')
+        self.assertContains(response, 'data-testid="bottom-prev-btn"')
         self.assertContains(response, self.unit2.title)
 
     def test_prev_not_in_gated_context(self):

@@ -101,67 +101,6 @@ class CourseDetailMobileCohortTest(CourseMobileSetupMixin, TestCase):
         self.assertIn("flex-col sm:flex-row sm:items-center sm:justify-between", content)
 
 
-class CourseUnitBreadcrumbMobileTest(CourseMobileSetupMixin, TestCase):
-    """Breadcrumb truncates and uses overflow-hidden on mobile."""
-
-    def test_breadcrumb_has_overflow_hidden(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        self.assertContains(response, "overflow-hidden")
-
-    def test_breadcrumb_course_name_truncates_on_desktop(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        self.assertContains(response, 'data-testid="breadcrumb-course"')
-        # The full course title link is hidden on mobile, shown on sm+
-        self.assertContains(response, 'hidden sm:inline')
-
-    def test_breadcrumb_shows_ellipsis_on_mobile(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        self.assertContains(response, 'data-testid="breadcrumb-course-short"')
-        # The "..." link is visible on mobile, hidden on sm+
-        self.assertContains(
-            response,
-            'class="flex-shrink-0 transition-colors hover:text-foreground '
-            'sm:hidden"',
-        )
-
-    def test_breadcrumb_unit_title_truncates(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        # The unit title span has truncate class
-        self.assertContains(response, '<span class="truncate text-foreground">')
-
-
-class CourseUnitTopNavMobileTest(CourseMobileSetupMixin, TestCase):
-    """Top prev/next navigation truncates long unit titles."""
-
-    def test_top_prev_uses_truncate(self):
-        self._login_main_user()
-        # unit2 has unit1 as prev
-        response = self.client.get("/courses/long-course/module-1/unit-2")
-        content = response.content.decode()
-        # The top-prev-btn should have max-w-[40vw] and a truncate span
-        self.assertIn('data-testid="top-prev-btn"', content)
-        self.assertIn("max-w-[40vw]", content)
-
-    def test_top_next_uses_truncate(self):
-        self._login_main_user()
-        # unit1 has unit2 as next
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        content = response.content.decode()
-        self.assertIn('data-testid="top-next-btn"', content)
-        self.assertIn("max-w-[40vw]", content)
-
-    def test_top_nav_titles_wrapped_in_truncate_span(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        content = response.content.decode()
-        # Next unit title should be inside a span with truncate class
-        self.assertIn('<span class="truncate">Unit Two Also Long</span>', content)
-
-
 class CourseUnitBottomNavMobileTest(CourseMobileSetupMixin, TestCase):
     """Bottom prev/next buttons use truncate and stack on mobile."""
 

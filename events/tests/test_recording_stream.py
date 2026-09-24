@@ -227,7 +227,13 @@ class EventRecordingStreamTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn('amazonaws.com', response['Location'])
-        client.generate_presigned_url.assert_called_once()
+        self.assertEqual(client.generate_presigned_url.call_count, 1)
+        call = client.generate_presigned_url.call_args
+        self.assertEqual(call.args[0], 'get_object')
+        self.assertEqual(
+            call.kwargs['Params']['Key'],
+            'recordings/2026/enrolled-hidden-session.mp4',
+        )
 
     def test_hidden_series_recording_plays_for_staff(self):
         series = EventSeries.objects.create(
@@ -255,7 +261,13 @@ class EventRecordingStreamTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn('amazonaws.com', response['Location'])
-        client.generate_presigned_url.assert_called_once()
+        self.assertEqual(client.generate_presigned_url.call_count, 1)
+        call = client.generate_presigned_url.call_args
+        self.assertEqual(call.args[0], 'get_object')
+        self.assertEqual(
+            call.kwargs['Params']['Key'],
+            'recordings/2026/staff-hidden-session.mp4',
+        )
 
     # --- Deny paths (must never emit a presigned URL) --------------------
 

@@ -83,7 +83,7 @@ class AttachEventTranscriptCommandTest(TestCase):
             self.event,
             ('\ufeff' + SAMPLE_VTT).encode('utf-8'),
         )
-        mock_text.assert_called_once()
+        mock_text.assert_called_once_with(self.event, 'Hello from the session.')
 
     def test_unknown_slug_errors(self):
         with self.assertRaisesMessage(Exception, 'No event with slug'):

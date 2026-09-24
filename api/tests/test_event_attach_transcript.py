@@ -136,8 +136,11 @@ class EventAttachTranscriptApiTest(TestCase):
         self.assertTrue(self.event.transcript_s3_url.endswith('.vtt'))
         self.assertIsNone(self.event.transcript_unavailable_at)
         self.assertEqual(self.event.transcript_fetch_attempts, 0)
-        self.archive_vtt.assert_called_once()
-        self.archive_text.assert_called_once()
+        self.archive_vtt.assert_called_once_with(self.event, SAMPLE_VTT)
+        self.archive_text.assert_called_once_with(
+            self.event,
+            'Hello from the session.\nSecond topic: deploying with uv.',
+        )
 
     def test_attach_archive_failure_is_422_without_storing(self):
         from jobs.tasks.recording_transcript import TranscriptArchiveError

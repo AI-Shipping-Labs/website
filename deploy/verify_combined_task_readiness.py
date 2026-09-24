@@ -199,6 +199,46 @@ def _require_ecs_arn(value: Any, invariant: str) -> str:
     return value
 
 
+# The verifier runs seconds after the /ping grace loop already proved the
+# new tag serving, but ECS deployment counts and rollout state converge
+# non-atomically around cutover, so a one-shot describe-services snapshot
+# can catch a transient mismatch on a healthy deployment. Treat these
+# deployment-state invariants as eventually consistent, like the
+# CloudWatch markers below: poll them within the same bounded deadline.
+# Persistent states still fail closed with the last observed invariant.
+# AWS call failures and malformed payloads are deterministic and stay
+# terminal.
+TRANSIENT_PRIMARY_INVARIANTS = frozenset(
+    {
+        "primary-deployment-missing",
+        "primary-rollout-not-completed",
+        "primary-counts-not-ready",
+    }
+)
+
+
+def _resolve_primary_ready(
+    aws: AwsCli, *, cluster: str, service: str, poll_seconds: int
+) -> str:
+    last_error = VerificationError("deadline-exhausted")
+    attempted = False
+    while True:
+        if attempted and aws.deadline - time.monotonic() <= 0:
+            break
+        attempted = True
+        try:
+            return _resolve_primary(aws, cluster=cluster, service=service)
+        except VerificationError as error:
+            if error.invariant not in TRANSIENT_PRIMARY_INVARIANTS:
+                raise
+            last_error = error
+        remaining = aws.deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(float(poll_seconds), remaining))
+    raise last_error
+
+
 def _resolve_primary(aws: AwsCli, *, cluster: str, service: str) -> str:
     payload = aws.call(
         "ecs",
@@ -659,10 +699,11 @@ def verify(args: argparse.Namespace) -> tuple[
     deadline = time.monotonic() + args.timeout_seconds
     aws = AwsCli(region=args.region, deadline=deadline)
     expected_image = f"{args.repository_uri}:{args.tag}"
-    task_definition_arn = _resolve_primary(
+    task_definition_arn = _resolve_primary_ready(
         aws,
         cluster=args.cluster,
         service=args.service,
+        poll_seconds=args.poll_seconds,
     )
     task_definition = _resolve_task_definition(
         aws,

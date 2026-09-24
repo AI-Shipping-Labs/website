@@ -79,12 +79,21 @@ def value_after(flag, default=None):
     return args[args.index(flag) + 1]
 
 if service == "ecs" and operation == "describe-services":
+    count_path = Path(os.environ["FAKE_DESCRIBE_SERVICES_COUNT"])
+    count = int(count_path.read_text()) + 1 if count_path.exists() else 1
+    count_path.write_text(str(count))
+    counts_settled = SCENARIO == "counts_settle" and count >= 2
     task_definition = (
         OLD_TASK_DEFINITION_ARN if SCENARIO == "old_primary"
         else TASK_DEFINITION_ARN
     )
     rollout = "IN_PROGRESS" if SCENARIO == "rollout_in_progress" else "COMPLETED"
-    running = 0 if SCENARIO == "counts_not_ready" else 1
+    if SCENARIO == "counts_not_ready":
+        running = 0
+    elif SCENARIO == "counts_settle":
+        running = 1 if counts_settled else 0
+    else:
+        running = 1
     output({
         "services": [{
             "deployments": [{
@@ -281,6 +290,7 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
                 "FAKE_SENTINEL_SECRET": SENTINEL_SECRET,
                 "FAKE_SENTINEL_LOG": SENTINEL_LOG,
                 "FAKE_AWS_CALLS": str(calls),
+                "FAKE_DESCRIBE_SERVICES_COUNT": str(root / "describe-services-count"),
                 "FAKE_DESCRIBE_TASKS_COUNT": str(root / "describe-count"),
                 "FAKE_LOG_FIRST_PAGE_COUNT": str(root / "log-count"),
             }
@@ -362,6 +372,23 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
             msg=f"stdout={result.stdout}\nstderr={result.stderr}",
         )
         self.assertGreaterEqual(calls.count("logs get-log-events"), 8)
+        self.assertSanitized(result)
+
+    def test_transient_primary_counts_settle_within_the_deadline(self):
+        # Issue #1813: ECS reports deployment counts non-atomically around
+        # cutover, and this verifier runs right after /ping already proved
+        # the new tag serving. The first snapshot may show a transient
+        # counts mismatch; the verifier must poll the state invariants
+        # within the deadline and pass once the deployment settles.
+        result, calls = self._run_scenario("counts_settle", timeout=20)
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"stdout={result.stdout}\nstderr={result.stderr}",
+        )
+        self.assertIn("COMBINED_READINESS verified", result.stdout)
+        self.assertGreaterEqual(calls.count("ecs describe-services"), 2)
         self.assertSanitized(result)
 
     def test_primary_revision_and_rollout_failures_are_terminal(self):

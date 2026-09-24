@@ -27,17 +27,9 @@
         {% endif %}
       </div>
 
-      {% if is_gated %}
-        {% if gated_reason == "unverified_email" %}
-          {% include "content/_verify_email_required.html" %}
-        {% else %}
-          {% include "topics/_topic_teaser.html" %}
-        {% endif %}
-      {% else %}
       <div class="prose min-w-0 max-w-full" data-testid="topics-hub-body">
         {{ hub.body_html|safe }}
       </div>
-      {% endif %}
 
       <div class="mt-16">
         <h2 class="text-xl font-semibold tracking-tight" data-testid="topics-grid-heading">All topics</h2>
@@ -49,6 +41,24 @@
           {% endfor %}
         </div>
       </div>
+
+      {% comment %}
+      Issue #1804 - conversion band for the free topics funnel. The
+      callout chrome copies the accent action-card pattern
+      (templates/content/about.html); CTAs go through the button_classes
+      owner, one primary size='lg' plus one secondary size='md' per the
+      CTA-row cap.
+      {% endcomment %}
+      <section class="mt-16 rounded-2xl border border-accent/30 bg-accent/5 p-8 text-center" data-testid="topics-conversion">
+        <h2 class="text-xl font-semibold tracking-tight">Keep building with a membership</h2>
+        <p class="mx-auto mt-3 max-w-2xl leading-relaxed text-muted-foreground">
+          Every topic guide is free to read. Members get structured courses, live workshops, and feedback on real projects.
+        </p>
+        <div class="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <a href="/membership" class="{% button_classes 'primary' size='lg' %}" data-testid="topics-cta-membership">View membership plans</a>
+          <a href="/workshops" class="{% button_classes 'secondary' size='md' %}" data-testid="topics-cta-workshops">Browse workshops</a>
+        </div>
+      </section>
     </div>
   </section>
 </main>

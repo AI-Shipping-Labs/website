@@ -1,9 +1,12 @@
-"""Nav availability, sitemap exclusion, and source seeding for topics (#1688).
+"""Nav availability, sitemap inclusion, and source seeding for topics.
 
-Member topics are a gated surface: the Topics nav entry exists only while
-published pages do, and /topics/ must never appear in sitemap.xml.
+The topics wiki is an open surface (#1804): the Topics nav entry exists
+only while published pages do, and /topics/ plus every published page
+must appear in sitemap.xml.
 """
 
+import re
+import xml.etree.ElementTree as ET
 from io import StringIO
 
 from community_base.content_sync.models import (
@@ -11,8 +14,11 @@ from community_base.content_sync.models import (
 )
 from django.core.management import call_command
 from django.test import TestCase
+from django.utils import timezone
 
 from topics.models import STATUS_DRAFT, TopicPage
+
+SITEMAP_NS = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
 
 
 class TopicsNavAvailabilityTest(TestCase):
@@ -80,28 +86,60 @@ class TopicsPrimaryNavTest(TestCase):
         )
 
 
-class TopicsSitemapExclusionTest(TestCase):
-    """Member topics stay out of sitemap.xml (gated, no SEO surface)."""
+class TopicsSitemapInclusionTest(TestCase):
+    """The open topics wiki is a sitemap member (#1804)."""
 
     @classmethod
     def setUpTestData(cls):
-        TopicPage.objects.create(slug='rag', title='RAG', body='The pipeline.')
+        cls.rag = TopicPage.objects.create(
+            slug='rag', title='RAG', body='The pipeline.',
+        )
         TopicPage.objects.create(
             slug='index',
             title='AISL Wiki',
             body='Hub body.',
         )
+        TopicPage.objects.create(
+            slug='evaluation',
+            title='Evaluation',
+            body='Draft.',
+            status=STATUS_DRAFT,
+        )
 
-    def test_no_topics_urls_in_sitemap(self):
+    def _sitemap_entries(self):
+        """Parse /sitemap.xml into {path: lastmod-text}."""
         response = self.client.get('/sitemap.xml')
-        # assertNotContains pins the 200 alongside the contract itself.
-        self.assertNotContains(response, '/topics/')
+        self.assertEqual(response.status_code, 200)
+        root = ET.fromstring(response.content)
+        entries = {}
+        for url in root.findall(f'{SITEMAP_NS}url'):
+            loc = url.findtext(f'{SITEMAP_NS}loc') or ''
+            path = re.sub(r'^https?://[^/]+', '', loc)
+            entries[path] = url.findtext(f'{SITEMAP_NS}lastmod') or ''
+        return entries
 
-    def test_content_sitemaps_dict_has_no_topics_section(self):
-        from content.sitemaps import sitemaps
+    def test_sitemap_lists_hub_and_published_pages(self):
+        entries = self._sitemap_entries()
+        self.assertIn('/topics/', entries)
+        self.assertIn('/topics/rag/', entries)
 
-        self.assertNotIn('topics', sitemaps)
-        self.assertNotIn('wiki_topics', sitemaps)
+    def test_sitemap_lastmod_comes_from_updated_at(self):
+        entries = self._sitemap_entries()
+        expected = timezone.localdate(self.rag.updated_at).isoformat()
+        self.assertTrue(
+            entries['/topics/rag/'].startswith(expected),
+            f'lastmod {entries["/topics/rag/"]!r} does not match '
+            f'updated_at date {expected!r}',
+        )
+
+    def test_sitemap_excludes_draft_pages(self):
+        entries = self._sitemap_entries()
+        self.assertNotIn('/topics/evaluation/', entries)
+
+    def test_content_sitemaps_dict_has_topics_section(self):
+        from content.sitemaps import TopicsSitemap, sitemaps
+
+        self.assertIs(sitemaps['topics'], TopicsSitemap)
 
 
 class WikiSourceSeedingTest(TestCase):

@@ -19,7 +19,7 @@ import hashlib
 
 from django.db import transaction
 
-from content.access import LEVEL_BASIC
+from content.access import LEVEL_OPEN
 from topics.models import STATUS_DRAFT, STATUS_PUBLISHED, TopicPage
 
 ACTION_CREATED = 'created'
@@ -76,7 +76,9 @@ def upsert_topic(
         page.summary = summary
         page.body = body
         page.related = list(related or [])
-        page.required_level = LEVEL_BASIC
+        # Issue #1804: the topics wiki is the free top of the funnel, so
+        # every synced page is open to everyone.
+        page.required_level = LEVEL_OPEN
         page.status = STATUS_PUBLISHED
         page.source_content_id = getattr(source, 'pk', None)
         page.source_path = source_path

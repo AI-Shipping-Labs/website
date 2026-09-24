@@ -8,6 +8,7 @@ asset) are tested strongly: each asserts the presigned URL is NOT emitted
 and that the presigned-URL machinery was never even reached.
 """
 
+from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
@@ -17,7 +18,8 @@ from django.utils import timezone
 
 from analytics.models import UserActivity
 from content.access import LEVEL_BASIC, LEVEL_OPEN
-from events.models import Event
+from content.models import Cohort, CohortEnrollment, Course
+from events.models import Event, EventSeries
 from integrations.config import clear_config_cache
 from tests.fixtures import TierSetupMixin, set_membership
 
@@ -167,6 +169,93 @@ class EventRecordingStreamTest(TierSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn('amazonaws.com', response['Location'])
+
+    def test_hidden_series_recording_is_404_without_linked_entitlement(self):
+        series = EventSeries.objects.create(
+            name='Hidden course series', slug='hidden-course-recordings',
+            cadence='none', day_of_week=None, start_time=None,
+            visibility='hidden',
+        )
+        event = Event.objects.create(
+            title='Hidden session', slug='hidden-course-session',
+            event_series=series, start_datetime=timezone.now(),
+            status='completed', required_level=LEVEL_OPEN,
+            recording_s3_url=(
+                'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/hidden-course-session.mp4'
+            ), published=True,
+        )
+        client = self._mock_client()
+        self.client.force_login(self.free_user)
+        with patch(RECORDINGS_S3_CLIENT_PATH, return_value=client):
+            response = self.client.get(self._url(event))
+
+        self.assertEqual(response.status_code, 404)
+        client.generate_presigned_url.assert_not_called()
+
+    def test_hidden_series_recording_plays_for_enrolled_course_member(self):
+        series = EventSeries.objects.create(
+            name='Hidden enrolled series', slug='hidden-enrolled-recordings',
+            cadence='none', day_of_week=None, start_time=None,
+            visibility='hidden',
+        )
+        event = Event.objects.create(
+            title='Enrolled hidden session', slug='enrolled-hidden-session',
+            event_series=series, start_datetime=timezone.now(),
+            status='completed', required_level=LEVEL_OPEN,
+            recording_s3_url=(
+                'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/enrolled-hidden-session.mp4'
+            ), published=True,
+        )
+        course = Course.objects.create(
+            title='Hidden recordings course', slug='hidden-recordings-course',
+            status='published', required_level=LEVEL_OPEN,
+        )
+        cohort = Cohort.objects.create(
+            course=course, name='Enrolled cohort', mode='cohort',
+            start_date=timezone.localdate() - timedelta(days=2),
+            end_date=timezone.localdate() + timedelta(days=30),
+            event_series=series,
+        )
+        CohortEnrollment.objects.create(user=self.free_user, cohort=cohort)
+
+        client = self._mock_client()
+        self.client.force_login(self.free_user)
+        with patch(RECORDINGS_S3_CLIENT_PATH, return_value=client):
+            response = self.client.get(self._url(event))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('amazonaws.com', response['Location'])
+        client.generate_presigned_url.assert_called_once()
+
+    def test_hidden_series_recording_plays_for_staff(self):
+        series = EventSeries.objects.create(
+            name='Hidden staff series', slug='hidden-staff-recordings',
+            cadence='none', day_of_week=None, start_time=None,
+            visibility='hidden',
+        )
+        event = Event.objects.create(
+            title='Staff hidden session', slug='staff-hidden-session',
+            event_series=series, start_datetime=timezone.now(),
+            status='completed', required_level=LEVEL_OPEN,
+            recording_s3_url=(
+                'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/staff-hidden-session.mp4'
+            ), published=True,
+        )
+        staff = User.objects.create_user(
+            email='recording-staff@test.com', password='pw', is_staff=True,
+        )
+
+        client = self._mock_client()
+        self.client.force_login(staff)
+        with patch(RECORDINGS_S3_CLIENT_PATH, return_value=client):
+            response = self.client.get(self._url(event))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('amazonaws.com', response['Location'])
+        client.generate_presigned_url.assert_called_once()
 
     # --- Deny paths (must never emit a presigned URL) --------------------
 

@@ -159,6 +159,42 @@ class ResolveSessionEventTest(TestCase):
         )
         self.assertIsNone(resolve_session_event(self.unit, self.user))
 
+    def test_hidden_fallback_event_is_not_exposed_without_entitlement(self):
+        series = _make_series(
+            name='Hidden fallback', slug='resolve-series-hidden-fallback',
+            visibility='hidden',
+        )
+        Cohort.objects.create(
+            course=self.course, name='Hidden Cohort', mode='cohort',
+            start_date=datetime.date(2025, 1, 1),
+            end_date=datetime.date(2025, 3, 1), event_series=series,
+        )
+        _make_event(
+            series=series, position=4,
+            when=self._now() - datetime.timedelta(days=200),
+            status='completed',
+        )
+
+        self.assertIsNone(resolve_session_event(self.unit, self.user))
+
+    def test_hidden_own_cohort_event_resolves_for_entitled_member(self):
+        series = _make_series(
+            name='Hidden own cohort', slug='resolve-series-hidden-own',
+            visibility='hidden',
+        )
+        cohort = Cohort.objects.create(
+            course=self.course, name='Hidden active cohort', mode='cohort',
+            start_date=datetime.date(2026, 9, 21),
+            end_date=datetime.date(2026, 11, 22), event_series=series,
+        )
+        CohortEnrollment.objects.create(user=self.user, cohort=cohort)
+        event = _make_event(
+            series=series, position=4,
+            when=self._now() + datetime.timedelta(days=3),
+        )
+
+        self.assertEqual(resolve_session_event(self.unit, self.user), event)
+
 
 class EventUnitCompletionTest(TestCase):
     """Completing a kind='event' unit uses the ordinary manual toggle."""

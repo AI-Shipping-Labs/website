@@ -10,10 +10,12 @@ after tier access has already been granted.
 from __future__ import annotations
 
 import datetime
+import re
 from dataclasses import dataclass
 
 from django.db import models
 from django.template.defaultfilters import date as django_date
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.html import strip_tags
 
@@ -40,9 +42,15 @@ from events.services.display_time import (
     format_event_time_range,
     resolve_event_display_timezone,
 )
+from events.services.series_entitlement import is_entitled_for_series
 
 TEASER_WORD_LIMIT = 150
 _UNSPECIFIED_DRIP_COHORT = object()
+_SESSION_INTERNAL_DESCRIPTION_NOTE = re.compile(
+    r'\s*(?:hidden series|internal note|operator note|staff note|'
+    r'registration operations|registration setup)\s*:[^.!?]*(?:[.!?]|$)',
+    re.IGNORECASE,
+)
 
 ACCESS_GRANTED = 'access_granted'
 ACCESS_GRANTED_PREVIEW = 'preview'
@@ -337,7 +345,7 @@ def build_drip_locked_course_unit_context(course, module, unit, decision):
     }
 
 
-def build_course_unit_navigation_context(user, course, module, unit):
+def build_course_unit_navigation_context(user, course, module, unit, *, request=None):
     """Build navigation, completion, discussion, and mobile progress context."""
     modules = course.get_syllabus()
     scoped_module = None
@@ -399,7 +407,7 @@ def build_course_unit_navigation_context(user, course, module, unit):
     # resolved for any cohort yet" — the template distinguishes those with
     # unit.kind, rendering the clean empty state only for the latter.
     unit_session_entry = (
-        build_unit_session_card_context(unit, user)
+        build_unit_session_card_context(unit, user, request=request)
         if unit.kind == UNIT_KIND_EVENT else None
     )
 
@@ -610,7 +618,8 @@ def resolve_session_event(unit: Unit, user) -> Event | None:
 
     Only draft/cancelled-excluded (``PUBLIC_EVENT_STATUSES``) events are
     considered a match, mirroring the course page's existing
-    live-sessions block.
+    live-sessions block. Hidden-series matches also require the same staff
+    or linked-enrollment entitlement as the event detail and recap pages.
     """
     if unit.session_position is None:
         return None
@@ -628,12 +637,14 @@ def resolve_session_event(unit: Unit, user) -> Event | None:
             and enrollment.cohort.mode == COHORT_MODE_COHORT
             and enrollment.cohort.event_series_id
         ):
-            event = Event.objects.filter(
+            event = Event.objects.select_related(
+                'event_series', 'workshop',
+            ).filter(
                 event_series_id=enrollment.cohort.event_series_id,
                 series_position=unit.session_position,
                 status__in=PUBLIC_EVENT_STATUSES,
             ).first()
-            if event is not None:
+            if event is not None and _can_view_session_event(user, event):
                 return event
 
     today = timezone.now().date()
@@ -649,39 +660,83 @@ def resolve_session_event(unit: Unit, user) -> Event | None:
         .values_list('event_series_id', flat=True)
     )
     for series_id in fallback_series_ids:
-        event = Event.objects.filter(
+        event = Event.objects.select_related(
+            'event_series', 'workshop',
+        ).filter(
             event_series_id=series_id,
             series_position=unit.session_position,
             status__in=PUBLIC_EVENT_STATUSES,
         ).first()
-        if event is not None:
+        if event is not None and _can_view_session_event(user, event):
             return event
 
     return None
 
 
-def build_unit_session_card_context(unit: Unit, user):
+def _can_view_session_event(user, event):
+    """Mirror the event page's hidden-series gate for in-course surfaces."""
+    series = event.event_series
+    return not (series and series.is_hidden) or is_entitled_for_series(user, series)
+
+
+def build_unit_session_card_context(unit: Unit, user, *, request=None):
     """Build the session-card entry for a ``kind='event'`` unit, or ``None``.
 
     ``None`` means no ``Event`` resolved anywhere — the template renders
-    the clean "not yet scheduled" empty state instead of a card. When an
-    ``Event`` resolves, returns the same entry shape
-    ``content.views.courses._build_live_session_entries`` builds for the
-    course page's live-sessions block, so the unit page reuses
-    ``content/_live_session_row.html`` unchanged — no second card is
-    hand-rolled.
+    the clean "not yet scheduled" empty state instead of a card. A resolved
+    occurrence is shown only when the viewer may reach its hidden series.
+    Recording playback is separately gated by the event and (when linked)
+    workshop recording access. Private S3 URLs and Zoom meeting/download
+    URLs are never added to this context.
     """
     event = resolve_session_event(unit, user)
     if event is None:
         return None
     is_past = event.is_past
+    can_watch_recording = bool(
+        is_past and event.has_recording and can_access(user, event)
+    )
+    workshop = getattr(event, 'workshop', None)
+    if can_watch_recording and workshop is not None:
+        can_watch_recording = workshop.user_can_access_recording(user)
+
+    recording_playback_url = ''
+    if can_watch_recording and event.recording_s3_url and request is not None:
+        recording_playback_url = request.build_absolute_uri(
+            reverse(
+                'event_recording_stream',
+                kwargs={'event_id': event.pk, 'slug': event.slug},
+            )
+        )
+
+    maven_enrolled = False
+    if (
+        not is_past
+        and getattr(user, 'is_authenticated', False)
+        and event.event_series_id
+    ):
+        maven_enrolled = CohortEnrollment.objects.filter(
+            user=user,
+            cohort__course=unit.module.course,
+            cohort__mode=COHORT_MODE_COHORT,
+            cohort__event_series_id=event.event_series_id,
+        ).exists()
+
     return {
         'event': event,
+        'description_html': _SESSION_INTERNAL_DESCRIPTION_NOTE.sub(
+            '', event.description_html or '',
+        ),
         'time_display': build_event_time_display(event, user),
         'is_past': is_past,
+        'show_recap': bool(is_past and event.recap_is_published),
+        'show_recording': bool(is_past and event.has_recording),
+        'can_watch_recording': can_watch_recording,
+        'recording_playback_url': recording_playback_url,
+        'maven_enrolled': maven_enrolled,
         'can_join_now': not is_past and event.can_show_zoom_link(),
         'join_url': event.get_join_url(),
-        'recap_url': event.get_recap_url() if event.has_recap else '',
+        'recap_url': event.get_recap_url() if is_past and event.recap_is_published else '',
     }
 
 

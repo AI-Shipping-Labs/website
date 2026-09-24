@@ -21,6 +21,7 @@ from django.views.decorators.http import require_GET
 
 from content.access import can_access
 from events.models import Event
+from events.services.series_entitlement import is_entitled_for_series
 from integrations.config import get_config
 from jobs.tasks.recordings_s3 import build_recording_presigned_url
 
@@ -81,6 +82,18 @@ def event_recording_stream(request, event_id, slug):
         event.status == 'cancelled'
         and not event.published
         and not request.user.is_staff
+    ):
+        raise Http404
+
+    # Issue #1660: hidden-series recordings follow the same exact audience
+    # gate as the event and recap pages. Checking here matters even when the
+    # stable stream endpoint was copied or constructed outside its lesson;
+    # an enrolled learner is entitled through the linked Cohort/Sprint, and
+    # staff retain their normal bypass.
+    if (
+        event.event_series_id is not None
+        and event.event_series.is_hidden
+        and not is_entitled_for_series(request.user, event.event_series)
     ):
         raise Http404
 

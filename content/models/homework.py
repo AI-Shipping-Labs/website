@@ -35,6 +35,8 @@ from django.utils import timezone
 from content.models.cohort import COHORT_MODE_SELF_PACED
 from content.models.mixins import SourceMetadataMixin
 
+MAX_LEARNING_IN_PUBLIC_LINKS = 20
+
 
 class HomeworkState(models.TextChoices):
     CLOSED = 'CL', 'Closed'
@@ -77,6 +79,12 @@ class Homework(SourceMetadataMixin, models.Model):
     # Activated only after the source has approved question keys and a
     # deadline. Older homework keeps its all-in-one submission form.
     stepper_enabled = models.BooleanField(default=False, db_default=False)
+    # Source-authored final-form settings. A public-links cap of zero removes
+    # the Learning in Public stop from the stepper.
+    learning_in_public_cap = models.PositiveSmallIntegerField(default=0, db_default=0)
+    homework_url_field = models.BooleanField(default=True, db_default=True)
+    time_spent_lectures_field = models.BooleanField(default=False, db_default=False)
+    time_spent_homework_field = models.BooleanField(default=False, db_default=False)
     state = models.CharField(
         max_length=2, choices=HomeworkState.choices,
         default=HomeworkState.OPEN, db_default=HomeworkState.OPEN,
@@ -231,6 +239,12 @@ class Submission(models.Model):
     submitted_at = models.DateTimeField(default=timezone.now)
     questions_score = models.IntegerField(default=0, db_default=0)
     total_score = models.IntegerField(default=0, db_default=0)
+    learning_in_public_links = models.JSONField(
+        default=list, blank=True,
+        help_text='Optional public links submitted with this homework.',
+    )
+    time_spent_lectures = models.FloatField(null=True, blank=True)
+    time_spent_homework = models.FloatField(null=True, blank=True)
 
     class Meta:
         constraints = [

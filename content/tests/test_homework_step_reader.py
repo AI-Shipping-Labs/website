@@ -7,9 +7,18 @@ from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
 from content.models.cohort import Cohort, CohortEnrollment
-from content.models.homework import Answer, Homework, Question, Submission
-from content.services.homework_step_reader import option_key
-from content.services.homework_step_sections import validate_question_bindings
+from content.models.homework import Answer, Homework, HomeworkState, Question, Submission
+from content.services import completion as completion_service
+from content.services.homework_submissions import save_submission
+from content.services.homework_step_reader import (
+    LEARNING_IN_PUBLIC_KEY,
+    build_assignment,
+    option_key,
+)
+from content.services.homework_step_sections import (
+    split_out_named_section,
+    validate_question_bindings,
+)
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
 
 
@@ -33,6 +42,21 @@ class HomeworkStepBindingsTest(SimpleTestCase):
         for ids in (['q2-reflect', 'q1-lines'], ['q1-lines', 'q1-lines']):
             with self.subTest(ids=ids), self.assertRaisesRegex(ValueError, 'course/homework.md'):
                 validate_question_bindings(markdown, ids, 'course/homework.md')
+
+    def test_learning_in_public_section_splits_from_other_closing_guidance(self):
+        remaining, guidance = split_out_named_section(
+            '## Submission\nAdd your URL.\n'
+            '## Learning in Public\nShare a demo.\n'
+            '```markdown\n## Learning in Public\nnot a new section\n```\n'
+            '## FAQ\nRead the FAQ.\n',
+            'Learning in Public',
+        )
+
+        self.assertIn('Add your URL.', remaining)
+        self.assertIn('## FAQ', remaining)
+        self.assertNotIn('## Learning in Public', remaining)
+        self.assertIn('Share a demo.', guidance)
+        self.assertIn('not a new section', guidance)
 
 
 class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):

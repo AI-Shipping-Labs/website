@@ -10,6 +10,7 @@ import datetime
 
 from django.utils.dateparse import parse_datetime
 
+from content.models.homework import MAX_LEARNING_IN_PUBLIC_LINKS
 from content.services.homework_step_sections import validate_question_bindings
 from content.sync_parsers.common import GitHubSyncError, logger
 
@@ -25,6 +26,12 @@ _ANSWER_TYPE_MAP = {
     'integer': 'INT',
     'exact_string': 'EXS',
     'contains_string': 'CTS',
+}
+_FORM_SETTING_KEYS = {
+    'learning_in_public_cap',
+    'homework_url_field',
+    'time_spent_lectures_field',
+    'time_spent_homework_field',
 }
 
 
@@ -45,8 +52,12 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
 
     raw_due_date = metadata.get('due_date')
     raw_questions = metadata.get('questions')
+    has_form_settings = any(key in metadata for key in _FORM_SETTING_KEYS)
 
-    if raw_due_date is None and not raw_questions and not metadata.get('homework_steps'):
+    if (
+        raw_due_date is None and not raw_questions
+        and not metadata.get('homework_steps') and not has_form_settings
+    ):
         return
 
     if raw_due_date is None:
@@ -66,6 +77,12 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
     if not isinstance(stepper_enabled, bool):
         raise GitHubSyncError(
             f'Invalid homework in {rel_path}: homework_steps must be true or false'
+        )
+    form_settings = _parse_form_settings(metadata, rel_path)
+    if has_form_settings and not stepper_enabled:
+        raise GitHubSyncError(
+            f'Invalid homework in {rel_path}: final-form settings require '
+            'homework_steps: true'
         )
     if stepper_enabled:
         question_ids = [entry.get('id') if isinstance(entry, dict) else None
@@ -119,6 +136,7 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
         'source_repo': unit.source_repo,
         'source_path': rel_path,
         'stepper_enabled': stepper_enabled,
+        **form_settings,
     }
 
     homework = Homework.objects.filter(
@@ -148,6 +166,30 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
     homework.questions.exclude(
         source_question_id__in=seen_question_ids,
     ).delete()
+
+
+def _parse_form_settings(metadata, rel_path):
+    """Validate optional source-authored submission fields and link cap."""
+    cap = metadata.get('learning_in_public_cap', 0)
+    if type(cap) is not int or not 0 <= cap <= MAX_LEARNING_IN_PUBLIC_LINKS:
+        raise GitHubSyncError(
+            f'Invalid homework in {rel_path}: learning_in_public_cap must be '
+            f'an integer from 0 to {MAX_LEARNING_IN_PUBLIC_LINKS}'
+        )
+
+    values = {'learning_in_public_cap': cap}
+    for key, default in (
+        ('homework_url_field', True),
+        ('time_spent_lectures_field', False),
+        ('time_spent_homework_field', False),
+    ):
+        value = metadata.get(key, default)
+        if not isinstance(value, bool):
+            raise GitHubSyncError(
+                f'Invalid homework in {rel_path}: {key} must be true or false'
+            )
+        values[key] = value
+    return values
 
 
 def _sync_one_question(homework, entry, index, rel_path):

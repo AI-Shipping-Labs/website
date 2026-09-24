@@ -44,6 +44,44 @@ def split_homework_sections(markdown):
     )
 
 
+def split_out_named_section(markdown, title):
+    """Return ``(remaining, section_body)`` for one authored H2 section.
+
+    Heading-shaped lines in fenced examples remain part of their surrounding
+    section, matching :func:`split_homework_sections`.
+    """
+    remaining = []
+    section = []
+    in_section = False
+    found = False
+    fence_char = None
+    fence_length = 0
+    expected = ' '.join(title.split()).casefold()
+
+    for line in markdown.splitlines(keepends=True):
+        fence = FENCE.match(line)
+        if fence:
+            marker = fence.group(1)
+            if fence_char is None:
+                fence_char, fence_length = marker[0], len(marker)
+            elif marker[0] == fence_char and len(marker) >= fence_length:
+                fence_char = None
+            (section if in_section else remaining).append(line)
+            continue
+
+        if fence_char is None and SECTION_HEADING.match(line):
+            if in_section:
+                in_section = False
+            heading = line.lstrip()[2:].strip()
+            if ' '.join(heading.split()).casefold() == expected and not found:
+                found = True
+                in_section = True
+                continue
+        (section if in_section else remaining).append(line)
+
+    return ''.join(remaining).strip(), ''.join(section).strip()
+
+
 def validate_question_bindings(markdown, question_ids, source_path):
     """Fail import if a rich prompt could attach to the wrong answer record."""
     intro, sections, closing = split_homework_sections(markdown)

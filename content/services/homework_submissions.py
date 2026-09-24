@@ -42,7 +42,11 @@ def parse_submission_post(post_data, homework):
 
 
 @transaction.atomic
-def save_submission(homework, user, *, homework_link, answers_by_question_id):
+def save_submission(
+    homework, user, *, homework_link, answers_by_question_id,
+    learning_in_public_links=None, time_spent_lectures=None,
+    time_spent_homework=None,
+):
     """Create or update ``user``'s ``Submission`` for ``homework``.
 
     Auto-creates the ``CohortEnrollment`` so a missing separate "enroll"
@@ -60,8 +64,14 @@ def save_submission(homework, user, *, homework_link, answers_by_question_id):
     )
     submission.enrollment = enrollment
     submission.homework_link = homework_link or None
+    submission.learning_in_public_links = learning_in_public_links or []
+    submission.time_spent_lectures = time_spent_lectures
+    submission.time_spent_homework = time_spent_homework
     submission.submitted_at = timezone.now()
-    submission.save(update_fields=['enrollment', 'homework_link', 'submitted_at'])
+    submission.save(update_fields=[
+        'enrollment', 'homework_link', 'learning_in_public_links',
+        'time_spent_lectures', 'time_spent_homework', 'submitted_at',
+    ])
 
     questions_by_id = {q.pk: q for q in homework.questions.all()}
     answered_question_ids = set()

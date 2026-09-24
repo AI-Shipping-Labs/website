@@ -62,6 +62,7 @@ from content.views.peer_review import (
     review_form,
 )
 from content.views.request_call import request_a_call
+from content.views.share_links import content_share_link, invalid_content_share_link
 from content.views.tags import tags_detail, tags_index
 from content.views.workshops import (
     api_workshop_page_complete,
@@ -77,6 +78,8 @@ from content.views.workshops import (
 )
 
 urlpatterns = [
+    path('c/<uuid:content_id>', content_share_link, name='content_share_link'),
+    re_path(r'^c(?:/.*)?$', invalid_content_share_link, name='invalid_content_share_link'),
     path('', home, name='home'),
     path('membership', membership, name='pricing'),
     path('about', about, name='about'),

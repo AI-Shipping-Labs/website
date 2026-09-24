@@ -40,6 +40,7 @@ RESERVED_PUBLIC_PATH_PREFIXES = (
     '/account',
     '/onboarding',
     '/api',
+    '/c',
     '/member-api',
     '/studio',
     '/membership',

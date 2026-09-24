@@ -9,6 +9,7 @@ rendering, and tier-state assertions are canonical in faster Django tests:
 
 import datetime
 import os
+import uuid
 
 import pytest
 
@@ -48,6 +49,7 @@ def _create_article(
     required_level=0,
     published=True,
     date=None,
+    content_id=None,
 ):
     """Helper to create an Article directly via the ORM."""
     from content.models import Article
@@ -67,6 +69,7 @@ def _create_article(
         required_level=required_level,
         published=published,
         date=date,
+        content_id=content_id,
     )
     article.save()
     connection.close()
@@ -120,6 +123,28 @@ class TestBlogBrowserSmoke:
         back_link = page.locator('a:has-text("Back to Blog")')
         assert back_link.count() >= 1
         assert back_link.first.get_attribute("href") == "/blog"
+
+    @browser_journey
+    def test_uuid_share_link_follows_article_after_slug_change(
+        self, django_server, page,
+    ):
+        """A saved UUID link reaches the current public article page."""
+        _clear_articles()
+        content_id = uuid.uuid4()
+        article = _create_article(
+            title="Stable share article",
+            slug="old-share-article-slug",
+            content_markdown="# Stable share article\n\nCurrent public content.",
+            content_id=content_id,
+        )
+        article.slug = "current-share-article-slug"
+        article.save()
+        connection.close()
+
+        page.goto(f"{django_server}/c/{content_id}", wait_until="domcontentloaded")
+
+        assert page.url.endswith("/blog/current-share-article-slug")
+        assert page.locator("h1").first.inner_text() == "Stable share article"
 
     @pytest.mark.core
     def test_free_user_paywall_journey_navigates_to_pricing(self, django_server, browser):

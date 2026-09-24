@@ -33,6 +33,8 @@ class MarketingPageModelTest(TestCase):
             '/events',
             '/api/marketing-pages',
             '/studio/marketing-pages',
+            '/c',
+            '/c/a-content-id',
             '/about',
             '/register',
             '/learning-path/ai-engineer',

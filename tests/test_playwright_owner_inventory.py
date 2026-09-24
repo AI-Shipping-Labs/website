@@ -1220,6 +1220,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
     issue_1770_owners = frozenset({
         "playwright_tests/test_course_syllabus_1770.py::"
         "test_mobile_visitor_opens_nested_topic_and_lesson_with_keyboard",
+        "playwright_tests/test_course_syllabus_1770.py::"
+        "test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry",
     })
 
     issue_1778_owners = frozenset({
@@ -1227,6 +1229,10 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_failed_autosave_blocks_step_link_without_losing_choice",
         "playwright_tests/test_homework_steps_1778.py::"
         "test_learner_saves_resumes_and_submits_from_review",
+        "playwright_tests/test_homework_steps_1778.py::"
+        "test_sidebar_exit_saves_latest_dirty_choice_before_navigation",
+        "playwright_tests/test_homework_learning_public.py::"
+        "test_public_links_are_configurable_saved_and_submitted",
     })
 
     issue_1781_owners = frozenset({
@@ -1239,6 +1245,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_course_home_entry_reader_return_and_mobile_themes",
         "playwright_tests/test_course_home_1784.py::"
         "test_course_home_commitments_to_homework_event_and_reviews",
+    })
+
+    issue_1802_owners = frozenset({
+        "playwright_tests/test_articles_blog.py::"
+        "TestBlogBrowserSmoke::test_uuid_share_link_follows_article_after_slug_change",
     })
 
     issue_1597_owners = frozenset({
@@ -1509,8 +1520,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2659)
-        self.assertEqual(len(inventory.owners), 2457)
+        self.assertEqual(inventory.item_count, 2664)
+        self.assertEqual(len(inventory.owners), 2461)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1556,6 +1567,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1778_owners
             | self.issue_1781_owners
             | self.issue_1782_owners
+            | self.issue_1802_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(
@@ -1612,6 +1624,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1778_owners
             | self.issue_1781_owners
             | self.issue_1782_owners
+            | self.issue_1802_owners
             | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

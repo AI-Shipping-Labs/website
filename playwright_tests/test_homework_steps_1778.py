@@ -207,7 +207,7 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.locator('[data-testid="homework-review-summary"]')).to_contain_text('Yes')
     assert not completion_service.is_completed(user, unit)
     page.screenshot(path='.tmp/astra-homework-review-desktop.png', full_page=True)
-    page.get_by_label('Homework link (optional)').fill('https://github.com/example/solution')
+    page.get_by_label('Homework URL (optional)').fill('https://github.com/example/solution')
     page.get_by_role('button', name='Submit homework').click()
     expect(page).to_have_url(re.compile(re.escape(unit_url) + r'\?homework_step=review&receipt=.+'))
     expect(page.get_by_text('Your homework was submitted.', exact=False)).to_be_visible()

@@ -233,7 +233,7 @@ class Submission(models.Model):
     questions_score = models.IntegerField(default=0, db_default=0)
     total_score = models.IntegerField(default=0, db_default=0)
     learning_in_public_links = models.JSONField(
-        default=list, blank=True,
+        default=list, blank=True, null=True,
         help_text='Optional public links submitted with this homework.',
     )
     time_spent_lectures = models.FloatField(null=True, blank=True)

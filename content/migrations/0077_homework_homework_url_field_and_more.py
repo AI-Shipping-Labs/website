@@ -33,7 +33,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='submission',
             name='learning_in_public_links',
-            field=models.JSONField(blank=True, default=list, help_text='Optional public links submitted with this homework.'),
+            field=models.JSONField(blank=True, default=list, null=True, help_text='Optional public links submitted with this homework.'),
         ),
         migrations.AddField(
             model_name='submission',

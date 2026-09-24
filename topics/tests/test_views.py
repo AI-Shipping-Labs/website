@@ -13,6 +13,7 @@ import xml.etree.ElementTree as ET
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
+import pytest
 
 from content.access import LEVEL_OPEN
 from tests.fixtures import TierSetupMixin, set_membership
@@ -214,6 +215,7 @@ class TopicsHubOpenAccessTest(_TopicsFixtureMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+@pytest.mark.visual_regression
 class HubConversionSectionTest(_TopicsFixtureMixin, TestCase):
     """The hub funnel band sits below the grid with the two open CTAs."""
 
@@ -233,8 +235,7 @@ class HubConversionSectionTest(_TopicsFixtureMixin, TestCase):
         self.assertIn('href="/membership"', tag)
         self.assertIn('View membership plans', content)
         # size='lg' primary chrome from the button_classes owner.
-        self.assertIn('px-6 py-3', tag)
-        self.assertIn('bg-accent text-accent-foreground', tag)
+        self.assertIn(button_classes('primary', size='lg'), tag)
 
     def test_workshops_cta_is_secondary_medium(self):
         content = self.client.get('/topics/').content.decode()
@@ -276,6 +277,7 @@ class TopicPageOpenAccessTest(_TopicsFixtureMixin, TestCase):
                 self.client.logout()
 
 
+@pytest.mark.visual_regression
 class TopicConversionSectionTest(_TopicsFixtureMixin, TestCase):
     """Every published topic page funnels to membership and the Buildcamp."""
 

@@ -12,7 +12,7 @@ from community_base.knowledge_base.models import (
 )
 from django.test import TestCase
 
-from content.access import LEVEL_BASIC
+from content.access import LEVEL_OPEN
 from content.nav_availability import has_published_topics_for_nav
 from integrations.tests.sync_fixtures import make_sync_repo, sync_repo
 from topics.models import STATUS_DRAFT, STATUS_PUBLISHED, TopicPage
@@ -131,10 +131,12 @@ class MemberWikiSyncHappyPathTest(_MemberWikiSyncRepoTest):
             'Topic guides built from every AISL course, workshop, and article.',
         )
 
-    def test_pages_default_to_basic_and_published(self):
+    def test_pages_are_open_and_published(self):
+        # Issue #1804: the topics wiki is the free top of the funnel, so
+        # every synced page is open to everyone.
         for page in TopicPage.objects.all():
             with self.subTest(slug=page.slug):
-                self.assertEqual(page.required_level, LEVEL_BASIC)
+                self.assertEqual(page.required_level, LEVEL_OPEN)
                 self.assertEqual(page.status, STATUS_PUBLISHED)
 
     def test_related_frontmatter_stored_as_slug_list(self):

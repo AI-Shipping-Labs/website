@@ -1,11 +1,12 @@
-"""Member topics user journeys (#1688).
+"""Topics wiki user journeys (#1688, open access per #1804).
 
-Covers the issue's Playwright scenarios that are practical locally: the
-Basic member reading and following related links, the Free member's
-upgrade path, the anonymous sign-in wall, hub-grid discovery, the hidden
-draft, and the sitemap exclusion. Server-rendered gating details (the
-full per-level matrix, context shapes) live in the Django tests at
-``topics/tests/test_views.py``.
+Covers the issue's Playwright scenarios that are practical locally:
+anonymous visitors read full topic pages and follow related links, the
+hub grid discovery journey, the conversion CTAs to /membership,
+/workshops, and /courses/ai-buildcamp, the free member reading without
+upsell friction, and the draft pages staying out of the hub grid and the
+sitemap. The full per-level matrix and context shapes live in the Django
+tests at ``topics/tests/test_views.py``.
 """
 
 import os
@@ -29,28 +30,15 @@ pytestmark = [
 ]
 
 TAGLINE = 'Topic guides built from every AISL course, workshop, and article.'
-HUB_TAIL = 'the second half of this hub essay exists only for paying members'
-RAG_TAIL = 'the rest of the RAG guide exists only for paying members'
-AGENTS_TAIL = 'the rest of the agents guide exists only for paying members'
-VECTOR_TAIL = 'the rest of the vector-search guide exists only for paying members'
-
-# The index body is one sentence; give it a gated tail beyond the window.
-HUB_TAIL_SENTENCE = (
-    'The wiki turns the AISL material into topic-oriented guides that keep '
-    'going well past the two hundred plain-text characters a denied render '
-    'may show as a teaser, and every word after this point, including '
-)
+HUB_TAIL = 'this clause exists only in the stored hub body'
+RAG_TAIL = 'this clause exists only in the stored RAG body'
+AGENTS_TAIL = 'this clause exists only in the stored agents body'
+VECTOR_TAIL = 'this clause exists only in the stored vector-search body'
 
 
-def _long_body(tail):
-    """A body whose tail starts beyond the 200-char teaser window."""
-    return (
-        'A topic body that keeps going well past the two hundred plain-text '
-        'characters a denied render may ever show as its teaser paragraph, '
-        'and every single word after this point, including '
-        f'{tail}, belongs to the gated tier and must never reach an '
-        'anonymous or Free-tier response.'
-    )
+def _topic_body(tail):
+    """A body with a distinctive tail proving the full render."""
+    return f'A topic guide body that ends with {tail} and nothing gated.'
 
 
 def _seed_topics(*, include_draft=False):
@@ -62,27 +50,27 @@ def _seed_topics(*, include_draft=False):
         slug='index',
         title='AISL Wiki',
         summary=TAGLINE,
-        body=f'{HUB_TAIL_SENTENCE}{HUB_TAIL}, never leaks to denied tiers.',
+        body=f'The wiki hub body runs long and ends where {HUB_TAIL}.',
     )
     TopicPage.objects.create(
         slug='rag',
         title='RAG',
         summary='Retrieval-augmented generation across the AISL material.',
-        body=_long_body(RAG_TAIL),
+        body=_topic_body(RAG_TAIL),
         related=['agents', 'missing-topic'],
     )
     TopicPage.objects.create(
         slug='agents',
         title='Agents',
         summary='The loop, the frameworks, durable execution.',
-        body=_long_body(AGENTS_TAIL),
+        body=_topic_body(AGENTS_TAIL),
         related=['rag'],
     )
     TopicPage.objects.create(
         slug='vector-search',
         title='Vector Search',
         summary='TF-IDF to embeddings, from first principles to SQLite.',
-        body=_long_body(VECTOR_TAIL),
+        body=_topic_body(VECTOR_TAIL),
     )
     if include_draft:
         TopicPage.objects.create(
@@ -102,32 +90,28 @@ def _open_topics_from_nav(page):
     page.wait_for_load_state('domcontentloaded')
 
 
+def _assert_open_render(page, body_tail):
+    """The full render contract: full body, conversion band, no gate."""
+    content = page.content()
+    assert body_tail in content
+    assert 'topics-gated-card' not in content
+    assert 'topics-gated-cta' not in content
+    assert 'topic-teaser' not in content
+    assert 'topics-signin-link' not in content
+
+
 @browser_journey
-def test_basic_member_reads_topic_and_follows_related_link(
+def test_anonymous_reads_topic_from_search_and_follows_related(
     browser, django_server,
 ):
-    """Basic member: nav -> hub -> RAG -> related topic, all in full."""
+    """Anonymous: a search-result landing reads in full, related too."""
     _seed_topics()
-    create_user('basic-1688@test.com', tier_slug='basic')
-    context = auth_context(browser, 'basic-1688@test.com')
-    page = context.new_page()
+    page = browser.new_context().new_page()
 
-    goto_with_retry(page, f'{django_server}/')
-    _open_topics_from_nav(page)
-    expect(page.get_by_test_id('topics-grid')).to_be_visible()
-    assert TAGLINE in page.content()
-    assert HUB_TAIL in page.content()
-    expect(page.get_by_test_id('topics-gated-cta')).to_have_count(0)
-
-    page.locator('[data-testid="topic-card"]').filter(
-        has_text='RAG',
-    ).first.click()
-    page.wait_for_load_state('domcontentloaded')
-    assert '/topics/rag/' in page.url
+    response = goto_with_retry(page, f'{django_server}/topics/rag/')
+    assert response.status == 200
     expect(page.get_by_test_id('topic-body')).to_be_visible()
-    assert RAG_TAIL in page.content()
-    assert 'topics-gated-cta' not in page.content()
-    assert 'topic-teaser-blur' not in page.content()
+    _assert_open_render(page, RAG_TAIL)
 
     related = page.get_by_test_id('topic-related-link')
     expect(related).to_have_count(1)
@@ -136,83 +120,88 @@ def test_basic_member_reads_topic_and_follows_related_link(
     page.wait_for_load_state('domcontentloaded')
     assert '/topics/agents/' in page.url
     expect(page.get_by_test_id('topic-body')).to_be_visible()
-    assert AGENTS_TAIL in page.content()
+    _assert_open_render(page, AGENTS_TAIL)
 
 
 @browser_journey
-def test_free_member_hits_teaser_and_finds_upgrade_path(
+def test_anonymous_explores_hub_grid_and_opens_topic(
     browser, django_server,
 ):
-    """Free member: teaser + blur + upgrade CTA that lands on /membership."""
+    """Anonymous: nav -> hub body + grid -> full topic page."""
+    _seed_topics()
+    page = browser.new_context().new_page()
+
+    goto_with_retry(page, f'{django_server}/')
+    _open_topics_from_nav(page)
+    expect(page.get_by_test_id('topics-grid')).to_be_visible()
+    assert TAGLINE in page.content()
+    _assert_open_render(page, HUB_TAIL)
+
+    page.locator('[data-testid="topic-card"]').filter(
+        has_text='Vector Search',
+    ).first.click()
+    page.wait_for_load_state('domcontentloaded')
+    assert '/topics/vector-search/' in page.url
+    expect(page.get_by_test_id('topic-body')).to_be_visible()
+    _assert_open_render(page, VECTOR_TAIL)
+
+
+@browser_journey
+def test_anonymous_follows_membership_cta_from_topic(
+    browser, django_server,
+):
+    """Anonymous: the topic conversion band lands on /membership."""
+    _seed_topics()
+    page = browser.new_context().new_page()
+
+    goto_with_retry(page, f'{django_server}/topics/rag/')
+    expect(page.get_by_test_id('topics-conversion')).to_be_visible()
+    page.get_by_test_id('topics-cta-membership').click()
+    page.wait_for_load_state('domcontentloaded')
+    assert '/membership' in page.url
+
+
+@browser_journey
+def test_anonymous_follows_buildcamp_and_workshops_ctas(
+    browser, django_server,
+):
+    """Anonymous: detail CTA to the Buildcamp, hub CTA to workshops."""
+    _seed_topics()
+    page = browser.new_context().new_page()
+
+    goto_with_retry(page, f'{django_server}/topics/rag/')
+    page.get_by_test_id('topics-cta-buildcamp').click()
+    page.wait_for_load_state('domcontentloaded')
+    assert '/courses/ai-buildcamp' in page.url
+
+    goto_with_retry(page, f'{django_server}/topics/')
+    expect(page.get_by_test_id('topics-conversion')).to_be_visible()
+    page.get_by_test_id('topics-cta-workshops').click()
+    page.wait_for_load_state('domcontentloaded')
+    assert '/workshops' in page.url
+
+
+@browser_journey
+def test_free_member_reads_full_page_without_upsell_friction(
+    browser, django_server,
+):
+    """Free member: full body, no gated render, conversion band present."""
     _seed_topics()
     create_user('free-1688@test.com', tier_slug='free')
     context = auth_context(browser, 'free-1688@test.com')
     page = context.new_page()
 
     goto_with_retry(page, f'{django_server}/topics/rag/')
-    expect(page.get_by_test_id('topic-teaser')).to_be_visible()
-    expect(page.get_by_test_id('topic-teaser-blur')).to_be_visible()
-    assert RAG_TAIL not in page.content()
-
-    page.get_by_test_id('topics-gated-cta').click()
-    page.wait_for_load_state('domcontentloaded')
-    assert '/membership' in page.url
-    assert 'Basic' in page.content()
-
-
-@browser_journey
-def test_anonymous_visitor_gets_signin_prompt_and_no_body(
-    browser, django_server,
-):
-    """Anonymous: sign-in prompt on hub and page, no body text anywhere."""
-    _seed_topics()
-    page = browser.new_context().new_page()
-
-    response = goto_with_retry(page, f'{django_server}/topics/')
-    assert response.status == 200
-    expect(page.get_by_test_id('topics-signin-link')).to_be_visible()
-    assert HUB_TAIL not in page.content()
-
-    response = goto_with_retry(page, f'{django_server}/topics/rag/')
-    assert response.status == 200
-    expect(page.get_by_test_id('topics-signin-link')).to_be_visible()
-    assert RAG_TAIL not in page.content()
-    assert 'topic-body' not in page.content()
-
-
-@browser_journey
-def test_main_member_discovers_topics_through_hub_grid(
-    browser, django_server,
-):
-    """Main member: every published topic appears in the grid; one opens."""
-    _seed_topics()
-    create_user('main-1688@test.com', tier_slug='main')
-    context = auth_context(browser, 'main-1688@test.com')
-    page = context.new_page()
-
-    goto_with_retry(page, f'{django_server}/topics/')
-    grid = page.get_by_test_id('topics-grid')
-    expect(grid).to_be_visible()
-    cards = page.get_by_test_id('topic-card')
-    expect(cards).to_have_count(3)
-    for title in ('RAG', 'Agents', 'Vector Search'):
-        expect(
-            cards.filter(has_text=title),
-        ).to_have_count(1)
-
-    cards.filter(has_text='Vector Search').first.click()
-    page.wait_for_load_state('domcontentloaded')
-    assert '/topics/vector-search/' in page.url
     expect(page.get_by_test_id('topic-body')).to_be_visible()
+    _assert_open_render(page, RAG_TAIL)
+    expect(page.get_by_test_id('topics-conversion')).to_be_visible()
 
 
 @browser_journey
-def test_draft_topic_stays_hidden_from_members(browser, django_server):
+def test_draft_topic_stays_hidden(browser, django_server):
     """Draft topic: 404 on the page and absent from the hub grid."""
     _seed_topics(include_draft=True)
-    create_user('basic-draft-1688@test.com', tier_slug='basic')
-    context = auth_context(browser, 'basic-draft-1688@test.com')
-    page = context.new_page()
+    page = browser.new_context().new_page()
 
     goto_with_retry(page, f'{django_server}/topics/')
     grid = page.get_by_test_id('topics-grid')
@@ -229,11 +218,14 @@ def test_draft_topic_stays_hidden_from_members(browser, django_server):
 
 
 @browser_journey
-def test_gated_topics_stay_out_of_the_sitemap(browser, django_server):
-    """Crawler surface: sitemap.xml lists no /topics/ URL."""
-    _seed_topics()
+def test_topics_urls_in_the_sitemap(browser, django_server):
+    """Crawler surface: sitemap.xml lists the hub and published pages."""
+    _seed_topics(include_draft=True)
     page = browser.new_context().new_page()
 
     response = goto_with_retry(page, f'{django_server}/sitemap.xml')
     assert response.status == 200
-    assert '/topics/' not in page.content()
+    content = page.content()
+    assert '/topics/' in content
+    assert '/topics/rag/' in content
+    assert '/topics/evaluation/' not in content

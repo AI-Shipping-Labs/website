@@ -4,7 +4,9 @@ One page per ``_wiki/<stem>.md`` file. The ``index`` page is the hub
 rendered at ``/topics/``; every other page renders at ``/topics/<slug>/``.
 Storage follows the package ``KnowledgeBasePage`` provenance pattern, but
 the model is this site's own: gating uses the site's visibility levels
-from ``content.access`` and every page defaults to Basic-and-above.
+from ``content.access``, and since #1804 every page is open to everyone
+(``LEVEL_OPEN``); the column stays so a future premium decision can
+reuse it without a destructive migration.
 """
 
 from community_base.content_sync.provenance import (
@@ -14,7 +16,7 @@ from community_base.content_sync.provenance import (
 from django.core.validators import RegexValidator
 from django.db import models
 
-from content.access import LEVEL_BASIC, VISIBILITY_CHOICES
+from content.access import LEVEL_OPEN, VISIBILITY_CHOICES
 from topics.rendering import render_topic_body
 
 SLUG_MAX_LENGTH = 300
@@ -23,11 +25,6 @@ TITLE_MAX_LENGTH = 300
 # The shared knowledge-base model now also supports slash-separated paths, but
 # that broader package validator must not change this site's existing schema.
 TOPIC_SLUG_PATTERN = r'^[-a-zA-Z0-9_.]+$'
-
-# Denied renders expose this many leading plain-text characters of the
-# body as the teaser; real topic bodies are far longer, so the teaser is
-# always a strict subset of the gated content.
-TEASER_MAX_CHARS = 200
 
 # The hub page's slug: index.md renders at /topics/ and the slug is
 # reserved in the page namespace (there is no /topics/index/ route).
@@ -66,7 +63,7 @@ class TopicPage(SourceProvenanceMixin, models.Model):
     related = models.JSONField(default=list, blank=True)
     required_level = models.PositiveIntegerField(
         choices=VISIBILITY_CHOICES,
-        default=LEVEL_BASIC,
+        default=LEVEL_OPEN,
     )
     status = models.CharField(
         max_length=20,
@@ -108,16 +105,6 @@ class TopicPage(SourceProvenanceMixin, models.Model):
         if self.is_hub:
             return '/topics/'
         return f'/topics/{self.slug}/'
-
-    @property
-    def teaser(self):
-        """A short plain-text teaser derived from the body (no full leak)."""
-        from content.utils.markdown import markdown_to_plain_text
-
-        plain = markdown_to_plain_text(self.body)
-        if len(plain) <= TEASER_MAX_CHARS:
-            return plain
-        return plain[:TEASER_MAX_CHARS].rstrip() + '…'
 
     def resolved_related(self):
         """Published topic pages named by ``related``, in listed order.

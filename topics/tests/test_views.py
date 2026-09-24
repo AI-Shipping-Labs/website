@@ -1,48 +1,51 @@
-"""Gating and rendering coverage for the /topics/ surfaces (#1688).
+"""Open-access rendering coverage for the /topics/ surfaces (#1804).
 
-Access matrix: anonymous gets a sign-in prompt with no body, Free gets a
-teaser with no body, Basic and above read the full page, drafts 404. The
-body-leak assertions check for sentences that exist only in the stored
-body, so any leak of ``body`` or ``body_html`` fails the test.
+Every viewer -- anonymous, Free, paid, staff -- gets the full hub and
+topic bodies plus the conversion band; the gated render (teaser, blur,
+gated card, sign-in link) is gone from the surface entirely. Drafts 404
+and stay out of the hub grid, and the SEO contract renders on detail
+pages.
 """
 
 import re
+import xml.etree.ElementTree as ET
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
+from content.access import LEVEL_OPEN
 from tests.fixtures import TierSetupMixin, set_membership
 from topics.models import STATUS_DRAFT, TopicPage
 
 HUB_BODY_SENTENCE = (
-    'Jump straight into the roadmap with hub-level context that keeps '
-    'going well past the two hundred plain-text characters a teaser '
-    'paragraph is ever allowed to show, and every word after this point '
-    'carries material reserved for members whose tier is Basic or above, '
-    'so it must never reach an anonymous or Free-tier response.'
+    'The wiki turns the AISL material into topic guides, and this '
+    'sentence lives only in the stored hub body, so finding it verbatim '
+    'proves the full body reached the response.'
 )
 RAG_BODY_SENTENCE = (
-    'RAG retrieves chunks the model never memorized, and the interesting '
-    'failures begin exactly where a fixed pipeline searches once and '
-    'hopes for the best, while the remainder of the explanation runs on '
-    'well past the teaser window and stays behind the tier gate, out of '
-    'every anonymous or Free-tier response no matter how the page is '
-    'fetched.'
+    'RAG retrieves chunks the model never memorized, and this sentence '
+    'lives only in the stored page body, so finding it verbatim proves '
+    'the full guide reached the response.'
 )
 VECTOR_BODY_SENTENCE = (
-    'Vector search goes from TF-IDF to embeddings, from first principles '
-    'to SQLite and Turso, with enough depth that the plain text runs long '
-    'past the teaser window and shows real member-only material only '
-    'after the gate opens.'
+    'Vector search goes from TF-IDF to embeddings, from first '
+    'principles to SQLite and Turso.'
 )
 
-# Distinctive tails: they start beyond the teaser window (TEASER_MAX_CHARS
-# is 200 and the clause before each tail fills it), so finding one in a
-# denied response means the gated body leaked.
-HUB_LEAK_TAIL = 'reserved for members'
-RAG_LEAK_TAIL = 'stays behind the tier gate'
-
 RAG_RELATED = ['agents', 'vector-search', 'does-not-exist']
+
+# Testids of the retired gated render: none of them may appear on any
+# topics response for any viewer.
+GATE_TESTIDS = (
+    'topics-gated-card',
+    'topics-gated-cta',
+    'topic-teaser',
+    'topic-teaser-blur',
+    'topics-signin-link',
+)
+
+SITEMAP_NS = '{http://www.sitemaps.org/schemas/sitemap/0.9}'
 
 
 def _create_topic(slug, title, body, *, summary='A summary.', related=None,
@@ -55,6 +58,30 @@ def _create_topic(slug, title, body, *, summary='A summary.', related=None,
         related=related or [],
         status=status,
     )
+
+
+def _anchor_tag(content, testid):
+    """The one anchor whose data-testid is `testid`, or a failed assert."""
+    match = re.search(rf'<a [^>]*data-testid="{testid}"[^>]*>', content)
+    assert match, f'anchor with data-testid={testid!r} missing'
+    return match.group(0)
+
+
+def _assert_no_gate_render(test, content):
+    for testid in GATE_TESTIDS:
+        with test.subTest(gate_testid=testid):
+            test.assertNotIn(f'data-testid="{testid}"', content)
+
+
+def _sitemap_paths_and_lastmods(response):
+    """Parse /sitemap.xml into {path: lastmod-text}."""
+    root = ET.fromstring(response.content)
+    entries = {}
+    for url in root.findall(f'{SITEMAP_NS}url'):
+        loc = url.findtext(f'{SITEMAP_NS}loc') or ''
+        path = re.sub(r'^https?://[^/]+', '', loc)
+        entries[path] = url.findtext(f'{SITEMAP_NS}lastmod') or ''
+    return entries
 
 
 class _TieredUsersMixin(TierSetupMixin):
@@ -117,41 +144,49 @@ class _TopicsFixtureMixin(_TieredUsersMixin):
         )
 
 
-class TopicsHubAccessTest(_TopicsFixtureMixin, TestCase):
-    def test_anonymous_sees_signin_prompt_and_no_body(self):
+class TopicsHubOpenAccessTest(_TopicsFixtureMixin, TestCase):
+    """The hub renders its full body for every viewer, no gate anywhere."""
+
+    def test_anonymous_gets_full_hub_body(self):
         response = self.client.get('/topics/')
         content = response.content.decode()
-        # Sign-in prompt renders (assertContains also pins the 200).
-        self.assertContains(response, 'data-testid="topics-signin-link"')
-        # The gated body content must not appear in any form: neither the
-        # full sentence nor the tail beyond the teaser window.
-        self.assertNotIn(HUB_BODY_SENTENCE, content)
-        self.assertNotIn(HUB_LEAK_TAIL, content)
-        self.assertNotIn(self.index.body_html, content)
-        self.assertNotIn('data-testid="topics-hub-body"', content)
+        # assertContains pins the 200 alongside the contract itself.
+        self.assertContains(response, 'data-testid="topics-hub-body"')
+        self.assertContains(response, HUB_BODY_SENTENCE)
+        self.assertContains(response, self.index.body_html)
+        _assert_no_gate_render(self, content)
 
-    def test_free_user_sees_teaser_blur_and_upgrade_cta(self):
+    def test_free_member_gets_identical_full_hub_body(self):
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/topics/')
         content = response.content.decode()
-        self.assertContains(response, 'data-testid="topic-teaser"')
-        self.assertContains(response, 'data-testid="topic-teaser-blur"')
-        self.assertContains(response, 'data-testid="topics-gated-cta"')
-        self.assertIn('href="/membership"', content)
-        # Teaser text may show; the tail of the body may not.
-        self.assertNotIn(HUB_LEAK_TAIL, content)
-        # Signed-in free users stay on the upgrade path: no sign-in prompt.
-        self.assertNotIn('data-testid="topics-signin-link"', content)
-
-    def test_basic_member_reads_hub_body(self):
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/topics/')
         self.assertContains(response, 'data-testid="topics-hub-body"')
         self.assertContains(response, HUB_BODY_SENTENCE)
-        self.assertNotIn('data-testid="topics-gated-cta"', response.content.decode())
+        _assert_no_gate_render(self, content)
+        # The funnel stays visible to signed-in free members too.
+        self.assertContains(response, 'data-testid="topics-conversion"')
+
+    def test_paid_members_get_full_hub_body(self):
+        for email in ('basic@test.com', 'main@test.com'):
+            with self.subTest(email=email):
+                self.client.login(email=email, password='testpass')
+                response = self.client.get('/topics/')
+                content = response.content.decode()
+                self.assertContains(response, 'data-testid="topics-hub-body"')
+                self.assertContains(response, HUB_BODY_SENTENCE)
+                _assert_no_gate_render(self, content)
+                self.client.logout()
+
+    def test_staff_member_reads_hub(self):
+        User = get_user_model()
+        staff = User.objects.create_user(
+            email='staff@test.com', password='testpass', is_staff=True,
+        )
+        self.client.login(email=staff.email, password='testpass')
+        response = self.client.get('/topics/')
+        self.assertContains(response, 'data-testid="topics-hub-body"')
 
     def test_hub_grid_lists_published_pages_with_title_and_summary(self):
-        self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/topics/')
         content = response.content.decode()
         self.assertContains(response, 'data-testid="topics-grid"')
@@ -178,55 +213,101 @@ class TopicsHubAccessTest(_TopicsFixtureMixin, TestCase):
         response = self.client.get('/topics/')
         self.assertEqual(response.status_code, 404)
 
-    def test_staff_member_reads_hub(self):
-        User = get_user_model()
-        staff = User.objects.create_user(
-            email='staff@test.com', password='testpass', is_staff=True,
-        )
-        self.client.login(email=staff.email, password='testpass')
+
+class HubConversionSectionTest(_TopicsFixtureMixin, TestCase):
+    """The hub funnel band sits below the grid with the two open CTAs."""
+
+    def test_conversion_section_renders_below_grid(self):
         response = self.client.get('/topics/')
-        self.assertContains(response, 'data-testid="topics-hub-body"')
+        content = response.content.decode()
+        self.assertContains(response, 'data-testid="topics-conversion"')
+        # The band comes after the All topics grid in document order.
+        self.assertLess(
+            content.index('data-testid="topics-grid"'),
+            content.index('data-testid="topics-conversion"'),
+        )
+
+    def test_membership_cta_is_primary_large(self):
+        content = self.client.get('/topics/').content.decode()
+        tag = _anchor_tag(content, 'topics-cta-membership')
+        self.assertIn('href="/membership"', tag)
+        self.assertIn('View membership plans', content)
+        # size='lg' primary chrome from the button_classes owner.
+        self.assertIn('px-6 py-3', tag)
+        self.assertIn('bg-accent text-accent-foreground', tag)
+
+    def test_workshops_cta_is_secondary_medium(self):
+        content = self.client.get('/topics/').content.decode()
+        tag = _anchor_tag(content, 'topics-cta-workshops')
+        self.assertIn('href="/workshops"', tag)
+        self.assertIn('Browse workshops', content)
+        # size='md' secondary chrome from the button_classes owner.
+        self.assertIn('px-4 py-2', tag)
+        self.assertIn('border border-border bg-transparent', tag)
 
 
-class TopicPageAccessTest(_TopicsFixtureMixin, TestCase):
-    def test_anonymous_gets_signin_prompt_and_no_body(self):
+class TopicPageOpenAccessTest(_TopicsFixtureMixin, TestCase):
+    """Topic pages render their full body for every viewer."""
+
+    def test_anonymous_reads_full_topic_body(self):
         response = self.client.get('/topics/rag/')
         content = response.content.decode()
-        self.assertIn('data-testid="topics-signin-link"', content)
-        self.assertContains(response, 'RAG')
-        self.assertNotIn(RAG_BODY_SENTENCE, content)
-        self.assertNotIn(RAG_LEAK_TAIL, content)
-        self.assertNotIn('data-testid="topic-body"', content)
+        self.assertContains(response, 'data-testid="topic-body"')
+        self.assertContains(response, RAG_BODY_SENTENCE)
+        _assert_no_gate_render(self, content)
 
-    def test_free_user_gets_teaser_and_upgrade_path(self):
+    def test_free_member_reads_full_topic_body(self):
         self.client.login(email='free@test.com', password='testpass')
         response = self.client.get('/topics/rag/')
         content = response.content.decode()
-        self.assertContains(response, 'data-testid="topic-teaser"')
-        self.assertContains(response, 'data-testid="topic-teaser-blur"')
-        self.assertContains(response, 'data-testid="topics-gated-cta"')
-        self.assertIn('href="/membership"', content)
-        self.assertNotIn(RAG_BODY_SENTENCE, content)
-        self.assertNotIn(RAG_LEAK_TAIL, content)
-
-    def test_basic_member_reads_full_page(self):
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/topics/rag/')
         self.assertContains(response, 'data-testid="topic-body"')
         self.assertContains(response, RAG_BODY_SENTENCE)
-        self.assertNotIn('data-testid="topics-gated-cta"', response.content.decode())
+        _assert_no_gate_render(self, content)
+        self.assertContains(response, 'data-testid="topics-conversion"')
 
-    def test_main_and_premium_read_full_page(self):
-        for email in ('main@test.com',):
-            self.client.login(email=email, password='testpass')
-            response = self.client.get('/topics/rag/')
-            self.assertContains(response, RAG_BODY_SENTENCE)
-            self.client.logout()
+    def test_paid_members_read_full_topic_body(self):
+        for email in ('basic@test.com', 'main@test.com'):
+            with self.subTest(email=email):
+                self.client.login(email=email, password='testpass')
+                response = self.client.get('/topics/rag/')
+                content = response.content.decode()
+                self.assertContains(response, RAG_BODY_SENTENCE)
+                _assert_no_gate_render(self, content)
+                self.client.logout()
+
+
+class TopicConversionSectionTest(_TopicsFixtureMixin, TestCase):
+    """Every published topic page funnels to membership and the Buildcamp."""
+
+    def test_conversion_section_renders_after_body_and_related(self):
+        response = self.client.get('/topics/rag/')
+        content = response.content.decode()
+        self.assertContains(response, 'data-testid="topics-conversion"')
+        self.assertLess(
+            content.index('data-testid="topic-body"'),
+            content.index('data-testid="topic-related"'),
+        )
+        self.assertLess(
+            content.index('data-testid="topic-related"'),
+            content.index('data-testid="topics-conversion"'),
+        )
+
+    def test_membership_cta_is_primary_large(self):
+        content = self.client.get('/topics/rag/').content.decode()
+        tag = _anchor_tag(content, 'topics-cta-membership')
+        self.assertIn('href="/membership"', tag)
+        self.assertIn('px-6 py-3', tag)
+
+    def test_buildcamp_cta_is_secondary_medium(self):
+        content = self.client.get('/topics/rag/').content.decode()
+        tag = _anchor_tag(content, 'topics-cta-buildcamp')
+        self.assertIn('href="/courses/ai-buildcamp"', tag)
+        self.assertIn('Explore the AI Buildcamp', content)
+        self.assertIn('px-4 py-2', tag)
 
 
 class TopicRelatedLinksTest(_TopicsFixtureMixin, TestCase):
-    def test_related_links_resolve_for_basic_member(self):
-        self.client.login(email='basic@test.com', password='testpass')
+    def test_related_links_resolve_for_anonymous(self):
         response = self.client.get('/topics/rag/')
         content = response.content.decode()
         self.assertContains(response, 'data-testid="topic-related"')
@@ -235,32 +316,28 @@ class TopicRelatedLinksTest(_TopicsFixtureMixin, TestCase):
         self.assertContains(response, 'href="/topics/vector-search/"')
 
     def test_dangling_related_slug_skipped(self):
-        self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/topics/rag/')
         self.assertNotContains(response, 'href="/topics/does-not-exist/"')
 
     def test_related_section_absent_when_nothing_resolves(self):
-        self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/topics/vector-search/')
-        self.assertNotContains(response, 'data-testid="topic-related"')
-
-    def test_related_section_hidden_from_denied_levels(self):
-        response = self.client.get('/topics/rag/')
         self.assertNotContains(response, 'data-testid="topic-related"')
 
 
 class TopicDraftAndReservedSlugTest(_TopicsFixtureMixin, TestCase):
-    def test_draft_page_404s_for_members(self):
-        self.client.login(email='basic@test.com', password='testpass')
-        response = self.client.get('/topics/evaluation/')
-        self.assertEqual(response.status_code, 404)
-
     def test_draft_page_404s_for_anonymous(self):
         response = self.client.get('/topics/evaluation/')
         self.assertEqual(response.status_code, 404)
 
+    def test_draft_page_404s_for_members(self):
+        for email in ('free@test.com', 'basic@test.com'):
+            with self.subTest(email=email):
+                self.client.login(email=email, password='testpass')
+                response = self.client.get('/topics/evaluation/')
+                self.assertEqual(response.status_code, 404)
+                self.client.logout()
+
     def test_hub_slug_has_no_detail_page(self):
-        self.client.login(email='basic@test.com', password='testpass')
         response = self.client.get('/topics/index/')
         self.assertEqual(response.status_code, 404)
 
@@ -269,8 +346,100 @@ class TopicDraftAndReservedSlugTest(_TopicsFixtureMixin, TestCase):
         self.assertEqual(response.status_code, 404)
 
 
+class TopicSeoTagsTest(_TopicsFixtureMixin, TestCase):
+    """Detail pages carry the canonical + OG/Twitter contract (#1804)."""
+
+    def test_detail_emits_canonical_and_social_tags(self):
+        response = self.client.get('/topics/rag/')
+        content = response.content.decode()
+        canonical = re.search(
+            r'<link rel="canonical" href="[^"]*">$', content, re.M,
+        )
+        self.assertIsNotNone(canonical, 'canonical link missing')
+        # page_seo_tags normalizes routes to no-trailing-slash form.
+        self.assertTrue(
+            canonical.group(0).endswith('/topics/rag">'),
+            f'canonical points at the wrong path: {canonical.group(0)}',
+        )
+        self.assertIn(
+            '<meta property="og:title" content="RAG | AI Shipping Labs">',
+            content,
+        )
+        self.assertIn(
+            '<meta property="og:description" '
+            'content="Retrieval-augmented generation, summarized.">',
+            content,
+        )
+        self.assertIn(
+            '<meta name="twitter:card" content="summary_large_image">',
+            content,
+        )
+
+    def test_detail_title_matches_document_title(self):
+        response = self.client.get('/topics/rag/')
+        content = response.content.decode()
+        self.assertIn('<title>RAG | AI Shipping Labs</title>', content)
+        self.assertIn(
+            '<meta property="og:title" content="RAG | AI Shipping Labs">',
+            content,
+        )
+
+    def test_detail_without_summary_falls_back_to_title_description(self):
+        _create_topic('bare', 'Bare Page', 'Body only.', summary='')
+        content = self.client.get('/topics/bare/').content.decode()
+        self.assertIn(
+            '<meta property="og:description" '
+            'content="Bare Page - an AI Shipping Labs member topic guide.">',
+            content,
+        )
+
+    def test_hub_keeps_canonical_and_social_tags(self):
+        response = self.client.get('/topics/')
+        content = response.content.decode()
+        self.assertIn(
+            '<meta property="og:title" content="Topics | AI Shipping Labs">',
+            content,
+        )
+        self.assertTrue(
+            re.search(r'<link rel="canonical" href="[^"]*">$', content, re.M),
+            'hub canonical link missing',
+        )
+
+
+class TopicsSitemapInclusionTest(_TopicsFixtureMixin, TestCase):
+    """The open topics wiki is a sitemap member (#1804)."""
+
+    def test_sitemap_lists_hub_and_published_pages(self):
+        response = self.client.get('/sitemap.xml')
+        self.assertEqual(response.status_code, 200)
+        entries = _sitemap_paths_and_lastmods(response)
+        self.assertIn('/topics/', entries)
+        self.assertIn('/topics/rag/', entries)
+        self.assertIn('/topics/agents/', entries)
+        self.assertIn('/topics/vector-search/', entries)
+
+    def test_sitemap_lastmod_comes_from_updated_at(self):
+        response = self.client.get('/sitemap.xml')
+        entries = _sitemap_paths_and_lastmods(response)
+        expected = timezone.localdate(self.rag.updated_at).isoformat()
+        self.assertTrue(
+            entries['/topics/rag/'].startswith(expected),
+            f'lastmod {entries["/topics/rag/"]!r} does not match '
+            f'updated_at date {expected!r}',
+        )
+
+    def test_sitemap_excludes_draft_pages(self):
+        response = self.client.get('/sitemap.xml')
+        entries = _sitemap_paths_and_lastmods(response)
+        self.assertNotIn('/topics/evaluation/', entries)
+
+
 class TopicModelRenderingTest(TestCase):
     """Model-level behavior of the body pipeline and related resolution."""
+
+    def test_new_pages_default_to_open(self):
+        page = _create_topic('defaults', 'Defaults', 'Body.')
+        self.assertEqual(page.required_level, LEVEL_OPEN)
 
     def test_relative_md_links_rewritten_in_body_html(self):
         page = _create_topic(

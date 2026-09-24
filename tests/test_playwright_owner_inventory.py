@@ -1366,17 +1366,19 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
 
     issue_1688_owners = frozenset({
         "playwright_tests/test_member_topics_1688.py::"
-        "test_basic_member_reads_topic_and_follows_related_link",
+        "test_anonymous_reads_topic_from_search_and_follows_related",
         "playwright_tests/test_member_topics_1688.py::"
-        "test_free_member_hits_teaser_and_finds_upgrade_path",
+        "test_anonymous_explores_hub_grid_and_opens_topic",
         "playwright_tests/test_member_topics_1688.py::"
-        "test_anonymous_visitor_gets_signin_prompt_and_no_body",
+        "test_anonymous_follows_membership_cta_from_topic",
         "playwright_tests/test_member_topics_1688.py::"
-        "test_main_member_discovers_topics_through_hub_grid",
+        "test_anonymous_follows_buildcamp_and_workshops_ctas",
         "playwright_tests/test_member_topics_1688.py::"
-        "test_draft_topic_stays_hidden_from_members",
+        "test_free_member_reads_full_page_without_upsell_friction",
         "playwright_tests/test_member_topics_1688.py::"
-        "test_gated_topics_stay_out_of_the_sitemap",
+        "test_draft_topic_stays_hidden",
+        "playwright_tests/test_member_topics_1688.py::"
+        "test_topics_urls_in_the_sitemap",
     })
 
     issue_1719_owners = frozenset({
@@ -1520,8 +1522,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2664)
-        self.assertEqual(len(inventory.owners), 2461)
+        self.assertEqual(inventory.item_count, 2665)
+        self.assertEqual(len(inventory.owners), 2462)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

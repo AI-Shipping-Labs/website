@@ -7,6 +7,7 @@ Includes:
 - All events (upcoming/completed, including recordings) at /events/<id>/<slug>
 - Published projects with required_level=0
 - Published tutorials with required_level=0
+- Open topic wiki pages: the /topics/ hub and every published TopicPage (#1804)
 - Tag pages (index + individual tags)
 - Static pages (home, about, blog listing, etc.)
 """
@@ -31,6 +32,7 @@ from content.models import (
 )
 from content.utils.tags import collect_tag_names
 from events.models import Event
+from topics.models import STATUS_PUBLISHED, TopicPage
 
 
 class ArticleSitemap(Sitemap):
@@ -199,6 +201,28 @@ class DocsPageSitemap(KnowledgeBaseSitemap):
     section = SECTION_DOCS
 
 
+class TopicsSitemap(Sitemap):
+    """Sitemap for the open topics wiki: the hub plus published pages (#1804).
+
+    The hub is itself a published TopicPage whose ``get_absolute_url`` is
+    ``/topics/``, so one published-only query covers the hub and every
+    detail page; drafts drop out with the status filter.
+    """
+    changefreq = 'weekly'
+    priority = 0.6
+
+    def items(self):
+        return TopicPage.objects.filter(
+            status=STATUS_PUBLISHED,
+        ).order_by('slug')
+
+    def lastmod(self, obj):
+        return obj.updated_at
+
+    def location(self, obj):
+        return obj.get_absolute_url()
+
+
 class StaticViewSitemap(Sitemap):
     """Sitemap for static pages."""
     changefreq = 'monthly'
@@ -272,6 +296,7 @@ sitemaps = {
     'marketing_pages': MarketingPageSitemap,
     'wiki_pages': WikiPageSitemap,
     'docs_pages': DocsPageSitemap,
+    'topics': TopicsSitemap,
     'tags': TagSitemap,
     'static': StaticViewSitemap,
 }

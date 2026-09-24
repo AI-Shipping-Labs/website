@@ -1,37 +1,15 @@
 """Public views for member topic pages (#1688).
 
-Both the hub and the topic pages are gated at the page's ``required_level``
-(default Basic and above). Denied renders carry the canonical gated-access
-card copy and never include the page's ``body`` or ``body_html``.
+Since #1804 the surface is open to everyone: the hub and every published
+topic page render their full body unconditionally, including for
+anonymous visitors. Drafts 404 and the hub slug has no detail route.
 """
 
 from django.http import Http404
 from django.shortcuts import render
 from django.views.decorators.http import require_GET
 
-from content.access import build_gating_context, can_access
 from topics.models import HUB_SLUG, STATUS_PUBLISHED, TopicPage
-
-
-def _gating_context(request, page):
-    """Return the template context for one page's gate, or ``{'is_gated': False}``."""
-    user = request.user
-    if can_access(user, page):
-        return {'is_gated': False}
-    context = build_gating_context(
-        user,
-        page,
-        content_type='topic',
-        gated_card_testid='topics-gated-card',
-        gated_cta_testid='topics-gated-cta',
-        gated_icon='map',
-    )
-    if context.get('is_gated'):
-        # TopicPage derives its teaser from the body; the shared builder
-        # only knows the description/content_markdown attributes.
-        context['teaser'] = page.teaser
-        context['page_url'] = page.get_absolute_url()
-    return context
 
 
 def _published_pages():
@@ -52,13 +30,15 @@ def topics_hub(request):
     ).first()
     if hub is None:
         raise Http404('No published topic hub has been synced yet.')
-    context = {
-        'hub': hub,
-        'pages': _published_pages(),
-        'related_topics': hub.resolved_related(),
-    }
-    context.update(_gating_context(request, hub))
-    return render(request, 'topics/hub.html', context)
+    return render(
+        request,
+        'topics/hub.html',
+        {
+            'hub': hub,
+            'pages': _published_pages(),
+            'related_topics': hub.resolved_related(),
+        },
+    )
 
 
 @require_GET
@@ -72,9 +52,11 @@ def topic_page(request, slug):
     ).first()
     if page is None:
         raise Http404(f'No published topic page {slug!r}.')
-    context = {
-        'page': page,
-        'related_topics': page.resolved_related(),
-    }
-    context.update(_gating_context(request, page))
-    return render(request, 'topics/detail.html', context)
+    return render(
+        request,
+        'topics/detail.html',
+        {
+            'page': page,
+            'related_topics': page.resolved_related(),
+        },
+    )

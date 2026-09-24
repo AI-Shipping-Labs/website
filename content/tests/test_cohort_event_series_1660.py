@@ -1,5 +1,4 @@
-"""Tests for ``Cohort.event_series`` and the course page live-sessions block
-(issue #1660).
+"""Tests for ``Cohort.event_series`` and the member-only Home session list.
 
 Kept in its own file (rather than extending ``test_cohorts.py``) to avoid
 touching a file the parallel #1659 engineer is also likely to edit on
@@ -84,8 +83,8 @@ class CohortEventSeriesFieldTest(TestCase):
         self.assertIn(cohort_b, series.cohorts.all())
 
 
-class CourseLiveSessionsBlockTest(TierSetupMixin, TestCase):
-    """Course page's member-only live-sessions block (issue #1660)."""
+class CourseLiveSessionsHomeTest(TierSetupMixin, TestCase):
+    """Live sessions are scoped to the learner's selected Home cohort."""
 
     def setUp(self):
         self.course = Course.objects.create(
@@ -134,35 +133,42 @@ class CourseLiveSessionsBlockTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Office Hours — Upcoming')
 
     def test_non_entitled_authenticated_sees_no_block(self):
-        User.objects.create_user(
+        user = User.objects.create_user(
             email='free-1660@test.com', password='testpass',
         )
         self.client.login(email='free-1660@test.com', password='testpass')
-        response = self.client.get(self._course_url())
-        self.assertNotContains(response, 'data-testid="course-live-sessions"')
+        detail = self.client.get(self._course_url())
+        home = self.client.get(f'{self._course_url()}/home')
+        self.assertNotContains(detail, 'data-testid="course-live-sessions"')
+        self.assertNotContains(home, 'data-testid="course-home-live-sessions"')
+        self.assertNotContains(home, self.upcoming_event.title)
+        self.assertFalse(CohortEnrollment.objects.filter(user=user).exists())
 
-    def test_entitled_cohort_member_sees_block_with_join_and_recap_links(self):
+    def test_course_detail_hides_full_list_and_home_shows_join_and_recap_links(self):
         user = User.objects.create_user(
             email='entitled-1660@test.com', password='testpass',
         )
         CohortEnrollment.objects.create(cohort=self.cohort, user=user)
         self.client.login(email='entitled-1660@test.com', password='testpass')
-        response = self.client.get(self._course_url())
-        self.assertContains(response, 'data-testid="course-live-sessions"')
-        self.assertContains(response, 'Office Hours — Upcoming')
-        self.assertContains(response, 'Office Hours — Past')
+        detail = self.client.get(self._course_url())
+        home = self.client.get(f'{self._course_url()}/home')
+        self.assertNotContains(detail, 'data-testid="course-live-sessions"')
+        self.assertNotContains(detail, 'Office Hours — Upcoming')
+        self.assertContains(home, 'data-testid="course-home-live-sessions"')
+        self.assertContains(home, self.upcoming_event.title)
+        self.assertContains(home, self.past_event.title)
         self.assertContains(
-            response, self.past_event.get_recap_url(),
+            home, self.past_event.get_recap_url(),
         )
 
-    def test_staff_sees_block_without_enrollment(self):
+    def test_staff_does_not_get_a_private_session_list_on_course_detail(self):
         User.objects.create_user(
             email='staff-1660@test.com', password='testpass', is_staff=True,
         )
         self.client.login(email='staff-1660@test.com', password='testpass')
         response = self.client.get(self._course_url())
-        self.assertContains(response, 'data-testid="course-live-sessions"')
-        self.assertContains(response, 'Office Hours — Upcoming')
+        self.assertNotContains(response, 'data-testid="course-live-sessions"')
+        self.assertNotContains(response, 'Office Hours — Upcoming')
 
     def test_draft_occurrence_is_excluded_from_block(self):
         Event.objects.create(

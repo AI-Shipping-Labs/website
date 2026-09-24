@@ -1,0 +1,11 @@
+{% if total_units > 0 %}
+<section class="rounded-lg border border-border bg-card p-4 sm:p-6" aria-labelledby="course-home-progress-heading" data-testid="course-home-progress">
+  <div class="mb-2 flex items-center justify-between gap-4">
+    <h2 id="course-home-progress-heading" class="text-sm font-medium text-foreground">Your Progress</h2>
+    <span class="text-sm text-muted-foreground">{{ completed_units }} of {{ total_units }} completed</span>
+  </div>
+  <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Course progress" aria-valuemin="0" aria-valuemax="{{ total_units }}" aria-valuenow="{{ completed_units }}">
+    <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ progress_pct }}%"></div>
+  </div>
+</section>
+{% endif %}

@@ -847,6 +847,13 @@ def _sync_course_cohorts(course, course_data, rel_path):
                 ) from exc
             cohort.save(update_fields=changed_fields)
 
+    # Course YAML may omit cohorts entirely when it has no scheduled
+    # offering. Give those courses one real, date-free cohort row. Existing
+    # dated cohorts are preserved and never get a synthetic replacement.
+    from content.services.course_cohorts import ensure_course_self_paced_cohort
+
+    ensure_course_self_paced_cohort(course)
+
 
 def _parse_cohort_date(value, *, field_name, rel_path):
     """Resolve a ``cohorts:`` date value to a ``datetime.date``.

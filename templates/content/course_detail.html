@@ -92,26 +92,39 @@
       {% if has_access and user_authenticated %}
       <div class="mb-10" data-testid="enrollment-cta">
         {% if user_is_enrolled %}
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between rounded-lg border border-accent/30 bg-accent/5 p-5">
-          <div class="flex items-center gap-3 min-w-0">
+        <div class="rounded-lg border border-accent/30 bg-accent/5 p-5 sm:p-6">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             {% member_badge "Enrolled" tone="success" size="md" icon="check-circle-2" extra_class="px-3 py-1" %}
-            <span class="text-sm text-muted-foreground truncate">You're taking this course.</span>
-          </div>
-          <div class="flex flex-wrap items-center gap-3">
-            <a href="{% url 'course_home' slug=course.slug %}" class="{% button_classes 'primary' size='md' %}" data-testid="course-detail-home-link">Course home</a>
-            {% if next_unit_for_user %}
-            <a href="{{ next_unit_for_user.get_absolute_url }}"
-               class="{% button_classes 'secondary' size='md' %}"
-               data-testid="continue-button">
-              Continue lesson
-              <i data-lucide="play" class="h-4 w-4"></i>
-            </a>
+            {% if enrolled_cohort %}
+            <span class="text-sm text-muted-foreground" data-testid="course-detail-enrolled-cohort">You're taking this course with {{ enrolled_cohort.name }}.</span>
+            {% else %}
+            <span class="text-sm text-muted-foreground">You're taking this course.</span>
             {% endif %}
-            <form method="post" action="/courses/{{ course.slug }}/unenroll" class="inline"
+            {% if enrolled_cohort.start_date and enrolled_cohort.end_date %}
+            <span class="text-xs text-muted-foreground">
+              <time datetime="{{ enrolled_cohort.start_date|form_date_value }}">{{ enrolled_cohort.start_date|member_short_date }}</time>–<time datetime="{{ enrolled_cohort.end_date|form_date_value }}">{{ enrolled_cohort.end_date|member_short_date }}</time>
+            </span>
+            {% endif %}
+          </div>
+          <div class="mt-5 flex flex-col gap-3 border-t border-accent/20 pt-5 sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {% if next_unit_for_user %}
+              <a href="{{ next_unit_for_user.get_absolute_url }}"
+                 class="{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}"
+                 data-testid="continue-button">
+                Continue lesson
+                <i data-lucide="play" class="h-4 w-4"></i>
+              </a>
+              {% endif %}
+              <a href="{% url 'course_home' slug=course.slug %}"
+                 class="{% if next_unit_for_user %}{% button_classes 'secondary' size='md' extra='w-full justify-center sm:w-auto' %}{% else %}{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}{% endif %}"
+                 data-testid="course-detail-home-link">Course home</a>
+            </div>
+            <form method="post" action="/courses/{{ course.slug }}/unenroll" class="self-end sm:self-auto"
                   onsubmit="return confirm('Unenroll from this course? Your progress will be preserved.')">
               {% csrf_token %}
               <button type="submit"
-                      class="inline-flex items-center gap-2 rounded-lg border border-border bg-transparent px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                      class="inline-flex min-h-[44px] items-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       data-testid="unenroll-button">
                 Unenroll
               </button>
@@ -217,22 +230,6 @@
       </div>
       {% endif %}
 
-      {% comment %}Issue #1660: member-only live-sessions block. An entitlement
-      gate, not a tier gate — anonymous and non-entitled viewers see nothing
-      here, with no upsell CTA (#1658 owns the course-level entitlement CTA).
-      Built the book club way: `content/_live_session_row.html` is a thin call
-      site for the canonical `includes/_list_row.html` row owner.{% endcomment %}
-      {% if live_session_entries %}
-      <div class="mb-8 rounded-lg border border-border bg-card p-6" data-testid="course-live-sessions">
-        <h2 class="text-2xl font-semibold tracking-tight mb-4">Live sessions</h2>
-        <div class="space-y-0.5">
-          {% for entry in live_session_entries %}
-          {% include "content/_live_session_row.html" with entry=entry user=user %}
-          {% endfor %}
-        </div>
-      </div>
-      {% endif %}
-
       <!-- Syllabus -->
       <style>
         .module-details[open] > div {
@@ -288,19 +285,6 @@
           {% endfor %}
         </div>
       </div>
-
-      <!-- Progress bar (authorized users only) -->
-      {% if has_access and user_authenticated and total_units > 0 %}
-      <div class="mb-8 rounded-lg border border-border bg-card p-6">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-sm font-medium text-foreground">Your Progress</span>
-          <span class="text-sm text-muted-foreground">{{ completed_units }} of {{ total_units }} completed</span>
-        </div>
-        <div class="w-full bg-muted rounded-full h-2.5">
-          <div class="bg-accent h-2.5 rounded-full transition-all" style="width: {{ progress_pct }}%"></div>
-        </div>
-      </div>
-      {% endif %}
 
       <!-- Testimonials -->
       {% if testimonials %}

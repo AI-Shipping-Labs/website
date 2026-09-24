@@ -10,7 +10,7 @@ from django.utils import timezone
 
 from content.access import LEVEL_BASIC, LEVEL_OPEN, LEVEL_REGISTERED, get_user_level
 from content.models import CourseAccess, UserCourseProgress
-from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_LESSON
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.peer_review import CourseProject
 from content.services.course_units import (
     build_module_week_dates,
@@ -169,36 +169,53 @@ def build_course_home(course, user, cohort, *, today=None):
                     'next_available': None,
                 })
 
+    orientation_rows = [
+        row for row in rows[:1]
+        if not row['optional'] and not row['capstone']
+        and _is_orientation_module(row['module'])
+    ]
+    orientation_module_ids = {row['module'].pk for row in orientation_rows}
+    unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
+
     recommendation = None
     locked_dates = []
     # Session units can be schedule-only stubs. Keep them in core progress, but
     # lead with an actual lesson while one is available anywhere in the syllabus.
     recommendation_order = [unit for unit in required_units if unit.kind == UNIT_KIND_LESSON]
     recommendation_order += [unit for unit in required_units if unit.kind == UNIT_KIND_EVENT]
-    for unit in recommendation_order:
-        if unit.pk in completed_ids:
-            continue
-        available_date = _unit_available_on(unit, cohort)
-        if available_date and today < available_date:
-            locked_dates.append(available_date)
-            continue
-        if not _can_open_unit(
-            unit, user_level=user_level, individual_access=individual_access,
-            entitlement_mode=course.access_mode == 'entitlement',
-            is_staff=user.is_staff or user.is_superuser,
-            verified=user.email_verified,
-        ):
-            continue
-        # Reuse the reader's final decisions for the one lesson we recommend.
-        if not decide_course_unit_access(user, unit).has_access:
-            continue
-        reader_drip = decide_course_unit_drip_lock(user, unit, today=today, cohort=cohort)
-        if reader_drip.is_locked:
-            if reader_drip.available_date:
-                locked_dates.append(reader_drip.available_date)
-            continue
-        recommendation = unit
-        break
+    recommendation_passes = (True, False) if unscheduled_cohort and orientation_module_ids else (False,)
+    for skip_orientation in recommendation_passes:
+        for unit in recommendation_order:
+            if (
+                skip_orientation
+                and _top_level_module(unit.module).pk in orientation_module_ids
+            ):
+                continue
+            if unit.pk in completed_ids:
+                continue
+            available_date = _unit_available_on(unit, cohort)
+            if available_date and today < available_date:
+                locked_dates.append(available_date)
+                continue
+            if not _can_open_unit(
+                unit, user_level=user_level, individual_access=individual_access,
+                entitlement_mode=course.access_mode == 'entitlement',
+                is_staff=user.is_staff or user.is_superuser,
+                verified=user.email_verified,
+            ):
+                continue
+            # Reuse the reader's final decisions for the one lesson we recommend.
+            if not decide_course_unit_access(user, unit).has_access:
+                continue
+            reader_drip = decide_course_unit_drip_lock(user, unit, today=today, cohort=cohort)
+            if reader_drip.is_locked:
+                if reader_drip.available_date:
+                    locked_dates.append(reader_drip.available_date)
+                continue
+            recommendation = unit
+            break
+        if recommendation:
+            break
 
     core_total = len(required_units)
     core_completed = len(completed_ids & {unit.pk for unit in required_units})
@@ -225,9 +242,21 @@ def build_course_home(course, user, cohort, *, today=None):
             current_week = 1 + (today - cohort.start_date).days // 7
 
     current_cohort_module = _current_cohort_module(modules, week_dates, cohort, today)
-    focus_module = current_cohort_module or _top_level_module(
-        recommendation.module if recommendation else None,
-    )
+    first_instructional_module = next((
+        module for module in modules
+        if not module.is_bonus and module.pk not in orientation_module_ids
+        and any(
+            unit.kind in MATERIAL_KINDS | {UNIT_KIND_HOMEWORK}
+            and not unit.effective_is_bonus
+            for unit in _all_module_units(module)
+        )
+    ), None)
+    recommended_module = _top_level_module(recommendation.module if recommendation else None)
+    focus_module = current_cohort_module or recommended_module
+    if unscheduled_cohort and (
+        focus_module is None or focus_module.pk in orientation_module_ids
+    ):
+        focus_module = first_instructional_module or focus_module
     focus_week_range = ''
     if focus_module and focus_module.pk in week_dates:
         focus_week_range = format_week_range(*week_dates[focus_module.pk])
@@ -259,12 +288,6 @@ def build_course_home(course, user, cohort, *, today=None):
         help_links.append(('Frequently asked questions', course.faq_url))
     if course.docs_url:
         help_links.append(('Course documentation', course.docs_url))
-
-    orientation_rows = [
-        row for row in rows[:1]
-        if not row['optional'] and not row['capstone']
-        and _is_orientation_module(row['module'])
-    ]
 
     return {
         'course': course,

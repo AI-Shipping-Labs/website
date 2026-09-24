@@ -102,10 +102,12 @@ class EnsureSelfPacedCohortEnrollmentTest(TestCase):
         )
         cls.user = User.objects.create_user(email='learner@test.com', password='pw')
 
-    def test_no_self_paced_cohort_defined_is_a_no_op(self):
+    def test_course_without_a_dated_cohort_gets_default_self_paced_membership(self):
         result = ensure_self_paced_cohort_enrollment(self.user, self.course)
-        self.assertIsNone(result)
-        self.assertFalse(CohortEnrollment.objects.filter(user=self.user).exists())
+        self.assertIsNotNone(result)
+        self.assertEqual(result.cohort.mode, 'self_paced')
+        self.assertEqual(result.cohort.name, 'Self-paced')
+        self.assertTrue(CohortEnrollment.objects.filter(user=self.user).exists())
 
     def test_creates_enrollment_into_self_paced_cohort(self):
         self_paced = Cohort.objects.create(
@@ -137,11 +139,35 @@ class EnsureSelfPacedCohortEnrollmentTest(TestCase):
             ).exists(),
         )
 
+    def test_unenrolled_learner_is_not_auto_joined_to_a_real_cohort(self):
+        dated = Cohort.objects.create(
+            course=self.course, name='Cohort 4', mode='cohort',
+            start_date=datetime.date(2026, 9, 21), end_date=datetime.date(2026, 11, 22),
+        )
+
+        result = ensure_self_paced_cohort_enrollment(self.user, self.course)
+
+        self.assertIsNone(result)
+        self.assertFalse(CohortEnrollment.objects.filter(user=self.user).exists())
+        self.assertEqual(Cohort.objects.filter(course=self.course).count(), 1)
+        self.assertEqual(Cohort.objects.get(course=self.course), dated)
+
     def test_anonymous_user_is_a_no_op(self):
         from django.contrib.auth.models import AnonymousUser
         Cohort.objects.create(course=self.course, name='Self-paced', mode='self_paced')
         result = ensure_self_paced_cohort_enrollment(AnonymousUser(), self.course)
         self.assertIsNone(result)
+
+    def test_user_without_course_access_is_not_auto_enrolled(self):
+        self.course.required_level = 30
+        self.course.save(update_fields=['required_level'])
+
+        result = ensure_self_paced_cohort_enrollment(self.user, self.course)
+
+        self.assertIsNone(result)
+        self.assertFalse(
+            CohortEnrollment.objects.filter(user=self.user, cohort__course=self.course).exists(),
+        )
 
 
 class DripLockSelfPacedRegressionTest(TestCase):

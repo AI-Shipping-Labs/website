@@ -12,7 +12,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import Resolver404, resolve
 
-from content.models import Course, Module, Unit
+from content.models import Cohort, Course, Module, Unit
 
 User = get_user_model()
 
@@ -113,6 +113,10 @@ class CourseAdminCRUDTest(TestCase):
         course = Course.objects.get(slug='new-course')
         self.assertEqual(course.title, 'New Course')
         self.assertEqual(course.required_level, 0)
+        self.assertEqual(
+            list(Cohort.objects.filter(course=course).values_list('mode', flat=True)),
+            ['self_paced'],
+        )
         self.assertEqual(course.reader_navigation_scope, 'course')
 
     def test_admin_status_change_draft_to_published(self):

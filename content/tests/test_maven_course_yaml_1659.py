@@ -115,6 +115,20 @@ class MavenCourseKeySyncTest(_CourseYamlSyncFixtureBase):
 
 
 class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
+    def test_course_without_a_scheduled_cohort_gets_a_default_self_paced_cohort(self):
+        self._write_course_yaml()
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(log.errors, [])
+        course = Course.objects.get(slug="buildcamp-1659")
+        cohort = Cohort.objects.get(course=course)
+        self.assertEqual(cohort.name, "Self-paced")
+        self.assertEqual(cohort.mode, "self_paced")
+        self.assertIsNone(cohort.start_date)
+        self.assertIsNone(cohort.end_date)
+        self.assertEqual(cohort.external_key, "")
+
     def test_cohorts_list_creates_cohort_rows(self):
         self._write_course_yaml(
             extras=(
@@ -134,6 +148,7 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
         self.assertEqual(cohort.name, "Cohort 4")
         self.assertEqual(str(cohort.start_date), "2026-09-21")
         self.assertEqual(str(cohort.end_date), "2026-11-22")
+        self.assertEqual(Cohort.objects.filter(course=course).count(), 1)
 
     def test_resync_updates_changed_cohort_fields(self):
         self._write_course_yaml(

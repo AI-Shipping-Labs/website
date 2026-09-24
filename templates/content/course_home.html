@@ -6,7 +6,7 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
-  <div class="mx-auto max-w-5xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8 lg:px-8">
+  <div class="mx-auto max-w-3xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8 lg:px-8">
     <header class="mb-5 sm:mb-6">
       <p class="text-sm font-medium text-muted-foreground">Course home</p>
       <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
@@ -27,8 +27,28 @@
     </nav>
 
     <div class="space-y-4">
+      {% if not cohort %}
+      <section class="rounded-xl border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
+        <h2 id="course-home-no-cohort-heading" class="text-base font-semibold text-foreground">No cohort is linked to your account</h2>
+        <p class="mt-1 text-sm text-muted-foreground">This page shows course materials without cohort dates, deadlines, or live sessions. If you expected cohort access, contact the course support team.</p>
+        <a href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access" class="mt-3 inline-flex min-h-[44px] items-center text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-cohort-support">Contact course support</a>
+      </section>
+      {% endif %}
+
+      {% for row in orientation_rows %}
+      <section class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-labelledby="course-home-get-started-heading" data-testid="course-home-get-started">
+        <div class="min-w-0">
+          <p class="text-xs font-semibold uppercase tracking-wide text-accent">Get started</p>
+          <h2 id="course-home-get-started-heading" class="mt-1 break-words text-base font-semibold text-foreground">{{ row.module.title }}</h2>
+        </div>
+        <a href="{{ row.url }}{{ cohort_query }}" class="{% button_classes 'secondary' size='md' extra='w-full justify-center sm:w-auto' %}" data-testid="course-home-open-orientation">Open orientation</a>
+      </section>
+      {% endfor %}
+
+      {% include "content/course_home/_progress.html" %}
       {% include "content/course_home/_urgent.html" %}
       {% include "content/course_home/_next_action.html" %}
+      {% include "content/course_home/_live_sessions.html" %}
     </div>
 
     {% if help_links %}

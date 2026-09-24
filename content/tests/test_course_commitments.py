@@ -282,6 +282,46 @@ class CourseCommitmentsTests(TestCase):
         self.assertEqual(work['url'], f'{step.get_absolute_url()}?cohort=first')
         self.assertEqual(work['action'], 'Open project step')
 
+    def test_unlinked_learner_sees_first_instructional_homework_without_a_deadline(self):
+        model = build_course_commitments(
+            self.course, self.other, None, now=self.now,
+        )
+
+        work = next(
+            item for item in model['focus_work_items']
+            if item['unit'] == self.homework_unit
+        )
+        self.assertIsNone(work['commitment'])
+        self.assertEqual(work['url'], self.homework_unit.get_absolute_url())
+        self.assertEqual(work['action'], 'Open homework')
+        self.assertIsNone(work['available_date'])
+        self.assertFalse(model['live_session_schedule'])
+
+    def test_self_paced_authored_homework_is_visible_without_a_fake_deadline(self):
+        self.module.title = 'Course Logistics'
+        self.module.save(update_fields=['title'])
+        foundations = Module.objects.create(
+            course=self.course, title='Foundations', slug='foundations', sort_order=2,
+        )
+        step = Unit.objects.create(
+            module=foundations, title='Foundations Capstone project step',
+            slug='foundations-step', kind='homework',
+        )
+        cohort = Cohort.objects.create(
+            course=self.course, name='Self-paced', mode='self_paced',
+        )
+        CohortEnrollment.objects.create(user=self.other, cohort=cohort)
+
+        model = build_course_commitments(
+            self.course, self.other, cohort, now=self.now,
+        )
+
+        work = next(item for item in model['focus_work_items'] if item['unit'] == step)
+        self.assertIsNone(work['commitment'])
+        self.assertEqual(work['action'], 'Open project step')
+        self.assertEqual(work['url'], step.get_absolute_url())
+        self.assertIsNone(work['available_date'])
+
     def test_live_future_past_and_cancelled_sessions_have_truthful_actions(self):
         self._event(
             'past-without-replay', self.series_one,
@@ -428,6 +468,6 @@ class CourseCommitmentsTests(TestCase):
         self.assertFalse(response.context['focus_work_items'])
         self.assertIsNone(response.context['next_live_session'])
         self.assertNotContains(response, 'data-testid="course-home-urgent"')
-        self.assertNotContains(response, 'data-testid="course-home-next-session"')
+        self.assertNotContains(response, 'data-testid="course-home-live-sessions"')
         self.assertNotContains(response, 'data-testid="course-home-weekly-work"')
         self.assertNotContains(response, self.homework_one.title)

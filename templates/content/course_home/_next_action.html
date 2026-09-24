@@ -22,13 +22,12 @@
         <h3 id="course-home-position-heading" class="text-sm font-semibold text-foreground">Your learning position</h3>
       </div>
       {% if recommended_unit %}
+      {% if recommended_live_session %}
+      <p class="mt-3 text-sm text-muted-foreground">Your next live session is highlighted in the schedule below.</p>
+      {% else %}
       <p class="mt-3 text-xs font-medium text-muted-foreground">Next uncompleted course material</p>
       <p class="mt-1 break-words text-base font-semibold text-foreground" data-testid="course-home-recommendation">{{ recommended_unit.title }}</p>
       <p class="mt-1 break-words text-sm text-muted-foreground">{% if recommended_unit.module.parent %}{{ recommended_unit.module.parent.title }} · {% endif %}{{ recommended_unit.module.title }}</p>
-      {% if recommended_live_session %}
-      <p class="mt-2 text-xs text-muted-foreground"><time datetime="{{ recommended_live_session.when.isoformat }}">{{ recommended_live_session.when_label }}</time></p>
-      <a href="{{ recommended_live_session.url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-open-recommended-session">{{ recommended_live_session.action }}</a>
-      {% else %}
       <a href="{{ recommended_unit.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-open-lesson">{{ recommendation_label }}</a>
       {% endif %}
       {% elif action == 'locked' %}
@@ -68,15 +67,4 @@
     {% endif %}
   </div>
 
-  {% if next_live_session %}
-  <section class="mt-6 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="course-home-session-heading" data-testid="course-home-next-session">
-    <div class="min-w-0">
-      <p class="text-xs font-medium text-muted-foreground">{% if next_live_session.status == 'Past' %}Catch up on a recent session{% else %}Next live session{% endif %}</p>
-      {% if next_live_session.module_title %}<h3 id="course-home-session-heading" class="mt-1 break-words text-sm font-semibold text-foreground">{{ next_live_session.module_title }}</h3><p class="mt-1 break-words text-xs text-muted-foreground">{{ next_live_session.title }}</p>
-      {% else %}<h3 id="course-home-session-heading" class="mt-1 break-words text-sm font-semibold text-foreground">{{ next_live_session.title }}</h3>{% endif %}
-      {% if next_live_session.when %}<p class="mt-1 text-xs text-muted-foreground"><time datetime="{{ next_live_session.when.isoformat }}">{{ next_live_session.when_label }}</time></p>{% endif %}
-    </div>
-    {% if next_live_session.url and next_live_session.action %}<a href="{{ next_live_session.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-session-link">{{ next_live_session.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
-  </section>
-  {% endif %}
 </section>

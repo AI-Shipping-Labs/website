@@ -783,15 +783,15 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
-        response = self.client.get('/courses/paid-course')
+        response = self.client.get('/courses/paid-course/home')
         self.assertContains(response, 'Your Progress')
         self.assertContains(response, '0 of 1 completed')
-        self.assertContains(response, 'Main or above')
-        self.assertNotContains(response, 'data-testid="course-gated-cta"')
+        self.assertContains(response, 'data-testid="course-home-progress"')
 
     def test_unauthorized_user_no_progress_bar(self):
         response = self.client.get('/courses/paid-course')
         self.assertNotContains(response, 'Your Progress')
+        self.assertNotContains(response, 'data-testid="course-home-progress"')
 
     # Per-tier matrix on /courses/{slug} (basic vs main, premium vs main)
     # removed in #261: covered end-to-end by
@@ -845,7 +845,7 @@ class FreeCourseAccessTest(TierSetupMixin, TestCase):
 
 
 class CourseProgressDisplayTest(TierSetupMixin, TestCase):
-    """Test progress bar display on course detail."""
+    """Test course progress is presented on the learner's Home page."""
 
     @classmethod
     def setUpTestData(cls):
@@ -876,7 +876,9 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
             user=self.user, unit=self.unit1, completed_at=timezone.now(),
         )
         self.client.login(email='prog@test.com', password='testpass')
-        response = self.client.get('/courses/progress-course')
+        landing = self.client.get('/courses/progress-course')
+        response = self.client.get('/courses/progress-course/home')
+        self.assertNotContains(landing, '1 of 3 completed')
         self.assertContains(response, '1 of 3 completed')
 
     def test_shows_completed_checkmark(self):
@@ -1459,6 +1461,10 @@ class CourseDetailModuleCountQueryGuardTest(TierSetupMixin, TestCase):
         # Warm up the session/middleware so we don't measure unrelated
         # one-off queries (CSRF token, session create, etc.).
         self.client.get(f'/courses/{small_course.slug}')
+        # First access implicitly creates a self-paced cohort enrollment for
+        # each unscheduled course. Warm both so that those one-time writes do
+        # not contaminate the module-count query comparison below.
+        self.client.get(f'/courses/{large_course.slug}')
 
         with CaptureQueriesContext(connection) as small_ctx:
             r1 = self.client.get(f'/courses/{small_course.slug}')

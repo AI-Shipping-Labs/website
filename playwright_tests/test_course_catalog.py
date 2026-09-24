@@ -497,13 +497,31 @@ class TestScenario3FreeUserFreeCourseProgress:
         )
         assert classes_link.count() >= 1
 
-        # "Your Progress" shows "0 of 3 completed"
+        # The progress card belongs to Home while the public overview keeps
+        # the syllabus and course access call to action.
+        assert "Your Progress" not in body
+
+        # Progress now lives on the learner Home, not the public overview.
+        page.goto(
+            f'{django_server}/courses/python-basics/home',
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
         assert "Your Progress" in body
         assert "0 of 3 completed" in body
 
         # No CTA block
         assert "Unlock with" not in body
         assert "Sign up free" not in body
+
+        page.goto(
+            f'{django_server}/courses/python-basics',
+            wait_until="domcontentloaded",
+        )
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+        variables_link = page.locator(
+            'a[href="/courses/python-basics/fundamentals/variables"]'
+        )
 
         # Step 2: Click on the first unit link
         variables_link.first.click()
@@ -533,7 +551,15 @@ class TestScenario3FreeUserFreeCourseProgress:
         )
         body = page.content()
 
-        # Progress now shows "1 of 3 completed"
+        # The public overview does not carry learner progress.
+        assert "Your Progress" not in body
+
+        # Home updates the progress card after a lesson is marked complete.
+        page.goto(
+            f"{django_server}/courses/python-basics/home",
+            wait_until="domcontentloaded",
+        )
+        body = page.content()
         assert "1 of 3 completed" in body
 
         # Completed unit shows a checkmark icon in the syllabus

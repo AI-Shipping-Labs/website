@@ -12,6 +12,7 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
+from content.services.course_cohorts import ensure_course_self_paced_cohort
 from notifications.services import notify_safely
 from studio.admin_links import studio_link
 
@@ -138,6 +139,11 @@ class CourseAdmin(admin.ModelAdmin):
     ordering = ['-created_at']
     date_hierarchy = 'created_at'
     readonly_fields = ['created_at', 'updated_at', 'studio_link']
+
+    def save_related(self, request, form, formsets, change):
+        """Keep manually managed courses on the same cohort invariant as sync."""
+        super().save_related(request, form, formsets, change)
+        ensure_course_self_paced_cohort(form.instance)
 
     fieldsets = (
         (None, {

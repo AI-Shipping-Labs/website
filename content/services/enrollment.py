@@ -8,7 +8,7 @@ same way.
 from __future__ import annotations
 
 from accounts.utils.user_checks import is_authenticated_user
-from content.models.cohort import COHORT_MODE_SELF_PACED, Cohort, CohortEnrollment
+from content.models.cohort import CohortEnrollment
 from content.models.enrollment import (
     SOURCE_AUTO_PROGRESS,
     SOURCE_MANUAL,
@@ -80,23 +80,24 @@ def auto_enroll_on_progress(user, course):
 def ensure_self_paced_cohort_enrollment(user, course):
     """Idempotently enroll ``user`` into ``course``'s self-paced Cohort.
 
-    Issue #1674: when a user has course access and holds no
-    ``CohortEnrollment`` in a ``mode='cohort'`` cohort of this course, and
-    the course defines a ``mode='self_paced'`` Cohort, the platform
-    ensures a ``CohortEnrollment`` into it — mirroring the
+    When a user has course access and holds no ``CohortEnrollment`` in a
+    dated cohort, courses without a dated cohort receive a generated
+    self-paced cohort and membership — mirroring the
     ``get_or_create`` idempotency ``ensure_enrollment`` already uses for
-    course-level ``Enrollment``. This is what makes "every learner is in
-    exactly one cohort" hold in practice, which is what keeps drip-lock
-    and event-slot resolution uniform with no special case for "no
-    cohort at all" vs "self-paced cohort".
+    course-level ``Enrollment``. A course with a dated cohort never gets a
+    generated self-paced cohort, and the learner is never auto-joined to
+    its real cohort.
 
     A no-op (returns ``None``) for anonymous users, for users already
-    enrolled in a dated cohort of this course, and for courses with no
-    ``mode='self_paced'`` Cohort defined — the existing "no enrollment =
-    unlocked" behaviour continues to apply for every course that doesn't
-    opt in, unchanged.
+    enrolled in a dated cohort of this course, and for courses with a real
+    dated cohort but no enrollment.
     """
     if not is_authenticated_user(user):
+        return None
+
+    from content.access import can_access
+
+    if not can_access(user, course):
         return None
 
     has_dated_enrollment = CohortEnrollment.objects.filter(
@@ -105,9 +106,9 @@ def ensure_self_paced_cohort_enrollment(user, course):
     if has_dated_enrollment:
         return None
 
-    self_paced_cohort = Cohort.objects.filter(
-        course=course, mode=COHORT_MODE_SELF_PACED,
-    ).first()
+    from content.services.course_cohorts import ensure_course_self_paced_cohort
+
+    self_paced_cohort = ensure_course_self_paced_cohort(course)
     if self_paced_cohort is None:
         return None
 

@@ -14,6 +14,7 @@ from content.models import (
     CohortEnrollment,
     Course,
     CourseAccess,
+    Enrollment,
     Module,
     Unit,
     UserCourseProgress,
@@ -100,6 +101,20 @@ class CourseHomeTests(TestCase):
         self.assertEqual(model['orientation_rows'][0]['module'], self.first)
         self.assertNotIn(self.first, [row['module'] for row in model['core_rows']])
 
+    def test_course_progress_is_shown_on_home_instead_of_the_public_overview(self):
+        self._complete(self.lesson1)
+        self.client.login(email=self.user.email, password='testpass')
+
+        home = self.client.get('/courses/course-home-test/home')
+        overview = self.client.get('/courses/course-home-test')
+
+        self.assertContains(home, 'data-testid="course-home-progress"')
+        self.assertContains(home, '1 of 4 completed')
+        self.assertContains(home, 'aria-valuemax="4"')
+        self.assertContains(overview, 'Syllabus')
+        self.assertNotContains(overview, 'Your Progress')
+        self.assertNotContains(overview, 'data-testid="course-home-progress"')
+
     def test_lessons_take_priority_over_unscheduled_sessions(self):
         event = Unit.objects.create(
             module=self.first, title='Session 1', slug='session-1',
@@ -177,6 +192,133 @@ class CourseHomeTests(TestCase):
         response = self.client.get('/courses/ai-buildcamp/home')
         self.assertIsNone(response.context['cohort'])
         self.assertNotContains(response, 'Public preview')
+
+    def test_unlinked_buildcamp_learner_gets_foundations_and_work_without_cohort_data(self):
+        course = Course.objects.create(
+            title='AI Engineering Buildcamp', slug='ai-buildcamp',
+            status='published', required_level=0,
+        )
+        logistics = Module.objects.create(
+            course=course, title='Course Logistics', slug='course-logistics',
+            sort_order=0,
+        )
+        foundations = Module.objects.create(
+            course=course, title='Foundations', slug='foundations', sort_order=1,
+        )
+        Unit.objects.create(
+            module=logistics, title='Welcome', slug='welcome', sort_order=1,
+        )
+        first_lesson = Unit.objects.create(
+            module=foundations, title='Build your first AI feature',
+            slug='first-ai-feature', sort_order=1,
+        )
+        project_step = Unit.objects.create(
+            module=foundations, title='Foundations project step',
+            slug='foundations-project-step', kind='homework', sort_order=2,
+        )
+        series = EventSeries.objects.create(name='Cohort 4 sessions', slug='c4-sessions')
+        cohort = Cohort.objects.create(
+            course=course, name='Cohort 4', external_key='cohort-4',
+            start_date=timezone.localdate() - datetime.timedelta(days=3),
+            end_date=timezone.localdate() + datetime.timedelta(days=60),
+            event_series=series,
+        )
+        event = Event.objects.create(
+            event_series=series, slug='cohort4-session', title='Cohort 4 session',
+            status='upcoming', start_datetime=timezone.now() + datetime.timedelta(days=1),
+            end_datetime=timezone.now() + datetime.timedelta(days=1, hours=1),
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get('/courses/ai-buildcamp/home')
+
+        self.assertIsNone(response.context['cohort'])
+        self.assertEqual(response.context['focus_module'], foundations)
+        self.assertEqual(response.context['recommended_unit'], first_lesson)
+        self.assertEqual(
+            [item['unit'] for item in response.context['focus_work_items']],
+            [project_step],
+        )
+        self.assertContains(response, 'data-testid="course-home-no-cohort"')
+        self.assertContains(response, 'data-testid="course-home-cohort-support"')
+        self.assertContains(response, 'data-testid="course-home-get-started"')
+        self.assertContains(response, 'data-testid="course-home-weekly-work"')
+        self.assertEqual(response.context['live_session_schedule'], [])
+        self.assertNotContains(response, cohort.name)
+        self.assertNotContains(response, event.title)
+        self.assertFalse(CohortEnrollment.objects.filter(user=self.user, cohort=cohort).exists())
+
+    def test_python_home_uses_a_real_self_paced_cohort_enrollment(self):
+        course = Course.objects.create(
+            title='Python', slug='python', status='published', required_level=LEVEL_MAIN,
+        )
+        CourseAccess.objects.create(user=self.user, course=course, access_type='granted')
+        lesson_module = Module.objects.create(
+            course=course, title='Python foundations', slug='python-foundations',
+        )
+        lesson = Unit.objects.create(
+            module=lesson_module, title='Python basics', slug='python-basics',
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get('/courses/python/home')
+
+        self.assertEqual(response.context['cohort'].mode, 'self_paced')
+        self.assertEqual(response.context['recommended_unit'], lesson)
+        self.assertEqual(
+            CohortEnrollment.objects.filter(user=self.user, cohort__course=course).count(), 1,
+        )
+        self.assertFalse(Cohort.objects.filter(course=course, mode='cohort').exists())
+
+    def test_detail_names_only_the_users_real_cohort_enrollment(self):
+        python = Course.objects.create(
+            title='Python', slug='python-detail', status='published', required_level=0,
+        )
+        Enrollment.objects.create(user=self.user, course=python)
+        self.client.force_login(self.user)
+
+        enrolled_detail = self.client.get('/courses/python-detail')
+
+        self.assertContains(enrolled_detail, 'data-testid="course-detail-enrolled-cohort"')
+        self.assertContains(enrolled_detail, 'Self-paced')
+        self.assertEqual(enrolled_detail.context['enrolled_cohort'].mode, 'self_paced')
+
+        scheduled_course = Course.objects.create(
+            title='Scheduled course', slug='scheduled-detail',
+            status='published', required_level=0,
+        )
+        scheduled_cohort = Cohort.objects.create(
+            course=scheduled_course, name='Cohort 4', external_key='cohort-4',
+            start_date=datetime.date(2026, 9, 21),
+            end_date=datetime.date(2026, 11, 22),
+        )
+        CohortEnrollment.objects.create(user=self.user, cohort=scheduled_cohort)
+        Enrollment.objects.create(user=self.user, course=scheduled_course)
+
+        scheduled_detail = self.client.get('/courses/scheduled-detail')
+
+        self.assertContains(scheduled_detail, 'data-testid="course-detail-enrolled-cohort"')
+        self.assertContains(scheduled_detail, 'Cohort 4')
+        self.assertContains(scheduled_detail, 'datetime="2026-09-21"')
+        self.assertContains(scheduled_detail, 'datetime="2026-11-22"')
+        self.assertEqual(scheduled_detail.context['enrolled_cohort'], scheduled_cohort)
+
+        buildcamp = Course.objects.create(
+            title='AI Engineering Buildcamp', slug='ai-buildcamp-detail',
+            status='published', required_level=0,
+        )
+        Cohort.objects.create(
+            course=buildcamp, name='Cohort 4', external_key='cohort-4',
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + datetime.timedelta(days=60),
+        )
+        Enrollment.objects.create(user=self.user, course=buildcamp)
+
+        unlinked_detail = self.client.get('/courses/ai-buildcamp-detail')
+
+        self.assertNotContains(unlinked_detail, 'data-testid="course-detail-enrolled-cohort"')
+        self.assertContains(unlinked_detail, "You're taking this course.")
+        self.assertIsNone(unlinked_detail.context['enrolled_cohort'])
 
     def test_selected_active_cohort_drip_matches_openable_reader(self):
         self._cohort(key='future-first', start_days=30, end_days=93)
@@ -317,9 +459,11 @@ class CourseHomeTests(TestCase):
         self.assertEqual(response.context['recommended_unit'], event_unit)
         self.assertEqual(response.context['recommended_live_session']['title'], event.title)
         self.assertIsNone(response.context['next_live_session'])
-        self.assertContains(response, 'data-testid="course-home-open-recommended-session"')
+        self.assertContains(response, 'data-testid="course-home-live-sessions"')
+        self.assertContains(response, 'Your next live session is highlighted in the schedule below.')
+        self.assertContains(response, 'data-featured="true"')
+        self.assertContains(response, event.title, count=1)
         self.assertContains(response, f'href="{event.get_absolute_url()}"')
-        self.assertNotContains(response, 'data-testid="course-home-next-session"')
 
     def test_course_map_query_count_does_not_grow_per_module(self):
         with CaptureQueriesContext(connection) as base_queries:

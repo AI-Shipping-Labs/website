@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -164,7 +165,7 @@ def course_detail(request, slug):
 
     Shows title, description, instructor bio, full syllabus, tags,
     discussion link. Access-dependent elements:
-    - Authorized user: clickable unit links, progress bar
+    - Authorized user: clickable unit links
     - Unauthorized user: unit titles (not clickable), CTA
     - Free course + unauthenticated: CTA to sign up
     """
@@ -177,8 +178,6 @@ def course_detail(request, slug):
         # points the spec names for implicit self-paced cohort membership.
         ensure_self_paced_cohort_enrollment(user, course)
     modules = course.get_syllabus()
-    total = course.total_units()
-    completed = course.completed_units(user)
 
     # Derived week dates and deliverable deadlines use the same selected
     # schedule cohort. An enrolled learner sees only an owned cohort; a
@@ -254,11 +253,6 @@ def course_detail(request, slug):
         cta_message = 'Sign up free to start this course'
         cta_url = f'/accounts/signup/?{urlencode({"next": course_url})}'
 
-    # Progress percentage
-    progress_pct = 0
-    if total > 0 and has_access:
-        progress_pct = int((completed / total) * 100)
-
     # Active cohorts
     # Issue #1674: the self-enroll block is dated-cohort-only — a
     # self-paced cohort is never shown as something to manually join,
@@ -275,6 +269,14 @@ def course_detail(request, slug):
                 cohort__is_active=True,
             ).values_list('cohort_id', flat=True)
         )
+    enrolled_cohort, enrolled_cohort_is_preview = select_display_cohort(course, user)
+    if enrolled_cohort_is_preview:
+        enrolled_cohort = None
+    if enrolled_cohort is None and user.is_authenticated:
+        self_paced_enrollment = CohortEnrollment.objects.filter(
+            user=user, cohort__course=course, cohort__mode='self_paced',
+        ).select_related('cohort').first()
+        enrolled_cohort = self_paced_enrollment.cohort if self_paced_enrollment else None
 
     course_projects = list(CourseProject.objects.filter(course=course).select_related('cohort', 'module'))
     has_configured_projects = bool(course_projects)
@@ -372,11 +374,8 @@ def course_detail(request, slug):
         'course': course,
         'modules': modules,
         'has_access': has_access,
-        'total_units': total,
-        'completed_units': completed,
         'completed_unit_ids': completed_unit_ids,
         'completed_count_by_module': completed_count_by_module,
-        'progress_pct': progress_pct,
         'cta_message': cta_message,
         'cta_url': cta_url,
         'required_tier_name': (
@@ -386,6 +385,7 @@ def course_detail(request, slug):
         'is_free_course': course.is_free,
         'user_authenticated': user.is_authenticated,
         'active_cohorts': active_cohorts,
+        'cohort_today': timezone.localdate(),
         'module_week_ranges': module_week_ranges,
         'schedule_cohort': viewer_cohort,
         'schedule_is_preview': schedule_is_preview,
@@ -394,6 +394,7 @@ def course_detail(request, slug):
         'module_deadline_summaries': module_deadline_summaries,
         'live_session_entries': live_session_entries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
+        'enrolled_cohort': enrolled_cohort,
         'course_projects': course_projects,
         'projects_by_module': projects_by_module,
         'preview_project_ids': preview_project_ids,
@@ -454,7 +455,27 @@ def course_home(request, slug):
         cohort = cohort.cohort if cohort else None
 
     context = build_course_home(course, request.user, cohort)
-    context.update(build_course_commitments(course, request.user, cohort))
+    context['total_units'] = course.total_units()
+    context['completed_units'] = course.completed_units(request.user)
+    context['progress_pct'] = (
+        int(context['completed_units'] / context['total_units'] * 100)
+        if context['total_units'] else 0
+    )
+    commitments = build_course_commitments(course, request.user, cohort)
+    recommended_unit = context['recommended_unit']
+    next_live_session = commitments['next_live_session']
+    if (
+        recommended_unit is not None
+        and next_live_session is not None
+        and next_live_session.get('session_unit') is not None
+        and next_live_session['session_unit'].pk == recommended_unit.pk
+    ):
+        # A linked session that is also the next course material has one
+        # presentation on Home. Keep the live event action and time, which
+        # are more useful than the generic course-unit reader link.
+        context['recommended_live_session'] = next_live_session
+        commitments['next_live_session'] = None
+    context.update(commitments)
     context['cohort_query'] = (
         f'?{urlencode({"cohort": cohort.external_key})}'
         if cohort and cohort.external_key and cohort.mode == 'cohort' else ''

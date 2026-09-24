@@ -16,11 +16,12 @@ from content.access import get_user_level
 from content.models import CohortEnrollment, CourseAccess, Unit
 from content.models.homework import Homework, Submission
 from content.models.peer_review import CourseProject, PeerReview, ProjectSubmission
-from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.services.course_home import (
     _all_module_units,
     _can_open_unit,
     _current_cohort_module,
+    _is_orientation_module,
     _ordered_modules,
 )
 from content.services.course_units import (
@@ -260,13 +261,31 @@ def _project_rows(course, user, cohort, timezone_name, now):
 
 def _focus_work_items(course, user, cohort, homework_rows, *, now):
     """Keep authored homework visible even when no submission form was synced."""
-    if cohort is None or cohort.start_date is None:
-        return []
     modules = _ordered_modules(course)
-    week_dates = build_module_week_dates(
-        modules, cohort, extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
-    )
-    module = _current_cohort_module(modules, week_dates, cohort, now.date())
+    unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
+    if unscheduled_cohort:
+        # Unlinked learners and self-paced members have no calendar week.
+        # Keep their authored work visible in the first instructional module
+        # without inventing a due date or a cohort schedule.
+        orientation_ids = {
+            modules[0].pk
+        } if modules and _is_orientation_module(modules[0]) else set()
+        module = next((
+            candidate for candidate in modules
+            if not candidate.is_bonus and candidate.pk not in orientation_ids
+            and any(
+                unit.kind in (UNIT_KIND_LESSON, UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK)
+                and not unit.effective_is_bonus
+                for unit in _all_module_units(candidate)
+            )
+        ), None)
+    elif cohort.start_date is None:
+        return []
+    else:
+        week_dates = build_module_week_dates(
+            modules, cohort, extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
+        )
+        module = _current_cohort_module(modules, week_dates, cohort, now.date())
     if module is None:
         return []
 
@@ -278,7 +297,7 @@ def _focus_work_items(course, user, cohort, homework_rows, *, now):
     }
     suffix = (
         f'?{urlencode({"cohort": cohort.external_key})}'
-        if cohort.mode == 'cohort' and cohort.external_key else ''
+        if cohort and cohort.mode == 'cohort' and cohort.external_key else ''
     )
     items = []
     for unit in _all_module_units(module):
@@ -408,6 +427,18 @@ def build_course_commitments(course, user, cohort, *, now=None):
         (row for row in events if row['status'] in ('Live now', 'In progress', 'Upcoming')),
         None,
     )
+    featured_live_session = next_event or next_live_session
+    if featured_live_session is None:
+        featured_live_session = next(
+            (row for row in reversed(events) if row['action']), None,
+        )
+    upcoming_sessions = [row for row in events if not row['complete']]
+    past_sessions = [row for row in events if row['complete']]
+    live_session_schedule = sorted(
+        upcoming_sessions, key=lambda row: row['when'],
+    ) + sorted(past_sessions, key=lambda row: row['when'], reverse=True)
+    for row in live_session_schedule:
+        row['featured'] = row is featured_live_session
     deadline_tasks = sorted(
         (row for row in open_assignments
          if row['when'] and row['when'] >= now and row['action']),
@@ -437,6 +468,7 @@ def build_course_commitments(course, user, cohort, *, now=None):
     return {
         'coming_up': upcoming,
         'schedule_rows': schedule,
+        'live_session_schedule': live_session_schedule,
         'past_events': [row for row in events if row['complete'] and row['action']],
         'open_assignments': open_assignments,
         'completed_assignments': completed_assignments,

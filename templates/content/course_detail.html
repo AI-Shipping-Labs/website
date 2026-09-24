@@ -267,19 +267,10 @@
         {% endif %}
         <div class="space-y-1">
           {% for module in modules %}
-          {% if course.slug == 'ai-buildcamp' and module.sort_order == 0 %}
-          <h3 class="px-1 pt-2 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-prework-group">Pre-work and logistics</h3>
-          {% endif %}
-          {% if course.slug == 'ai-buildcamp' and module.sort_order == 1 %}
-          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-main-content-group">Main content</h3>
-          {% endif %}
-          {% if course.slug == 'ai-buildcamp' and module.sort_order == 7 %}
-          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-capstone-group">Project · weeks 7–9</h3>
-          {% endif %}
-          {% if course.slug == 'ai-buildcamp' and module.is_bonus %}
+          {% if module.is_bonus %}
           {% ifchanged module.is_bonus %}<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-optional-group">Optional</h3>{% endifchanged %}
           {% endif %}
-          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id bonus_group=module.is_bonus unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone %}
+          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone %}
           {% empty %}
           {% member_empty_state title='Syllabus coming soon' body='Lessons for this course will appear here when they are ready.' icon='book-open' kind='fresh' testid='syllabus-empty-state' %}
           {% endfor %}

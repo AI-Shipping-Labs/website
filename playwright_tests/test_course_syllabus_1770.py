@@ -2,6 +2,7 @@
 
 import os
 import re
+from pathlib import Path
 
 import pytest
 from django.db import connection
@@ -90,5 +91,62 @@ def test_mobile_visitor_opens_nested_topic_and_lesson_with_keyboard(browser, dja
         topic_summary.press('Enter')
         lesson_link.click()
         expect(page).to_have_url(re.compile(r'/courses/nested-syllabus-1770/week-one/research/long-lesson/?$'))
+    finally:
+        context.close()
+
+
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.core
+@browser_journey
+def test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry(browser, django_server):
+    from content.models import Course, Module, Unit
+
+    python = Course.objects.create(
+        title='Python', slug='python', status='published', required_level=0,
+    )
+    python_intro = Module.objects.create(
+        course=python, title='Introduction', slug='introduction', sort_order=1,
+    )
+    Unit.objects.create(
+        module=python_intro, title='Why Python', slug='why-python', sort_order=1,
+    )
+
+    buildcamp = Course.objects.create(
+        title='AI Buildcamp', slug='ai-buildcamp', status='published', required_level=0,
+    )
+    week = Module.objects.create(
+        course=buildcamp, title='Foundations', slug='week-1', sort_order=1,
+    )
+    session_topic = Module.objects.create(
+        course=buildcamp, parent=week, title='Session 1', slug='session', sort_order=1,
+    )
+    Unit.objects.create(
+        module=session_topic, title='Session 1', slug='session-1',
+        sort_order=1, kind='event', session_position=1,
+    )
+    connection.close()
+
+    context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+    page = context.new_page()
+    screenshot_dir = Path('.tmp/screenshots/course-syllabus-parity')
+    screenshot_dir.mkdir(parents=True, exist_ok=True)
+    row_boxes = {}
+    try:
+        for slug, row_title in (
+            ('python', 'Why Python'),
+            ('ai-buildcamp', 'Session 1'),
+        ):
+            page.goto(f'{django_server}/courses/{slug}', wait_until='domcontentloaded')
+            page.locator('[data-testid="syllabus-module-summary"]').first.click()
+            row = page.locator('[data-syllabus-unit-row]').filter(has_text=row_title).first
+            expect(row).to_be_visible()
+            row_boxes[slug] = row.bounding_box()
+            page.screenshot(
+                path=str(screenshot_dir / f'{slug}-desktop-light.png'),
+                full_page=True,
+            )
+
+        assert row_boxes['python']['x'] == pytest.approx(row_boxes['ai-buildcamp']['x'])
+        assert row_boxes['python']['width'] == pytest.approx(row_boxes['ai-buildcamp']['width'])
     finally:
         context.close()

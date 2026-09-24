@@ -67,14 +67,14 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
         self.assertContains(response, 'Bonus topic')
         self.assertContains(response, 'data-testid="syllabus-parent-module"')
 
-    def test_optional_badge_appears_on_submodule_and_standalone_unit(self):
+    def test_optional_badge_appears_on_nested_module_and_standalone_unit(self):
         self.client.login(email='learner@test.com', password='pw')
         response = self.client.get('/courses/buildcamp-views')
         self.assertContains(response, 'data-testid="syllabus-optional-badge"', count=1)
         self.assertContains(response, 'data-testid="syllabus-unit-optional-badge"', count=1)
         self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
-    def test_optional_parent_suppresses_descendant_badges(self):
+    def test_optional_parent_groups_once_and_suppresses_descendant_badges(self):
         optional_module = Module.objects.create(
             course=self.course, title='Optional module', slug='optional-module',
             sort_order=3, is_bonus=True,
@@ -88,8 +88,9 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
             sort_order=1, is_bonus=True,
         )
         response = self.client.get('/courses/buildcamp-views')
-        self.assertContains(response, 'data-testid="syllabus-optional-badge"', count=2)
+        self.assertContains(response, 'data-testid="syllabus-optional-badge"', count=1)
         self.assertContains(response, 'data-testid="syllabus-unit-optional-badge"', count=1)
+        self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>', count=1)
         self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
 
@@ -155,8 +156,8 @@ class BuildcampSinglePageTopicTest(TestCase):
         links = ContentLinks()
         links.feed(overview.content.decode())
         self.assertEqual(links.hrefs, [
-            '/courses/ai-buildcamp/foundations/session/session',
-            '/courses/ai-buildcamp/foundations/week-1-overview/week-1-overview',
+            '/courses/ai-buildcamp/foundations/session',
+            '/courses/ai-buildcamp/foundations/week-1-overview',
             '/courses/ai-buildcamp/foundations/foundations-topic',
         ])
 
@@ -584,13 +585,10 @@ class SyllabusIncludeContextLeakRegressionTest(TestCase):
         )
         CohortEnrollment.objects.create(user=cls.user, cohort=cls.cohort)
 
-    def test_position_chip_renders_exactly_once_for_the_top_level_module(self):
+    def test_flat_and_nested_courses_do_not_add_position_chips(self):
         self.client.login(email='leak@test.com', password='pw')
         response = self.client.get('/courses/leak-regression-course')
-        self.assertContains(
-            response, 'data-testid="syllabus-module-position-chip"',
-            count=1, status_code=200,
-        )
+        self.assertNotContains(response, 'data-testid="syllabus-module-position-chip"', status_code=200)
 
     def test_top_level_bonus_has_no_position_chip(self):
         Module.objects.create(
@@ -599,11 +597,8 @@ class SyllabusIncludeContextLeakRegressionTest(TestCase):
         )
         self.client.login(email='leak@test.com', password='pw')
         response = self.client.get('/courses/leak-regression-course')
-        self.assertNotContains(response, 'module-bonus-badge', status_code=200)
-        self.assertContains(
-            response, 'data-testid="syllabus-module-position-chip"',
-            count=1, status_code=200,
-        )
+        self.assertNotContains(response, 'data-testid="syllabus-module-position-chip"', status_code=200)
+        self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>', status_code=200)
 
     def test_week_date_range_renders_exactly_once_for_the_top_level_module(self):
         """Not once per submodule — with a dated cohort, Week 1's derived
@@ -646,6 +641,17 @@ class _SyllabusChipParser(HTMLParser):
             self._in_summary = False
 
 
+class _TopLevelSyllabusContentParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.classes = []
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if attrs.get('data-testid') == 'syllabus-module-content':
+            self.classes.append(attrs.get('class', ''))
+
+
 class SyllabusBuildcampPositionTest(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -670,16 +676,42 @@ class SyllabusBuildcampPositionTest(TestCase):
         parser.feed(response.content.decode())
         return parser.positions
 
-    def test_buildcamp_logistics_and_bonus_are_unnumbered(self):
+    def test_buildcamp_and_other_courses_use_the_same_unnumbered_module_summary(self):
         self.assertEqual(self._positions('ai-buildcamp'), [None, None, None, None])
+        self.assertEqual(self._positions('other-course'), [None, None, None, None])
         response = self.client.get('/courses/ai-buildcamp')
         self.assertContains(response, 'Week 1 · ')
-        self.assertContains(response, 'Week 2 · ')
-        self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>')
-        self.assertNotContains(response, 'data-testid="syllabus-optional-badge"')
 
-    def test_other_courses_keep_their_position_numbers(self):
-        self.assertEqual(self._positions('other-course'), [1, 2, 3, None])
+    def test_optional_grouping_is_data_driven_for_both_courses(self):
+        for slug in ('ai-buildcamp', 'other-course'):
+            response = self.client.get(f'/courses/{slug}')
+            self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>')
+            self.assertNotContains(response, 'data-testid="syllabus-optional-badge"')
+
+    def test_top_level_module_content_has_the_same_horizontal_geometry(self):
+        buildcamp_week = Module.objects.get(course__slug='ai-buildcamp', slug='week-1')
+        session_topic = Module.objects.create(
+            course=buildcamp_week.course, parent=buildcamp_week,
+            title='Session 1', slug='session', sort_order=1,
+        )
+        Unit.objects.create(
+            module=session_topic, title='Session 1', slug='session-1',
+            sort_order=1, kind='event', session_position=1,
+        )
+        python_module = Module.objects.get(course__slug='other-course', slug='week-1')
+        Unit.objects.create(
+            module=python_module, title='Why Python', slug='why-python', sort_order=1,
+        )
+
+        content_classes = []
+        for slug in ('ai-buildcamp', 'other-course'):
+            response = self.client.get(f'/courses/{slug}')
+            parser = _TopLevelSyllabusContentParser()
+            parser.feed(response.content.decode())
+            content_classes.append(parser.classes[1])
+
+        self.assertEqual(content_classes[0], content_classes[1])
+        self.assertIn('px-1', content_classes[0])
 
     def test_buildcamp_capstone_card_does_not_repeat_week_label(self):
         course = Course.objects.get(slug='ai-buildcamp')

@@ -62,6 +62,7 @@ from events.services.occurrence_publication import (
     run_occurrence_publication_lifecycle,
 )
 from events.services.recording_transcript import (
+    attach_transcript_vtt,
     enqueue_recording_transcript_task,
     refresh_transcript_from_zoom,
     transcript_status,
@@ -2129,6 +2130,128 @@ def event_sync_transcript(request, slug):
             "recap_queued": recap_queued,
             "zoom_refresh": zoom_refresh,
             "redraft": redraft,
+        },
+        status=200,
+    )
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Attach an operator-supplied event transcript",
+    methods={
+        "POST": {
+            "summary": "Attach transcript VTT",
+            "description": (
+                "Parse a supplied WebVTT transcript, archive both the exact "
+                "VTT and parsed text in the private recordings bucket, and "
+                "store the transcript on the event. A staff token is "
+                "required. Set redraft=true to queue a fresh recap draft."
+            ),
+            "request_body": {
+                "body_required": True,
+                "properties": {
+                    "vtt": {
+                        "type": "string",
+                        "description": "Complete WebVTT document.",
+                    },
+                    "redraft": {
+                        "type": "boolean",
+                        "default": False,
+                    },
+                },
+                "example": {
+                    "vtt": (
+                        "WEBVTT\\n\\n00:00:01.000 --> 00:00:02.000\\n"
+                        "Welcome to the session.\\n"
+                    ),
+                    "redraft": False,
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Transcript archive and event state.",
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "transcript_status": {"type": "string"},
+                            "characters": {"type": "integer"},
+                            "transcript_s3_url": {"type": "string"},
+                            "transcript_txt_s3_url": {"type": "string"},
+                            "recap_queued": {"type": "boolean"},
+                        },
+                    },
+                },
+                400: {"description": "Malformed JSON body."},
+                401: {"description": "Missing, invalid, or non-staff token."},
+                404: {"description": "Event not found."},
+                422: {"description": "Invalid transcript or archive failure."},
+            },
+        },
+    },
+)
+def event_attach_transcript(request, slug):
+    """POST ``/api/events/<slug>/attach-transcript``."""
+    from events.services.recap_draft import enqueue_recap_draft_task
+    from jobs.tasks.recording_transcript import TranscriptArchiveError
+
+    event = Event.objects.filter(slug=slug).first()
+    if event is None:
+        return error_response(
+            "Event not found",
+            "unknown_event",
+            status=404,
+        )
+
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return body_must_be_object_response()
+
+    vtt = data.get("vtt")
+    if not isinstance(vtt, str) or not vtt.strip():
+        return validation_response({"vtt": "A WebVTT document is required."})
+
+    redraft = data.get("redraft", False)
+    if not isinstance(redraft, bool):
+        return validation_response({"redraft": "Must be a boolean."})
+    if redraft and not llm_is_enabled():
+        return error_response(
+            "Recap redraft requested but the LLM provider is not configured.",
+            "llm_not_configured",
+            status=422,
+        )
+
+    try:
+        attached = attach_transcript_vtt(event, vtt)
+    except ValueError:
+        return error_response(
+            "The supplied VTT parses to empty text.",
+            "empty_transcript",
+            status=422,
+        )
+    except TranscriptArchiveError:
+        return error_response(
+            "Transcript archival failed.",
+            "transcript_archive_failed",
+            status=422,
+        )
+
+    recap_queued = False
+    if redraft:
+        recap_queued = enqueue_recap_draft_task(
+            event,
+            source="API attach-transcript",
+            force=True,
+        ) is not None
+
+    return JsonResponse(
+        {
+            **attached,
+            "recap_queued": recap_queued,
         },
         status=200,
     )

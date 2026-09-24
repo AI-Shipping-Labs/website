@@ -10,6 +10,7 @@ from integrations.config import get_config
 DEFAULT_RECORDINGS_REGION = 'eu-central-1'
 RECORDING_CONTENT_TYPE = 'video/mp4'
 TRANSCRIPT_CONTENT_TYPE = 'text/vtt; charset=utf-8'
+TRANSCRIPT_TEXT_CONTENT_TYPE = 'text/plain; charset=utf-8'
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,10 @@ def build_transcript_s3_key(event):
     return f'recordings/{event.start_datetime.year}/{event.slug}.vtt'
 
 
+def build_transcript_text_s3_key(event):
+    return f'recordings/{event.start_datetime.year}/{event.slug}.txt'
+
+
 def build_recording_s3_url(bucket, region, key):
     return f'https://{bucket}.s3.{region}.amazonaws.com/{key}'
 
@@ -76,6 +81,19 @@ def upload_transcript_vtt(raw_vtt, config, key):
         Key=key,
         Body=raw_vtt,
         ContentType=TRANSCRIPT_CONTENT_TYPE,
+    )
+    return build_recording_s3_url(config.bucket, config.region, key)
+
+
+def upload_transcript_text(text, config, key):
+    """Upload parsed transcript text to the private recordings bucket."""
+    body = text if isinstance(text, bytes) else text.encode('utf-8')
+    s3_client = get_recordings_s3_client(config)
+    s3_client.put_object(
+        Bucket=config.bucket,
+        Key=key,
+        Body=body,
+        ContentType=TRANSCRIPT_TEXT_CONTENT_TYPE,
     )
     return build_recording_s3_url(config.bucket, config.region, key)
 

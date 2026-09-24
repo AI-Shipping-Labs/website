@@ -87,6 +87,7 @@ from api.views.event_series import (
     event_series_zoom_meetings,
 )
 from api.views.events import (
+    event_attach_transcript,
     event_detail,
     event_notify_recap_ready,
     event_notify_workshop_ready,
@@ -465,6 +466,11 @@ urlpatterns = [
         "events/<slug:slug>/retry-recording-upload",
         event_retry_recording_upload,
         name="api_event_retry_recording_upload",
+    ),
+    path(
+        "events/<slug:slug>/attach-transcript",
+        event_attach_transcript,
+        name="api_event_attach_transcript",
     ),
     path(
         "events/<slug:slug>/sync-transcript",

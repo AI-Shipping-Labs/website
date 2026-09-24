@@ -9,8 +9,9 @@ Flow:
    the WEBVTT header, cue numbers, timestamps and inline tags; collapse
    the consecutive duplicate caption lines Zoom's rolling captions
    produce).
-3. Archive the exact VTT bytes in the private recordings bucket and store
-   both ``Event.transcript_text`` and ``Event.transcript_s3_url``.
+3. Archive the exact VTT bytes and parsed text in the private recordings
+   bucket and store ``Event.transcript_text`` and
+   ``Event.transcript_s3_url``.
 4. Chain the recap auto-draft when its gates allow (issue #1597).
 
 Retry model: Zoom can deliver ``recording.completed`` before the VTT is
@@ -31,7 +32,9 @@ import requests
 
 from jobs.tasks.recordings_s3 import (
     build_transcript_s3_key,
+    build_transcript_text_s3_key,
     get_recordings_s3_config,
+    upload_transcript_text,
     upload_transcript_vtt,
 )
 
@@ -55,7 +58,7 @@ class TranscriptArchiveNotReady(Exception):
 
 
 class TranscriptArchiveError(Exception):
-    """Raised with a bounded message when private VTT archival fails."""
+    """Raised with a bounded message when private transcript archival fails."""
 
 
 def parse_vtt_to_text(raw):
@@ -71,6 +74,8 @@ def parse_vtt_to_text(raw):
     """
     if isinstance(raw, bytes):
         raw = raw.decode('utf-8-sig', errors='replace')
+    else:
+        raw = raw.removeprefix('\ufeff')
 
     lines = []
     in_note = False
@@ -144,6 +149,23 @@ def _archive_vtt(event, raw_vtt):
     except Exception:
         raise TranscriptArchiveError(
             f'VTT archival failed for event {event.id}',
+        ) from None
+
+
+def _archive_transcript_text(event, transcript_text):
+    """Store parsed transcript text at its deterministic private S3 key."""
+    config = get_recordings_s3_config()
+    if not config.bucket:
+        raise TranscriptArchiveError('Recordings S3 bucket is not configured')
+    try:
+        return upload_transcript_text(
+            transcript_text,
+            config,
+            build_transcript_text_s3_key(event),
+        )
+    except Exception:
+        raise TranscriptArchiveError(
+            f'Text archival failed for event {event.id}',
         ) from None
 
 
@@ -280,8 +302,12 @@ def transcribe_recording(event_id, redraft=False):
         text_update_fields.append('updated_at')
         event.save(update_fields=text_update_fields)
 
+    transcript_s3_url = event.transcript_s3_url
+    if not transcript_s3_url:
+        transcript_s3_url = _archive_vtt(event, raw_vtt)
+    _archive_transcript_text(event, transcript_text)
     if not event.transcript_s3_url:
-        event.transcript_s3_url = _archive_vtt(event, raw_vtt)
+        event.transcript_s3_url = transcript_s3_url
         event.save(update_fields=['transcript_s3_url', 'updated_at'])
     logger.info(
         'Stored %d characters of transcript text for event "%s" (id=%s)',

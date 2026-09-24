@@ -108,7 +108,6 @@ def enqueue_recording_transcript_task(event, *, source, redraft=False):
         TRANSCRIPT_TASK_RETRY_SECONDS,
         TRANSCRIPT_TASK_TIMEOUT_SECONDS,
     )
-
     return async_task(
         'jobs.tasks.recording_transcript.transcribe_recording',
         event.id,
@@ -122,6 +121,46 @@ def enqueue_recording_transcript_task(event, *, source, redraft=False):
             source,
         ),
     )
+
+
+def attach_transcript_vtt(event, raw_vtt):
+    """Archive an operator-supplied VTT and attach its parsed text to event.
+
+    Both private S3 writes finish before the event row is updated. If either
+    archive fails, callers can report the failure without leaving partially
+    updated transcript state on the event.
+    """
+    from jobs.tasks.recording_transcript import (
+        _archive_transcript_text,
+        _archive_vtt,
+        parse_vtt_to_text,
+    )
+
+    transcript_text = parse_vtt_to_text(raw_vtt)
+    if not transcript_text:
+        raise ValueError('The supplied VTT parses to empty text.')
+
+    transcript_s3_url = _archive_vtt(event, raw_vtt)
+    transcript_txt_s3_url = _archive_transcript_text(event, transcript_text)
+
+    event.transcript_text = transcript_text
+    event.transcript_s3_url = transcript_s3_url
+    event.transcript_fetch_attempts = 0
+    event.transcript_unavailable_at = None
+    event.save(update_fields=[
+        'transcript_text',
+        'transcript_s3_url',
+        'transcript_fetch_attempts',
+        'transcript_unavailable_at',
+        'updated_at',
+    ])
+
+    return {
+        'transcript_status': TRANSCRIPT_STATUS_STORED,
+        'characters': len(transcript_text),
+        'transcript_s3_url': transcript_s3_url,
+        'transcript_txt_s3_url': transcript_txt_s3_url,
+    }
 
 
 def refresh_transcript_from_zoom(event):

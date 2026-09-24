@@ -103,6 +103,16 @@ class ParseVttToTextTest(TestCase):
 
         self.assertEqual(parse_vtt_to_text('WEBVTT\n'), '')
 
+    def test_string_input_strips_utf8_bom_before_parsing(self):
+        from jobs.tasks.recording_transcript import parse_vtt_to_text
+
+        self.assertEqual(
+            parse_vtt_to_text('\ufeff' + SAMPLE_VTT),
+            'Welcome everyone, glad you are here\n'
+            'Today we cover the recording pipeline.\n'
+            'Second topic: deploying with uv.',
+        )
+
     def test_no_metadata_variant(self):
         from jobs.tasks.recording_transcript import parse_vtt_to_text
 
@@ -149,6 +159,15 @@ class TranscribeRecordingTest(TestCase):
         )
         self.archive = archive_patcher.start()
         self.addCleanup(archive_patcher.stop)
+        text_archive_patcher = patch(
+            'jobs.tasks.recording_transcript._archive_transcript_text',
+            return_value=(
+                'https://test-recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/transcript-workshop.txt'
+            ),
+        )
+        self.archive_text = text_archive_patcher.start()
+        self.addCleanup(text_archive_patcher.stop)
         self.event = _make_event(
             transcript_url='https://zoom.us/rec/download/transcript.vtt',
         )
@@ -175,6 +194,10 @@ class TranscribeRecordingTest(TestCase):
             'recordings/2026/transcript-workshop.vtt',
         )
         self.archive.assert_called_once_with(self.event, SAMPLE_VTT)
+        self.archive_text.assert_called_once_with(
+            self.event,
+            self.event.transcript_text,
+        )
         self.assertEqual(self.event.transcript_fetch_attempts, 0)
         # LLM disabled: transcript stored, recap skipped with reason.
         self.assertEqual(

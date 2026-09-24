@@ -57,6 +57,43 @@ def _material_units(module):
     return [unit for unit in module.units.all() if unit.kind in MATERIAL_KINDS]
 
 
+def _all_module_units(module):
+    """Return a module's units in curriculum order, including submodule units."""
+    children = list(module.children.all())
+    if not children:
+        return list(module.units.all())
+    ordered = [child for child in children if not child.is_bonus] + [
+        child for child in children if child.is_bonus
+    ]
+    return [unit for child in ordered for unit in child.units.all()]
+
+
+def _current_cohort_module(modules, week_dates, cohort, today):
+    """Pick the scheduled top-level module for the selected cohort date."""
+    if cohort is None or cohort.start_date is None:
+        return None
+    dated = [
+        module for module in modules
+        if not module.is_bonus and module.pk in week_dates
+    ]
+    if not dated:
+        return None
+    for module in dated:
+        start, end = week_dates[module.pk]
+        if start <= today <= end:
+            return module
+    earlier = [module for module in dated if week_dates[module.pk][1] < today]
+    if earlier:
+        return earlier[-1]
+    return dated[0]
+
+
+def _top_level_module(module):
+    if module is None:
+        return None
+    return module.parent if module.parent_id else module
+
+
 def _can_open_unit(unit, *, user_level, individual_access, entitlement_mode, is_staff, verified):
     """Bulk policy screen; the eventual recommendation is checked by the reader policy."""
     if unit.is_preview:
@@ -187,6 +224,21 @@ def build_course_home(course, user, cohort, *, today=None):
             cohort_status = 'in progress'
             current_week = 1 + (today - cohort.start_date).days // 7
 
+    current_cohort_module = _current_cohort_module(modules, week_dates, cohort, today)
+    focus_module = current_cohort_module or _top_level_module(
+        recommendation.module if recommendation else None,
+    )
+    focus_week_range = ''
+    if focus_module and focus_module.pk in week_dates:
+        focus_week_range = format_week_range(*week_dates[focus_module.pk])
+    focus_module_row = next(
+        (row for row in rows if row['module'].pk == focus_module.pk), None,
+    ) if focus_module else None
+    focus_work_units = [
+        unit for unit in _all_module_units(focus_module)
+        if unit.kind == 'homework' and not unit.effective_is_bonus
+    ] if focus_module else []
+
     help_links = []
     help_units = {unit.slug: unit for unit in all_units if unit.slug in HELP_UNIT_SLUGS}
     cohort_suffix = (
@@ -219,6 +271,11 @@ def build_course_home(course, user, cohort, *, today=None):
         'cohort': cohort,
         'cohort_status': cohort_status,
         'current_week': current_week,
+        'current_cohort_module': current_cohort_module,
+        'focus_module': focus_module,
+        'focus_module_row': focus_module_row,
+        'focus_week_range': focus_week_range,
+        'focus_work_units': focus_work_units,
         'core_total': core_total,
         'core_completed': core_completed,
         'action': action,

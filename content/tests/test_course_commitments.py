@@ -87,26 +87,42 @@ class CourseCommitmentsTests(TestCase):
         )
 
     def test_switching_owned_cohort_switches_every_scheduled_source(self):
+        Unit.objects.create(
+            module=self.module, title='Session 1', slug='session-1', kind='event',
+            session_position=1,
+        )
         event_one = self._event(
             'first-session', self.series_one,
-            start=self.now + datetime.timedelta(days=1),
+            start=self.now + datetime.timedelta(days=1), series_position=1,
         )
         self._event(
             'second-session', self.series_two,
-            start=self.now + datetime.timedelta(days=1),
+            start=self.now + datetime.timedelta(days=1), series_position=1,
         )
         self.client.force_login(self.user)
         first = self.client.get('/courses/commitment-course/home?cohort=first')
         self.assertContains(first, 'First cohort homework')
-        self.assertContains(first, 'First cohort project')
         self.assertContains(first, event_one.title)
+        self.assertEqual(
+            first.context['urgent_commitment']['title'], 'First cohort homework',
+        )
+        self.assertIn(
+            'First cohort project',
+            [row['title'] for row in first.context['open_assignments']],
+        )
         self.assertNotContains(first, 'Second cohort homework')
         self.assertNotContains(first, 'Second cohort project')
         self.assertNotContains(first, 'Second Session')
         second = self.client.get('/courses/commitment-course/home?cohort=second')
         self.assertContains(second, 'Second cohort homework')
-        self.assertContains(second, 'Second cohort project')
         self.assertContains(second, 'Second Session')
+        self.assertEqual(
+            second.context['urgent_commitment']['title'], 'Second cohort homework',
+        )
+        self.assertIn(
+            'Second cohort project',
+            [row['title'] for row in second.context['open_assignments']],
+        )
         self.assertNotContains(second, 'First cohort homework')
         self.assertNotContains(second, 'First cohort project')
         self.assertNotContains(second, event_one.title)
@@ -199,6 +215,72 @@ class CourseCommitmentsTests(TestCase):
                             for row in model['completed_assignments']))
         self.assertFalse(any('second-project' in row['url']
                              for row in model['open_assignments']))
+
+    def test_home_collapses_alternative_project_windows_to_one_deadline(self):
+        self.project_one.submission_due_at = self.now + datetime.timedelta(days=5)
+        self.project_one.review_due_at = self.now + datetime.timedelta(days=12)
+        self.project_one.module = self.module
+        self.project_one.save(update_fields=[
+            'submission_due_at', 'review_due_at', 'module',
+        ])
+        self.project_two.submission_due_at = self.now + datetime.timedelta(days=6)
+        self.project_two.review_due_at = self.now + datetime.timedelta(days=13)
+        self.project_two.cohort = self.cohort_one
+        self.project_two.module = self.module
+        self.project_two.save(update_fields=[
+            'submission_due_at', 'review_due_at', 'cohort', 'module',
+        ])
+        self.homework_one.due_date = self.now + datetime.timedelta(days=30)
+        self.homework_one.save(update_fields=['due_date'])
+
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+
+        urgent = model['urgent_commitment']
+        self.assertEqual(urgent['kind'], 'Project')
+        self.assertEqual(urgent['title'], self.module.title)
+        self.assertEqual(urgent['url'], f'/courses/{self.course.slug}/projects/{self.project_one.slug}/submit')
+        self.assertEqual(urgent['detail'], 'Alternative submission windows for one project.')
+
+    def test_submitting_one_alternative_removes_sibling_submission_obligation(self):
+        self.project_one.submission_due_at = self.now + datetime.timedelta(days=2)
+        self.project_one.module = self.module
+        self.project_one.save(update_fields=['submission_due_at', 'module'])
+        self.project_two.submission_due_at = self.now + datetime.timedelta(days=3)
+        self.project_two.cohort = self.cohort_one
+        self.project_two.module = self.module
+        self.project_two.save(update_fields=['submission_due_at', 'cohort', 'module'])
+        self.homework_one.due_date = self.now + datetime.timedelta(days=30)
+        self.homework_one.save(update_fields=['due_date'])
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course, course_project=self.project_one,
+            cohort=self.cohort_one, project_url='https://example.com/my-project',
+        )
+
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+
+        self.assertIsNone(model['urgent_commitment'])
+
+    def test_authored_capstone_step_is_visible_without_submission_metadata(self):
+        self.module.available_after_days = 0
+        self.module.save(update_fields=['available_after_days'])
+        content_id = uuid.uuid4()
+        step = Unit.objects.create(
+            module=self.module, title='Module 1 Capstone: Your AI Project',
+            slug='module-1-capstone', kind='homework', content_id=content_id,
+        )
+
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+
+        work = next(item for item in model['focus_work_items'] if item['unit'] == step)
+        self.assertIsNone(work['commitment'])
+        self.assertEqual(work['url'], f'{step.get_absolute_url()}?cohort=first')
+        self.assertEqual(work['action'], 'Open project step')
 
     def test_live_future_past_and_cancelled_sessions_have_truthful_actions(self):
         self._event(
@@ -341,10 +423,11 @@ class CourseCommitmentsTests(TestCase):
         )
         self.client.force_login(self.user)
         response = self.client.get('/courses/no-commitments/home')
-        self.assertContains(response, 'No live sessions or assignment deadlines')
-        self.assertContains(response, 'No assignments need your attention')
-        self.assertContains(response, 'No sessions or deadlines are scheduled')
-        self.assertContains(response, 'data-testid="course-home-coming-up-empty"')
-        self.assertContains(response, 'data-testid="course-home-assignments-empty"')
-        self.assertContains(response, 'data-testid="course-home-schedule-empty"')
+        self.assertContains(response, 'data-testid="course-home-focus"')
+        self.assertIsNone(response.context['urgent_commitment'])
+        self.assertFalse(response.context['focus_work_items'])
+        self.assertIsNone(response.context['next_live_session'])
+        self.assertNotContains(response, 'data-testid="course-home-urgent"')
+        self.assertNotContains(response, 'data-testid="course-home-next-session"')
+        self.assertNotContains(response, 'data-testid="course-home-weekly-work"')
         self.assertNotContains(response, self.homework_one.title)

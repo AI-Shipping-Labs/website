@@ -1,34 +1,82 @@
-{% load accounts_extras %}
-<section class="rounded-lg border border-border bg-card p-5 sm:p-6" aria-labelledby="course-next-heading" data-testid="course-home-next">
-  {% if action == 'start' %}<h2 id="course-next-heading" class="text-lg font-semibold text-foreground">Start the course</h2>
-  {% elif action == 'continue' %}<h2 id="course-next-heading" class="text-lg font-semibold text-foreground">Continue learning</h2>
-  {% elif action == 'complete' %}<h2 id="course-next-heading" class="text-lg font-semibold text-foreground">Core material complete</h2>
-  {% elif action == 'locked' %}<h2 id="course-next-heading" class="text-lg font-semibold text-foreground">Your next lesson is not available yet</h2>
-  {% else %}<h2 id="course-next-heading" class="text-lg font-semibold text-foreground">Course materials are coming soon</h2>{% endif %}
-
-  {% if cohort_status == 'upcoming' %}<p class="mt-2 text-sm text-muted-foreground">Your cohort starts <time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_full_date }}</time>.</p>
-  {% elif cohort_status == 'completed' %}<p class="mt-2 text-sm text-muted-foreground">Your cohort has ended. Your personal reader progress remains available.</p>
-  {% elif current_week %}<p class="mt-2 text-sm text-muted-foreground" data-testid="course-home-week">Cohort week {{ current_week }}</p>
-  {% endif %}
-
-  {% if recommended_unit %}
-    <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
-      <div class="min-w-0">
-        <p class="text-sm text-muted-foreground">{% if recommended_unit.module.parent %}{{ recommended_unit.module.parent.title }} · {% endif %}{{ recommended_unit.module.title }}</p>
-        <p class="mt-1 break-words text-xl font-semibold text-foreground" data-testid="course-home-recommendation">{{ recommended_unit.title }}</p>
-      </div>
-      <div class="flex flex-col gap-2 sm:shrink-0 sm:items-end">
-        <a href="{{ recommended_unit.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}" data-testid="course-home-open-lesson">{{ recommendation_label }}</a>
-      </div>
+{% load accounts_extras member_badges %}
+<section class="rounded-xl border border-border bg-card p-5 sm:p-7" aria-labelledby="course-focus-heading" data-testid="course-home-focus">
+  <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+    <div class="min-w-0">
+      <p class="text-xs font-semibold uppercase tracking-wide text-accent"{% if current_week and cohort_status == 'in progress' %} data-testid="course-home-week"{% endif %}>
+        {% if cohort and cohort.mode == 'self_paced' %}Your next focus{% elif current_week and cohort_status == 'in progress' %}Cohort week {{ current_week }}{% elif cohort_status == 'upcoming' %}First cohort module{% elif cohort_status == 'completed' %}Final cohort module{% elif cohort %}Cohort focus{% else %}Your next focus{% endif %}
+      </p>
+      <h2 id="course-focus-heading" class="mt-1 break-words text-xl font-semibold text-foreground sm:text-2xl">
+        {% if focus_module %}{{ focus_module.title }}{% else %}Course focus{% endif %}
+      </h2>
+      {% if focus_week_range %}<p class="mt-1 text-sm text-muted-foreground">{{ focus_week_range }}</p>{% endif %}
+      {% if cohort_status == 'upcoming' and cohort.start_date %}<p class="mt-2 text-sm text-muted-foreground">Your cohort starts <time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_full_date }}</time>.</p>{% elif cohort_status == 'completed' %}<p class="mt-2 text-sm text-muted-foreground">Your cohort has ended. Pick up with the next lesson that is not marked complete.</p>{% endif %}
     </div>
-  {% elif action == 'locked' %}
-    {% if next_available %}<p class="mt-3 text-sm text-muted-foreground">The next core material is scheduled for <time datetime="{{ next_available|form_date_value }}">{{ next_available|member_full_date }}</time>.</p>
-    {% else %}<p class="mt-3 text-sm text-muted-foreground">There is no core lesson you can open right now.</p>{% endif %}
-    <a href="{{ course.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'secondary' size='md' extra='mt-4' %}">View course materials</a>
-  {% elif action == 'complete' %}
-    <p class="mt-3 text-sm text-muted-foreground">All core reader material is marked complete. Homework, peer review, and certificates have their own requirements.</p>
-  {% else %}
-    <p class="mt-3 text-sm text-muted-foreground">Check the course overview for the current materials.</p>
-    <a href="{{ course.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'secondary' size='md' extra='mt-4' %}">View course materials</a>
+    {% if focus_module and focus_module_row and focus_module_row.total %}
+    <p class="mt-2 shrink-0 text-xs text-muted-foreground sm:mt-1">{{ focus_module_row.completed }} of {{ focus_module_row.total }} materials marked complete in this module</p>
+    {% endif %}
+  </div>
+
+  <div class="mt-6 grid gap-6 border-t border-border pt-5 md:grid-cols-2 md:gap-8">
+    <section class="min-w-0" aria-labelledby="course-home-position-heading" data-testid="course-home-position">
+      <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+        <h3 id="course-home-position-heading" class="text-sm font-semibold text-foreground">Your learning position</h3>
+      </div>
+      {% if recommended_unit %}
+      <p class="mt-3 text-xs font-medium text-muted-foreground">Next uncompleted course material</p>
+      <p class="mt-1 break-words text-base font-semibold text-foreground" data-testid="course-home-recommendation">{{ recommended_unit.title }}</p>
+      <p class="mt-1 break-words text-sm text-muted-foreground">{% if recommended_unit.module.parent %}{{ recommended_unit.module.parent.title }} · {% endif %}{{ recommended_unit.module.title }}</p>
+      {% if recommended_live_session %}
+      <p class="mt-2 text-xs text-muted-foreground"><time datetime="{{ recommended_live_session.when.isoformat }}">{{ recommended_live_session.when_label }}</time></p>
+      <a href="{{ recommended_live_session.url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-open-recommended-session">{{ recommended_live_session.action }}</a>
+      {% else %}
+      <a href="{{ recommended_unit.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-open-lesson">{{ recommendation_label }}</a>
+      {% endif %}
+      {% elif action == 'locked' %}
+        {% if next_available %}<p class="mt-3 text-sm text-muted-foreground">The next core material is scheduled for <time datetime="{{ next_available|form_date_value }}">{{ next_available|member_full_date }}</time>.</p>
+        {% else %}<p class="mt-3 text-sm text-muted-foreground">There is no core lesson you can open right now.</p>{% endif %}
+      {% elif action == 'complete' %}
+      <p class="mt-3 text-sm text-muted-foreground">All core learning materials are marked complete. Homework and peer review have their own requirements.</p>
+      {% else %}
+      <p class="mt-3 text-sm text-muted-foreground">Course materials have not been published yet.</p>
+      {% endif %}
+    </section>
+
+    {% if focus_work_items %}
+    <section class="min-w-0" aria-labelledby="course-home-work-heading" data-testid="course-home-weekly-work">
+      <h3 id="course-home-work-heading" class="text-sm font-semibold text-foreground">Homework and project work</h3>
+      <ul class="mt-2 divide-y divide-border">
+        {% for work in focus_work_items %}
+        <li class="flex min-w-0 items-start justify-between gap-3 py-3 first:pt-1 last:pb-0">
+          <div class="min-w-0">
+            <p class="break-words text-sm font-medium text-foreground">{{ work.unit.title }}</p>
+            {% if work.commitment.status %}
+            <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              {% member_label_badge work.commitment.status tone=work.commitment.status_tone size="xs" %}
+              {% if work.due_soon %}<span class="font-medium text-accent">Due soon</span>{% endif %}
+              {% if work.commitment.when %}<span>Due <time datetime="{{ work.commitment.when.isoformat }}">{{ work.commitment.when_label }}</time></span>{% endif %}
+            </p>
+            {% elif work.available_date %}
+            <p class="mt-1 text-xs text-muted-foreground">Available <time datetime="{{ work.available_date|form_date_value }}">{{ work.available_date|member_short_date }}</time></p>
+            {% endif %}
+            {% if work.commitment.detail %}<p class="mt-1 text-xs text-muted-foreground">{{ work.commitment.detail }}</p>{% endif %}
+          </div>
+          {% if work.url %}<a href="{{ work.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-weekly-work-link">{{ work.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+
+  {% if next_live_session %}
+  <section class="mt-6 flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between" aria-labelledby="course-home-session-heading" data-testid="course-home-next-session">
+    <div class="min-w-0">
+      <p class="text-xs font-medium text-muted-foreground">{% if next_live_session.status == 'Past' %}Catch up on a recent session{% else %}Next live session{% endif %}</p>
+      {% if next_live_session.module_title %}<h3 id="course-home-session-heading" class="mt-1 break-words text-sm font-semibold text-foreground">{{ next_live_session.module_title }}</h3><p class="mt-1 break-words text-xs text-muted-foreground">{{ next_live_session.title }}</p>
+      {% else %}<h3 id="course-home-session-heading" class="mt-1 break-words text-sm font-semibold text-foreground">{{ next_live_session.title }}</h3>{% endif %}
+      {% if next_live_session.when %}<p class="mt-1 text-xs text-muted-foreground"><time datetime="{{ next_live_session.when.isoformat }}">{{ next_live_session.when_label }}</time></p>{% endif %}
+    </div>
+    {% if next_live_session.url and next_live_session.action %}<a href="{{ next_live_session.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-session-link">{{ next_live_session.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  </section>
   {% endif %}
 </section>

@@ -1,0 +1,19 @@
+{% load member_badges %}
+{% if urgent_commitment %}
+<section class="rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 sm:px-5" aria-labelledby="course-home-urgent-heading" data-testid="course-home-urgent">
+  <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+    <div class="min-w-0">
+      <p class="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-muted-foreground">
+        <span>Needs attention this week</span>
+        <span aria-hidden="true">·</span>
+        <span>{{ urgent_commitment.kind }}</span>
+        {% if urgent_commitment.status %}{% member_label_badge urgent_commitment.status tone=urgent_commitment.status_tone size="xs" %}{% endif %}
+      </p>
+      <h2 id="course-home-urgent-heading" class="mt-1 break-words text-sm font-semibold text-foreground">{{ urgent_commitment.title }}</h2>
+      {% if urgent_commitment.when %}<p class="mt-1 text-xs text-muted-foreground">Due <time datetime="{{ urgent_commitment.when.isoformat }}">{{ urgent_commitment.when_label }}</time></p>{% endif %}
+      {% if urgent_commitment.detail %}<p class="mt-1 text-xs text-muted-foreground">{{ urgent_commitment.detail }}</p>{% endif %}
+    </div>
+    {% if urgent_commitment.url and urgent_commitment.action %}<a href="{{ urgent_commitment.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-urgent-link">{{ urgent_commitment.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  </div>
+</section>
+{% endif %}

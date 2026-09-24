@@ -19,6 +19,7 @@ from content.models import (
     UserCourseProgress,
 )
 from content.services.course_home import build_course_home
+from events.models import Event, EventSeries
 
 
 class CourseHomeTests(TestCase):
@@ -230,7 +231,8 @@ class CourseHomeTests(TestCase):
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
         self.assertContains(response, f'href="{self.lesson1.get_absolute_url()}"')
         self.assertContains(response, f'href="{self.course.get_absolute_url()}"')
-        self.assertContains(response, '0 of 3 core materials marked complete')
+        self.assertContains(response, 'data-testid="course-home-position"')
+        self.assertContains(response, 'Next uncompleted course material')
         lesson = self.client.get(self.lesson1.get_absolute_url())
         self.assertContains(lesson, 'data-testid="reader-course-home"')
 
@@ -289,6 +291,35 @@ class CourseHomeTests(TestCase):
         self.assertEqual(response.context['action'], 'empty')
         self.assertContains(response, 'Course materials have not been published yet')
         self.assertNotContains(response, 'Open lesson')
+
+    def test_recommended_linked_session_uses_one_real_session_action(self):
+        event_unit = Unit.objects.create(
+            module=self.first, title='Session 1', slug='session-1', kind='event',
+            session_position=1,
+        )
+        self._complete(self.lesson1, self.lesson2, self.lesson3)
+        cohort = self._cohort()
+        series = EventSeries.objects.create(name='Course sessions', slug='course-sessions')
+        cohort.event_series = series
+        cohort.save(update_fields=['event_series'])
+        event = Event.objects.create(
+            event_series=series, slug='first-session', title='Session 1 for this course',
+            status='upcoming', start_datetime=timezone.now() + datetime.timedelta(days=1),
+            end_datetime=timezone.now() + datetime.timedelta(days=1, hours=1),
+            series_position=1,
+        )
+        self.client.force_login(self.user)
+
+        response = self.client.get(
+            f'/courses/{self.course.slug}/home?cohort={cohort.external_key}',
+        )
+
+        self.assertEqual(response.context['recommended_unit'], event_unit)
+        self.assertEqual(response.context['recommended_live_session']['title'], event.title)
+        self.assertIsNone(response.context['next_live_session'])
+        self.assertContains(response, 'data-testid="course-home-open-recommended-session"')
+        self.assertContains(response, f'href="{event.get_absolute_url()}"')
+        self.assertNotContains(response, 'data-testid="course-home-next-session"')
 
     def test_course_map_query_count_does_not_grow_per_module(self):
         with CaptureQueriesContext(connection) as base_queries:

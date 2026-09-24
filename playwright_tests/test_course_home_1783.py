@@ -69,9 +69,12 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     page.goto(f'{django_server}/courses', wait_until='domcontentloaded')
     page.get_by_role('link', name=course.title).click()
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home')
+    expect(page.locator('[data-testid="course-home-focus"]')).to_contain_text(second.title)
     expect(page.locator('[data-testid="course-home-week"]')).to_contain_text('Cohort week 3')
     expect(page.locator('[data-testid="course-home-recommendation"]')).to_have_text(next_unit.title)
-    expect(page.locator('[data-testid="course-home-progress"]')).to_contain_text('1 of 3')
+    expect(page.locator('[data-testid="course-home-position"]')).to_contain_text(
+        'Next uncompleted course material',
+    )
     screenshot_dir = Path('.tmp/screenshots/course-home-1783')
     screenshot_dir.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(screenshot_dir / 'desktop-light.png'), full_page=True)
@@ -81,8 +84,7 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     expect(page.locator('[data-testid="course-home-open-lesson"]')).to_be_visible()
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['y'] < 844
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['height'] >= 44
-    assert page.locator('[data-testid^="course-home-module-"]').first.bounding_box()['height'] >= 44
-    assert page.locator('[data-testid="course-home-help"] a').first.bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.screenshot(path=str(screenshot_dir / 'mobile-light.png'), full_page=True)
 
@@ -93,10 +95,8 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.screenshot(path=str(screenshot_dir / 'desktop-dark.png'), full_page=True)
 
-    page.get_by_role('navigation', name='Course pages').get_by_role('link', name='Help').click()
-    help_heading = page.get_by_role('heading', name='Help')
-    expect(help_heading).to_be_visible()
-    assert help_heading.bounding_box()['y'] >= 64
+    help_links = page.get_by_role('navigation', name='Course help and links')
+    expect(help_links.get_by_role('link', name='Course communication')).to_be_visible()
 
     page.locator('[data-testid="course-home-open-lesson"]').click()
     expect(page).to_have_url(f'{django_server}{next_unit.get_absolute_url()}?cohort=current-study')

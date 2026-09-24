@@ -21,7 +21,7 @@ pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 @pytest.mark.core
 @browser_journey
 def test_course_home_commitments_to_homework_event_and_reviews(django_server, browser):
-    from content.models import Cohort, CohortEnrollment, Course, Module, PeerReview, ProjectSubmission, Unit
+    from content.models import Cohort, CohortEnrollment, Course, Module, ProjectSubmission, Unit
     from content.models.homework import Homework, Question
     from content.models.peer_review import CourseProject
     from events.models import Event, EventSeries
@@ -29,16 +29,21 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     user = create_user('course-home-commitments@test.com')
     user.preferred_timezone = 'Europe/Berlin'
     user.save(update_fields=['preferred_timezone'])
-    peer = create_user('course-home-review-peer@test.com')
     course = Course.objects.create(
         title='Build and review a useful project', slug='course-home-commitments',
         status='published', required_level=0,
         peer_review_enabled=True, peer_review_count=1,
+        discussion_url='https://example.org/course-discussion',
     )
     module = Module.objects.create(
         course=course, title='Foundations', slug='foundations', sort_order=1,
+        available_after_days=0,
     )
     Unit.objects.create(module=module, title='First lesson', slug='first-lesson')
+    Unit.objects.create(
+        module=module, title='Session 1', slug='session-1', kind='event',
+        session_position=1,
+    )
     content_id = uuid.uuid4()
     homework_unit = Unit.objects.create(
         module=module, title='Practice assignment', slug='practice-assignment',
@@ -65,6 +70,7 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
         title='Upcoming practice session', status='upcoming',
         start_datetime=now + datetime.timedelta(days=1),
         end_datetime=now + datetime.timedelta(days=1, hours=1),
+        series_position=1,
     )
     project = CourseProject.objects.create(
         course=course, cohort=cohort, slug='first-attempt',
@@ -77,11 +83,6 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
         user=user, course=course, course_project=project, cohort=cohort,
         project_url='https://example.com/my-project',
     )
-    peer_submission = ProjectSubmission.objects.create(
-        user=peer, course=course, course_project=project, cohort=cohort,
-        project_url='https://example.com/peer-project',
-    )
-    PeerReview.objects.create(submission=peer_submission, reviewer=user)
     connection.close()
 
     context = auth_context(browser, user.email)
@@ -93,15 +94,25 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     home_url = f'{django_server}/courses/{course.slug}/home?cohort=current'
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.goto(home_url, wait_until='domcontentloaded')
-    expect(page.locator('[data-testid="course-home-coming-up"]')).to_contain_text(event.title)
-    expect(page.locator('[data-testid="course-home-coming-up"]')).to_contain_text(homework.title)
-    expect(page.locator('[data-testid="course-home-assignments"]')).to_contain_text('Continue reviews')
+    expect(page.locator('[data-testid="course-home-next-session"]')).to_contain_text(event.title)
+    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text(homework.title)
+    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text('Due soon')
+    expect(page.locator('[data-testid="course-home-focus"]')).not_to_contain_text(
+        'Continue reviews',
+    )
+    course_pages = page.get_by_role('navigation', name='Course pages')
+    expect(course_pages.get_by_role('link', name='Home')).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Course materials')).to_be_visible()
+    assert course_pages.get_by_role('link').count() == 2
     screenshots = Path('.tmp/screenshots/course-home-1784')
     screenshots.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(screenshots / 'desktop-light.png'), full_page=True)
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['y'] < 844
+    assert page.locator('[data-testid="course-home-weekly-work-link"]').bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-session-link"]').bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     page.screenshot(path=str(screenshots / 'mobile-light.png'), full_page=True)
     page.evaluate("localStorage.setItem('theme', 'dark')")
     page.reload(wait_until='domcontentloaded')
@@ -109,29 +120,22 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.screenshot(path=str(screenshots / 'desktop-dark.png'), full_page=True)
 
-    page.locator('[data-testid="course-home-coming-up"]').get_by_role(
+    page.locator('[data-testid="course-home-next-session"]').get_by_role(
         'link', name='View session',
     ).click()
     expect(page).to_have_url(f'{django_server}{event.get_absolute_url()}')
     page.goto(home_url, wait_until='domcontentloaded')
-    page.locator('[data-testid="course-home-assignments"]').get_by_role(
+    page.locator('[data-testid="course-home-weekly-work"]').get_by_role(
         'link', name='Start homework',
     ).click()
     expect(page).to_have_url(f'{django_server}{homework_unit.get_absolute_url()}?cohort=current')
     page.locator(f'[name="answer_{question.pk}"]').fill('A working prototype')
     page.get_by_role('button', name='Submit homework').click()
     page.goto(home_url, wait_until='domcontentloaded')
-    expect(page.locator('[data-testid="course-home-assignments"]')).not_to_contain_text(
-        'Start homework',
-    )
-    page.locator('[data-testid="course-home-completed-assignments"] summary').click()
-    expect(page.locator('[data-testid="course-home-completed-assignments"]')).to_contain_text(
+    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text(
         'Submitted',
     )
-    page.locator('[data-testid="course-home-assignments"]').get_by_role(
-        'link', name='Continue reviews',
-    ).click()
-    expect(page).to_have_url(
-        f'{django_server}/courses/{course.slug}/projects/{project.slug}/reviews',
+    expect(page.locator('[data-testid="course-home-weekly-work"]')).not_to_contain_text(
+        'Start homework',
     )
     context.close()

@@ -27,14 +27,22 @@ class CourseProjectAttemptViewsTest(TestCase):
             course=cls.course, parent=cls.module, title='Project Attempts',
             slug='project-attempts', sort_order=3,
         )
+        today = timezone.localdate()
+        cls.cohort = Cohort.objects.create(
+            course=cls.course, name='Cohort 1', external_key='1',
+            start_date=today - timedelta(days=1), end_date=today + timedelta(days=90),
+        )
+        CohortEnrollment.objects.create(cohort=cls.cohort, user=cls.user)
         now = timezone.now()
         cls.first = CourseProject.objects.create(
-            course=cls.course, module=cls.project_module, slug='first', title='First attempt',
+            course=cls.course, cohort=cls.cohort, module=cls.project_module,
+            slug='first', title='First attempt',
             submission_due_at=now + timedelta(days=1),
             review_due_at=now + timedelta(days=8),
         )
         cls.second = CourseProject.objects.create(
-            course=cls.course, module=cls.project_module, slug='second', title='Second attempt',
+            course=cls.course, cohort=cls.cohort, module=cls.project_module,
+            slug='second', title='Second attempt',
             submission_due_at=now + timedelta(days=15),
             review_due_at=now + timedelta(days=22),
         )
@@ -131,6 +139,8 @@ class CourseProjectAttemptViewsTest(TestCase):
         response = self.client.get('/courses/attempt-course')
         self.assertNotContains(response, '/courses/attempt-course/projects/first/submit')
         self.assertEqual(self.client.get('/courses/attempt-course/projects/first/submit').status_code, 404)
+        response = self.client.get('/courses/attempt-course?cohort=4')
+        self.assertNotContains(response, '/courses/attempt-course/projects/first/submit')
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
-        response = self.client.get('/courses/attempt-course')
+        response = self.client.get('/courses/attempt-course?cohort=4')
         self.assertContains(response, '/courses/attempt-course/projects/first/submit')

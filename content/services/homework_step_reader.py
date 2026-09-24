@@ -18,7 +18,8 @@ from django.core.validators import URLValidator
 from django.utils.safestring import mark_safe
 
 from content.models.homework import QuestionType, Submission
-from content.services import completion as completion_service, course_units
+from content.services import completion as completion_service
+from content.services import course_units
 from content.services.homework_step_sections import (
     split_out_named_section,
     validate_question_bindings,

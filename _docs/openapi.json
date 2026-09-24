@@ -6498,6 +6498,90 @@
         ]
       }
     },
+    "/api/events/{slug}/attach-transcript": {
+      "post": {
+        "description": "Parse a supplied WebVTT transcript, archive both the exact VTT and parsed text in the private recordings bucket, and store the transcript on the event. A staff token is required. Set redraft=true to queue a fresh recap draft.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "redraft": false,
+                "vtt": "WEBVTT\\n\\n00:00:01.000 --> 00:00:02.000\\nWelcome to the session.\\n"
+              },
+              "schema": {
+                "properties": {
+                  "redraft": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "vtt": {
+                    "description": "Complete WebVTT document.",
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "characters": {
+                      "type": "integer"
+                    },
+                    "recap_queued": {
+                      "type": "boolean"
+                    },
+                    "transcript_s3_url": {
+                      "type": "string"
+                    },
+                    "transcript_status": {
+                      "type": "string"
+                    },
+                    "transcript_txt_s3_url": {
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Transcript archive and event state."
+          },
+          "400": {
+            "description": "Malformed JSON body."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "description": "Event not found."
+          },
+          "422": {
+            "description": "Invalid transcript or archive failure."
+          }
+        },
+        "summary": "Attach transcript VTT",
+        "tags": [
+          "Events"
+        ]
+      }
+    },
     "/api/events/{slug}/notify-recap-ready": {
       "post": {
         "description": "After an operator verifies the anonymous public recap page, send one transactional email and one in-app notification to active users registered for this exact event occurrence. The action is explicit and idempotent per channel.",

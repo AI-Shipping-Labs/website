@@ -41,6 +41,9 @@ from playwright_tests.conftest import (
     create_user as _create_user,
 )
 from playwright_tests.conftest import (
+    enroll_self_paced as _enroll_self_paced,
+)
+from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
 
@@ -1559,6 +1562,7 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
             module, "Lesson One", sort_order=0,
             body="# Lesson One\n\nLesson one content for main members.",
         )
+        _enroll_self_paced("main@test.com", course)
 
         context = _auth_context(browser, "main@test.com")
         page = context.new_page()

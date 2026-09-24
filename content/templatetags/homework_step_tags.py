@@ -1,8 +1,8 @@
 """Template helpers for interactive, authored homework question prompts."""
 
+import re
 from html import unescape
 from html.parser import HTMLParser
-import re
 
 from django import template
 from django.utils.html import escape, strip_tags

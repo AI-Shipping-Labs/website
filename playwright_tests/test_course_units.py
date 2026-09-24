@@ -27,6 +27,9 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
+from playwright_tests.conftest import (
+    enroll_self_paced as _enroll_self_paced,
+)
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection
@@ -662,6 +665,7 @@ class TestScenario7ProgressBar:
             module1, "P Unit 3", sort_order=2,
             body="# PU3\n\nThird.",
         )
+        _enroll_self_paced("premium-pb@test.com", course)
 
         context = _auth_context(browser, "premium-pb@test.com")
         page = context.new_page()

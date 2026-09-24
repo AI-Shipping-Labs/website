@@ -6,7 +6,6 @@ from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
 
-
 PRE_MIGRATION = ('content', '0077_homework_homework_url_field_and_more')
 POST_MIGRATION = ('content', '0078_backfill_course_self_paced_cohorts')
 

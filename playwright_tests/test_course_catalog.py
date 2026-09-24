@@ -29,6 +29,9 @@ from playwright_tests.conftest import (
     create_user as _create_user,
 )
 from playwright_tests.conftest import (
+    enroll_self_paced as _enroll_self_paced,
+)
+from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
 
@@ -468,6 +471,7 @@ class TestScenario3FreeUserFreeCourseProgress:
         )
         _create_unit(mod, "Functions", sort_order=2)
         _create_unit(mod, "Classes", sort_order=3)
+        _enroll_self_paced("free-cc@test.com", course)
 
         context = _auth_context(browser, "free-cc@test.com")
         page = context.new_page()
@@ -604,6 +608,7 @@ class TestScenario4MainMemberPaidCourseProgress:
             mod, "Kubernetes Setup", sort_order=2,
             body="# Kubernetes\nLearn about K8s.",
         )
+        _enroll_self_paced("main-cc@test.com", course)
 
         context = _auth_context(browser, "main-cc@test.com")
         page = context.new_page()

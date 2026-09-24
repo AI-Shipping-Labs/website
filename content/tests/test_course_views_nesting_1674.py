@@ -20,6 +20,7 @@ Covers:
 import datetime
 from html.parser import HTMLParser
 
+import pytest
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -688,6 +689,7 @@ class SyllabusBuildcampPositionTest(TestCase):
             self.assertContains(response, 'data-testid="syllabus-optional-group">Optional</h3>')
             self.assertNotContains(response, 'data-testid="syllabus-optional-badge"')
 
+    @pytest.mark.visual_regression
     def test_top_level_module_content_has_the_same_horizontal_geometry(self):
         buildcamp_week = Module.objects.get(course__slug='ai-buildcamp', slug='week-1')
         session_topic = Module.objects.create(

@@ -19,6 +19,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.utils import timezone
 
+from accounts.templatetags.date_formatting import member_full_date
 from content.access import LEVEL_MAIN, LEVEL_OPEN
 from content.models import (
     Cohort,
@@ -187,8 +188,8 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
         )
         self.cohort = Cohort.objects.create(
             course=self.course, name='Spring 2026',
-            start_date=datetime.date(2026, 3, 1),
-            end_date=datetime.date(2026, 6, 1),
+            start_date=datetime.date.today() + datetime.timedelta(days=14),
+            end_date=datetime.date.today() + datetime.timedelta(days=120),
             is_active=True,
             max_participants=30,
         )
@@ -200,7 +201,7 @@ class CourseDetailCohortDisplayTest(TierSetupMixin, TestCase):
 
     def test_shows_cohort_start_date(self):
         response = self.client.get('/courses/cohort-course')
-        self.assertContains(response, 'March 1, 2026')
+        self.assertContains(response, member_full_date(self.cohort.start_date))
 
     def test_shows_spots_remaining(self):
         response = self.client.get('/courses/cohort-course')

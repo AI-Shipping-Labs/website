@@ -14,9 +14,9 @@ from django.utils.formats import date_format
 
 from content.access import get_user_level
 from content.models import CohortEnrollment, CourseAccess, Unit
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.homework import Homework, Submission
 from content.models.peer_review import CourseProject, PeerReview, ProjectSubmission
-from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.services.course_home import (
     _all_module_units,
     _can_open_unit,

@@ -78,8 +78,10 @@ def _create_assignment(email):
 @pytest.mark.parametrize(
     ('failure_status', 'expected_error'),
     [
-        (503, 'retry before leaving'),
-        (409, 'Reload this page'),
+        # The save-failure wording differs between community-base v0.5.5 and
+        # the pending release; both must surface an explicit recovery hint.
+        (503, re.compile(r'retry before leaving|Save failed')),
+        (409, re.compile(r'Reload this page|Changed in another tab')),
     ],
 )
 def test_failed_autosave_blocks_step_link_without_losing_choice(
@@ -131,8 +133,9 @@ def test_failed_autosave_blocks_step_link_without_losing_choice(
 @pytest.mark.core
 @browser_journey
 def test_sidebar_exit_saves_latest_dirty_choice_before_navigation(django_server, browser):
-    from accounts.models import User
     from community_base.homework_steps.models import HomeworkDraft
+
+    from accounts.models import User
     from content.services.homework_step_reader import option_key
 
     email = 'homework-step-sidebar-flush@test.com'

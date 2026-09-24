@@ -10,7 +10,6 @@ from django.utils import timezone
 from content.models.cohort import Cohort, CohortEnrollment
 from content.models.homework import Answer, Homework, HomeworkState, Question, Submission
 from content.services import completion as completion_service
-from content.services.homework_submissions import save_submission
 from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
     build_assignment,
@@ -20,6 +19,7 @@ from content.services.homework_step_sections import (
     split_out_named_section,
     validate_question_bindings,
 )
+from content.services.homework_submissions import save_submission
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
 
 

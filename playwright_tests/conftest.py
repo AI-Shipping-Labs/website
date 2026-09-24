@@ -906,6 +906,22 @@ def create_user(
     return user
 
 
+def enroll_self_paced(email, course):
+    """Enroll a learner into the course's default self-paced cohort.
+
+    Mirrors the enrollment the product creates through the enroll/continue
+    flow; cohort-scoped surfaces render empty without it.
+    """
+    from django.db import connection
+
+    from accounts.models import User
+    from content.services.enrollment import ensure_self_paced_cohort_enrollment
+
+    user = User.objects.get(email=email)
+    ensure_self_paced_cohort_enrollment(user, course)
+    connection.close()
+
+
 def create_staff_user(email="admin@test.com", password=DEFAULT_PASSWORD):
     """Create a staff/superuser for admin and studio tests."""
     from django.db import connection

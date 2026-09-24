@@ -60,13 +60,12 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
     ):
         return
 
-    if raw_due_date is None:
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: due_date is required when '
-            f'questions: are present'
-        )
-
-    due_date = _parse_due_date(raw_due_date, rel_path)
+    # Some cohort assignments intentionally have no deadline. In that case
+    # OPEN/CLOSED state alone controls whether a learner can submit.
+    due_date = (
+        _parse_due_date(raw_due_date, rel_path)
+        if raw_due_date is not None else None
+    )
 
     if not isinstance(raw_questions, list):
         raise GitHubSyncError(

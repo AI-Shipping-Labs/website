@@ -10,11 +10,9 @@ when reading this file:
   envelope (the content repo is already private; the actual leak surface is
   rendering, not storage -- enforced by never putting ``correct_answer`` /
   ``Answer.is_correct`` in a student-facing context, not by crypto).
-- ``Homework.is_accepting_submissions`` also gates on ``due_date`` in
-  addition to ``state``, because tranche 1 has no Studio surface to flip
-  ``state`` manually -- except for a ``mode='self_paced'`` cohort, which
-  has no dates at all and so is never deadline-gated (see the property's
-  own docstring).
+- ``Homework.is_accepting_submissions`` gates on ``due_date`` when one is
+  set, in addition to ``state``. A missing deadline leaves open homework
+  accepting submissions until an operator changes its state.
 
 Tester-confirmed bug fix (issue #1683 follow-up): ``content_id`` does NOT
 use ``SyncedContentIdentityMixin`` here, unlike ``Unit``/``Course``. That
@@ -47,7 +45,7 @@ class HomeworkState(models.TextChoices):
 class Homework(SourceMetadataMixin, models.Model):
     """One cohort's homework assignment.
 
-    Synced from a homework unit's ``questions:``/``due_date:`` frontmatter
+    Synced from a homework unit's ``questions:`` and optional ``due_date:`` frontmatter
     (see ``content/sync_parsers/families/homework.py``). ``content_id``
     mirrors the owning ``Unit``'s ``content_id`` -- resolution at render
     time is ``Homework.objects.filter(content_id=unit.content_id,
@@ -75,9 +73,9 @@ class Homework(SourceMetadataMixin, models.Model):
     )
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True, default='', db_default='')
-    due_date = models.DateTimeField()
-    # Activated only after the source has approved question keys and a
-    # deadline. Older homework keeps its all-in-one submission form.
+    due_date = models.DateTimeField(null=True, blank=True)
+    # Activated only after the source has approved question keys. Older
+    # homework keeps its all-in-one submission form.
     stepper_enabled = models.BooleanField(default=False, db_default=False)
     # Source-authored final-form settings. A public-links cap of zero removes
     # the Learning in Public stop from the stepper.
@@ -107,8 +105,7 @@ class Homework(SourceMetadataMixin, models.Model):
 
     @property
     def is_accepting_submissions(self):
-        """True while ``state == OPEN`` and, for a dated cohort, the
-        deadline has not passed.
+        """True while ``state == OPEN`` and any assigned deadline remains.
 
         Deliberate divergence from the donor (issue #1683): the donor gates
         acceptance on ``state`` alone (an operator manually flips
@@ -117,28 +114,24 @@ class Homework(SourceMetadataMixin, models.Model):
         "deadline enforcement" -- on the owner's must-land list -- would
         never actually trigger.
 
-        Tester-confirmed bug fix: a ``mode='self_paced'`` cohort has no
-        ``start_date``/``end_date`` at all -- there is no schedule to be
-        late against, so ``due_date`` (which the sync layer still has to
-        stamp on every ``Homework`` row, dated or not, since the content
-        frontmatter always carries one) is not enforced for a self-paced
-        cohort. A self-paced learner's homework only ever closes when an
-        operator flips ``state`` away from ``OPEN``.
+        A missing ``due_date`` also means there is no deadline to enforce,
+        for either cohort or self-paced learners. In both cases, only an
+        operator changing ``state`` away from ``OPEN`` closes submissions.
         """
         if self.state != HomeworkState.OPEN:
             return False
         if self.cohort.mode == COHORT_MODE_SELF_PACED:
             return True
-        return timezone.now() <= self.due_date
+        return self.due_date is None or timezone.now() <= self.due_date
 
     @property
     def is_past_due(self):
-        """True when a dated cohort's deadline has passed.
+        """True when an assigned deadline has passed.
 
-        Always ``False`` for a self-paced cohort -- see
-        ``is_accepting_submissions``.
+        Always ``False`` for a self-paced cohort or homework without a
+        deadline -- see ``is_accepting_submissions``.
         """
-        if self.cohort.mode == COHORT_MODE_SELF_PACED:
+        if self.cohort.mode == COHORT_MODE_SELF_PACED or self.due_date is None:
             return False
         return timezone.now() > self.due_date
 

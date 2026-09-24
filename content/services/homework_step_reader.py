@@ -203,7 +203,7 @@ class AISLHomeworkAdapter:
         if not self.homework.is_accepting_submissions:
             reason = (
                 'This homework is closed. Your saved answers are still available.'
-                if self.homework.is_self_paced else
+                if self.homework.is_self_paced or self.homework.due_date is None else
                 'The deadline for this homework has passed. Your saved answers are still available.'
             )
             return Eligibility(True, False, False, reason)

@@ -142,8 +142,9 @@ class HomeworkSyncValidationTest(HomeworkSyncTestBase):
             Homework.objects.filter(cohort=self.cohort).exists()
         )
 
-    def test_questions_without_due_date_is_a_sync_error(self):
-        # due_date key entirely absent, questions: present.
+    def test_questions_without_deadline_sync_into_open_homework(self):
+        # A homework may intentionally have no due_date; its OPEN/CLOSED
+        # state then controls whether it accepts submissions.
         text = (
             '---\n'
             'content_id: 66666666-6666-6666-6666-666666666666\n'
@@ -156,10 +157,20 @@ class HomeworkSyncValidationTest(HomeworkSyncTestBase):
         self.repo.write_text('course/01-module/02-homework.md', text)
         log = sync_repo(self.source, self.repo)
 
-        self.assertTrue(log.errors)
-        self.assertTrue(
-            any('due_date' in str(e.get('error', '')) for e in log.errors)
-        )
+        self.assertEqual(log.errors, [])
+        unit = Unit.objects.get(slug='homework')
+        homework = Homework.objects.get(content_id=unit.content_id, cohort=self.cohort)
+        self.assertIsNone(homework.due_date)
+        self.assertTrue(homework.is_accepting_submissions)
+
+    def test_explicit_null_deadline_syncs_into_homework(self):
+        self._write_homework_unit(QUESTIONS_YAML, due_date='null')
+        log = sync_repo(self.source, self.repo)
+
+        self.assertEqual(log.errors, [])
+        unit = Unit.objects.get(slug='homework')
+        homework = Homework.objects.get(content_id=unit.content_id, cohort=self.cohort)
+        self.assertIsNone(homework.due_date)
 
     def test_homework_unit_without_questions_or_due_date_syncs_with_no_homework_row(self):
         """Backward compatibility: a plain `is_homework: true` unit with no
@@ -209,28 +220,27 @@ class HomeworkCohortResolutionTest(TestCase):
         )
         self.repo.write_text('course/01-module/02-homework.md', text)
 
-    def test_no_cohort_and_no_match_is_skipped_with_a_logged_warning_not_a_hard_failure(self):
+    def test_default_self_paced_cohort_is_used_as_the_fallback_target(self):
         self._write_homework_unit()
         log = sync_repo(self.source, self.repo)
 
-        # Homework sync is skipped (info-severity note, not a hard error);
-        # the file itself -- and the rest of the course -- still syncs.
+        # Course sync creates one default self-paced cohort when the source
+        # defines no cohorts, so the homework can resolve to that cohort.
         self.assertTrue(Unit.objects.filter(slug='homework').exists())
-        self.assertFalse(Homework.objects.filter(cohort__course=self.course).exists())
-        self.assertFalse(
-            any(e.get('severity') != 'info' for e in log.errors)
-        )
+        self.assertEqual(log.errors, [])
+        unit = Unit.objects.get(slug='homework')
+        homework = Homework.objects.get(content_id=unit.content_id)
+        self.assertEqual(homework.cohort.mode, 'self_paced')
 
-    def test_single_cohort_is_used_as_the_fallback_target(self):
-        cohort = Cohort.objects.create(
+    def test_multiple_cohorts_without_an_in_range_match_are_skipped(self):
+        Cohort.objects.create(
             course=self.course, name='Cohort 4',
             start_date='2000-01-01', end_date='2000-02-01',  # not in range
         )
         self._write_homework_unit()
         log = sync_repo(self.source, self.repo)
-        self.assertEqual(log.errors, [])
 
-        unit = Unit.objects.get(slug='homework')
-        self.assertTrue(
-            Homework.objects.filter(content_id=unit.content_id, cohort=cohort).exists()
-        )
+        self.assertTrue(Unit.objects.filter(slug='homework').exists())
+        self.assertFalse(Homework.objects.filter(cohort__course=self.course).exists())
+        self.assertTrue(any(e.get('severity') == 'info' for e in log.errors))
+        self.assertFalse(any(e.get('severity') != 'info' for e in log.errors))

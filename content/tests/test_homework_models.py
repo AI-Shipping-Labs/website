@@ -77,6 +77,19 @@ class HomeworkModelTest(TestCase):
         )
         self.assertFalse(homework.is_accepting_submissions)
 
+    def test_no_deadline_stays_open_until_state_is_closed(self):
+        homework = Homework.objects.create(
+            cohort=self.cohort, slug='hw-no-deadline', title='HW without deadline',
+            due_date=None,
+        )
+        self.assertTrue(homework.is_accepting_submissions)
+        self.assertFalse(homework.is_past_due)
+        self.assertFalse(homework.is_self_paced)
+
+        homework.state = HomeworkState.CLOSED
+        self.assertFalse(homework.is_accepting_submissions)
+        self.assertFalse(homework.is_past_due)
+
 
 class SelfPacedHomeworkDeadlineTest(TestCase):
     """Tester-confirmed bug fix: a self-paced cohort has no dates, so

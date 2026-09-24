@@ -16,7 +16,13 @@ from django.test import TestCase
 
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort
-from content.models.homework import AnswerType, Homework, Question, QuestionType
+from content.models.homework import (
+    MAX_LEARNING_IN_PUBLIC_LINKS,
+    AnswerType,
+    Homework,
+    Question,
+    QuestionType,
+)
 from content.sync_parsers.common import GitHubSyncError
 from content.sync_parsers.families.homework import sync_unit_homework
 
@@ -124,14 +130,79 @@ class SyncUnitHomeworkDirectTest(TestCase):
         self.assertEqual(stats['errors'], [])
         self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
 
-    def test_step_activation_without_questions_or_deadline_is_rejected(self):
-        with self.assertRaisesRegex(GitHubSyncError, 'due_date'):
+    def test_step_activation_without_questions_is_rejected(self):
+        with self.assertRaisesRegex(GitHubSyncError, 'questions'):
             self._sync({'homework_steps': True})
 
-    def test_questions_without_due_date_raises(self):
-        with self.assertRaises(GitHubSyncError) as cm:
-            self._sync({'questions': _questions_metadata()['questions']})
-        self.assertIn('due_date', str(cm.exception))
+    def test_final_form_settings_sync_and_default_per_homework(self):
+        self._sync(_questions_metadata(
+            homework_steps=True,
+            learning_in_public_cap=7,
+            homework_url_field=True,
+            time_spent_lectures_field=True,
+            time_spent_homework_field=True,
+        ))
+        homework = Homework.objects.get(content_id=self.unit.content_id)
+        self.assertEqual(homework.learning_in_public_cap, 7)
+        self.assertTrue(homework.homework_url_field)
+        self.assertTrue(homework.time_spent_lectures_field)
+        self.assertTrue(homework.time_spent_homework_field)
+
+        self._sync(_questions_metadata(homework_steps=True))
+        homework.refresh_from_db()
+        self.assertEqual(homework.learning_in_public_cap, 0)
+        self.assertTrue(homework.homework_url_field)
+        self.assertFalse(homework.time_spent_lectures_field)
+        self.assertFalse(homework.time_spent_homework_field)
+
+    def test_final_form_settings_require_stepper(self):
+        with self.assertRaisesRegex(GitHubSyncError, 'require homework_steps'):
+            self._sync(_questions_metadata(learning_in_public_cap=3))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
+    def test_learning_in_public_cap_rejects_invalid_values(self):
+        for cap in (True, -1, MAX_LEARNING_IN_PUBLIC_LINKS + 1, '3'):
+            with self.subTest(cap=cap), self.assertRaisesRegex(
+                GitHubSyncError, 'learning_in_public_cap',
+            ):
+                self._sync(_questions_metadata(
+                    homework_steps=True,
+                    learning_in_public_cap=cap,
+                ))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
+    def test_optional_time_field_settings_must_be_booleans(self):
+        with self.assertRaisesRegex(GitHubSyncError, 'time_spent_lectures_field'):
+            self._sync(_questions_metadata(
+                homework_steps=True,
+                time_spent_lectures_field='false',
+            ))
+        self.assertFalse(Homework.objects.filter(content_id=self.unit.content_id).exists())
+
+    def test_questions_without_deadline_create_open_homework(self):
+        self.unit.homework = (
+            'Homework instructions.\n'
+            '## Question 1. Lines\nCount lines.\n'
+            '## Question 2. Reflection\nDescribe the work.'
+        )
+        self.unit.save(update_fields=['homework'])
+        self._sync({
+            'homework_steps': True,
+            'questions': _questions_metadata()['questions'],
+        })
+
+        homework = Homework.objects.get(content_id=self.unit.content_id)
+        self.assertIsNone(homework.due_date)
+        self.assertTrue(homework.stepper_enabled)
+        self.assertTrue(homework.is_accepting_submissions)
+        self.assertEqual(homework.questions.count(), 2)
+
+    def test_explicit_null_deadline_syncs_like_an_omitted_deadline(self):
+        self._sync(_questions_metadata(due_date=None))
+
+        homework = Homework.objects.get(content_id=self.unit.content_id)
+        self.assertIsNone(homework.due_date)
+        self.assertTrue(homework.is_accepting_submissions)
 
     def test_naive_due_date_raises(self):
         with self.assertRaises(GitHubSyncError) as cm:

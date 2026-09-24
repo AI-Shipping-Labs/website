@@ -1,6 +1,7 @@
 """AISL homework reader integration on an explicitly activated assignment."""
 
 import datetime
+from html.parser import HTMLParser
 
 from community_base.homework_steps.models import HomeworkDraft
 from django.test import Client, SimpleTestCase, TestCase
@@ -20,6 +21,23 @@ from content.services.homework_step_sections import (
     validate_question_bindings,
 )
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
+
+
+class CheckedRadioParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.values = set()
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == 'input' and attributes.get('type') == 'radio' and 'checked' in attributes:
+            self.values.add(attributes.get('value', ''))
+
+
+def checked_radio_values(response):
+    parser = CheckedRadioParser()
+    parser.feed(response.content.decode())
+    return parser.values
 
 
 class HomeworkStepBindingsTest(SimpleTestCase):
@@ -99,11 +117,199 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(question, 'answer')
         self.assertNotContains(question, self.canary_question.correct_answer)
 
+    def test_positive_public_link_cap_adds_a_distinct_authored_step(self):
+        self.homework.learning_in_public_cap = 3
+        self.homework.time_spent_lectures_field = True
+        self.homework.time_spent_homework_field = True
+        self.homework.save(update_fields=[
+            'learning_in_public_cap', 'time_spent_lectures_field',
+            'time_spent_homework_field',
+        ])
+
+        assignment = build_assignment(self.homework, self.unit, self.student)
+        response = self.client.get(f'{self.unit_url}?homework_step={LEARNING_IN_PUBLIC_KEY}')
+
+        self.assertEqual(assignment.questions[-1].key, LEARNING_IN_PUBLIC_KEY)
+        self.assertIn('Learning in Public', assignment.questions[-1].prompt)
+        self.assertEqual(assignment.context['learning_in_public_cap'], 3)
+        self.assertEqual(
+            [field.key for field in assignment.final_fields],
+            ['homework_link', 'time_spent_lectures', 'time_spent_homework'],
+        )
+        self.assertEqual(response.context['stepper']['step'], LEARNING_IN_PUBLIC_KEY)
+        self.assertContains(response, 'Share your work.')
+        self.assertContains(response, 'data-learning-public-links')
+        self.assertContains(response, 'data-max-links="3"')
+        self.assertContains(response, 'data-public-link-slots')
+        self.assertContains(response, 'data-testid="homework-step-current"')
+        self.assertContains(response, f'href="{self.unit_url}?homework_step={LEARNING_IN_PUBLIC_KEY}"')
+
+    def test_zero_public_link_cap_hides_step_and_keeps_existing_guidance(self):
+        self.homework.learning_in_public_cap = 0
+        self.homework.save(update_fields=['learning_in_public_cap'])
+
+        assignment = build_assignment(self.homework, self.unit, self.student)
+
+        self.assertNotIn(LEARNING_IN_PUBLIC_KEY, [q.key for q in assignment.questions])
+        self.assertIn('Learning in Public', assignment.instructions)
+        response = self.client.get(self.unit_url)
+        self.assertNotContains(response, 'data-learning-public-links')
+
+    def test_capstone_form_shape_has_three_links_and_only_homework_url(self):
+        self.homework.learning_in_public_cap = 3
+        self.homework.homework_url_field = True
+        self.homework.time_spent_lectures_field = False
+        self.homework.time_spent_homework_field = False
+        self.homework.save(update_fields=[
+            'learning_in_public_cap', 'homework_url_field',
+            'time_spent_lectures_field', 'time_spent_homework_field',
+        ])
+
+        assignment = build_assignment(self.homework, self.unit, self.student)
+
+        self.assertEqual(assignment.context['learning_in_public_cap'], 3)
+        self.assertEqual([field.key for field in assignment.final_fields], ['homework_link'])
+
+    def test_review_submit_persists_optional_links_and_time_spent_fields(self):
+        self.homework.learning_in_public_cap = 3
+        self.homework.time_spent_lectures_field = True
+        self.homework.time_spent_homework_field = True
+        self.homework.save(update_fields=[
+            'learning_in_public_cap', 'time_spent_lectures_field',
+            'time_spent_homework_field',
+        ])
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+        public_links = 'https://example.com/progress\nhttps://github.com/student/demo'
+        saved = self.save_answer(LEARNING_IN_PUBLIC_KEY, draft.revision, public_links)
+        self.assertEqual(saved.json(), {'revision': draft.revision + 1, 'saved': True})
+        draft.refresh_from_db()
+
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'submit',
+            'final_homework_link': 'https://github.com/student/project',
+            'final_time_spent_lectures': '1.5',
+            'final_time_spent_homework': '2',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        self.assertContains(review, 'Homework URL (optional)')
+        self.assertContains(review, 'type="number"')
+        submission = Submission.objects.get(homework=self.homework, student=self.student)
+        self.assertEqual(
+            submission.learning_in_public_links,
+            ['https://example.com/progress', 'https://github.com/student/demo'],
+        )
+        self.assertEqual(submission.homework_link, 'https://github.com/student/project')
+        self.assertEqual(submission.time_spent_lectures, 1.5)
+        self.assertEqual(submission.time_spent_homework, 2.0)
+
+    def test_invalid_public_link_submission_keeps_the_draft(self):
+        self.homework.learning_in_public_cap = 1
+        self.homework.save(update_fields=['learning_in_public_cap'])
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+        self.save_answer(
+            LEARNING_IN_PUBLIC_KEY, draft.revision,
+            'https://example.com/one\nhttps://example.com/two',
+        )
+        draft.refresh_from_db()
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'submit',
+            'final_homework_link': '',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'Add no more than 1 public link.', status_code=400)
+        self.assertEqual(
+            HomeworkDraft.objects.get(user=self.student).answers[LEARNING_IN_PUBLIC_KEY],
+            'https://example.com/one\nhttps://example.com/two',
+        )
+        self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
+
+    def test_disabled_submission_fields_preserve_previous_values(self):
+        previous = save_submission(
+            self.homework, self.student,
+            homework_link='https://example.com/project',
+            learning_in_public_links=['https://example.com/progress'],
+            time_spent_lectures=1.5,
+            time_spent_homework=2.0,
+            answers_by_question_id={},
+        )
+        self.homework.learning_in_public_cap = 0
+        self.homework.homework_url_field = False
+        self.homework.time_spent_lectures_field = False
+        self.homework.time_spent_homework_field = False
+        self.homework.save(update_fields=[
+            'learning_in_public_cap', 'homework_url_field',
+            'time_spent_lectures_field', 'time_spent_homework_field',
+        ])
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'submit',
+        })
+
+        self.assertEqual(response.status_code, 302)
+        previous.refresh_from_db()
+        self.assertEqual(previous.homework_link, 'https://example.com/project')
+        self.assertEqual(previous.learning_in_public_links, ['https://example.com/progress'])
+        self.assertEqual(previous.time_spent_lectures, 1.5)
+        self.assertEqual(previous.time_spent_homework, 2.0)
+
+    def test_negative_time_value_keeps_draft_and_does_not_submit(self):
+        self.homework.time_spent_lectures_field = True
+        self.homework.save(update_fields=['time_spent_lectures_field'])
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'submit',
+            'final_time_spent_lectures': '-0.5',
+        })
+
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'non-negative number of hours', status_code=400)
+        self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
+
+    def test_no_deadline_homework_renders_without_date_metadata(self):
+        self.homework.due_date = None
+        self.homework.save(update_fields=['due_date'])
+
+        response = self.client.get(self.unit_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['homework_due_date_display'], '')
+        self.assertNotContains(response, 'data-testid="homework-due-date"')
+
+    def test_closed_no_deadline_homework_uses_closed_copy(self):
+        self.homework.due_date = None
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['due_date', 'state'])
+
+        response = self.client.get(self.unit_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
+        self.assertNotContains(response, 'deadline has passed')
+
     def test_one_answer_saves_without_submission_and_resumes(self):
         self.client.get(self.unit_url)
+        self.assertFalse(completion_service.is_completed(self.student, self.unit))
         response = self.save_answer(self.mc_question.source_question_id, 0, '2')
         self.assertEqual(response.json(), {'revision': 1, 'saved': True})
         self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
+        self.assertFalse(completion_service.is_completed(self.student, self.unit))
         self.assertEqual(
             HomeworkDraft.objects.get(user=self.student).answers,
             {'q1-lines': option_key('14')},
@@ -313,12 +519,13 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             submission=submission, question=self.mc_question, answer_text='1',
         )
         opened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
-        self.assertContains(opened, f'value="{option_key("12")}" checked')
+        self.assertIn(option_key('12'), checked_radio_values(opened))
         self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '1')
 
     def test_stale_all_in_one_post_still_submits_and_clears_stepper_draft(self):
         self.client.get(self.unit_url)
         self.save_answer('q1-lines', 0, '1')
+        self.assertFalse(completion_service.is_completed(self.student, self.unit))
 
         response = self.client.post(self.unit_url, {
             f'answer_{self.mc_question.pk}': '2',
@@ -330,6 +537,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '2')
         self.assertEqual(submission.homework_link, 'https://github.com/example/legacy')
         self.assertFalse(HomeworkDraft.objects.filter(user=self.student).exists())
+        self.assertTrue(completion_service.is_completed(self.student, self.unit))
 
     def test_reordered_options_preserve_draft_choice_and_submit_current_index(self):
         self.client.get(self.unit_url)
@@ -340,7 +548,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.mc_question.save(update_fields=['possible_answers'])
 
         reopened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
-        self.assertContains(reopened, f'value="{saved_key}" checked')
+        self.assertIn(saved_key, checked_radio_values(reopened))
         self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers['q1-lines'], saved_key)
         response = self.client.post(self.unit_url, {
             'assignment_key': f'aisl:homework:{self.homework.pk}',

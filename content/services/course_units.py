@@ -876,6 +876,12 @@ def build_homework_submission_context(user, unit, *, cohort=None):
 
     display_timezone = resolve_event_display_timezone(user)
 
+    homework_due_date_display = ''
+    if homework.due_date is not None:
+        homework_due_date_display = format_event_time_range(
+            homework.due_date, None, display_timezone,
+        )
+
     return {
         'homework': homework,
         'homework_questions': question_views,
@@ -883,8 +889,6 @@ def build_homework_submission_context(user, unit, *, cohort=None):
         'homework_link_value': submission.homework_link if submission else '',
         'homework_is_accepting': homework.is_accepting_submissions,
         'homework_is_self_paced': homework.is_self_paced,
-        'homework_due_date_display': format_event_time_range(
-            homework.due_date, None, display_timezone,
-        ),
+        'homework_due_date_display': homework_due_date_display,
         'homework_display_timezone': display_timezone,
     }

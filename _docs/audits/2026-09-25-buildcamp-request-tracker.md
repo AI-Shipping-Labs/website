@@ -10,9 +10,9 @@ course repository push triggers production sync.
 
 | Request | State | Evidence / next check |
 | --- | --- | --- |
-| Run AISL on localhost 8030 from the correct repository and main checkout | Needs recheck | Verify live process and route after current edits. |
-| Keep focused commits; push AISL; deploy dev; promote to prod | In progress | `94eefe8` reached dev, Deploy Dev `36164802288` green. Exact-image production promotion `36170154228` is running; local grouping commit `aa8f81e` awaits community-base v0.5.8. |
-| Register and sync Buildcamp content into dev, verify rendered course pages | Open | Dev Buildcamp routes currently 404 because source is absent. |
+| Run AISL on localhost 8030 from the correct repository and main checkout | Running | `curl` to localhost:8030 `/courses/ai-buildcamp` returned 200 on September 25; main checkout runs with `--noreload`, so restart after later code changes. |
+| Keep focused commits; push AISL; deploy dev; promote to prod | In progress | Site `7ae7ab1` passed Deploy Dev `36172759037`; exact dev image `20260925-183544-7ae7ab1` is being promoted by production run `36176062139`. New shared-step adoption commit remains local until community-base v0.5.9 releases. |
+| Register and sync Buildcamp content into dev, verify rendered course pages | Dev sync complete; authenticated UI check open | Source `1dec32f0-fd53-497f-8fd6-6f0c6ebae2ba` was initially disabled for missing webhook secret. A forced first sync created the course/cohort; the second succeeded with zero errors at commit `302ed71d`. Dev course landing returned 200; unit pages correctly returned 403 anonymously. Configure the source secret for normal future syncs. |
 | Preserve/recover lost work, reconcile worktrees/branches, bring needed changes to main | Needs audit | Prior branches and worktrees were reviewed in this session; verify no remaining valuable unmerged work before closure. |
 | Do not move Cohort 4 end from November 22 | Decision | User explicitly confirmed. |
 

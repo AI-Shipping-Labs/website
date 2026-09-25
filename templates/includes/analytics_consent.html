@@ -65,6 +65,12 @@
       document.documentElement.style.setProperty(
         '--analytics-consent-clearance', clearance + 'px'
       );
+      if (spacer) {
+        // The spacer reserves document flow for the fixed panel; drive it
+        // from the measured clearance, not the fixed h-80/sm:h-60 classes,
+        // which are only the no-JS fallback (#1815).
+        spacer.style.height = clearance > 0 ? clearance + 'px' : '';
+      }
     }
 
     function setBusy(isBusy) {

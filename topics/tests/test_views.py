@@ -18,7 +18,7 @@ from django.utils import timezone
 from accounts.templatetags.accounts_extras import button_classes
 from content.access import LEVEL_OPEN
 from tests.fixtures import TierSetupMixin, set_membership
-from topics.models import STATUS_DRAFT, TopicPage
+from topics.models import STATUS_DRAFT, STATUS_PUBLISHED, TopicPage
 
 HUB_BODY_SENTENCE = (
     'The wiki turns the AISL material into topic guides, and this '
@@ -445,6 +445,9 @@ class TopicModelRenderingTest(TestCase):
         self.assertEqual(page.required_level, LEVEL_OPEN)
 
     def test_relative_md_links_rewritten_in_body_html(self):
+        # The target must be published before (or by the time) the linking
+        # page renders: #1815 resolves stems against the published set.
+        _create_topic('rag', 'RAG', 'The pipeline.', summary='Summarized.')
         page = _create_topic(
             'index',
             'AISL Wiki',
@@ -458,6 +461,20 @@ class TopicModelRenderingTest(TestCase):
         )
         self.assertNotIn('rag.md', page.body_html)
 
+    def test_unresolvable_md_link_renders_plain_text_without_anchor(self):
+        # Issue #1815: a stem without a published page must not become an
+        # internal href that 404s; the link degrades to its plain text.
+        page = _create_topic(
+            'index',
+            'AISL Wiki',
+            'See [Ghost Topic](ghost-topic.md) for the details.\n',
+        )
+        self.assertNotIn('href="/topics/ghost-topic/"', page.body_html)
+        self.assertNotIn('<a ', page.body_html)
+        self.assertNotIn('ghost-topic', page.body_html)
+        self.assertIn('Ghost Topic', page.body_html)
+        self.assertIn('for the details.', page.body_html)
+
     def test_resolved_related_skips_draft_and_unknown(self):
         published = _create_topic('agents', 'Agents', 'The loop.')
         _create_topic('ghost', 'Ghost', 'A draft page.', status=STATUS_DRAFT)
@@ -468,3 +485,75 @@ class TopicModelRenderingTest(TestCase):
         resolved = page.resolved_related()
         self.assertEqual([topic.slug for topic in resolved], ['agents'])
         self.assertEqual(resolved[0], published)
+
+
+class TopicsNoDeadInternalHrefTest(_TopicsFixtureMixin, TestCase):
+    """Issue #1815: no rendered topics page carries an internal
+    ``/topics/`` href whose slug is not a published page.
+
+    The fixture includes a page that links a stem with no page at all;
+    under the unguarded rewriter that stem rendered as a live 404 href.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.ghost_linker = _create_topic(
+            'ghost-linker',
+            'Ghost Linker',
+            'Read [RAG](rag.md), the [hub](index.md), then '
+            '[Missing Page](missing-stem.md).\n',
+            summary='Links a real stem, the hub stem, and a missing stem.',
+        )
+
+    _HREF_RE = re.compile(r'href="([^"]*)"')
+
+    def _internal_topics_paths(self, content):
+        """Every href path on the page that lives under /topics/."""
+        paths = set()
+        for href in self._HREF_RE.findall(content):
+            path = re.sub(r'^https?://[^/]+', '', href)
+            if path.startswith('/topics'):
+                paths.add(path)
+        return paths
+
+    def test_every_rendered_page_has_only_published_internal_hrefs(self):
+        published = set(
+            TopicPage.objects.filter(status=STATUS_PUBLISHED)
+            .values_list('slug', flat=True)
+        )
+        urls = ['/topics/'] + [
+            f'/topics/{slug}/' for slug in sorted(published - {'index'})
+        ]
+        self.assertIn('ghost-linker', published)
+        for url in urls:
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                # assertContains carries the 200 contract through real
+                # content, per the status-200 assertion ratchet.
+                if url == '/topics/':
+                    self.assertContains(response, 'data-testid="topics-hub-body"')
+                else:
+                    self.assertContains(response, 'data-testid="topic-title"')
+                content = response.content.decode()
+                for path in sorted(self._internal_topics_paths(content)):
+                    if path in ('/topics', '/topics/'):
+                        continue  # the hub itself
+                    slug = path.rstrip('/').rsplit('/', 1)[-1]
+                    with self.subTest(href=path):
+                        self.assertIn(
+                            slug,
+                            published,
+                            f'{url} renders an internal href to {path}, '
+                            'which is not a published topic page',
+                        )
+
+    def test_ghost_linker_page_renders_real_link_and_plain_text(self):
+        response = self.client.get('/topics/ghost-linker/')
+        self.assertContains(response, 'href="/topics/rag/"')
+        # The hub stem maps to /topics/ itself, never the reserved
+        # /topics/index/ detail path that would 404.
+        self.assertContains(response, 'href="/topics/"')
+        self.assertNotContains(response, 'href="/topics/index/"')
+        self.assertNotContains(response, 'href="/topics/missing-stem/"')
+        self.assertContains(response, 'Missing Page')

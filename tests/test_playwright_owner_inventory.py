@@ -1394,6 +1394,16 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_courses_low_count_grid_unaffected_on_mobile_viewport",
     })
 
+    issue_1815_owners = frozenset({
+        "playwright_tests/test_analytics_consent_1164.py::"
+        "TestAnalyticsConsent::"
+        "test_visible_panel_page_clearance_tracks_measured_panel_height",
+        "playwright_tests/test_member_topic_links_1815.py::"
+        "test_anonymous_follows_resolved_body_link_to_its_topic",
+        "playwright_tests/test_member_topic_links_1815.py::"
+        "test_unresolvable_body_link_renders_as_plain_text",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1522,8 +1532,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2665)
-        self.assertEqual(len(inventory.owners), 2462)
+        self.assertEqual(inventory.item_count, 2669)
+        self.assertEqual(len(inventory.owners), 2465)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1531,6 +1541,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1529_owners
             | self.issue_1530_owners
             | self.issue_1531_owners
+            | self.issue_1815_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners

@@ -21,6 +21,7 @@ from django.db import transaction
 
 from content.access import LEVEL_OPEN
 from topics.models import STATUS_DRAFT, STATUS_PUBLISHED, TopicPage
+from topics.rendering import render_topic_body
 
 ACTION_CREATED = 'created'
 ACTION_UPDATED = 'updated'
@@ -109,3 +110,29 @@ def delete_missing(source, seen_slugs):
         page.save(update_fields=['status', 'updated_at'])
         drafted.append(page)
     return drafted
+
+
+def refresh_stale_body_links():
+    """Re-render every page's ``body_html`` against the published set.
+
+    A sync moves the published slug set one page at a time, so pages
+    saved mid-run (or left ``ACTION_UNCHANGED`` from an earlier run) can
+    finish the run with an internal href whose target just changed
+    status: ``delete_missing`` drafts a stem other pages still link, and
+    a first-time target leaves plain text behind in pages saved before
+    it existed. The family cleanup calls this once after
+    ``delete_missing`` so every page's stored HTML matches the
+    then-published set (#1815). Only pages whose HTML actually changes
+    are re-saved; provenance fields are never written, so the next run's
+    ``ACTION_UNCHANGED`` detection is unaffected.
+    """
+
+    refreshed = []
+    for page in TopicPage.objects.all().order_by('pk'):
+        html = render_topic_body(page.body, page.title)
+        if html == page.body_html:
+            continue
+        page.body_html = html
+        page.save(update_fields=['body_html', 'updated_at'])
+        refreshed.append(page)
+    return refreshed

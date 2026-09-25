@@ -131,6 +131,7 @@ def build_assignment(homework, unit, user, *, context=None):
                 key=LEARNING_IN_PUBLIC_KEY,
                 prompt=learning_prompt,
                 type='long_text',
+                step_label='Learning in Public',
             ),
         )
         existing_answers[LEARNING_IN_PUBLIC_KEY] = '\n'.join(existing_public_links)
@@ -175,6 +176,7 @@ def build_assignment(homework, unit, user, *, context=None):
             'homework_is_submitted': bool(submission),
             'learning_in_public_cap': learning_in_public_cap,
         },
+        has_submission=bool(submission),
     )
 
 

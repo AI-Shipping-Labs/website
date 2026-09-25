@@ -1,16 +1,13 @@
 {% load curriculum_tags %}
-{% load homework_step_tags %}
 <div role="group" aria-label="Homework steps" data-testid="homework-step-nav">
 <ul class="reader-nav-list ml-4 mt-0.5">
   {% for title, url, current in stepper.nav_steps %}
   <li>
-    {% with step_title=title|homework_step_nav_title:url %}
     {% if current %}
-      {% include "includes/_list_row.html" with href=url title=step_title is_current=True marker_kind="custom" marker_html=step_title|homework_step_nav_marker_html trailing_icon="" testid="homework-step-current" extra_attrs='aria-current="step"' scoped_module='' reader_cohort_param='' %}
+      {% include "includes/_list_row.html" with href=url title=title is_current=True marker_kind="custom" marker_html=title|homework_step_nav_marker_html trailing_icon="" testid="homework-step-current" extra_attrs='aria-current="step"' scoped_module='' reader_cohort_param='' %}
     {% else %}
-      {% include "includes/_list_row.html" with href=url title=step_title marker_kind="custom" marker_html=step_title|homework_step_nav_marker_html trailing_icon="" scoped_module='' reader_cohort_param='' %}
+      {% include "includes/_list_row.html" with href=url title=title marker_kind="custom" marker_html=title|homework_step_nav_marker_html trailing_icon="" scoped_module='' reader_cohort_param='' %}
     {% endif %}
-    {% endwith %}
   </li>
   {% endfor %}
 </ul>

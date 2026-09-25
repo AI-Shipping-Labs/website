@@ -7,8 +7,17 @@ from community_base.homework_steps.models import HomeworkDraft
 from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
+from content.models import Course, Module, Unit
 from content.models.cohort import Cohort, CohortEnrollment
-from content.models.homework import Answer, Homework, HomeworkState, Question, Submission
+from content.models.homework import (
+    Answer,
+    AnswerType,
+    Homework,
+    HomeworkState,
+    Question,
+    QuestionType,
+    Submission,
+)
 from content.services import completion as completion_service
 from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
@@ -119,6 +128,83 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(question, 'answer')
         self.assertNotContains(question, self.canary_question.correct_answer)
 
+    def test_canonical_path_steps_and_query_bookmarks_are_both_readable(self):
+        canonical_url = f'{self.unit_url}/q2-reflect'
+        canonical = self.client.get(canonical_url)
+        bookmark = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
+
+        self.assertEqual(canonical.status_code, 200)
+        self.assertEqual(canonical.context['stepper']['step'], 'q2-reflect')
+        self.assertEqual(canonical.context['stepper']['action'], canonical_url)
+        self.assertEqual(bookmark.status_code, 200)
+        self.assertEqual(bookmark.context['stepper']['step'], 'q2-reflect')
+        self.assertContains(bookmark, f'href="{self.unit_url}/q2-reflect"')
+
+    def test_unknown_canonical_homework_step_is_not_rendered_as_another_unit(self):
+        response = self.client.get(f'{self.unit_url}/not-a-question')
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_submodule_unit_four_segment_url_still_resolves(self):
+        nested_course = Course.objects.create(
+            title='Nested course', slug='nested-course', status='published',
+            required_level=0,
+        )
+        parent = Module.objects.create(
+            course=nested_course, title='Parent', slug='parent',
+        )
+        submodule = Module.objects.create(
+            course=nested_course, parent=parent, title='Submodule', slug='submodule',
+        )
+        nested_unit = Unit.objects.create(
+            module=submodule, title='Nested lesson', slug='lesson', sort_order=1,
+            body='The nested route still works.', kind='lesson',
+        )
+
+        response = self.client.get(nested_unit.get_absolute_url())
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'The nested route still works.')
+
+    def test_submodule_homework_uses_canonical_path_step(self):
+        nested_course = Course.objects.create(
+            title='Nested homework course', slug='nested-homework-course',
+            status='published', required_level=0,
+        )
+        parent = Module.objects.create(
+            course=nested_course, title='Parent', slug='parent',
+        )
+        submodule = Module.objects.create(
+            course=nested_course, parent=parent, title='Submodule', slug='submodule',
+        )
+        nested_unit = Unit.objects.create(
+            module=submodule, title='Nested homework', slug='homework', sort_order=1,
+            homework='## Question 1. Explain\nExplain the result.',
+            content_id='cccccccc-cccc-cccc-cccc-cccccccccccc', kind='homework',
+        )
+        cohort = Cohort.objects.create(
+            course=nested_course, name='Nested cohort',
+            start_date=timezone.localdate() - datetime.timedelta(days=2),
+            end_date=timezone.localdate() + datetime.timedelta(days=30),
+        )
+        CohortEnrollment.objects.create(user=self.student, cohort=cohort)
+        nested_homework = Homework.objects.create(
+            cohort=cohort, slug='homework', title='Nested homework',
+            content_id=nested_unit.content_id, stepper_enabled=True,
+        )
+        Question.objects.create(
+            homework=nested_homework, source_question_id='q1-nested',
+            text='Explain the result.', question_type=QuestionType.FREE_FORM,
+            answer_type=AnswerType.ANY,
+        )
+
+        canonical_url = f'{nested_unit.get_absolute_url()}/q1-nested'
+        response = self.client.get(canonical_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['stepper']['step'], 'q1-nested')
+        self.assertEqual(response.context['stepper']['action'], canonical_url)
+
     def test_short_text_question_uses_one_line_input(self):
         response = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
 
@@ -138,6 +224,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         response = self.client.get(f'{self.unit_url}?homework_step={LEARNING_IN_PUBLIC_KEY}')
 
         self.assertEqual(assignment.questions[-1].key, LEARNING_IN_PUBLIC_KEY)
+        self.assertEqual(assignment.questions[-1].step_label, 'Learning in Public')
         self.assertIn('Learning in Public', assignment.questions[-1].prompt)
         self.assertEqual(assignment.context['learning_in_public_cap'], 3)
         self.assertEqual(
@@ -145,13 +232,16 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             ['homework_link', 'time_spent_lectures', 'time_spent_homework'],
         )
         self.assertEqual(response.context['stepper']['step'], LEARNING_IN_PUBLIC_KEY)
+        self.assertEqual(
+            response.context['stepper']['nav_steps'][-2][0], 'Learning in Public',
+        )
         self.assertContains(response, 'Share your work.')
         self.assertContains(response, 'Up to 3 public links; each is optional.')
         self.assertContains(response, 'data-learning-public-links')
         self.assertContains(response, 'data-max-links="3"')
         self.assertContains(response, 'data-public-link-slots')
         self.assertContains(response, 'data-testid="homework-step-current"')
-        self.assertContains(response, f'href="{self.unit_url}?homework_step={LEARNING_IN_PUBLIC_KEY}"')
+        self.assertContains(response, f'href="{self.unit_url}/{LEARNING_IN_PUBLIC_KEY}"')
 
     def test_zero_public_link_cap_hides_step_and_keeps_existing_guidance(self):
         self.homework.learning_in_public_cap = 0
@@ -370,7 +460,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         page = self.client.get(f'{self.unit_url}?cohort=cohort-4&homework_step=q1-lines')
         self.assertEqual(
             page.context['stepper']['nav_steps'][2][1],
-            f'{self.unit_url}?cohort=cohort-4&homework_step=q2-reflect',
+            f'{self.unit_url}/q2-reflect?cohort=cohort-4',
         )
         draft = HomeworkDraft.objects.get(user=self.student)
         response = self.client.post(
@@ -383,8 +473,33 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
         self.assertEqual(
             response['Location'],
-            f'{self.unit_url}?cohort=cohort-4&homework_step=q2-reflect',
+            f'{self.unit_url}/q2-reflect?cohort=cohort-4',
         )
+
+    def test_saved_edits_show_accepted_submission_and_pending_draft_separately(self):
+        save_submission(
+            self.homework, self.student,
+            homework_link='https://example.com/accepted',
+            answers_by_question_id={self.mc_question.pk: '2'},
+        )
+        self.client.get(self.unit_url)
+
+        changed = self.save_answer('q1-lines', 0, '1')
+        page = self.client.get(f'{self.unit_url}/q1-lines')
+
+        self.assertEqual(changed.json(), {'revision': 1, 'saved': True})
+        self.assertContains(page, 'Your previous submission is still accepted.')
+        self.assertContains(page, 'These saved changes are a draft and have not been submitted.')
+        self.assertNotContains(page, 'Your homework was submitted.', status_code=200)
+
+    def test_unsent_saved_answers_are_labeled_as_a_draft(self):
+        self.client.get(self.unit_url)
+        self.save_answer('q1-lines', 0, '1')
+
+        response = self.client.get(f'{self.unit_url}/q1-lines')
+
+        self.assertContains(response, 'Your answers are saved as a draft.')
+        self.assertContains(response, 'You have not submitted this homework yet.')
 
     def test_selected_second_cohort_uses_its_own_stepper_draft_and_submission(self):
         self.cohort.external_key = 'older'

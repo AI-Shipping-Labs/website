@@ -105,12 +105,12 @@ def test_public_links_are_configurable_saved_and_submitted(django_server, browse
     expect(page.locator('[data-save-status]')).to_contain_text('Saved')
 
     page.get_by_role('button', name='Save & review').click()
-    expect(page).to_have_url(f'{unit_url}?homework_step=review')
+    expect(page).to_have_url(f'{unit_url}/review')
     expect(page.get_by_label('Homework URL (required)')).to_be_visible()
     expect(page.get_by_label('Time spent on lectures (hours) (optional)')).to_have_count(0)
     expect(page.get_by_label('Time spent on homework (hours) (optional)')).to_have_count(0)
     page.get_by_role('button', name='Save draft').click()
-    expect(page).to_have_url(f'{unit_url}?homework_step=review')
+    expect(page).to_have_url(f'{unit_url}/review')
     page.get_by_label('Homework URL (required)').fill('https://github.com/student/project')
     page.get_by_role('button', name='Submit homework').click()
 

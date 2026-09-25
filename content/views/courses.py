@@ -51,7 +51,12 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
-from content.services.homework_step_reader import AISLHomeworkAdapter, build_assignment, question_key
+from content.services.homework_step_reader import (
+    LEARNING_IN_PUBLIC_KEY,
+    AISLHomeworkAdapter,
+    build_assignment,
+    question_key,
+)
 from content.services.homework_submissions import (
     parse_submission_post,
     save_submission,
@@ -857,7 +862,7 @@ def module_overview(request, course_slug, module_slug):
     return _render_module_overview(request, course, module)
 
 
-def _render_course_unit_detail(request, course, module, unit):
+def _render_course_unit_detail(request, course, module, unit, *, route_step=None):
     """Unit page: gated by tier level, except for preview units.
 
     Shows video player, lesson text, homework, sidebar navigation,
@@ -952,6 +957,8 @@ def _render_course_unit_detail(request, course, module, unit):
             step_param='homework_step',
             query_params={'cohort': request.GET['cohort']}
             if request.GET.get('cohort') else None,
+            route_step=route_step,
+            step_url_builder=lambda step: f'{unit.get_absolute_url().rstrip("/")}/{step}',
         )
     return render(request, 'content/course_unit_detail.html', context)
 
@@ -1004,6 +1011,69 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     return _render_course_unit_detail(request, course, top_module, unit)
 
 
+def _unit_for_course_unit_path(course, module_slug, unit_slug):
+    """Resolve the unit displayed by a three-slug course path, if any."""
+    top_module = _resolve_top_level_module(course, module_slug)
+    if not top_module.children.exists():
+        unit = Unit.objects.filter(module=top_module, slug=unit_slug).first()
+        return (top_module, unit) if unit else None
+
+    submodule = Module.objects.select_related('parent').filter(
+        course=course, parent=top_module, slug=unit_slug,
+    ).first()
+    if submodule is None:
+        unit = inline_homework_capstone_for_parent(top_module, unit_slug, course.slug)
+        return (unit.module, unit) if unit else None
+
+    unit = inline_unit_for(submodule, course.slug) or inline_homework_unit_for(
+        submodule, course.slug,
+    )
+    return (submodule, unit) if unit else None
+
+
+def _is_valid_homework_route_step(request, course, unit, route_step):
+    """Check a path step against the viewer's resolved cohort assignment."""
+    selected_cohort, selected_is_preview = select_display_cohort(
+        course, request.user, request.GET.get('cohort', ''),
+    )
+    homework = course_unit_service.resolve_homework_for_unit(
+        unit, request.user,
+        cohort=selected_cohort if not selected_is_preview else None,
+    )
+    if not homework or not homework.stepper_enabled or not homework.questions.exists():
+        return False
+    question_keys = {question_key(question) for question in homework.questions.all()}
+    if homework.learning_in_public_cap:
+        question_keys.add(LEARNING_IN_PUBLIC_KEY)
+    return route_step in {'intro', 'review'} or route_step in question_keys
+
+
+def course_homework_step_or_submodule_unit(
+    request, course_slug, module_slug, unit_slug, homework_step,
+):
+    """Serve a canonical three-slug unit step, preserving four-slug units.
+
+    ``/courses/<course>/<module>/<unit>/<step>`` overlaps the existing
+    submodule-unit route. Resolve it as a homework step only when the
+    three-slug prefix names a stepper homework and the final slug is a
+    valid step; otherwise dispatch to the existing four-slug route.
+    """
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    try:
+        target = _unit_for_course_unit_path(course, module_slug, unit_slug)
+    except Http404:
+        target = None
+    if target:
+        module, unit = target
+        if _is_valid_homework_route_step(request, course, unit, homework_step):
+            return _render_course_unit_detail(
+                request, course, module, unit, route_step=homework_step,
+            )
+    return course_submodule_unit_detail(
+        request, course_slug, module_slug, unit_slug, homework_step,
+    )
+
+
 def course_submodule_unit_detail(
     request, course_slug, parent_slug, module_slug, unit_slug,
 ):
@@ -1029,6 +1099,26 @@ def course_submodule_unit_detail(
                 canonical_url = f'{canonical_url}?{query_string}'
             return redirect(canonical_url, permanent=True)
     return _render_course_unit_detail(request, course, submodule, unit)
+
+
+def course_submodule_homework_step_detail(
+    request, course_slug, parent_slug, module_slug, unit_slug, homework_step,
+):
+    """Serve a canonical step URL for a unit inside a submodule."""
+    course = get_object_or_404(Course, slug=course_slug, status='published')
+    parent_module = _resolve_top_level_module(course, parent_slug)
+    submodule = get_object_or_404(
+        Module.objects.select_related('parent'), course=course,
+        parent=parent_module, slug=module_slug,
+    )
+    unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
+    if is_inline_homework_unit(submodule, unit, course.slug):
+        raise Http404
+    if not _is_valid_homework_route_step(request, course, unit, homework_step):
+        raise Http404
+    return _render_course_unit_detail(
+        request, course, submodule, unit, route_step=homework_step,
+    )
 
 
 def _handle_homework_submission_post(request, unit, *, cohort=None):

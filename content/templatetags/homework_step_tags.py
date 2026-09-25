@@ -11,13 +11,6 @@ from django.utils.safestring import SafeData, mark_safe
 register = template.Library()
 
 
-@register.filter
-def homework_step_nav_title(title, url):
-    """Give the authored Learning in Public step its actual navigation name."""
-    if 'homework_step=learning-in-public' in str(url):
-        return 'Learning in Public'
-    return title
-
 _VOID_TAGS = {
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
     "meta", "param", "source", "track", "wbr",

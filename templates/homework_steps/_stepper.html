@@ -4,7 +4,13 @@
 
 <section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
   {% if homework_due_date_display and not homework_is_self_paced %}<p class="mb-4 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }} &mdash; shown in your account timezone</p>{% endif %}
-  {% if stepper.submitted %}<p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300" role="status" data-testid="homework-submitted-status">{% if stepper.can_submit %}Your homework was submitted. You can update it while submissions are open.{% else %}Your homework was submitted. Editing is now closed.{% endif %}</p>{% endif %}
+  {% if stepper.has_pending_changes %}
+  <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200" role="status" data-testid="homework-pending-draft-status">Your previous submission is still accepted. These saved changes are a draft and have not been submitted.</p>
+  {% elif stepper.submitted %}
+  <p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted.{% if stepper.can_submit %} You can update it while submissions are open.{% else %} The submission window is closed.{% endif %}</p>
+  {% elif stepper.draft_status == 'Saved' %}
+  <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200" role="status" data-testid="homework-pending-draft-status">Your answers are saved as a draft. You have not submitted this homework yet.</p>
+  {% endif %}
   {% if stepper.notice %}<p class="mb-4 text-sm text-muted-foreground" role="status">That question changed. Your saved answers are still here.</p>{% endif %}
   {% if stepper.error %}<p class="mb-4 text-sm text-red-400" role="alert">{{ stepper.error }}</p>{% endif %}
   {% if stepper.reason and not stepper.can_write %}<p class="mb-4 text-sm text-muted-foreground" role="status">{{ stepper.reason }}</p>{% endif %}
@@ -62,10 +68,10 @@
   {% else %}
     <h2 class="mb-4 text-lg font-semibold text-foreground">Review &amp; submit</h2>
     <ol class="mb-6 space-y-2" data-testid="homework-review-summary">
-      {% for prompt, answer, url in stepper.review_rows %}
+      {% for row in stepper.review_display_rows %}
         <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
-          <a href="{{ url }}" class="font-medium text-accent hover:underline">Question {{ forloop.counter }}</a>
-          <p class="mt-1 text-foreground">{% if answer %}{{ answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
+          <a href="{{ row.url }}" class="font-medium text-accent hover:underline">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</a>
+          <p class="mt-1 text-foreground">{% if row.answer %}{{ row.answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
         </li>
       {% endfor %}
     </ol>

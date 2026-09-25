@@ -17,6 +17,8 @@ from content.views.courses import (
     api_courses_list,
     course_detail,
     course_home,
+    course_homework_step_or_submodule_unit,
+    course_submodule_homework_step_detail,
     course_submodule_unit_detail,
     course_unit_detail,
     courses_list,
@@ -184,6 +186,19 @@ urlpatterns = [
     # Module overview page (issue #222) — must come before the catch-all unit URL.
     # No trailing slash: RemoveTrailingSlashMiddleware would redirect away from it.
     path('courses/<slug:course_slug>/<slug:module_slug>', module_overview, name='module_overview'),
+    # Canonical homework step paths append the step key to the unit URL.
+    # The four-segment route overlaps submodule-unit URLs, so its view first
+    # checks for a valid homework step and otherwise preserves that route.
+    path(
+        'courses/<slug:course_slug>/<slug:parent_slug>/<slug:module_slug>/<slug:unit_slug>/<slug:homework_step>',
+        course_submodule_homework_step_detail,
+        name='course_submodule_homework_step',
+    ),
+    path(
+        'courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>/<slug:homework_step>',
+        course_homework_step_or_submodule_unit,
+        name='course_homework_step',
+    ),
     # Course unit detail (three slug segments - must be after more specific
     # patterns). Issue #1674: also resolves a submodule's own overview page
     # (/courses/<course>/<parent>/<submodule>) — see course_unit_detail's

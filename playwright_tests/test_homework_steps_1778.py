@@ -108,7 +108,7 @@ def test_failed_autosave_blocks_step_link_without_losing_choice(
     with context.expect_page() as new_page_info:
         step_link.click(modifiers=['Control'])
     new_page = new_page_info.value
-    expect(new_page).to_have_url(f'{django_server}{unit.get_absolute_url()}?homework_step=q2-second')
+    expect(new_page).to_have_url(f'{django_server}{unit.get_absolute_url()}/q2-second')
     new_page.close()
     step_link.click()
 
@@ -150,7 +150,7 @@ def test_sidebar_exit_saves_latest_dirty_choice_before_navigation(django_server,
         'link', name='Question 2',
     ).click()
 
-    expect(page).to_have_url(f'{unit_url}?homework_step=q2-second')
+    expect(page).to_have_url(f'{unit_url}/q2-second')
     user = User.objects.get(email=email)
     draft = HomeworkDraft.objects.get(
         user=user, assignment_key=f'aisl:homework:{homework.pk}',
@@ -190,26 +190,26 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(question_link.locator('span.rounded-full')).to_have_count(0)
     page.screenshot(path='.tmp/astra-homework-intro-desktop.png', full_page=True)
     page.get_by_role('link', name='Start questions').click()
-    expect(page).to_have_url(f'{unit_url}?homework_step=q1-first')
+    expect(page).to_have_url(f'{unit_url}/q1-first')
     page.screenshot(path='.tmp/astra-homework-q1-desktop.png', full_page=True)
     page.set_viewport_size({'width': 390, 'height': 844})
     page.screenshot(path='.tmp/astra-homework-q1-mobile.png', full_page=True)
     page.set_viewport_size({'width': 1280, 'height': 720})
     page.get_by_role('radio', name='Beta').check()
     page.get_by_role('button', name='Save & continue').click()
-    expect(page).to_have_url(f'{unit_url}?homework_step=q2-second')
+    expect(page).to_have_url(f'{unit_url}/q2-second')
     page.reload(wait_until='domcontentloaded')
     expect(page.locator('[data-testid="homework-question-prompt"]')).to_contain_text('Question 2')
     page.get_by_role('radio', name='Yes').check()
     page.get_by_role('button', name='Save & review').click()
-    expect(page).to_have_url(f'{unit_url}?homework_step=review')
+    expect(page).to_have_url(f'{unit_url}/review')
     expect(page.locator('[data-testid="homework-review-summary"]')).to_contain_text('Beta')
     expect(page.locator('[data-testid="homework-review-summary"]')).to_contain_text('Yes')
     assert not completion_service.is_completed(user, unit)
     page.screenshot(path='.tmp/astra-homework-review-desktop.png', full_page=True)
     page.get_by_label('Homework URL (required)').fill('https://github.com/example/solution')
     page.get_by_role('button', name='Submit homework').click()
-    expect(page).to_have_url(re.compile(re.escape(unit_url) + r'\?homework_step=review&receipt=.+'))
+    expect(page).to_have_url(re.compile(re.escape(unit_url) + r'/review\?receipt=.+'))
     expect(page.get_by_text('Your homework was submitted.', exact=False)).to_be_visible()
     submission = Submission.objects.get(homework=homework, student=User.objects.get(email=email))
     assert submission.homework_link == 'https://github.com/example/solution'

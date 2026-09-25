@@ -50,28 +50,21 @@ class OptionalSyllabusSectionRenderingTest(TestCase):
 
     def _assert_section_labels(self, response, testid):
         html = response.content.decode()
-        self.assertEqual(
-            html.count(f'data-testid="{testid}">Week 1</'), 1,
-        )
-        self.assertEqual(
-            html.count(f'data-testid="{testid}">Week 2</'), 1,
-        )
+        self.assertContains(response, f'data-testid="{testid}">Week 1</', count=1)
+        self.assertContains(response, f'data-testid="{testid}">Week 2</', count=1)
         self.assertNotIn(f'data-testid="{testid}">Week 3</', html)
 
     def test_course_syllabus_uses_source_sections_for_non_buildcamp_courses(self):
         response = self.client.get(self.course.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
         self._assert_section_labels(response, 'syllabus-module-section')
 
     def test_optional_module_overview_uses_source_sections(self):
         response = self.client.get(self.optional.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
         self._assert_section_labels(response, 'module-syllabus-section')
 
     def test_course_reader_sidebar_uses_source_sections(self):
         response = self.client.get(self.optional_unit.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
         self._assert_section_labels(response, 'reader-syllabus-section')

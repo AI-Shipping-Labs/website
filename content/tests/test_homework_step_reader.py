@@ -133,10 +133,10 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         canonical = self.client.get(canonical_url)
         bookmark = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
 
-        self.assertEqual(canonical.status_code, 200)
+        self.assertContains(canonical, 'What was difficult?')
         self.assertEqual(canonical.context['stepper']['step'], 'q2-reflect')
         self.assertEqual(canonical.context['stepper']['action'], canonical_url)
-        self.assertEqual(bookmark.status_code, 200)
+        self.assertContains(bookmark, 'What was difficult?')
         self.assertEqual(bookmark.context['stepper']['step'], 'q2-reflect')
         self.assertContains(bookmark, f'href="{self.unit_url}/q2-reflect"')
 
@@ -163,7 +163,6 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         response = self.client.get(nested_unit.get_absolute_url())
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'The nested route still works.')
 
     def test_submodule_homework_uses_canonical_path_step(self):
@@ -201,7 +200,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         canonical_url = f'{nested_unit.get_absolute_url()}/q1-nested'
         response = self.client.get(canonical_url)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Explain the result.')
         self.assertEqual(response.context['stepper']['step'], 'q1-nested')
         self.assertEqual(response.context['stepper']['action'], canonical_url)
 

@@ -248,6 +248,101 @@ class MemberWikiDeleteMissingTest(_MemberWikiSyncRepoTest):
         )
 
 
+class MemberWikiBodyLinkInvariantTest(_MemberWikiSyncRepoTest):
+    """The #1815 post-sync re-render invariant: after each run, every
+    page's stored ``body_html`` matches the then-published slug set.
+
+    A page saved mid-run (or unchanged from an earlier run) must never
+    serve an internal ``/topics/`` href whose target is not published:
+    a link to a stem that has no page yet renders as plain text and
+    becomes a working link once a later sync publishes the target, and
+    a target later drafted is de-linked from every page.
+    """
+
+    def test_link_to_not_yet_synced_stem_becomes_link_when_target_arrives(self):
+        # Both fixture targets exist, so the hub's links are live.
+        index = TopicPage.objects.get(slug='index')
+        self.assertIn('href="/topics/rag/"', index.body_html)
+        # A new page links one synced stem and one stem that has no page.
+        self.repo.write_markdown(
+            '_wiki/vector-search.md',
+            {
+                'layout': 'wiki',
+                'title': 'Vector Search',
+                'summary': 'Embeddings and similarity.',
+            },
+            'Start with [RAG](rag.md), then [Embeddings](embeddings.md).\n',
+            ensure_content_id=False,
+        )
+        sync_repo(self.source, self.repo)
+        page = TopicPage.objects.get(slug='vector-search')
+        self.assertIn('href="/topics/rag/"', page.body_html)
+        self.assertNotIn('href="/topics/embeddings/"', page.body_html)
+        self.assertNotIn('embeddings.md', page.body_html)
+        self.assertIn('Embeddings', page.body_html)
+
+        # The target arrives in a later sync: plain text becomes a link.
+        self.repo.write_markdown(
+            '_wiki/embeddings.md',
+            {
+                'layout': 'wiki',
+                'title': 'Embeddings',
+                'summary': 'Vectors for meaning.',
+            },
+            'Embeddings map text to vectors.\n',
+            ensure_content_id=False,
+        )
+        sync_repo(self.source, self.repo)
+        page = TopicPage.objects.get(slug='vector-search')
+        self.assertIn('href="/topics/embeddings/"', page.body_html)
+
+    def test_drafted_target_de_links_from_other_pages(self):
+        index = TopicPage.objects.get(slug='index')
+        self.assertIn('href="/topics/agents/"', index.body_html)
+
+        self.repo.remove('_wiki/agents.md')
+        second_log = sync_repo(self.source, self.repo)
+        self.assertEqual(second_log.errors, [])
+
+        self.assertEqual(
+            TopicPage.objects.get(slug='agents').status,
+            STATUS_DRAFT,
+        )
+        index = TopicPage.objects.get(slug='index')
+        self.assertNotIn('href="/topics/agents/"', index.body_html)
+        # The link degrades to plain text; the sentence survives.
+        self.assertIn('Agents', index.body_html)
+        self.assertNotIn('agents.md', index.body_html)
+
+    def test_refresh_leaves_provenance_so_next_sync_stays_unchanged(self):
+        index = TopicPage.objects.get(slug='index')
+        checksum = index.source_checksum
+        commit_sha = index.source_commit_sha
+        # Simulate a page whose stored HTML went stale without a source
+        # change (the mid-run / drafted-target case).
+        TopicPage.objects.filter(slug='index').update(
+            body_html='<p>stale render</p>',
+        )
+
+        second_log = sync_repo(self.source, self.repo)
+        self.assertEqual(second_log.errors, [])
+        index = TopicPage.objects.get(slug='index')
+        self.assertEqual(index.source_checksum, checksum)
+        self.assertEqual(index.source_commit_sha, commit_sha)
+        self.assertIn('href="/topics/rag/"', index.body_html)
+        self.assertNotIn('stale render', index.body_html)
+
+        third_log = sync_repo(self.source, self.repo)
+        self.assertEqual(third_log.errors, [])
+        topic_actions = [
+            detail['action']
+            for detail in third_log.items_detail
+            if detail.get('content_type') == 'wiki_topic'
+        ]
+        self.assertTrue(topic_actions, 'topic items missing from detail')
+        self.assertEqual(set(topic_actions), {'unchanged'})
+
+
 class MemberWikiBrokenFileTest(_MemberWikiSyncRepoTest):
     def test_missing_title_reported_and_page_skipped(self):
         self.repo.write_markdown(

@@ -125,6 +125,10 @@ class MemberWikiPagesParser(FamilyParser):
         drafted = sync.delete_missing(
             run.source, state.seen | state.failed,
         )
+        # Issue #1815: the published slug set is final only now, so make
+        # every page's stored body_html match it -- de-link drafted stems,
+        # link stems that arrived mid-run. Leaves provenance untouched.
+        sync.refresh_stale_body_links()
         stats = self.item_stats()
         for page in drafted:
             stats['items_detail'].append({

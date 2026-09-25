@@ -6,6 +6,8 @@ import uuid
 import pytest
 from playwright.sync_api import expect
 
+from scripts.browser_journey_policy import browser_journey
+
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 from django.db import connection  # noqa: E402
 
@@ -126,6 +128,95 @@ class TestAnalyticsConsent:
         expect(page.get_by_role('heading', name='Privacy Policy')).to_be_visible()
         expect(panel).to_be_visible()
         assert 'aslab_analytics_consent' not in _cookie_names(context)
+        context.close()
+
+    @pytest.mark.parametrize(
+        'viewport',
+        [
+            {'width': 1280, 'height': 800},
+            {'width': 390, 'height': 844},
+        ],
+        ids=['desktop', 'mobile'],
+    )
+    @browser_journey
+    def test_visible_panel_page_clearance_tracks_measured_panel_height(
+        self, django_server, browser, viewport,
+    ):
+        """Issue #1815: the on-page clearance is the panel's measured
+        height plus its inset and gap, not the fixed h-80/sm:h-60 guess,
+        so the footer scrolls fully clear of the visible panel."""
+        context = browser.new_context(viewport=viewport)
+        page = context.new_page()
+        page.goto(f'{django_server}/blog', wait_until='domcontentloaded')
+
+        panel = page.get_by_test_id('analytics-consent-panel')
+        expect(panel).to_be_visible()
+        expect(page.get_by_test_id('analytics-consent-spacer')).to_be_visible()
+
+        measured = page.evaluate(
+            """() => {
+                const spacer = document.getElementById(
+                    'analytics-consent-spacer'
+                );
+                const panel = document.querySelector(
+                    '[data-testid="analytics-consent-panel"]'
+                );
+                return {
+                    expected: Math.ceil(
+                        panel.getBoundingClientRect().height
+                    ) + 32,
+                    spacerHeight: spacer.getBoundingClientRect().height,
+                };
+            }"""
+        )
+        assert measured['spacerHeight'] == pytest.approx(measured['expected']), (
+            f'spacer height {measured["spacerHeight"]}px does not track the '
+            f'measured panel clearance {measured["expected"]}px'
+        )
+
+        # Guarantee the page scrolls, then prove the last content block
+        # and the footer end up fully above the panel without dismissing
+        # it.
+        page.evaluate(
+            """() => {
+                document.querySelector('main').style.paddingBottom = '2000px';
+                window.scrollTo(0, document.documentElement.scrollHeight);
+            }"""
+        )
+        page.wait_for_function(
+            """() => {
+                const doc = document.documentElement;
+                return window.scrollY + window.innerHeight
+                    >= doc.scrollHeight - 1;
+            }"""
+        )
+        footer_clearance = page.evaluate(
+            """() => {
+                const footer = document.querySelector('footer');
+                const panel = document.querySelector(
+                    '[data-testid="analytics-consent-panel"]'
+                );
+                return panel.getBoundingClientRect().top
+                    - footer.getBoundingClientRect().bottom;
+            }"""
+        )
+        assert footer_clearance >= 15, (
+            f'footer does not clear the visible panel: {footer_clearance}px'
+        )
+        expect(panel).to_be_visible()
+        assert 'aslab_analytics_consent' not in _cookie_names(context)
+
+        # Saving a choice collapses the measured clearance to zero: the
+        # reloaded page hides the panel and reserves no spacer height.
+        with page.expect_navigation(wait_until='domcontentloaded'):
+            with page.expect_response('**/api/analytics/consent'):
+                page.get_by_role('button', name='Keep analytics off').click()
+        expect(page.get_by_test_id('analytics-consent-panel')).to_be_hidden()
+        assert page.evaluate(
+            """() => document.getElementById(
+                'analytics-consent-spacer'
+            ).getBoundingClientRect().height"""
+        ) == 0
         context.close()
 
     @pytest.mark.parametrize(

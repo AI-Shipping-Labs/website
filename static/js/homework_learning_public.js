@@ -29,7 +29,7 @@ document.querySelectorAll("[data-learning-public-links]").forEach((group) => {
       const label = document.createElement("label");
       label.className = "mb-2 block text-sm text-muted-foreground";
       label.htmlFor = `learning-public-link-${index + 1}`;
-      label.textContent = `Public link ${index + 1} (optional)`;
+      label.textContent = `Public link ${index + 1}`;
 
       const input = document.createElement("input");
       input.id = label.htmlFor;
@@ -45,7 +45,7 @@ document.querySelectorAll("[data-learning-public-links]").forEach((group) => {
       remove.type = "button";
       remove.className = "mt-8 shrink-0 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent";
       remove.dataset.removePublicLink = "true";
-      remove.setAttribute("aria-label", `Remove public link ${index + 1}`);
+      remove.setAttribute("aria-label", `Remove link ${index + 1}`);
       remove.textContent = "Remove";
 
       field.append(label, input);

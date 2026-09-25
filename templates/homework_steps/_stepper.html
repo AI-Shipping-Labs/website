@@ -3,10 +3,7 @@
 {% load homework_step_tags %}
 
 <section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
-  <div class="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground" aria-live="polite">
-    <span>Step {{ stepper.step_number|add:1 }} of {{ stepper.step_count }}</span>
-    {% if homework_due_date_display and not homework_is_self_paced %}<span data-testid="homework-due-date">Due {{ homework_due_date_display }} &mdash; shown in your account timezone</span>{% endif %}
-  </div>
+  {% if homework_due_date_display and not homework_is_self_paced %}<p class="mb-4 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }} &mdash; shown in your account timezone</p>{% endif %}
   {% if stepper.submitted %}<p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300" role="status" data-testid="homework-submitted-status">{% if stepper.can_submit %}Your homework was submitted. You can update it while submissions are open.{% else %}Your homework was submitted. Editing is now closed.{% endif %}</p>{% endif %}
   {% if stepper.notice %}<p class="mb-4 text-sm text-muted-foreground" role="status">That question changed. Your saved answers are still here.</p>{% endif %}
   {% if stepper.error %}<p class="mb-4 text-sm text-red-400" role="alert">{{ stepper.error }}</p>{% endif %}
@@ -29,19 +26,23 @@
         <div id="homework-question-prompt" class="prose max-w-none" data-testid="homework-question-prompt">{% render_homework_question_prompt stepper.question.prompt stepper.options stepper.question.type %}</div>
         {% if stepper.question.type != 'choice' and stepper.question.type != 'checkbox' %}
           {% if stepper.step == 'learning-in-public' %}
-          <div class="mt-5" data-learning-public-links data-max-links="{{ stepper.assignment.context.learning_in_public_cap }}">
-            <p class="mb-4 text-sm text-muted-foreground" data-testid="learning-public-link-guidance">
-              Add up to {{ stepper.assignment.context.learning_in_public_cap }} optional public links. Each link is optional.
+          <div class="mt-4" data-learning-public-links data-max-links="{{ stepper.assignment.context.learning_in_public_cap }}">
+            <p class="mb-3 text-sm text-muted-foreground" data-testid="learning-public-link-guidance">
+              Up to {{ stepper.assignment.context.learning_in_public_cap }} public links; each is optional.
             </p>
             <textarea name="answer" data-public-links-value hidden>{{ stepper.answer }}</textarea>
-            <div class="space-y-3" data-public-link-slots data-testid="learning-public-link-slots"></div>
-            <button type="button" data-add-public-link class="mt-3 text-sm font-medium text-accent hover:underline">
+            <div class="space-y-2" data-public-link-slots data-testid="learning-public-link-slots"></div>
+            <button type="button" data-add-public-link class="mt-2 text-sm font-medium text-accent hover:underline">
               Add another link
             </button>
           </div>
           {% else %}
           <label for="homework-answer" class="mb-2 mt-6 block text-sm text-muted-foreground">Your answer</label>
-          <textarea id="homework-answer" name="answer" maxlength="10000" rows="{% if stepper.question.type == 'long_text' %}8{% else %}2{% endif %}" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ stepper.answer }}</textarea>
+          {% if stepper.question.type == 'short_text' %}
+          <input id="homework-answer" name="answer" type="text" maxlength="10000" value="{{ stepper.answer }}" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          {% else %}
+          <textarea id="homework-answer" name="answer" maxlength="10000" rows="8" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ stepper.answer }}</textarea>
+          {% endif %}
           {% endif %}
         {% endif %}
       </fieldset>
@@ -76,11 +77,11 @@
       <input type="hidden" name="{{ stepper.step_param }}" value="review">
       <input type="hidden" name="revision" value="{{ stepper.revision }}">
       {% for field, value in stepper.final_field_rows %}
-        <label for="final-{{ field.key }}" class="mb-2 block text-sm font-medium text-foreground">{{ field.label }}</label>
+        <label for="final-{{ field.key }}" class="mb-2 block text-sm font-medium text-foreground">{{ field.label }}{% if field.required %} <span class="text-red-400">(required)</span>{% endif %}</label>
         {% if field.key == 'time_spent_lectures' or field.key == 'time_spent_homework' %}
-        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="number" min="0" step="any" inputmode="decimal" value="{{ value }}"{% if not stepper.can_write %} disabled{% endif %} class="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="number" min="0" step="any" inputmode="decimal" value="{{ value }}"{% if field.required %} required{% endif %}{% if not stepper.can_write %} disabled{% endif %} class="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         {% else %}
-        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="{{ field.type }}" value="{{ value }}"{% if not stepper.can_write %} disabled{% endif %} class="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="{{ field.type }}" value="{{ value }}"{% if field.required %} required aria-required="true"{% endif %}{% if not stepper.can_write %} disabled{% endif %} class="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
         {% endif %}
       {% endfor %}
       <p class="mb-3 text-sm text-muted-foreground" data-save-status role="status" aria-live="polite">{{ stepper.draft_status }}</p>
@@ -91,7 +92,7 @@
       </div>
       {% elif stepper.can_write %}
       <div class="flex flex-wrap gap-3" data-testid="homework-action-row">
-        <button type="submit" name="intent" value="save" class="{% button_classes 'secondary' %}">Save draft</button>
+        <button type="submit" name="intent" value="save" formnovalidate class="{% button_classes 'secondary' %}">Save draft</button>
         {% if stepper.can_submit %}<button type="submit" name="intent" value="submit" class="{% button_classes 'primary' %}" data-testid="homework-submit-button">Submit homework</button>{% endif %}
       </div>
       {% else %}

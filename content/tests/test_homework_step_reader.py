@@ -108,6 +108,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         intro = self.client.get(self.unit_url)
         self.assertContains(intro, 'homework-stepper')
         self.assertContains(intro, 'Download the books first.')
+        self.assertContains(intro, 'data-testid="homework-due-date"')
+        self.assertNotContains(intro, 'Step 1 of')
         self.assertNotContains(intro, 'What was difficult?')
         self.assertNotContains(intro, 'homework-submission-form')
         question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
@@ -116,6 +118,12 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertNotContains(question, 'What was difficult?')
         self.assertContains(question, 'answer')
         self.assertNotContains(question, self.canary_question.correct_answer)
+
+    def test_short_text_question_uses_one_line_input(self):
+        response = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
+
+        self.assertContains(response, 'id="homework-answer" name="answer" type="text"')
+        self.assertNotContains(response, '<textarea id="homework-answer"')
 
     def test_positive_public_link_cap_adds_a_distinct_authored_step(self):
         self.homework.learning_in_public_cap = 3
@@ -138,6 +146,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
         self.assertEqual(response.context['stepper']['step'], LEARNING_IN_PUBLIC_KEY)
         self.assertContains(response, 'Share your work.')
+        self.assertContains(response, 'Up to 3 public links; each is optional.')
         self.assertContains(response, 'data-learning-public-links')
         self.assertContains(response, 'data-max-links="3"')
         self.assertContains(response, 'data-public-link-slots')
@@ -169,6 +178,42 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         self.assertEqual(assignment.context['learning_in_public_cap'], 3)
         self.assertEqual([field.key for field in assignment.final_fields], ['homework_link'])
+        self.assertEqual(assignment.final_fields[0].type, 'url')
+        self.assertTrue(assignment.final_fields[0].required)
+        self.assertEqual(assignment.final_fields[0].label, 'Homework URL')
+
+    def test_required_homework_url_allows_draft_save_but_blocks_submit(self):
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+        review = self.client.get(f'{self.unit_url}?homework_step=review')
+
+        self.assertContains(review, 'Homework URL')
+        self.assertContains(review, '(required)')
+        self.assertContains(review, 'name="final_homework_link" type="url"')
+        self.assertContains(review, 'name="intent" value="save" formnovalidate')
+
+        saved = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'save',
+            'final_homework_link': '',
+        })
+
+        self.assertEqual(saved.status_code, 302)
+        draft.refresh_from_db()
+        self.assertEqual(draft.final_fields['homework_link'], '')
+        self.assertEqual(draft.revision, 1)
+        rejected = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token), 'homework_step': 'review',
+            'revision': str(draft.revision), 'intent': 'submit',
+            'final_homework_link': '',
+        })
+
+        self.assertEqual(rejected.status_code, 400)
+        self.assertContains(rejected, 'Homework URL is required.', status_code=400)
+        self.assertTrue(HomeworkDraft.objects.filter(pk=draft.pk).exists())
+        self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
 
     def test_review_submit_persists_optional_links_and_time_spent_fields(self):
         self.homework.learning_in_public_cap = 3
@@ -196,7 +241,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         self.assertEqual(response.status_code, 302)
         review = self.client.get(f'{self.unit_url}?homework_step=review')
-        self.assertContains(review, 'Homework URL (optional)')
+        self.assertContains(review, 'Homework URL')
+        self.assertContains(review, '(required)')
         self.assertContains(review, 'type="number"')
         submission = Submission.objects.get(homework=self.homework, student=self.student)
         self.assertEqual(
@@ -221,7 +267,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(draft.token), 'homework_step': 'review',
             'revision': str(draft.revision), 'intent': 'submit',
-            'final_homework_link': '',
+            'final_homework_link': 'https://github.com/student/project',
         })
 
         self.assertEqual(response.status_code, 400)
@@ -275,6 +321,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(draft.token), 'homework_step': 'review',
             'revision': str(draft.revision), 'intent': 'submit',
+            'final_homework_link': 'https://github.com/student/project',
             'final_time_spent_lectures': '-0.5',
         })
 
@@ -290,6 +337,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         self.assertEqual(response.context['homework_due_date_display'], '')
         self.assertNotContains(response, 'data-testid="homework-due-date"')
+        self.assertNotContains(response, 'Step 1 of')
 
     def test_closed_no_deadline_homework_uses_closed_copy(self):
         self.homework.due_date = None
@@ -379,7 +427,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         submitted = self.client.post(selected_url, {
             'assignment_key': f'aisl:homework:{second_homework.pk}',
             'draft_token': str(draft.token), 'homework_step': 'review',
-            'revision': '1', 'intent': 'submit', 'final_homework_link': '',
+            'revision': '1', 'intent': 'submit',
+            'final_homework_link': 'https://github.com/student/project',
         })
         self.assertEqual(submitted.status_code, 302)
         self.assertTrue(Submission.objects.filter(
@@ -510,7 +559,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
             'homework_step': 'review', 'revision': '0', 'intent': 'submit',
-            'final_homework_link': '',
+            'final_homework_link': 'https://github.com/student/project',
         })
         submission = Submission.objects.get(homework=self.homework, student=self.student)
         Answer.objects.create(
@@ -552,7 +601,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
             'homework_step': 'review', 'revision': '1', 'intent': 'submit',
-            'final_homework_link': '',
+            'final_homework_link': 'https://github.com/student/project',
         })
         self.assertEqual(response.status_code, 302)
         submission = Submission.objects.get(homework=self.homework, student=self.student)

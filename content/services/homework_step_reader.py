@@ -123,8 +123,7 @@ def build_assignment(homework, unit, user, *, context=None):
     )
     if learning_in_public_cap:
         guidance = learning_guidance or (
-            f'Add up to {learning_in_public_cap} optional links that show your '
-            'progress in public. Each link is optional.'
+            'Share your progress in public if you would like.'
         )
         learning_prompt = _render_safe(f'## Learning in Public\n\n{guidance}')
         step_questions += (
@@ -138,7 +137,9 @@ def build_assignment(homework, unit, user, *, context=None):
     final_fields = []
     existing_final_fields = {}
     if homework.homework_url_field:
-        final_fields.append(FinalField('homework_link', 'Homework URL (optional)', 'url'))
+        final_fields.append(FinalField(
+            'homework_link', 'Homework URL', 'url', required=True,
+        ))
         existing_final_fields['homework_link'] = (
             submission.homework_link or '' if submission else ''
         )

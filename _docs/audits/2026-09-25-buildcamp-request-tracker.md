@@ -35,7 +35,7 @@ course repository push triggers production sync.
 | Request | State | Evidence / next check |
 | --- | --- | --- |
 | Every Buildcamp homework and capstone uses a multi-step form with steps in course navigation | Partially implemented | Verify all 10 authored files, direct navigation, mobile layout, save/resume and submission. |
-| Same submission semantics as old CMP and DTC website, spread across steps | Under Astra review | Compare field requirements, validation, save, deadline, closed/scored and statistics behavior. |
+| Same submission semantics as old CMP and DTC website, spread across steps | Audit complete; implementation open | Astra's concrete gaps and implementation queue are below. |
 | Code URL is required; remove copy saying it is optional | Open | Canonical source correction assigned; enforce at submission boundary, not copy alone. |
 | October 5, 2026 at 23:59 UTC homework deadline copy must agree with actual deadline and required code URL | Open | Verify authored date and database after sync; user identified this exact sentence as wrong about the URL. |
 | Remove generic "AI Assistants / You can use AI..." homework prose | Open | Canonical source correction assigned. |
@@ -65,3 +65,45 @@ course repository push triggers production sync.
 - Homework navigation review: `2026-09-24-buildcamp-homework-controls-review.md`.
 - This tracker must be updated when a change is committed, deployed, or rejected
   by rendered evidence. "Open" means no verified completion yet.
+
+## Astra submission-flow audit (2026-09-25)
+
+Read-only review of AISL, old CMP and DTC found these concrete gaps. This is
+the implementation queue for the shared homework work:
+
+1. **Required code URL:** All ten active Buildcamp homework files enable
+   `homework_url_field`. AISL currently constructs an optional `FinalField` in
+   `content/services/homework_step_reader.py` and the template omits its
+   `required` flag. Require it on final submission at the server boundary,
+   while allowing an incomplete draft to save.
+2. **Accepted submission versus draft:** The shared stepper reports submitted
+   when a submission exists but renders newer draft values in the review.
+   Show pending edits separately from the accepted submission. Closed/scored
+   views must present the accepted snapshot.
+3. **Deadline semantics:** Old CMP/DTC accept submissions while the state is
+   OPEN, even after the displayed due date. AISL currently auto-closes at the
+   due date, a deliberate earlier divergence. Reconcile this with the latest
+   parity request only after confirming an operator path to close/score; show
+   an accurate late-but-open message. Do not change the separate project
+   attempt/review timeline.
+4. **Learning in Public:** AISL stores URLs but does not award one point per
+   eligible link or block duplicate reuse across homework/project submissions
+   in a cohort. Put reusable validation/scoring in community-base and adapt
+   both sites.
+5. **Results and statistics:** A scored AISL homework currently looks like a
+   closed draft. Show the accepted score, correct answers when permitted, and
+   statistics only when scored/available. Shared statistics helpers currently
+   expect community-base coursework models; AISL needs an adapter.
+6. **Configurable fields:** Old CMP/DTC include optional comments and FAQ
+   contribution fields. AISL does not yet model or persist these; add only
+   where enabled by source configuration.
+7. **Review and confirmation:** Give Learning in Public its own label rather
+   than “Question 7”; use semantic question titles and targeted errors. Show
+   accepted submission time and restore the confirmation notification hook
+   subject to preferences.
+
+The audit found existing save/reload/stale-revision/browser tests in
+`content/tests/test_homework_step_reader.py` and
+`playwright_tests/test_homework_steps_1778.py`. Add focused tests for the new
+gaps, especially required URL at submit, accepted versus pending draft,
+late-open versus closed, duplicate LIP links/scoring, and scored-only results.

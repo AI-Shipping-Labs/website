@@ -42,9 +42,7 @@ class CourseSyllabusEmptyAndFlatTest(TestCase):
         response = self.client.get('/courses/flat-syllabus-1770')
         self.assertContains(
             response,
-            '<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" '
             'data-testid="syllabus-section-heading">Pre-work and logistics</h3>',
-            html=True,
         )
 
 

@@ -11,7 +11,7 @@ has no webhook secret, so the September 25 update required an explicit sync.
 
 | Request | State | Evidence / next check |
 | --- | --- | --- |
-| Run AISL on localhost 8030 from the correct repository and main checkout | Running | `curl` to localhost:8030 `/courses/ai-buildcamp` returned 200 on September 25; main checkout runs with `--noreload`, so restart after later code changes. |
+| Run AISL on localhost 8030 from the correct repository and main checkout | Running | Restarted after v0.5.9 pin; `/courses/ai-buildcamp` returns 200 and protected canonical homework step paths return 403 anonymously, confirming route resolution. |
 | Keep focused commits; push AISL; deploy dev; promote to prod | v0.5.8 site release complete; next shared-step release pending | Site `7ae7ab1` passed Deploy Dev `36172759037`; exact image `20260925-183544-7ae7ab1` reached production and promotion run `36176062139` succeeded. New shared-step adoption commit remains local until community-base v0.5.9 releases. |
 | Register and sync Buildcamp content into dev, verify rendered course pages | Dev sync complete; authenticated UI check open | Source `1dec32f0-fd53-497f-8fd6-6f0c6ebae2ba` was initially disabled for missing webhook secret. A forced first sync created the course/cohort; a follow-up succeeded with zero errors. Dev and production both synced source commit `513d795` with zero errors. Dev course landing returned 200; unit pages correctly returned 403 anonymously. Configure the source secret for normal future syncs. |
 | Preserve/recover lost work, reconcile worktrees/branches, bring needed changes to main | Needs audit | Prior branches and worktrees were reviewed in this session; verify no remaining valuable unmerged work before closure. |
@@ -51,7 +51,7 @@ has no webhook secret, so the September 25 update required an explicit sync.
 | Fix capstone starter instructions: literal `bash` and option list numbering | Source synced; authenticated render check open | Screenshots 20260925-193248 and 193318; source commit `bb3743b` uses headings and valid indented code blocks. Production sync at `513d795` succeeded. |
 | Make capstone starter answer a normal one-line text field; collect repo URL once on final review | Source and app deployed; authenticated render check open | Screenshot 20260925-193331; source commit `513d795` changes q2 to `free_form` and removes duplicate URL prompt. AISL short-text input implementation shipped in image `20260925-183544-7ae7ab1`. |
 | Simplify Learning in Public link controls and remove repetitive optional copy | Implemented locally; rendered check open | `1c648353b`, screenshot 20260925-193506; configurable max and optional links preserved. |
-| Step URL `/homework/intro` instead of `?homework_step=intro` | Implemented locally; package release and deploy open | AISL adoption commit uses canonical step paths, direct entry and old query bookmarks. Shared package PR #299 must pass cross-repo CI and release before site pin and deployment. |
+| Step URL `/homework/intro` instead of `?homework_step=intro` | Package released and AISL pushed; dev/prod deployment open | AISL adoption commit uses canonical step paths, direct entry and old query bookmarks. Shared package PR #299 passed both consumer checks and released v0.5.9; AISL pin `ed1f84a` pushed and Deploy Dev `36181232812` is running. |
 | Show learner submission state: no submission, draft, submitted, closed, scored | Open | Keep learner state distinct from homework availability. Inspect each rendered state. |
 | Show homework statistics where available, especially scored homework | Open | Shared community-base statistics exist; define concise placement and gating. |
 | Keep shared homework behavior in community-base and adopt it in AISL and DTC | Open | Includes step URLs, LIP examples/pattern, validation, status and stats; run both consumer suites after package changes. |
@@ -63,7 +63,7 @@ has no webhook secret, so the September 25 update required an explicit sync.
 | --- | --- | --- |
 | Create community-base issue for reusable `/c/<uuid>` links in DTC; defer DTC implementation | Needs issue check | User asked to track, not implement now. |
 | Bring cohort-only course model and shared homework design to DTC through community-base | Open | Do after AISL working deployment, with cross-consumer tests. |
-| Track inherited DTC Studio `community_base.studio.E001` check failure | Issue filed; fix later | DataTalksClub/website#435 records the pre-existing check failure without blocking the AISL course-content release. |
+| Track DTC Studio `community_base.studio.E001` under local settings | Issue filed; fix later | DataTalksClub/website#435 records the local-settings-only check failure. DTC test settings and package consumer CI passed without silencing it. |
 
 ## Review notes
 

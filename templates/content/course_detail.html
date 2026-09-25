@@ -271,7 +271,9 @@
         {% endif %}
         <div class="space-y-1">
           {% for module in modules %}
-          {% if module.is_bonus %}
+          {% if module.syllabus_section %}
+          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-section-heading">{{ module.syllabus_section }}</h3>
+          {% elif module.is_bonus %}
           {% ifchanged module.is_bonus %}<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-optional-group">Optional</h3>{% endifchanged %}
           {% endif %}
           {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone %}

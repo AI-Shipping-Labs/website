@@ -981,6 +981,7 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
         )
         cls.module = Module.objects.create(
             course=cls.course, title='Mod 1', slug='mod-1', sort_order=1,
+            syllabus_section='Main content',
         )
         cls.unit = Unit.objects.create(
             module=cls.module, title='Unit 1', slug='unit-1', sort_order=1,
@@ -1010,6 +1011,7 @@ class ApiCourseDetailTest(TierSetupMixin, TestCase):
         data = json.loads(response.content)
         self.assertEqual(len(data['syllabus']), 1)
         self.assertEqual(data['syllabus'][0]['title'], 'Mod 1')
+        self.assertEqual(data['syllabus'][0]['syllabus_section'], 'Main content')
         self.assertEqual(len(data['syllabus'][0]['units']), 1)
         self.assertEqual(data['syllabus'][0]['units'][0]['title'], 'Unit 1')
         self.assertTrue(data['syllabus'][0]['units'][0]['is_preview'])

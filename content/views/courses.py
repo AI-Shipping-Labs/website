@@ -676,6 +676,7 @@ def _module_json(module, course_slug):
         'sort_order': module.sort_order,
         'parent_id': module.parent_id,
         'is_bonus': module.is_bonus,
+        'syllabus_section': module.syllabus_section,
     }
     children = list(module.children.all())
     if children:

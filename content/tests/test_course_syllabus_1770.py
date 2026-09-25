@@ -19,6 +19,7 @@ class CourseSyllabusEmptyAndFlatTest(TestCase):
         cls.flat_module = Module.objects.create(
             course=cls.flat_course, title='Getting started',
             slug='getting-started', sort_order=1,
+            syllabus_section='Pre-work and logistics',
         )
         cls.flat_unit = Unit.objects.create(
             module=cls.flat_module, title='First lesson',
@@ -36,6 +37,15 @@ class CourseSyllabusEmptyAndFlatTest(TestCase):
         self.assertContains(response, 'data-testid="syllabus-module-summary"')
         self.assertContains(response, '1 lesson</span>')
         self.assertContains(response, f'href="{self.flat_unit.get_absolute_url()}"')
+
+    def test_source_authored_syllabus_section_renders(self):
+        response = self.client.get('/courses/flat-syllabus-1770')
+        self.assertContains(
+            response,
+            '<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" '
+            'data-testid="syllabus-section-heading">Pre-work and logistics</h3>',
+            html=True,
+        )
 
 
 class CourseSyllabusParentSummaryTest(TestCase):

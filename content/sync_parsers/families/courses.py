@@ -1461,6 +1461,7 @@ def _upsert_module_row(
         'title': module_data.get('title', entry.name),
         'slug': slug,
         'sort_order': sort_order,
+        'syllabus_section': module_data.get('syllabus_section') or '',
         'is_bonus': is_bonus,
         'available_after_days': available_after_days,
         'parent': parent_module,

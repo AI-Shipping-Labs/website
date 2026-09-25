@@ -171,6 +171,19 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         self.assertTrue(module.is_bonus)
         self.assertEqual(module.available_after_days, 21)
 
+    def test_module_yaml_syllabus_section_is_synced(self):
+        self._write_course_yaml()
+        self._write_yaml(
+            '00-logistics/module.yaml',
+            {'title': 'Course logistics', 'syllabus_section': 'Pre-work and logistics'},
+        )
+        self._write_markdown('00-logistics/01-checklist.md', {'title': 'Checklist'}, 'Body.\n')
+
+        stats = self._sync()
+        self.assertEqual(stats['errors'], [])
+        module = Module.objects.get(course__slug='buildcamp-direct', slug='logistics')
+        self.assertEqual(module.syllabus_section, 'Pre-work and logistics')
+
     def test_module_yaml_bonus_absent_defaults_false(self):
         self._write_course_yaml()
         self._write_yaml('06-plain/module.yaml', {'title': 'Plain module'})

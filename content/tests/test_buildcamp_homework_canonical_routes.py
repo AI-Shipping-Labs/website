@@ -1,10 +1,17 @@
 """Canonical first-level URLs for Buildcamp homework and capstone units."""
 
+import datetime
 import uuid
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from content.models import Course, Module, Unit
+from content.models.cohort import Cohort, CohortEnrollment
+from content.models.homework import Homework, Question, QuestionType
+
+User = get_user_model()
 
 
 class BuildcampHomeworkCanonicalRoutesTest(TestCase):
@@ -86,6 +93,87 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
         old_url = '/courses/ai-buildcamp/foundation/homework/document-processing'
         response = self.client.get(old_url)
         self.assertEqual(response.status_code, 404, response.get('Location'))
+
+    def test_syllabus_and_week_overview_show_homework_units_as_sibling_rows(self):
+        for url, testid in (
+            ('/courses/ai-buildcamp', 'syllabus-unit-row'),
+            ('/courses/ai-buildcamp/foundation', 'module-lesson-link'),
+        ):
+            with self.subTest(url=url):
+                response = self.client.get(url)
+                self.assertContains(response, f'data-testid="{testid}"')
+                self.assertContains(
+                    response,
+                    f'href="{self.foundation_main.get_absolute_url()}"',
+                )
+                self.assertContains(
+                    response,
+                    f'href="{self.foundation_capstone.get_absolute_url()}"',
+                )
+
+        syllabus = self.client.get('/courses/ai-buildcamp')
+        self.assertNotContains(syllabus, 'data-testid="syllabus-module"')
+        api_week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
+        self.assertEqual(
+            [unit['title'] for unit in api_week['units']],
+            [self.foundation_main.title, self.foundation_capstone.title],
+        )
+        self.assertEqual(api_week['modules'], [])
+
+    def test_reader_navigation_shows_homework_units_in_full_and_scoped_modes(self):
+        user = User.objects.create_user(email='buildcamp-inline-reader@test.com', password='pw')
+        self.client.force_login(user)
+
+        for scope in ('course', 'module'):
+            with self.subTest(scope=scope):
+                self.course.reader_navigation_scope = scope
+                self.course.save(update_fields=['reader_navigation_scope'])
+                response = self.client.get(self.foundation_main.get_absolute_url())
+                sidebar = response.content.decode().split(
+                    '<nav id="sidebar-nav"', 1,
+                )[1].split('</nav>', 1)[0]
+
+                self.assertIn(self.foundation_main.get_absolute_url(), sidebar)
+                self.assertIn(self.foundation_main.title, sidebar)
+                self.assertIn(self.foundation_capstone.get_absolute_url(), sidebar)
+                self.assertIn(self.foundation_capstone.title, sidebar)
+
+    def test_inline_homework_reader_keeps_step_navigation(self):
+        user = User.objects.create_user(email='buildcamp-homework-reader@test.com', password='pw')
+        self.client.force_login(user)
+        today = timezone.localdate()
+        cohort = Cohort.objects.create(
+            course=self.course,
+            name='Reader test cohort',
+            start_date=today - datetime.timedelta(days=1),
+            end_date=today + datetime.timedelta(days=30),
+        )
+        CohortEnrollment.objects.create(cohort=cohort, user=user)
+        self.course.reader_navigation_scope = 'module'
+        self.course.save(update_fields=['reader_navigation_scope'])
+        self.foundation_main.homework = '## Question 1. First step\nDescribe your approach.'
+        self.foundation_main.save(update_fields=['homework'])
+        homework = Homework.objects.create(
+            content_id=self.foundation_main.content_id,
+            cohort=cohort,
+            slug='foundation-homework',
+            title=self.foundation_main.title,
+            stepper_enabled=True,
+        )
+        Question.objects.create(
+            homework=homework,
+            source_question_id='q1-first-step',
+            text='Describe your approach.',
+            question_type=QuestionType.FREE_FORM,
+        )
+
+        response = self.client.get(self.foundation_main.get_absolute_url())
+        self.assertContains(response, 'data-testid="homework-step-nav"')
+        self.assertContains(response, 'data-testid="homework-step-current"')
+        sidebar = response.content.decode().split(
+            '<nav id="sidebar-nav"', 1,
+        )[1].split('</nav>', 1)[0]
+        self.assertIn(self.foundation_capstone.get_absolute_url(), sidebar)
 
     def test_real_submodule_slug_takes_precedence_over_capstone_alias(self):
         colliding_module = Module.objects.create(

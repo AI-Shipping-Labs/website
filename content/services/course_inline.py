@@ -101,7 +101,7 @@ def inline_unit_for(module, course_slug):
 
 
 def inline_units_for(module, course_slug):
-    """Expose Buildcamp optional lessons alongside the week's other items."""
+    """Expose selected Buildcamp presentation wrappers as sibling units."""
     if (
         course_slug == 'ai-buildcamp'
         and module.parent_id
@@ -110,6 +110,9 @@ def inline_units_for(module, course_slug):
         and module.is_bonus
     ):
         return list(module.units.all())
+    homework_units = inline_homework_units(module, course_slug)
+    if homework_units:
+        return list(homework_units)
     unit = inline_unit_for(module, course_slug)
     return [unit] if unit is not None else []
 

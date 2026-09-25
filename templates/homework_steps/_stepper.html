@@ -9,14 +9,9 @@
   {% elif stepper.submitted %}
   <p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted.{% if stepper.can_submit %} You can update it while submissions are open.{% else %} The submission window is closed.{% endif %}</p>
   {% elif stepper.draft_status == 'Saved' %}
-  <div class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200" data-testid="homework-pending-draft-status">
+  <div class="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" data-testid="homework-pending-draft-status">
     <span class="min-w-0" role="status">Your answers are saved as a draft. You have not submitted this homework yet.</span>
-    <span class="homework-draft-help">
-      <details>
-        <summary role="button" aria-label="Draft answer details" aria-describedby="homework-draft-help-copy">?</summary>
-      </details>
-      <span id="homework-draft-help-copy" class="homework-draft-help-copy" role="tooltip">Saved answers stay private until you submit in Review &amp; submit. Edits after submission remain a draft until you submit again.</span>
-    </span>
+    {% include "homework_steps/_draft_status_help.html" %}
   </div>
   {% endif %}
   {% if stepper.notice %}<p class="mb-4 text-sm text-muted-foreground" role="status">That question changed. Your saved answers are still here.</p>{% endif %}

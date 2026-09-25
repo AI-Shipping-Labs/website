@@ -57,11 +57,7 @@
       {% with bonus_children=children|bonus_only %}
       {% if bonus_children %}
       {% for child in bonus_children %}
-      {% if course_slug == 'ai-buildcamp' and module.slug == 'bonus' %}
-      {% with week=child|bonus_week %}
-      {% if week %}{% ifchanged week %}<h3 class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="syllabus-bonus-week">Week {{ week }}</h3>{% endifchanged %}{% endif %}
-      {% endwith %}
-      {% endif %}
+      {% if child.syllabus_section %}<h3 class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="syllabus-module-section">{{ child.syllabus_section }}</h3>{% endif %}
       {% with inline_units=child|inline_course_units:course_slug %}
       {% if inline_units %}
       {% for inline_unit in inline_units %}

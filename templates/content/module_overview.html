@@ -88,11 +88,7 @@
         </h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
           {% for submodule in submodules %}
-          {% if course.slug == 'ai-buildcamp' and module.slug == 'bonus' %}
-          {% with week=submodule|bonus_week %}
-          {% if week %}{% ifchanged week %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-bonus-week">Week {{ week }}</h3>{% endifchanged %}{% endif %}
-          {% endwith %}
-          {% endif %}
+          {% if submodule.syllabus_section %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-syllabus-section">{{ submodule.syllabus_section }}</h3>{% endif %}
           <a href="{{ submodule.get_absolute_url }}"
              class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]"
              data-testid="module-submodule-link">

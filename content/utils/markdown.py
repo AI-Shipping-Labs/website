@@ -25,9 +25,9 @@ from content.utils.linkify import linkify_urls
 # Markdown-generated structure (a real ``<ul>``, an ``<a target rel>``) is
 # preserved unchanged, so legitimate content renders identically.
 _SANITIZE_TAGS = {
-    'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'div', 'em', 'h1', 'h2',
+    'a', 'abbr', 'b', 'blockquote', 'br', 'code', 'details', 'div', 'em', 'h1', 'h2',
     'h3', 'h4', 'h5', 'h6', 'hr', 'i', 'img', 'li', 'ol', 'p', 'pre', 'span',
-    'strong', 'sub', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'ul',
+    'strong', 'sub', 'summary', 'sup', 'table', 'tbody', 'td', 'th', 'thead', 'tr', 'ul',
 }
 _SANITIZE_ATTRIBUTES = {
     'a': {'href', 'title', 'target', 'rel'},

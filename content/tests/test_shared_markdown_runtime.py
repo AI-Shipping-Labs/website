@@ -16,7 +16,7 @@ from content.models import (
 from content.models.interview_category import (
     render_markdown as render_interview_category_markdown,
 )
-from content.utils.markdown import render_markdown
+from content.utils.markdown import render_markdown, sanitize_html
 from events.models import Event
 
 
@@ -36,6 +36,15 @@ class SharedMarkdownRuntimeTest(TestCase):
         '```\n\n'
         '<section markdown="1">**inside html**</section>\n'
     )
+
+    def test_sanitized_homework_examples_remain_collapsible(self):
+        html = sanitize_html(render_markdown(
+            '<details onclick="alert(1)"><summary>Example</summary>'
+            '<pre><code>Share your work</code></pre></details>'
+        ))
+        self.assertIn('<details><summary>Example</summary>', html)
+        self.assertIn('<pre><code>Share your work</code></pre>', html)
+        self.assertNotIn('onclick', html)
 
     def assert_rich_markdown_rendered(self, html):
         self.assertIn('class="codehilite"', html)

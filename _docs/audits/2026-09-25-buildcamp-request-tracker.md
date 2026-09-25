@@ -135,3 +135,11 @@ link or summary only when actual statistics exist. Keep the distribution
 detail in the existing statistics surface. Share the state calculation and
 presentation contract through community-base, with AISL and DTC supplying
 their own model rows and URLs.
+
+## Delivery order confirmed September 25
+
+Finish community-base v0.5.10 only as needed to adopt the shared Review
+fallback and draft help in AISL. Push that AISL adoption to dev, verify it,
+then promote the same image to production. Only after AISL production is
+verified, audit and implement the remaining shared homework behavior in
+community-base, bring DTC website to parity, and run both consumer suites.

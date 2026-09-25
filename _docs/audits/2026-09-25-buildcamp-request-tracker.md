@@ -63,6 +63,7 @@ has no webhook secret, so the September 25 update required an explicit sync.
 | --- | --- | --- |
 | Create community-base issue for reusable `/c/<uuid>` links in DTC; defer DTC implementation | Needs issue check | User asked to track, not implement now. |
 | Bring cohort-only course model and shared homework design to DTC through community-base | Open | Do after AISL working deployment, with cross-consumer tests. |
+| Track inherited DTC Studio `community_base.studio.E001` check failure | Issue filed; fix later | DataTalksClub/website#435 records the pre-existing check failure without blocking the AISL course-content release. |
 
 ## Review notes
 

@@ -11,7 +11,7 @@ course repository push triggers production sync.
 | Request | State | Evidence / next check |
 | --- | --- | --- |
 | Run AISL on localhost 8030 from the correct repository and main checkout | Needs recheck | Verify live process and route after current edits. |
-| Keep focused commits; push AISL; deploy dev; promote to prod | In progress | `94eefe8` reached dev, Deploy Dev `36164802288` green; local grouping commit `aa8f81e` awaits community-base v0.5.8. Prod promotion remains open. |
+| Keep focused commits; push AISL; deploy dev; promote to prod | In progress | `94eefe8` reached dev, Deploy Dev `36164802288` green. Exact-image production promotion `36170154228` is running; local grouping commit `aa8f81e` awaits community-base v0.5.8. |
 | Register and sync Buildcamp content into dev, verify rendered course pages | Open | Dev Buildcamp routes currently 404 because source is absent. |
 | Preserve/recover lost work, reconcile worktrees/branches, bring needed changes to main | Needs audit | Prior branches and worktrees were reviewed in this session; verify no remaining valuable unmerged work before closure. |
 | Do not move Cohort 4 end from November 22 | Decision | User explicitly confirmed. |
@@ -37,19 +37,19 @@ course repository push triggers production sync.
 | --- | --- | --- |
 | Every Buildcamp homework and capstone uses a multi-step form with steps in course navigation | Partially implemented | Verify all 10 authored files, direct navigation, mobile layout, save/resume and submission. |
 | Same submission semantics as old CMP and DTC website, spread across steps | Audit complete; implementation open | Astra's concrete gaps and implementation queue are below. |
-| Code URL is required; remove copy saying it is optional | Open | Canonical source correction assigned; enforce at submission boundary, not copy alone. |
+| Code URL is required; remove copy saying it is optional | Implemented locally; deploy open | Source commit `99d3d3c` and AISL commit `1c648353b`; 27 Django and 5 focused Playwright tests passed. |
 | October 5, 2026 at 23:59 UTC homework deadline copy must agree with actual deadline and required code URL | Open | Verify authored date and database after sync; user identified this exact sentence as wrong about the URL. |
-| Remove generic "AI Assistants / You can use AI..." homework prose | Open | Canonical source correction assigned. |
+| Remove generic "AI Assistants / You can use AI..." homework prose | Implemented in source branch; sync/render open | `99d3d3c`, no source push yet. |
 | Week 1/2 homework has two weeks; weeks 3–6 one week each; project attempt 1 starts week 7 and lasts two weeks; peer review one week; attempt 2 two weeks plus one-week review | Needs data check | Use prior CMP cohort schedule. Preserve Cohort 4 end November 22. |
 | Week 2 capstone asks only for URL; may include up to three Learning in Public links | Needs form check | Other homework can have different configurable link counts. |
 | Learning in Public is its own step, configurable count, hidden at zero | Partially implemented | Verify all homework. |
-| Learning in Public content uses brief intro, useful links and collapsible examples across AISL and DTC | In progress | Course source edit assigned; reusable rendering belongs in community-base. |
-| Validate X example length using X link weighting; literal `<LINK>` counts as a link | In progress | Apply to authored X examples; distinguish from learner-submitted URLs. |
-| Use meaningful, nonduplicated step icons/labels, remove "Question 1" duplication and "Step N of M" beside due date | Open | Screenshot 20260924-152151 and 20260925-191013. |
+| Learning in Public content uses brief intro, useful links and collapsible examples across AISL and DTC | Source complete; shared implementation open | `99d3d3c` updates ten canonical files; reusable rendering belongs in community-base. |
+| Validate X example length using X link weighting; literal `<LINK>` counts as a link | Source validator complete; shared rule open | Source validator in `99d3d3c`, longest example 247 weighted characters; distinguish authored examples from learner URLs. |
+| Use meaningful, nonduplicated step icons/labels, remove "Question 1" duplication and "Step N of M" beside due date | Partial | `1c648353b` removed step count; icon/question-label review remains. |
 | Give the answer form more space below the question text | Implemented locally; rendered check open | Screenshot 20260925-193200; added `mt-6` before the "Your answer" label. |
 | Fix capstone starter instructions: literal `bash` and option list numbering | Implemented in source branch; sync/render open | Screenshots 20260925-193248 and 193318; source commit `bb3743b` uses headings and valid indented code blocks. |
 | Make capstone starter answer a normal one-line text field; collect repo URL once on final review | Source changed; app rendering open | Screenshot 20260925-193331; source commit `513d795` changes q2 to `free_form` and removes duplicate URL prompt. AISL short-text input implementation is in progress. |
-| Simplify Learning in Public link controls and remove repetitive optional copy | In progress | Screenshot 20260925-193506; keep configurable max and optional links. |
+| Simplify Learning in Public link controls and remove repetitive optional copy | Implemented locally; rendered check open | `1c648353b`, screenshot 20260925-193506; configurable max and optional links preserved. |
 | Step URL `/homework/intro` instead of `?homework_step=intro` | Open | AISL #1827; shared stepper currently generates query URLs. Preserve save, direct entry and old bookmarks. |
 | Show learner submission state: no submission, draft, submitted, closed, scored | Open | Keep learner state distinct from homework availability. Inspect each rendered state. |
 | Show homework statistics where available, especially scored homework | Open | Shared community-base statistics exist; define concise placement and gating. |

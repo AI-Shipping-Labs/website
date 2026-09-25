@@ -5,8 +5,16 @@
 {% load seo_tags %}
 
 {% block title %}Topics | AI Shipping Labs{% endblock %}
-{% block meta_description %}{% if hub.summary %}{{ hub.summary }}{% else %}Topic guides built from every AI Shipping Labs course, workshop, and article.{% endif %}{% endblock %}
-{% block page_head_metadata %}{% page_seo_tags "Topics | AI Shipping Labs" hub.summary|default:"Topic guides built from every AI Shipping Labs course, workshop, and article." "/topics" %}{% endblock %}
+{% block meta_description %}{% seo_description hub %}{% endblock %}
+{% comment %}
+Issue #1803: the hub is a TopicPage, so it shares the detail pages'
+content-page head contract. Overriding the structured_data block replaces
+base.html's Organization default, so the Organization block is re-emitted
+ahead of the per-page block.
+{% endcomment %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ hub.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags hub %}{% endblock %}
+{% block structured_data %}{% structured_data %}{% structured_data hub %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

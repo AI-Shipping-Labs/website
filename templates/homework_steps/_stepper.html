@@ -40,7 +40,7 @@
             </button>
           </div>
           {% else %}
-          <label for="homework-answer" class="mb-2 block text-sm text-muted-foreground">Your answer</label>
+          <label for="homework-answer" class="mb-2 mt-6 block text-sm text-muted-foreground">Your answer</label>
           <textarea id="homework-answer" name="answer" maxlength="10000" rows="{% if stepper.question.type == 'long_text' %}8{% else %}2{% endif %}" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ stepper.answer }}</textarea>
           {% endif %}
         {% endif %}

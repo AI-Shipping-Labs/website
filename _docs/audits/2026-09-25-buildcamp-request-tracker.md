@@ -45,6 +45,7 @@ course repository push triggers production sync.
 | Learning in Public content uses brief intro, useful links and collapsible examples across AISL and DTC | In progress | Course source edit assigned; reusable rendering belongs in community-base. |
 | Validate X example length using X link weighting; literal `<LINK>` counts as a link | In progress | Apply to authored X examples; distinguish from learner-submitted URLs. |
 | Use meaningful, nonduplicated step icons/labels, remove "Question 1" duplication and "Step N of M" beside due date | Open | Screenshot 20260924-152151 and 20260925-191013. |
+| Give the answer form more space below the question text | Implemented locally; rendered check open | Screenshot 20260925-193200; added `mt-6` before the "Your answer" label. |
 | Step URL `/homework/intro` instead of `?homework_step=intro` | Open | AISL #1827; shared stepper currently generates query URLs. Preserve save, direct entry and old bookmarks. |
 | Show learner submission state: no submission, draft, submitted, closed, scored | Open | Keep learner state distinct from homework availability. Inspect each rendered state. |
 | Show homework statistics where available, especially scored homework | Open | Shared community-base statistics exist; define concise placement and gating. |

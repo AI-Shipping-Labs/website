@@ -3,8 +3,16 @@
 {% load seo_tags %}
 
 {% block title %}{{ page.title }} | AI Shipping Labs{% endblock %}
-{% block meta_description %}{% if page.summary %}{{ page.summary }}{% else %}{{ page.title }} - an AI Shipping Labs member topic guide.{% endif %}{% endblock %}
-{% block page_head_metadata %}{% with doc_title=page.title|add:" | AI Shipping Labs" %}{% if page.summary %}{% page_seo_tags doc_title page.summary page.get_absolute_url %}{% else %}{% page_seo_tags doc_title page.title|add:" - an AI Shipping Labs member topic guide." page.get_absolute_url %}{% endif %}{% endwith %}{% endblock %}
+{% block meta_description %}{% seo_description page %}{% endblock %}
+{% comment %}
+Issue #1803: content-page head contract (canonical + OG/Twitter + JSON-LD
+from the model, like blog/course detail). Overriding the structured_data
+block replaces base.html's Organization default, so the Organization block
+is re-emitted ahead of the per-page block.
+{% endcomment %}
+{% block canonical %}<link rel="canonical" href="{{ site_url }}{{ page.get_absolute_url }}">{% endblock %}
+{% block og_tags %}{% og_tags page %}{% endblock %}
+{% block structured_data %}{% structured_data %}{% structured_data page %}{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}

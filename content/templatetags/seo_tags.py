@@ -45,6 +45,7 @@ CONTENT_TYPE_LABELS = {
     'module': 'course module',
     'project': 'project',
     'recording': 'recording',
+    'topicpage': 'member topic guide',
     'tutorial': 'tutorial',
     'unit': 'course unit',
     'workshop': 'workshop',
@@ -153,6 +154,13 @@ def _description_source(obj, content_type):
     if explicit_description:
         return explicit_description
 
+    if content_type == 'topicpage':
+        # Issue #1803: topic guides summarize in `summary`; the body (with a
+        # duplicated leading H1 stripped) is the fallback source.
+        return (
+            getattr(obj, 'summary', '')
+            or _body_source_without_duplicate_h1(obj, 'body')
+        )
     if content_type in ('article', 'project', 'tutorial'):
         return _body_source_without_duplicate_h1(obj, 'content_markdown')
     if content_type == 'module':
@@ -218,6 +226,10 @@ def seo_description(content, content_type=None, max_length=160):
 def _seo_title(content, content_type):
     """Return the metadata/social title for a content object."""
     title = getattr(content, 'title', SITE_NAME)
+    if content_type == 'topicpage':
+        # Issue #1803: topic pages suffix the site name in og/twitter titles,
+        # matching the document title the templates hardcode.
+        return f'{title} | {SITE_NAME}'
     if content_type in ('workshop_page', 'workshoppage'):
         workshop_title = getattr(getattr(content, 'workshop', None), 'title', '')
         if workshop_title:
@@ -566,6 +578,32 @@ def _build_workshop_video_jsonld(workshop, *, include_video_url=True):
     return data
 
 
+def _build_topic_page_jsonld(page):
+    """Build JSON-LD for a member topic guide page (#1803).
+
+    Guides are evergreen reference articles: ``Article`` schema with the
+    canonical slash-form URL the sitemap and internal links already use.
+    """
+    site_url = _get_site_url()
+    url = f'{site_url}{page.get_absolute_url()}'
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        'headline': page.title,
+        'description': build_seo_description(page, 'topicpage'),
+        'publisher': {
+            '@type': 'Organization',
+            'name': SITE_NAME,
+            'url': site_url,
+        },
+        'mainEntityOfPage': {
+            '@type': 'WebPage',
+            '@id': url,
+        },
+        'url': url,
+    }
+
+
 def _build_organization_jsonld():
     """Build JSON-LD for the Organization (homepage)."""
     site_url = _get_site_url()
@@ -694,6 +732,7 @@ JSONLD_BUILDERS = {
     'article': _build_article_jsonld,
     'course': _build_course_jsonld,
     'recording': _build_recording_jsonld,
+    'topicpage': _build_topic_page_jsonld,
     'event': _build_event_jsonld,
     'unit': _build_unit_jsonld,
     'project': _build_article_jsonld,  # Projects use Article schema
@@ -752,6 +791,7 @@ def _get_og_type(obj, content_type=None):
     if content_type in (
         'article',
         'project',
+        'topicpage',
         'tutorial',
         'workshop',
         'workshop_page',

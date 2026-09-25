@@ -7,12 +7,13 @@ and stay out of the hub grid, and the SEO contract renders on detail
 pages.
 """
 
+import json
 import re
 import xml.etree.ElementTree as ET
 
 import pytest
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from accounts.templatetags.accounts_extras import button_classes
@@ -113,7 +114,7 @@ class _TopicsFixtureMixin(_TieredUsersMixin):
         super().setUpTestData()
         cls.index = _create_topic(
             'index',
-            'AISL Wiki',
+            'Topics',
             HUB_BODY_SENTENCE + '\n\n## Start here\n\n- [RAG](rag.md)\n',
             summary='Topic guides built from every AISL course, workshop, and article.',
         )
@@ -349,20 +350,68 @@ class TopicDraftAndReservedSlugTest(_TopicsFixtureMixin, TestCase):
 
 
 class TopicSeoTagsTest(_TopicsFixtureMixin, TestCase):
-    """Detail pages carry the canonical + OG/Twitter contract (#1804)."""
+    """Detail and hub pages carry the content-page SEO contract (#1803).
 
-    def test_detail_emits_canonical_and_social_tags(self):
+    Canonical and og:url are the slash-form URLs the sitemap already lists
+    (no redirect hop), and every page emits its own JSON-LD next to the
+    global Organization block from base.html.
+    """
+
+    def _jsonld_objects(self, content):
+        """Parse every JSON-LD block in the response into dicts."""
+        blocks = re.findall(
+            r'<script type="application/ld\+json">\n(.*?)\n</script>',
+            content, re.S,
+        )
+        return [json.loads(block) for block in blocks]
+
+    def _sitemap_locs(self):
+        """Parse /sitemap.xml into {path: full loc URL}."""
+        response = self.client.get('/sitemap.xml')
+        root = ET.fromstring(response.content)
+        locs = {}
+        for url in root.findall(f'{SITEMAP_NS}url'):
+            loc = url.findtext(f'{SITEMAP_NS}loc') or ''
+            path = re.sub(r'^https?://[^/]+', '', loc)
+            locs[path] = loc
+        return locs
+
+    def _canonical_href(self, content):
+        match = re.search(r'<link rel="canonical" href="([^"]*)">', content)
+        self.assertIsNotNone(match, 'canonical link missing')
+        return match.group(1)
+
+    def _og_url(self, content):
+        match = re.search(r'<meta property="og:url" content="([^"]*)">', content)
+        self.assertIsNotNone(match, 'og:url missing')
+        return match.group(1)
+
+    def test_detail_canonical_and_og_url_match_sitemap(self):
+        locs = self._sitemap_locs()
+        content = self.client.get('/topics/rag/').content.decode()
+        self.assertEqual(self._canonical_href(content), locs['/topics/rag/'])
+        self.assertEqual(self._og_url(content), locs['/topics/rag/'])
+
+    def test_detail_emits_per_page_json_ld_beside_organization_block(self):
         response = self.client.get('/topics/rag/')
         content = response.content.decode()
-        canonical = re.search(
-            r'<link rel="canonical" href="[^"]*">$', content, re.M,
+        objects = self._jsonld_objects(content)
+        organizations = [o for o in objects if o.get('@type') == 'Organization']
+        articles = [o for o in objects if o.get('@type') == 'Article']
+        self.assertEqual(len(organizations), 1)
+        self.assertEqual(len(articles), 1)
+        article = articles[0]
+        self.assertEqual(article['headline'], 'RAG')
+        self.assertEqual(
+            article['description'],
+            'Retrieval-augmented generation, summarized.',
         )
-        self.assertIsNotNone(canonical, 'canonical link missing')
-        # page_seo_tags normalizes routes to no-trailing-slash form.
-        self.assertTrue(
-            canonical.group(0).endswith('/topics/rag">'),
-            f'canonical points at the wrong path: {canonical.group(0)}',
-        )
+        canonical = self._canonical_href(content)
+        self.assertEqual(article['url'], canonical)
+        self.assertEqual(article['mainEntityOfPage']['@id'], canonical)
+
+    def test_detail_og_and_twitter_tags_follow_content_page_contract(self):
+        content = self.client.get('/topics/rag/').content.decode()
         self.assertIn(
             '<meta property="og:title" content="RAG | AI Shipping Labs">',
             content,
@@ -376,36 +425,65 @@ class TopicSeoTagsTest(_TopicsFixtureMixin, TestCase):
             '<meta name="twitter:card" content="summary_large_image">',
             content,
         )
+        self.assertIn('<meta property="og:type" content="article">', content)
 
     def test_detail_title_matches_document_title(self):
-        response = self.client.get('/topics/rag/')
-        content = response.content.decode()
+        content = self.client.get('/topics/rag/').content.decode()
         self.assertIn('<title>RAG | AI Shipping Labs</title>', content)
         self.assertIn(
             '<meta property="og:title" content="RAG | AI Shipping Labs">',
             content,
         )
 
-    def test_detail_without_summary_falls_back_to_title_description(self):
+    def test_detail_without_summary_falls_back_to_body_description(self):
         _create_topic('bare', 'Bare Page', 'Body only.', summary='')
         content = self.client.get('/topics/bare/').content.decode()
         self.assertIn(
-            '<meta property="og:description" '
-            'content="Bare Page - an AI Shipping Labs member topic guide.">',
+            '<meta property="og:description" content="Body only.">',
             content,
         )
+        self.assertIn(
+            '<meta name="description" content="Body only.">',
+            content,
+        )
+        articles = [
+            o for o in self._jsonld_objects(content)
+            if o.get('@type') == 'Article'
+        ]
+        self.assertEqual([o['description'] for o in articles], ['Body only.'])
 
-    def test_hub_keeps_canonical_and_social_tags(self):
-        response = self.client.get('/topics/')
-        content = response.content.decode()
+    def test_hub_emits_content_page_seo_contract(self):
+        locs = self._sitemap_locs()
+        content = self.client.get('/topics/').content.decode()
+        self.assertEqual(self._canonical_href(content), locs['/topics/'])
+        self.assertEqual(self._og_url(content), locs['/topics/'])
+        self.assertIn('<title>Topics | AI Shipping Labs</title>', content)
         self.assertIn(
             '<meta property="og:title" content="Topics | AI Shipping Labs">',
             content,
         )
-        self.assertTrue(
-            re.search(r'<link rel="canonical" href="[^"]*">$', content, re.M),
-            'hub canonical link missing',
+        objects = self._jsonld_objects(content)
+        articles = [o for o in objects if o.get('@type') == 'Article']
+        organizations = [o for o in objects if o.get('@type') == 'Organization']
+        self.assertEqual(len(articles), 1)
+        self.assertEqual(len(organizations), 1)
+        self.assertEqual(articles[0]['headline'], 'Topics')
+        self.assertEqual(
+            articles[0]['description'],
+            'Topic guides built from every AISL course, workshop, and '
+            'article.',
         )
+        self.assertEqual(articles[0]['url'], locs['/topics/'])
+
+    @override_settings(SITE_BASE_URL='https://dev.aishippinglabs.com')
+    def test_dev_site_suppresses_canonical_and_stays_noindex(self):
+        # assertContains carries the 200 contract through real content,
+        # per the status-200 assertion ratchet.
+        response = self.client.get('/topics/rag/')
+        self.assertContains(response, 'data-testid="topic-body"')
+        content = response.content.decode()
+        self.assertNotIn('rel="canonical"', content)
+        self.assertIn('noindex,nofollow,noarchive', content)
 
 
 class TopicsSitemapInclusionTest(_TopicsFixtureMixin, TestCase):

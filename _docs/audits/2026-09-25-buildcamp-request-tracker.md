@@ -4,7 +4,8 @@ This is the working checklist for requests raised during the September 24–25
 course iteration. A checked item needs code and rendered or test evidence;
 "implemented locally" does not mean deployed. Source content must not be pushed
 until the site and shared parser that consume it are deployed, because the
-course repository push triggers production sync.
+course repository may sync into production after a push. The current source
+has no webhook secret, so the September 25 update required an explicit sync.
 
 ## Release and data
 

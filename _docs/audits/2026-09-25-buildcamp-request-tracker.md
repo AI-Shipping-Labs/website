@@ -112,3 +112,18 @@ The audit found existing save/reload/stale-revision/browser tests in
 `playwright_tests/test_homework_steps_1778.py`. Add focused tests for the new
 gaps, especially required URL at submit, accepted versus pending draft,
 late-open versus closed, duplicate LIP links/scoring, and scored-only results.
+
+## Homework state presentation decision to implement
+
+Use a small state label beside the homework title in the course navigation and
+the same state near the due line on the homework page. Derive it from both the
+assignment state and this learner's accepted submission: **Not submitted**,
+**Draft**, **Submitted**, **Unsubmitted changes**, **Closed — not submitted**,
+or **Scored**. A learner without a submission must not see a cohort-wide
+"no submissions" claim. On closed/scored pages, show the accepted snapshot
+and submission time; if there is a saved unsent draft, label it separately.
+For a scored assignment, show the score first and a compact public-statistics
+link or summary only when actual statistics exist. Keep the distribution
+detail in the existing statistics surface. Share the state calculation and
+presentation contract through community-base, with AISL and DTC supplying
+their own model rows and URLs.

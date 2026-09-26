@@ -163,35 +163,35 @@ class ContentShareLinkTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response['Location'], f'{unit.get_absolute_url()}?{query}')
 
-    def test_buildcamp_single_unit_share_uses_current_short_url(self):
+    def test_unit_share_tracks_its_current_physical_path(self):
         content_id = uuid.uuid4()
         course = Course.objects.create(
-            title='AI Engineering Buildcamp', slug='ai-buildcamp',
+            title='Share course', slug='share-course-physical-path',
             status='published', source_content_id=uuid.uuid4(),
         )
-        week = Module.objects.create(
-            title='Foundations', slug='foundations', course=course,
-        )
-        session = Module.objects.create(
-            title='Session 1', slug='session', course=course,
-            parent=week, sort_order=1,
+        module = Module.objects.create(
+            title='Week 1', slug='week-1', course=course,
         )
         unit = Unit.objects.create(
-            title='Session 1', slug='session-1', module=session,
+            title='Session 1', slug='session', module=module,
             source_content_id=content_id,
         )
 
         response = self.client.get(f'/c/{content_id}')
 
-        self.assertEqual(unit.get_absolute_url(), '/courses/ai-buildcamp/foundations/session')
+        self.assertEqual(
+            unit.get_absolute_url(), '/courses/share-course-physical-path/week-1/session',
+        )
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response['Location'], '/courses/ai-buildcamp/foundations/session')
+        self.assertEqual(response['Location'], unit.get_absolute_url())
 
-        session.slug = 'session-8'
-        session.save(update_fields=['slug'])
+        unit.slug = 'session-8'
+        unit.save(update_fields=['slug'])
         response_after_change = self.client.get(f'/c/{content_id}')
 
-        self.assertEqual(unit.get_absolute_url(), '/courses/ai-buildcamp/foundations/session-8')
+        self.assertEqual(
+            unit.get_absolute_url(), '/courses/share-course-physical-path/week-1/session-8',
+        )
         self.assertEqual(response_after_change.status_code, 302)
         self.assertEqual(response_after_change['Location'], unit.get_absolute_url())
 

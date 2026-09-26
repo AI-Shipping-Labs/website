@@ -2,7 +2,7 @@
 <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1"{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
   <div id="content-sidebar-sticky" class="lg:sticky lg:top-28">
     <div class="flex items-center justify-between gap-2">
-      <a href="{{ reader_back_url }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
+      <a href="{{ reader_back_url }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
          title="{{ reader_back_title }}"
          class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0"
          {% if reader_back_testid %}data-testid="{{ reader_back_testid }}"{% endif %}>
@@ -51,89 +51,20 @@
           <div class="px-2 pb-2">
             <p class="mt-0.5 flex flex-wrap items-center gap-2 text-sm font-semibold leading-snug text-foreground break-words">{{ scoped_module.title }}{% if scoped_module.is_bonus %}<span class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}</p>
           </div>
-          {% for nav_child in scoped_module.children.all %}
-            {% if nav_child.syllabus_section %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-syllabus-section">{{ nav_child.syllabus_section }}</p>{% endif %}
-            {% with inline_units=nav_child|inline_course_units:course.slug %}
-            {% if inline_units %}
-            {% for inline_unit in inline_units %}
-            <ul class="reader-nav-list">
-              <li>
-                {% if inline_unit.pk == unit.pk %}
-                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus assignment_state=homework_state %}
-                {% elif inline_unit.pk in completed_unit_ids %}
-                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
-                  {% else %}
-                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
-                  {% endif %}
-                  {% if homework_stepper and inline_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-                </li>
-              </ul>
-            {% endfor %}
-            {% else %}
-            {% if homework_stepper and nav_child.pk == unit.module.pk %}
-            <ul class="reader-nav-list">
-              {% for nav_unit in nav_child.units.all %}
-                {% if nav_unit.pk == unit.pk %}
-                  {% include "content/reader/_homework_sidebar_unit.html" with unit=nav_unit root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus ancestor_optional=nav_child.is_bonus %}
-                {% else %}
-                <li>
-                  {% if nav_unit.pk in completed_unit_ids %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% else %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% endif %}
-                </li>
-                {% endif %}
-                {% endfor %}
-            </ul>
-            {% else %}
-            <details class="sidebar-module mt-1" data-reader-submodule {% if nav_child.pk == unit.module.pk %}open{% endif %}>
-              <summary class="flex min-h-[44px] cursor-pointer list-none items-center gap-2.5 rounded-md px-2 py-2 text-sm font-medium leading-snug text-foreground hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-0 lg:py-1">
-                <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center" aria-hidden="true"><i data-lucide="chevron-right" class="sidebar-chevron h-4 w-4 text-muted-foreground"></i></span>
-                <span class="min-w-0 break-words">{{ nav_child.title }}</span>
-                {% if nav_child.is_bonus and not scoped_module.is_bonus %}<span class="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}
-              </summary>
-              <ul class="reader-nav-list ml-4">
-                {% for nav_unit in nav_child.units.all %}
-                <li>
-                  {% if nav_unit.pk == unit.pk %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus assignment_state=homework_state %}
-                  {% elif nav_unit.pk in completed_unit_ids %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% else %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% endif %}
-                  {% if homework_stepper and nav_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-                </li>
-                {% endfor %}
-              </ul>
-            </details>
-            {% endif %}
-            {% endif %}
-            {% endwith %}
-          {% empty %}
           <ul class="reader-nav-list">
-            {% for nav_unit in scoped_module.units.all %}
-            <li>
-              {% if nav_unit.pk == unit.pk %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus assignment_state=homework_state %}
-              {% else %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus %}
-              {% endif %}
-              {% if homework_stepper and nav_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-            </li>
+            {% for tree_item in scoped_module_tree.items %}
+              {% include "content/reader/_course_tree_sidebar_item.html" with tree_item=tree_item unit=unit homework_stepper=homework_stepper stepper=stepper homework_state=homework_state completed_unit_ids=completed_unit_ids open_module_ids=open_module_ids reader_cohort_param=reader_cohort_param root_optional=scoped_module.is_bonus ancestor_optional=scoped_module.is_bonus only %}
             {% endfor %}
           </ul>
-          {% endfor %}
           <div class="mt-3 border-t border-border pt-2" data-testid="reader-module-navigation">
             {% if previous_module %}
-            <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module">
+            <a href="{{ previous_module.get_absolute_url }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module">
               <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
               <span class="min-w-0 break-words">Previous module: {{ previous_module.title }}</span>
             </a>
             {% endif %}
             {% if next_module %}
-            <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module">
+            <a href="{{ next_module.get_absolute_url }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module">
               <span class="min-w-0 flex-1 break-words">Next module: {{ next_module.title }}</span>
               <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
             </a>
@@ -145,114 +76,11 @@
           </div>
         </div>
         {% else %}
-        {% for nav_module in modules %}
-        {% with nav_children=nav_module.children.all %}
-        <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_module.pk == unit.module.pk or nav_module.pk == unit.module.parent_id %}open{% endif %}>
-          <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
-            <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
-            <span class="text-sm font-medium text-foreground">{{ nav_module.title }}</span>
-          </summary>
-          <div>
-            {% if nav_children %}
-            {% comment %}
-              Issue #1674: a parent module nests one more <details> level
-              for its submodules — same sidebar-module pattern, one level
-              deeper. A leaf module's unit list (below) is unchanged.
-            {% endcomment %}
-            <div class="ml-4">
-              {% for nav_child in nav_children %}
-              {% if nav_child.syllabus_section %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-syllabus-section">{{ nav_child.syllabus_section }}</p>{% endif %}
-              {% with inline_units=nav_child|inline_course_units:course.slug %}
-              {% if inline_units %}
-              {% for inline_unit in inline_units %}
-              <ul class="reader-nav-list mt-1">
-                <li>
-                  {% if inline_unit.pk == unit.pk %}
-                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus assignment_state=homework_state %}
-                  {% elif inline_unit.pk in completed_unit_ids %}
-                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
-                  {% else %}
-                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
-                  {% endif %}
-                  {% if homework_stepper and inline_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-                </li>
-              </ul>
-              {% endfor %}
-              {% else %}
-              {% if homework_stepper and nav_child.pk == unit.module.pk %}
-              <ul class="reader-nav-list mt-1">
-                {% for nav_unit in nav_child.units.all %}
-                {% if nav_unit.pk == unit.pk %}
-                  {% include "content/reader/_homework_sidebar_unit.html" with unit=nav_unit root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus ancestor_optional=nav_child.is_bonus %}
-                {% else %}
-                <li>
-                  {% if nav_unit.pk in completed_unit_ids %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" root_optional=nav_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% else %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" root_optional=nav_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
-                  {% endif %}
-                </li>
-                {% endif %}
-                {% endfor %}
-              </ul>
-              {% else %}
-              <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" {% if nav_child.pk == unit.module.pk %}open{% endif %}>
-                <summary class="cursor-pointer list-none flex items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
-                  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
-                  <span class="text-sm font-medium text-foreground">{{ nav_child.title }}</span>
-                </summary>
-                <div>
-                  <ul class="reader-nav-list mt-1">
-                    {% for nav_unit in nav_child.units.all %}
-                    <li>
-                      {% if nav_unit.pk == unit.pk %}
-                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' assignment_state=homework_state %}
-                      {% elif nav_unit.pk in completed_unit_ids %}
-                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
-                      {% else %}
-                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
-                      {% endif %}
-                      {% if homework_stepper and nav_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-                    </li>
-                    {% endfor %}
-                  </ul>
-                </div>
-              </details>
-              {% endif %}
-              {% endif %}
-              {% endwith %}
-              {% endfor %}
-            </div>
-            {% else %}
-            {% comment %}
-              Issue #527: unit rows use the shared `_list_row.html`
-              partial so they match the workshop drawer rows and the
-              landing's "Tutorial pages" card. The module `<summary>`
-              typography (issue #516) is unchanged.
-            {% endcomment %}
-            {% comment %}
-              The shared reader-nav-list keeps the same 4px rhythm inside an
-              expanded module and between sibling module sections.
-            {% endcomment %}
-            <ul class="reader-nav-list mt-1">
-              {% for nav_unit in nav_module.units.all %}
-              <li>
-                {% if nav_unit.pk == unit.pk %}
-                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' assignment_state=homework_state %}
-                {% elif nav_unit.pk in completed_unit_ids %}
-                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
-                {% else %}
-                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs="" %}
-                {% endif %}
-                {% if homework_stepper and nav_unit.pk == unit.pk %}{% include "content/reader/_homework_step_nav.html" %}{% endif %}
-              </li>
-              {% endfor %}
-            </ul>
-            {% endif %}
-          </div>
-        </details>
-        {% endwith %}
-        {% endfor %}
+        <ul class="reader-nav-list">
+          {% for tree_item in curriculum_tree %}
+            {% include "content/reader/_course_tree_sidebar_item.html" with tree_item=tree_item unit=unit homework_stepper=homework_stepper stepper=stepper homework_state=homework_state completed_unit_ids=completed_unit_ids open_module_ids=open_module_ids reader_cohort_param=reader_cohort_param root_optional=tree_item.module.is_bonus ancestor_optional=tree_item.module.is_bonus only %}
+          {% endfor %}
+        </ul>
         {% endif %}
       {% elif reader_nav_kind == "workshop" %}
         {% comment %}

@@ -3,9 +3,8 @@
 Covers the model-level invariants and the reading-order/progress helpers
 that don't require the sync pipeline or an HTTP client:
 
-- Module.clean(): self-parent, depth cap, same-course, mixed content.
-- Unit.clean(): kind='event' requires session_position; module-has
-  -children rejection.
+- Module.clean(): self-parent, arbitrary depth, and same-course.
+- Unit.clean(): kind='event' requires session_position.
 - non_bonus_units()/Course.total_units()/completed_units(): event units
   count, bonus modules/units are excluded from the denominator.
 - Course.get_syllabus() / get_all_units_ordered(): depth-first order.
@@ -29,7 +28,7 @@ User = get_user_model()
 
 
 class ModuleParentValidationTest(TestCase):
-    """Module.clean() invariants (self-parent, depth cap, same-course)."""
+    """Module.clean() invariants (self-parent, arbitrary depth, same-course)."""
 
     @classmethod
     def setUpTestData(cls):
@@ -51,7 +50,7 @@ class ModuleParentValidationTest(TestCase):
         with self.assertRaises(ValidationError):
             module.full_clean()
 
-    def test_three_level_depth_rejected(self):
+    def test_modules_can_nest_beyond_three_levels(self):
         submodule = Module.objects.create(
             course=self.course, title='Sub', slug='sub', sort_order=1,
             parent=self.week,
@@ -61,8 +60,7 @@ class ModuleParentValidationTest(TestCase):
             sort_order=1,
         )
         grandchild.parent = submodule
-        with self.assertRaises(ValidationError):
-            grandchild.full_clean()
+        grandchild.full_clean()
 
     def test_parent_from_different_course_rejected(self):
         module = Module.objects.create(
@@ -156,8 +154,8 @@ class ModuleSlugSiblingScopedUniquenessTest(TestCase):
         self.assertNotEqual(top_level.pk, submodule.pk)
 
 
-class MixedContentValidationTest(TestCase):
-    """A module holds either child modules or direct units, never both."""
+class MixedContentAllowedTest(TestCase):
+    """A module can contain ordered direct units and child modules."""
 
     @classmethod
     def setUpTestData(cls):
@@ -165,7 +163,7 @@ class MixedContentValidationTest(TestCase):
             title='Course', slug='mixed-course', status='published',
         )
 
-    def test_unit_rejected_under_module_with_children(self):
+    def test_unit_is_allowed_under_module_with_children(self):
         parent = Module.objects.create(
             course=self.course, title='Week', slug='week', sort_order=1,
         )
@@ -174,11 +172,11 @@ class MixedContentValidationTest(TestCase):
             parent=parent,
         )
         unit = Unit(module=parent, title='Stray', slug='stray', sort_order=1)
-        with self.assertRaises(ValidationError) as ctx:
-            unit.full_clean()
-        self.assertIn('Week', str(ctx.exception))
+        unit.full_clean()
+        unit.save()
+        self.assertTrue(parent.units.filter(pk=unit.pk).exists())
 
-    def test_child_module_rejected_under_module_with_units(self):
+    def test_child_module_is_allowed_under_module_with_units(self):
         parent = Module.objects.create(
             course=self.course, title='Leaf', slug='leaf', sort_order=1,
         )
@@ -189,9 +187,9 @@ class MixedContentValidationTest(TestCase):
             course=self.course, title='New sub', slug='new-sub',
             sort_order=1, parent=parent,
         )
-        with self.assertRaises(ValidationError) as ctx:
-            child.full_clean()
-        self.assertIn('Leaf', str(ctx.exception))
+        child.full_clean()
+        child.save()
+        self.assertTrue(parent.children.filter(pk=child.pk).exists())
 
 
 class UnitKindValidationTest(TestCase):
@@ -230,8 +228,7 @@ class UnitKindValidationTest(TestCase):
 
 
 class ThreeLevelFixtureMixin:
-    """A three-level course: Week 1 -> {Foundations, Bonus topic} -> units,
-    plus a two-level Week 2 with a lesson and an event unit."""
+    """A mixed, arbitrarily nested course with a second root module."""
 
     @classmethod
     def setUpTestData(cls):
@@ -249,7 +246,11 @@ class ThreeLevelFixtureMixin:
         )
         cls.bonus_sub = Module.objects.create(
             course=cls.course, title='Bonus topic', slug='bonus-topic',
-            sort_order=2, parent=cls.week1, is_bonus=True,
+            sort_order=3, parent=cls.week1, is_bonus=True,
+        )
+        cls.advanced = Module.objects.create(
+            course=cls.course, title='Advanced', slug='advanced',
+            sort_order=3, parent=cls.foundations,
         )
         cls.u_intro = Unit.objects.create(
             module=cls.foundations, title='Intro', slug='intro', sort_order=1,
@@ -260,6 +261,13 @@ class ThreeLevelFixtureMixin:
         )
         cls.u_extra = Unit.objects.create(
             module=cls.bonus_sub, title='Extra', slug='extra', sort_order=1,
+        )
+        cls.u_week_intro = Unit.objects.create(
+            module=cls.week1, title='Week note', slug='week-note', sort_order=2,
+        )
+        cls.u_advanced = Unit.objects.create(
+            module=cls.advanced, title='Advanced lesson', slug='advanced-lesson',
+            sort_order=1,
         )
         cls.week2 = Module.objects.create(
             course=cls.course, title='Week 2', slug='week-2', sort_order=2,
@@ -279,10 +287,9 @@ class ProgressDenominatorTest(ThreeLevelFixtureMixin, TestCase):
     """total_units()/completed_units() include events, exclude bonus."""
 
     def test_total_units_excludes_bonus_module_and_bonus_unit(self):
-        # Units: intro, deep-dive(bonus), extra(under bonus module),
-        # solo-lesson, live-qa(event). Non-bonus: intro, solo-lesson,
-        # live-qa = 3.
-        self.assertEqual(self.course.total_units(), 3)
+        # Bonus unit/module content is excluded; mixed required siblings and
+        # the nested Advanced unit remain in the denominator.
+        self.assertEqual(self.course.total_units(), 5)
 
     def test_non_bonus_units_filter_excludes_bonus_event_unit(self):
         bonus_event = Unit.objects.create(
@@ -295,9 +302,12 @@ class ProgressDenominatorTest(ThreeLevelFixtureMixin, TestCase):
     def test_completing_all_required_units_reaches_full_progress(self):
         user = User.objects.create_user(email='learner@test.com', password='pw')
         now = timezone.now()
-        for unit in (self.u_intro, self.u_solo, self.u_event):
+        for unit in (
+            self.u_intro, self.u_advanced, self.u_week_intro,
+            self.u_solo, self.u_event,
+        ):
             UserCourseProgress.objects.create(user=user, unit=unit, completed_at=now)
-        self.assertEqual(self.course.completed_units(user), 3)
+        self.assertEqual(self.course.completed_units(user), 5)
         self.assertEqual(self.course.completed_units(user), self.course.total_units())
 
     def test_completing_only_bonus_units_does_not_count(self):
@@ -309,32 +319,31 @@ class ProgressDenominatorTest(ThreeLevelFixtureMixin, TestCase):
 
 
 class ReadingOrderTest(ThreeLevelFixtureMixin, TestCase):
-    """Depth-first order: top-level modules, leaf units or child units."""
+    """Reading order follows every authored unit/module sibling sequence."""
 
     def test_get_all_units_ordered_is_depth_first(self):
         ordered = get_all_units_ordered(self.course)
         self.assertEqual(
             [u.pk for u in ordered],
             [
-                self.u_intro.pk, self.u_deep_dive.pk, self.u_extra.pk,
-                self.u_solo.pk, self.u_event.pk,
+                self.u_intro.pk, self.u_deep_dive.pk, self.u_advanced.pk,
+                self.u_week_intro.pk, self.u_extra.pk, self.u_solo.pk,
+                self.u_event.pk,
             ],
         )
 
     def test_next_prev_cross_submodule_boundary(self):
-        # Last unit of Foundations submodule -> first unit of the Bonus
-        # topic submodule (both children of Week 1).
-        self.assertEqual(get_next_unit(self.course, self.u_deep_dive), self.u_extra)
-        self.assertEqual(get_prev_unit(self.course, self.u_extra), self.u_deep_dive)
+        # The shared projection descends through a true nested group before
+        # returning to a direct unit under the week.
+        self.assertEqual(get_next_unit(self.course, self.u_deep_dive), self.u_advanced)
+        self.assertEqual(get_prev_unit(self.course, self.u_week_intro), self.u_advanced)
 
-    def test_bonus_lesson_follows_required_lesson_even_when_its_sort_order_is_earlier(self):
-        later_required = Unit.objects.create(
-            module=self.foundations, title='Visual summary', slug='visual-summary',
-            sort_order=3,
-        )
-        self.assertEqual(get_next_unit(self.course, self.u_intro), later_required)
-        self.assertEqual(get_next_unit(self.course, later_required), self.u_deep_dive)
-        self.assertEqual(get_prev_unit(self.course, self.u_deep_dive), later_required)
+    def test_bonus_sibling_is_not_moved_behind_required_content(self):
+        self.u_deep_dive.sort_order = 0
+        self.u_deep_dive.save(update_fields=['sort_order'])
+        ordered = get_all_units_ordered(self.course)
+        self.assertEqual(ordered[0], self.u_deep_dive)
+        self.assertEqual(get_next_unit(self.course, self.u_deep_dive), self.u_intro)
 
     def test_next_crosses_top_level_module_boundary(self):
         self.assertEqual(get_next_unit(self.course, self.u_extra), self.u_solo)

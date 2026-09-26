@@ -73,13 +73,9 @@ class CourseProjectAttemptViewsTest(TestCase):
             module=cls.topic, title='Project overview', slug='project-overview',
             sort_order=1,
         )
-        cls.homework = Module.objects.create(
-            course=cls.course, parent=cls.module, title='Homework',
-            slug='homework', sort_order=2,
-        )
-        Unit.objects.create(
-            module=cls.homework, title='Plan your project', slug='plan-your-project',
-            sort_order=1, kind='homework',
+        cls.homework = Unit.objects.create(
+            module=cls.module, title='Plan your project', slug='homework',
+            sort_order=2, kind='homework',
         )
         today = timezone.localdate()
         cls.cohort = Cohort.objects.create(
@@ -144,7 +140,8 @@ class CourseProjectAttemptViewsTest(TestCase):
         )
         self.assertContains(response, 'Capstone Overview')
         self.assertContains(response, 'data-testid="module-submodule-link"', count=1)
-        self.assertNotContains(response, 'data-testid="module-lesson-list"')
+        self.assertContains(response, 'data-testid="module-lesson-link"')
+        self.assertContains(response, 'Plan your project')
 
     def test_submissions_are_isolated_per_attempt(self):
         for slug in ('first', 'second'):

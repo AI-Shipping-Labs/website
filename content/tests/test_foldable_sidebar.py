@@ -120,7 +120,7 @@ class FoldableSidebarMarkupTest(TierSetupMixin, TestCase):
     def test_course_unit_list_uses_module_section_gap(self):
         """Both reader types use the shared navigation-list rhythm."""
         response = self.client.get(self.url)
-        self.assertContains(response, '<ul class="reader-nav-list mt-1">')
+        self.assertContains(response, '<ul class="reader-nav-list mt-1 ml-3">')
 
         workshop_response = self.client.get(
             self.workshop_page.get_absolute_url(),

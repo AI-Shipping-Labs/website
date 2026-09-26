@@ -21,10 +21,10 @@
         <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
-        {% if module.parent %}
+        {% for ancestor in breadcrumb_modules %}
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-        <a href="{{ module.parent.get_absolute_url }}" class="hover:text-foreground transition-colors truncate" data-testid="module-breadcrumb-parent">{{ module.parent.title }}</a>
-        {% endif %}
+        <a href="{{ ancestor.get_absolute_url }}" class="hover:text-foreground transition-colors truncate" data-testid="module-breadcrumb-parent">{{ ancestor.title }}</a>
+        {% endfor %}
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <span class="text-foreground truncate">{{ module.title }}</span>
       </div>
@@ -35,7 +35,7 @@
             <i data-lucide="book-open" class="h-4 w-4"></i>
             {% if module.parent %}Submodule{% else %}Module{% endif %}
           </span>
-          {% if module.is_bonus and not module.parent.is_bonus %}
+          {% if module.is_bonus and not optional_ancestor %}
           {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
           {% endif %}
         </div>
@@ -48,100 +48,42 @@
       </div>
       {% endif %}
 
-      {% if units and submodules %}
+      {% if has_direct_units and has_child_modules %}
       <section class="mb-12" data-testid="module-content-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">Contents</h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for child in display_children %}
-          {% with inline_units=child|inline_course_units:course.slug %}
-          {% if inline_units %}
-          {% for inline_unit in inline_units %}
-          <a href="{{ inline_unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-lesson-link">
-            <i data-lucide="{{ inline_unit.kind|unit_kind_icon }}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
-            {{ inline_unit.title }}
-          </a>
-          {% endfor %}
-          {% else %}
-          <a href="{{ child.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-submodule-link">
-            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
-            {{ child.title }}
-          </a>
-          {% endif %}
-          {% endwith %}
-          {% endfor %}
+          {% include "content/_module_overview_items.html" with items=items module_optional=module_optional has_access=has_access completed_unit_ids=completed_unit_ids only %}
         </div>
       </section>
-      {% endif %}
-
-      {% if submodules and not units %}
-      {% comment %}
-        Issue #1674: a parent module holds submodules, not units — this
-        section replaces "Lessons" and must never show "This module has
-        no lessons yet.", which is wrong for a parent module.
-      {% endcomment %}
+      {% elif has_child_modules %}
       <section class="mb-12" data-testid="module-submodule-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">
-          Submodules
-          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ submodules|length }}</span>
+          Sections
+          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ items|length }}</span>
         </h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for submodule in submodules %}
-          {% if submodule.syllabus_section %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-syllabus-section">{{ submodule.syllabus_section }}</h3>{% endif %}
-          <a href="{{ submodule.get_absolute_url }}"
-             class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]"
-             data-testid="module-submodule-link">
-            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            <span class="text-sm text-foreground flex-1 py-2">{{ submodule.title }}</span>
-            {% if submodule.is_bonus and not module.is_bonus %}
-            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
-            {% endif %}
-            <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-          </a>
-          {% endfor %}
+          {% include "content/_module_overview_items.html" with items=items module_optional=module_optional has_access=has_access completed_unit_ids=completed_unit_ids only %}
         </div>
       </section>
-      {% elif not submodules %}
-      <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
+      {% else %}
       <section class="mb-12" data-testid="module-lesson-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">
-          Lessons
-          {% if units %}
-          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ units|length }}</span>
+          Contents
+          {% if items %}
+          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ items|length }}</span>
           {% endif %}
         </h2>
-        {% if units %}
+        {% if items %}
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for unit in units %}
-          <div class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]">
-            {% if unit.pk in completed_unit_ids %}
-            <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
-            {% elif unit.is_preview %}
-            <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% elif not has_access %}
-            <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% else %}
-            <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% endif %}
-            <a href="{{ unit.get_absolute_url }}"
-               class="text-sm {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %} hover:text-accent transition-colors flex-1 py-2"
-               data-testid="module-lesson-link">
-              {{ unit.title }}
-            </a>
-            {% if unit.is_bonus and not module.is_bonus and not module.parent.is_bonus %}
-            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
-            {% endif %}
-            {% if unit.is_preview and not has_access %}
-            <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
-            {% endif %}
-          </div>
-          {% endfor %}
+          {% include "content/_module_overview_items.html" with items=items module_optional=module_optional has_access=has_access completed_unit_ids=completed_unit_ids only %}
         </div>
         {% else %}
         <p class="text-sm text-muted-foreground" data-testid="module-no-lessons">
-          This module has no lessons yet.
+          This section has no content yet.
         </p>
         {% endif %}
       </section>
+      {% endif %}
       {% if course_projects %}
       <section class="mb-12" aria-labelledby="module-projects-heading" data-testid="module-project-attempts">
         <h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>
@@ -151,7 +93,6 @@
           {% endfor %}
         </div>
       </section>
-      {% endif %}
       {% endif %}
 
       {% if cta_message %}

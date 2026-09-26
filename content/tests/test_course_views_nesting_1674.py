@@ -95,7 +95,7 @@ class CourseDetailThreeLevelSyllabusTest(ThreeLevelCourseViewMixin, TestCase):
         self.assertNotContains(response, 'data-testid="syllabus-bonus-divider"')
 
 
-class BuildcampSinglePageTopicTest(TestCase):
+class MixedCurriculumSiblingsTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_user(email='inline-reader@example.com', password='pw')
@@ -106,21 +106,13 @@ class BuildcampSinglePageTopicTest(TestCase):
         cls.week = Module.objects.create(
             course=cls.course, title='Foundations', slug='foundations', sort_order=1,
         )
-        cls.session = Module.objects.create(
-            course=cls.course, parent=cls.week, title='Session 1',
-            slug='session', sort_order=1,
-        )
-        Unit.objects.create(
-            module=cls.session, title='Session 1', slug='session',
+        cls.session = Unit.objects.create(
+            module=cls.week, title='Session 1', slug='session',
             sort_order=1, kind='event', session_position=1, is_preview=True,
         )
-        cls.overview = Module.objects.create(
-            course=cls.course, parent=cls.week, title='Week 1 Overview',
-            slug='week-1-overview', sort_order=2,
-        )
-        Unit.objects.create(
-            module=cls.overview, title='Week 1 Overview', slug='week-1-overview',
-            sort_order=1,
+        cls.overview = Unit.objects.create(
+            module=cls.week, title='Week 1 Overview', slug='overview',
+            sort_order=2,
         )
         cls.topic = Module.objects.create(
             course=cls.course, parent=cls.week, title='Foundations Topic',
@@ -131,27 +123,37 @@ class BuildcampSinglePageTopicTest(TestCase):
         )
 
     def test_nested_unit_uses_its_physical_path_without_redirect(self):
-        unit = self.session.units.get()
-        physical_url = '/courses/ai-buildcamp/foundations/session/session'
+        unit = self.session
+        physical_url = '/courses/ai-buildcamp/foundations/session'
 
         self.assertEqual(unit.get_absolute_url(), physical_url)
         response = self.client.get(physical_url)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Session 1')
         self.assertEqual(response.context['unit'].pk, unit.pk)
+
+    def test_removed_nested_path_alias_does_not_redirect(self):
+        response = self.client.get(
+            '/courses/ai-buildcamp/foundations/session/session',
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 404)
 
     def test_syllabus_and_overview_show_single_pages_as_lessons(self):
         syllabus = self.client.get('/courses/ai-buildcamp')
-        self.assertContains(syllabus, 'data-testid="module-submodule-count">1 topic')
+        self.assertContains(
+            syllabus,
+            'data-testid="module-submodule-count">1 topic &middot; 3 lessons',
+        )
         self.assertContains(syllabus, 'Session 1')
         self.assertContains(syllabus, 'Week 1 Overview')
         self.assertContains(syllabus, 'Foundations Topic')
         overview = self.client.get('/courses/ai-buildcamp/foundations')
         self.assertContains(overview, 'data-testid="module-content-list"')
-        self.assertEqual([module.title for module in overview.context['submodules']],
-                         ['Foundations Topic'])
-        self.assertEqual([unit.title for unit in overview.context['units']],
-                         ['Session 1', 'Week 1 Overview'])
+        self.assertEqual(
+            [item.kind for item in overview.context['items']],
+            ['unit', 'unit', 'module'],
+        )
         class ContentLinks(HTMLParser):
             def __init__(self):
                 super().__init__()
@@ -167,27 +169,24 @@ class BuildcampSinglePageTopicTest(TestCase):
         links = ContentLinks()
         links.feed(overview.content.decode())
         self.assertEqual(links.hrefs, [
-            '/courses/ai-buildcamp/foundations/session/session',
-            '/courses/ai-buildcamp/foundations/week-1-overview/week-1-overview',
+            '/courses/ai-buildcamp/foundations/session',
+            '/courses/ai-buildcamp/foundations/overview',
             '/courses/ai-buildcamp/foundations/foundations-topic',
         ])
 
-    def test_api_exposes_inline_units_and_remaining_topic(self):
+    def test_api_exposes_mixed_siblings_in_authored_order(self):
         week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
-        self.assertEqual([unit['title'] for unit in week['units']],
+        self.assertEqual([item['kind'] for item in week['items']],
+                         ['unit', 'unit', 'module'])
+        self.assertEqual([item['unit']['title'] for item in week['items'][:2]],
                          ['Session 1', 'Week 1 Overview'])
         self.assertEqual([module['title'] for module in week['modules']],
                          ['Foundations Topic'])
 
     def test_optional_single_page_topic_remains_visible_as_a_lesson(self):
-        bonus = Module.objects.create(
-            course=self.course, parent=self.week,
-            title='Capstone Presentations', slug='capstone-presentations',
-            sort_order=4, is_bonus=True,
-        )
         unit = Unit.objects.create(
-            module=bonus, title='Capstone Presentations',
-            slug='capstone-presentations', sort_order=1,
+            module=self.week, title='Capstone Presentations',
+            slug='presentations', sort_order=4, is_bonus=True,
         )
 
         syllabus = self.client.get('/courses/ai-buildcamp')
@@ -199,8 +198,8 @@ class BuildcampSinglePageTopicTest(TestCase):
         self.assertEqual(week['units'][-1]['title'], 'Capstone Presentations')
 
     def test_course_scope_reader_shows_inline_current_and_completed_rows(self):
-        session_unit = self.session.units.get()
-        overview_unit = self.overview.units.get()
+        session_unit = self.session
+        overview_unit = self.overview
         UserCourseProgress.objects.create(
             user=self.user, unit=overview_unit, completed_at=timezone.now(),
         )
@@ -434,13 +433,14 @@ class TwoLevelApiBackwardCompatTest(TestCase):
             module=cls.module, title='Lesson 1', slug='lesson-1', sort_order=1,
         )
 
-    def test_leaf_module_has_no_modules_key_populated(self):
+    def test_module_exposes_ordered_items_and_filtered_compatibility_views(self):
         response = self.client.get('/api/courses/flat-api-course')
         data = response.json()
         module_entry = data['syllabus'][0]
         self.assertIsNone(module_entry['parent_id'])
         self.assertFalse(module_entry['is_bonus'])
-        self.assertNotIn('modules', module_entry)
+        self.assertEqual(module_entry['items'][0]['kind'], 'unit')
+        self.assertEqual(module_entry['modules'], [])
         self.assertEqual(len(module_entry['units']), 1)
         self.assertEqual(module_entry['units'][0]['kind'], 'lesson')
 
@@ -474,6 +474,25 @@ class SubmoduleUrlDisambiguationTest(ThreeLevelCourseViewMixin, TestCase):
         self.client.login(email='learner@test.com', password='pw')
         response = self.client.get('/courses/buildcamp-views/week-1/foundations/intro')
         self.assertContains(response, 'Intro', status_code=200)
+
+    def test_arbitrary_nested_path_resolves_module_overview_and_unit(self):
+        advanced = Module.objects.create(
+            course=self.course, parent=self.foundations, title='Advanced',
+            slug='advanced', sort_order=3,
+        )
+        unit = Unit.objects.create(
+            module=advanced, title='Advanced lesson', slug='lesson', sort_order=1,
+        )
+        self.client.force_login(self.user)
+
+        self.assertEqual(advanced.get_absolute_url(),
+                         '/courses/buildcamp-views/week-1/foundations/advanced')
+        overview = self.client.get(advanced.get_absolute_url())
+        self.assertContains(overview, 'Advanced', status_code=200)
+        self.assertContains(overview, 'Advanced lesson')
+        response = self.client.get(unit.get_absolute_url())
+        self.assertContains(response, 'Advanced lesson', status_code=200)
+        self.assertEqual(response.context['unit'].pk, unit.pk)
 
     def test_two_segment_path_no_longer_resolves_a_submodule_directly(self):
         """A submodule's canonical URL now requires the parent segment —

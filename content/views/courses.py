@@ -33,13 +33,6 @@ from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
 from content.services.course_home import build_course_home
-from content.services.course_inline import (
-    inline_homework_capstone_for_parent,
-    inline_homework_unit_for,
-    inline_unit_for,
-    inline_units_and_topics,
-    is_inline_homework_unit,
-)
 from content.services.course_schedule import (
     build_deadline_context,
     schedule_timezone_name,
@@ -192,6 +185,9 @@ def course_detail(request, slug):
         # points the spec names for implicit self-paced cohort membership.
         ensure_self_paced_cohort_enrollment(user, course)
     modules = course.get_syllabus()
+    from content.services.course_tree import get_site_curriculum_tree
+
+    curriculum_tree = get_site_curriculum_tree(course, modules=modules)
 
     # Derived week dates and deliverable deadlines use the same selected
     # schedule cohort. An enrolled learner sees only an owned cohort; a
@@ -231,6 +227,25 @@ def course_detail(request, slug):
             completed_unit_ids.add(unit_id)
             module_id_counts[module_id] += 1
         completed_count_by_module = dict(module_id_counts)
+
+    curriculum_summaries = {}
+
+    def add_curriculum_summaries(module_projection):
+        module = module_projection.module
+        curriculum_summaries[module.pk] = {
+            'topic_count': sum(
+                item.kind == 'module' for item in module_projection.items
+            ),
+            'unit_count': module_projection.descendant_unit_count,
+            'direct_unit_count': module_projection.direct_unit_count,
+            'completed_count': completed_count_by_module.get(module.pk, 0),
+        }
+        for item in module_projection.items:
+            if item.kind == 'module':
+                add_curriculum_summaries(item)
+
+    for module_projection in curriculum_tree:
+        add_curriculum_summaries(module_projection)
 
     gating = build_gating_context(user, course, 'course')
 
@@ -383,10 +398,11 @@ def course_detail(request, slug):
 
     context = {
         'course': course,
-        'modules': modules,
+        'modules': curriculum_tree,
         'has_access': has_access,
         'completed_unit_ids': completed_unit_ids,
         'completed_count_by_module': completed_count_by_module,
+        'curriculum_summaries': curriculum_summaries,
         'cta_message': cta_message,
         'cta_url': cta_url,
         'required_tier_name': (
@@ -593,20 +609,15 @@ def api_course_detail(request, slug):
     user = request.user
 
     has_access = can_access(user, course)
-    modules = course.get_syllabus()
+    from content.services.course_tree import get_site_curriculum_tree
+
+    modules = get_site_curriculum_tree(course)
     total = course.total_units()
     completed = course.completed_units(user)
 
-    # Build syllabus. ``modules`` comes from ``Course.get_syllabus()`` which
-    # prefetches the full tree (top-level modules, their children, and
-    # every leaf module's units) already ordered; iterating
-    # ``module.children.all()``/``module.units.all()`` reads from the
-    # prefetch cache. Adding an extra ``.order_by()`` here would force a
-    # fresh SELECT per module (N+1) — see issue #287.
-    #
-    # AI Buildcamp presents selected one-page child modules as inline units
-    # while preserving their source IDs and canonical unit URLs.
-    syllabus = [_module_json(module, course.slug) for module in modules]
+    # The shared projection carries each source-ordered unit/module item at
+    # every level, including mixed siblings and deeper module groups.
+    syllabus = [_module_json(module) for module in modules]
 
     # Single query: ordered_instructors fetches the full M2M; primary is
     # the first row. Avoids the additional .first() query primary_instructor
@@ -671,12 +682,9 @@ def _unit_json(unit):
     return data
 
 
-def _module_json(module, course_slug):
-    """Issue #1674: shared module JSON shape for the public syllabus API.
-
-    A leaf module carries ``units``. A parent normally carries ``modules``;
-    AI Buildcamp also exposes selected one-page children as inline ``units``.
-    """
+def _module_json(module_projection):
+    """Serialize a recursive shared module projection for the course API."""
+    module = module_projection.module
     data = {
         'id': module.pk,
         'title': module.title,
@@ -685,13 +693,18 @@ def _module_json(module, course_slug):
         'is_bonus': module.is_bonus,
         'syllabus_section': module.syllabus_section,
     }
-    children = list(module.children.all())
-    if children:
-        inline_units, topics = inline_units_and_topics(children, course_slug)
-        data['modules'] = [_module_json(child, course_slug) for child in topics]
-        data['units'] = [_unit_json(unit) for unit in inline_units]
-    else:
-        data['units'] = [_unit_json(unit) for unit in module.units.all()]
+    data['items'] = []
+    data['modules'] = []
+    data['units'] = []
+    for item in module_projection.items:
+        if item.kind == 'module':
+            nested = _module_json(item)
+            data['items'].append({'kind': 'module', 'module': nested})
+            data['modules'].append(nested)
+        else:
+            unit = _unit_json(item.unit)
+            data['items'].append({'kind': 'unit', 'unit': unit})
+            data['units'].append(unit)
     return data
 
 
@@ -711,30 +724,21 @@ def _resolve_top_level_module(course, module_slug):
 
 
 def _render_module_overview(request, course, module):
-    """Module overview page: renders ``Module.overview_html`` + lesson list.
-
-    Issue #222: the module README is now the module overview rather than a
-    sibling Unit. Issue #1674: also used for a submodule's own overview
-    page — a submodule either lists its own units (leaf) or has no
-    ``submodules`` at all (max depth two, so a submodule never has
-    children of its own).
+    """Render a module overview and its immediate source-ordered children.
 
     Access mirrors the course detail page: the page is always reachable for
     SEO; gated content shows the upgrade CTA. Unit links in the lesson
     list are clickable for users with access; the unit detail view itself
     handles the per-lesson gating / teaser.
     """
+    from content.services.course_tree import get_site_curriculum_tree
+
+    tree_node = get_site_curriculum_tree(course, modules=[module])[0]
     if (
         course.reader_navigation_scope in ('module', 'submodule')
         and not CourseProject.objects.filter(module=module).exists()
     ):
-        child_ids = list(module.children.values_list('pk', flat=True))
-        ordered_units = (
-            list(Unit.objects.filter(module_id__in=child_ids).order_by(
-                'module__sort_order', 'module__pk', 'sort_order', 'pk',
-            ))
-            if child_ids else list(module.units.order_by('sort_order', 'pk'))
-        )
+        ordered_units = [projection.unit for projection in tree_node.all_units]
         first_unit = next(
             (unit for unit in ordered_units if unit.kind == 'lesson'),
             ordered_units[0] if ordered_units else None,
@@ -749,14 +753,6 @@ def _render_module_overview(request, course, module):
     user = request.user
 
     has_access = can_access(user, course)
-    # ``Unit.Meta.ordering = ['sort_order']`` already guarantees ordering;
-    # an explicit ``.order_by()`` would be redundant. Issue #287.
-    units = list(module.units.all())
-    # Issue #1674: a parent module holds submodules, not units directly —
-    # ``submodules`` is empty for a leaf module (today's two-level shape).
-    children = list(module.children.order_by('sort_order', 'id').prefetch_related('units'))
-    inline_units, submodules = inline_units_and_topics(children, course.slug)
-    units.extend(inline_units)
     course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
     viewer_cohort, _ = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
@@ -805,10 +801,15 @@ def _render_module_overview(request, course, module):
         completed_unit_ids = set(
             UserCourseProgress.objects.filter(
                 user=user,
-                unit__module=module,
+                unit_id__in=[projection.unit.pk for projection in tree_node.all_units],
                 completed_at__isnull=False,
             ).values_list('unit_id', flat=True)
         )
+
+    from content.services.course_tree import get_module_ancestors
+
+    breadcrumb_modules = get_module_ancestors(module)
+    optional_ancestor = any(parent.is_bonus for parent in breadcrumb_modules)
 
     cta_message = ''
     cta_url = ''
@@ -833,9 +834,13 @@ def _render_module_overview(request, course, module):
     context = {
         'course': course,
         'module': module,
-        'units': units,
-        'submodules': submodules,
-        'display_children': children,
+        'tree_node': tree_node,
+        'items': tree_node.items,
+        'has_direct_units': tree_node.direct_unit_count > 0,
+        'has_child_modules': tree_node.descendant_module_count > 0,
+        'breadcrumb_modules': breadcrumb_modules,
+        'optional_ancestor': optional_ancestor,
+        'module_optional': optional_ancestor or module.is_bonus,
         'course_projects': course_projects,
         'preview_project_ids': preview_project_ids,
         'schedule_timezone': schedule_timezone_name(course, user),
@@ -853,23 +858,8 @@ def _render_module_overview(request, course, module):
     return render(request, 'content/module_overview.html', context)
 
 
-def module_overview(request, course_slug, module_slug):
-    """``/courses/<course_slug>/<module_slug>`` — TOP-LEVEL modules only
-    (issue #1674). Unchanged two-segment shape and behaviour for every
-    existing two-level course; a submodule's own overview page now lives
-    at the three-segment ``course_unit_detail`` route below instead
-    (``/courses/<course>/<parent>/<submodule>``)."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    module = _resolve_top_level_module(course, module_slug)
-    return _render_module_overview(request, course, module)
-
-
 def _render_course_unit_detail(request, course, module, unit, *, route_step=None):
-    """Unit page: gated by tier level, except for preview units.
-
-    Shows video player, lesson text, homework, sidebar navigation,
-    mark-complete toggle, and next-unit button.
-    """
+    """Render a unit after access, cohort, and homework-step resolution."""
     user = request.user
 
     access_decision = course_unit_service.decide_course_unit_access(user, unit)
@@ -877,6 +867,9 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
         context = course_unit_service.build_gated_course_unit_context(
             user, course, module, unit, access_decision,
         )
+        from content.services.course_tree import get_module_ancestors
+
+        context['module_breadcrumbs'] = get_module_ancestors(module)
         return render(
             request,
             'content/course_unit_detail.html',
@@ -884,11 +877,6 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
             status=access_decision.status_code,
         )
 
-    # Issue #1674: "first interacts with a unit" is one of the two points
-    # the spec names for implicit self-paced cohort membership (the other
-    # is course_detail below, "first gains course access"). Idempotent —
-    # a no-op once a self-paced CohortEnrollment already exists, and a
-    # no-op for courses with no mode='self_paced' Cohort at all.
     ensure_self_paced_cohort_enrollment(user, course)
 
     selected_cohort, selected_is_preview = select_display_cohort(
@@ -915,17 +903,11 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     use_homework_steps = bool(
         homework and homework.stepper_enabled and homework.questions.exists()
     )
-    # A learner may still submit a previously opened all-in-one form after
-    # source content enables the stepper. Keep that POST on the legacy path.
     if request.method == 'POST' and (
         not use_homework_steps or not request.POST.get('draft_token')
     ):
         return _handle_homework_submission_post(request, unit, cohort=owned_cohort)
 
-    # Record a `lesson_open` activity row for the CRM timeline (issue #853),
-    # only for authenticated users who have access (this branch). Deduped:
-    # re-opening the same unit within 30 minutes does not create a new row.
-    # Defensive — never raises into the page render.
     from analytics.activity import record_lesson_open
     record_lesson_open(user, unit=unit)
 
@@ -933,8 +915,7 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
         user, course, module, unit, request=request,
     )
     context['reader_cohort_param'] = request.GET.get('cohort', '')
-    if context['reader_cohort_param'] and context['scoped_module']:
-        from urllib.parse import urlencode
+    if context['reader_cohort_param']:
         query = '?' + urlencode({'cohort': context['reader_cohort_param']})
         for key in ('prev_item_url', 'next_item_url'):
             if context[key]:
@@ -972,59 +953,6 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     return render(request, 'content/course_unit_detail.html', context)
 
 
-def course_unit_detail(request, course_slug, module_slug, unit_slug):
-    """``/courses/<course_slug>/<module_slug>/<unit_slug>`` — dispatches
-    between a leaf module's unit page (unchanged, every existing
-    two-level course) and a parent module's SUBMODULE overview page
-    (issue #1674's new shape,
-    ``/courses/<course>/<parent>/<submodule>``).
-
-    Deterministic, not a fallback guess: ``Module.clean()`` forbids mixed
-    content, so a top-level module holds EITHER child submodules OR
-    direct units, never both. If ``module_slug`` names a top-level module
-    WITH children, ``unit_slug`` can only be one of its submodule slugs
-    (that module has no direct units to be a unit's parent). If it has
-    NO children, ``unit_slug`` can only be a unit slug under it — exactly
-    today's two-level behaviour, byte-for-byte unchanged.
-    """
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    top_module = _resolve_top_level_module(course, module_slug)
-
-    if top_module.children.exists():
-        direct_unit = Unit.objects.filter(
-            module=top_module, slug=unit_slug,
-        ).first()
-        submodule = Module.objects.select_related('parent').filter(
-            course=course, parent=top_module, slug=unit_slug,
-        ).first()
-        if direct_unit is not None and submodule is not None:
-            raise Http404
-        if direct_unit is not None:
-            return _render_course_unit_detail(
-                request, course, top_module, direct_unit,
-            )
-        if submodule is None:
-            raise Http404
-        return _render_module_overview(request, course, submodule)
-
-    unit = get_object_or_404(Unit, module=top_module, slug=unit_slug)
-    return _render_course_unit_detail(request, course, top_module, unit)
-
-
-def _unit_for_course_unit_path(course, module_slug, unit_slug):
-    """Resolve the unit displayed by a three-slug course path, if any."""
-    top_module = _resolve_top_level_module(course, module_slug)
-    unit = Unit.objects.filter(module=top_module, slug=unit_slug).first()
-    submodule = Module.objects.filter(
-        course=course, parent=top_module, slug=unit_slug,
-    ).exists()
-    # The shared source validator enforces one slug namespace across mixed
-    # direct units and child modules. Fail closed for ambiguous legacy rows.
-    if unit is not None and submodule:
-        return None
-    return (top_module, unit) if unit is not None else None
-
-
 def _is_valid_homework_route_step(request, course, unit, route_step):
     """Check a path step against the viewer's resolved cohort assignment."""
     selected_cohort, selected_is_preview = select_display_cohort(
@@ -1042,65 +970,49 @@ def _is_valid_homework_route_step(request, course, unit, route_step):
     return route_step in {'intro', 'review'} or route_step in question_keys
 
 
-def course_homework_step_or_submodule_unit(
-    request, course_slug, module_slug, unit_slug, homework_step,
-):
-    """Serve a canonical three-slug unit step, preserving four-slug units.
+def course_curriculum_path(request, course_slug, curriculum_path):
+    """Resolve a canonical course path by walking the physical module tree.
 
-    ``/courses/<course>/<module>/<unit>/<step>`` overlaps the existing
-    submodule-unit route. Resolve it as a homework step only when the
-    three-slug prefix names a stepper homework and the final slug is a
-    valid step; otherwise dispatch to the existing four-slug route.
+    Every path segment follows one repository node: intermediate segments are
+    modules, and the final segment is either a module overview or a unit. A
+    final extra segment is accepted only for a valid homework step.
     """
     course = get_object_or_404(Course, slug=course_slug, status='published')
-    try:
-        target = _unit_for_course_unit_path(course, module_slug, unit_slug)
-    except Http404:
-        target = None
-    if target:
-        module, unit = target
-        if _is_valid_homework_route_step(request, course, unit, homework_step):
-            return _render_course_unit_detail(
-                request, course, module, unit, route_step=homework_step,
-            )
-    return course_submodule_unit_detail(
-        request, course_slug, module_slug, unit_slug, homework_step,
-    )
-
-
-def course_submodule_unit_detail(
-    request, course_slug, parent_slug, module_slug, unit_slug,
-):
-    """``/courses/<course>/<parent>/<submodule>/<unit>`` (issue #1674):
-    a unit's page when its module is a submodule. Entirely new URL
-    territory — a two-level course never produces a four-segment path,
-    so this never collides with any existing URL."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    parent_module = _resolve_top_level_module(course, parent_slug)
-    submodule = get_object_or_404(
-        Module.objects.select_related('parent'), course=course,
-        parent=parent_module, slug=module_slug,
-    )
-    unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
-    return _render_course_unit_detail(request, course, submodule, unit)
-
-
-def course_submodule_homework_step_detail(
-    request, course_slug, parent_slug, module_slug, unit_slug, homework_step,
-):
-    """Serve a canonical step URL for a unit inside a submodule."""
-    course = get_object_or_404(Course, slug=course_slug, status='published')
-    parent_module = _resolve_top_level_module(course, parent_slug)
-    submodule = get_object_or_404(
-        Module.objects.select_related('parent'), course=course,
-        parent=parent_module, slug=module_slug,
-    )
-    unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
-    if not _is_valid_homework_route_step(request, course, unit, homework_step):
+    parts = curriculum_path.split('/')
+    if not parts or any(not part for part in parts):
         raise Http404
-    return _render_course_unit_detail(
-        request, course, submodule, unit, route_step=homework_step,
-    )
+
+    module = _resolve_top_level_module(course, parts[0])
+    index = 1
+    while index < len(parts):
+        slug = parts[index]
+        child_module = Module.objects.filter(
+            course=course, parent=module, slug=slug,
+        ).first()
+        unit = Unit.objects.filter(module=module, slug=slug).first()
+        if child_module is not None and unit is not None:
+            raise Http404
+
+        if index == len(parts) - 1:
+            if child_module is not None:
+                return _render_module_overview(request, course, child_module)
+            if unit is not None:
+                return _render_course_unit_detail(request, course, module, unit)
+            raise Http404
+
+        if unit is not None and index == len(parts) - 2:
+            route_step = parts[index + 1]
+            if _is_valid_homework_route_step(request, course, unit, route_step):
+                return _render_course_unit_detail(
+                    request, course, module, unit, route_step=route_step,
+                )
+
+        if child_module is None or unit is not None:
+            raise Http404
+        module = child_module
+        index += 1
+
+    return _render_module_overview(request, course, module)
 
 
 def _handle_homework_submission_post(request, unit, *, cohort=None):

@@ -2,15 +2,8 @@
 {% load curriculum_tags %}
 {% load schedule_tags %}
 {% load member_badges %}
-{% comment %}
-  A top-level module is a course section; a nested module is a topic. Keep this
-  specialized recursive disclosure because the shared section accordion
-  cannot render distinct week/topic summaries or nested unit lists.
-{% endcomment %}
-{% with children=module.children.all %}
-{% with topic_children=children|topic_course_modules:course_slug %}
 {% firstof module.is_bonus parent_optional as optional_here %}
-<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
+<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if tree_node.descendant_module_count %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
   <summary class="cursor-pointer list-none grid min-h-[44px] w-full items-center {% if counter %}grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if not counter %}<i data-lucide="chevron-right" class="topic-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
     <span class="min-w-0 {% if counter %}col-start-1{% else %}col-start-2{% endif %}">
@@ -18,15 +11,10 @@
       {% if counter %}
       <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-muted-foreground" data-testid="syllabus-module-meta">
         {% if module_week_range %}<span data-testid="syllabus-module-week-range">{{ module_week_range }}</span>{% endif %}
-        {% if children %}
-        {% with leaf_total=children|leaf_unit_count %}
-        <span data-testid="module-submodule-count">{{ topic_children|length }} topic{{ topic_children|length|pluralize }}{% if leaf_total %} &middot; {{ leaf_total }} lesson{{ leaf_total|pluralize }}{% endif %}</span>
+        {% with module_summary=curriculum_summaries|dict_get:module.id %}
+        {% if module_summary.topic_count %}<span data-testid="module-submodule-count">{{ module_summary.topic_count }} topic{{ module_summary.topic_count|pluralize }} &middot; {{ module_summary.unit_count }} lesson{{ module_summary.unit_count|pluralize }}</span>
+        {% elif module_summary.direct_unit_count %}<span data-testid="module-lesson-count">{% if module_summary.completed_count %}{{ module_summary.completed_count }}/{{ module_summary.direct_unit_count }}{% else %}{{ module_summary.direct_unit_count }}{% endif %} lesson{{ module_summary.direct_unit_count|pluralize }}</span>{% endif %}
         {% endwith %}
-        {% else %}
-        {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
-        {% if module_total %}<span data-testid="module-lesson-count">{% if module_completed %}{{ module_completed }}/{{ module_total }}{% else %}{{ module_total }}{% endif %} lesson{{ module_total|pluralize }}</span>{% endif %}
-        {% endwith %}
-        {% endif %}
       </span>
       {% endif %}
       {% with deadline_summary=module_deadline_summaries|dict_get:module.id %}
@@ -34,64 +22,25 @@
       {% endwith %}
     </span>
     <span class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">
-    {% if module.is_bonus and not parent_optional and not counter %}{% member_label_badge "Optional" tone="accent" size="xs" testid="syllabus-optional-badge" %}{% endif %}
-    {% if not children and not counter %}
-    {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
-    {% if module_total %}<span class="flex-shrink-0 text-xs text-muted-foreground" data-testid="module-lesson-count">{% if module_completed %}{{ module_completed }}/{{ module_total }}{% else %}{{ module_total }}{% endif %} lesson{{ module_total|pluralize }}</span>{% endif %}
-    {% endwith %}
-    {% endif %}
-    {% if counter %}<i data-lucide="chevron-down" class="module-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
+      {% if module.is_bonus and not parent_optional and not counter %}{% member_label_badge "Optional" tone="accent" size="xs" testid="syllabus-optional-badge" %}{% endif %}
+      {% if counter %}<i data-lucide="chevron-down" class="module-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
     </span>
   </summary>
-  <div class="pb-1{% if counter %} border-t border-border/60 px-1{% elif children %} border-t border-border/60 pl-6 pr-1{% else %} pl-6 pr-1{% endif %}"{% if counter %} data-testid="syllabus-module-content"{% endif %}>
-    {% if children %}
-      {% for child in children|required_only %}
-      {% with inline_units=child|inline_course_units:course_slug %}
-      {% if inline_units %}
-      {% for inline_unit in inline_units %}
-      {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
-      {% endfor %}
+  <div class="pb-1{% if counter %} border-t border-border/60 px-1{% else %} border-t border-border/60 pl-6 pr-1{% endif %}"{% if counter %} data-testid="syllabus-module-content"{% endif %}>
+    {% for item in tree_node.items %}
+      {% if item.kind == 'unit' %}
+        {% include "content/_syllabus_unit_row.html" with unit=item.unit parent_optional=optional_here completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+        {% if item.module.syllabus_section %}<h3 class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="syllabus-module-section">{{ item.module.syllabus_section }}</h3>{% endif %}
+        {% include "content/_syllabus_module.html" with tree_node=item module=item.module parent_optional=optional_here course_slug=course_slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module curriculum_summaries=curriculum_summaries has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endif %}
-      {% endwith %}
-      {% endfor %}
-      {% with bonus_children=children|bonus_only %}
-      {% if bonus_children %}
-      {% for child in bonus_children %}
-      {% if child.syllabus_section %}<h3 class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="syllabus-module-section">{{ child.syllabus_section }}</h3>{% endif %}
-      {% with inline_units=child|inline_course_units:course_slug %}
-      {% if inline_units %}
-      {% for inline_unit in inline_units %}
-      {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
-      {% endfor %}
-      {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
-      {% endif %}
-      {% endwith %}
-      {% endfor %}
-      {% endif %}
-      {% endwith %}
-    {% else %}
-      {% for unit in module.units.all|required_only %}
-      {% include "content/_syllabus_unit_row.html" with unit=unit parent_optional=optional_here completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
-      {% endfor %}
-      {% with bonus_units=module.units.all|bonus_only %}
-      {% if bonus_units %}
-      {% for unit in bonus_units %}
-      {% include "content/_syllabus_unit_row.html" with unit=unit parent_optional=optional_here completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
-      {% endfor %}
-      {% endif %}
-      {% endwith %}
-    {% endif %}
+    {% endfor %}
     {% with module_projects=projects_by_module|dict_get:module.id %}
     {% if module_projects %}
-    {% for project in module_projects %}
-    {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
-    {% endfor %}
+      {% for project in module_projects %}
+        {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
+      {% endfor %}
     {% endif %}
     {% endwith %}
   </div>
 </details>
-{% endwith %}
-{% endwith %}

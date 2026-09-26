@@ -62,7 +62,7 @@ Notes
 - `<span>` text uses `truncate` so long titles do not wrap and break
   the row rhythm.
 {% endcomment %}
-<a href="{{ href }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
+<a href="{{ href }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
    class="reader-list-row group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_current %}bg-accent/10 text-accent font-medium{% else %}text-foreground hover:bg-muted/50{% endif %}{% if extra_anchor_class %} {{ extra_anchor_class }}{% endif %}"
    {% if testid %}data-testid="{{ testid }}"{% endif %}
    {% if extra_attrs %}{{ extra_attrs|safe }}{% endif %}>

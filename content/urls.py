@@ -17,13 +17,9 @@ from content.views.courses import (
     api_courses_list,
     course_detail,
     course_home,
-    course_homework_step_or_submodule_unit,
-    course_submodule_homework_step_detail,
-    course_submodule_unit_detail,
-    course_unit_detail,
+    course_curriculum_path,
     courses_list,
     enroll_course,
-    module_overview,
     unenroll_course,
 )
 from content.views.faq import faq
@@ -183,35 +179,6 @@ urlpatterns = [
     path('courses/<slug:slug>/submit', project_submit, name='project_submit'),
     path('courses/<slug:slug>/reviews', review_dashboard, name='peer_review_dashboard'),
     path('courses/<slug:slug>/reviews/<int:submission_id>', review_form, name='peer_review_form'),
-    # Module overview page (issue #222) — must come before the catch-all unit URL.
-    # No trailing slash: RemoveTrailingSlashMiddleware would redirect away from it.
-    path('courses/<slug:course_slug>/<slug:module_slug>', module_overview, name='module_overview'),
-    # Canonical homework step paths append the step key to the unit URL.
-    # The four-segment route overlaps submodule-unit URLs, so its view first
-    # checks for a valid homework step and otherwise preserves that route.
-    path(
-        'courses/<slug:course_slug>/<slug:parent_slug>/<slug:module_slug>/<slug:unit_slug>/<slug:homework_step>',
-        course_submodule_homework_step_detail,
-        name='course_submodule_homework_step',
-    ),
-    path(
-        'courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>/<slug:homework_step>',
-        course_homework_step_or_submodule_unit,
-        name='course_homework_step',
-    ),
-    # Course unit detail (three slug segments - must be after more specific
-    # patterns). Issue #1674: also resolves a submodule's own overview page
-    # (/courses/<course>/<parent>/<submodule>) — see course_unit_detail's
-    # docstring for the deterministic dispatch, unchanged for every
-    # existing two-level course.
-    path('courses/<slug:course_slug>/<slug:module_slug>/<slug:unit_slug>', course_unit_detail, name='course_unit_detail'),
-    # Issue #1674: a unit inside a submodule — new four-segment territory,
-    # never produced by a two-level course, so it cannot collide with the
-    # pattern above.
-    path(
-        'courses/<slug:course_slug>/<slug:parent_slug>/<slug:module_slug>/<slug:unit_slug>',
-        course_submodule_unit_detail, name='course_submodule_unit_detail',
-    ),
     # Certificates
     path('certificates/<uuid:certificate_id>', certificate_page, name='certificate_page'),
     # API endpoints
@@ -238,4 +205,12 @@ urlpatterns = [
     path('api/courses/<slug:slug>/submit', api_submit_project, name='api_submit_project'),
     path('api/courses/<slug:slug>/reviews', api_review_dashboard, name='api_review_dashboard'),
     path('api/courses/<slug:slug>/reviews/<int:submission_id>', api_submit_review, name='api_submit_review'),
+    # Course reader URLs follow the physical curriculum tree at any depth.
+    # Keep this after every static course/API route so it only receives
+    # syllabus module, unit, and homework-step paths.
+    path(
+        'courses/<slug:course_slug>/<path:curriculum_path>',
+        course_curriculum_path,
+        name='course_curriculum_path',
+    ),
 ]

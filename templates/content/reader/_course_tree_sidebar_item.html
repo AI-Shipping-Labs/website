@@ -1,0 +1,33 @@
+{% load curriculum_tags %}
+{% if tree_item.kind == 'unit' %}
+  {% with nav_unit=tree_item.unit %}
+  <li>
+    {% if homework_stepper and nav_unit.pk == unit.pk %}
+      {% include "content/reader/_homework_sidebar_unit.html" with unit=nav_unit root_optional=root_optional ancestor_optional=ancestor_optional reader_cohort_param=reader_cohort_param %}
+    {% elif nav_unit.pk == unit.pk %}
+      {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' reader_cohort_param=reader_cohort_param root_optional=root_optional ancestor_optional=ancestor_optional optional_badge=nav_unit.is_bonus assignment_state=homework_state %}
+    {% elif nav_unit.pk in completed_unit_ids %}
+      {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" reader_cohort_param=reader_cohort_param root_optional=root_optional ancestor_optional=ancestor_optional optional_badge=nav_unit.is_bonus %}
+    {% else %}
+      {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" reader_cohort_param=reader_cohort_param root_optional=root_optional ancestor_optional=ancestor_optional optional_badge=nav_unit.is_bonus %}
+    {% endif %}
+  </li>
+  {% endwith %}
+{% else %}
+  {% if tree_item.module.syllabus_section %}<li class="list-none px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-syllabus-section">{{ tree_item.module.syllabus_section }}</li>{% endif %}
+  <li>
+    {% firstof tree_item.module.is_bonus ancestor_optional as child_ancestor_optional %}
+    <details class="sidebar-module {% if not forloop.first %}mt-1{% endif %}" data-reader-submodule {% if tree_item.module.pk in open_module_ids %}open{% endif %}>
+      <summary class="cursor-pointer list-none flex min-h-[44px] items-center gap-2 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors">
+        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0 text-muted-foreground transition-transform duration-150 sidebar-chevron"></i>
+        <span class="min-w-0 flex-1 break-words text-sm font-medium text-foreground">{{ tree_item.module.title }}</span>
+        {% if tree_item.module.is_bonus and not root_optional and not ancestor_optional %}<span class="flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}
+      </summary>
+      <ul class="reader-nav-list mt-1 ml-3">
+        {% for child_item in tree_item.items %}
+      {% include "content/reader/_course_tree_sidebar_item.html" with tree_item=child_item unit=unit homework_stepper=homework_stepper stepper=stepper homework_state=homework_state completed_unit_ids=completed_unit_ids open_module_ids=open_module_ids reader_cohort_param=reader_cohort_param root_optional=root_optional ancestor_optional=child_ancestor_optional only %}
+        {% endfor %}
+      </ul>
+    </details>
+  </li>
+{% endif %}

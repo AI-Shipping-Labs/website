@@ -347,19 +347,43 @@ def build_drip_locked_course_unit_context(course, module, unit, decision):
 
 def build_course_unit_navigation_context(user, course, module, unit, *, request=None):
     """Build navigation, completion, discussion, and mobile progress context."""
-    modules = course.get_syllabus()
+    from content.services.course_tree import (
+        get_module_ancestors,
+        get_site_curriculum_tree,
+    )
+
+    curriculum_tree = get_site_curriculum_tree(course)
+    modules = [node.module for node in curriculum_tree]
     scoped_module = None
+    scoped_module_tree = None
     previous_module = None
     next_module = None
-    if course.reader_navigation_scope in ('module', 'submodule'):
-        current_root_id = module.parent_id or module.pk
-        for index, top_module in enumerate(modules):
-            if top_module.pk == current_root_id:
-                scoped_module = top_module
-                previous_module = modules[index - 1] if index else None
-                next_module = modules[index + 1] if index + 1 < len(modules) else None
-                break
-                break
+    open_module_ids = set()
+
+    def find_current_path(items, module_ids=()):
+        for item in items:
+            if item.kind == 'unit':
+                if item.unit.pk == unit.pk:
+                    return module_ids
+            else:
+                found = find_current_path(
+                    item.items, (*module_ids, item.module.pk),
+                )
+                if found is not None:
+                    return found
+        return None
+
+    for index, root in enumerate(curriculum_tree):
+        current_path = find_current_path(root.items, (root.module.pk,))
+        if current_path is None:
+            continue
+        open_module_ids.update(current_path)
+        if course.reader_navigation_scope in ('module', 'submodule'):
+            scoped_module = root.module
+            scoped_module_tree = root
+            previous_module = modules[index - 1] if index else None
+            next_module = modules[index + 1] if index + 1 < len(modules) else None
+        break
 
     completed_unit_ids = set()
     is_completed = False
@@ -415,8 +439,12 @@ def build_course_unit_navigation_context(user, course, module, unit, *, request=
         'course': course,
         'module': module,
         'unit': unit,
+        'module_breadcrumbs': get_module_ancestors(module),
         'modules': modules,
+        'curriculum_tree': curriculum_tree,
         'scoped_module': scoped_module,
+        'scoped_module_tree': scoped_module_tree,
+        'open_module_ids': open_module_ids,
         'previous_module': previous_module,
         'next_module': next_module,
         'is_gated': False,
@@ -447,38 +475,18 @@ def build_course_unit_navigation_context(user, course, module, unit, *, request=
 
 
 def get_all_units_ordered(course):
-    """Return all units in course reading order (issue #1674).
+    """Return units in the community-base projection's authored tree order.
 
-    Depth-first, per the documented contract: top-level modules in
-    ``(sort_order, id)`` order; a leaf module yields its own units with
-    required lessons before bonus lessons; a parent module yields required
-    child submodules before bonus submodules. Mixed content
-    (direct units alongside children) is forbidden by ``Module.clean()``,
-    so there is no interleaving case. This follows the syllabus grouping,
-    which also places bonus content after required content at each level.
-    ``kind`` does not affect reading order.
-
-    This is the single ordering helper both ``get_next_unit``/
-    ``get_prev_unit`` and the progress-percentage/``reader_progress_*``
-    computation call — no second implementation of ordering anywhere.
-    Reuses ``Course.get_syllabus()``'s prefetch: four queries total, one
-    per tree level, not one per module.
+    Bonus flags affect access and labels. Sibling sequence comes from the
+    repository's shared ordered ``items`` union at every level.
     """
-    def syllabus_order(items):
-        items = list(items)
-        return [item for item in items if not item.is_bonus] + [
-            item for item in items if item.is_bonus
-        ]
+    from content.services.course_tree import get_site_curriculum_tree
 
-    units = []
-    for module in course.get_syllabus():
-        children = syllabus_order(module.children.all())
-        if children:
-            for child in children:
-                units.extend(syllabus_order(child.units.all()))
-        else:
-            units.extend(syllabus_order(module.units.all()))
-    return units
+    return [
+        unit_projection.unit
+        for module_projection in get_site_curriculum_tree(course)
+        for unit_projection in module_projection.all_units
+    ]
 
 
 def get_next_unit(course, current_unit):

@@ -11,6 +11,7 @@ fields on CourseExtension and historical URL shapes
 from __future__ import annotations
 
 import hashlib
+import posixpath
 import uuid
 
 from community_base.curriculum.models import Course, Module, Unit
@@ -641,9 +642,15 @@ def _install_managers() -> None:
 
 def _install_module_unit_methods() -> None:
     def module_url(self):
-        if self.parent_id is None:
-            return f'/courses/{self.course.slug}/{self.slug}'
-        return f'/courses/{self.course.slug}/{self.parent.slug}/{self.slug}'
+        cached_path = getattr(self, '_curriculum_path', None)
+        if cached_path:
+            return cached_path
+        slugs = [self.slug]
+        parent = self.parent if self.parent_id else None
+        while parent is not None:
+            slugs.append(parent.slug)
+            parent = parent.parent if parent.parent_id else None
+        return f'/courses/{self.course.slug}/' + '/'.join(reversed(slugs))
 
     def module_is_leaf(self):
         if self.pk is None:
@@ -651,14 +658,10 @@ def _install_module_unit_methods() -> None:
         return not self.children.exists()
 
     def unit_url(self):
-        course = self.module.course
-        if self.module.parent_id is None:
-            return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
-
-        return (
-            f'/courses/{course.slug}/{self.module.parent.slug}/'
-            f'{self.module.slug}/{self.slug}'
-        )
+        cached_path = getattr(self, '_curriculum_path', None)
+        if cached_path:
+            return cached_path
+        return f'{self.module.get_absolute_url()}/{self.slug}'
 
     def unit_studio_url(self):
         return f'/studio/units/{self.pk}/edit'
@@ -700,7 +703,10 @@ def _install_module_unit_methods() -> None:
         overview = getattr(self, 'overview', None)
         path = getattr(self, 'source_path', None)
         if overview and path:
-            return f'{str(path).rstrip("/")}/README.md'
+            source_path = str(path).rstrip('/')
+            if posixpath.basename(source_path) == 'module.yaml':
+                source_path = posixpath.dirname(source_path)
+            return f'{source_path}/README.md'
         return None
 
     def _overview_path_set(self, value):

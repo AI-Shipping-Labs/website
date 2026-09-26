@@ -1,0 +1,30 @@
+{% load curriculum_tags %}
+{% load member_badges %}
+{% for item in items %}
+  {% if item.kind == 'module' %}
+    {% if item.module.syllabus_section %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-syllabus-section">{{ item.module.syllabus_section }}</h3>{% endif %}
+    <a href="{{ item.module.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-submodule-link">
+      <i data-lucide="folder" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+      <span class="min-w-0 flex-1">{{ item.module.title }}</span>
+      {% if item.module.is_bonus and not module_optional %}{% member_label_badge "Optional" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}{% endif %}
+      <i data-lucide="chevron-right" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+    </a>
+  {% else %}
+    {% with unit=item.unit %}
+    <div class="flex min-h-[44px] items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors">
+      {% if unit.pk in completed_unit_ids %}
+      <i data-lucide="check-circle-2" class="h-4 w-4 flex-shrink-0 text-green-400" aria-hidden="true"></i>
+      {% elif unit.is_preview %}
+      <i data-lucide="eye" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+      {% elif not has_access %}
+      <i data-lucide="lock" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+      {% else %}
+      <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+      {% endif %}
+      <a href="{{ unit.get_absolute_url }}" class="min-w-0 flex-1 py-2 text-sm {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %} hover:text-accent transition-colors" data-testid="module-lesson-link">{{ unit.title }}</a>
+      {% if unit.effective_is_bonus and not module_optional %}{% member_label_badge "Optional" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}{% endif %}
+      {% if unit.is_preview and not has_access %}<span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>{% endif %}
+    </div>
+    {% endwith %}
+  {% endif %}
+{% endfor %}

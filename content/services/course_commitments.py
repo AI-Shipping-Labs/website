@@ -18,12 +18,11 @@ from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND
 from content.models.homework import Homework, Submission
 from content.models.peer_review import CourseProject, PeerReview, ProjectSubmission
 from content.services.course_home import (
-    _all_module_units,
     _can_open_unit,
     _current_cohort_module,
     _is_orientation_module,
-    _ordered_modules,
 )
+from content.services.course_tree import get_site_curriculum_tree
 from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
@@ -261,7 +260,9 @@ def _project_rows(course, user, cohort, timezone_name, now):
 
 def _focus_work_items(course, user, cohort, homework_rows, *, now):
     """Keep authored homework visible even when no submission form was synced."""
-    modules = _ordered_modules(course)
+    tree = get_site_curriculum_tree(course)
+    tree_by_module_id = {node.module.pk: node for node in tree}
+    modules = [node.module for node in tree]
     unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
     if unscheduled_cohort:
         # Unlinked learners and self-paced members have no calendar week.
@@ -274,9 +275,9 @@ def _focus_work_items(course, user, cohort, homework_rows, *, now):
             candidate for candidate in modules
             if not candidate.is_bonus and candidate.pk not in orientation_ids
             and any(
-                unit.kind in (UNIT_KIND_LESSON, UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK)
-                and not unit.effective_is_bonus
-                for unit in _all_module_units(candidate)
+                projection.unit.kind in (UNIT_KIND_LESSON, UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK)
+                and not projection.unit.effective_is_bonus
+                for projection in tree_by_module_id[candidate.pk].all_units
             )
         ), None)
     elif cohort.start_date is None:
@@ -300,7 +301,8 @@ def _focus_work_items(course, user, cohort, homework_rows, *, now):
         if cohort and cohort.mode == 'cohort' and cohort.external_key else ''
     )
     items = []
-    for unit in _all_module_units(module):
+    for unit_projection in tree_by_module_id[module.pk].all_units:
+        unit = unit_projection.unit
         if unit.kind != UNIT_KIND_HOMEWORK or unit.effective_is_bonus:
             continue
         unit_content_id = str(unit.content_id) if unit.content_id else ''
@@ -341,10 +343,10 @@ def _focus_work_items(course, user, cohort, homework_rows, *, now):
 
 def _next_linked_session(course, events):
     """Return one event that is backed by an event unit in this course."""
-    modules = _ordered_modules(course)
     units_by_position = {}
-    for module in modules:
-        for unit in _all_module_units(module):
+    for module_projection in get_site_curriculum_tree(course):
+        for unit_projection in module_projection.all_units:
+            unit = unit_projection.unit
             if unit.kind != UNIT_KIND_EVENT or unit.session_position is None:
                 continue
             units_by_position.setdefault(unit.session_position, unit)

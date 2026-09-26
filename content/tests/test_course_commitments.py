@@ -297,6 +297,28 @@ class CourseCommitmentsTests(TestCase):
         self.assertIsNone(work['available_date'])
         self.assertFalse(model['live_session_schedule'])
 
+    def test_focus_homework_follows_mixed_repository_order(self):
+        nested = Module.objects.create(
+            course=self.course, parent=self.module, title='Nested work',
+            slug='nested-work', sort_order=1,
+        )
+        nested_homework = Unit.objects.create(
+            module=nested, title='Nested assignment', slug='nested-assignment',
+            sort_order=1, kind='homework', content_id=uuid.uuid4(),
+        )
+
+        model = build_course_commitments(
+            self.course, self.other, None, now=self.now,
+        )
+
+        self.assertEqual(
+            [item['unit'] for item in model['focus_work_items']],
+            [self.homework_unit, nested_homework],
+        )
+        self.assertEqual(
+            model['focus_work_items'][1]['url'], nested_homework.get_absolute_url(),
+        )
+
     def test_self_paced_authored_homework_is_visible_without_a_fake_deadline(self):
         self.module.title = 'Course Logistics'
         self.module.save(update_fields=['title'])

@@ -537,7 +537,7 @@ def _parse_shared_course_tree(course_dir, repo_dir, course_data):
 
 
 def _is_legacy_course_tree_parse_error(error):
-    """Identify old AISL frontmatter the shared format intentionally omits."""
+    """Recognize only explicitly retired AISL unit frontmatter keys."""
     message = str(error)
     legacy_fields = (
         'is_preview', 'is_homework', 'access', 'prev_url', 'homework_steps',
@@ -547,10 +547,13 @@ def _is_legacy_course_tree_parse_error(error):
     )
     if 'unknown top-level key:' in message:
         return any(f'unknown top-level key: {field}' in message for field in legacy_fields)
-    if 'session_position: event units need a positive integer' in message:
-        return True
-    return 'sort_order' in message and any(
-        word in message.lower() for word in ('required', 'missing', 'must declare')
+    # Legacy module.yaml manifests predate stable module content IDs. The
+    # site-owned importer identifies those modules by source path/slug; do
+    # not treat unrelated parser diagnostics (ordering, event metadata, etc.)
+    # as a reason to fall back.
+    return (
+        'module.yaml:/content_id:' in message
+        and 'required key content_id is missing' in message
     )
 
 
@@ -1986,6 +1989,7 @@ def _sync_course_tree(course, tree, repo_dir, repo_name, commit_sha, stats,
         transformed_tree,
         commit=str(commit_sha or ''),
         checkout=checkout,
+        sync_homework=False,
     )
     for action in ('created', 'updated', 'unchanged', 'deleted'):
         stats[action] += counts[action]

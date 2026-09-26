@@ -388,13 +388,14 @@ class ModuleTransitionOrphanedUnitTest(DirectSyncFixtureBase):
         error_text = self._errors_text(stats)
         self.assertIn('topics-a', error_text.lower())
 
-        # Exactly one error names the transitioning module and the
-        # orphaned unit.
+        # The unrelated sync error blocks stale cleanup, so the orphaned
+        # source row survives. Mixed direct units and child modules are
+        # valid now, so this is no longer a hierarchy validation error.
         orphan_errors = [
             e for e in stats['errors']
             if 'Transition' in e.get('error', '') and 'Orphan' in e.get('error', '')
         ]
-        self.assertEqual(len(orphan_errors), 1)
+        self.assertEqual(orphan_errors, [])
 
         transition = Module.objects.get(
             course__slug='buildcamp-1721', slug='transition', parent=None,

@@ -19,7 +19,7 @@ import uuid
 import yaml
 from django.test import TestCase
 
-from content.models import Cohort, Module, Unit
+from content.models import Cohort, Course, Module, Unit
 from content.models.homework import Homework, QuestionType
 from content.sync_parsers.checkout_view import checkout_scope
 from content.sync_parsers.families.courses import _sync_single_course
@@ -34,6 +34,18 @@ def _fresh_stats():
 
 class _FakeSource:
     repo_name = 'AI-Shipping-Labs/direct-sync-courses'
+
+
+class _AIHeroContentSource:
+    repo_name = 'AI-Shipping-Labs/content'
+
+
+class _PythonCourseSource:
+    repo_name = 'AI-Shipping-Labs/python-course'
+
+
+class _BuildcampCourseSource:
+    repo_name = 'AI-Shipping-Labs/ai-buildcamp-course'
 
 
 class DirectSyncFixtureBase(TestCase):
@@ -90,11 +102,11 @@ class DirectSyncFixtureBase(TestCase):
         data.update(overrides)
         self._write_yaml('course.yaml', data)
 
-    def _sync(self):
+    def _sync(self, source=None):
         stats = _fresh_stats()
         with checkout_scope(self.temp_dir):
             _sync_single_course(
-                self.course_dir, self.temp_dir, _FakeSource(),
+                self.course_dir, self.temp_dir, source or _FakeSource(),
                 'deadbeef', stats, set(), set(),
             )
         return stats
@@ -158,7 +170,13 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         self.assertEqual(child.sort_order, 2)
         self.assertEqual(nested.sort_order, 1)
 
-    def test_yaml_homework_mixed_tree_creates_form_and_updates_stable_questions(self):
+    def test_shared_yaml_tree_imports_homework_and_updates_stable_questions(self):
+        """Structured homework.yaml is imported through the CB tree parser.
+
+        The legacy Markdown walker cannot create this Homework row from the
+        source shape, so these assertions protect the shared graph path used
+        by the migrated Buildcamp repository.
+        """
         course_id = str(uuid.uuid4())
         unit_id = str(uuid.uuid4())
         self._write_course_yaml(
@@ -222,7 +240,7 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
             {'title': 'Project start'}, 'Start here.\n',
         )
 
-        stats = self._sync()
+        stats = self._sync(source=_BuildcampCourseSource())
 
         self.assertEqual(stats['errors'], [])
         week = Module.objects.get(course__source_content_id=course_id, slug='week')
@@ -252,12 +270,13 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
 
         homework_data['questions'][0]['prompt'] = 'How many lines are in the output?'
         self._write_yaml(homework_path, homework_data)
-        second_sync = self._sync()
+        second_sync = self._sync(source=_BuildcampCourseSource())
 
         self.assertEqual(second_sync['errors'], [])
         question.refresh_from_db()
         self.assertEqual(question.pk, original_question_pk)
         self.assertEqual(question.text, 'How many lines are in the output?')
+
 
     def test_same_unit_slug_across_two_submodules_syncs_cleanly(self):
         """Two submodules under one module, each with a unit slug of
@@ -403,6 +422,63 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         parent = Module.objects.get(course__slug='buildcamp-direct', slug='transition')
         self.assertFalse(Unit.objects.filter(slug='old-unit').exists())
         self.assertEqual(list(parent.children.values_list('slug', flat=True)), ['new-sub'])
+
+
+class LegacyCourseAdapterDirectSyncTest(DirectSyncFixtureBase):
+    def test_aihero_preview_frontmatter_still_syncs(self):
+        """AI Hero's configured content source still uses legacy unit YAML."""
+        self.course_dir = os.path.join(self.temp_dir, 'courses', 'aihero')
+        os.makedirs(self.course_dir)
+        course_id = str(uuid.uuid4())
+        unit_id = str(uuid.uuid4())
+        self._write_course_yaml(
+            title='AI Hero', slug='aihero-direct', content_id=course_id,
+        )
+        self._write_yaml('01-day-1/module.yaml', {'title': 'Day 1'})
+        self._write_markdown(
+            '01-day-1/01-introduction.md',
+            {
+                'content_id': unit_id,
+                'title': 'Introduction',
+                'is_preview': True,
+            },
+            'Welcome to the AI Hero crash course.\n',
+        )
+
+        stats = self._sync(source=_AIHeroContentSource())
+
+        self.assertEqual(stats['errors'], [])
+        course = Course.objects.get(source_content_id=course_id)
+        unit = Unit.objects.get(source_content_id=unit_id)
+        self.assertEqual(unit.module.course_id, course.pk)
+        self.assertTrue(unit.is_preview)
+
+    def test_python_source_without_module_content_id_still_syncs(self):
+        """Python's configured source uses pre-identity module manifests."""
+        course_id = str(uuid.uuid4())
+        unit_id = str(uuid.uuid4())
+        self._write_course_yaml(
+            title='Python for AI Engineering',
+            slug='python',
+            content_id=course_id,
+        )
+        module_path = os.path.join(self.course_dir, '01-intro', 'module.yaml')
+        os.makedirs(os.path.dirname(module_path))
+        with open(module_path, 'w', encoding='utf-8') as module_file:
+            module_file.write('title: Introduction\n')
+        self._write_markdown(
+            '01-intro/01-why-python.md',
+            {'content_id': unit_id, 'title': 'Why Python'},
+            'Python is useful for AI engineering.\n',
+        )
+
+        stats = self._sync(source=_PythonCourseSource())
+
+        self.assertEqual(stats['errors'], [])
+        module = Module.objects.get(course__slug='python', slug='intro')
+        self.assertTrue(Unit.objects.filter(
+            module=module, source_content_id=unit_id,
+        ).exists())
 
 
 class UnitKindFrontmatterDirectSyncTest(DirectSyncFixtureBase):

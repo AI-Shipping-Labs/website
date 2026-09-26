@@ -78,55 +78,117 @@ class NestedModuleSyncTest(TestCase):
         self.assertEqual(docker_unit.title, 'Docker basics')
         self.assertEqual(docker_unit.module.parent_id, parent.pk)
 
-    def test_mixed_directory_rejected_and_creates_neither_side(self):
+    def test_mixed_directory_syncs_direct_units_and_child_modules(self):
         self._write_base_course()
         self.repo.write_yaml(
             'buildcamp/03-mixed/module.yaml',
-            {'title': 'Mixed module'},
+            {
+                'title': 'Mixed module',
+                'content_id': '33333333-0000-0000-0000-000000000001',
+            },
         )
         self.repo.write_yaml(
             'buildcamp/03-mixed/01-sub/module.yaml',
-            {'title': 'Sub'},
+            {
+                'title': 'Sub',
+                'content_id': '33333333-0000-0000-0000-000000000002',
+                'sort_order': 2,
+            },
         )
         self.repo.write_markdown(
             'buildcamp/03-mixed/01-sub/01-lesson.md',
-            {'title': 'Sub lesson'}, 'Body.\n',
+            {
+                'title': 'Sub lesson',
+                'content_id': '33333333-0000-0000-0000-000000000003',
+            },
+            'Body.\n',
         )
-        # Direct unit file alongside the submodule dir -> mixed content.
         self.repo.write_markdown(
             'buildcamp/03-mixed/01-stray-unit.md',
-            {'title': 'Stray unit'}, 'Stray body.\n',
+            {
+                'title': 'Direct lesson',
+                'content_id': '33333333-0000-0000-0000-000000000004',
+            },
+            'Direct body.\n',
         )
 
         sync_log = sync_repo(self.source, self.repo)
 
-        self.assertFalse(
-            Module.objects.filter(course__slug='buildcamp-nest', slug='mixed-module').exists(),
-        )
-        self.assertFalse(
-            Module.objects.filter(course__slug='buildcamp-nest', slug='sub').exists(),
-        )
-        self.assertFalse(Unit.objects.filter(slug='stray-unit').exists())
-        self.assertFalse(Unit.objects.filter(slug='sub-lesson').exists())
-        error_text = ' '.join(
-            e.get('error', '') for e in (sync_log.errors or [])
-        )
-        self.assertIn('03-mixed', error_text)
+        self.assertIn(sync_log.status, ('success', 'partial'), sync_log.errors)
+        parent = Module.objects.get(course__slug='buildcamp-nest', slug='mixed')
+        child = parent.children.get(slug='sub')
+        self.assertTrue(Unit.objects.filter(
+            module=parent, title='Direct lesson',
+        ).exists())
+        self.assertTrue(Unit.objects.filter(
+            module=child, title='Sub lesson',
+        ).exists())
 
-    def test_same_unit_slug_across_two_submodules_syncs_cleanly(self):
-        """The collision two flattened section-overview units caused
-        disappears once each lives under its own submodule Module row."""
+    def test_modules_can_nest_more_than_two_levels(self):
         self._write_base_course()
         self.repo.write_yaml(
-            'buildcamp/04-topics/module.yaml', {'title': 'Topics'},
+            'buildcamp/08-week/module.yaml',
+            {'title': 'Week', 'content_id': '33333333-0000-0000-0000-000000000010'},
         )
-        for sub_slug, title in (('01-rag', 'RAG'), ('02-agents', 'Agents')):
+        self.repo.write_yaml(
+            'buildcamp/08-week/01-topic/module.yaml',
+            {'title': 'Topic', 'content_id': '33333333-0000-0000-0000-000000000011'},
+        )
+        self.repo.write_yaml(
+            'buildcamp/08-week/01-topic/01-group/module.yaml',
+            {'title': 'Group', 'content_id': '33333333-0000-0000-0000-000000000012'},
+        )
+        self.repo.write_markdown(
+            'buildcamp/08-week/01-topic/01-group/01-lesson.md',
+            {
+                'title': 'Nested lesson',
+                'content_id': '33333333-0000-0000-0000-000000000013',
+            },
+            'Nested body.\n',
+        )
+        self.repo.write_yaml(
+            'buildcamp/09-plain/module.yaml',
+            {'title': 'Plain sibling', 'content_id': '33333333-0000-0000-0000-000000000014'},
+        )
+        self.repo.write_markdown(
+            'buildcamp/09-plain/01-lesson.md',
+            {
+                'title': 'Plain lesson',
+                'content_id': '33333333-0000-0000-0000-000000000015',
+            },
+            'Plain body.\n',
+        )
+
+        sync_log = sync_repo(self.source, self.repo)
+
+        self.assertIn(sync_log.status, ('success', 'partial'), sync_log.errors)
+        week = Module.objects.get(course__slug='buildcamp-nest', slug='week')
+        topic = week.children.get(slug='topic')
+        group = topic.children.get(slug='group')
+        nested_unit = Unit.objects.get(module=group, title='Nested lesson')
+        self.assertEqual(nested_unit.module.parent.parent_id, week.pk)
+        plain_module = Module.objects.get(course__slug='buildcamp-nest', slug='plain')
+        self.assertTrue(Unit.objects.filter(module=plain_module, title='Plain lesson').exists())
+
+    def test_same_unit_slug_across_two_submodules_syncs_cleanly(self):
+        """Identically named units remain distinct under different parents."""
+        self._write_base_course()
+        self.repo.write_yaml(
+            'buildcamp/04-topics/module.yaml',
+            {'title': 'Topics', 'content_id': '33333333-0000-0000-0000-000000000020'},
+        )
+        for sub_slug, title, index in (('01-rag', 'RAG', 21), ('02-agents', 'Agents', 22)):
             self.repo.write_yaml(
-                f'buildcamp/04-topics/{sub_slug}/module.yaml', {'title': title},
+                f'buildcamp/04-topics/{sub_slug}/module.yaml',
+                {'title': title, 'content_id': f'33333333-0000-0000-0000-0000000000{index}'},
             )
             self.repo.write_markdown(
                 f'buildcamp/04-topics/{sub_slug}/01-section-overview.md',
-                {'title': 'Section overview'}, f'{title} overview body.\n',
+                {
+                    'title': 'Section overview',
+                    'content_id': f'33333333-0000-0000-0000-0000000000{index + 2}',
+                },
+                f'{title} overview body.\n',
             )
 
         sync_log = sync_repo(self.source, self.repo)
@@ -161,54 +223,6 @@ class NestedModuleSyncTest(TestCase):
         module = Module.objects.get(course__slug='buildcamp-nest', slug='plain')
         self.assertFalse(module.is_bonus)
         self.assertIsNone(module.available_after_days)
-
-    def test_third_level_module_directory_rejected_at_sync_layer(self):
-        """Depth cap (max two levels of module) is enforced at SYNC time,
-        not just model validation — a submodule dir that itself contains
-        a further nested module.yaml is rejected, named, and creates
-        nothing at the third level, while sibling modules still sync."""
-        self._write_base_course()
-        self.repo.write_yaml('buildcamp/08-week/module.yaml', {'title': 'Week'})
-        self.repo.write_yaml(
-            'buildcamp/08-week/01-topic/module.yaml', {'title': 'Topic'},
-        )
-        self.repo.write_yaml(
-            'buildcamp/08-week/01-topic/01-too-deep/module.yaml',
-            {'title': 'Too deep'},
-        )
-        self.repo.write_markdown(
-            'buildcamp/08-week/01-topic/01-too-deep/01-lesson.md',
-            {'title': 'Too deep lesson'}, 'Body.\n',
-        )
-        self.repo.write_yaml(
-            'buildcamp/09-plain/module.yaml', {'title': 'Plain sibling'},
-        )
-        self.repo.write_markdown(
-            'buildcamp/09-plain/01-lesson.md', {'title': 'Plain lesson'}, 'Body.\n',
-        )
-
-        sync_log = sync_repo(self.source, self.repo)
-
-        self.assertFalse(
-            Module.objects.filter(
-                course__slug='buildcamp-nest', slug='too-deep',
-            ).exists(),
-        )
-        self.assertFalse(Unit.objects.filter(title='Too deep lesson').exists())
-        error_text = ' '.join(
-            e.get('error', '') for e in (sync_log.errors or [])
-        )
-        self.assertIn('too-deep', error_text)
-        plain_module = Module.objects.get(course__slug='buildcamp-nest', slug='plain')
-        self.assertTrue(
-            Unit.objects.filter(module=plain_module, title='Plain lesson').exists(),
-        )
-        self.assertTrue(
-            Module.objects.filter(
-                course__slug='buildcamp-nest', slug='topic', parent__isnull=False,
-            ).exists(),
-        )
-
 
 class UnitKindFrontmatterSyncTest(TestCase):
     def setUp(self):

@@ -1550,8 +1550,8 @@ class SyncSingleCourseRepoTest(TestCase):
 
         module = Module.objects.get(course=course)
         self.assertEqual(module.title, 'Introduction')
-        # Module source_path is the module dir relative to content root.
-        self.assertEqual(module.source_path, '01-intro')
+        # Shared curriculum provenance points to the authored module manifest.
+        self.assertEqual(module.source_path, '01-intro/module.yaml')
         # sort_order derived from numeric "01-" prefix.
         self.assertEqual(module.sort_order, 1)
 

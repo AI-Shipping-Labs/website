@@ -37,17 +37,21 @@
       <input type="hidden" name="revision" value="{{ stepper.revision }}">
       <fieldset class="min-w-0" aria-describedby="homework-question-prompt"{% if not stepper.can_write %} disabled{% endif %}>
         <legend class="sr-only">Answer for question {{ stepper.step_number }}</legend>
-        <div id="homework-question-prompt" class="prose max-w-none" data-testid="homework-question-prompt">{% render_homework_question_prompt stepper.question.prompt stepper.options stepper.question.type %}</div>
+        <div id="homework-question-prompt" class="prose max-w-none{% if stepper.step == 'learning-in-public' %} homework-learning-public-prompt{% endif %}" data-testid="homework-question-prompt">{% render_homework_question_prompt stepper.question.prompt stepper.options stepper.question.type %}</div>
         {% if stepper.question.type != 'choice' and stepper.question.type != 'checkbox' %}
           {% if stepper.step == 'learning-in-public' %}
-          <div class="mt-4" data-learning-public-links data-max-links="{{ stepper.assignment.context.learning_in_public_cap }}">
-            <p class="mb-3 text-sm text-muted-foreground" data-testid="learning-public-link-guidance">
-              Up to {{ stepper.assignment.context.learning_in_public_cap }} public links; each is optional.
-            </p>
+          <div class="mt-6 border-t border-border pt-5" data-learning-public-links data-max-links="{{ stepper.assignment.context.learning_in_public_cap }}">
+            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <p class="text-sm font-medium text-foreground">Your public posts</p>
+                <p class="mt-1 text-sm text-muted-foreground" data-testid="learning-public-link-guidance">Optional. Add up to {{ stepper.assignment.context.learning_in_public_cap }} links to posts about your progress.</p>
+              </div>
+              <span class="text-xs text-muted-foreground" data-public-link-count aria-live="polite"></span>
+            </div>
             <textarea name="answer" data-public-links-value hidden>{{ stepper.answer }}</textarea>
-            <div class="space-y-2" data-public-link-slots data-testid="learning-public-link-slots"></div>
-            <button type="button" data-add-public-link class="mt-2 text-sm font-medium text-accent hover:underline">
-              Add another link
+            <div class="space-y-3" data-public-link-slots data-testid="learning-public-link-slots"></div>
+            <button type="button" data-add-public-link class="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              <span aria-hidden="true">+</span> <span data-add-public-link-label>Add another link</span>
             </button>
           </div>
           {% else %}
@@ -74,20 +78,14 @@
       {% endif %}
     </form>
   {% else %}
-    <h2 class="mb-4 text-lg font-semibold text-foreground">Review &amp; submit</h2>
+    <h2 class="mb-1 text-lg font-semibold text-foreground">Review &amp; submit</h2>
+    {% if not stepper.closed_review %}<p class="mb-4 text-sm text-muted-foreground">Check your answers, then add your submission link below.</p>{% endif %}
     {% if stepper.closed_review %}
       {% if stepper.accepted_snapshot_primary %}
       <section class="mb-6" aria-labelledby="homework-accepted-submission-title" data-testid="homework-accepted-snapshot">
         <h3 id="homework-accepted-submission-title" class="mb-3 text-base font-semibold text-foreground">Accepted submission</h3>
         {% if stepper.accepted_submitted_at %}<p class="mb-3 text-sm text-muted-foreground" data-testid="homework-submitted-at">Submitted {{ stepper.accepted_submitted_at|timezone:homework_display_timezone|member_short_datetime }} {{ homework_display_timezone }}</p>{% endif %}
-        <ol class="space-y-2" data-testid="homework-review-summary">
-          {% for row in stepper.review_display_rows %}
-          <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
-            <a href="{{ row.url }}" class="font-medium text-accent hover:underline">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</a>
-            <p class="mt-1 text-foreground">{% if row.answer %}{{ row.answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
-          </li>
-          {% endfor %}
-        </ol>
+        {% include 'homework_steps/_review_rows.html' with rows=stepper.review_display_rows editable=False test_id='homework-review-summary' %}
         {% for field, value in stepper.accepted_field_rows %}
         <p class="mt-3 text-sm text-foreground"><span class="font-medium">{{ field.label }}:</span> {{ value|default:"No answer saved" }}</p>
         {% endfor %}
@@ -96,14 +94,7 @@
       <section class="mb-6" aria-labelledby="homework-unsent-draft-title" data-testid="homework-unsent-draft">
         <h3 id="homework-unsent-draft-title" class="mb-3 text-base font-semibold text-foreground">Unsubmitted draft</h3>
         {% if stepper.pending_draft_display_rows %}
-        <ol class="space-y-2">
-          {% for row in stepper.pending_draft_display_rows %}
-          <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
-            <p class="font-medium text-foreground">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</p>
-            <p class="mt-1 text-foreground">{% if row.answer %}{{ row.answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
-          </li>
-          {% endfor %}
-        </ol>
+        {% include 'homework_steps/_review_rows.html' with rows=stepper.pending_draft_display_rows editable=False %}
         {% endif %}
         {% for field, value in stepper.pending_draft_field_rows %}
         <p class="mt-3 text-sm text-foreground"><span class="font-medium">{{ field.label }}:</span> {{ value|default:"No answer saved" }}</p>
@@ -113,14 +104,7 @@
       {% elif stepper.homework_state.has_saved_draft %}
       <section class="mb-6" aria-labelledby="homework-saved-draft-title" data-testid="homework-unsent-draft">
         <h3 id="homework-saved-draft-title" class="mb-3 text-base font-semibold text-foreground">Saved draft — not submitted</h3>
-        <ol class="space-y-2">
-          {% for row in stepper.unsent_draft_display_rows %}
-          <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
-            <p class="font-medium text-foreground">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</p>
-            <p class="mt-1 text-foreground">{% if row.answer %}{{ row.answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
-          </li>
-          {% endfor %}
-        </ol>
+        {% include 'homework_steps/_review_rows.html' with rows=stepper.unsent_draft_display_rows editable=False %}
         {% for field, value in stepper.unsent_draft_field_rows %}
         <p class="mt-3 text-sm text-foreground"><span class="font-medium">{{ field.label }}:</span> {{ value|default:"No answer saved" }}</p>
         {% endfor %}
@@ -134,14 +118,7 @@
         <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{{ course.get_absolute_url }}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
       </div>
     {% else %}
-    <ol class="mb-6 space-y-2" data-testid="homework-review-summary">
-      {% for row in stepper.review_display_rows %}
-        <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">
-          <a href="{{ row.url }}" class="font-medium text-accent hover:underline">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</a>
-          <p class="mt-1 text-foreground">{% if row.answer %}{{ row.answer }}{% else %}<span class="text-muted-foreground">No answer saved</span>{% endif %}</p>
-        </li>
-      {% endfor %}
-    </ol>
+    <div class="mb-6">{% include 'homework_steps/_review_rows.html' with rows=stepper.review_display_rows editable=True test_id='homework-review-summary' %}</div>
     {% if stepper.assignment.instructions %}<div class="prose max-w-none mb-6" data-testid="homework-closing-guidance">{{ stepper.assignment.instructions }}</div>{% endif %}
     <form method="post" action="{{ stepper.action }}" data-homework-autosave data-testid="homework-review-form">
       {% csrf_token %}

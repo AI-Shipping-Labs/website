@@ -87,7 +87,7 @@ def test_public_links_are_configurable_saved_and_submitted(django_server, browse
 
     step_nav = page.get_by_role('group', name='Homework steps')
     expect(step_nav.get_by_role('link', name='Learning in Public')).to_be_visible()
-    expect(page.get_by_test_id('learning-public-link-guidance')).to_contain_text('Up to 3 public links; each is optional.')
+    expect(page.get_by_test_id('learning-public-link-guidance')).to_contain_text('Optional. Add up to 3 links to posts about your progress.')
     inputs = page.locator('[data-public-link-input]')
     expect(inputs).to_have_count(1)
     page.screenshot(path='.tmp/learning-in-public-desktop.png', full_page=True)
@@ -106,6 +106,10 @@ def test_public_links_are_configurable_saved_and_submitted(django_server, browse
 
     page.get_by_role('button', name='Save & review').click()
     expect(page).to_have_url(f'{unit_url}/review')
+    page.screenshot(path='.tmp/homework-review-desktop.png', full_page=True)
+    page.set_viewport_size({'width': 390, 'height': 844})
+    page.screenshot(path='.tmp/homework-review-mobile.png', full_page=True)
+    page.set_viewport_size({'width': 1280, 'height': 800})
     expect(page.get_by_label('Homework URL (required)')).to_be_visible()
     expect(page.get_by_label('Time spent on lectures (hours) (optional)')).to_have_count(0)
     expect(page.get_by_label('Time spent on homework (hours) (optional)')).to_have_count(0)

@@ -319,7 +319,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             response.context['stepper']['nav_steps'][-2][0], 'Learning in Public',
         )
         self.assertContains(response, 'Share your work.')
-        self.assertContains(response, 'Up to 3 public links; each is optional.')
+        self.assertContains(response, 'Optional. Add up to 3 links to posts about your progress.')
         self.assertContains(response, 'data-learning-public-links')
         self.assertContains(response, 'data-max-links="3"')
         self.assertContains(response, 'data-public-link-slots')
@@ -709,7 +709,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         old_token = str(HomeworkDraft.objects.get(user=self.student).token)
         review = self.client.get(f'{self.unit_url}?homework_step=review')
         self.assertContains(review, 'Share your work.')
-        self.assertContains(review, 'No answer saved')
+        self.assertContains(review, 'Not answered')
         response = self.client.post(
             self.unit_url,
             {

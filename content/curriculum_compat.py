@@ -319,41 +319,12 @@ def _wrap_inits_and_saves() -> None:
 
     Unit.clean = unit_clean_event_kind
 
+    package_module_clean = Module.clean
+
     def module_clean(self):
         from django.core.exceptions import ValidationError
 
-        models.Model.clean(self)
-        _ensure_provenance(self)
-        if self.parent_id is not None:
-            if self.pk is not None and self.parent_id == self.pk:
-                raise ValidationError({
-                    'parent': 'A module cannot be its own parent.',
-                })
-            parent = self.parent
-            if parent.parent_id is not None:
-                raise ValidationError({
-                    'parent': (
-                        'A submodule cannot itself have children '
-                        '(maximum two levels of module).'
-                    ),
-                })
-            if parent.course_id != self.course_id:
-                raise ValidationError({
-                    'parent': 'Parent module must belong to the same course.',
-                })
-            if parent.units.exists() and not getattr(
-                self, '_allow_parent_with_pending_units', False,
-            ):
-                raise ValidationError({
-                    'parent': (
-                        f'"{parent.title}" already has direct units and '
-                        'cannot also have submodules.'
-                    ),
-                })
-        if self.pk is not None and self.children.exists() and self.units.exists():
-            raise ValidationError(
-                f'"{self.title}" cannot have both submodules and direct units.'
-            )
+        package_module_clean(self)
         if self.parent_id is None and self.course_id and self.slug:
             clash = Module.objects.filter(
                 course_id=self.course_id,
@@ -683,22 +654,6 @@ def _install_module_unit_methods() -> None:
         course = self.module.course
         if self.module.parent_id is None:
             return f'/courses/{course.slug}/{self.module.slug}/{self.slug}'
-
-        from content.services.course_inline import canonical_inline_homework_url
-
-        homework_url = canonical_inline_homework_url(self)
-        if homework_url is not None:
-            return homework_url
-
-        # AI Buildcamp presents selected one-page child modules inline as
-        # first-level lessons. Keep their canonical URL at the child module
-        # path (the same path used to identify that first-level item), rather
-        # than exposing the presentation wrapper and its duplicate unit slug.
-        from content.services.course_inline import inline_unit_for
-
-        inline_unit = inline_unit_for(self.module, course.slug)
-        if inline_unit is not None and inline_unit.pk == self.pk:
-            return self.module.get_absolute_url()
 
         return (
             f'/courses/{course.slug}/{self.module.parent.slug}/'

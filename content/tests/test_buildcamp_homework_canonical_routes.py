@@ -27,40 +27,36 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
         cls.agents = Module.objects.create(
             course=cls.course, title='Agents', slug='agents', sort_order=2,
         )
-        cls.foundation_homework, cls.foundation_main, cls.foundation_capstone = (
-            cls._make_homework_group(cls.foundation, 1)
+        cls.foundation_main, cls.foundation_capstone = cls._make_homework_group(
+            cls.foundation, 1,
         )
-        cls.agents_homework, cls.agents_main, cls.agents_capstone = (
+        cls.agents_main, cls.agents_capstone = (
             cls._make_homework_group(cls.agents, 3)
         )
 
     @classmethod
     def _make_homework_group(cls, parent, week):
-        homework = Module.objects.create(
-            course=cls.course, parent=parent, title='Homework', slug='homework',
-            sort_order=90,
-        )
         main = Unit.objects.create(
-            module=homework,
+            module=parent,
             title=f'Week {week} Homework: Build an Agent',
-            slug='build-an-agent' if week > 1 else 'document-processing',
+            slug='homework',
             kind='homework',
-            sort_order=1,
+            sort_order=4,
             content_id=uuid.uuid4(),
             is_preview=True,
             homework='## Question 1. First\nDescribe your approach.',
         )
         capstone = Unit.objects.create(
-            module=homework,
+            module=parent,
             title=f'Week {week} Capstone: Extend Your Project',
-            slug='capstone-ai-project' if week == 1 else 'capstone-building-agents',
+            slug='homework-capstone',
             kind='homework',
-            sort_order=2,
+            sort_order=5,
             content_id=uuid.uuid4(),
             is_preview=True,
             homework='## Question 1. First\nDescribe the capstone step.',
         )
-        return homework, main, capstone
+        return main, capstone
 
     def _assert_route_resolves_to(self, url, expected_unit):
         response = self.client.get(url)
@@ -112,13 +108,13 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
                 )
 
         syllabus = self.client.get('/courses/ai-buildcamp')
-        self.assertNotContains(syllabus, 'data-testid="syllabus-module"')
+        self.assertContains(syllabus, 'data-testid="syllabus-module"')
         api_week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
         self.assertEqual(
             [unit['title'] for unit in api_week['units']],
             [self.foundation_main.title, self.foundation_capstone.title],
         )
-        self.assertEqual(api_week['modules'], [])
+        self.assertEqual(api_week.get('modules', []), [])
 
     def test_reader_navigation_shows_homework_units_in_full_and_scoped_modes(self):
         user = User.objects.create_user(email='buildcamp-inline-reader@test.com', password='pw')
@@ -174,21 +170,3 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
             '<nav id="sidebar-nav"', 1,
         )[1].split('</nav>', 1)[0]
         self.assertIn(self.foundation_capstone.get_absolute_url(), sidebar)
-
-    def test_real_submodule_slug_takes_precedence_over_capstone_alias(self):
-        colliding_module = Module.objects.create(
-            course=self.course, parent=self.foundation,
-            title='Separate capstone materials', slug='homework-capstone',
-            sort_order=91,
-        )
-        colliding_unit = Unit.objects.create(
-            module=colliding_module, title='Capstone instructions', slug='instructions',
-            kind='lesson', sort_order=1, content_id=uuid.uuid4(), body='Read this.'
-        )
-
-        self.assertEqual(
-            self.foundation_capstone.get_absolute_url(),
-            '/courses/ai-buildcamp/foundation/homework/capstone-ai-project',
-        )
-        response = self.client.get('/courses/ai-buildcamp/foundation/homework-capstone')
-        self.assertContains(response, colliding_unit.title)

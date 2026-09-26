@@ -112,7 +112,7 @@ class BuildcampSinglePageTopicTest(TestCase):
         )
         Unit.objects.create(
             module=cls.session, title='Session 1', slug='session',
-            sort_order=1, kind='event', session_position=1,
+            sort_order=1, kind='event', session_position=1, is_preview=True,
         )
         cls.overview = Module.objects.create(
             course=cls.course, parent=cls.week, title='Week 1 Overview',
@@ -129,6 +129,16 @@ class BuildcampSinglePageTopicTest(TestCase):
         Unit.objects.create(
             module=cls.topic, title='Topic Lesson', slug='topic-lesson', sort_order=1,
         )
+
+    def test_nested_unit_uses_its_physical_path_without_redirect(self):
+        unit = self.session.units.get()
+        physical_url = '/courses/ai-buildcamp/foundations/session/session'
+
+        self.assertEqual(unit.get_absolute_url(), physical_url)
+        response = self.client.get(physical_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['unit'].pk, unit.pk)
 
     def test_syllabus_and_overview_show_single_pages_as_lessons(self):
         syllabus = self.client.get('/courses/ai-buildcamp')
@@ -157,8 +167,8 @@ class BuildcampSinglePageTopicTest(TestCase):
         links = ContentLinks()
         links.feed(overview.content.decode())
         self.assertEqual(links.hrefs, [
-            '/courses/ai-buildcamp/foundations/session',
-            '/courses/ai-buildcamp/foundations/week-1-overview',
+            '/courses/ai-buildcamp/foundations/session/session',
+            '/courses/ai-buildcamp/foundations/week-1-overview/week-1-overview',
             '/courses/ai-buildcamp/foundations/foundations-topic',
         ])
 
@@ -681,7 +691,8 @@ class SyllabusBuildcampPositionTest(TestCase):
         self.assertEqual(self._positions('ai-buildcamp'), [None, None, None, None])
         self.assertEqual(self._positions('other-course'), [None, None, None, None])
         response = self.client.get('/courses/ai-buildcamp')
-        self.assertContains(response, 'Week 1 · ')
+        self.assertContains(response, 'Foundations')
+        self.assertNotContains(response, 'Week 1 · ')
 
     def test_optional_grouping_is_data_driven_for_both_courses(self):
         for slug in ('ai-buildcamp', 'other-course'):

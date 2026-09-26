@@ -14,7 +14,7 @@
   <summary class="cursor-pointer list-none grid min-h-[44px] w-full items-center {% if counter %}grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if not counter %}<i data-lucide="chevron-right" class="topic-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
     <span class="min-w-0 {% if counter %}col-start-1{% else %}col-start-2{% endif %}">
-      <span class="block break-words {% if counter %}text-base font-semibold{% else %}text-sm font-normal{% endif %}">{% if counter and course_slug == 'ai-buildcamp' and module.sort_order > 0 and module.sort_order < 10 and module.sort_order != 7 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}</span>
+      <span class="block break-words {% if counter %}text-base font-semibold{% else %}text-sm font-normal{% endif %}">{{ module.title }}</span>
       {% if counter %}
       <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-muted-foreground" data-testid="syllabus-module-meta">
         {% if module_week_range %}<span data-testid="syllabus-module-week-range">{{ module_week_range }}</span>{% endif %}

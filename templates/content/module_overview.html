@@ -35,13 +35,11 @@
             <i data-lucide="book-open" class="h-4 w-4"></i>
             {% if module.parent %}Submodule{% else %}Module{% endif %}
           </span>
-          {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
+          {% if module.is_bonus and not module.parent.is_bonus %}
           {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
           {% endif %}
         </div>
-        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
-          {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
-        </h1>
+        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">{{ module.title }}</h1>
       </header>
 
       {% if module.overview_html %}
@@ -103,7 +101,6 @@
         </div>
       </section>
       {% elif not submodules %}
-      {% if module.slug != 'project-attempts' %}
       <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
       <section class="mb-12" data-testid="module-lesson-list">
         <h2 class="text-2xl font-semibold tracking-tight mb-4">
@@ -145,18 +142,15 @@
         </p>
         {% endif %}
       </section>
-      {% endif %}
       {% if course_projects %}
-      <section class="mb-12" {% if module.slug != 'project-attempts' %}aria-labelledby="module-projects-heading"{% else %}aria-label="Project attempts"{% endif %} data-testid="module-project-attempts">
-        {% if module.slug != 'project-attempts' %}<h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>{% endif %}
+      <section class="mb-12" aria-labelledby="module-projects-heading" data-testid="module-project-attempts">
+        <h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>
         <div class="rounded-lg border border-border bg-card divide-y divide-border">
           {% for project in course_projects %}
           {% include "content/_syllabus_project_row.html" with project=project course_slug=course.slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
           {% endfor %}
         </div>
       </section>
-      {% elif course.slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
-      <p class="mb-12 text-sm text-muted-foreground" data-testid="module-project-coming-soon">Attempt dates will be announced here.</p>
       {% endif %}
       {% endif %}
 

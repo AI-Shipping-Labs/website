@@ -991,29 +991,20 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
     top_module = _resolve_top_level_module(course, module_slug)
 
     if top_module.children.exists():
+        direct_unit = Unit.objects.filter(
+            module=top_module, slug=unit_slug,
+        ).first()
         submodule = Module.objects.select_related('parent').filter(
             course=course, parent=top_module, slug=unit_slug,
         ).first()
-        if submodule is None:
-            capstone_unit = inline_homework_capstone_for_parent(
-                top_module, unit_slug, course.slug,
-            )
-            if capstone_unit is not None:
-                return _render_course_unit_detail(
-                    request, course, capstone_unit.module, capstone_unit,
-                )
+        if direct_unit is not None and submodule is not None:
             raise Http404
-
-        inline_unit = inline_unit_for(submodule, course.slug)
-        if inline_unit is not None:
+        if direct_unit is not None:
             return _render_course_unit_detail(
-                request, course, submodule, inline_unit,
+                request, course, top_module, direct_unit,
             )
-        homework_unit = inline_homework_unit_for(submodule, course.slug)
-        if homework_unit is not None:
-            return _render_course_unit_detail(
-                request, course, submodule, homework_unit,
-            )
+        if submodule is None:
+            raise Http404
         return _render_module_overview(request, course, submodule)
 
     unit = get_object_or_404(Unit, module=top_module, slug=unit_slug)
@@ -1023,21 +1014,15 @@ def course_unit_detail(request, course_slug, module_slug, unit_slug):
 def _unit_for_course_unit_path(course, module_slug, unit_slug):
     """Resolve the unit displayed by a three-slug course path, if any."""
     top_module = _resolve_top_level_module(course, module_slug)
-    if not top_module.children.exists():
-        unit = Unit.objects.filter(module=top_module, slug=unit_slug).first()
-        return (top_module, unit) if unit else None
-
-    submodule = Module.objects.select_related('parent').filter(
+    unit = Unit.objects.filter(module=top_module, slug=unit_slug).first()
+    submodule = Module.objects.filter(
         course=course, parent=top_module, slug=unit_slug,
-    ).first()
-    if submodule is None:
-        unit = inline_homework_capstone_for_parent(top_module, unit_slug, course.slug)
-        return (unit.module, unit) if unit else None
-
-    unit = inline_unit_for(submodule, course.slug) or inline_homework_unit_for(
-        submodule, course.slug,
-    )
-    return (submodule, unit) if unit else None
+    ).exists()
+    # The shared source validator enforces one slug namespace across mixed
+    # direct units and child modules. Fail closed for ambiguous legacy rows.
+    if unit is not None and submodule:
+        return None
+    return (top_module, unit) if unit is not None else None
 
 
 def _is_valid_homework_route_step(request, course, unit, route_step):
@@ -1097,16 +1082,6 @@ def course_submodule_unit_detail(
         parent=parent_module, slug=module_slug,
     )
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
-    if is_inline_homework_unit(submodule, unit, course.slug):
-        raise Http404
-    inline_unit = inline_unit_for(submodule, course.slug)
-    if inline_unit is not None and inline_unit.pk == unit.pk:
-        if request.method in ('GET', 'HEAD'):
-            canonical_url = unit.get_absolute_url()
-            query_string = request.META.get('QUERY_STRING')
-            if query_string:
-                canonical_url = f'{canonical_url}?{query_string}'
-            return redirect(canonical_url, permanent=True)
     return _render_course_unit_detail(request, course, submodule, unit)
 
 
@@ -1121,8 +1096,6 @@ def course_submodule_homework_step_detail(
         parent=parent_module, slug=module_slug,
     )
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
-    if is_inline_homework_unit(submodule, unit, course.slug):
-        raise Http404
     if not _is_valid_homework_route_step(request, course, unit, homework_step):
         raise Http404
     return _render_course_unit_detail(

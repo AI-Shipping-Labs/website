@@ -5,10 +5,10 @@ from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
 from community_base.homework_steps.models import HomeworkDraft
-from django.template.defaultfilters import date as format_date
 from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
+from accounts.templatetags.date_formatting import member_short_datetime
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort, CohortEnrollment
 from content.models.homework import (
@@ -208,7 +208,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
         self.assertContains(
             response,
-            f'Submitted {format_date(submitted_at, "M j, Y, g:i A T")}',
+            f'Submitted {member_short_datetime(submitted_at)} '
+            f'{response.context["homework_display_timezone"]}',
         )
 
     def test_canonical_path_steps_and_query_bookmarks_are_both_readable(self):

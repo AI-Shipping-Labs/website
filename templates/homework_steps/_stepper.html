@@ -1,6 +1,7 @@
 {% load static %}
 {% load accounts_extras %}
 {% load homework_step_tags %}
+{% load date_formatting %}
 {% load tz %}
 
 <section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
@@ -78,7 +79,7 @@
       {% if stepper.accepted_snapshot_primary %}
       <section class="mb-6" aria-labelledby="homework-accepted-submission-title" data-testid="homework-accepted-snapshot">
         <h3 id="homework-accepted-submission-title" class="mb-3 text-base font-semibold text-foreground">Accepted submission</h3>
-        {% if stepper.accepted_submitted_at %}<p class="mb-3 text-sm text-muted-foreground" data-testid="homework-submitted-at">Submitted {{ stepper.accepted_submitted_at|timezone:homework_display_timezone|date:"M j, Y, g:i A T" }}</p>{% endif %}
+        {% if stepper.accepted_submitted_at %}<p class="mb-3 text-sm text-muted-foreground" data-testid="homework-submitted-at">Submitted {{ stepper.accepted_submitted_at|timezone:homework_display_timezone|member_short_datetime }} {{ homework_display_timezone }}</p>{% endif %}
         <ol class="space-y-2" data-testid="homework-review-summary">
           {% for row in stepper.review_display_rows %}
           <li class="{% include 'content/_info_card_classes.html' %} bg-card text-sm">

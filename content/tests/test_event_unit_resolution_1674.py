@@ -261,12 +261,9 @@ class SessionUnitPresentationTest(TestCase):
             status='completed',
             title='AI Engineering Buildcamp — Office Hours — Session 1',
             description=(
-                'Weekly office hours for cohort 4 of the AI Engineering '
-                'Buildcamp (Maven course). Mondays 17:00 Europe/Berlin. '
-                'Recordings and recaps are shared with enrolled cohort '
-                'members. Hidden series: occurrences render only on the '
-                'buildcamp course page for entitled members, never in public '
-                'event listings.'
+                'Hidden series: occurrences render only on the buildcamp '
+                'course page for entitled members, never in public event '
+                'listings.'
             ),
             recap_notes='Session 1 recap: we reviewed retrieval quality.',
             recording_url='https://www.youtube.com/watch?v=p64Pik3OeIA',
@@ -283,8 +280,11 @@ class SessionUnitPresentationTest(TestCase):
         self.assertNotContains(response, 'data-testid="unit-session-recording-section"')
         self.assertNotContains(response, 'data-testid="unit-session-recap-section"')
         self.assertContains(response, self.event.title)
-        self.assertContains(response, 'Weekly office hours for cohort 4')
-        self.assertContains(response, 'Mondays 17:00 Europe/Berlin')
+        self.assertContains(response, 'data-event-time-display')
+        self.assertNotContains(
+            response,
+            'Weekly office hours for cohort 4 of the AI Engineering Buildcamp',
+        )
         self.assertContains(response, 'data-testid="unit-session-event-details"')
         self.assertContains(response, f'href="{self.event.get_absolute_url()}"')
         self.assertNotContains(response, 'Hidden series:')

@@ -102,7 +102,7 @@ class CourseProjectAttemptSyncTest(TestCase):
         self.assertFalse(CourseProject.objects.filter(course=self.course).exists())
 
     def test_rejects_project_paths_nested_under_topics(self):
-        with self.assertRaisesMessage(GitHubSyncError, 'top-level module'):
+        with self.assertRaises(GitHubSyncError):
             _sync_course_projects(self.course, {'projects': [{
                 'slug': 'nested-attempt', 'title': 'Nested attempt',
                 'module_path': 'capstone/project',

@@ -25,8 +25,9 @@ from __future__ import annotations
 
 from datetime import date
 
+import pytest
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN
 from content.models import (
@@ -89,6 +90,8 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         self.assertIn('min-h-[44px]', window)
         self.assertIn('px-3 py-2.5', window)
 
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
     def test_unit_row_matches_workshop_padding_and_keeps_44px_tap_target(self):
         """Syllabus units use the workshop row scale and stay tappable."""
         response = self.client.get("/courses/spacing-course")
@@ -99,7 +102,7 @@ class CourseSyllabusMobileSpacingTest(TierSetupMixin, TestCase):
         self.assertNotEqual(idx, -1)
         window = body[max(0, idx - 400):idx + 200]
         self.assertIn('min-h-[44px]', window)
-        self.assertIn('gap-2.5 rounded-md px-3 py-2', window)
+        self.assertIn('gap-x-2.5 rounded-md px-3 py-2', window)
         self.assertNotIn('py-1.5', window)
         self.assertNotIn('sm:py-2.5', window)
 

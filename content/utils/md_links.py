@@ -77,6 +77,7 @@ def rewrite_md_links(
     source_path=None,
     sync_errors=None,
     parent_module_slug=None,
+    source_content_lookup=None,
 ):
     """Rewrite intra-content ``.md`` links in ``body`` to platform URLs.
 
@@ -106,6 +107,11 @@ def rewrite_md_links(
             is what lets ``..``-depth resolution distinguish "one level up
             reaches the parent week" from "one level up reaches the course
             root".
+        source_content_lookup: Optional mapping from repository-relative
+            Markdown paths to destination URLs. When supplied, links resolve
+            from the source file's physical path and can use stable ``/c/``
+            content URLs. This supports YAML-backed units whose Markdown body
+            lives below the unit directory.
 
     Returns:
         str: The body with internal ``.md`` links replaced.
@@ -171,6 +177,30 @@ def rewrite_md_links(
                 f'in {source_path or "(unknown file)"}: not supported.'
             )
             return None
+
+        if source_content_lookup is not None:
+            source_file = posixpath.normpath(source_path or '')
+            destination_path = posixpath.normpath(
+                posixpath.join(posixpath.dirname(source_file), path_part),
+            )
+            if destination_path == '..' or destination_path.startswith('../'):
+                _warn(
+                    f'Cannot rewrite cross-repository link "{target}" '
+                    f'in {source_path or "(unknown file)"}.'
+                )
+                return None
+            destination = source_content_lookup.get(destination_path)
+            if destination is None:
+                _warn(
+                    f'Could not resolve Markdown link "{target}" in '
+                    f'{source_path or "(unknown file)"}.'
+                )
+                return None
+            if isinstance(destination, dict):
+                destination = destination.get('url')
+            if not destination:
+                return None
+            return f'{destination}{fragment}'
 
         # Normalise the path. ``posixpath.normpath`` collapses ``./`` and
         # double slashes but leaves leading ``..`` intact (we use that to

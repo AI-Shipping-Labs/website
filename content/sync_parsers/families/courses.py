@@ -10,6 +10,7 @@ from django.utils.dateparse import parse_date, parse_datetime
 
 from content.sync_parsers.base import FamilyParser
 from content.sync_parsers.checkout_view import (
+    active_checkout,
     checkout_exists,
     checkout_is_dir,
     checkout_is_file,
@@ -387,6 +388,10 @@ def _sync_single_course(
             stats['errors'].append({'file': rel_path, 'error': msg})
             return
 
+        course_tree = _parse_shared_course_tree(
+            course_dir, repo_dir, course_data,
+        )
+
         if _course_slug_collision_blocked(
             Course, slug, course_content_id, source.repo_name, rel_path, stats,
         ):
@@ -412,12 +417,19 @@ def _sync_single_course(
         if not result.created:
             _delete_duplicate_course_siblings(candidates, course)
 
-        _sync_course_children(
+        pending_course_tree_homework = _sync_course_children(
             course, course_data, course_dir, repo_dir, rel_path, source,
             commit_sha, stats, known_images, course_ignore_patterns,
+            course_tree,
         )
         _sync_course_cohorts(course, course_data, rel_path)
-        _sync_course_projects(course, course_data, rel_path)
+        if pending_course_tree_homework:
+            _sync_course_tree_homework(
+                course, pending_course_tree_homework, stats,
+            )
+        _sync_course_projects(
+            course, course_data, rel_path, course_tree=course_tree,
+        )
 
         # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
         # only on create/update. ``_enqueue_banner_if_missing`` itself
@@ -481,6 +493,99 @@ def _course_slug_collision_blocked(
 def _course_ignore_patterns(course_data):
     raw_ignore = course_data.get('ignore', []) or []
     return [str(p) for p in raw_ignore]
+
+
+def _parse_shared_course_tree(course_dir, repo_dir, course_data):
+    """Parse module and unit files through community-base's curriculum parser.
+
+    The legacy ``course.yaml`` remains AISL-owned because it also contains
+    Maven, access, cohort, and peer-review settings. Only its course-relative
+    ignore patterns cross the adapter boundary; the package owns the physical
+    module/unit structure and validation.
+    """
+    from community_base.curriculum.parsers import parse_course_tree
+    from community_base.curriculum.source import CurriculumParseError
+
+    checkout = active_checkout()
+    if checkout is None:
+        source = course_dir
+        path = '.'
+    else:
+        source = checkout
+        path = os.path.relpath(course_dir, repo_dir).replace(os.sep, '/')
+    try:
+        tree = parse_course_tree(
+            source,
+            path=path,
+            project_specs=course_data.get('projects', []) or [],
+            ignore=_course_ignore_patterns(course_data),
+        )
+        _validate_course_tree_site_fields(tree)
+        return tree
+    except CurriculumParseError as exc:
+        if (
+            _course_tree_has_yaml_homework_units(checkout, course_dir, repo_dir)
+            or not _is_legacy_course_tree_parse_error(exc)
+        ):
+            raise
+        logger.info(
+            'Using legacy course source adapter for %s: source is not yet '
+            'in the shared curriculum format.',
+            os.path.relpath(course_dir, repo_dir),
+        )
+        return None
+
+
+def _is_legacy_course_tree_parse_error(error):
+    """Identify old AISL frontmatter the shared format intentionally omits."""
+    message = str(error)
+    legacy_fields = (
+        'is_preview', 'is_homework', 'access', 'prev_url', 'homework_steps',
+        'questions', 'due_date', 'homework_url_field',
+        'time_spent_lectures_field', 'time_spent_homework_field',
+        'learning_in_public_cap', 'ignore',
+    )
+    if 'unknown top-level key:' in message:
+        return any(f'unknown top-level key: {field}' in message for field in legacy_fields)
+    if 'session_position: event units need a positive integer' in message:
+        return True
+    return 'sort_order' in message and any(
+        word in message.lower() for word in ('required', 'missing', 'must declare')
+    )
+
+
+def _validate_course_tree_site_fields(tree):
+    from community_base.curriculum.source import CurriculumParseError
+
+    for unit in _iter_course_tree_units(tree):
+        if unit.kind != 'event':
+            continue
+        position = unit.session_position
+        if isinstance(position, bool) or not isinstance(position, int) or position < 1:
+            raise CurriculumParseError(
+                f'{unit.source_path}:/session_position: event units need a '
+                'positive integer session position'
+            )
+
+
+def _course_tree_has_yaml_homework_units(checkout, course_dir, repo_dir):
+    if checkout is not None:
+        course_path = os.path.relpath(course_dir, repo_dir).replace(os.sep, '/')
+        prefix = '' if course_path == '.' else f'{course_path.rstrip("/")}/'
+        for path in checkout.checkout.files():
+            path = str(path)
+            if prefix and not path.startswith(prefix):
+                continue
+            relative = path[len(prefix):] if prefix else path
+            if 'cohorts/' not in relative and relative.endswith('/homework.yaml'):
+                return True
+        return False
+
+    for current_root, directories, filenames in os.walk(course_dir):
+        directories[:] = [name for name in directories if name != 'cohorts']
+        if 'homework.yaml' in filenames:
+            return True
+    return False
 
 
 def _build_course_defaults(
@@ -636,17 +741,27 @@ def _delete_duplicate_course_siblings(candidates, course):
 
 def _sync_course_children(
     course, course_data, course_dir, repo_dir, rel_path, source, commit_sha,
-    stats, known_images, course_ignore_patterns,
+    stats, known_images, course_ignore_patterns, course_tree,
 ):
     resolved_instructors = _resolve_instructors_for_yaml(
         course_data, rel_path, stats,
     )
     _attach_instructors_to_course(course, resolved_instructors, stats)
-    _sync_course_modules(
-        course, course_dir, repo_dir, source.repo_name,
-        commit_sha, stats, known_images=known_images,
-        course_ignore_patterns=course_ignore_patterns,
-    )
+    if course_tree is None:
+        # Older repositories still use AISL-only Markdown frontmatter. Keep
+        # their importer as a compatibility adapter until those repositories
+        # adopt the shared curriculum format.
+        _sync_course_modules(
+            course, course_dir, repo_dir, source.repo_name,
+            commit_sha, stats, known_images=known_images,
+            course_ignore_patterns=course_ignore_patterns,
+        )
+        return None
+    else:
+        return _sync_course_tree(
+            course, course_tree, repo_dir, source.repo_name, commit_sha, stats,
+            known_images=known_images,
+        )
 
 
 _COHORT_REQUIRED_FIELDS = ('key', 'name', 'start_date', 'end_date')
@@ -654,7 +769,7 @@ _COHORT_SELF_PACED_REQUIRED_FIELDS = ('key', 'name')
 _VALID_COHORT_MODES = frozenset({'cohort', 'self_paced'})
 
 
-def _sync_course_projects(course, course_data, rel_path):
+def _sync_course_projects(course, course_data, rel_path, course_tree=None):
     """Import dated attempts without deleting attempts that may have submissions.
 
     ``projects`` is a list of mappings with a course-unique ``slug``, title,
@@ -666,6 +781,22 @@ def _sync_course_projects(course, course_data, rel_path):
     from content.models.peer_review import CourseProject
 
     entries = course_data.get('projects', [])
+    if course_tree is not None:
+        entries = []
+        for project in course_tree.projects:
+            module = Module.objects.filter(
+                course=course,
+                source_content_id=project.module_content_id,
+            ).first()
+            entries.append({
+                'slug': project.slug,
+                'title': project.title,
+                'cohort_key': project.cohort_key,
+                'peer_review_count': project.peer_review_count,
+                'submission_due_at': project.submission_due_at,
+                'review_due_at': project.review_due_at,
+                '_module': module,
+            })
     if not isinstance(entries, list):
         raise GitHubSyncError(f'Invalid projects in {rel_path}/course.yaml: expected a list')
     if entries and not course.peer_review_enabled:
@@ -707,18 +838,19 @@ def _sync_course_projects(course, course_data, rel_path):
             cohort = course.aisl_cohorts.filter(external_key=cohort_key).first()
             if cohort is None:
                 raise GitHubSyncError(f'Project {slug!r} references unknown cohort_key {cohort_key!r}')
-        module_path = entry.get('module_path')
-        if not isinstance(module_path, str) or not module_path.strip():
-            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires module_path')
-        module = None
-        for component in module_path.split('/'):
-            if not component:
-                raise GitHubSyncError(f'Project {slug!r} has invalid module_path {module_path!r}')
-            module = Module.objects.filter(
-                course=course, parent=module, slug=component,
-            ).first()
-            if module is None:
-                raise GitHubSyncError(f'Project {slug!r} references unknown module_path {module_path!r}')
+        module = entry.get('_module')
+        if module is None:
+            module_path = entry.get('module_path')
+            if not isinstance(module_path, str) or not module_path.strip():
+                raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires module_path')
+            for component in module_path.split('/'):
+                if not component:
+                    raise GitHubSyncError(f'Project {slug!r} has invalid module_path {module_path!r}')
+                module = Module.objects.filter(
+                    course=course, parent=module, slug=component,
+                ).first()
+                if module is None:
+                    raise GitHubSyncError(f'Project {slug!r} references unknown module_path {module_path!r}')
         if module.parent_id is not None:
             raise GitHubSyncError(
                 f'Project {slug!r} module_path must point to a top-level module',
@@ -1543,8 +1675,7 @@ def _sync_module_dir(
     unit_lookup, seen_module_paths, seen_module_slugs, unit_sync_state,
     allow_parent_with_pending_units=False,
 ):
-    """Sync one module directory: the module row, then either its
-    submodules (parent) or its units (leaf) — never both (issue #1674).
+    """Sync one legacy module directory from its physical children.
 
     ``seen_module_slugs`` and ``unit_sync_state`` are shared, mutable,
     course-wide accumulators threaded through the whole recursive tree
@@ -1578,22 +1709,6 @@ def _sync_module_dir(
     submodule_entries = _find_submodule_dir_entries(
         entry.path, course_ignore_patterns, course_dir,
     )
-    has_direct_units = _has_direct_unit_files(
-        entry.path, course_ignore_patterns, module_ignore_patterns, course_dir,
-    )
-
-    if submodule_entries and has_direct_units:
-        # Reject the mixed directory outright — do not create either side.
-        # A submodule row and/or a stray unit row created before this
-        # check would leave the "does not partially create either side"
-        # contract broken, so the directory-shape check runs before any
-        # DB write for this directory.
-        raise GitHubSyncError(
-            f'Module directory {rel_path} mixes submodule subdirectories '
-            'with direct unit markdown files — a module must hold either '
-            'submodules or units, never both. Move the unit files into a '
-            'submodule subdirectory, or remove the submodule dirs.'
-        )
 
     module = _upsert_module_row(
         course, parent_module, entry, module_data, rel_path, repo_name,
@@ -1770,6 +1885,223 @@ def _count_real_errors(errors, start_index):
     those are unresolved. Do not assume every entry carries the key.
     """
     return sum(1 for e in errors[start_index:] if e.get('severity') != 'info')
+
+
+def _sync_course_tree(course, tree, repo_dir, repo_name, commit_sha, stats,
+                      known_images=None):
+    """Persist the community-base course tree with AISL rendering adapters.
+
+    The shared importer owns module/unit identity, reparenting, sibling order,
+    and stale-node reconciliation. AISL still rewrites repository images and
+    Markdown links for its public URLs and syncs its separate homework form
+    rows after the shared Unit rows exist.
+    """
+    from dataclasses import replace
+
+    from community_base.curriculum.importing import apply_curriculum_tree
+    from community_base.curriculum.source import ModuleGraph, UnitGraph
+    from content.models import Unit
+    from content.sync_parsers.checkout_view import active_checkout
+    from content.utils.md_links import rewrite_md_links
+
+    checkout_view = active_checkout()
+    checkout = checkout_view.checkout if checkout_view is not None else None
+    link_targets = _course_tree_link_targets(tree, course.slug)
+    initial_error_count = len(stats['errors'])
+
+    def rewrite_body(body, body_path, module_path, parent_module_slug=None):
+        if not body:
+            return body
+        base_dir = os.path.dirname(body_path)
+        if known_images is not None:
+            _check_broken_image_refs(
+                body, body_path, repo_name, base_dir,
+                known_images, stats.get('errors', []),
+            )
+        body = rewrite_image_urls(body, repo_name, base_dir)
+        return rewrite_md_links(
+            body,
+            course_slug=course.slug,
+            module_slug=module_path[-1],
+            unit_lookup={},
+            source_path=body_path,
+            sync_errors=stats.get('errors'),
+            parent_module_slug=parent_module_slug,
+            source_content_lookup=link_targets,
+        )
+
+    def transform_module(module, ancestors=()):
+        module_path = (*ancestors, module.slug)
+        overview = module.overview
+        if overview:
+            overview_path = os.path.join(
+                os.path.dirname(module.source_path), 'README.md',
+            ).replace(os.sep, '/')
+            overview = rewrite_body(
+                overview, overview_path, module_path,
+                parent_module_slug=ancestors[-1] if ancestors else None,
+            )
+
+        items = []
+        for item in module.items:
+            if isinstance(item, ModuleGraph):
+                items.append(transform_module(item, module_path))
+                continue
+            if not isinstance(item, UnitGraph):
+                items.append(item)
+                continue
+
+            body_path = item.body_source_path or item.source_path
+            if item.homework_unit is not None:
+                body = rewrite_body(
+                    item.homework, body_path, module_path,
+                    parent_module_slug=ancestors[-1] if ancestors else None,
+                )
+                items.append(replace(item, homework=body))
+            else:
+                body = item.homework or item.body
+                body = rewrite_body(
+                    body, body_path, module_path,
+                    parent_module_slug=ancestors[-1] if ancestors else None,
+                )
+                if item.kind == 'homework':
+                    items.append(replace(item, body='', homework=body))
+                else:
+                    items.append(replace(item, body=body))
+        return replace(module, overview=overview, items=tuple(items))
+
+    transformed_tree = replace(
+        tree,
+        modules=tuple(transform_module(module) for module in tree.modules),
+    )
+
+    # The importer removes stale content as part of its transaction. If an
+    # authored local image or Markdown target is broken, retain the existing
+    # tree so one bad reference cannot cascade-delete learner progress.
+    if _count_real_errors(stats['errors'], initial_error_count):
+        return
+
+    counts = apply_curriculum_tree(
+        course,
+        transformed_tree,
+        commit=str(commit_sha or ''),
+        checkout=checkout,
+    )
+    for action in ('created', 'updated', 'unchanged', 'deleted'):
+        stats[action] += counts[action]
+
+    return tuple(
+        unit for unit in _iter_course_tree_units(transformed_tree)
+        if unit.homework_unit is not None
+    )
+
+
+def _sync_course_tree_homework(course, homework_units, stats):
+    """Sync YAML homework forms after this course's cohorts exist."""
+    from content.models import Unit
+
+    for unit_graph in homework_units:
+        unit = Unit.objects.filter(
+            source_content_id=unit_graph.content_id,
+            module__course=course,
+        ).first()
+        if unit is None:
+            stats['errors'].append({
+                'file': unit_graph.source_path,
+                'error': 'Shared curriculum importer did not persist the homework unit.',
+            })
+            continue
+        metadata = _homework_metadata_from_graph(unit_graph)
+        try:
+            sync_unit_homework(
+                unit, course, metadata, unit_graph.source_path, stats,
+            )
+        except Exception as exc:
+            stats['errors'].append({
+                'file': unit_graph.source_path,
+                'error': str(exc),
+            })
+
+
+def _iter_course_tree_units(tree):
+    from community_base.curriculum.source import ModuleGraph, UnitGraph
+
+    def walk(modules):
+        for module in modules:
+            for item in module.items:
+                if isinstance(item, UnitGraph):
+                    yield item
+                elif isinstance(item, ModuleGraph):
+                    yield from walk((item,))
+
+    yield from walk(tree.modules)
+
+
+def _homework_metadata_from_graph(unit):
+    homework = unit.homework_unit
+    form = homework.form
+    metadata = {
+        'due_date': homework.due_at,
+        'homework_steps': True,
+        'questions': [
+            {
+                'id': question.stable_id,
+                'type': question.type,
+                'text': question.prompt,
+                'score': question.points,
+                'options': [option.label for option in question.options],
+                'correct': question.correct or '',
+                **({'answer_type': question.answer_type} if question.answer_type else {}),
+            }
+            for question in homework.questions
+        ],
+    }
+    for source_key, form_key in (
+        ('homework_url', 'homework_url_field'),
+        ('time_spent_lectures', 'time_spent_lectures_field'),
+        ('time_spent_homework', 'time_spent_homework_field'),
+        ('learning_in_public_cap', 'learning_in_public_cap'),
+    ):
+        value = getattr(form, source_key)
+        if value is not None:
+            metadata[form_key] = value
+    return metadata
+
+
+def _course_tree_link_targets(tree, course_slug):
+    """Index every source Markdown file to its stable public content URL."""
+    from community_base.curriculum.source import ModuleGraph, UnitGraph
+
+    targets = {}
+
+    def module_url(module_path, content_id):
+        return f'/c/{content_id}' if content_id else (
+            f'/courses/{course_slug}/' + '/'.join(module_path)
+        )
+
+    def unit_url(module_path, unit):
+        return f'/c/{unit.content_id}' if unit.content_id else (
+            f'/courses/{course_slug}/' + '/'.join((*module_path, unit.slug))
+        )
+
+    def walk(modules, ancestors=()):
+        for module in modules:
+            module_path = (*ancestors, module.slug)
+            if module.overview:
+                readme_path = os.path.join(
+                    os.path.dirname(module.source_path), 'README.md',
+                ).replace(os.sep, '/')
+                targets[readme_path] = module_url(module_path, module.content_id)
+            for item in module.items:
+                if isinstance(item, UnitGraph):
+                    if item.body_source_path:
+                        targets[item.body_source_path] = unit_url(module_path, item)
+                    targets[item.source_path] = unit_url(module_path, item)
+                elif isinstance(item, ModuleGraph):
+                    walk((item,), module_path)
+
+    walk(tree.modules)
+    return targets
 
 
 def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, stats,

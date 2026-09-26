@@ -20,6 +20,7 @@ import yaml
 from django.test import TestCase
 
 from content.models import Cohort, Module, Unit
+from content.models.homework import Homework, QuestionType
 from content.sync_parsers.checkout_view import checkout_scope
 from content.sync_parsers.families.courses import _sync_single_course
 
@@ -47,6 +48,16 @@ class DirectSyncFixtureBase(TestCase):
     def _write_yaml(self, rel_path, data):
         full = os.path.join(self.course_dir, rel_path)
         os.makedirs(os.path.dirname(full), exist_ok=True)
+        data = dict(data)
+        if rel_path.endswith('/module.yaml'):
+            data.setdefault('content_id', str(uuid.uuid4()))
+            try:
+                data.setdefault(
+                    'sort_order',
+                    int(os.path.basename(os.path.dirname(rel_path)).split('-', 1)[0]),
+                )
+            except ValueError:
+                pass
         with open(full, 'w') as f:
             yaml.safe_dump(data, f)
 
@@ -55,6 +66,14 @@ class DirectSyncFixtureBase(TestCase):
         os.makedirs(os.path.dirname(full), exist_ok=True)
         frontmatter = dict(frontmatter)
         frontmatter.setdefault('content_id', str(uuid.uuid4()))
+        if not rel_path.endswith('/README.md'):
+            try:
+                frontmatter.setdefault(
+                    'sort_order',
+                    int(os.path.basename(rel_path).split('-', 1)[0]),
+                )
+            except ValueError:
+                pass
         with open(full, 'w') as f:
             f.write('---\n')
             yaml.safe_dump(frontmatter, f)
@@ -111,29 +130,134 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         docker_unit = Unit.objects.get(module__slug='docker', slug='lesson')
         self.assertEqual(docker_unit.title, 'Docker basics')
 
-    def test_mixed_directory_rejected_and_creates_neither_side(self):
+    def test_mixed_directory_imports_direct_units_and_nested_modules(self):
         self._write_course_yaml()
         self._write_yaml('03-mixed/module.yaml', {'title': 'Mixed module'})
-        self._write_yaml('03-mixed/01-sub/module.yaml', {'title': 'Sub'})
         self._write_markdown(
-            '03-mixed/01-sub/01-lesson.md', {'title': 'Sub lesson'}, 'Body.\n',
+            '03-mixed/01-direct.md',
+            {'title': 'Direct unit', 'sort_order': 1}, 'Direct body.\n',
+        )
+        self._write_yaml(
+            '03-mixed/02-sub/module.yaml',
+            {'title': 'Sub', 'sort_order': 2},
         )
         self._write_markdown(
-            '03-mixed/01-stray-unit.md', {'title': 'Stray unit'}, 'Stray body.\n',
+            '03-mixed/02-sub/01-lesson.md',
+            {'title': 'Sub lesson'}, 'Nested body.\n',
         )
 
         stats = self._sync()
 
-        self.assertFalse(
-            Module.objects.filter(course__slug='buildcamp-direct', slug='mixed-module').exists(),
+        self.assertEqual(stats['errors'], [])
+        parent = Module.objects.get(course__slug='buildcamp-direct', slug='mixed')
+        child = Module.objects.get(course__slug='buildcamp-direct', slug='sub')
+        self.assertEqual(child.parent_id, parent.pk)
+        direct = Unit.objects.get(module=parent, slug='direct')
+        nested = Unit.objects.get(module=child, slug='lesson')
+        self.assertEqual(direct.sort_order, 1)
+        self.assertEqual(child.sort_order, 2)
+        self.assertEqual(nested.sort_order, 1)
+
+    def test_yaml_homework_mixed_tree_creates_form_and_updates_stable_questions(self):
+        course_id = str(uuid.uuid4())
+        unit_id = str(uuid.uuid4())
+        self._write_course_yaml(
+            content_id=course_id,
+            cohorts=[{
+                'key': 'cohort-4', 'name': 'Cohort 4',
+                'start_date': '2026-01-01', 'end_date': '2026-12-31',
+            }],
         )
-        self.assertFalse(
-            Module.objects.filter(course__slug='buildcamp-direct', slug='sub').exists(),
+        self._write_yaml('01-week/module.yaml', {'title': 'Week 1'})
+        homework_path = '01-week/01-homework/homework.yaml'
+        homework_data = {
+            'content_id': unit_id,
+            'title': 'Homework 1',
+            'slug': 'homework',
+            'sort_order': 1,
+            'due_at': '2026-10-05T23:59:59+00:00',
+            'form': {
+                'homework_url': True,
+                'time_spent_lectures': True,
+                'time_spent_homework': False,
+                'learning_in_public_cap': 3,
+            },
+            'questions': [
+                {
+                    'content_id': str(uuid.uuid4()),
+                    'id': 'q1-lines',
+                    'type': 'multiple_choice',
+                    'prompt': 'How many lines?',
+                    'points': 2,
+                    'step_label': 'Line count',
+                    'options': [
+                        {'id': 'option-one', 'label': 'One'},
+                        {'id': 'option-two', 'label': 'Two'},
+                    ],
+                    'correct': '2',
+                },
+                {
+                    'content_id': str(uuid.uuid4()),
+                    'id': 'q2-reflection',
+                    'type': 'free_form',
+                    'prompt': 'What did you learn?',
+                    'points': 1,
+                    'step_label': 'Reflection',
+                    'answer_type': 'any',
+                },
+            ],
+        }
+        self._write_yaml(homework_path, homework_data)
+        self._write_markdown(
+            '01-week/01-homework/homework.md', {},
+            'Instructions.\n\n## Question 1. Lines\nRun the line count.\n'
+            '\n## Question 2. Reflection\nWrite what you learned.\n',
         )
-        self.assertFalse(Unit.objects.filter(slug='stray-unit').exists())
-        self.assertFalse(Unit.objects.filter(slug='sub-lesson').exists())
-        error_text = ' '.join(e.get('error', '') for e in stats['errors'])
-        self.assertIn('03-mixed', error_text)
+        self._write_yaml(
+            '01-week/02-project/module.yaml',
+            {'title': 'Project Work', 'sort_order': 2},
+        )
+        self._write_markdown(
+            '01-week/02-project/01-start.md',
+            {'title': 'Project start'}, 'Start here.\n',
+        )
+
+        stats = self._sync()
+
+        self.assertEqual(stats['errors'], [])
+        week = Module.objects.get(course__source_content_id=course_id, slug='week')
+        homework_unit = Unit.objects.get(
+            source_content_id=unit_id, module=week, slug='homework',
+        )
+        project_module = Module.objects.get(parent=week, slug='project')
+        self.assertEqual(project_module.sort_order, 2)
+        self.assertEqual(
+            Unit.objects.get(module=project_module, slug='start').title,
+            'Project start',
+        )
+
+        homework = Homework.objects.get(content_id=unit_id)
+        self.assertEqual(homework.content_id, homework_unit.content_id)
+        self.assertEqual(homework.due_date.isoformat(), '2026-10-05T23:59:59+00:00')
+        self.assertTrue(homework.stepper_enabled)
+        self.assertTrue(homework.homework_url_field)
+        self.assertTrue(homework.time_spent_lectures_field)
+        self.assertFalse(homework.time_spent_homework_field)
+        self.assertEqual(homework.learning_in_public_cap, 3)
+        question = homework.questions.get(source_question_id='q1-lines')
+        self.assertEqual(question.question_type, QuestionType.MULTIPLE_CHOICE)
+        self.assertEqual(question.correct_answer, '2')
+        self.assertEqual(question.options_list, ['One', 'Two'])
+        original_question_pk = question.pk
+
+        homework_data['questions'][0]['prompt'] = 'How many lines are in the output?'
+        self._write_yaml(homework_path, homework_data)
+        second_sync = self._sync()
+
+        self.assertEqual(second_sync['errors'], [])
+        question.refresh_from_db()
+        self.assertEqual(question.pk, original_question_pk)
+        self.assertEqual(question.text, 'How many lines are in the output?')
 
     def test_same_unit_slug_across_two_submodules_syncs_cleanly(self):
         """Two submodules under one module, each with a unit slug of
@@ -193,16 +317,12 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         self.assertFalse(module.is_bonus)
         self.assertIsNone(module.available_after_days)
 
-    def test_third_level_module_directory_rejected_at_sync_layer(self):
-        """Depth cap (max two levels of module) is enforced at SYNC time,
-        not just by model validation on a hand-built instance — a
-        submodule directory that itself contains a further nested
-        module.yaml is rejected, named, and does not create the
-        third-level row, while sibling well-formed modules still sync."""
+    def test_arbitrary_module_depth_is_loaded_from_repository_tree(self):
+        """Every physical module directory remains a node at any depth."""
         self._write_course_yaml()
         self._write_yaml('08-week/module.yaml', {'title': 'Week'})
         self._write_yaml('08-week/01-topic/module.yaml', {'title': 'Topic'})
-        # Third level: a module.yaml nested inside the submodule dir.
+        # A third nested module follows the same repository convention.
         self._write_yaml(
             '08-week/01-topic/01-too-deep/module.yaml', {'title': 'Too deep'},
         )
@@ -210,7 +330,7 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
             '08-week/01-topic/01-too-deep/01-lesson.md',
             {'title': 'Too deep lesson'}, 'Body.\n',
         )
-        # A well-formed sibling course elsewhere in the tree must still sync.
+        # A sibling module keeps its authored top-level order.
         self._write_yaml('09-plain/module.yaml', {'title': 'Plain sibling'})
         self._write_markdown(
             '09-plain/01-lesson.md', {'title': 'Plain lesson'}, 'Body.\n',
@@ -218,26 +338,21 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
 
         stats = self._sync()
 
-        self.assertFalse(
-            Module.objects.filter(
-                course__slug='buildcamp-direct', slug='too-deep',
-            ).exists(),
+        self.assertEqual(stats['errors'], [])
+        week = Module.objects.get(course__slug='buildcamp-direct', slug='week')
+        topic = Module.objects.get(course__slug='buildcamp-direct', slug='topic')
+        deepest = Module.objects.get(course__slug='buildcamp-direct', slug='too-deep')
+        self.assertEqual(topic.parent_id, week.pk)
+        self.assertEqual(deepest.parent_id, topic.pk)
+        self.assertTrue(
+            Unit.objects.filter(module=deepest, title='Too deep lesson').exists(),
         )
-        self.assertFalse(Unit.objects.filter(title='Too deep lesson').exists())
-        error_text = ' '.join(e.get('error', '') for e in stats['errors'])
-        self.assertIn('too-deep', error_text)
-        # The sibling top-level module still synced despite the rejection.
+        # The sibling top-level module remains in the same sync.
         plain_module = Module.objects.get(
             course__slug='buildcamp-direct', slug='plain',
         )
         self.assertTrue(
             Unit.objects.filter(module=plain_module, title='Plain lesson').exists(),
-        )
-        # The submodule itself (level 2, valid) still synced correctly.
-        self.assertTrue(
-            Module.objects.filter(
-                course__slug='buildcamp-direct', slug='topic', parent__isnull=False,
-            ).exists(),
         )
 
     def test_submodule_slug_repeated_across_different_parents_syncs_cleanly(self):

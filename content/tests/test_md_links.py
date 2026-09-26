@@ -106,6 +106,23 @@ class RewriteMdLinksTest(SimpleTestCase):
         self.assertIn('[Setup](/courses/python/fundamentals/setup)', result)
         self.assertNotIn('02-setup.md', result)
 
+    def test_source_path_lookup_resolves_physical_nested_unit_to_stable_link(self):
+        result = rewrite_md_links(
+            'Continue with [Session](../01-session.md#recap).',
+            course_slug='ai-buildcamp',
+            module_slug='week-1',
+            unit_lookup={},
+            source_path='course/week-1/07-homework/homework.md',
+            source_content_lookup={
+                'course/week-1/01-session.md': '/c/11111111-1111-4111-8111-111111111111',
+            },
+        )
+        self.assertIn(
+            '[Session](/c/11111111-1111-4111-8111-111111111111#recap)',
+            result,
+        )
+        self.assertNotIn('/courses/ai-buildcamp/', result)
+
     def test_cross_module_same_course_link_resolves(self):
         body = 'See [Deploy](../advanced/02-deploy.md) later.'
         result = rewrite_md_links(

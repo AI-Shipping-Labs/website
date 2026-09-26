@@ -40,20 +40,7 @@
         <div id="homework-question-prompt" class="prose max-w-none{% if stepper.step == 'learning-in-public' %} homework-learning-public-prompt{% endif %}" data-testid="homework-question-prompt">{% render_homework_question_prompt stepper.question.prompt stepper.options stepper.question.type %}</div>
         {% if stepper.question.type != 'choice' and stepper.question.type != 'checkbox' %}
           {% if stepper.step == 'learning-in-public' %}
-          <div class="mt-6 border-t border-border pt-5" data-learning-public-links data-max-links="{{ stepper.assignment.context.learning_in_public_cap }}">
-            <div class="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-              <div>
-                <p class="text-sm font-medium text-foreground">Your public posts</p>
-                <p class="mt-1 text-sm text-muted-foreground" data-testid="learning-public-link-guidance">Optional. Add up to {{ stepper.assignment.context.learning_in_public_cap }} links to posts about your progress.</p>
-              </div>
-              <span class="text-xs text-muted-foreground" data-public-link-count aria-live="polite"></span>
-            </div>
-            <textarea name="answer" data-public-links-value hidden>{{ stepper.answer }}</textarea>
-            <div class="space-y-3" data-public-link-slots data-testid="learning-public-link-slots"></div>
-            <button type="button" data-add-public-link class="mt-3 inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
-              <span aria-hidden="true">+</span> <span data-add-public-link-label>Add another link</span>
-            </button>
-          </div>
+          {% include 'homework_steps/_public_links.html' %}
           {% else %}
           <label for="homework-answer" class="mb-2 mt-6 block text-sm text-muted-foreground">Your answer</label>
           {% if stepper.question.type == 'short_text' %}
@@ -155,5 +142,5 @@
     {% endif %}
   {% endif %}
 </section>
-<script defer src="{% static 'js/homework_learning_public.js' %}"></script>
+<script defer src="{% static 'community_base/homework_public_links.js' %}"></script>
 <script defer src="{% static 'community_base/homework_steps.js' %}"></script>

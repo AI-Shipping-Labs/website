@@ -73,6 +73,8 @@ has no webhook secret, so the September 25 update required an explicit sync.
 | Request | State | Evidence / next check |
 | --- | --- | --- |
 | Create community-base issue for reusable `/c/<uuid>` links in DTC; defer DTC implementation | Needs issue check | User asked to track, not implement now. |
+| Replace broken optional-content unit links with `/c/<uuid>` share links | Local preview fixed; source branch committed | All 24 links across seven optional pages return 302 locally. Course source commit `e762d20` is on `feature/course-source-hierarchy`; publish it with the hierarchy rollout. |
+| Simplify Learning in Public and Review form UI; remove weighted-character copy | In progress | Course source commit `f00d0d2` removed the phrase from all ten homework examples and local DB preview. AISL compact controls and review rows are under browser verification. Track shared version in DataTalksClub/community-base#308. |
 | Bring cohort-only course model and shared homework design to DTC through community-base | Open | Do after AISL working deployment, with cross-consumer tests. |
 | Track DTC Studio `community_base.studio.E001` under local settings | Issue filed; fix later | DataTalksClub/website#435 records the local-settings-only check failure. DTC test settings and package consumer CI passed without silencing it. |
 

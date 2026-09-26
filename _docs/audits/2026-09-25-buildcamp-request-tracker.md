@@ -35,6 +35,7 @@ has no webhook secret, so the September 25 update required an explicit sync.
 | Canonical first-level overview/session/homework URLs; capstone under `/homework-capstone`; `/c/<uuid>` share redirect | Needs route check | Old nested aliases/redirects were specifically rejected except `/c/<uuid>`. |
 | Subtle expansion animation; sidebar spacing and overflow fixes | Needs rendered check | Review screenshot-specific requests. |
 | Session page shows event details, past recap and video, with subtle inline event link and Maven auto-registration note | Needs rendered check | Event series was requested from production for local reproduction. |
+| Remove redundant office-hours series boilerplate from every occurrence | Open; Luna agent investigating production event data | September 26 screenshots 175626 and 175648 show the same “Weekly office hours for cohort 4...” paragraph on Session 1 and Session 2. Remove that exact boilerplate across the office-hours series, while preserving occurrence-specific details, event title/time/link, recap, and video. Use event API CLI with GET/write/GET verification. |
 
 ## Homework behavior and content
 

@@ -102,7 +102,15 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertEqual(response.context['unit_deadlines'][self.unit.pk], self.due4)
         self.assertEqual(response.context['module_deadline_summaries'][self.week.pk]['count'], 5)
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
-        self.assertContains(response, 'Oct 1, 2026 20:00 Europe/Berlin')
+        self.assertContains(
+            response,
+            'data-testid="syllabus-module-deadline">Due Oct 1, 2026 20:00 Europe/Berlin',
+        )
+        self.assertNotContains(response, 'Next due')
+        self.assertNotContains(response, 'Last due')
+        self.assertNotContains(response, 'deadlines')
+        self.assertContains(response, 'data-testid="syllabus-homework-icon"')
+        self.assertNotContains(response, 'data-testid="syllabus-unit-kind-label"')
 
     def test_course_projects_are_scoped_to_the_selected_cohort(self):
         self.client.force_login(self.learner)

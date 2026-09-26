@@ -1,20 +1,20 @@
 {% load schedule_tags %}
-<div class="flex min-h-[52px] items-center gap-2 rounded-md px-3 text-sm" data-testid="syllabus-project-attempt">
-  <i data-lucide="folder-git-2" class="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true"></i>
+<div class="grid min-h-[52px] grid-cols-[1rem_minmax(0,1fr)_auto] items-center gap-x-2.5 rounded-md px-3 text-sm" data-testid="syllabus-project-attempt">
+  <i data-lucide="folder-git-2" class="h-4 w-4 flex-shrink-0 text-muted-foreground" data-testid="syllabus-project-icon" aria-hidden="true"></i>
   {% if project.pk in preview_project_ids %}
-  <span class="min-w-0 flex-1 py-2.5 text-foreground" data-testid="syllabus-project-preview">
+  <span class="col-start-2 min-w-0 py-2.5 text-foreground" data-testid="syllabus-project-preview">
     <span class="block font-medium">{{ project.title }}</span>
     <span class="mt-0.5 block text-xs font-normal text-muted-foreground">Submit by {{ project.submission_due_at|schedule_datetime:schedule_timezone }}</span>
   </span>
   {% else %}
   <a href="{% url 'course_project_submit' slug=course_slug attempt_slug=project.slug %}"
-     class="min-w-0 flex-1 rounded-md py-2.5 text-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+     class="col-start-2 min-w-0 rounded-md py-2.5 text-foreground hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
     <span class="block font-medium">{{ project.title }}</span>
     <span class="mt-0.5 block text-xs font-normal text-muted-foreground">Submit by {{ project.submission_due_at|schedule_datetime:schedule_timezone }}{% if project.show_reviews %} · Reviews by {{ project.review_due_at|schedule_datetime:schedule_timezone }}{% endif %}</span>
   </a>
   {% if project.show_reviews %}
   <a href="{% url 'course_project_reviews' slug=course_slug attempt_slug=project.slug %}"
-     class="flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+     class="col-start-3 flex min-h-[44px] shrink-0 items-center rounded-md px-2 text-xs text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
      aria-label="Peer reviews for {{ project.title }}">Reviews</a>
   {% endif %}
   {% endif %}

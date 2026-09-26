@@ -11,9 +11,9 @@
 {% with topic_children=children|topic_course_modules:course_slug %}
 {% firstof module.is_bonus parent_optional as optional_here %}
 <details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
-  <summary class="cursor-pointer list-none flex min-h-[44px] items-center {% if counter %}gap-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}gap-2 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
+  <summary class="cursor-pointer list-none grid min-h-[44px] w-full items-center {% if counter %}grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if not counter %}<i data-lucide="chevron-right" class="topic-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
-    <span class="min-w-0 flex-1">
+    <span class="min-w-0 {% if counter %}col-start-1{% else %}col-start-2{% endif %}">
       <span class="block break-words {% if counter %}text-base font-semibold{% else %}text-sm font-normal{% endif %}">{% if counter and course_slug == 'ai-buildcamp' and module.sort_order > 0 and module.sort_order < 10 and module.sort_order != 7 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}</span>
       {% if counter %}
       <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-muted-foreground" data-testid="syllabus-module-meta">
@@ -30,9 +30,10 @@
       </span>
       {% endif %}
       {% with deadline_summary=module_deadline_summaries|dict_get:module.id %}
-      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">{% if deadline_summary.is_upcoming %}Next due{% else %}Last due{% endif %} {{ deadline_summary.next_due|schedule_datetime:schedule_timezone }}{% if deadline_summary.count > 1 %} · {{ deadline_summary.count }} deadlines{% endif %}</span>{% endif %}
+      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">Due {{ deadline_summary.next_due|schedule_datetime:schedule_timezone }}</span>{% endif %}
       {% endwith %}
     </span>
+    <span class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">
     {% if module.is_bonus and not parent_optional and not counter %}{% member_label_badge "Optional" tone="accent" size="xs" testid="syllabus-optional-badge" %}{% endif %}
     {% if not children and not counter %}
     {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
@@ -40,6 +41,7 @@
     {% endwith %}
     {% endif %}
     {% if counter %}<i data-lucide="chevron-down" class="module-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
+    </span>
   </summary>
   <div class="pb-1{% if counter %} border-t border-border/60 px-1{% elif children %} border-t border-border/60 pl-6 pr-1{% else %} pl-6 pr-1{% endif %}"{% if counter %} data-testid="syllabus-module-content"{% endif %}>
     {% if children %}
@@ -81,19 +83,14 @@
       {% endfor %}
       {% endif %}
       {% endwith %}
-      {% with module_projects=projects_by_module|dict_get:module.id %}
-      {% if module_projects %}
-      {% if module.slug != 'project-attempts' %}
-      <p class="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground" data-testid="syllabus-project-group">Project attempts</p>
-      {% endif %}
-      {% for project in module_projects %}
-      {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
-      {% endfor %}
-      {% elif course_slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
-      <p class="px-3 py-2 text-xs text-muted-foreground" data-testid="syllabus-project-coming-soon">Attempt dates will be announced here.</p>
-      {% endif %}
-      {% endwith %}
     {% endif %}
+    {% with module_projects=projects_by_module|dict_get:module.id %}
+    {% if module_projects %}
+    {% for project in module_projects %}
+    {% include "content/_syllabus_project_row.html" with project=project course_slug=course_slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
   </div>
 </details>
 {% endwith %}

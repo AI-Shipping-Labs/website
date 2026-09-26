@@ -56,7 +56,7 @@ class CourseProjectAttemptSyncTest(TestCase):
         entries = [
             {
                 'slug': f'attempt-{number}', 'title': f'Attempt {number}',
-                'module_path': 'capstone/project',
+                'module_path': 'capstone',
                 'submission_due_at': f'2026-11-{number + 20:02d}T23:59:00+01:00',
                 'review_due_at': f'2026-11-{number + 22:02d}T23:59:00+01:00',
             }
@@ -66,7 +66,7 @@ class CourseProjectAttemptSyncTest(TestCase):
         self.assertEqual(CourseProject.objects.filter(course=self.course).count(), 2)
         first = CourseProject.objects.get(course=self.course, slug='attempt-1')
         self.assertTrue(timezone.is_aware(first.submission_due_at))
-        self.assertEqual(first.module_id, self.project_module.pk)
+        self.assertEqual(first.module_id, self.module.pk)
         entries[0]['title'] = 'Updated first attempt'
         _sync_course_projects(self.course, {'projects': entries}, 'buildcamp')
         self.assertEqual(CourseProject.objects.filter(course=self.course).count(), 2)
@@ -78,13 +78,13 @@ class CourseProjectAttemptSyncTest(TestCase):
             _sync_course_projects(self.course, {'projects': [
                 {
                     'slug': 'valid', 'title': 'Valid',
-                    'module_path': 'capstone/project',
+                    'module_path': 'capstone',
                     'submission_due_at': '2026-11-21T23:59:00+01:00',
                     'review_due_at': '2026-11-22T23:59:00+01:00',
                 },
                 {
                     'slug': 'invalid', 'title': 'Invalid',
-                    'module_path': 'capstone/project',
+                    'module_path': 'capstone',
                     'submission_due_at': '2026-11-21T23:59:00',
                     'review_due_at': '2026-11-22T23:59:00+01:00',
                 },
@@ -95,6 +95,16 @@ class CourseProjectAttemptSyncTest(TestCase):
         with self.assertRaisesMessage(GitHubSyncError, 'invalid slug'):
             _sync_course_projects(self.course, {'projects': [{
                 'slug': 'attempt/one', 'title': 'Attempt one',
+                'module_path': 'capstone',
+                'submission_due_at': '2030-11-21T23:59:00+01:00',
+                'review_due_at': '2030-11-28T23:59:00+01:00',
+            }]}, 'buildcamp')
+        self.assertFalse(CourseProject.objects.filter(course=self.course).exists())
+
+    def test_rejects_project_paths_nested_under_topics(self):
+        with self.assertRaisesMessage(GitHubSyncError, 'top-level module'):
+            _sync_course_projects(self.course, {'projects': [{
+                'slug': 'nested-attempt', 'title': 'Nested attempt',
                 'module_path': 'capstone/project',
                 'submission_due_at': '2030-11-21T23:59:00+01:00',
                 'review_due_at': '2030-11-28T23:59:00+01:00',

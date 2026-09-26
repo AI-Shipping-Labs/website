@@ -719,8 +719,10 @@ def _sync_course_projects(course, course_data, rel_path):
             ).first()
             if module is None:
                 raise GitHubSyncError(f'Project {slug!r} references unknown module_path {module_path!r}')
-        if module.children.exists():
-            raise GitHubSyncError(f'Project {slug!r} module_path must point to a leaf module')
+        if module.parent_id is not None:
+            raise GitHubSyncError(
+                f'Project {slug!r} module_path must point to a top-level module',
+            )
         parsed.append((slug, {
             'title': title.strip(), 'cohort': cohort, 'module': module,
             'peer_review_count': count, **dates,

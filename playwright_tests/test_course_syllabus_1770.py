@@ -2,6 +2,7 @@
 
 import os
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
@@ -99,7 +100,10 @@ def test_mobile_visitor_opens_nested_topic_and_lesson_with_keyboard(browser, dja
 @pytest.mark.core
 @browser_journey
 def test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry(browser, django_server):
-    from content.models import Course, Module, Unit
+    from django.utils import timezone
+
+    from content.models import Cohort, Course, Module, Unit
+    from content.models.peer_review import CourseProject
 
     python = Course.objects.create(
         title='Python', slug='python', status='published', required_level=0,
@@ -124,9 +128,41 @@ def test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry(browser
         module=session_topic, title='Session 1', slug='session-1',
         sort_order=1, kind='event', session_position=1,
     )
+    research_topic = Module.objects.create(
+        course=buildcamp, parent=week, title='Research and outputs',
+        slug='research', sort_order=2,
+    )
+    Unit.objects.create(
+        module=research_topic, title='Research the problem', slug='research-problem',
+        sort_order=1,
+    )
+    homework_topic = Module.objects.create(
+        course=buildcamp, parent=week, title='Homework', slug='homework',
+        sort_order=3,
+    )
+    Unit.objects.create(
+        module=homework_topic, title='Build the retrieval pipeline',
+        slug='retrieval-homework', sort_order=1, kind='homework',
+    )
+    today = timezone.localdate()
+    cohort = Cohort.objects.create(
+        course=buildcamp, name='Cohort 4', external_key='4',
+        start_date=today - timedelta(days=1), end_date=today + timedelta(days=30),
+    )
+    now = timezone.now()
+    CourseProject.objects.create(
+        course=buildcamp, cohort=cohort, module=week,
+        slug='capstone-attempt-1', title='Capstone Project Attempt 1',
+        submission_due_at=now + timedelta(days=7),
+        review_due_at=now + timedelta(days=14),
+    )
     connection.close()
 
     context = browser.new_context(viewport={'width': 1440, 'height': 1000})
+    context.add_cookies([{
+        'name': 'aslab_analytics_consent', 'value': 'denied',
+        'url': django_server,
+    }])
     page = context.new_page()
     screenshot_dir = Path('.tmp/screenshots/course-syllabus-parity')
     screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -148,5 +184,58 @@ def test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry(browser
 
         assert row_boxes['python']['x'] == pytest.approx(row_boxes['ai-buildcamp']['x'])
         assert row_boxes['python']['width'] == pytest.approx(row_boxes['ai-buildcamp']['width'])
+
+        for width in (1440, 390):
+            page.set_viewport_size({'width': width, 'height': 1000})
+            page.goto(
+                f'{django_server}/courses/ai-buildcamp?cohort=4',
+                wait_until='domcontentloaded',
+            )
+            page.locator('.syllabus-week > summary').first.click()
+            topic_summary = page.locator('.syllabus-topic > summary').filter(
+                has_text='Research and outputs',
+            )
+            homework_row = page.locator('[data-syllabus-unit-row]').filter(
+                has_text='Build the retrieval pipeline',
+            )
+            session_row = page.locator('[data-syllabus-unit-row]').filter(
+                has_text='Session 1',
+            )
+            project_row = page.locator('[data-testid="syllabus-project-attempt"]')
+            project_title = page.locator('[data-testid="syllabus-project-preview"]')
+            expect(topic_summary).to_be_visible()
+            expect(homework_row).to_be_visible()
+            expect(session_row).to_be_visible()
+            expect(project_title).to_be_visible()
+
+            icons = [
+                topic_summary.locator('.topic-chevron'),
+                homework_row.locator('[data-testid="syllabus-homework-icon"]'),
+                session_row.locator('[data-testid="syllabus-event-icon"]'),
+                project_row.locator('[data-testid="syllabus-project-icon"]'),
+            ]
+            titles = [
+                topic_summary.locator(':scope > span').first,
+                homework_row.locator('.syllabus-title'),
+                session_row.locator('.syllabus-title'),
+                project_title,
+            ]
+            icon_x = [locator.bounding_box()['x'] for locator in icons]
+            title_x = [locator.bounding_box()['x'] for locator in titles]
+            assert max(icon_x) - min(icon_x) <= 1
+            assert max(title_x) - min(title_x) <= 1
+            assert all(
+                title - icon == pytest.approx(26, abs=1)
+                for icon, title in zip(icon_x, title_x)
+            )
+            expect(page.locator('[data-testid="syllabus-project-group"]')).to_have_count(0)
+            expect(
+                homework_row.locator('[data-testid="syllabus-unit-right-meta"]'),
+            ).to_have_text('')
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            page.screenshot(
+                path=str(screenshot_dir / f'buildcamp-syllabus-{width}px.png'),
+                full_page=True,
+            )
     finally:
         context.close()

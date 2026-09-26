@@ -5,6 +5,7 @@ import math
 from decimal import Decimal, InvalidOperation
 
 from community_base.homework_steps.types import (
+    AcceptedSubmission,
     Assignment,
     Eligibility,
     FinalField,
@@ -17,7 +18,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
 from django.utils.safestring import mark_safe
 
-from content.models.homework import QuestionType, Submission
+from content.models.homework import HomeworkState, QuestionType, Submission
 from content.services import completion as completion_service
 from content.services import course_units
 from content.services.homework_step_sections import (
@@ -162,6 +163,11 @@ def build_assignment(homework, unit, user, *, context=None):
             '' if not submission or submission.time_spent_homework is None
             else str(submission.time_spent_homework)
         )
+    availability = (
+        'scored' if homework.state == HomeworkState.SCORED else
+        'closed' if not homework.is_accepting_submissions else
+        'open'
+    )
     return Assignment(
         key=f'aisl:homework:{homework.pk}',
         title=homework.title,
@@ -177,6 +183,15 @@ def build_assignment(homework, unit, user, *, context=None):
             'learning_in_public_cap': learning_in_public_cap,
         },
         has_submission=bool(submission),
+        availability=availability,
+        accepted_submission=(
+            AcceptedSubmission(
+                answers=existing_answers,
+                final_fields=existing_final_fields,
+                submitted_at=submission.submitted_at,
+            )
+            if submission else None
+        ),
     )
 
 
@@ -207,7 +222,7 @@ class AISLHomeworkAdapter:
         if not self.homework.is_accepting_submissions:
             reason = (
                 'This homework is closed. Your saved answers are still available.'
-                if self.homework.is_self_paced or self.homework.due_date is None else
+                if self.homework.is_self_paced or not self.homework.is_past_due else
                 'The deadline for this homework has passed. Your saved answers are still available.'
             )
             return Eligibility(True, False, False, reason)

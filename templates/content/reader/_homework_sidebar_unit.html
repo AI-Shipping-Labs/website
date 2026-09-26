@@ -1,5 +1,5 @@
 {% load curriculum_tags %}
 <li>
-  {% include "includes/_list_row.html" with href=unit.get_absolute_url title=unit.title is_current=True marker_kind="custom" marker_html=unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=root_optional wrapper_optional=wrapper_optional ancestor_optional=ancestor_optional optional_badge=unit.is_bonus %}
+  {% include "includes/_list_row.html" with href=unit.get_absolute_url title=unit.title is_current=True marker_kind="custom" marker_html=unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=root_optional wrapper_optional=wrapper_optional ancestor_optional=ancestor_optional optional_badge=unit.is_bonus assignment_state=homework_state %}
   {% include "content/reader/_homework_step_nav.html" %}
 </li>

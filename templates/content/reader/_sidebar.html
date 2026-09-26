@@ -60,7 +60,7 @@
             <ul class="reader-nav-list">
               <li>
                 {% if inline_unit.pk == unit.pk %}
-                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                  {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus assignment_state=homework_state %}
                 {% elif inline_unit.pk in completed_unit_ids %}
                   {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
                   {% else %}
@@ -98,7 +98,7 @@
                 {% for nav_unit in nav_child.units.all %}
                 <li>
                   {% if nav_unit.pk == unit.pk %}
-                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
+                    {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus assignment_state=homework_state %}
                   {% elif nav_unit.pk in completed_unit_ids %}
                     {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus %}
                   {% else %}
@@ -117,7 +117,7 @@
             {% for nav_unit in scoped_module.units.all %}
             <li>
               {% if nav_unit.pk == unit.pk %}
-                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus %}
+                {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus assignment_state=homework_state %}
               {% else %}
                 {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus %}
               {% endif %}
@@ -169,7 +169,7 @@
               <ul class="reader-nav-list mt-1">
                 <li>
                   {% if inline_unit.pk == unit.pk %}
-                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
+                    {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=True marker_kind="custom" marker_html=inline_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus assignment_state=homework_state %}
                   {% elif inline_unit.pk in completed_unit_ids %}
                     {% include "includes/_list_row.html" with href=inline_unit.get_absolute_url title=inline_unit.title is_current=False marker_kind="check" trailing_icon="" root_optional=nav_module.is_bonus wrapper_optional=nav_child.is_bonus optional_badge=inline_unit.is_bonus %}
                   {% else %}
@@ -207,7 +207,7 @@
                     {% for nav_unit in nav_child.units.all %}
                     <li>
                       {% if nav_unit.pk == unit.pk %}
-                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
+                        {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' assignment_state=homework_state %}
                       {% elif nav_unit.pk in completed_unit_ids %}
                         {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
                       {% else %}
@@ -239,7 +239,7 @@
               {% for nav_unit in nav_module.units.all %}
               <li>
                 {% if nav_unit.pk == unit.pk %}
-                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' %}
+                  {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind="custom" marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' assignment_state=homework_state %}
                 {% elif nav_unit.pk in completed_unit_ids %}
                   {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=False marker_kind="check" trailing_icon="" extra_attrs="" %}
                 {% else %}

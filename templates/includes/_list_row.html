@@ -78,6 +78,11 @@ Notes
     {% endif %}
   </span>
   <span class="min-w-0 flex-1 truncate">{{ title }}</span>
+  {% if assignment_state %}
+    <span class="flex-shrink-0 rounded border border-border/70 bg-background/70 px-1.5 py-0.5 text-[10px] leading-tight text-muted-foreground" data-testid="homework-nav-state">
+      {% include "homework_steps/_state_label.html" with homework_state=assignment_state %}
+    </span>
+  {% endif %}
   {% if not root_optional and wrapper_optional or optional_badge and not root_optional and not ancestor_optional %}
     {% if '(Optional)' not in title %}
     <span class="flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>

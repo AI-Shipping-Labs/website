@@ -1,6 +1,8 @@
 from collections import Counter
+from dataclasses import replace
 from urllib.parse import urlencode
 
+from community_base.homework_steps.state import homework_state_for
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -950,6 +952,13 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
             for question in homework.questions.all()
         }
         assignment = build_assignment(homework, unit, user, context=context)
+        assignment = replace(
+            assignment,
+            context={
+                **assignment.context,
+                'homework_state': homework_state_for(user, assignment),
+            },
+        )
         return handle_stepper(
             request, assignment, AISLHomeworkAdapter(homework, unit, cohort=owned_cohort),
             action=unit.get_absolute_url(),

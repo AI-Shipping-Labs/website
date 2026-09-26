@@ -163,7 +163,7 @@ def test_sidebar_exit_saves_latest_dirty_choice_before_navigation(django_server,
 @browser_journey
 def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     from accounts.models import User
-    from content.models.homework import Submission
+    from content.models.homework import HomeworkState, Submission
     from content.services import completion as completion_service
 
     email = 'homework-step-success@test.com'
@@ -188,6 +188,12 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(question_link.locator('svg.lucide-help-circle')).to_have_count(1)
     expect(review_link.locator('svg.lucide-clipboard-check')).to_have_count(1)
     expect(question_link.locator('span.rounded-full')).to_have_count(0)
+    expect(page.get_by_test_id('homework-page-state').locator(
+        '[data-homework-state="not_submitted"]',
+    )).to_be_visible()
+    expect(page.locator('#sidebar-nav [data-testid="homework-nav-state"]').locator(
+        '[data-homework-state="not_submitted"]',
+    )).to_be_visible()
     page.screenshot(path='.tmp/astra-homework-intro-desktop.png', full_page=True)
     page.get_by_role('link', name='Start questions').click()
     expect(page).to_have_url(f'{unit_url}/q1-first')
@@ -235,4 +241,33 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.locator('[data-testid="homework-submitted-status"]')).to_be_visible()
     expect(page.get_by_role('button', name='Update submission')).to_be_visible()
     expect(page.get_by_role('link', name='Back to course')).to_be_visible()
+    page.goto(f'{unit_url}/q1-first', wait_until='domcontentloaded')
+    expect(page.get_by_role('radio', name='Beta')).to_be_checked()
+    page.get_by_role('radio', name='Alpha').check()
+    page.get_by_role('button', name='Save & continue').click()
+    expect(page).to_have_url(f'{unit_url}/q2-second')
+    homework.state = HomeworkState.CLOSED
+    homework.save(update_fields=['state'])
+    page.goto(f'{unit_url}/review', wait_until='domcontentloaded')
+    accepted = page.get_by_test_id('homework-accepted-snapshot')
+    unsent = page.get_by_test_id('homework-unsent-draft')
+    expect(accepted).to_contain_text('Accepted submission')
+    expect(accepted).to_contain_text('Beta')
+    expect(accepted).to_contain_text('Yes')
+    expect(accepted).to_contain_text('Submitted')
+    expect(unsent).to_contain_text('Unsubmitted draft')
+    expect(unsent).to_contain_text('Alpha')
+    expect(page.get_by_test_id('homework-page-state').locator(
+        '[data-homework-state="submitted"]',
+    )).to_be_visible()
+    expect(page.locator('#sidebar-nav [data-testid="homework-nav-state"]').locator(
+        '[data-homework-state="submitted"]',
+    )).to_be_visible()
+    expect(page.get_by_test_id('homework-review-form')).to_have_count(0)
+    expect(page.get_by_test_id('homework-submit-button')).to_have_count(0)
+    page.screenshot(path='.tmp/homework-state-review-desktop.png', full_page=True)
+    page.set_viewport_size({'width': 390, 'height': 844})
+    page.get_by_test_id('reader-mobile-drawer-toggle').click()
+    expect(page.locator('#sidebar-nav')).to_be_visible()
+    page.screenshot(path='.tmp/homework-state-review-mobile.png', full_page=True)
     context.close()

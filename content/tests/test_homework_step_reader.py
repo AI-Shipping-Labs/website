@@ -2,8 +2,10 @@
 
 import datetime
 from html.parser import HTMLParser
+from zoneinfo import ZoneInfo
 
 from community_base.homework_steps.models import HomeworkDraft
+from django.template.defaultfilters import date as format_date
 from django.test import Client, SimpleTestCase, TestCase
 from django.utils import timezone
 
@@ -118,6 +120,8 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(intro, 'homework-stepper')
         self.assertContains(intro, 'Download the books first.')
         self.assertContains(intro, 'data-testid="homework-due-date"')
+        self.assertEqual(intro.context['homework_state'].value, 'not_submitted')
+        self.assertContains(intro, 'data-homework-state="not_submitted"', count=2)
         self.assertNotContains(intro, 'Step 1 of')
         self.assertNotContains(intro, 'What was difficult?')
         self.assertNotContains(intro, 'homework-submission-form')
@@ -127,6 +131,85 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertNotContains(question, 'What was difficult?')
         self.assertContains(question, 'answer')
         self.assertNotContains(question, self.canary_question.correct_answer)
+
+    def test_nav_and_page_show_all_six_learner_homework_states(self):
+        def assert_state(expected):
+            response = self.client.get(f'{self.unit_url}?homework_step=review')
+            self.assertEqual(response.context['homework_state'].value, expected)
+            self.assertEqual(response.context['stepper']['homework_state'].value, expected)
+            self.assertContains(response, f'data-homework-state="{expected}"', count=2)
+
+        self.client.get(self.unit_url)
+        assert_state('not_submitted')
+        self.assertEqual(self.save_answer('q1-lines', 0, '2').json(), {
+            'revision': 1, 'saved': True,
+        })
+        assert_state('draft')
+
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
+        assert_state('closed_not_submitted')
+
+        self.homework.state = HomeworkState.OPEN
+        self.homework.save(update_fields=['state'])
+        save_submission(
+            self.homework,
+            self.student,
+            homework_link='',
+            answers_by_question_id={self.mc_question.pk: '2'},
+        )
+        assert_state('submitted')
+        self.assertEqual(self.save_answer('q1-lines', 1, '1').json(), {
+            'revision': 2, 'saved': True,
+        })
+        assert_state('unsubmitted_changes')
+
+        self.homework.state = HomeworkState.SCORED
+        self.homework.save(update_fields=['state'])
+        assert_state('scored')
+
+    def test_closed_review_separates_accepted_snapshot_from_unsent_draft(self):
+        submission = save_submission(
+            self.homework,
+            self.student,
+            homework_link='https://example.com/accepted',
+            answers_by_question_id={
+                self.mc_question.pk: '2',
+                self.ff_question.pk: 'Accepted reflection',
+            },
+        )
+        submission.submitted_at = timezone.now() - datetime.timedelta(days=2)
+        submission.save(update_fields=['submitted_at'])
+        self.client.get(self.unit_url)
+        self.assertEqual(self.save_answer('q1-lines', 0, '1').json(), {
+            'revision': 1, 'saved': True,
+        })
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
+
+        response = self.client.get(f'{self.unit_url}?homework_step=review')
+
+        self.assertContains(response, 'data-testid="homework-accepted-snapshot"')
+        self.assertContains(response, 'data-testid="homework-unsent-draft"')
+        self.assertContains(response, 'Accepted submission')
+        self.assertContains(response, 'Unsubmitted draft')
+        self.assertContains(response, 'Accepted reflection')
+        self.assertContains(response, 'https://example.com/accepted')
+        self.assertContains(response, '>14</p>')
+        self.assertContains(response, '>12</p>')
+        self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
+        self.assertNotContains(response, 'deadline for this homework has passed')
+        self.assertNotContains(response, 'homework-review-form')
+        self.assertNotContains(response, 'homework-submit-button')
+        self.assertEqual(response.context['homework_state'].value, 'submitted')
+        submitted_at = timezone.localtime(
+            submission.submitted_at,
+            ZoneInfo(response.context['homework_display_timezone']),
+        )
+        self.assertContains(
+            response,
+            f'Submitted {format_date(submitted_at, "M j, Y, g:i A T")}',
+        )
 
     def test_canonical_path_steps_and_query_bookmarks_are_both_readable(self):
         canonical_url = f'{self.unit_url}/q2-reflect'

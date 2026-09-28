@@ -155,6 +155,7 @@
           {% include "content/_syllabus_project_row.html" with project=project course_slug=course.slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
           {% endfor %}
         </div>
+        {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_subject="Deadline times" timezone_notice_testid="module-project-timezone-note" only %}
       </section>
       {% elif course.slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
       <p class="mb-12 text-sm text-muted-foreground" data-testid="module-project-coming-soon">Attempt dates will be announced here.</p>

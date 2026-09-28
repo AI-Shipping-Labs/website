@@ -1,3 +1,4 @@
+{% load accounts_extras %}
 {% if unit_session_entry %}
   {% with entry=unit_session_entry %}
   <div class="mb-8" data-testid="unit-session-content">
@@ -16,7 +17,7 @@
     {% if not entry.is_past %}
     <div class="mb-8 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
       {% if entry.session_join_url %}
-      <a href="{{ entry.session_join_url }}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="unit-session-join">
+      <a href="{{ entry.session_join_url }}" class="{% button_classes 'primary' %}" data-testid="unit-session-join">
         Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
       </a>
       {% if not entry.can_join_now and not entry.event.is_external %}<span class="text-sm text-muted-foreground">Opens 5 minutes before the session.</span>{% endif %}

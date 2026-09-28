@@ -1,3 +1,4 @@
+{% load accounts_extras %}
 {% comment %}
   Reader bottom navigation (issue #483).
 
@@ -46,7 +47,7 @@
     {% if next_item_url %}
     {% if user_authenticated and completion_kind == "course" and not is_completed %}
     <button type="button"
-       class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0 min-h-[44px]"
+       class="{% button_classes 'primary' extra='sm:ml-auto min-w-0' %}"
        data-completion-and-navigate
        data-completion-url="{{ completion_url }}"
        data-navigate-url="{{ next_item_url }}"

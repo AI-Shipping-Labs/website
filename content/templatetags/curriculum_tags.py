@@ -89,6 +89,19 @@ def unit_nav_marker_html(kind):
 
 
 @register.filter
+def unit_nav_marker_kind(unit, completed_unit_ids):
+    """Return the `_list_row.html` marker kind for a reader nav unit row.
+
+    A completed unit always shows the completion tick, including the
+    currently selected row; everything else keeps its type icon
+    (``marker_kind="custom"`` + ``unit_nav_marker_html``).
+    """
+    if completed_unit_ids and unit.pk in completed_unit_ids:
+        return 'check'
+    return 'custom'
+
+
+@register.filter
 def homework_step_nav_marker_html(title):
     """Use a type icon; the visible link text supplies the accessible label."""
     normalized_title = (title or '').strip().casefold()

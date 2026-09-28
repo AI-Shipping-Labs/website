@@ -14,7 +14,7 @@
   {% if homework_stepper %}
   <p class="mb-4 text-sm text-muted-foreground">This marks the course unit complete. Submit answers from Review &amp; submit.</p>
   {% endif %}
-  {% if user_authenticated %}
+  {% if user_authenticated and completion_kind != "course" or user_authenticated and not next_item_url %}
   {% comment %}
     Mobile-only stand-alone mark-complete row. Hidden on sm+ where the
     button is rendered inline below. The DOM contains both the mobile
@@ -32,24 +32,36 @@
        class="inline-flex items-center justify-center gap-2 rounded-lg border border-border px-5 py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted min-w-0 min-h-[44px]"
        data-testid="{{ bottom_prev_testid }}">
       <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
-      <span class="truncate">{{ prev_item_title }}</span>
+      <span>Previous</span>
     </a>
     {% endif %}
 
     {# Desktop-only inline placement of the mark-complete button. #}
-    {% if user_authenticated %}
+    {% if user_authenticated and completion_kind != "course" or user_authenticated and not next_item_url %}
     <div class="hidden sm:block" data-testid="reader-bottom-completion-desktop">
       {% include "content/reader/_completion_button.html" %}
     </div>
     {% endif %}
 
     {% if next_item_url %}
+    {% if user_authenticated and completion_kind == "course" and not is_completed %}
+    <button type="button"
+       class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0 min-h-[44px]"
+       data-completion-and-navigate
+       data-completion-url="{{ completion_url }}"
+       data-navigate-url="{{ next_item_url }}"
+       data-testid="{{ bottom_next_testid }}">
+      <span>Complete &amp; Next</span>
+      <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
+    </button>
+    {% else %}
     <a href="{{ next_item_url }}"
        class="inline-flex items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90 sm:ml-auto min-w-0 min-h-[44px]"
        data-testid="{{ bottom_next_testid }}">
-      <span class="truncate">Next: {{ next_item_title }}</span>
+      <span>Next</span>
       <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0"></i>
     </a>
+    {% endif %}
     {% endif %}
   </div>
 </div>

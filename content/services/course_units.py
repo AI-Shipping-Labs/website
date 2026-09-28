@@ -10,7 +10,6 @@ after tier access has already been granted.
 from __future__ import annotations
 
 import datetime
-import re
 from dataclasses import dataclass
 
 from django.db import models
@@ -35,22 +34,18 @@ from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus
 from content.models.homework import Homework, QuestionType, Submission
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
-from events.models import Event
+from events.models import Event, EventRegistration
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.display_time import (
     build_event_time_display,
     format_event_time_range,
     resolve_event_display_timezone,
 )
+from events.services.public_copy import strip_internal_description_notes
 from events.services.series_entitlement import is_entitled_for_series
 
 TEASER_WORD_LIMIT = 150
 _UNSPECIFIED_DRIP_COHORT = object()
-_SESSION_INTERNAL_DESCRIPTION_NOTE = re.compile(
-    r'\s*(?:hidden series|internal note|operator note|staff note|'
-    r'registration operations|registration setup)\s*:[^.!?]*(?:[.!?]|$)',
-    re.IGNORECASE,
-)
 
 ACCESS_GRANTED = 'access_granted'
 ACCESS_GRANTED_PREVIEW = 'preview'
@@ -709,10 +704,17 @@ def build_unit_session_card_context(unit: Unit, user, *, request=None):
             cohort__event_series_id=event.event_series_id,
         ).exists()
 
+    session_join_url = ''
+    if not is_past and getattr(user, 'is_authenticated', False):
+        if event.is_external and maven_enrolled and event.zoom_join_url:
+            session_join_url = event.zoom_join_url
+        elif EventRegistration.objects.filter(event=event, user=user).exists():
+            session_join_url = event.get_join_url()
+
     return {
         'event': event,
-        'description_html': _SESSION_INTERNAL_DESCRIPTION_NOTE.sub(
-            '', event.description_html or '',
+        'description_html': strip_internal_description_notes(
+            event.description_html or '',
         ),
         'time_display': build_event_time_display(event, user),
         'is_past': is_past,
@@ -723,6 +725,7 @@ def build_unit_session_card_context(unit: Unit, user, *, request=None):
         'maven_enrolled': maven_enrolled,
         'can_join_now': not is_past and event.can_show_zoom_link(),
         'join_url': event.get_join_url(),
+        'session_join_url': session_join_url,
         'recap_url': event.get_recap_url() if is_past and event.recap_is_published else '',
     }
 

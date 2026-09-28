@@ -5,21 +5,12 @@
 
 {% include "content/reader/_mobile_progress_bar.html" %}
 
-<!-- Breadcrumb -->
-<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
-  <a href="{% url 'course_home' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex-shrink-0 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-course-home">Course home</a>
-  {% if unit.module.parent_id %}
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-  <a href="{{ unit.module.parent.get_absolute_url }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-parent-module">{{ unit.module.parent.title }}</a>
-  {% endif %}
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-  <span class="truncate text-foreground">{{ unit.title }}</span>
-</div>
+{% include "content/reader/_breadcrumb.html" with breadcrumb_kind="course_unit" %}
 
 <div class="mb-8 flex flex-wrap items-center gap-3">
-  <h1 class="flex items-start gap-2.5 text-2xl font-semibold tracking-tight sm:text-3xl">
+  <h1 class="flex min-w-0 items-start gap-2.5 text-2xl font-semibold tracking-tight sm:text-3xl">
     <i data-lucide="{{ unit.kind|unit_kind_icon }}" class="mt-0.5 h-6 w-6 flex-shrink-0 text-muted-foreground sm:h-7 sm:w-7" aria-hidden="true"></i>
-    <span>{{ unit.title }}</span>
+    <span class="min-w-0 break-words">{{ unit.title }}</span>
   </h1>
   {% if unit.is_bonus %}
   {% member_label_badge "Optional" tone="accent" size="sm" testid="unit-detail-bonus-badge" %}
@@ -68,10 +59,10 @@
 
   {% if homework and not homework_stepper %}
   <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission">
-    <p class="mb-4 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="homework-due-date">
-      <i data-lucide="calendar-clock" class="h-4 w-4 flex-shrink-0"></i>
-      Due {{ homework_due_date_display }} &mdash; shown in your account timezone
-    </p>
+    {% if homework_due_date_display and not homework_is_self_paced %}
+    <p class="mb-1 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }}</p>
+    {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4 mt-0" only %}
+    {% endif %}
 
     {% if not user_authenticated %}
     <div data-testid="homework-login-prompt">

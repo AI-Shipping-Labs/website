@@ -1,4 +1,9 @@
 <style>
+  /* Keep selected lesson labels readable on a neutral surface in both themes. */
+  #sidebar-nav .reader-list-row[aria-current="page"] {
+    background-color: hsl(var(--foreground) / 0.055);
+    color: hsl(var(--foreground));
+  }
   /* Course lessons and workshop tutorials always use the blog reader width.
      The surrounding frame remains wide only to make room for navigation. */
   #content-sidebar-main {
@@ -177,15 +182,13 @@
   .homework-learning-public-prompt details {
     margin: 0.5rem 0;
     overflow: hidden;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    background: hsl(var(--card));
+    border-bottom: 1px solid hsl(var(--border));
   }
   .homework-learning-public-prompt details > summary {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 0.625rem 0.875rem;
+    padding: 0.625rem 0.25rem;
     color: hsl(var(--foreground));
     font-size: 0.875rem;
     font-weight: 500;
@@ -202,9 +205,22 @@
   }
   .homework-learning-public-prompt details[open] > summary::before { transform: rotate(90deg); }
   .homework-learning-public-prompt details > pre {
-    margin: 0 0.875rem 0.875rem;
-    overflow-x: auto;
-    font-size: 0.8125rem;
+    margin: 0.25rem 0 0.875rem;
+    padding: 0.75rem 1rem;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+    border: 0;
+    border-left: 2px solid hsl(var(--accent));
+    border-radius: 0;
+    background: hsl(var(--secondary) / 0.35);
+    color: hsl(var(--foreground));
+    font-family: inherit;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+  }
+  .homework-learning-public-prompt details > pre code {
+    font: inherit;
+    color: inherit;
   }
   @media (prefers-reduced-motion: reduce) {
     .homework-learning-public-prompt details > summary::before { transition: none; }

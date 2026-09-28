@@ -191,7 +191,8 @@
 
   (function() {
     var buttons = document.querySelectorAll('[data-completion-toggle]');
-    if (!buttons.length) return;
+    var navigateButtons = document.querySelectorAll('[data-completion-and-navigate]');
+    if (!buttons.length && !navigateButtons.length) return;
 
     function getCsrfToken() {
       var cookies = document.cookie.split(';');
@@ -240,6 +241,35 @@
             '[data-completion-toggle][data-completion-url="' + url + '"]'
           );
           siblings.forEach(function(sib) { renderButton(sib, completed); });
+        });
+      });
+    });
+
+    navigateButtons.forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        var label = btn.querySelector('span');
+        if (label) label.textContent = 'Completing…';
+        fetch(btn.dataset.completionUrl, {
+          method: 'POST',
+          headers: {
+            'X-CSRFToken': getCsrfToken(),
+            'Content-Type': 'application/json',
+          },
+          credentials: 'same-origin',
+        })
+        .then(function(response) {
+          if (!response.ok) throw new Error('Completion request failed');
+          return response.json();
+        })
+        .then(function(data) {
+          if (!data.completed) throw new Error('Unit was not completed');
+          window.location.assign(btn.dataset.navigateUrl);
+        })
+        .catch(function() {
+          btn.disabled = false;
+          if (label) label.textContent = 'Complete & Next';
         });
       });
     });

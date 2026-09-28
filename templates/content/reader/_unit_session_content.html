@@ -10,12 +10,23 @@
         Event details
         <i data-lucide="arrow-up-right" class="h-3.5 w-3.5" aria-hidden="true"></i>
       </a>
-      {% if not entry.is_past and entry.maven_enrolled %}
-      <span class="text-xs text-muted-foreground" data-testid="unit-session-maven-registration">
-        Maven handles registration automatically; no separate registration is needed.
-      </span>
+    </div>
+    {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=entry.time_display.fallback_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-6 mt-0" only %}
+
+    {% if not entry.is_past %}
+    <div class="mb-8 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
+      {% if entry.session_join_url %}
+      <a href="{{ entry.session_join_url }}" class="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-testid="unit-session-join">
+        Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
+      </a>
+      {% if not entry.can_join_now and not entry.event.is_external %}<span class="text-sm text-muted-foreground">Opens 5 minutes before the session.</span>{% endif %}
+      {% elif entry.event.zoom_join_url %}
+      <a href="{{ entry.event.get_absolute_url }}" class="text-sm font-medium text-accent hover:underline">See how to join</a>
+      {% else %}
+      <span class="text-sm text-muted-foreground">Joining details will appear here when available.</span>
       {% endif %}
     </div>
+    {% endif %}
 
     {% if entry.description_html %}
     <div class="prose reader-prose mb-8 max-w-full overflow-x-auto" data-testid="unit-session-description">

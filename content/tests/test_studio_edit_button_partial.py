@@ -1,13 +1,13 @@
-"""Tests for the shared "Edit in Studio" partial (issue #667).
+"""Tests for the shared "Open in Studio" partial (issue #667).
 
 The partial lives at ``templates/includes/_studio_edit_button.html``. It
 must:
 
 - render nothing for non-staff users (server-side gate, not CSS)
-- render nothing when ``obj.get_studio_edit_url()`` returns ``None`` /
-  empty (defensive: no broken ``href=""``)
-- render exactly one ``<a data-testid="studio-edit-button">`` linking to
-  ``obj.get_studio_edit_url()`` for staff users
+- render nothing when no Studio destination resolves (defensive: no
+  broken ``href=""``)
+- render exactly one ``<a data-testid="studio-edit-button">`` for staff
+  users, labeled Open in Studio
 """
 
 from types import SimpleNamespace
@@ -47,7 +47,10 @@ class StudioEditButtonPartialTest(TestCase):
         html = _render(obj, is_staff=True)
         self.assertIn('data-testid="studio-edit-button"', html)
         self.assertIn('href="/studio/articles/7/edit"', html)
-        self.assertIn('aria-label="Edit in Studio"', html)
+        self.assertIn('aria-label="Open in Studio"', html)
+        self.assertIn('>Open in Studio</span>', html)
+        self.assertIn('data-lucide="external-link"', html)
+        self.assertNotIn('Edit in Studio', html)
         # Exactly one link emitted.
         self.assertEqual(html.count('data-testid="studio-edit-button"'), 1)
 

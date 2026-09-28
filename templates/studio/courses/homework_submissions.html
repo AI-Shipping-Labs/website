@@ -14,7 +14,16 @@
   <span>Due: <span class="text-foreground">{{ homework.due_date|operator_datetime }}</span></span>
   <span aria-hidden="true">&middot;</span>
   <span data-testid="homework-submissions-count">{{ submission_items|length }} submission{{ submission_items|length|pluralize }}</span>
+  <button type="button" data-testid="homework-privacy-toggle" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Hide emails</button>
 </div>
+
+<style>
+  html[data-studio-homework-privacy="on"] [data-testid="homework-submission-student"] {
+    filter: blur(6px);
+    user-select: none;
+    -webkit-user-select: none;
+  }
+</style>
 
 {% if submission_items %}
 <div class="bg-card border border-border rounded-lg overflow-hidden">
@@ -61,4 +70,39 @@
 {% else %}
 {% studio_empty_state 'fresh' entity_label='submission' entity_label_plural='submissions' empty_message='No submissions for this homework yet.' %}
 {% endif %}
+<script>
+(function () {
+  var toggle = document.querySelector('[data-testid="homework-privacy-toggle"]');
+  function emails() {
+    return document.querySelectorAll('[data-testid="homework-submission-student"]');
+  }
+  function apply(on) {
+    document.documentElement.setAttribute('data-studio-homework-privacy', on ? 'on' : 'off');
+    emails().forEach(function (el) {
+      if (on) {
+        el.setAttribute('aria-hidden', 'true');
+      } else {
+        el.removeAttribute('aria-hidden');
+      }
+    });
+    if (toggle) {
+      toggle.textContent = on ? 'Show emails' : 'Hide emails';
+    }
+  }
+  var on = false;
+  try {
+    on = window.localStorage.getItem('studio-homework-privacy') === '1';
+  } catch (e) {}
+  apply(on);
+  if (toggle) {
+    toggle.addEventListener('click', function () {
+      on = document.documentElement.getAttribute('data-studio-homework-privacy') !== 'on';
+      try {
+        window.localStorage.setItem('studio-homework-privacy', on ? '1' : '0');
+      } catch (e) {}
+      apply(on);
+    });
+  }
+})();
+</script>
 {% endblock %}

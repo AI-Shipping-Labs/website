@@ -1,18 +1,13 @@
 {% if event_relationships %}
-<section class="{% include 'content/_info_card_classes.html' %} mb-12 bg-card"
+<section class="mb-12 border-t border-border pt-8"
          aria-labelledby="event-relationship-context-title"
          data-testid="event-relationship-context">
-  <h2 id="event-relationship-context-title" class="text-lg font-semibold text-foreground">Part of</h2>
-  <p class="mt-1 text-sm text-muted-foreground">Explore the series and programs connected to this session.</p>
-  <nav class="mt-4 space-y-1" aria-label="Related event context">
+  <h2 id="event-relationship-context-title" class="text-xs font-medium uppercase tracking-widest text-muted-foreground">Part of</h2>
+  <nav class="mt-5 divide-y divide-border" aria-label="Related event context">
     {% for relationship in event_relationships %}
-      {% if relationship.kind == "event_series" %}
-        {% include "includes/_list_row.html" with href=relationship.url title=relationship.text marker_kind="custom" marker_html='<i data-lucide="calendar-range" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>' testid="event-relationship-row" %}
-      {% elif relationship.kind == "book" %}
-        {% include "includes/_list_row.html" with href=relationship.url title=relationship.text marker_kind="custom" marker_html='<i data-lucide="book-open" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>' testid="event-relationship-row" %}
-      {% elif relationship.kind == "sprint" %}
-        {% include "includes/_list_row.html" with href=relationship.url title=relationship.text marker_kind="custom" marker_html='<i data-lucide="goal" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>' testid="event-relationship-row" %}
-      {% endif %}
+      <a href="{{ relationship.url }}"
+         class="block py-4 text-xl font-medium tracking-tight text-foreground underline-offset-4 first:pt-0 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="event-relationship-row">{{ relationship.text }}</a>
     {% endfor %}
   </nav>
 </section>

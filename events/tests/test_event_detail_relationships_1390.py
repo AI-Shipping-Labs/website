@@ -163,11 +163,11 @@ class EventDetailRelationshipTest(TestCase):
         response = self.client.get(self.event.get_absolute_url())
 
         self.assertContains(response, '>Part of</h2>', count=1)
-        self.assertContains(
+        self.assertNotContains(
             response,
             'Explore the series and programs connected to this session.',
-            count=1,
         )
+        self.assertNotContains(response, 'data-lucide="calendar-range"')
         self.assertNotContains(response, 'Related community')
 
     def test_hidden_and_unrelated_programs_do_not_leak(self):

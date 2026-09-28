@@ -6,7 +6,7 @@
   registration flow entirely. ``required_level`` is intentionally ignored
   here -- the partner controls access on their platform.
 {% endcomment %}
-<div class="mb-12 rounded-lg border border-accent/40 bg-accent/5 p-6" data-testid="event-external-join-card">
+<div class="mb-12 border-t border-border pt-8" data-testid="event-external-join-card">
   <div class="flex items-start gap-3">
     <div class="rounded-full bg-accent/20 p-2">
       <i data-lucide="external-link" class="h-5 w-5 text-accent"></i>
@@ -43,7 +43,7 @@
   {% include "content/_gated_access_card.html" with gated_card_testid="event-registration-card" gated_icon="lock" gated_heading=gated_heading gated_description="Membership is required before you can register for this event." required_tier_name=required_tier_name gated_extra_partial="events/_event_freestyle_evidence.html" gated_cta_url="/membership" gated_cta_label="View Pricing" gated_cta_testid="event-under-tier-pricing-cta" %}
 {% endwith %}
 {% elif event.is_upcoming %}
-<div class="mb-12 rounded-lg border border-border bg-card p-6" data-testid="event-registration-card">
+<div class="mb-12 border-t border-border pt-8" data-testid="event-registration-card">
   {% if anon_registered_email %}
     <div data-testid="event-anonymous-registered-confirmation">
       <div class="flex items-center gap-3">
@@ -150,12 +150,8 @@
       a real per-session cancel control.
     {% endcomment %}
     <div data-testid="event-registered-confirmation">
-      <div class="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex items-center gap-3">
-          <div class="rounded-full bg-green-500/20 p-2">
-            <i data-lucide="check" class="h-5 w-5 text-green-400"></i>
-          </div>
-          <div>
+      <div class="flex flex-col items-start gap-4">
+        <div>
             {% comment %}
               Issue #1460: the series summary is only rendered for a member
               who actually holds the standing flag, and it prints the real
@@ -164,9 +160,9 @@
               the plain heading and is offered the series below.
             {% endcomment %}
             {% if event.event_series_id and series_session_total >= 2 and is_series_registered %}
-            <p class="font-semibold text-foreground" data-testid="event-registered-heading"><span data-testid="event-registered-series-summary">{% if series_fully_registered %}You're registered for all {{ series_session_total }} sessions in {{ event.event_series.name }}{% else %}You're registered for {{ series_session_registered }} of {{ series_session_total }} sessions in {{ event.event_series.name }}{% endif %}</span></p>
+            <p class="text-2xl font-semibold tracking-tight text-foreground" data-testid="event-registered-heading"><span data-testid="event-registered-series-summary">{% if series_fully_registered %}You're registered for all {{ series_session_total }} sessions in {{ event.event_series.name }}{% else %}You're registered for {{ series_session_registered }} of {{ series_session_total }} sessions in {{ event.event_series.name }}{% endif %}</span></p>
             {% else %}
-            <p class="font-semibold text-foreground" data-testid="event-registered-heading">You're registered!</p>
+            <p class="text-2xl font-semibold tracking-tight text-foreground" data-testid="event-registered-heading">You're registered!</p>
             {% endif %}
             {% if series_session_locked > 0 %}
             <p class="mt-1 text-sm text-muted-foreground" data-testid="event-series-tier-note">
@@ -174,44 +170,37 @@
               <a href="/membership" class="text-accent hover:underline" data-testid="event-series-tier-upgrade-link">Upgrade</a>
             </p>
             {% endif %}
-          </div>
         </div>
         <a href="{{ event_ics_url }}"
-           class="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/10 px-4 py-3 text-sm font-medium text-accent transition-colors hover:bg-accent/20 sm:w-auto"
+           class="{% button_classes 'secondary' %}"
            data-testid="event-add-to-calendar"
            download>
-          <i data-lucide="calendar-plus" class="h-4 w-4"></i>
           Add to calendar
         </a>
       </div>
 
       <ul class="mt-5 space-y-2 text-sm text-muted-foreground" data-testid="event-next-steps">
         <li class="flex items-start gap-2">
-          <i data-lucide="mail" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <i data-lucide="mail" class="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"></i>
           <span>We've sent a confirmation to your email with the calendar invite attached. Check your inbox (and spam folder) within a few minutes.</span>
         </li>
         <li class="flex items-start gap-2">
-          <i data-lucide="calendar-plus" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <i data-lucide="calendar-plus" class="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"></i>
           <span>If the email is delayed, use the <span class="text-foreground">Add to calendar</span> button above to download the invite directly.</span>
         </li>
         <li class="flex items-start gap-2">
-          <i data-lucide="video" class="mt-0.5 h-4 w-4 flex-shrink-0 text-accent"></i>
+          <i data-lucide="video" class="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"></i>
           <span>The join link unlocks here on the event page about 5 minutes before the start time.</span>
         </li>
       </ul>
 
       {% if show_zoom_link %}
-      <div class="mt-4 rounded-lg border border-accent/30 bg-accent/5 p-4" data-testid="event-join-now">
-        <div class="flex items-center gap-3">
-          <i data-lucide="video" class="h-5 w-5 text-accent"></i>
-          <div>
-            <p class="font-semibold text-foreground">Join the event</p>
-            <a href="{% url 'event_join' event.id event.slug %}" target="_blank" rel="noopener noreferrer"
-               class="text-accent hover:underline">
-              Click here to join
-            </a>
-          </div>
-        </div>
+      <div class="mt-6 border-t border-border pt-4" data-testid="event-join-now">
+        <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">Join the event</p>
+        <a href="{% url 'event_join' event.id event.slug %}" target="_blank" rel="noopener noreferrer"
+           class="mt-2 inline-flex text-lg font-medium text-foreground underline underline-offset-4">
+          Click here to join
+        </a>
       </div>
       {% endif %}
 
@@ -229,9 +218,9 @@
           {% if series_fully_registered %}You're registered for every upcoming session in this series. {% endif %}New sessions added to the series are registered automatically.
         </p>
         {% endif %}
-        <div class="mt-3 flex justify-end">
+        <div class="mt-4">
           <button type="button"
-                  class="{% button_classes 'destructive' extra='w-full sm:w-auto' %}"
+                  class="{% button_classes 'destructive' %}"
                   id="unregister-btn"
                   data-testid="{% if event.event_series_id %}event-cancel-session-button{% else %}event-cancel-registration-button{% endif %}"
                   {% if event.event_series_id %}data-cancel-confirm="Cancel your spot for this session? You'll stay registered for the other sessions in {{ event.event_series.name }}."{% endif %}
@@ -241,16 +230,14 @@
         </div>
         {% if is_series_registered %}
         <a href="{{ event.event_series.get_absolute_url }}"
-           class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
+           class="mt-4 inline-flex min-h-[44px] items-center text-sm font-medium text-foreground underline underline-offset-4"
            data-testid="event-manage-series-registration-link">
-          <i data-lucide="settings" class="h-4 w-4"></i>
           Manage series registration
         </a>
         {% elif show_register_rest_of_series %}
         <a href="{{ event.event_series.get_absolute_url }}"
-           class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
+           class="mt-4 inline-flex min-h-[44px] items-center text-sm font-medium text-foreground underline underline-offset-4"
            data-testid="event-register-rest-of-series-link">
-          <i data-lucide="calendar-plus" class="h-4 w-4"></i>
           Register for the rest of {{ event.event_series.name }}
         </a>
         {% endif %}
@@ -264,41 +251,38 @@
       single-session behaviour. ``series_session_accessible`` (N) and
       ``series_session_locked`` (K) are computed in the view.
     {% endcomment %}
-    <div class="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
-      <div class="w-full sm:w-auto text-center sm:text-left">
-        <p class="font-semibold text-foreground">{% if event.event_series_id %}Register for this session{% else %}Register for this event{% endif %}</p>
-      </div>
+    <p class="text-2xl font-semibold tracking-tight text-foreground">{% if event.event_series_id %}Register for this session{% else %}Register for this event{% endif %}</p>
+    {% if event.event_series_id %}
+    <p class="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground" data-testid="event-series-scope-note">
+      This session is part of {{ event.event_series.name }}. New sessions added to the series are registered automatically.
+    </p>
+    {% if series_session_locked > 0 %}
+    <p class="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground" data-testid="event-series-tier-note">
+      {{ series_session_locked }} session{{ series_session_locked|pluralize }} in this series require{{ series_session_locked|pluralize:"s," }} {{ series_locked_tier_name }}.
+      <a href="/membership" class="text-foreground underline underline-offset-4" data-testid="event-series-tier-upgrade-link">Upgrade</a>
+    </p>
+    {% endif %}
+    {% endif %}
+    <div class="mt-6 flex flex-col items-start gap-3">
       <button type="button"
-              class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"
+              class="{% button_classes 'primary' size='lg' %}"
               id="register-btn"
               data-register-scope="series"
+              {% if event.event_series_id and series_session_accessible >= 2 %}data-series-url="{{ event.event_series.get_absolute_url }}"{% endif %}
               data-testid="{% if event.event_series_id and series_session_accessible >= 2 %}event-register-series-button{% else %}event-register-button{% endif %}"
               data-event-register-button>
         {% if event.event_series_id and series_session_accessible >= 2 %}Register for all {{ series_session_accessible }} sessions{% else %}Register{% endif %}
       </button>
-    </div>
-    {% if event.event_series_id %}
-    {% if series_session_accessible >= 2 %}
-    <div class="mt-4 flex justify-end">
+      {% if event.event_series_id and series_session_accessible >= 2 %}
       <button type="button"
-              class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline"
+              class="inline-flex min-h-[44px] items-center text-sm font-medium text-foreground underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               data-register-scope="event"
               data-testid="event-register-single-button"
               data-event-register-button>
         Just this session
       </button>
+      {% endif %}
     </div>
-    {% endif %}
-    <p class="mt-4 text-sm text-muted-foreground" data-testid="event-series-scope-note">
-      This session is part of {{ event.event_series.name }}. New sessions added to the series are registered automatically.
-    </p>
-    {% if series_session_locked > 0 %}
-    <p class="mt-2 text-sm text-muted-foreground" data-testid="event-series-tier-note">
-      {{ series_session_locked }} session{{ series_session_locked|pluralize }} in this series require{{ series_session_locked|pluralize:"s," }} {{ series_locked_tier_name }}.
-      <a href="/membership" class="text-accent hover:underline" data-testid="event-series-tier-upgrade-link">Upgrade</a>
-    </p>
-    {% endif %}
-    {% endif %}
   {% endif %}
 </div>
 {% endif %}

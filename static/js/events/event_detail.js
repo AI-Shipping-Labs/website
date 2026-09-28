@@ -55,6 +55,13 @@
           const reload = () => {
             if (reloaded) return;
             reloaded = true;
+            // Whole-series signup leaves the session page for the series,
+            // where every session shows its registration state.
+            const seriesUrl = button && button.dataset.seriesUrl;
+            if (scope === 'series' && seriesUrl) {
+              window.location.assign(seriesUrl);
+              return;
+            }
             window.location.reload();
           };
           const analytics = window.aslabAnalytics;

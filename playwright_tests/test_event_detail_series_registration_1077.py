@@ -483,21 +483,7 @@ class TestWholeSeriesSignup:
         ).inner_text()
 
         page.locator(SERIES_BUTTON).click()
-        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
-        assert (
-            "You're registered for all 4 sessions in AI Engineering Book Club"
-            in page.locator(SERIES_SUMMARY).inner_text()
-        )
-        assert (
-            "You're registered for every upcoming session in this series."
-            in page.locator(SERIES_EXPLAINER).inner_text()
-        )
-
-        # The series page shows every session registered.
-        page.goto(
-            f"{django_server}{series.get_absolute_url()}",
-            wait_until="domcontentloaded",
-        )
+        page.wait_for_url(f"**{series.get_absolute_url()}")
         assert page.locator(
             '[data-testid="series-event-state-registered"]'
         ).count() == 4
@@ -564,6 +550,8 @@ class TestMixedAccessSeries:
         )
 
         page.locator('[data-event-register-button]').first.click()
+        page.wait_for_url(f"**{series.get_absolute_url()}")
+        _open(page, django_server, weeks[0])
         page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
         assert (
             "You're registered for 1 of 4 sessions"
@@ -608,7 +596,7 @@ class TestSkipOneWeek:
         page = ctx.new_page()
         _open(page, django_server, weeks[0])
         page.locator(SERIES_BUTTON).click()
-        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+        page.wait_for_url(f"**{series.get_absolute_url()}")
 
         # Cancel week 3 only.
         _open(page, django_server, weeks[2])
@@ -651,7 +639,7 @@ class TestSkipOneWeek:
         page = ctx.new_page()
         _open(page, django_server, weeks[0])
         page.locator(SERIES_BUTTON).click()
-        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
+        page.wait_for_url(f"**{series.get_absolute_url()}")
 
         _open(page, django_server, weeks[2])
         page.on("dialog", lambda dialog: dialog.accept())
@@ -659,12 +647,7 @@ class TestSkipOneWeek:
         page.locator(SERIES_BUTTON).wait_for(state="visible")
 
         page.locator(SERIES_BUTTON).click()
-        page.locator(REGISTERED_CONFIRMATION).wait_for(state="visible")
-
-        page.goto(
-            f"{django_server}{series.get_absolute_url()}",
-            wait_until="domcontentloaded",
-        )
+        page.wait_for_url(f"**{series.get_absolute_url()}")
         assert page.locator(
             '[data-testid="series-event-state-registered"]'
         ).count() == 4

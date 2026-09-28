@@ -606,6 +606,24 @@ class EventCardSeriesCopyTest(TierSetupMixin, TestCase):
             response,
             'This session is part of AI Engineering Book Club.',
         )
+        html = response.content.decode()
+        note_at = html.index('data-testid="event-series-scope-note"')
+        series_at = html.index('data-testid="event-register-series-button"')
+        single_at = html.index('data-testid="event-register-single-button"')
+        self.assertLess(note_at, series_at)
+        self.assertLess(series_at, single_at)
+        decision = html[html.index('data-testid="event-registration-card"'):single_at]
+        self.assertNotIn('justify-between', decision)
+        self.assertNotIn('justify-end', decision)
+        series_button = html[
+            html.index('id="register-btn"'):series_at
+        ]
+        self.assertIn(
+            f'data-series-url="{self.series.get_absolute_url()}"',
+            series_button,
+        )
+        single_button = html[series_at:single_at]
+        self.assertNotIn('data-series-url', single_button)
 
     def test_single_session_series_shows_plain_register_and_note(self):
         only = _make_occurrence(self.series, position=1)

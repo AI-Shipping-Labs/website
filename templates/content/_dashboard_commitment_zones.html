@@ -94,7 +94,7 @@
           {% firstof item.next_page.get_absolute_url item.workshop.get_absolute_url as continue_url %}
           {% include "content/_content_card.html" with card_url=continue_url card_testid="continue-learning-workshop" card_anchor_testid="continue-learning-workshop-cta" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=item.workshop.title card_heading_tag="h3" card_aria_label=item.workshop.title dashboard_card_variant="learning" %}
         {% else %}
-          {% firstof item.next_unit.get_absolute_url item.course.get_absolute_url as continue_url %}
+          {% firstof item.home_url item.course.get_absolute_url as continue_url %}
           {% include "content/_content_card.html" with card_url=continue_url card_testid="continue-learning-course" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=item.course.title card_heading_tag="h3" card_aria_label=item.course.title dashboard_card_variant="learning" %}
         {% endif %}
       {% endfor %}

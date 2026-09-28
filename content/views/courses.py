@@ -43,6 +43,11 @@ from content.services.course_inline import (
     inline_units_and_topics,
     is_inline_homework_unit,
 )
+from content.services.course_navigation import (
+    course_home_url,
+    course_overview_url,
+    opens_course_home,
+)
 from content.services.course_schedule import (
     build_deadline_context,
     schedule_timezone_name,
@@ -191,12 +196,8 @@ def course_detail(request, slug):
     user = request.user
 
     has_access = can_access(user, course)
-    if request.GET.get('view') != 'overview' and has_access and is_enrolled(user, course):
-        destination = f'/courses/{course.slug}/home'
-        cohort_key = request.GET.get('cohort', '')
-        if cohort_key:
-            destination += f'?{urlencode({"cohort": cohort_key})}'
-        return redirect(destination)
+    if request.GET.get('view') != 'overview' and opens_course_home(user, course):
+        return redirect(course_home_url(course, cohort=request.GET.get('cohort', '')))
     if has_access:
         # Issue #1674: "first gains course access" — the other of the two
         # points the spec names for implicit self-paced cohort membership.
@@ -544,9 +545,8 @@ def course_home(request, slug, section='home'):
         f'?{urlencode({"cohort": cohort.external_key})}'
         if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
     )
-    context['overview_url'] = (
-        f'{course.get_absolute_url()}?view=overview'
-        + (f'&{context["cohort_query"][1:]}' if context['cohort_query'] else '')
+    context['overview_url'] = course_overview_url(
+        course, cohort=cohort if context['cohort_query'] else '',
     )
     context['homework_rows'] = [
         row for row in context['deadline_rows']
@@ -811,9 +811,8 @@ def enroll_course(request, slug):
     next_unit = course.get_next_unit_for(user)
     if next_unit is not None:
         return redirect(next_unit.get_absolute_url())
-    # No units yet — bounce back to the course page so the user sees the
-    # "Enrolled" state.
-    return redirect(course.get_absolute_url())
+    # No units yet — the enrolled learner's course page is course Home.
+    return redirect(course_home_url(course))
 
 
 @require_POST
@@ -1175,6 +1174,7 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     if drip_decision.is_locked:
         context = course_unit_service.build_drip_locked_course_unit_context(
             course, module, unit, drip_decision,
+            user=user, cohort=request.GET.get('cohort', ''),
         )
         return render(request, 'content/course_unit_detail.html', context, status=403)
 

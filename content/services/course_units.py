@@ -32,6 +32,7 @@ from content.models import Cohort, CohortEnrollment, Unit, UserCourseProgress
 from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus_units
 from content.models.homework import Homework, QuestionType, Submission
+from content.services.course_navigation import course_entry_url
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
 from events.models import Event, EventRegistration
@@ -296,12 +297,15 @@ def build_gated_course_unit_context(user, course, module, unit, decision):
     return context
 
 
-def build_drip_locked_course_unit_context(course, module, unit, decision):
+def build_drip_locked_course_unit_context(
+    course, module, unit, decision, *, user=None, cohort='',
+):
     """Build template context for a cohort-drip locked unit."""
     available_date = decision.available_date
     formatted_date = available_date.strftime('%B %d, %Y')
     heading = f'This lesson will be available on {formatted_date}'
-    course_url = f'/courses/{course.slug}'
+    # An enrolled learner goes back to course Home; others to the landing.
+    course_url = course_entry_url(user, course, cohort=cohort)
 
     return {
         'course': course,

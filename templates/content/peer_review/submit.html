@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load course_links %}
 {% load member_badges accounts_extras date_formatting %}
 
 {% block title %}Submit project - {{ course.title }} | {{ site_name }}{% endblock %}
@@ -13,7 +14,7 @@
     <div class="relative mx-auto max-w-2xl px-4 py-16 sm:px-6 lg:px-8 lg:py-24">
 
   <div class="mb-6">
-    <a href="{{ course.get_absolute_url }}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to {{ course.title }}</a>
+    <a href="{% course_entry_url course cohort=request.GET.cohort section='projects' %}" class="text-sm text-muted-foreground hover:text-foreground">&larr; Back to {{ course.title }}</a>
   </div>
 
   <h1 class="mb-2 flex items-center gap-2.5 text-2xl font-semibold text-foreground">

@@ -378,6 +378,8 @@ class CourseDetailEnrollButtonTest(TierSetupMixin, TestCase):
 
     def test_continue_button_shown_when_enrolled(self):
         Enrollment.objects.create(user=self.user, course=self.course)
+        # Enrolled learners are redirected to course Home; the overview
+        # stays reachable explicitly.
         response = self.client.get(f'/courses/{self.course.slug}?view=overview')
         self.assertContains(response, 'data-testid="continue-button"')
         self.assertNotContains(response, 'data-testid="enroll-button"')

@@ -18,6 +18,7 @@ from content.models import (
     ProjectSubmission,
 )
 from content.models.cohort import CohortEnrollment
+from content.services.course_navigation import course_home_url
 from content.services.peer_review_service import PeerReviewService
 
 _project_url_validator = URLValidator(schemes=['http', 'https'])
@@ -65,7 +66,7 @@ def project_submit(request, slug):
     user = request.user
     submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
     if submission is None and CourseProject.objects.filter(course=course).exists():
-        return redirect(f'{course.get_absolute_url()}#syllabus')
+        return redirect(course_home_url(course, section='projects'))
 
     if request.method == 'POST':
         project_url = request.POST.get('project_url', '').strip()
@@ -142,7 +143,7 @@ def review_dashboard(request, slug):
     user = request.user
     submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
     if submission is None and CourseProject.objects.filter(course=course).exists():
-        return redirect(f'{course.get_absolute_url()}#syllabus')
+        return redirect(course_home_url(course, section='projects'))
 
     # Reviews assigned to this student
     assigned_reviews = []

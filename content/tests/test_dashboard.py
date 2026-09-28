@@ -283,8 +283,8 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
             'data-testid="dashboard-continue-learning-section"', content,
         )
 
-    def test_continue_button_links_to_next_unfinished_unit(self):
-        # Complete units 1-3 of 4 → Continue should link to unit 4.
+    def test_next_unit_is_next_unfinished_unit(self):
+        # Complete units 1-3 of 4 → next_unit is unit 4 (the card itself opens course Home).
         self._enroll(self.user, self.course)
         now = timezone.now()
         for i in range(3):
@@ -296,11 +296,9 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         item = response.context['in_progress_courses'][0]
         self.assertEqual(item['next_unit'], self.units[3])
-        # The button uses the next-unit URL, not the course URL.
-        self.assertContains(response, self.units[3].get_absolute_url())
 
-    def test_continue_button_links_to_first_skipped_unit(self):
-        # Complete units 1, 3 (skip unit 2) → Continue should link to unit 2.
+    def test_next_unit_is_first_skipped_unit(self):
+        # Complete units 1, 3 (skip unit 2) → next_unit is unit 2.
         self._enroll(self.user, self.course)
         now = timezone.now()
         UserCourseProgress.objects.create(
@@ -315,7 +313,6 @@ class ContinueLearningTest(TierSetupMixin, TestCase):
         response = self.client.get('/')
         item = response.context['in_progress_courses'][0]
         self.assertEqual(item['next_unit'], self.units[1])
-        self.assertContains(response, self.units[1].get_absolute_url())
 
     def test_continue_card_aria_label_names_course(self):
         # The whole learning row is one link with the course as its name.

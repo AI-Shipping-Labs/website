@@ -31,6 +31,7 @@ from content.models import (
     WorkshopPage,
 )
 from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
+from content.services.course_navigation import course_entry_url, course_home_url
 from content.tier_config import get_tiers_with_features
 from events.services.time_windows import (
     registered_upcoming_events,
@@ -648,6 +649,9 @@ def _get_in_progress_courses(user, user_level):
             'last_unit': last_unit,
             'last_completed_at': last_completed_at,
             'next_unit': next_unit,
+            # Every row is an active, accessible enrollment, so the course
+            # link is course Home (same rule as ``course_entry_url``).
+            'home_url': course_home_url(course),
             'enrolled_at': enrolled_at_by_course[cid],
             '_sort_key': sort_key,
         })
@@ -1654,7 +1658,7 @@ def _build_buildcamp_checklist_item(*, user, checklist_item):
         description=(
             f'Begin the course you enrolled in through {program_label}.'
         ),
-        url='/courses/ai-buildcamp',
+        url=course_entry_url(user, course),
         cta_label='Open course',
         icon='rocket',
         completed=_has_course_activity(user, course.pk),

@@ -3,6 +3,7 @@
 {% load seo_tags %}
 {% load teaser_tags %}
 {% load curriculum_tags %}
+{% load course_links %}
 
 {% block title %}{{ unit.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description unit "unit" %}{% endblock %}
@@ -24,7 +25,7 @@
        unlock it by upgrading, which isn't true. -->
   <div class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
+      <a href="{% course_entry_url course cohort=request.GET.cohort %}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to {{ course.title }}
       </a>
@@ -35,7 +36,7 @@
       <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="teaser-breadcrumb">
         <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-        <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
+        <a href="{% course_entry_url course cohort=request.GET.cohort %}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
         {% if module.parent_id %}
         <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
         <span class="text-muted-foreground truncate hidden sm:inline" data-testid="teaser-breadcrumb-parent">{{ module.parent.title }}</span>
@@ -127,7 +128,9 @@
     </div>
   </div>
   {% else %}
-  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_course_unit_content.html" reader_back_url=course.get_absolute_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
+  {% comment %}The sidebar appends ?cohort itself for module-scoped navigation, so pass the cohort only when it will not.{% endcomment %}
+  {% if scoped_module %}{% course_entry_url course as reader_course_url %}{% else %}{% course_entry_url course cohort=reader_cohort_param as reader_course_url %}{% endif %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_course_unit_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
   {% endif %}
 </main>
 {% include "includes/footer.html" %}

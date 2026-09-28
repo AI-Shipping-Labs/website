@@ -172,7 +172,7 @@ class CourseProjectAttemptViewsTest(TestCase):
 
     def test_legacy_submit_link_points_to_attempt_picker(self):
         response = self.client.get('/courses/ai-buildcamp/submit')
-        self.assertRedirects(response, '/courses/ai-buildcamp#syllabus', fetch_redirect_response=False)
+        self.assertRedirects(response, '/courses/ai-buildcamp/home/projects', fetch_redirect_response=False)
 
     def test_review_cannot_be_submitted_after_attempt_deadline(self):
         other = get_user_model().objects.create_user(email='other@example.com', password='pw')

@@ -890,28 +890,22 @@ class TestScenario10DashboardContinueLearning:
         progress_text = page.locator("text=/1\\s*(of|\\/)\\s*3/")
         assert progress_text.count() >= 1, "Expected progress indicator like '1 of 3' or '1/3'"
 
-        # Step 2: Click the Continue button in the Continue learning section.
-        # After #244, Continue deep-links to the next unfinished unit, so the
-        # link should start with /courses/dashboard-course/ (a descendant URL),
-        # not point at the course landing page.
+        # Step 2: Click the course card in the Continue learning section.
+        # An enrolled learner's course link opens course Home, which owns
+        # the next-lesson action; it never drops them on the public landing.
         course_link = page.locator(
-            'a[href^="/courses/dashboard-course/"]'
+            '[data-testid="continue-learning-course"] a'
         )
-        assert course_link.count() >= 1, (
-            "Expected a Continue link deep-linking into the course "
-            "(href starting with /courses/dashboard-course/)"
-        )
-        # Unit 1 was marked complete, so the next unfinished unit is unit 2.
-        expected_href = "/courses/dashboard-course/module-1/dash-unit-2"
+        assert course_link.count() >= 1, "Expected a Continue learning course card"
+        expected_href = "/courses/dashboard-course/home"
         assert course_link.first.get_attribute("href") == expected_href, (
-            f"Expected Continue link to point at {expected_href}, "
+            f"Expected the course card to open {expected_href}, "
             f"got {course_link.first.get_attribute('href')!r}"
         )
         course_link.first.click()
         page.wait_for_load_state("domcontentloaded")
 
-        # Lands on the next unfinished unit's page within the course.
-        assert "/courses/dashboard-course/" in page.url
+        # Lands on course Home, not the public landing page.
         assert page.url.endswith(expected_href)
 
         context.close()

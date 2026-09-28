@@ -1,4 +1,5 @@
 {% load static %}
+{% load course_links %}
 {% load accounts_extras %}
 {% load homework_step_tags %}
 {% load date_formatting %}
@@ -110,7 +111,7 @@
       {% if stepper.assignment.instructions %}<div class="prose max-w-none mb-6" data-testid="homework-closing-guidance">{{ stepper.assignment.instructions }}</div>{% endif %}
       <div class="flex flex-wrap gap-3" data-testid="homework-action-row">
         {% if not stepper.submitted %}<a href="{{ stepper.previous_url }}" class="{% button_classes 'secondary' %}">Back to last question</a>{% endif %}
-        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{{ course.get_absolute_url }}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
+        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{% course_entry_url course cohort=reader_cohort_param %}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
       </div>
     {% else %}
     <div class="mb-6">{% include 'homework_steps/_review_rows.html' with rows=stepper.review_display_rows editable=True test_id='homework-review-summary' %}</div>
@@ -132,7 +133,7 @@
       <p class="mb-3 text-sm text-muted-foreground" data-save-status role="status" aria-live="polite">{{ stepper.draft_status }}</p>
       {% if stepper.submitted %}
       <div class="flex flex-wrap gap-3" data-testid="homework-action-row">
-        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{{ course.get_absolute_url }}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
+        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{% course_entry_url course cohort=reader_cohort_param %}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
         {% if stepper.can_submit %}<button type="submit" name="intent" value="submit" class="{% button_classes 'secondary' %}" data-testid="homework-submit-button">Update submission</button>{% endif %}
       </div>
       {% elif stepper.can_write %}
@@ -143,7 +144,7 @@
       {% else %}
       <div class="flex flex-wrap gap-3" data-testid="homework-action-row">
         <a href="{{ stepper.previous_url }}" class="{% button_classes 'secondary' %}">Back to last question</a>
-        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{{ course.get_absolute_url }}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
+        <a href="{% if next_item_url %}{{ next_item_url }}{% else %}{% course_entry_url course cohort=reader_cohort_param %}{% endif %}" class="{% button_classes 'primary' %}" data-testid="homework-continue-course">{% if next_item_url %}Continue to {{ next_item_title }}{% else %}Back to course{% endif %}</a>
       </div>
       {% endif %}
     </form>

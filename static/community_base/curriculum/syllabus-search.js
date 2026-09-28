@@ -101,6 +101,9 @@
     }
 
     function itemContext(item) {
+      if (item.dataset.searchContext) {
+        return [cleanText(item.dataset.searchContext)];
+      }
       const parts = [];
       let section = item.closest("[data-cb-syllabus-search-section]");
       while (section && scope.contains(section)) {

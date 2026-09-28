@@ -1,7 +1,7 @@
 {% load accounts_extras %}
 {% load member_empty_state %}
 
-<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 {% if show_catalog_filters %}py-8 sm:py-16 lg:py-24{% elif hide_catalog_header %}pt-6 pb-6 sm:pb-8 lg:pb-10{% else %}pt-8 pb-6 sm:pt-12 sm:pb-8 lg:pt-16 lg:pb-10{% endif %}" data-testid="{{ catalog_testid|default:"workshop-catalog" }}">
+<section id="{{ catalog_section_id|default:"workshop-catalog" }}" class="scroll-mt-24 {% if show_catalog_filters %}py-8 sm:py-16 lg:py-24{% elif hide_catalog_header %}pt-6 pb-6 sm:pb-8 lg:pb-10{% else %}pt-8 pb-6 sm:pt-12 sm:pb-8 lg:pt-16 lg:pb-10{% endif %}" data-testid="{{ catalog_testid|default:"workshop-catalog" }}"{% if show_catalog_filters %} data-cb-syllabus{% endif %}>
   {% if show_catalog_filters %}
   <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
   {% else %}
@@ -34,8 +34,13 @@
         {% endif %}
       </div>
       {% if show_catalog_filters %}
+      {% if workshop_search_index %}
+      <div class="mt-6" data-testid="workshop-search">
+        {% include "content/_workshops_search.html" %}
+      </div>
+      {% endif %}
       {% if topic_filters %}
-      <nav class="mt-4 flex flex-wrap gap-2" aria-label="Filter workshops by topic" data-testid="workshop-topic-filter">
+      <nav data-cb-syllabus-browse class="mt-4 flex flex-wrap gap-2" aria-label="Filter workshops by topic" data-testid="workshop-topic-filter">
         <a href="{{ base_path }}"
            class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_topic and not selected_tags %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
            data-testid="workshop-topic-all"
@@ -59,7 +64,7 @@
     one calm scanning column, subtle dividers, and no repeated box wall. Real
     authored media remains conditional; coverless workshops reserve no slot.
     {% endcomment %}
-    <div class="border-t border-border/70" data-testid="workshops-list">
+    <div class="border-t border-border/70" data-testid="workshops-list" data-cb-syllabus-browse>
       {% for workshop in workshops %}
       {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_media_present=workshop.card_image_url card_editorial=True card_title=workshop.title card_title_testid="workshop-card-title" card_heading_tag="h3" card_arrow_testid="workshop-card-arrow" card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
       {% endfor %}
@@ -69,12 +74,12 @@
     The short landing-page preview remains a compact, left-aligned grid in the
     landing page's 5xl frame. Only the standalone archive becomes a 3xl feed.
     {% endcomment %}
-    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid">
+    <div class="grid gap-6 sm:grid-cols-2 lg:grid-cols-3" data-testid="workshops-grid" data-cb-syllabus-browse>
       {% for workshop in workshops %}
       {% include "content/_content_card.html" with card_url=workshop.get_absolute_url card_testid="workshop-card" card_anchor_testid="workshop-card-link" card_body_template="content/_workshop_card_body.html" card_badge_template="content/_workshop_card_badges.html" card_media_template="content/_workshop_card_media.html" card_compact=True card_aria_label=workshop.title card_extra_attrs='data-workshop-slug="'|add:workshop.slug|add:'"' %}
       {% endfor %}
     </div>
-    <a href="{{ catalog_all_url }}" class="{% button_classes 'secondary' extra='mt-6' %}" data-testid="view-all-workshops-preview-cta">
+    <a href="{{ catalog_all_url }}" class="{% button_classes 'secondary' extra='mt-6' %}" data-testid="view-all-workshops-preview-cta" data-cb-syllabus-browse>
       See all workshops
       <i data-lucide="arrow-right" class="h-4 w-4"></i>
     </a>

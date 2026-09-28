@@ -41,6 +41,8 @@ from django.http import (
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.cache import patch_cache_control
+from django.utils.html import strip_tags
+from django.utils.text import Truncator
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 
@@ -235,6 +237,75 @@ def _prepare_catalog_card_workshops(queryset, *, limit=None):
     return prepared
 
 
+WORKSHOP_SEARCH_EXCERPT_CHARS = 180
+
+
+def _build_workshop_search_index(queryset):
+    """Return the workshops in ``queryset`` plus their tutorial pages.
+
+    Feeds the hidden client-side index behind the workshop search box
+    (``templates/content/_workshops_search.html``). Callers pass the
+    catalog's filtered queryset *before* any preview limit, so the index
+    covers every workshop the current catalog view lists (the full archive
+    on the landing page, the active topic/tag subset on the catalog). Pages
+    are fetched with one prefetch query (titles and slugs only, never the
+    gated bodies) and instructors with another, so the cost is three
+    queries regardless of archive size.
+    """
+    workshops = (
+        queryset
+        .order_by('-date')
+        .prefetch_related(
+            Prefetch(
+                'instructors',
+                queryset=Instructor.objects.order_by(
+                    'workshopinstructor__position', 'pk',
+                ).only('pk', 'name'),
+                to_attr='search_instructors',
+            ),
+            Prefetch(
+                'pages',
+                queryset=WorkshopPage.objects.order_by(
+                    'sort_order', 'pk',
+                ).only('pk', 'workshop_id', 'slug', 'title', 'sort_order'),
+                to_attr='search_pages',
+            ),
+        )
+    )
+    index = []
+    for workshop in workshops:
+        description = ' '.join(strip_tags(workshop.description_html).split())
+        topic = primary_topic(workshop.tags, WORKSHOP_TOPICS)
+        instructor_names = [i.name for i in workshop.search_instructors]
+        search_text = ' '.join(filter(None, [
+            workshop.title,
+            description,
+            ' '.join(str(tag) for tag in workshop.tags or ()),
+            ' '.join(str(tool) for tool in workshop.core_tools or ()),
+            topic[1] if topic else '',
+            workshop.skill_level_label,
+            ' '.join(instructor_names),
+        ]))
+        workshop_url = workshop.get_absolute_url()
+        index.append({
+            'title': workshop.title,
+            'url': workshop_url,
+            'excerpt': Truncator(description).chars(
+                WORKSHOP_SEARCH_EXCERPT_CHARS,
+            ),
+            'search_text': search_text,
+            'pages': [
+                {
+                    'title': page.title,
+                    'url': page.get_absolute_url(),
+                    'search_text': f'{workshop.title} {page.title}',
+                }
+                for page in workshop.search_pages
+            ],
+        })
+    return index
+
+
 def _build_workshops_catalog_context(
     request,
     *,
@@ -289,6 +360,7 @@ def _build_workshops_catalog_context(
         'catalog_intro': catalog_intro,
         'catalog_section_id': catalog_section_id,
         'catalog_testid': catalog_testid,
+        'workshop_search_index': _build_workshop_search_index(published),
     }
 
 

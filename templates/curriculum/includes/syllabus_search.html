@@ -10,7 +10,9 @@ The surrounding syllabus should use these hooks:
     explicit. Otherwise the component derives it from the rendered item.
   - Optionally wrap each module in `data-cb-syllabus-search-section`. The
     nearest section headings become each result's breadcrumb. Mark a custom
-    heading with `data-cb-syllabus-search-heading` when needed.
+    heading with `data-cb-syllabus-search-heading` when needed. An item's
+    `data-search-context` attribute, when present, replaces the derived
+    breadcrumb (useful for attribute-only indexes with no rendered text).
   - Include this partial inside the `data-cb-syllabus` container. Optional
     `search_input_class`, `search_label_class`, `search_button_class`, and
     `search_status_class` values override the matching elements' classes.
@@ -104,6 +106,10 @@ preservation of unrelated query parameters such as `cohort`.
   }
   [data-cb-syllabus-search-results] {
     margin-top: 1.25rem;
+  }
+  [data-cb-syllabus-search-results]:focus {
+    /* Focus moves here programmatically after submit; no ring on a region. */
+    outline: none;
   }
   .cb-syllabus-search__results-heading {
     margin: 0 0 1rem;

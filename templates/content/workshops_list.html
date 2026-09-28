@@ -8,6 +8,11 @@
 {% block body %}
 {% include "includes/header.html" %}
 <main class="min-h-screen pt-24">
+  {% comment %}
+  One search scope spans the hero and the embedded preview grid so inline
+  search results replace the featured card and the preview while active.
+  {% endcomment %}
+  <div data-cb-syllabus>
   <section class="pt-8 sm:pt-16 lg:pt-24" data-testid="workshops-landing">
     <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
       <header>
@@ -20,8 +25,14 @@
         </p>
       </header>
 
+      {% if workshop_search_index %}
+      <div class="mt-8 max-w-3xl" data-testid="workshop-search">
+        {% include "content/_workshops_search.html" %}
+      </div>
+      {% endif %}
+
       {% if featured_workshop %}
-      <div class="mt-12" data-testid="workshops-featured">
+      <div class="mt-12" data-testid="workshops-featured" data-cb-syllabus-browse>
         <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Latest workshops</h2>
         <div class="mt-5">
           {% with workshop=featured_workshop %}
@@ -34,6 +45,7 @@
   </section>
 
   {% include "content/_workshops_catalog.html" with suppress_empty_state=featured_workshop hide_catalog_header=True %}
+  </div>
 
   {# How workshops work — static value-prop cards, mirroring the /books "How it works" trio. #}
   <section class="pt-0 pb-8 sm:pb-16 lg:pb-24">

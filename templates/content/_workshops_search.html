@@ -1,0 +1,25 @@
+{% comment %}
+Client-side workshop search, reusing the shared curriculum syllabus search
+(templates/curriculum/includes/syllabus_search.html). The caller must wrap
+this include and the browsable workshop list in one `data-cb-syllabus`
+scope and mark the browsable list with `data-cb-syllabus-browse` so inline
+results replace it. The hidden index below lists every workshop the current
+view lists, ignoring the landing preview limit (`workshop_search_index` from
+content.views.workshops), and each workshop's tutorial page titles, with the
+workshop title as each page result's breadcrumb.
+{% endcomment %}
+{% if workshop_search_index %}
+{% include "curriculum/includes/syllabus_search.html" with search_id=search_id|default:"workshops-search" results_id=results_id|default:"workshops-search-results" search_label_text="Search workshops" search_placeholder="Search workshops or tutorial pages..." search_no_results_text="No workshops or tutorial pages match this search. Try fewer or broader words." search_no_matches_status="No matching workshops" search_input_class="mt-2 block w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" search_label_class="sr-only" search_status_class="sr-only" %}
+{% comment %}
+Attribute-only index: items carry no text nodes, so hidden titles never
+collide with the visible cards in text lookups or assistive tech.
+{% endcomment %}
+<div hidden aria-hidden="true" data-testid="workshop-search-index">
+  {% for entry in workshop_search_index %}
+  <div data-cb-syllabus-search-item data-search-title="{{ entry.title }}" data-search-url="{{ entry.url }}" data-search-text="{{ entry.search_text }}" data-search-excerpt="{{ entry.excerpt|default:'Open this workshop.' }}" data-search-context="Workshop"></div>
+  {% for page in entry.pages %}
+  <div data-cb-syllabus-search-item data-search-title="{{ page.title }}" data-search-url="{{ page.url }}" data-search-text="{{ page.search_text }}" data-search-excerpt="Tutorial page" data-search-context="{{ entry.title }}"></div>
+  {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}

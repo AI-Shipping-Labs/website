@@ -12,15 +12,19 @@
       <p class="text-sm font-medium text-muted-foreground">Course</p>
       <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
       {% if cohort %}
-      <p class="mt-2 text-sm text-muted-foreground" data-testid="course-home-cohort">
-        {{ cohort.name }}
-        {% if cohort.mode == 'self_paced' %}<span aria-hidden="true"> · </span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true"> · </span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
-      </p>
-      {% endif %}
-      {% if preview_cohorts|length > 1 %}
-      <nav class="mt-4 flex flex-wrap gap-2" aria-label="Cohort schedule">
-        {% for option in preview_cohorts %}<a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="inline-flex min-h-[36px] items-center rounded-full border px-3 text-sm {% if cohort.pk == option.pk %}border-accent bg-accent/10 text-foreground{% else %}border-border text-muted-foreground hover:text-foreground{% endif %}">{{ option.name }}</a>{% endfor %}
-      </nav>
+      <div class="mt-2 flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
+        {% if preview_cohorts|length > 1 %}
+        <details class="relative" data-testid="course-home-cohort-switcher">
+          <summary class="inline-flex cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
+          <ul class="absolute left-0 z-20 mt-1 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg" aria-label="Cohort schedule">
+            {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="block px-3 py-2 {% if cohort.pk == option.pk %}text-foreground font-medium{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
+          </ul>
+        </details>
+        {% else %}
+        <span>{{ cohort.name }}</span>
+        {% endif %}
+        {% if cohort.mode == 'self_paced' %}<span aria-hidden="true">&nbsp;·&nbsp;</span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true">&nbsp;·&nbsp;</span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
+      </div>
       {% endif %}
     </header>
 

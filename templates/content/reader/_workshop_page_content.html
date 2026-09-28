@@ -10,15 +10,7 @@
 {% include "content/reader/_mobile_nav_toggle_gated.html" %}
 {% endif %}
 
-<!-- Breadcrumb -->
-<div class="mb-6 flex items-center gap-2 overflow-hidden text-sm text-muted-foreground" data-reader-breadcrumb data-testid="page-breadcrumb">
-  <a href="/workshops" class="flex-shrink-0 transition-colors hover:text-foreground">Workshops</a>
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-  <a href="{{ workshop.get_absolute_url }}" class="hidden truncate transition-colors hover:text-foreground sm:inline">{{ workshop.title }}</a>
-  <a href="{{ workshop.get_absolute_url }}" class="flex-shrink-0 transition-colors hover:text-foreground sm:hidden">...</a>
-  <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-  <span class="truncate text-foreground">{{ page.title }}</span>
-</div>
+{% include "content/reader/_breadcrumb.html" with breadcrumb_kind="workshop_page" breadcrumb_testid="page-breadcrumb" %}
 
 {% if is_gated %}
 <a href="{{ workshop.get_absolute_url }}" class="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
@@ -34,16 +26,16 @@
 {% endif %}
 {% endif %}
 
+<h1 class="{% if show_watch_bar %}mb-4{% else %}mb-8{% endif %} text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
+
 {% if show_watch_bar %}
 <a href="{{ watch_bar_url }}"
-   class="mb-4 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
+   class="mb-8 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
    data-testid="watch-this-section">
   <i data-lucide="play" class="h-3.5 w-3.5"></i>
   Watch this section ({{ watch_bar_label }})
 </a>
 {% endif %}
-
-<h1 class="mb-8 text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
 
 {% if is_gated %}
 {% if gated_reason == "unverified_email" %}

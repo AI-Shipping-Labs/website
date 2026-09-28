@@ -1580,13 +1580,12 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
         unit_link = page.locator('a:has-text("Lesson One")')
         assert unit_link.count() >= 1
 
-        # Progress indicator visible on the learner Home
+        # The learner Home offers the next lesson
         page.goto(
             f"{django_server}/courses/main-course/home",
             wait_until="domcontentloaded",
         )
-        home_body = page.content()
-        assert "Progress" in home_body or "completed" in home_body.lower()
+        assert page.get_by_test_id("course-home-open-lesson").count() == 1
         page.goto(
             f"{django_server}/courses/main-course",
             wait_until="domcontentloaded",

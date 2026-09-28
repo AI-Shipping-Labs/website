@@ -207,7 +207,8 @@ def test_free_member_gets_module_upgrade_path(django_server, browser):
             f"{django_server}/courses/module-main-1225/foundations",
             wait_until="domcontentloaded",
         )
-        expect(page.get_by_text("First lesson", exact=True)).to_be_visible()
+        # Module home lists lessons in the (collapsed) reader sidebar.
+        expect(page.get_by_test_id("module-title")).to_be_visible()
         expect(page.get_by_test_id("module-cta")).to_contain_text(
             "Main or above required"
         )

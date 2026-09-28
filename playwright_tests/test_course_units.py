@@ -658,20 +658,21 @@ class TestScenario7ProgressBar:
 
         context = _auth_context(browser, "premium-pb@test.com")
         page = context.new_page()
-        # Step 1: Check initial progress (0 of 3) on the learner Home
+        from playwright.sync_api import expect as pw_expect
+
+        # Step 1: Check initial progress (0 of 3) on the module home
         page.goto(
-            f"{django_server}/courses/progress-course/home",
+            f"{django_server}/courses/progress-course/module-1",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-        assert "0 of 3 materials marked complete in this module" in body
+        progress = page.get_by_test_id("module-progress-count")
+        pw_expect(progress).to_have_text("0 of 3 complete")
 
         # Step 2: Complete Unit 1
         page.goto(
             f"{django_server}/courses/progress-course/module-1/p-unit-1",
             wait_until="domcontentloaded",
         )
-        from playwright.sync_api import expect as pw_expect
 
         complete_next = page.locator('[data-testid="bottom-next-btn"]')
         pw_expect(complete_next).to_contain_text("Complete & Next")
@@ -684,15 +685,14 @@ class TestScenario7ProgressBar:
         complete_next.click()
         page.wait_for_url("**/courses/progress-course/module-1/p-unit-3")
 
-        # Step 4: Home shows the updated progress summary
+        # Step 4: The module home shows the updated progress
         page.goto(
-            f"{django_server}/courses/progress-course/home",
+            f"{django_server}/courses/progress-course/module-1",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # Progress bar shows 2 of 3
-        assert "2 of 3 materials marked complete in this module" in body
+        pw_expect(page.get_by_test_id("module-progress-count")).to_have_text(
+            "2 of 3 complete"
+        )
 
         context.close()
 # ---------------------------------------------------------------
@@ -734,12 +734,15 @@ class TestScenario8LastUnitNoNext:
         body = page.content()
 
         # "Next" button is visible pointing to the second unit
-        next_link = page.locator('a:has-text("Next: Last Unit")')
-        assert next_link.count() >= 1
+        # "Complete & Next" leads to the second unit
+        next_btn = page.get_by_test_id("reader-bottom-nav").get_by_role(
+            "button", name="Complete & Next"
+        )
+        assert next_btn.count() == 1
 
-        # Step 2: Click the "Next" button
-        next_link.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        # Step 2: Click it (saves completion, then navigates)
+        next_btn.click()
+        page.wait_for_url("**/courses/last-unit-course/module-1/last-unit")
 
         # Verify URL is the second (last) unit
         assert "/courses/last-unit-course/module-1/last-unit" in page.url
@@ -957,7 +960,8 @@ class TestScenario11CourseSidebarTopAlignment:
                 'aside a[href="/courses/gap-1080-course"]'
             ).first
             back.wait_for(state="visible")
-            crumb = page.locator('[data-testid="breadcrumb-course"]').first
+            # The shared reader breadcrumb leads with the course Home crumb.
+            crumb = page.locator('[data-testid="reader-course-home"]').first
             crumb.wait_for(state="visible")
 
             os.makedirs(".tmp/screenshots", exist_ok=True)

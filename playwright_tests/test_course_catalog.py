@@ -505,13 +505,14 @@ class TestScenario3FreeUserFreeCourseProgress:
         # the syllabus and course access call to action.
         assert "Your Progress" not in body
 
-        # Progress now lives on the learner Home, not the public overview.
+        # The learner Home leads with the next lesson; the public overview
+        # keeps the syllabus.
         page.goto(
             f'{django_server}/courses/python-basics/home',
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "0 of 3 materials marked complete in this module" in body
+        assert page.get_by_test_id("course-home-open-lesson").count() == 1
 
         # No CTA block
         assert "Unlock with" not in body
@@ -552,13 +553,13 @@ class TestScenario3FreeUserFreeCourseProgress:
         # The public overview does not carry learner progress.
         assert "Your Progress" not in body
 
-        # Home updates the progress card after a lesson is marked complete.
+        # The module home updates its progress after a lesson is marked
+        # complete.
         page.goto(
-            f"{django_server}/courses/python-basics/home",
+            f"{django_server}/courses/python-basics/fundamentals",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-        assert "1 of 3 materials marked complete in this module" in body
+        assert page.get_by_test_id("module-progress-count").inner_text() == "1 of 3 complete"
 
         # Completed unit shows a checkmark icon in the reader sidebar
         page.goto(
@@ -631,13 +632,12 @@ class TestScenario4MainMemberPaidCourseProgress:
         )
         assert k8s_link.count() >= 1
 
-        # Progress shows "0 of 2 completed" (progress card lives on Home)
+        # The learner Home leads with the next lesson.
         page.goto(
             f"{django_server}/courses/advanced-mlops/home",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-        assert "0 of 2 materials marked complete in this module" in body
+        assert page.get_by_test_id("course-home-open-lesson").count() == 1
 
         # Step 2: back to the overview, then click on the first unit
         page.goto(
@@ -690,15 +690,12 @@ class TestScenario4MainMemberPaidCourseProgress:
         mark_btn.click()
         pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
 
-        # Step 6: Home shows the updated progress summary
+        # Step 6: The module home shows both materials marked complete.
         page.goto(
-            f"{django_server}/courses/advanced-mlops/home",
+            f"{django_server}/courses/advanced-mlops/deployment",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # Progress shows both materials in the module marked complete.
-        assert "2 of 2 materials marked complete in this module" in body
+        assert page.get_by_test_id("module-progress-count").inner_text() == "2 of 2 complete"
 # ---------------------------------------------------------------
 # Scenario 5: Removed -- duplicate of dashboard "Continue Learning"
 #   tests in playwright_tests/test_dashboard.py (Scenarios 4, 10)

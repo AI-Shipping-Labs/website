@@ -131,26 +131,13 @@ def decide_course_unit_access(user, unit: Unit) -> CourseUnitAccessDecision:
 
 
 def _effective_drip_offset_days(unit: Unit) -> int | None:
-    """Resolve the effective drip offset for ``unit`` (issue #1674).
+    """Return only a unit-specific drip offset.
 
-    "Most specific wins" cascade, the same pattern #465 established for
-    ``required_level``/``default_unit_required_level``:
-
-    1. ``Unit.available_after_days`` (existing per-unit override).
-    2. The unit's own (leaf) ``Module.available_after_days``.
-    3. That module's parent ``Module.available_after_days`` (only
-       relevant when the unit's module is a submodule).
-    4. ``None`` when none of those is set — unchanged legacy behaviour
-       (not locked, no cohort lookup even attempted).
+    Module dates describe the cohort schedule; they must not implicitly lock
+    every lesson within that module. Explicit per-unit offsets remain
+    supported for content that intentionally uses a lesson-level drip.
     """
-    if unit.available_after_days is not None:
-        return unit.available_after_days
-    module = unit.module
-    if module.available_after_days is not None:
-        return module.available_after_days
-    if module.parent_id is not None and module.parent.available_after_days is not None:
-        return module.parent.available_after_days
-    return None
+    return unit.available_after_days
 
 
 def decide_course_unit_drip_lock(

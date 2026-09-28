@@ -1,4 +1,5 @@
 {% load member_badges %}
+{% load event_copy %}
 {% comment %}
 Shared timeline row for Upcoming events, grouped Series, and Past events.
 All variants use the same signal/title/context/meta anatomy and fixed access
@@ -7,10 +8,31 @@ so workshop cards can still open their workshop from the body without nesting
 anchors. Recording-less past events use the same whole-card navigation as
 Upcoming rows.
 
-Required context: ``card_variant`` ("upcoming", "series", or "past") plus
-``event`` + ``display_time`` for event variants, or ``row`` for Series.
+Required context: ``card_variant`` ("upcoming", "series", "past", or
+"course_session") plus ``event`` + ``display_time`` for event variants,
+``row`` for Series, or ``session`` for course session rows.
 {% endcomment %}
-{% if card_variant == 'series' %}{% with series=row.series occ=row.next_occurrence %}
+{% if card_variant == 'course_session' %}
+<article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="course-home-live-session-row">
+  <div class="flex items-start justify-between gap-4">
+    <div class="min-w-0 flex-1">
+      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        {% if session.series_position %}Session {{ session.series_position }} <span aria-hidden="true">·</span> {% endif %}{{ session.status }}
+      </p>
+      <h3 class="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-accent"><a href="{{ session.event_url }}" class="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-title">{% if session.session_unit %}{{ session.session_unit.title }}{% else %}{{ session.title }}{% endif %}</a></h3>
+      {% if session.when %}<p class="mt-3 text-sm text-muted-foreground" data-testid="course-home-live-session-time"><time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time></p>{% endif %}
+      {% if session.status == 'Past' and not session.recap_url %}<p class="mt-2 text-sm text-muted-foreground">No recap available yet</p>{% endif %}
+      {% if session.url and session.status != 'Past' or session.action == 'Watch recording' or session.recap_url %}
+      <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
+        {% if session.url and session.status != 'Past' or session.action == 'Watch recording' %}<a href="{{ session.url }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-action">{{ session.action|default:"View event" }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+        {% if session.recap_url %}<a href="{{ session.recap_url }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-recap-link">Read recap <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="flex flex-shrink-0 items-center"><i data-lucide="arrow-right" class="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-accent" aria-hidden="true"></i></div>
+  </div>
+</article>
+{% elif card_variant == 'series' %}{% with series=row.series occ=row.next_occurrence %}
 <article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="event-series-card" data-series-slug="{{ series.slug }}">
   <a href="{{ series.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="series-card-link">
     <div class="flex items-start justify-between gap-4">
@@ -50,7 +72,7 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
   {% elif card_variant == 'past' %}
     <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-event-link">
   {% else %}
-    {% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
+    {% if course_session %}{% firstof event.get_absolute_url as event_card_href %}{% else %}{% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}{% endif %}
     <a href="{{ event_card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
   {% endif %}
     <div class="flex items-start justify-between gap-4">
@@ -64,14 +86,16 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
           {% member_access_badge event.required_level testid="event-tier-badge" %}
           {% endif %}
           <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="event-card-kind">
-            {% if card_variant == 'past' and event.has_recording %}{% if event.kind == 'workshop' and event.workshop %}<span data-testid="past-card-workshop-badge">Workshop recording</span>{% else %}Recording{% endif %}{% elif event.event_series and card_variant != 'past' %}Series{% elif event.kind == 'standard' %}Event{% else %}{{ event.get_kind_display }}{% endif %}
+            {% if course_session %}{% if course_session.series_position %}Session {{ course_session.series_position }} · {% endif %}{{ course_session.status }}{% elif card_variant == 'past' and event.has_recording %}{% if event.kind == 'workshop' and event.workshop %}<span data-testid="past-card-workshop-badge">Workshop recording</span>{% else %}Recording{% endif %}{% elif event.event_series and card_variant != 'past' %}Series{% elif event.kind == 'standard' %}Event{% else %}{{ event.get_kind_display }}{% endif %}
           </p>
         </div>
-        <h3 class="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ event.title }}</h3>
-        {% if event.description_html %}
-        <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ event.description_html|striptags|truncatechars:160 }}</p>
+        <h3 class="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{% if course_session.session_unit %}{{ course_session.session_unit.title }}{% else %}{{ event.title }}{% endif %}</h3>
+        {% with public_description=event.description_html|strip_internal_notes %}
+        {% if public_description %}
+        <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ public_description|striptags|truncatechars:160 }}</p>
         {% endif %}
-        {% if card_variant != 'past' and event.event_series %}
+        {% endwith %}
+        {% if card_variant != 'past' and event.event_series and not course_session %}
         <p class="mt-2 text-sm text-muted-foreground" data-testid="series-cadence-line">
           {% if event.event_series.cadence_prefix %}{{ event.event_series.cadence_prefix }} <span aria-hidden="true">·</span> {% endif %}part of {{ event.event_series.name }}
         </p>
@@ -115,6 +139,9 @@ Required context: ``card_variant`` ("upcoming", "series", or "past") plus
       <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
     </a>
     {% endif %}
+    {% if course_session.recap_url %}<a href="{{ course_session.recap_url }}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline" data-testid="course-home-recap-link">Read recap <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  {% elif course_session and course_session.action == 'Join now' %}
+    <a href="{{ course_session.url }}" class="mt-3 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline" data-testid="course-home-live-session-action">Join session <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   {% endif %}
 </article>
 {% endif %}

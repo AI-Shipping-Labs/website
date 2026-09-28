@@ -1,5 +1,4 @@
-<!-- Notification Actions: in-app notifications and Post to Slack -->
-<!-- Requires: notify_url, announce_url variables to be set before including -->
+<!-- Notification actions. A blank announce_url suppresses the Slack action. -->
 <div class="{% if compact %}space-y-3{% else %}mt-8 max-w-3xl{% endif %}" data-testid="notification-actions">
   <div class="bg-card border border-border rounded-lg {% if compact %}p-4{% else %}p-6{% endif %}">
     <h2 class="{% if compact %}text-sm{% else %}text-lg{% endif %} font-medium text-foreground mb-4">Notifications</h2>
@@ -10,14 +9,14 @@
               class="min-h-[44px] bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background{% if compact %} w-full{% endif %}">
         {{ notify_button_label|default:"Notify subscribers" }}
       </button>
-      <button type="button" id="post-to-slack-btn"
+      {% if announce_url %}<button type="button" id="post-to-slack-btn"
               onclick="postToSlack()"
               class="min-h-[44px] bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background{% if compact %} w-full{% endif %}">
         Post to Slack
-      </button>
+      </button>{% endif %}
     </div>
     <div id="notify-status" class="mt-3 text-sm" style="display:none;"></div>
-    <div id="slack-status" class="mt-3 text-sm" style="display:none;"></div>
+    {% if announce_url %}<div id="slack-status" class="mt-3 text-sm" style="display:none;"></div>{% endif %}
   </div>
 </div>
 
@@ -74,7 +73,7 @@ function notifySubscribers() {
   });
 }
 
-function postToSlack() {
+{% if announce_url %}function postToSlack() {
   var btn = document.getElementById('post-to-slack-btn');
   var status = document.getElementById('slack-status');
   if (!window.confirm('{{ slack_confirmation|escapejs }}')) {
@@ -110,5 +109,5 @@ function postToSlack() {
     btn.disabled = false;
     btn.textContent = 'Post to Slack';
   });
-}
+}{% endif %}
 </script>

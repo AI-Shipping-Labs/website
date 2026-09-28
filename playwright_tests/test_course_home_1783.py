@@ -41,12 +41,12 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
         sort_order=3, is_bonus=True,
     )
     done = Unit.objects.create(module=first, title='Orientation', slug='orientation')
-    next_unit = Unit.objects.create(
+    Unit.objects.create(
         module=first, title='Retrieval-augmented generation',
         slug='retrieval-augmented-generation', sort_order=1,
         body='Practice reading and building.',
     )
-    Unit.objects.create(module=second, title='Ship a prototype', slug='ship-prototype')
+    current_unit = Unit.objects.create(module=second, title='Ship a prototype', slug='ship-prototype')
     Unit.objects.create(module=optional, title='Try another model', slug='try-model')
     UserCourseProgress.objects.create(user=user, unit=done, completed_at=timezone.now())
     Enrollment.objects.create(user=user, course=course)
@@ -71,9 +71,11 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home')
     expect(page.locator('[data-testid="course-home-focus"]')).to_contain_text(second.title)
     expect(page.locator('[data-testid="course-home-week"]')).to_contain_text('Cohort week 3')
-    expect(page.locator('[data-testid="course-home-recommendation"]')).to_have_text(next_unit.title)
-    expect(page.locator('[data-testid="course-home-position"]')).to_contain_text(
-        'Next uncompleted course material',
+    # The running cohort's current module leads; the unfinished earlier
+    # lesson is a secondary line, not the primary action.
+    expect(page.locator('[data-testid="course-home-recommendation"]')).to_have_text(current_unit.title)
+    expect(page.locator('[data-testid="course-home-earlier-unfinished"]')).to_contain_text(
+        '1 earlier lesson unfinished in Foundations and tools',
     )
     screenshot_dir = Path('.tmp/screenshots/course-home-1783')
     screenshot_dir.mkdir(parents=True, exist_ok=True)
@@ -99,7 +101,7 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     expect(help_links.get_by_role('link', name='Course communication')).to_be_visible()
 
     page.locator('[data-testid="course-home-open-lesson"]').click()
-    expect(page).to_have_url(f'{django_server}{next_unit.get_absolute_url()}?cohort=current-study')
+    expect(page).to_have_url(f'{django_server}{current_unit.get_absolute_url()}?cohort=current-study')
     page.locator('[data-testid="reader-course-home"]').click()
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home?cohort=current-study')
     page.get_by_role('navigation', name='Course pages').get_by_role(

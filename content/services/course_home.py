@@ -177,19 +177,18 @@ def build_course_home(course, user, cohort, *, today=None):
     orientation_module_ids = {row['module'].pk for row in orientation_rows}
     unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
 
-    recommendation = None
     locked_dates = []
-    # Session units can be schedule-only stubs. Keep them in core progress, but
-    # lead with an actual lesson while one is available anywhere in the syllabus.
-    recommendation_order = [unit for unit in required_units if unit.kind == UNIT_KIND_LESSON]
-    recommendation_order += [unit for unit in required_units if unit.kind == UNIT_KIND_EVENT]
-    recommendation_passes = (True, False) if unscheduled_cohort and orientation_module_ids else (False,)
-    for skip_orientation in recommendation_passes:
-        for unit in recommendation_order:
-            if (
-                skip_orientation
-                and _top_level_module(unit.module).pk in orientation_module_ids
-            ):
+
+    def first_openable(units, *, skip_module_ids=()):
+        """Return the first incomplete unit the reader would open, lessons first.
+
+        Session units can be schedule-only stubs. Keep them in core progress,
+        but lead with an actual lesson while one is available in ``units``.
+        """
+        ordered = [unit for unit in units if unit.kind == UNIT_KIND_LESSON]
+        ordered += [unit for unit in units if unit.kind == UNIT_KIND_EVENT]
+        for unit in ordered:
+            if _top_level_module(unit.module).pk in skip_module_ids:
                 continue
             if unit.pk in completed_ids:
                 continue
@@ -212,10 +211,85 @@ def build_course_home(course, user, cohort, *, today=None):
                 if reader_drip.available_date:
                     locked_dates.append(reader_drip.available_date)
                 continue
-            recommendation = unit
-            break
-        if recommendation:
-            break
+            return unit
+        return None
+
+    cohort_status = ''
+    current_week = None
+    if cohort and cohort.start_date and cohort.end_date:
+        if today < cohort.start_date:
+            cohort_status = 'upcoming'
+        elif today > cohort.end_date:
+            cohort_status = 'completed'
+        else:
+            cohort_status = 'in progress'
+            current_week = 1 + (today - cohort.start_date).days // 7
+
+    current_cohort_module = _current_cohort_module(modules, week_dates, cohort, today)
+    teaching_module = (
+        current_cohort_module
+        if cohort_status == 'in progress' and cohort.mode == 'cohort' else None
+    )
+
+    recommendation = None
+    earlier_units = []
+    if teaching_module is not None:
+        # A running cohort leads with this week's module. Learners may read
+        # ahead, so a finished current module continues into later modules;
+        # earlier unfinished material is reported separately, never as the
+        # primary action.
+        module_index = next(
+            index for index, module in enumerate(modules)
+            if module.pk == teaching_module.pk
+        )
+        earlier_ids = {module.pk for module in modules[:module_index]}
+        current_and_later = [
+            unit for unit in required_units
+            if _top_level_module(unit.module).pk not in earlier_ids
+        ]
+        recommendation = first_openable(
+            [unit for unit in current_and_later
+             if _top_level_module(unit.module).pk == teaching_module.pk]
+        ) or first_openable(current_and_later)
+        earlier_units = [
+            unit for unit in required_units
+            if unit.kind == UNIT_KIND_LESSON
+            and unit.pk not in completed_ids
+            and _top_level_module(unit.module).pk in earlier_ids
+        ]
+        if recommendation is None:
+            # Nothing openable from here on: the earlier material is the
+            # only real next step, so it becomes the primary action.
+            recommendation = first_openable([
+                unit for unit in required_units
+                if _top_level_module(unit.module).pk in earlier_ids
+            ])
+            if recommendation is not None:
+                earlier_units = []
+    else:
+        recommendation_passes = (
+            (True, False) if unscheduled_cohort and orientation_module_ids else (False,)
+        )
+        for skip_orientation in recommendation_passes:
+            recommendation = first_openable(
+                required_units,
+                skip_module_ids=orientation_module_ids if skip_orientation else (),
+            )
+            if recommendation:
+                break
+
+    earlier_unfinished = None
+    if earlier_units:
+        first_earlier = earlier_units[0]
+        earlier_modules = {
+            _top_level_module(unit.module).pk for unit in earlier_units
+        }
+        earlier_unfinished = {
+            'count': len(earlier_units),
+            'unit': first_earlier,
+            'module': _top_level_module(first_earlier.module),
+            'module_count': len(earlier_modules),
+        }
 
     core_total = len(required_units)
     core_completed = len(completed_ids & {unit.pk for unit in required_units})
@@ -230,18 +304,6 @@ def build_course_home(course, user, cohort, *, today=None):
     else:
         action = 'start'
 
-    cohort_status = ''
-    current_week = None
-    if cohort and cohort.start_date and cohort.end_date:
-        if today < cohort.start_date:
-            cohort_status = 'upcoming'
-        elif today > cohort.end_date:
-            cohort_status = 'completed'
-        else:
-            cohort_status = 'in progress'
-            current_week = 1 + (today - cohort.start_date).days // 7
-
-    current_cohort_module = _current_cohort_module(modules, week_dates, cohort, today)
     first_instructional_module = next((
         module for module in modules
         if not module.is_bonus and module.pk not in orientation_module_ids
@@ -303,6 +365,8 @@ def build_course_home(course, user, cohort, *, today=None):
         'core_completed': core_completed,
         'action': action,
         'recommended_unit': recommendation,
+        'teaching_module': teaching_module,
+        'earlier_unfinished': earlier_unfinished,
         'recommendation_label': (
             'Open session' if recommendation and recommendation.kind == UNIT_KIND_EVENT
             else 'Open lesson'
@@ -317,3 +381,41 @@ def build_course_home(course, user, cohort, *, today=None):
         'optional_rows': [row for row in rows if row['optional']] + optional_child_rows,
         'help_links': help_links,
     }
+
+
+def next_lesson_after(unit, completed_unit_ids):
+    """First unfinished lesson after ``unit`` in the same top-level module.
+
+    Used when Home recommends a live session: the card also points to the
+    lesson the learner should read next in that week.
+    """
+    module = _top_level_module(unit.module)
+    units = _all_module_units(module)
+    after = False
+    for candidate in units:
+        if candidate.pk == unit.pk:
+            after = True
+            continue
+        if after and candidate.kind == UNIT_KIND_LESSON and candidate.pk not in completed_unit_ids:
+            return candidate
+    earlier_in_module = next(
+        (candidate for candidate in units
+         if candidate.pk != unit.pk and candidate.kind == UNIT_KIND_LESSON
+         and candidate.pk not in completed_unit_ids),
+        None,
+    )
+    if earlier_in_module is not None:
+        return earlier_in_module
+    # This week is done: point at the first unfinished lesson in a later week.
+    modules = _ordered_modules(module.course)
+    later = False
+    for candidate_module in modules:
+        if candidate_module.pk == module.pk:
+            later = True
+            continue
+        if not later:
+            continue
+        for candidate in _all_module_units(candidate_module):
+            if candidate.kind == UNIT_KIND_LESSON and candidate.pk not in completed_unit_ids:
+                return candidate
+    return None

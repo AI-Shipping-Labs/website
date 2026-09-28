@@ -35,7 +35,7 @@ from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
-from content.services.course_home import build_course_home
+from content.services.course_home import build_course_home, next_lesson_after
 from content.services.course_inline import (
     inline_homework_capstone_for_parent,
     inline_homework_unit_for,
@@ -502,6 +502,13 @@ def course_home(request, slug, section='home'):
         # presentation on Home. Keep the live event action and time, which
         # are more useful than the generic course-unit reader link.
         context['recommended_live_session'] = next_live_session
+        context['next_lesson_after_session'] = next_lesson_after(
+            next_live_session['session_unit'],
+            set(UserCourseProgress.objects.filter(
+                user=request.user, unit__module__course=course,
+                completed_at__isnull=False,
+            ).values_list('unit_id', flat=True)),
+        )
         commitments['next_live_session'] = None
     context.update(commitments)
     recommended_session = context.get('recommended_live_session')

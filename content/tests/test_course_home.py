@@ -143,14 +143,72 @@ class CourseHomeTests(TestCase):
         self.assertEqual(remaining['recommended_unit'], event)
         self.assertEqual(remaining['recommendation_label'], 'Open session')
 
-    def test_behind_schedule_week_is_separate_from_personal_recommendation(self):
+    def test_running_cohort_leads_with_current_module_and_reports_earlier_work(self):
         cohort = self._cohort()
         self._complete(self.lesson1)
         model = build_course_home(self.course, self.user, cohort)
         self.assertEqual(model['current_week'], 4)
+        self.assertEqual(model['teaching_module'], self.second)
         self.assertEqual(model['action'], 'continue')
-        self.assertEqual(model['recommended_unit'], self.lesson2)
+        # The current module's first unfinished lesson is primary, not the
+        # earliest unfinished lesson from an earlier module.
+        self.assertEqual(model['recommended_unit'], self.lesson3)
+        self.assertEqual(model['earlier_unfinished']['count'], 1)
+        self.assertEqual(model['earlier_unfinished']['unit'], self.lesson2)
+        self.assertEqual(model['earlier_unfinished']['module'], self.first)
         self.assertEqual(model['core_completed'], 1)
+
+    def test_finished_current_module_reads_ahead_into_later_module(self):
+        later = Module.objects.create(
+            course=self.course, title='Ship it', slug='ship-it',
+            sort_order=3, available_after_days=None,
+        )
+        ahead = Unit.objects.create(module=later, title='Deploy', slug='deploy')
+        cohort = self._cohort()
+        self._complete(self.lesson3)
+        model = build_course_home(self.course, self.user, cohort)
+        self.assertEqual(model['teaching_module'], self.second)
+        self.assertEqual(model['recommended_unit'], ahead)
+        self.assertEqual(model['earlier_unfinished']['count'], 2)
+        self.assertEqual(model['earlier_unfinished']['unit'], self.lesson1)
+
+    def test_cohort_home_card_shows_current_module_action_and_earlier_line(self):
+        cohort = self._cohort()
+        self._complete(self.lesson1)
+        self.client.force_login(self.user)
+        response = self.client.get(
+            f'/courses/{self.course.slug}/home?cohort={cohort.external_key}',
+        )
+        self.assertContains(
+            response,
+            f'<h2 id="course-focus-heading" class="mt-1 break-words text-lg font-semibold '
+            f'text-foreground" data-testid="course-home-recommendation">{self.lesson3.title}</h2>',
+            html=True,
+        )
+        self.assertContains(
+            response,
+            f'href="{self.lesson3.get_absolute_url()}?cohort={cohort.external_key}"',
+        )
+        self.assertContains(response, 'data-testid="course-home-week">Cohort week 4</span>')
+        self.assertContains(response, '1 earlier lesson unfinished in')
+        self.assertContains(
+            response,
+            f'<a href="{self.lesson2.get_absolute_url()}?cohort={cohort.external_key}" '
+            'class="font-medium text-accent hover:underline" '
+            f'data-testid="course-home-earlier-unfinished-link">{self.first.title}</a>',
+            html=True,
+        )
+
+    def test_no_cohort_home_card_has_no_week_or_earlier_line(self):
+        self._complete(self.lesson1)
+        self.client.force_login(self.user)
+        response = self.client.get(f'/courses/{self.course.slug}/home')
+        self.assertIsNone(response.context['teaching_module'])
+        self.assertIsNone(response.context['earlier_unfinished'])
+        self.assertEqual(response.context['recommended_unit'], self.lesson2)
+        self.assertNotContains(response, 'data-testid="course-home-week"')
+        self.assertNotContains(response, 'data-testid="course-home-earlier-unfinished"')
+        self.assertContains(response, f'href="{self.lesson2.get_absolute_url()}"')
 
     def test_locked_material_is_not_recommended_and_completed_core_is_not_certificate(self):
         cohort = self._cohort(start_days=-1)
@@ -389,8 +447,7 @@ class CourseHomeTests(TestCase):
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
         self.assertContains(response, f'href="{self.lesson1.get_absolute_url()}"')
         self.assertContains(response, 'href="/courses/course-home-test/home/syllabus"')
-        self.assertContains(response, 'data-testid="course-home-position"')
-        self.assertContains(response, 'Next uncompleted course material')
+        self.assertEqual(response.context['recommended_unit'], self.lesson1)
         lesson = self.client.get(self.lesson1.get_absolute_url())
         self.assertContains(lesson, 'data-testid="reader-course-home"')
 

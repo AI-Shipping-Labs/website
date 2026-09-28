@@ -109,23 +109,23 @@ class CourseUnitBottomNavMobileTest(CourseMobileSetupMixin, TestCase):
         response = self.client.get("/courses/long-course/module-1/unit-1")
         self.assertContains(response, "flex-col sm:flex-row items-stretch sm:items-center")
 
-    def test_bottom_prev_title_truncates(self):
+    def test_bottom_prev_uses_short_label_not_long_title(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-2")
         content = response.content.decode()
-        self.assertIn('data-testid="bottom-prev-btn"', content)
-        # Title should be wrapped in truncate span
-        self.assertIn(
-            '<span class="truncate">Unit One With A Particularly Long Title For Testing Truncation</span>',
-            content,
-        )
+        prev_start = content.index('data-testid="bottom-prev-btn"')
+        prev_tag = content[prev_start:content.index("</a>", prev_start)]
+        self.assertIn("<span>Previous</span>", prev_tag)
+        self.assertNotIn("Particularly Long Title", prev_tag)
 
-    def test_bottom_next_title_truncates(self):
+    def test_bottom_next_uses_short_label_not_long_title(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-1")
         content = response.content.decode()
-        self.assertIn('data-testid="bottom-next-btn"', content)
-        self.assertIn('<span class="truncate">Next: Unit Two Also Long</span>', content)
+        next_start = content.index('data-testid="bottom-next-btn"')
+        next_tag = content[next_start:content.index("</button>", next_start)]
+        self.assertIn("<span>Complete &amp; Next</span>", next_tag)
+        self.assertNotIn("Unit Two Also Long", next_tag)
 
 
 class CourseUnitSidebarMobileTest(CourseMobileSetupMixin, TestCase):

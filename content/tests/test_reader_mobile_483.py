@@ -158,7 +158,10 @@ class CourseSyllabusZeroCountSuppressionTest(TestCase):
 
 class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
     """Mark-complete is rendered as a stand-alone mobile row above the
-    prev/next pair, plus an inline desktop placement."""
+    prev/next pair, plus an inline desktop placement.
+
+    Course lessons with a next lesson use Complete & Next instead, so these
+    placement checks use the last lesson (u2), which has no next lesson."""
 
     @classmethod
     def setUpTestData(cls):
@@ -192,7 +195,7 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
 
     def test_mobile_completion_row_present_and_hidden_on_desktop(self):
         response = self.client.get(
-            "/courses/bottom-nav-course/m1/u1",
+            "/courses/bottom-nav-course/m1/u2",
         )
         self.assertEqual(response.status_code, 200)
         # The mobile-only wrapper is sm:hidden so it disappears on >=sm.
@@ -208,7 +211,7 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
 
     def test_desktop_completion_row_hidden_on_mobile(self):
         response = self.client.get(
-            "/courses/bottom-nav-course/m1/u1",
+            "/courses/bottom-nav-course/m1/u2",
         )
         self.assertContains(
             response,
@@ -224,7 +227,7 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         """Both rendered buttons point at the same toggle endpoint so
         the JS handler keeps them in sync after a click."""
         response = self.client.get(
-            "/courses/bottom-nav-course/m1/u1",
+            "/courses/bottom-nav-course/m1/u2",
         )
         body = response.content.decode()
         # Count *button-attribute* occurrences only (the literal
@@ -240,7 +243,7 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
 
     def test_completion_button_min_height_44(self):
         response = self.client.get(
-            "/courses/bottom-nav-course/m1/u1",
+            "/courses/bottom-nav-course/m1/u2",
         )
         body = response.content.decode()
         # Both buttons inherit min-h-[44px] from the include template.

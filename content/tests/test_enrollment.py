@@ -378,7 +378,7 @@ class CourseDetailEnrollButtonTest(TierSetupMixin, TestCase):
 
     def test_continue_button_shown_when_enrolled(self):
         Enrollment.objects.create(user=self.user, course=self.course)
-        response = self.client.get(f'/courses/{self.course.slug}')
+        response = self.client.get(f'/courses/{self.course.slug}?view=overview')
         self.assertContains(response, 'data-testid="continue-button"')
         self.assertNotContains(response, 'data-testid="enroll-button"')
         # Continue link points at the first unfinished unit
@@ -386,7 +386,7 @@ class CourseDetailEnrollButtonTest(TierSetupMixin, TestCase):
 
     def test_unenroll_button_shown_when_enrolled(self):
         Enrollment.objects.create(user=self.user, course=self.course)
-        response = self.client.get(f'/courses/{self.course.slug}')
+        response = self.client.get(f'/courses/{self.course.slug}?view=overview')
         self.assertContains(response, 'data-testid="unenroll-button"')
 
     def test_enrollment_cta_hidden_for_anonymous_user(self):

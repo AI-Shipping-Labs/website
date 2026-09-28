@@ -77,7 +77,7 @@ class CourseScheduleDisplayTest(TestCase):
         response = self.client.get('/courses/ai-buildcamp?cohort=5')
         self.assertEqual(response.context['schedule_cohort'], self.c5)
         self.assertEqual(response.context['unit_deadlines'][self.unit.pk], self.due5)
-        self.assertContains(response, 'Cohort 5 schedule')
+        self.assertContains(response, 'data-testid="syllabus-timezone-note"')
         self.assertContains(response, 'Deadline to be announced')
         self.assertContains(response, 'data-testid="syllabus-project-preview"')
         self.assertNotContains(response, 'Attempt 4')
@@ -104,7 +104,7 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
         self.assertContains(
             response,
-            'data-testid="syllabus-module-deadline">Due Oct 1, 2026 20:00 Europe/Berlin',
+            'data-testid="syllabus-module-deadline">Due Oct 1, 2026 20:00</span>',
         )
         self.assertNotContains(response, 'Next due')
         self.assertNotContains(response, 'Last due')
@@ -234,7 +234,9 @@ class CourseScheduleDisplayTest(TestCase):
     def test_module_overview_uses_selected_schedule_timezone_and_preview_gate(self):
         response = self.client.get(f'{self.topic.get_absolute_url()}?cohort=5')
         self.assertContains(response, 'Attempt 5')
-        self.assertContains(response, 'Feb 1, 2027 19:00 Europe/Berlin')
+        # Rows omit the zone; one notice below the list names it.
+        self.assertContains(response, 'Feb 1, 2027 19:00')
+        self.assertContains(response, 'Deadline times are shown in Europe/Berlin.')
         self.assertNotContains(response, 'Attempt 4')
         submit_url = reverse('course_project_submit', kwargs={
             'slug': self.course.slug, 'attempt_slug': 'attempt-5',

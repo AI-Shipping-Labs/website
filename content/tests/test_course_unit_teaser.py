@@ -246,9 +246,11 @@ class EligibleUserNoRegressionTest(CourseUnitTeaserSetupMixin, TestCase):
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'FINAL_PARAGRAPH_MARKER')
 
-    def test_renders_mark_complete_button(self):
+    def test_renders_complete_and_next_action(self):
+        # A lesson with a next lesson offers Complete & Next, which saves
+        # completion before navigating.
         response = self.client.get(self.unit_url)
-        self.assertContains(response, 'id="mark-complete-btn"')
+        self.assertContains(response, 'data-completion-and-navigate')
 
     def test_does_not_render_teaser_markers(self):
         response = self.client.get(self.unit_url)

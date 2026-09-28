@@ -393,14 +393,17 @@ class NextUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def test_next_unit_within_module(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
-        self.assertContains(response, 'Next: Lesson 2')
-        self.assertContains(response, 'href="/courses/test-course/module-1/lesson-2"')
+        # Incomplete lesson: Complete & Next saves completion, then navigates.
+        self.assertContains(
+            response, 'data-navigate-url="/courses/test-course/module-1/lesson-2"',
+        )
 
     def test_next_unit_across_module_boundary(self):
         response = self.client.get('/courses/test-course/module-1/preview-lesson')
         # After the last unit in module 1 (sort_order 3), next is module 2 unit 1
-        self.assertContains(response, 'Next: Advanced Lesson')
-        self.assertContains(response, 'href="/courses/test-course/module-2/advanced-lesson"')
+        self.assertContains(
+            response, 'data-navigate-url="/courses/test-course/module-2/advanced-lesson"',
+        )
 
     def test_no_next_unit_on_last_unit(self):
         response = self.client.get('/courses/test-course/module-2/advanced-lesson')
@@ -755,8 +758,9 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def test_next_button_still_works(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
-        self.assertContains(response, 'Next: Lesson 2')
-        self.assertContains(response, f'href="{self.unit2.get_absolute_url()}"')
+        self.assertContains(
+            response, f'data-navigate-url="{self.unit2.get_absolute_url()}"',
+        )
 
     def test_single_unit_course_no_nav(self):
         solo_course = Course.objects.create(

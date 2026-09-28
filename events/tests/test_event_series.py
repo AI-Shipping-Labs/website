@@ -444,7 +444,7 @@ class PublicEventSeriesViewTest(TestCase):
         )
         self.assertContains(
             response,
-            'Event times are shown in your timezone: America/New_York.',
+            'Shown in your timezone.',
         )
         self.assertNotContains(response, '18:00')
 

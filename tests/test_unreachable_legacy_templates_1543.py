@@ -39,9 +39,11 @@ class UnreachableLegacyTemplateDeletionTest(SimpleTestCase):
             REPO_ROOT / 'templates' / 'events' / '_events_timeline.html'
         ).read_text(encoding='utf-8')
         listing_include = 'events/_timeline_listing_card.html'
-        self.assertEqual(timeline.count(listing_include), 3)
+        # upcoming, past, series, and course-session rows share one card.
+        self.assertEqual(timeline.count(listing_include), 4)
         for variant in ('upcoming', 'past', 'series'):
             self.assertIn(f'card_variant="{variant}"', timeline)
+        self.assertIn("row.kind == 'course_session'", timeline)
 
         catalog = (
             REPO_ROOT / 'templates' / 'content' / '_workshops_catalog.html'

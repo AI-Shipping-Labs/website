@@ -90,7 +90,7 @@ class ReaderNavigationScopeTest(TestCase):
         sidebar = self.sidebar(response)
         self.assertNotIn('data-testid="reader-previous-module"', sidebar)
         self.assertIn('href="/courses/scoped-reader/week-2"', sidebar)
-        self.assertIn('href="/courses/scoped-reader#syllabus"', sidebar)
+        self.assertIn('href="/courses/scoped-reader/home/syllabus"', sidebar)
         first = self.reader(self.first)
         self.assertIsNone(first.context['previous_module'])
         last = self.reader(self.last)
@@ -111,7 +111,7 @@ class ReaderNavigationScopeTest(TestCase):
         sidebar = self.sidebar(response)
         self.assertIn('href="/courses/scoped-reader/week-2?cohort=4"', sidebar)
         self.assertIn('href="/courses/scoped-reader/week-1/first/lesson?cohort=4"', sidebar)
-        self.assertIn('href="/courses/scoped-reader?cohort=4#syllabus"', sidebar)
+        self.assertIn('href="/courses/scoped-reader/home/syllabus?cohort=4"', sidebar)
         self.assertEqual(response.context['prev_item_url'], '/courses/scoped-reader/week-1/first/lesson?cohort=4')
         redirected = self.client.get('/courses/scoped-reader/week-2?cohort=4')
         self.assertRedirects(

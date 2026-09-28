@@ -108,9 +108,14 @@ class PublicPolishTemplateContractTest(SimpleTestCase):
         self.assertIn('id="dismiss-success-banner"', dashboard)
         self.assertGreaterEqual(dashboard.count("h-11 w-11"), 1)
         self.assertGreaterEqual(dashboard.count('aria-label="Dismiss"'), 1)
-        self.assertIn('data-testid="free-activation-dismiss"', getting_started)
+        checklist = self._read("templates/content/_activation_checklist.html")
+        self.assertIn("free-activation-dismiss", checklist)
         self.assertIn(
-            "{% if activation_checklist_all_complete %}", getting_started,
+            "{% if checklist_all_complete or checklist_all_resolved %}", checklist,
+        )
+        self.assertIn(
+            "checklist_all_complete=activation_checklist_all_complete",
+            getting_started,
         )
         self.assertNotIn(
             'data-testid="onboarding-prompt-dismiss"', getting_started,

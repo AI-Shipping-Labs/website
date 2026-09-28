@@ -784,9 +784,11 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
         response = self.client.get('/courses/paid-course/home')
-        self.assertContains(response, 'Your Progress')
-        self.assertContains(response, '0 of 1 completed')
-        self.assertContains(response, 'data-testid="course-home-progress"')
+        # Course Home reports progress in the focus-module card.
+        self.assertContains(response, 'data-testid="course-home-focus"')
+        self.assertContains(
+            response, '0 of 1 materials marked complete in this module',
+        )
 
     def test_unauthorized_user_no_progress_bar(self):
         response = self.client.get('/courses/paid-course')
@@ -878,8 +880,10 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
         self.client.login(email='prog@test.com', password='testpass')
         landing = self.client.get('/courses/progress-course')
         response = self.client.get('/courses/progress-course/home')
-        self.assertNotContains(landing, '1 of 3 completed')
-        self.assertContains(response, '1 of 3 completed')
+        self.assertNotContains(landing, 'materials marked complete')
+        self.assertContains(
+            response, '1 of 3 materials marked complete in this module',
+        )
 
     def test_shows_completed_checkmark(self):
         UserCourseProgress.objects.create(

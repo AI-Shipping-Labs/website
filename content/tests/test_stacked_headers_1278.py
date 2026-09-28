@@ -18,6 +18,7 @@ MEMBERSHIP_PREVIEWS = (
 WORKSHOPS = BASE_DIR / 'templates' / 'content' / '_workshops_catalog.html'
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
 DASHBOARD_ZONES = BASE_DIR / 'templates' / 'content' / '_dashboard_commitment_zones.html'
+ACTIVATION_CHECKLIST = BASE_DIR / 'templates' / 'content' / '_activation_checklist.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
 
 DISCOVERY_CLASSES = (
@@ -159,7 +160,11 @@ class PublicStackedHeaderStaticTest(TestCase):
             self.assertIn(heading, zones)
         for href in ('/courses', '/workshops', '/events', '/blog', '/sprints'):
             self.assertIn(f'href="{href}"', zones)
-        self.assertLess(zones.index('Getting started'), zones.index('<ol'))
+        self.assertIn('checklist_eyebrow="Getting started"', zones)
+        checklist = _source(ACTIVATION_CHECKLIST)
+        self.assertLess(
+            checklist.index('{{ checklist_eyebrow }}'), checklist.index('<ol'),
+        )
 
     def test_dashboard_justify_between_survivors_are_only_exempt_roles(self):
         source = _source(DASHBOARD) + _source(DASHBOARD_ZONES)

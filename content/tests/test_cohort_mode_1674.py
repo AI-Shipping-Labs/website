@@ -215,7 +215,7 @@ class DripLockSelfPacedRegressionTest(TestCase):
 
 
 class DripLockOffsetCascadeTest(TestCase):
-    """Unit.available_after_days -> leaf Module's -> parent Module's."""
+    """Only Unit.available_after_days drips a lesson; module offsets do not."""
 
     @classmethod
     def setUpTestData(cls):
@@ -251,15 +251,17 @@ class DripLockOffsetCascadeTest(TestCase):
         )
         self.assertEqual(decision.available_date, datetime.date(2026, 9, 24))
 
-    def test_falls_back_to_parent_module_offset_when_unit_and_leaf_unset(self):
+    def test_module_offset_does_not_lock_lessons_inside_the_module(self):
         unit = Unit.objects.create(
             module=self.submodule, title='U2', slug='u2', sort_order=2,
         )
         decision = decide_course_unit_drip_lock(
             self.user, unit, today=datetime.date(2026, 9, 22),
         )
-        # week.available_after_days=21 -> cohort.start_date + 21 days.
-        self.assertEqual(decision.available_date, datetime.date(2026, 10, 12))
+        # week.available_after_days=21 describes the cohort schedule only;
+        # learners may read ahead of it.
+        self.assertFalse(decision.is_locked)
+        self.assertIsNone(decision.available_date)
 
     def test_no_offset_anywhere_is_unlocked(self):
         leaf = Module.objects.create(

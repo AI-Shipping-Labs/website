@@ -128,7 +128,7 @@ class TimelineTimezoneNoteTest(TestCase):
                 response = self.client.get(url)
                 self.assertContains(
                     response,
-                    'Event times are shown in your timezone: Europe/Berlin.',
+                    'Shown in your timezone.',
                 )
                 self.assertContains(response, 'Change timezone')
 
@@ -162,7 +162,7 @@ class TimelineTimezoneNoteTest(TestCase):
         signed_in = self.client.get(series.get_absolute_url())
         self.assertContains(
             signed_in,
-            'Event times are shown in your timezone: Asia/Kolkata.',
+            'Shown in your timezone.',
         )
 
 

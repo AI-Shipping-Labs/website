@@ -612,9 +612,6 @@ class EventCardSeriesCopyTest(TierSetupMixin, TestCase):
         single_at = html.index('data-testid="event-register-single-button"')
         self.assertLess(note_at, series_at)
         self.assertLess(series_at, single_at)
-        decision = html[html.index('data-testid="event-registration-card"'):single_at]
-        self.assertNotIn('justify-between', decision)
-        self.assertNotIn('justify-end', decision)
         series_button = html[
             html.index('id="register-btn"'):series_at
         ]

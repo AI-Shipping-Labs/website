@@ -113,7 +113,7 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
         'Continue reviews',
     )
     course_pages = page.get_by_role('navigation', name='Course pages')
-    expect(course_pages.get_by_role('link', name='Home')).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Home', exact=True)).to_be_visible()
     expect(course_pages.get_by_role('link', name='Syllabus', exact=True)).to_be_visible()
     expect(course_pages.get_by_role('link', name='Live sessions')).to_be_visible()
     expect(course_pages.get_by_role('link', name='Homework')).to_be_visible()

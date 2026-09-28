@@ -28,6 +28,7 @@ from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
     decide_course_unit_drip_lock,
+    resolve_session_event,
 )
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
@@ -52,6 +53,10 @@ def _row(kind, title, *, when=None, status='', url='', action='', detail='', com
         'title': title,
         'when': when,
         'when_label': format_event_time_range(when, None, timezone_name) if when else '',
+        'when_label_without_timezone': (
+            format_event_time_range(when, None, timezone_name).rsplit(' ', 1)[0]
+            if when else ''
+        ),
         'status': status,
         'status_tone': status_tone,
         'url': url,
@@ -66,35 +71,111 @@ def _row(kind, title, *, when=None, status='', url='', action='', detail='', com
     }
 
 
-def _event_rows(cohort, timezone_name, now):
-    if cohort is None or not cohort.event_series_id:
-        return []
-    events = Event.objects.filter(
-        event_series_id=cohort.event_series_id,
-        status__in=PUBLIC_EVENT_STATUSES,
-    ).order_by('start_datetime', 'pk')
-    rows = []
-    for event in events:
-        if event.is_past:
-            if event.recap_is_published:
-                url, action = event.get_recap_url(), 'Read recap'
-            elif event.has_recording:
-                url, action = event.get_recording_url(), 'Watch recording'
-            else:
-                url, action = '', ''
-            status = 'Past'
-        elif event.can_show_zoom_link():
-            url, action, status = event.get_join_url(), 'Join now', 'Live now'
-        elif event.start_datetime <= now:
-            url, action, status = event.get_absolute_url(), 'View session', 'In progress'
+def _event_row(event, timezone_name, now):
+    """Build one truthful schedule row from a persisted occurrence."""
+    if event.is_past:
+        if event.recap_is_published:
+            url, action = event.get_recap_url(), 'Read recap'
+        elif event.has_recording:
+            url, action = event.get_recording_url(), 'Watch recording'
         else:
-            url, action, status = event.get_absolute_url(), 'View session', 'Upcoming'
-        rows.append(_row(
-            'Live session', event.title, when=event.start_datetime,
-            status=status, url=url, action=action,
-            complete=event.is_past, timezone_name=timezone_name,
-            series_position=event.series_position,
-        ))
+            url, action = '', ''
+        status = 'Past'
+    elif event.can_show_zoom_link():
+        url, action, status = event.get_join_url(), 'Join now', 'Live now'
+    elif event.start_datetime <= now:
+        url, action, status = event.get_absolute_url(), 'View session', 'In progress'
+    else:
+        url, action, status = event.get_absolute_url(), 'View session', 'Upcoming'
+    row = _row(
+        'Live session', event.title, when=event.start_datetime,
+        status=status, url=url, action=action,
+        complete=event.is_past, timezone_name=timezone_name,
+        series_position=event.series_position,
+    )
+    row['event_url'] = event.get_absolute_url()
+    row['event'] = event
+    row['card_variant'] = 'past' if event.is_past else 'upcoming'
+    row['recap_url'] = event.get_recap_url() if event.recap_is_published else ''
+    return row
+
+
+def _authored_event_units(course):
+    """Return event units in the same nested order as the course syllabus."""
+    return [
+        unit
+        for module in _ordered_modules(course)
+        for unit in _all_module_units(module)
+        if unit.kind == UNIT_KIND_EVENT
+    ]
+
+
+def _authored_event_row(unit, cohort):
+    """Keep an authored session visible before an occurrence is scheduled."""
+    suffix = (
+        f'?{urlencode({"cohort": cohort.external_key})}'
+        if cohort and cohort.mode == 'cohort' and cohort.external_key else ''
+    )
+    unit_url = unit.get_absolute_url() + suffix
+    row = _row(
+        'Live session', unit.title, status='Not scheduled',
+        url=unit_url, action='View session',
+        series_position=unit.session_position,
+    )
+    row['event_url'] = unit_url
+    row['recap_url'] = ''
+    row['session_unit'] = unit
+    return row
+
+
+def _event_rows(course, user, cohort, timezone_name, now):
+    """Combine cohort occurrences with authored course session units.
+
+    Occurrences provide dates, status, join links, recordings, and published
+    recaps. Authored units fill any gaps so the Office hours page still shows
+    the complete course session outline before a cohort or occurrence exists.
+    A shared ``series_position`` represents one session and is emitted once.
+    """
+    units = _authored_event_units(course)
+    units_by_position = {}
+    for unit in units:
+        if unit.session_position is not None:
+            units_by_position.setdefault(unit.session_position, unit)
+
+    if cohort is not None and cohort.event_series_id:
+        events = list(Event.objects.filter(
+            event_series_id=cohort.event_series_id,
+            status__in=PUBLIC_EVENT_STATUSES,
+        ).order_by('start_datetime', 'pk'))
+    else:
+        # This is the same safe, entitlement-aware fallback used by the
+        # syllabus session page. Once one authored unit resolves, include the
+        # complete series so real occurrences without a matching unit are not
+        # lost. A hidden series never resolves for an unentitled user.
+        resolved_event = None
+        for unit in units:
+            resolved_event = resolve_session_event(unit, user)
+            if resolved_event is not None:
+                break
+        events = list(Event.objects.filter(
+            event_series_id=resolved_event.event_series_id,
+            status__in=PUBLIC_EVENT_STATUSES,
+        ).order_by('start_datetime', 'pk')) if resolved_event else []
+
+    rows = []
+    represented_positions = set()
+    for event in events:
+        row = _event_row(event, timezone_name, now)
+        unit = units_by_position.get(event.series_position)
+        if unit is not None:
+            row['session_unit'] = unit
+        if event.series_position is not None:
+            represented_positions.add(event.series_position)
+        rows.append(row)
+
+    for unit in units:
+        if unit.session_position not in represented_positions:
+            rows.append(_authored_event_row(unit, cohort))
     return rows
 
 
@@ -171,6 +252,13 @@ def _homework_rows(course, user, cohort, timezone_name, today):
             timezone_name=timezone_name,
             unit_content_id=str(homework.content_id) if homework.content_id else '',
         ))
+        if unit is not None:
+            row = rows[-1]
+            row['module_id'] = unit.module.parent_id or unit.module_id
+            row['module_title'] = (
+                f'{unit.module.parent.title} · {unit.module.title}'
+                if unit.module.parent_id else unit.module.title
+            )
     return rows
 
 
@@ -197,7 +285,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
         submit_url = f'/courses/{course.slug}/projects/{project.slug}/submit'
         reviews_url = f'/courses/{course.slug}/projects/{project.slug}/reviews'
         if submission:
-            rows.append(_row(
+            row = _row(
                 'Project', project.title, when=project.submission_due_at,
                 status='Submitted', url=submit_url, action='View project',
                 complete=True, timezone_name=timezone_name,
@@ -207,10 +295,10 @@ def _project_rows(course, user, cohort, timezone_name, now):
                     project.module.parent.title if project.module_id and project.module.parent_id
                     else project.module.title if project.module_id else project.title
                 ),
-            ))
+            )
         else:
             open_for_submission = now < project.submission_due_at
-            rows.append(_row(
+            row = _row(
                 'Project', project.title, when=project.submission_due_at,
                 status='Not submitted' if open_for_submission else 'Closed',
                 url=submit_url if open_for_submission else '',
@@ -222,7 +310,9 @@ def _project_rows(course, user, cohort, timezone_name, now):
                     project.module.parent.title if project.module_id and project.module.parent_id
                     else project.module.title if project.module_id else project.title
                 ),
-            ))
+            )
+        row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
+        rows.append(row)
 
         if not submission or not course.peer_review_enabled:
             continue
@@ -243,7 +333,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
             status, action = 'Closed', ''
         else:
             status, action = 'Completed', 'View reviews'
-        rows.append(_row(
+        row = _row(
             'Peer reviews', project.title, when=project.review_due_at,
             status=status, url=reviews_url if action else '', action=action,
             detail=f'{completed} of {target} reviews completed',
@@ -255,12 +345,14 @@ def _project_rows(course, user, cohort, timezone_name, now):
                 project.module.parent.title if project.module_id and project.module.parent_id
                 else project.module.title if project.module_id else project.title
             ),
-        ))
+        )
+        row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
+        rows.append(row)
     return rows
 
 
-def _focus_work_items(course, user, cohort, homework_rows, *, now):
-    """Keep authored homework visible even when no submission form was synced."""
+def _focus_module(course, cohort, now):
+    """Resolve the course module currently in focus for Home."""
     modules = _ordered_modules(course)
     unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
     if unscheduled_cohort:
@@ -286,6 +378,12 @@ def _focus_work_items(course, user, cohort, homework_rows, *, now):
             modules, cohort, extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
         )
         module = _current_cohort_module(modules, week_dates, cohort, now.date())
+    return module
+
+
+def _focus_work_items(course, user, cohort, homework_rows, *, now, module=None):
+    """Keep authored homework visible even when no submission form was synced."""
+    module = module or _focus_module(course, cohort, now)
     if module is None:
         return []
 
@@ -357,7 +455,7 @@ def _next_linked_session(course, events):
     upcoming = [row for row in linked if row['status'] in ('Live now', 'In progress', 'Upcoming')]
     if upcoming:
         return min(upcoming, key=lambda row: row['when'])
-    recoverable = [row for row in linked if row['action']]
+    recoverable = [row for row in linked if row['action'] and row['when']]
     return max(recoverable, key=lambda row: row['when']) if recoverable else None
 
 
@@ -376,6 +474,7 @@ def _home_project_commitment_rows(assignments):
             actionable = [
                 row for row in rows
                 if row['kind'] == 'Peer reviews' and row['action'] and row['when']
+                and not row['complete']
             ]
         else:
             actionable = [
@@ -403,14 +502,17 @@ def build_course_commitments(course, user, cohort, *, now=None):
         raise PermissionDenied('Cohort is not available to this learner')
 
     timezone_name = resolve_event_display_timezone(user)
-    events = _event_rows(cohort, timezone_name, now)
+    events = _event_rows(course, user, cohort, timezone_name, now)
     assignments = _homework_rows(course, user, cohort, timezone_name, now.date())
     assignments += _project_rows(course, user, cohort, timezone_name, now)
     open_assignments = [row for row in assignments if not row['complete']]
     completed_assignments = [row for row in assignments if row['complete']]
 
     homework_rows = [row for row in assignments if row['kind'] == 'Homework']
-    focus_work_items = _focus_work_items(course, user, cohort, homework_rows, now=now)
+    focus_module = _focus_module(course, cohort, now)
+    focus_work_items = _focus_work_items(
+        course, user, cohort, homework_rows, now=now, module=focus_module,
+    )
     focus_work_content_ids = {item['content_id'] for item in focus_work_items}
     for item in focus_work_items:
         item['due_soon'] = bool(item['due_soon'])
@@ -430,15 +532,30 @@ def build_course_commitments(course, user, cohort, *, now=None):
     featured_live_session = next_event or next_live_session
     if featured_live_session is None:
         featured_live_session = next(
-            (row for row in reversed(events) if row['action']), None,
+            (row for row in reversed(events) if row['action'] and row['when']), None,
         )
-    upcoming_sessions = [row for row in events if not row['complete']]
+    upcoming_sessions = [row for row in events if not row['complete'] and row['when']]
     past_sessions = [row for row in events if row['complete']]
+    unscheduled_sessions = [row for row in events if not row['when']]
     live_session_schedule = sorted(
-        upcoming_sessions, key=lambda row: row['when'],
-    ) + sorted(past_sessions, key=lambda row: row['when'], reverse=True)
+        upcoming_sessions + past_sessions,
+        key=lambda row: (
+            row['series_position'] is None,
+            row['series_position'] if row['series_position'] is not None else 0,
+            row['when'],
+        ),
+    ) + sorted(
+        unscheduled_sessions,
+        key=lambda row: (row['series_position'] is None, row['series_position'] or 0),
+    )
     for row in live_session_schedule:
         row['featured'] = row is featured_live_session
+    home_office_hours = [
+        row for row in live_session_schedule
+        if focus_module and row.get('session_unit')
+        and (row['session_unit'].module.parent_id or row['session_unit'].module_id)
+        == focus_module.pk
+    ]
     deadline_tasks = sorted(
         (row for row in open_assignments
          if row['when'] and row['when'] >= now and row['action']),
@@ -446,7 +563,7 @@ def build_course_commitments(course, user, cohort, *, now=None):
     )
     upcoming = ([next_event] if next_event else []) + deadline_tasks[:2 if next_event else 3]
     schedule = sorted(
-        [row for row in events if not row['complete']]
+        [row for row in events if not row['complete'] and row['when']]
         + [row for row in open_assignments if row['when'] and not row['closed']],
         key=lambda row: row['when'],
     )
@@ -474,6 +591,8 @@ def build_course_commitments(course, user, cohort, *, now=None):
         'completed_assignments': completed_assignments,
         'commitment_timezone': timezone_name,
         'focus_work_items': focus_work_items,
+        'focus_module': focus_module,
+        'home_office_hours': home_office_hours,
         'next_live_session': next_live_session,
         'urgent_commitment': urgent_commitment,
     }

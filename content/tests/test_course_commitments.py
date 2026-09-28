@@ -110,6 +110,8 @@ class CourseCommitmentsTests(TestCase):
             'First cohort project',
             [row['title'] for row in first.context['open_assignments']],
         )
+        self.assertContains(first, 'data-testid="course-home-deadlines"')
+        self.assertContains(first, 'First cohort project')
         self.assertNotContains(first, 'Second cohort homework')
         self.assertNotContains(first, 'Second cohort project')
         self.assertNotContains(first, 'Second Session')

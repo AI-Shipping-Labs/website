@@ -34,6 +34,7 @@
 
     {% if section == 'home' %}
     <div class="space-y-5">
+      {% include "content/course_home/_next_action.html" %}
       {% if not cohort %}
       <section class="rounded-xl border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
         <h2 id="course-home-no-cohort-heading" class="text-base font-semibold text-foreground">No cohort is linked to your account</h2>
@@ -55,10 +56,17 @@
           {% include "content/_course_syllabus.html" with section="home_search_index" %}
         </div>
       </section>
-      {% include "content/course_home/_next_action.html" %}
       {% include "content/course_home/_deadlines.html" %}
       {% if home_office_hours %}
       {% include "content/course_home/_live_sessions.html" with live_session_schedule=home_office_hours section="home" %}
+      {% endif %}
+      {% if help_links %}
+      <nav class="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-sm" aria-label="Course help and links" data-testid="course-home-help-links">
+        <span class="font-medium text-muted-foreground">Need help?</span>
+        {% for label, url in help_links %}
+        <a href="{{ url }}" class="inline-flex min-h-[44px] items-center text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"{% if '://' in url %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ label }}</a>
+        {% endfor %}
+      </nav>
       {% endif %}
     </div>
     {% elif section == 'syllabus' %}

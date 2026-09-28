@@ -143,10 +143,17 @@ class TestAnonymousRegistrationCopy:
         assert page.locator('#event-anon-submit-btn').count() == 1
 
         # Returning-user sign-in link preserves the canonical event URL.
-        login = page.locator(
+        # The timezone notice adds a second login link with the same next URL.
+        login = form_card.locator(
             f'a[href="/accounts/login/?next={event_path}"]'
         )
         assert login.count() == 1
+        assert login.inner_text().strip() == "Sign in"
+        timezone_login = page.locator(
+            f'a[href="/accounts/login/?next={event_path}"]',
+            has_text="Sign in to use your timezone",
+        )
+        assert timezone_login.count() == 1
         # The legacy "Create free account" button is gone for free events.
         assert page.locator(
             f'a[href="/accounts/signup/?next={event_path}"]'

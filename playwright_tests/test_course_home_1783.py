@@ -103,7 +103,9 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     page.locator('[data-testid="reader-course-home"]').click()
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home?cohort=current-study')
     page.get_by_role('navigation', name='Course pages').get_by_role(
-        'link', name='Full syllabus',
+        'link', name='Syllabus', exact=True,
     ).click()
-    expect(page).to_have_url(f'{django_server}/courses/{course.slug}?view=overview&cohort=current-study#syllabus')
+    expect(page).to_have_url(
+        f'{django_server}/courses/{course.slug}/home/syllabus?cohort=current-study',
+    )
     context.close()

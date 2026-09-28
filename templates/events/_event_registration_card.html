@@ -268,7 +268,7 @@
               class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"
               id="register-btn"
               data-register-scope="series"
-              {% if event.event_series_id and series_session_accessible >= 2 %}data-series-url="{{ event.event_series.get_absolute_url }}"{% endif %}
+              {% if event.event_series_id %}data-series-url="{{ event.event_series.get_absolute_url }}"{% endif %}
               data-testid="{% if event.event_series_id and series_session_accessible >= 2 %}event-register-series-button{% else %}event-register-button{% endif %}"
               data-event-register-button>
         {% if event.event_series_id and series_session_accessible >= 2 %}Register for all {{ series_session_accessible }} sessions{% else %}Register{% endif %}

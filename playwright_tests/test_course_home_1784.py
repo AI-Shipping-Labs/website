@@ -101,7 +101,8 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     home_url = f'{django_server}/courses/{course.slug}/home?cohort=current'
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.goto(home_url, wait_until='domcontentloaded')
-    expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text(event.title)
+    # The card uses the authored session-unit title, not the calendar event title.
+    expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text('Session 1')
     expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text(past_event.title)
     expect(page.locator('[data-testid="course-home-recap-link"]')).to_have_attribute(
         'href', past_event.get_recap_url(),
@@ -113,8 +114,11 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     )
     course_pages = page.get_by_role('navigation', name='Course pages')
     expect(course_pages.get_by_role('link', name='Home')).to_be_visible()
-    expect(course_pages.get_by_role('link', name='Full syllabus')).to_be_visible()
-    assert course_pages.get_by_role('link').count() == 2
+    expect(course_pages.get_by_role('link', name='Syllabus', exact=True)).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Live sessions')).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Homework')).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Projects')).to_be_visible()
+    assert course_pages.get_by_role('link').count() == 5
     screenshots = Path('.tmp/screenshots/course-home-1784')
     screenshots.mkdir(parents=True, exist_ok=True)
     page.screenshot(path=str(screenshots / 'desktop-light.png'), full_page=True)

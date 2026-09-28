@@ -357,20 +357,12 @@ class TestScenario4FreeMemberDay1ToDay2:
         # Homework section visible
         assert "Homework" in body or "homework" in body.lower()
 
-        # Step 3: Mark Day 1 as completed
+        # Step 3: Complete & Next saves Day 1 and opens Day 2.
         from playwright.sync_api import expect
-        mark_btn = page.locator("#mark-complete-btn")
-        assert mark_btn.count() >= 1
-        mark_btn.click()
-
-        # Button changes to Completed (wait for AJAX response to update DOM)
-        expect(mark_btn).to_contain_text("Completed", timeout=5000)
-
-        # Step 4: Click Next to proceed to Day 2
-        next_btn = page.locator('a:has-text("Next:")')
-        assert next_btn.count() >= 1
-        next_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/aihero/7-day-ai-agents/day-2")
 
         # Lands on Day 2
         body = page.content()

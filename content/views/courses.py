@@ -599,6 +599,15 @@ def course_home(request, slug, section='home'):
         row for row in reversed(context['live_session_schedule'])
         if row['recap_url']
     ), None)
+    latest_home_recap = context['latest_home_recap']
+    if latest_home_recap is not None and not any(
+        row is latest_home_recap for row in context['home_office_hours']
+    ):
+        # Home otherwise lists only the focus module's linked sessions, which
+        # drops a past recap that has no session unit. Keep that recap on Home.
+        context['home_office_hours'] = [
+            *context['home_office_hours'], latest_home_recap,
+        ]
     ordered_units = course_unit_service.get_all_units_ordered(course)
     checklist_items = []
 

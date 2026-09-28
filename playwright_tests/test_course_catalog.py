@@ -511,8 +511,7 @@ class TestScenario3FreeUserFreeCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "Your Progress" in body
-        assert "0 of 3 completed" in body
+        assert "0 of 3 materials marked complete in this module" in body
 
         # No CTA block
         assert "Unlock with" not in body
@@ -536,17 +535,12 @@ class TestScenario3FreeUserFreeCourseProgress:
         # Unit page loads with lesson text
         assert "Variables" in body
 
-        # "Mark as completed" button at the bottom
-        mark_btn = page.locator("#mark-complete-btn")
-        assert mark_btn.count() >= 1
-        assert "Mark as completed" in mark_btn.inner_text()
-
-        # Step 3: Click "Mark as completed"
+        # A lesson with a successor completes and advances together.
         from playwright.sync_api import expect
-        mark_btn.click()
-
-        # Button changes to "Completed" (wait for AJAX)
-        expect(mark_btn).to_contain_text("Completed", timeout=5000)
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/python-basics/fundamentals/functions")
 
         # Step 4: Navigate back to course detail
         page.goto(
@@ -564,7 +558,7 @@ class TestScenario3FreeUserFreeCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "1 of 3 completed" in body
+        assert "1 of 3 materials marked complete in this module" in body
 
         # Completed unit shows a checkmark icon in the reader sidebar
         page.goto(
@@ -643,7 +637,7 @@ class TestScenario4MainMemberPaidCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "0 of 2 completed" in body
+        assert "0 of 2 materials marked complete in this module" in body
 
         # Step 2: back to the overview, then click on the first unit
         page.goto(
@@ -672,20 +666,12 @@ class TestScenario4MainMemberPaidCourseProgress:
         assert "Docker Basics" in sidebar_text
         assert "Kubernetes Setup" in sidebar_text
 
-        # Step 3: Click "Mark as completed"
+        # Step 3: Complete & Next saves Docker Basics and opens Kubernetes.
         from playwright.sync_api import expect as pw_expect
-        mark_btn = page.locator("#mark-complete-btn")
-        assert "Mark as completed" in mark_btn.inner_text()
-        mark_btn.click()
-
-        # Button changes to "Completed" with green checkmark (wait for AJAX)
-        pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
-
-        # Step 4: Click the "Next" button to go to second unit
-        next_btn = page.locator('a:has-text("Next:")')
-        assert next_btn.count() >= 1
-        next_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        pw_expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/advanced-mlops/deployment/kubernetes-setup")
 
         body = page.content()
 
@@ -711,8 +697,8 @@ class TestScenario4MainMemberPaidCourseProgress:
         )
         body = page.content()
 
-        # Progress shows "2 of 2 completed"
-        assert "2 of 2 completed" in body
+        # Progress shows both materials in the module marked complete.
+        assert "2 of 2 materials marked complete in this module" in body
 # ---------------------------------------------------------------
 # Scenario 5: Removed -- duplicate of dashboard "Continue Learning"
 #   tests in playwright_tests/test_dashboard.py (Scenarios 4, 10)

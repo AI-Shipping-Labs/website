@@ -252,24 +252,13 @@ class TestScenario1PremiumMemberWorksThrough:
         assert "Task 1" in body
         assert "Build a simple agent" in body
 
-        # Step 3: Click "Mark as completed"
-        complete_btn = page.locator("#mark-complete-btn")
-        assert complete_btn.is_visible()
-        assert "Mark as completed" in complete_btn.inner_text()
-
+        # Step 3: Complete & Next saves this lesson and opens Unit 2.
         from playwright.sync_api import expect
-        complete_btn.click()
-
-        # Button changes to "Completed" (wait for AJAX)
-        expect(complete_btn).to_contain_text("Completed", timeout=5000)
-
-        # Step 4: Click the "Next" button to proceed to Unit 2
-        next_btn = page.locator(
-            'a:has-text("Next: Unit 2: Deep Dive")'
-        )
-        assert next_btn.count() >= 1
-        next_btn.first.click()
-        page.wait_for_load_state("domcontentloaded")
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        expect(complete_next).to_be_visible()
+        expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/advanced-ai-patterns/module-1/unit-2-deep-dive")
 
         # Verify we are on Unit 2
         assert "/courses/advanced-ai-patterns/module-1/unit-2-deep-dive" in page.url
@@ -675,27 +664,25 @@ class TestScenario7ProgressBar:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert "0 of 3 completed" in body
+        assert "0 of 3 materials marked complete in this module" in body
 
         # Step 2: Complete Unit 1
         page.goto(
             f"{django_server}/courses/progress-course/module-1/p-unit-1",
             wait_until="domcontentloaded",
         )
-        complete_btn = page.locator("#mark-complete-btn")
         from playwright.sync_api import expect as pw_expect
 
-        complete_btn.click()
-        pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        pw_expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/progress-course/module-1/p-unit-2")
 
-        # Step 3: Complete Unit 2
-        page.goto(
-            f"{django_server}/courses/progress-course/module-1/p-unit-2",
-            wait_until="domcontentloaded",
-        )
-        complete_btn = page.locator("#mark-complete-btn")
-        complete_btn.click()
-        pw_expect(complete_btn).to_contain_text("Completed", timeout=5000)
+        # Step 3: Complete Unit 2 and advance to Unit 3.
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        pw_expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url("**/courses/progress-course/module-1/p-unit-3")
 
         # Step 4: Home shows the updated progress summary
         page.goto(
@@ -705,7 +692,7 @@ class TestScenario7ProgressBar:
         body = page.content()
 
         # Progress bar shows 2 of 3
-        assert "2 of 3 completed" in body
+        assert "2 of 3 materials marked complete in this module" in body
 
         context.close()
 # ---------------------------------------------------------------

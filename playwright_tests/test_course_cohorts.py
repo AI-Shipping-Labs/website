@@ -739,18 +739,14 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
         assert "Homework" in body
         assert "Do it now" in body
 
-        # Then: User can mark as completed
-        mark_btn = page.locator("#mark-complete-btn")
-        assert mark_btn.count() >= 1
-        assert "Mark as completed" in mark_btn.inner_text()
-
+        # Then: Complete & Next saves this lesson and opens the next one.
         from playwright.sync_api import expect as pw_expect
-        mark_btn.click()
-        pw_expect(mark_btn).to_contain_text("Completed", timeout=5000)
-
-        # Then: Can navigate to the next unit
-        next_btn = page.locator('a:has-text("Next:")')
-        assert next_btn.count() >= 1
+        complete_next = page.locator('[data-testid="bottom-next-btn"]')
+        pw_expect(complete_next).to_contain_text("Complete & Next")
+        complete_next.click()
+        page.wait_for_url(
+            "**/courses/drip-no-cohort-course/module-1/second-unit",
+        )
 # ---------------------------------------------------------------
 # Scenario 9: Main member enrolls in a free course cohort
 #              without tier issues

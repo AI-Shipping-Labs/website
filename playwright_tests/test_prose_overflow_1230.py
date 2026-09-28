@@ -278,9 +278,11 @@ def test_mobile_course_table_scrolls_then_reader_continues(django_server, browse
         _assert_ordinary_prose_wraps(prose)
         _assert_document_fits(page)
 
-        expect(page.get_by_role("button", name="Mark as completed").first).to_be_visible()
-        next_link = page.get_by_role("link", name="Next: Continue Building").first
+        # A lesson with a successor uses Complete & Next, which saves
+        # completion and then opens that lesson.
+        next_link = page.get_by_test_id("bottom-next-btn")
         expect(next_link).to_be_visible()
+        expect(next_link).to_contain_text("Complete & Next")
         next_link.click()
         expect(page.get_by_role("heading", name="Continue Building")).to_be_visible()
         assert page.url.endswith(second.get_absolute_url())
@@ -326,7 +328,10 @@ def test_workshop_diagram_is_reachable_in_guarded_reader(django_server, browser)
             assert pan > 0
             expect(page.get_by_test_id("reader-bottom-nav")).to_be_visible()
             expect(page.get_by_role("heading", name="Questions & Answers")).to_be_visible()
-            expect(page.get_by_role("link", name="Next: Next Steps")).to_be_visible()
+            next_link = page.get_by_test_id("page-next-btn")
+            expect(next_link).to_be_visible()
+            expect(next_link).to_contain_text("Next")
+            expect(next_link).not_to_contain_text("Next Steps")
             _assert_document_fits(page)
     finally:
         context.close()

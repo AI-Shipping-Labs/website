@@ -683,7 +683,7 @@ class StudioUnitEditTest(StaffUserMixin, TestCase):
         self.unit.refresh_from_db()
         self.assertEqual(self.unit.title, 'Updated Unit')
         self.assertEqual(self.unit.video_url, 'https://youtube.com/test')
-        self.assertIn('<h1>Lesson</h1>', self.unit.body_html)
+        self.assertIn('<h1 id="lesson">Lesson</h1>', self.unit.body_html)
 
     def test_edit_unit_is_preview(self):
         self.client.post(f'/studio/units/{self.unit.pk}/edit', {

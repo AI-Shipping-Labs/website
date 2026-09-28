@@ -104,7 +104,7 @@ class EventSeriesDescriptionPipelineTest(TestCase):
             start_time=time(18, 0),
         )
         html = series.description_html
-        self.assertIn('<h1>Heading</h1>', html)
+        self.assertIn('<h1 id="heading">Heading</h1>', html)
         self.assertIn('<em>emph</em>', html)
         self.assertIn('<ul>', html)
         self.assertIn('<li>one</li>', html)
@@ -155,7 +155,7 @@ class EventCourseParityTest(TestCase):
             title='Parity Course', slug='parity-course',
             description=self.SOURCE,
         )
-        self.assertIn('<h2>Schedule</h2>', event.description_html)
+        self.assertIn('<h2 id="schedule">Schedule</h2>', event.description_html)
         self.assertIn('<em>several</em>', event.description_html)
         self.assertIn('<ul>', event.description_html)
         self.assertIn('href="https://example.com/guide"', event.description_html)

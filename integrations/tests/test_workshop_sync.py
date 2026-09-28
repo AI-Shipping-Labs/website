@@ -1618,7 +1618,7 @@ class WorkshopSyncCopyFileTest(_WorkshopSyncFixtureBase):
         self.assertIn('codehilite', workshop.description_html)
         self.assertIn('Welcome to the demo workshop.', workshop.description_html)
         # The leading H1 must NOT be re-introduced in the rendered HTML.
-        self.assertNotIn('<h1>Demo Workshop</h1>', workshop.description_html)
+        self.assertNotRegex(workshop.description_html, r'<h1(?: id="[^"]*")?>Demo Workshop</h1>')
 
     def test_explicit_copy_file_wins(self):
         folder = '2026/2026-04-21-demo'

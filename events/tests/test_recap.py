@@ -32,7 +32,7 @@ class EventRecapModelTest(TestCase):
             recap_notes='## Week 1\n\nWe covered batching.',
         )
         event.refresh_from_db()
-        self.assertIn('<h2>Week 1</h2>', event.recap_notes_html)
+        self.assertIn('<h2 id="week-1">Week 1</h2>', event.recap_notes_html)
         self.assertIn('We covered batching.', event.recap_notes_html)
 
     def test_studio_notes_take_precedence_over_synced_recap(self):
@@ -164,7 +164,7 @@ class EventRecapPageViewTest(TestCase):
         response = self.client.get(event.get_recap_url())
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'events/event_recap.html')
-        self.assertContains(response, '<h2>What we covered</h2>', html=False)
+        self.assertContains(response, '<h2 id="what-we-covered">What we covered</h2>', html=False)
         self.assertContains(response, 'Batching.')
         self.assertContains(response, 'data-testid="event-recap-notes-body"')
 

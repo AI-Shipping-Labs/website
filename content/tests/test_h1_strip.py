@@ -148,7 +148,7 @@ class ArticleSaveStripsLeadingH1Test(TestCase):
             content_markdown='# Running examples\n\nThe body content.\n',
             published=True,
         )
-        self.assertNotIn('<h1>Running examples</h1>', article.content_html)
+        self.assertNotRegex(article.content_html, r'<h1(?: id="[^"]*")?>Running examples</h1>')
         self.assertIn('The body content.', article.content_html)
 
     def test_different_h1_is_preserved_in_rendered_html(self):
@@ -158,7 +158,7 @@ class ArticleSaveStripsLeadingH1Test(TestCase):
             content_markdown='# Why this matters\n\nThe body content.\n',
             published=True,
         )
-        self.assertIn('<h1>Why this matters</h1>', article.content_html)
+        self.assertIn('<h1 id="why-this-matters">Why this matters</h1>', article.content_html)
 
     def test_stored_markdown_is_unchanged(self):
         # We strip in the rendering step, not in the source-of-truth field.
@@ -181,7 +181,7 @@ class CourseSaveStripsLeadingH1Test(TestCase):
             title='Python Course', slug='python-course-h1',
             description='# Python Course\n\nLearn Python from scratch.\n',
         )
-        self.assertNotIn('<h1>Python Course</h1>', course.description_html)
+        self.assertNotRegex(course.description_html, r'<h1(?: id="[^"]*")?>Python Course</h1>')
         self.assertIn('Learn Python from scratch.', course.description_html)
 
     def test_different_h1_is_preserved_in_description_html(self):
@@ -189,7 +189,7 @@ class CourseSaveStripsLeadingH1Test(TestCase):
             title='Python Course', slug='python-course-h1-keep',
             description='# Why Python\n\nLearn Python from scratch.\n',
         )
-        self.assertIn('<h1>Why Python</h1>', course.description_html)
+        self.assertIn('<h1 id="why-python">Why Python</h1>', course.description_html)
 
 
 class UnitSaveStripsLeadingH1Test(TestCase):
@@ -209,7 +209,7 @@ class UnitSaveStripsLeadingH1Test(TestCase):
             module=self.module, title='Running examples', slug='running-examples',
             body='# Running examples\n\nThis course uses two running examples.\n',
         )
-        self.assertNotIn('<h1>Running examples</h1>', unit.body_html)
+        self.assertNotRegex(unit.body_html, r'<h1(?: id="[^"]*")?>Running examples</h1>')
         self.assertIn('This course uses two running examples.', unit.body_html)
 
     def test_h1_with_trailing_period_does_not_appear_in_body_html(self):
@@ -217,7 +217,7 @@ class UnitSaveStripsLeadingH1Test(TestCase):
             module=self.module, title='Why Python', slug='why-python-1',
             body='# Why Python.\n\nBecause it is great.\n',
         )
-        self.assertNotIn('<h1>Why Python', unit.body_html)
+        self.assertNotRegex(unit.body_html, r'<h1(?: id="[^"]*")?>Why Python')
         self.assertIn('Because it is great.', unit.body_html)
 
     def test_different_h1_is_preserved_in_body_html(self):
@@ -225,7 +225,7 @@ class UnitSaveStripsLeadingH1Test(TestCase):
             module=self.module, title='Why Python', slug='why-python-2',
             body='# A short tour\n\nLet us begin.\n',
         )
-        self.assertIn('<h1>A short tour</h1>', unit.body_html)
+        self.assertIn('<h1 id="a-short-tour">A short tour</h1>', unit.body_html)
 
 
 class SyncStripsLeadingH1Test(TestCase):
@@ -280,7 +280,7 @@ class SyncStripsLeadingH1Test(TestCase):
     def test_matching_unit_h1_is_stripped_after_sync(self):
         sync_content_source(self.source, repo_dir=self.temp_dir)
         unit = Unit.objects.get(slug='running-examples')
-        self.assertNotIn('<h1>Running examples</h1>', unit.body_html)
+        self.assertNotRegex(unit.body_html, r'<h1(?: id="[^"]*")?>Running examples</h1>')
         self.assertIn(
             'This course uses two running examples.', unit.body_html,
         )
@@ -288,4 +288,4 @@ class SyncStripsLeadingH1Test(TestCase):
     def test_non_matching_unit_h1_survives_sync(self):
         sync_content_source(self.source, repo_dir=self.temp_dir)
         unit = Unit.objects.get(slug='why-python')
-        self.assertIn('<h1>A short tour of Python</h1>', unit.body_html)
+        self.assertIn('<h1 id="a-short-tour-of-python">A short tour of Python</h1>', unit.body_html)

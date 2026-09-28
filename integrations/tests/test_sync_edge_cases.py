@@ -934,7 +934,7 @@ class ProjectSyncMarkdownRenderingTest(TestCase):
         sync_content_source(self.source, repo_dir=self.temp_dir)
 
         project = Project.objects.get(slug='test-project')
-        self.assertIn('<h1>Overview</h1>', project.content_html)
+        self.assertIn('<h1 id="overview">Overview</h1>', project.content_html)
         self.assertIn('<img', project.content_html)
         self.assertIn('<strong>bold</strong>', project.content_html)
 

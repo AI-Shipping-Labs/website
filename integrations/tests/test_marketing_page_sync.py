@@ -51,7 +51,7 @@ class MarketingPageSyncTest(TestCase):
         self.assertEqual(page.public_path, '/launch-recap')
         self.assertEqual(page.source_repo, 'AI-Shipping-Labs/content')
         self.assertEqual(page.source_path, 'pages/launch-recap.md')
-        self.assertIn('<h2>Body</h2>', page.content_html)
+        self.assertIn('<h2 id="body">Body</h2>', page.content_html)
         self.assertEqual(page.nav_section, 'resources')
 
     def test_sync_marks_removed_synced_page_as_draft_without_deleting(self):

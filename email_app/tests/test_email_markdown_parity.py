@@ -49,12 +49,14 @@ class EmailMarkdownParityTest(TestCase):
 
         This is the parity contract: identical parsing for lists, tables,
         links, emphasis, and escaping — only the browser-only extensions
-        differ between email and on-site.
+        and the section-anchor heading ids (issue #1833) differ between
+        email and on-site.
         """
         expected = render_markdown(
             REPRESENTATIVE_MARKDOWN,
             include_mermaid=False,
             include_codehilite=False,
+            include_heading_ids=False,
         )
         self.assertEqual(render_email_markdown(REPRESENTATIVE_MARKDOWN), expected)
 

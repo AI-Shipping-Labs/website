@@ -131,7 +131,7 @@ class EventMarkdownRenderingTest(TestCase):
             description='# Hello World',
             start_datetime=timezone.now(),
         )
-        self.assertIn('<h1>Hello World</h1>', event.description_html)
+        self.assertIn('<h1 id="hello-world">Hello World</h1>', event.description_html)
 
     def test_empty_description_html_when_no_description(self):
         event = Event.objects.create(

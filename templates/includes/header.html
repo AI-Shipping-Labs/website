@@ -239,6 +239,30 @@
 </header>
 
 <script>
+  // Section anchors (issue #1833): keep --site-header-offset equal to the
+  // fixed header's height + 16px so `.prose` headings reached by a
+  // #fragment clear it (scroll-margin-top in assets/css/tailwind.css). The
+  // height is measured to the bottom of the <nav>, so the announcement and
+  // unverified-email banners count but an open mobile menu does not.
+  (function() {
+    var header = document.getElementById('site-header');
+    if (!header) return;
+    var nav = header.querySelector('nav');
+    var root = document.documentElement;
+    function update() {
+      var bottom = nav ? nav.getBoundingClientRect().bottom : header.getBoundingClientRect().bottom;
+      var height = bottom - header.getBoundingClientRect().top;
+      root.style.setProperty('--site-header-offset', Math.ceil(height + 16) + 'px');
+    }
+    update();
+    window.addEventListener('resize', update, { passive: true });
+    if (window.ResizeObserver) {
+      new ResizeObserver(update).observe(header);
+    }
+  })();
+</script>
+
+<script>
   // Mobile menu toggle
   (function() {
     var menuBtn = document.getElementById('mobile-menu-btn');

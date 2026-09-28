@@ -63,7 +63,7 @@ class ProjectMarkdownRenderingTest(TestCase):
             content_markdown='# Hello\n\nA paragraph.',
             published=True,
         )
-        self.assertIn('<h1>Hello</h1>', project.content_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', project.content_html)
         self.assertIn('<p>A paragraph.</p>', project.content_html)
 
     def test_image_in_markdown_rendered_to_html(self):
@@ -121,7 +121,7 @@ class ProjectMarkdownRenderingTest(TestCase):
                 'published': True,
             },
         )
-        self.assertIn('<h1>Old</h1>', project.content_html)
+        self.assertIn('<h1 id="old">Old</h1>', project.content_html)
 
         project, created = Project.objects.update_or_create(
             slug='uoc-test',
@@ -134,7 +134,7 @@ class ProjectMarkdownRenderingTest(TestCase):
             },
         )
         project.refresh_from_db()
-        self.assertIn('<h1>New version</h1>', project.content_html)
+        self.assertIn('<h1 id="new-version">New version</h1>', project.content_html)
         self.assertNotIn('Old', project.content_html)
 
 

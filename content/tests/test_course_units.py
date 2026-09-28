@@ -152,14 +152,14 @@ class CourseUnitDetailViewTest(CourseUnitSetupMixin, TestCase):
     def test_shows_lesson_text(self):
         self._login_main_user()
         response = self.client.get('/courses/test-course/module-1/lesson-1')
-        self.assertContains(response, '<h1>Introduction</h1>')
+        self.assertContains(response, '<h1 id="introduction">Introduction</h1>')
         self.assertContains(response, '<strong>first</strong>')
 
     def test_shows_homework_section(self):
         self._login_main_user()
         response = self.client.get('/courses/test-course/module-1/lesson-1')
         self.assertContains(response, 'Homework')
-        self.assertContains(response, '<h2>Exercise 1</h2>')
+        self.assertContains(response, '<h2 id="exercise-1">Exercise 1</h2>')
         self.assertContains(response, '<strong>this</strong>')
 
     def test_no_homework_section_when_empty(self):
@@ -839,7 +839,7 @@ class UnitBodyHtmlSyncTest(TestCase):
         )
         self.assertTrue(created)
         body_html, _ = self._unit_html_fields(unit)
-        self.assertIn('<h1>Hello</h1>', body_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', body_html)
 
         # Update body via update_or_create
         unit, created = Unit.objects.update_or_create(
@@ -853,7 +853,7 @@ class UnitBodyHtmlSyncTest(TestCase):
         )
         self.assertFalse(created)
         body_html, _ = self._unit_html_fields(unit)
-        self.assertIn('<h1>Updated</h1>', body_html)
+        self.assertIn('<h1 id="updated">Updated</h1>', body_html)
         self.assertNotIn('Hello', body_html)
 
     def test_update_or_create_renders_homework_html(self):
@@ -914,7 +914,7 @@ class UnitBodyHtmlSyncTest(TestCase):
             },
         )
         body_html, _ = self._unit_html_fields(unit)
-        self.assertIn('<h1>New content</h1>', body_html)
+        self.assertIn('<h1 id="new-content">New content</h1>', body_html)
         self.assertIn('<strong>formatting</strong>', body_html)
         self.assertNotIn('Old content', body_html)
 

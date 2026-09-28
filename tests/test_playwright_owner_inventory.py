@@ -1252,6 +1252,22 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestBlogBrowserSmoke::test_uuid_share_link_follows_article_after_slug_change",
     })
 
+    issue_1833_owners = frozenset({
+        "playwright_tests/test_section_anchors_1833.py::test_member_follows_share_link_to_lesson_section",
+        "playwright_tests/test_section_anchors_1833.py::test_reader_opens_direct_article_section_and_follows_body_link",
+        "playwright_tests/test_section_anchors_1833.py::test_author_custom_heading_id_keeps_working",
+        "playwright_tests/test_section_anchors_1833.py::test_reader_jumps_to_second_identically_named_section",
+        "playwright_tests/test_section_anchors_1833.py::test_visitor_signs_in_from_gated_lesson_and_returns_to_section",
+        "playwright_tests/test_section_anchors_1833.py::test_saved_section_does_not_hijack_other_pages",
+        "playwright_tests/test_section_anchors_1833.py::test_expired_pending_section_is_ignored",
+        "playwright_tests/test_section_anchors_1833.py::test_member_copies_section_link_with_hover_affordance",
+        "playwright_tests/test_section_anchors_1833.py::test_keyboard_user_reaches_section_link",
+        "playwright_tests/test_section_anchors_1833.py::test_hover_link_skips_member_notes_and_keeps_heading_layout",
+        "playwright_tests/test_section_anchors_1833.py::test_section_link_clears_header_with_announcement_banner",
+        "playwright_tests/test_section_anchors_1833.py::test_event_description_section_link",
+        "playwright_tests/test_section_anchors_1833.py::test_section_link_stays_on_target_while_lazy_image_above_loads",
+    })
+
     issue_1597_owners = frozenset({
         "playwright_tests/test_event_transcript_recap.py::"
         "TestStudioTranscriptPanel::"
@@ -1549,8 +1565,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2676)
-        self.assertEqual(len(inventory.owners), 2472)
+        self.assertEqual(inventory.item_count, 2689)
+        self.assertEqual(len(inventory.owners), 2485)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1599,6 +1615,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1781_owners
             | self.issue_1782_owners
             | self.issue_1802_owners
+            | self.issue_1833_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(

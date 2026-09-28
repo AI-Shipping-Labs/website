@@ -20,6 +20,7 @@ Usage:
 """
 
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -165,7 +166,7 @@ class TestReadmeBecomesLandingDescription:
 
         # Leading H1 was stripped — must NOT appear inside the description
         # block. Check it's not present anywhere in the rendered page.
-        assert '<h1>Title we expect stripped</h1>' not in body
+        assert not re.search(r'<h1(?: id="[^"]*")?>Title we expect stripped</h1>', body)
         # Yaml-derived placeholder is gone (we never wrote one).
         assert 'Workshop description body.' not in body
 
@@ -232,7 +233,7 @@ class TestCopyFileOverrideAndLink:
         # Mermaid block placeholder is rendered (issue #300 extension).
         assert 'class="mermaid"' in body
         # Leading H1 from 01-intro.md was stripped.
-        assert '<h1>Intro heading</h1>' not in body
+        assert not re.search(r'<h1(?: id="[^"]*")?>Intro heading</h1>', body)
         page.close()
 
         # Basic user can see tutorial pages — verify the link to the intro

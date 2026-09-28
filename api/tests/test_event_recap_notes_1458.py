@@ -99,7 +99,7 @@ class EventRecapNotesApiTest(TestCase):
 
         page = self.client.get(body["recap_url"])
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, "<h2>Week 1</h2>")
+        self.assertContains(page, '<h2 id="week-1">Week 1</h2>')
         self.assertContains(page, "Batching and KV cache.")
 
     def test_patch_with_empty_string_clears_notes_and_recap_404s_again(self):

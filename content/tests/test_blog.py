@@ -154,9 +154,9 @@ class MarkdownRenderingTest(TestCase):
 
     def test_headings_rendered(self):
         html = render_markdown('# Heading 1\n## Heading 2\n### Heading 3')
-        self.assertIn('<h1>Heading 1</h1>', html)
-        self.assertIn('<h2>Heading 2</h2>', html)
-        self.assertIn('<h3>Heading 3</h3>', html)
+        self.assertIn('<h1 id="heading-1">Heading 1</h1>', html)
+        self.assertIn('<h2 id="heading-2">Heading 2</h2>', html)
+        self.assertIn('<h3 id="heading-3">Heading 3</h3>', html)
 
     def test_bold_italic_rendered(self):
         html = render_markdown('**bold** and *italic*')
@@ -213,7 +213,7 @@ class ArticleSaveRendersMarkdownTest(TestCase):
             content_markdown='# Hello\nThis is **bold** content.',
             published=True,
         )
-        self.assertIn('<h1>Hello</h1>', article.content_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', article.content_html)
         self.assertIn('<strong>bold</strong>', article.content_html)
 
     def test_reading_time_auto_calculated(self):
@@ -750,7 +750,7 @@ class BlogDetailDisplayTest(TestCase):
     def test_shows_rendered_markdown(self):
         response = self.client.get('/blog/detail-article')
         content = response.content.decode()
-        self.assertIn('<h1>Hello</h1>', content)
+        self.assertIn('<h1 id="hello">Hello</h1>', content)
         self.assertIn('<strong>full</strong>', content)
 
     def test_shows_syntax_highlighted_code(self):
@@ -959,7 +959,7 @@ class DraftArticleVisibilityTest(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Draft preview')
-        self.assertContains(response, '<h1>Private Draft</h1>')
+        self.assertContains(response, '<h1 id="private-draft">Private Draft</h1>')
         self.assertContains(response, 'Full draft body.')
         self.assertNotContains(response, 'Upgrade to Basic')
         self.assertEqual(

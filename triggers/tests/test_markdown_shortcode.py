@@ -25,7 +25,7 @@ class EventWidgetShortcodeTest(TestCase):
     def test_shortcode_inside_surrounding_markdown(self):
         md = "# Heading\n\nSome text.\n\n```eventwidget\nslug: v0-claim\n```\n\nMore."
         html = render_markdown(md)
-        self.assertIn("<h1>Heading</h1>", html)
+        self.assertIn('<h1 id="heading">Heading</h1>', html)
         self.assertIn('data-event-widget="v0-claim"', html)
         self.assertIn("More.", html)
 

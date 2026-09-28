@@ -101,7 +101,7 @@ class StudioEventRecapNotesFieldTest(StaffUserMixin, TestCase):
         self.assertEqual(response.status_code, 302)
         event.refresh_from_db()
         self.assertEqual(event.recap_notes, '## What we covered\n\nBatching.')
-        self.assertIn('<h2>What we covered</h2>', event.recap_notes_html)
+        self.assertIn('<h2 id="what-we-covered">What we covered</h2>', event.recap_notes_html)
 
     def test_post_persists_recap_notes_on_synced_event(self):
         event = self._synced_event()

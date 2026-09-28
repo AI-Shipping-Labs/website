@@ -127,17 +127,21 @@
           </ul>
           {% endfor %}
           <div class="mt-3 border-t border-border pt-2" data-testid="reader-module-navigation">
-            {% if previous_module %}
-            <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Previous module: {{ previous_module.title }}" title="Previous module: {{ previous_module.title }}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module">
-              <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-              <span class="min-w-0 break-words">Previous module</span>
-            </a>
-            {% endif %}
-            {% if next_module %}
-            <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Next module: {{ next_module.title }}" title="Next module: {{ next_module.title }}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module">
-              <span class="min-w-0 flex-1 break-words">Next module</span>
-              <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-            </a>
+            {% if previous_module or next_module %}
+            <div class="flex items-center justify-between gap-2">
+              {% if previous_module %}
+              <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Previous module: {{ previous_module.title }}" title="Previous module: {{ previous_module.title }}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module">
+                <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+                <span>Previous module</span>
+              </a>
+              {% endif %}
+              {% if next_module %}
+              <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Next module: {{ next_module.title }}" title="Next module: {{ next_module.title }}" class="ml-auto flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm leading-snug text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module">
+                <span>Next module</span>
+                <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+              </a>
+              {% endif %}
+            </div>
             {% endif %}
             <a href="{% url 'course_syllabus' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="flex min-h-[44px] items-center gap-2 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-view-syllabus">
               <i data-lucide="list" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>

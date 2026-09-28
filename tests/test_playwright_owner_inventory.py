@@ -1404,6 +1404,23 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_unresolvable_body_link_renders_as_plain_text",
     })
 
+    issue_1837_owners = frozenset({
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_opens_studio_from_a_workshop",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_anonymous_course_pages_hide_the_studio_control",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_reviews_homework_submissions_from_the_course",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_opens_the_section_studio_destinations",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_opens_the_enrolled_homework_or_the_unit_editor",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_reviews_homeworks_in_module_order_for_one_cohort",
+        "playwright_tests/test_studio_open_1837.py::"
+        "test_staff_hides_learner_emails_across_submissions_pages",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1532,8 +1549,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2669)
-        self.assertEqual(len(inventory.owners), 2465)
+        self.assertEqual(inventory.item_count, 2676)
+        self.assertEqual(len(inventory.owners), 2472)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1542,6 +1559,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1530_owners
             | self.issue_1531_owners
             | self.issue_1815_owners
+            | self.issue_1837_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners

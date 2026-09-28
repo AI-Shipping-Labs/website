@@ -269,6 +269,12 @@ def post_series_slack_announcement(series):
     Slack is disabled/unconfigured or the series has zero upcoming
     sessions (nothing to announce).
     """
+    if series.is_hidden:
+        logger.info(
+            'Skipping series Slack announcement: event series is hidden',
+        )
+        return False
+
     if not is_enabled('SLACK_ENABLED'):
         logger.debug('Skipping series Slack announcement: SLACK_ENABLED is not true')
         return False
@@ -444,6 +450,16 @@ def post_slack_announcement(content_type, content):
     Returns:
         True if posted successfully, False otherwise.
     """
+    if (
+        content_type == 'event'
+        and content.event_series_id
+        and content.event_series.is_hidden
+    ):
+        logger.info(
+            'Skipping event Slack announcement: event series is hidden',
+        )
+        return False
+
     if not is_enabled('SLACK_ENABLED'):
         logger.debug('Skipping Slack announcement: SLACK_ENABLED is not true')
         return False

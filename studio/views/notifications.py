@@ -162,6 +162,16 @@ def _announce_slack(request, content_type, content_id):
     model_class = CONTENT_TYPE_MAP[content_type][0]
     content = get_object_or_404(model_class, pk=content_id)
 
+    if (
+        content_type == 'event'
+        and content.event_series_id
+        and content.event_series.is_hidden
+    ):
+        return JsonResponse(
+            {'error': 'Hidden events cannot be posted to Slack.'},
+            status=409,
+        )
+
     try:
         result = post_slack_announcement(content_type, content)
         if result:

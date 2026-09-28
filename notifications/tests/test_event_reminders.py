@@ -14,7 +14,7 @@ from django.test import TestCase
 from freezegun import freeze_time
 
 from email_app.testing import StubSESClient, deliver_pending_mail
-from events.models import Event, EventRegistration
+from events.models import Event, EventRegistration, EventSeries
 from events.services.host_registration import maybe_register_host_as_attendee
 from notifications.models import EventReminderLog, Notification
 from notifications.services.event_reminders import check_event_reminders
@@ -421,6 +421,67 @@ class CheckEventRemindersTest(TestCase):
         self.assertEqual(
             EventReminderLog.objects.filter(
                 event=event, interval='24h_slack', user__isnull=True,
+            ).count(),
+            1,
+        )
+
+    @freeze_time(FROZEN_NOW)
+    @patch('notifications.services.slack_announcements.post_slack_announcement')
+    def test_hidden_series_keeps_private_reminders_without_slack_guard(
+        self, mock_slack,
+    ):
+        from email_app.models import EmailLog
+
+        series = EventSeries.objects.create(
+            name='Private cohort',
+            slug='private-cohort',
+            visibility='hidden',
+        )
+        event = Event.objects.create(
+            title='Private cohort office hours',
+            slug='private-cohort-office-hours',
+            start_datetime=FROZEN_NOW + timedelta(hours=24),
+            status='upcoming',
+            event_series=series,
+        )
+        EventRegistration.objects.create(event=event, user=self.user)
+
+        check_event_reminders()
+
+        mock_slack.assert_not_called()
+        self.assertEqual(
+            Notification.objects.filter(
+                user=self.user,
+                notification_type='event_reminder',
+            ).count(),
+            1,
+        )
+        self.assertFalse(
+            EventReminderLog.objects.filter(
+                event=event,
+                user__isnull=True,
+                interval='24h_slack',
+            ).exists(),
+        )
+        deliver_pending_mail()
+        self.assertEqual(
+            EmailLog.objects.filter(
+                user=self.user,
+                email_type='event_reminder',
+            ).count(),
+            1,
+        )
+
+        series.visibility = 'public'
+        series.save(update_fields=['visibility'])
+        check_event_reminders()
+
+        mock_slack.assert_called_once_with('event', event)
+        self.assertEqual(
+            EventReminderLog.objects.filter(
+                event=event,
+                user__isnull=True,
+                interval='24h_slack',
             ).count(),
             1,
         )

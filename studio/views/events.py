@@ -1047,9 +1047,12 @@ def event_edit(request, event_id):
             context['notify_url'] = reverse(
                 'studio_event_notify', kwargs={'event_id': event.pk},
             )
-            context['announce_url'] = reverse(
-                'studio_event_announce_slack',
-                kwargs={'event_id': event.pk},
+            context['announce_url'] = (
+                '' if event.event_series_id and event.event_series.is_hidden
+                else reverse(
+                    'studio_event_announce_slack',
+                    kwargs={'event_id': event.pk},
+                )
             )
             context['form_values'] = {}
             context['errors'] = form_errors
@@ -1147,9 +1150,12 @@ def event_edit(request, event_id):
                 context['notify_url'] = reverse(
                     'studio_event_notify', kwargs={'event_id': event.pk},
                 )
-                context['announce_url'] = reverse(
-                    'studio_event_announce_slack',
-                    kwargs={'event_id': event.pk},
+                context['announce_url'] = (
+                    '' if event.event_series_id and event.event_series.is_hidden
+                    else reverse(
+                        'studio_event_announce_slack',
+                        kwargs={'event_id': event.pk},
+                    )
                 )
                 context['form_values'] = {}
                 context['errors'] = {'timezone': 'Unknown timezone.'}
@@ -1264,7 +1270,12 @@ def event_edit(request, event_id):
     context['is_synced'] = synced
     context['github_edit_url'] = get_github_edit_url(event)
     context['notify_url'] = reverse('studio_event_notify', kwargs={'event_id': event.pk})
-    context['announce_url'] = reverse('studio_event_announce_slack', kwargs={'event_id': event.pk})
+    context['announce_url'] = (
+        '' if event.event_series_id and event.event_series.is_hidden
+        else reverse(
+            'studio_event_announce_slack', kwargs={'event_id': event.pk},
+        )
+    )
     context.update(notification_action_context(
         'event', event, includes_slack=False,
     ))

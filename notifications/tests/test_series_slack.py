@@ -111,6 +111,30 @@ class PostSeriesSlackAnnouncementTest(TestCase):
     def setUp(self):
         clear_config_cache()
 
+    @patch('notifications.services.slack_announcements.get_config')
+    @patch('notifications.services.slack_announcements._series_upcoming_sessions')
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_hidden_series_skips_before_config_payload_or_http(
+        self, mock_post, mock_upcoming_sessions, mock_get_config,
+    ):
+        private_description = 'Confidential sprint agenda'
+        series = _make_series(
+            description=private_description,
+            visibility='hidden',
+        )
+
+        with self.assertLogs(
+            'notifications.services.slack_announcements', level='INFO',
+        ) as logs:
+            result = post_series_slack_announcement(series)
+
+        self.assertFalse(result)
+        mock_get_config.assert_not_called()
+        mock_upcoming_sessions.assert_not_called()
+        mock_post.assert_not_called()
+        log_output = '\n'.join(logs.output)
+        self.assertNotIn(private_description, log_output)
+
     @patch('notifications.services.slack_announcements.requests.post')
     def test_posts_one_message_for_whole_series(self, mock_post):
         mock_response = MagicMock()

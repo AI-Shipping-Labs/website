@@ -801,6 +801,12 @@ def event_series_announce_slack(request, series_id):
     """
     series = get_object_or_404(EventSeries, pk=series_id)
 
+    if series.is_hidden:
+        return JsonResponse(
+            {'error': 'Hidden event series cannot be posted to Slack.'},
+            status=409,
+        )
+
     from notifications.services.slack_announcements import (
         _series_upcoming_sessions,
     )

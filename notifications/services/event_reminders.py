@@ -64,7 +64,7 @@ def check_event_reminders():
     events_24h = Event.objects.filter(
         start_datetime__gte=window_24h_start,
         start_datetime__lte=window_24h_end,
-    ).exclude(status__in=['draft', 'cancelled'])
+    ).exclude(status__in=['draft', 'cancelled']).select_related('event_series')
 
     for event in events_24h:
         registrations = EventRegistration.objects.filter(
@@ -91,6 +91,13 @@ def check_event_reminders():
             logger.info(
                 'Created %d 24h reminders for event %s', count, event.slug,
             )
+
+        # Hidden-series occurrences keep their private bell + email reminders,
+        # but never create a channel-post guard. If an operator makes the
+        # series public while this occurrence remains in the window, a later
+        # tick can still post it once (issue #1832).
+        if event.event_series_id and event.event_series.is_hidden:
+            continue
 
         # Post Slack reminder for 24h window, at most once per event.
         # The 24h cron window (30 min wide) overlaps two consecutive

@@ -18,7 +18,7 @@ from django.test import Client, TestCase
 from django.utils import timezone
 
 from content.models import Article, Course, Download, Workshop
-from events.models import Event
+from events.models import Event, EventSeries
 from notifications.models import Notification
 from payments.models import TierOverride
 from tests.fixtures import TierSetupMixin, set_membership
@@ -414,6 +414,41 @@ class StudioEventNotifyTest(TierSetupMixin, TestCase):
         response = self.client.get(f'/studio/events/{self.event.pk}/edit')
         self.assertNotContains(response, 'Notify eligible members in app')
         self.assertNotContains(response, 'Post to Slack')
+
+    def test_hidden_series_event_keeps_notify_action_without_slack_action(self):
+        series = EventSeries.objects.create(
+            name='Private cohort',
+            slug='private-cohort',
+            visibility='hidden',
+        )
+        self.event.event_series = series
+        self.event.save(update_fields=['event_series'])
+
+        response = self.client.get(f'/studio/events/{self.event.pk}/edit')
+
+        self.assertContains(response, 'Notify eligible members in app')
+        self.assertNotContains(response, 'id="post-to-slack-btn"')
+
+    @patch('studio.views.notifications.post_slack_announcement')
+    def test_hidden_series_event_announce_endpoint_returns_409(self, mock_slack):
+        series = EventSeries.objects.create(
+            name='Private cohort',
+            slug='private-cohort',
+            visibility='hidden',
+        )
+        self.event.event_series = series
+        self.event.save(update_fields=['event_series'])
+
+        response = self.client.post(
+            f'/studio/events/{self.event.pk}/announce-slack',
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json(),
+            {'error': 'Hidden events cannot be posted to Slack.'},
+        )
+        mock_slack.assert_not_called()
 
     @patch('studio.views.notifications.post_slack_announcement')
     def test_announce_slack_calls_slack_without_notifications(self, mock_slack):

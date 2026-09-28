@@ -125,6 +125,21 @@ class SeriesSlackEndpointTest(SeriesActionMixin, TestCase):
         resp = self.client.get(self._slack_url())
         self.assertEqual(resp.status_code, 405)
 
+    @patch('studio.views.event_series.post_series_slack_announcement')
+    def test_hidden_series_returns_409_without_posting(self, mock_post):
+        self.series.visibility = 'hidden'
+        self.series.save(update_fields=['visibility'])
+        self._session(1, 3)
+
+        resp = self.client.post(self._slack_url())
+
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(
+            resp.json(),
+            {'error': 'Hidden event series cannot be posted to Slack.'},
+        )
+        mock_post.assert_not_called()
+
     @patch(
         'studio.views.event_series.post_series_slack_announcement',
         return_value=True,
@@ -167,3 +182,16 @@ class SeriesDetailButtonsTest(SeriesActionMixin, TestCase):
         self.assertContains(resp, 'data-testid="event-series-announce-slack"')
         self.assertContains(resp, self._notify_url())
         self.assertContains(resp, self._slack_url())
+
+    def test_hidden_series_keeps_notify_action_without_slack_action(self):
+        self.series.visibility = 'hidden'
+        self.series.save(update_fields=['visibility'])
+        self._session(1, 3)
+
+        resp = self.client.get(f'/studio/event-series/{self.series.pk}/')
+
+        self.assertContains(resp, 'data-testid="event-series-notify"')
+        self.assertNotContains(
+            resp,
+            'data-testid="event-series-announce-slack"',
+        )

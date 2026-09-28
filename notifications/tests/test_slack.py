@@ -8,7 +8,7 @@ import requests
 from django.test import TestCase, override_settings
 
 from content.models import Article, Course, Download, Workshop
-from events.models import Event
+from events.models import Event, EventSeries
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.services.slack_announcements import (
@@ -371,6 +371,39 @@ class PostSlackAnnouncementTest(TestCase):
 
     def setUp(self):
         clear_config_cache()
+
+    @patch('notifications.services.slack_announcements.get_config')
+    @patch('notifications.services.slack_announcements._build_slack_blocks')
+    @patch('notifications.services.slack_announcements.requests.post')
+    def test_hidden_series_event_skips_before_config_payload_or_http(
+        self, mock_post, mock_build_blocks, mock_get_config,
+    ):
+        private_description = 'Confidential cohort agenda'
+        series = EventSeries.objects.create(
+            name='Private cohort',
+            slug='private-cohort',
+            description=private_description,
+            visibility='hidden',
+        )
+        event = Event.objects.create(
+            title='Private office hours',
+            slug='private-office-hours',
+            description=private_description,
+            start_datetime=datetime(2026, 9, 29, tzinfo=dt_tz.utc),
+            event_series=series,
+        )
+
+        with self.assertLogs(
+            'notifications.services.slack_announcements', level='INFO',
+        ) as logs:
+            result = post_slack_announcement('event', event)
+
+        self.assertFalse(result)
+        mock_get_config.assert_not_called()
+        mock_build_blocks.assert_not_called()
+        mock_post.assert_not_called()
+        log_output = '\n'.join(logs.output)
+        self.assertNotIn(private_description, log_output)
 
     def test_skips_when_no_bot_token(self):
         article = Article.objects.create(

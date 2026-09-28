@@ -102,7 +102,9 @@ class CourseCommitmentsTests(TestCase):
         self.client.force_login(self.user)
         first = self.client.get('/courses/commitment-course/home?cohort=first')
         self.assertContains(first, 'First cohort homework')
-        self.assertContains(first, event_one.title)
+        first_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=first')
+        self.assertContains(first_sessions, f'href="{event_one.get_absolute_url()}"')
+        self.assertNotContains(first_sessions, 'second-session')
         self.assertEqual(
             first.context['urgent_commitment']['title'], 'First cohort homework',
         )
@@ -111,13 +113,18 @@ class CourseCommitmentsTests(TestCase):
             [row['title'] for row in first.context['open_assignments']],
         )
         self.assertContains(first, 'data-testid="course-home-deadlines"')
-        self.assertContains(first, 'First cohort project')
+        self.assertContains(
+            self.client.get('/courses/commitment-course/home/projects?cohort=first'),
+            'First cohort project',
+        )
         self.assertNotContains(first, 'Second cohort homework')
         self.assertNotContains(first, 'Second cohort project')
-        self.assertNotContains(first, 'Second Session')
+        self.assertNotContains(first, 'second-session')
         second = self.client.get('/courses/commitment-course/home?cohort=second')
         self.assertContains(second, 'Second cohort homework')
-        self.assertContains(second, 'Second Session')
+        second_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=second')
+        self.assertContains(second_sessions, 'second-session')
+        self.assertNotContains(second_sessions, f'href="{event_one.get_absolute_url()}"')
         self.assertEqual(
             second.context['urgent_commitment']['title'], 'Second cohort homework',
         )
@@ -127,7 +134,7 @@ class CourseCommitmentsTests(TestCase):
         )
         self.assertNotContains(second, 'First cohort homework')
         self.assertNotContains(second, 'First cohort project')
-        self.assertNotContains(second, event_one.title)
+        self.assertNotContains(second, f'href="{event_one.get_absolute_url()}"')
 
         unowned = Cohort.objects.create(
             course=self.course, name='Other cohort', external_key='other',

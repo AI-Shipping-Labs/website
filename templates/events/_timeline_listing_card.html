@@ -13,7 +13,7 @@ Required context: ``card_variant`` ("upcoming", "series", "past", or
 ``row`` for Series, or ``session`` for course session rows.
 {% endcomment %}
 {% if card_variant == 'course_session' %}
-<article class="group rounded-lg border border-border bg-card p-5 transition-colors hover:border-accent/50" data-testid="course-home-live-session-row">
+<article class="group rounded-lg border {% if session.featured %}border-accent/50 bg-accent/5{% else %}border-border bg-card{% endif %} p-5 transition-colors hover:border-accent/50" data-testid="course-home-live-session-row"{% if session.featured %} data-featured="true"{% endif %}>
   <div class="flex items-start justify-between gap-4">
     <div class="min-w-0 flex-1">
       <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">

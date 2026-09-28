@@ -108,9 +108,10 @@ class CourseHomeTests(TestCase):
         home = self.client.get('/courses/course-home-test/home')
         overview = self.client.get('/courses/course-home-test')
 
-        self.assertContains(home, 'data-testid="course-home-progress"')
-        self.assertContains(home, '1 of 4 completed')
-        self.assertContains(home, 'aria-valuemax="4"')
+        self.assertContains(home, 'data-testid="course-home-focus"')
+        self.assertContains(
+            home, '1 of 2 materials marked complete in this module',
+        )
         self.assertContains(overview, 'Syllabus')
         self.assertNotContains(overview, 'Your Progress')
         self.assertNotContains(overview, 'data-testid="course-home-progress"')
@@ -253,8 +254,10 @@ class CourseHomeTests(TestCase):
             [project_step],
         )
         self.assertContains(response, 'data-testid="course-home-no-cohort"')
-        self.assertContains(response, 'data-testid="course-home-cohort-support"')
-        self.assertContains(response, 'data-testid="course-home-get-started"')
+        self.assertContains(
+            response, 'href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access"',
+        )
+        self.assertContains(response, 'data-testid="course-home-checklist"')
         self.assertContains(response, 'data-testid="course-home-undated-work"')
         self.assertEqual(response.context['live_session_schedule'], [])
         self.assertNotContains(response, cohort.name)
@@ -385,7 +388,7 @@ class CourseHomeTests(TestCase):
         response = self.client.get('/courses/course-home-test/home')
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
         self.assertContains(response, f'href="{self.lesson1.get_absolute_url()}"')
-        self.assertContains(response, f'href="{self.course.get_absolute_url()}?view=overview#syllabus"')
+        self.assertContains(response, 'href="/courses/course-home-test/home/syllabus"')
         self.assertContains(response, 'data-testid="course-home-position"')
         self.assertContains(response, 'Next uncompleted course material')
         lesson = self.client.get(self.lesson1.get_absolute_url())
@@ -397,7 +400,7 @@ class CourseHomeTests(TestCase):
         CourseAccess.objects.create(user=self.user, course=self.course, access_type='granted')
         self.client.force_login(self.user)
         response = self.client.get('/courses/course-home-test/home')
-        self.assertContains(response, self.course.discussion_url)
+        self.assertEqual(response.context['recommended_unit'], self.lesson1)
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
 
     def test_help_and_optional_child_use_database_curriculum(self):
@@ -475,7 +478,12 @@ class CourseHomeTests(TestCase):
         self.assertContains(response, 'data-testid="course-home-live-sessions"')
         self.assertContains(response, 'Your next live session is highlighted in the schedule below.')
         self.assertContains(response, 'data-featured="true"')
-        self.assertContains(response, event.title, count=1)
+        # The session card names the authored session unit, once.
+        self.assertContains(
+            response,
+            f'data-testid="course-home-live-session-title">{event_unit.title}</a>',
+            count=1,
+        )
         self.assertContains(response, f'href="{event.get_absolute_url()}"')
 
     def test_course_map_query_count_does_not_grow_per_module(self):

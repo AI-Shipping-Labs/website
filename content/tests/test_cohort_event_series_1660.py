@@ -151,7 +151,7 @@ class CourseLiveSessionsHomeTest(TierSetupMixin, TestCase):
         CohortEnrollment.objects.create(cohort=self.cohort, user=user)
         self.client.login(email='entitled-1660@test.com', password='testpass')
         detail = self.client.get(self._course_url())
-        home = self.client.get(f'{self._course_url()}/home')
+        home = self.client.get(f'{self._course_url()}/home/sessions')
         self.assertNotContains(detail, 'data-testid="course-live-sessions"')
         self.assertNotContains(detail, 'Office Hours — Upcoming')
         self.assertContains(home, 'data-testid="course-home-live-sessions"')

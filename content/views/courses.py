@@ -7,8 +7,8 @@ from community_base.homework_steps.state import homework_state_for
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.http import Http404, JsonResponse
 from django.db.models import Q
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -30,8 +30,8 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from content.models.peer_review import CourseProject, ProjectSubmission
 from content.models.homework import Submission
+from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
@@ -503,6 +503,16 @@ def course_home(request, slug, section='home'):
         context['recommended_live_session'] = next_live_session
         commitments['next_live_session'] = None
     context.update(commitments)
+    recommended_session = context.get('recommended_live_session')
+    if recommended_session is not None and not any(
+        row is recommended_session for row in context['home_office_hours']
+    ):
+        # Home says the recommended session is highlighted in the schedule
+        # below, so keep it there even when it belongs to an earlier module
+        # than the current focus module.
+        context['home_office_hours'] = [
+            recommended_session, *context['home_office_hours'],
+        ]
     dated_sessions = [
         {'kind': 'course_session', 'event': row['event'], 'session': row}
         for row in context['live_session_schedule'] if row.get('event')

@@ -84,7 +84,10 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     page.set_viewport_size({'width': 390, 'height': 844})
     expect(page.locator('[data-testid="course-home-open-lesson"]')).to_be_visible()
-    assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['y'] < 844
+    # The next step is visible on a phone without scrolling.
+    assert page.evaluate('window.scrollY') == 0
+    open_lesson_box = page.locator('[data-testid="course-home-open-lesson"]').bounding_box()
+    assert open_lesson_box['y'] + open_lesson_box['height'] <= 844
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['height'] >= 44
     assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')

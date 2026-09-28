@@ -71,6 +71,14 @@ from content.services.homework_submissions import (
     parse_submission_post,
     save_submission,
 )
+from content.services.module_home import (
+    build_module_home,
+    cohort_query_for,
+    commitment_cohort_for,
+    completed_course_unit_ids,
+    module_reader_navigation,
+    module_tree_units,
+)
 from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
@@ -1054,131 +1062,18 @@ def _render_module_overview(request, course, module):
             and project.pk not in preview_project_ids
         )
 
-    module_tree_units = list(module.units.all())
-    for child in children:
-        module_tree_units.extend(child.units.all())
-
-    # Course-wide, like the unit reader: the shared sidebar lists sibling
-    # submodules (and, for course-scoped navigation, every module), so a
-    # module-tree-only set would drop completion ticks outside this module.
-    completed_unit_ids: set[int] = set()
-    if user.is_authenticated:
-        completed_unit_ids = set(
-            UserCourseProgress.objects.filter(
-                user=user,
-                unit__module__course=course,
-                completed_at__isnull=False,
-            ).values_list('unit_id', flat=True)
-        )
-
-    # Module pages share the course reader shell. Keep the relevant section
-    # expanded without treating one of its lessons as the current page.
-    modules = course.get_syllabus()
-    scoped_module = None
-    previous_module = None
-    next_module = None
-    if course.reader_navigation_scope in ('module', 'submodule'):
-        current_root_id = module.parent_id or module.pk
-        for index, top_module in enumerate(modules):
-            if top_module.pk == current_root_id:
-                scoped_module = top_module
-                previous_module = modules[index - 1] if index else None
-                next_module = modules[index + 1] if index + 1 < len(modules) else None
-                break
-    reader_active_submodule = module if module.parent_id else (children[0] if children else None)
+    tree_units = module_tree_units(module, children)
+    completed_unit_ids = completed_course_unit_ids(user, course)
     cohort_param = request.GET.get('cohort', '')
-    cohort_query = f'?{urlencode({"cohort": cohort_param})}' if cohort_param else ''
-
-    # Module home: progress, one next-lesson action, and this module's
-    # sessions and work. Sessions and work come from the same cohort-aware
-    # commitments as Course Home; a learner without a real cohort (or a
-    # staff/anonymous preview) gets no personal deadlines.
-    # Sessions have their own section below, so progress and the next
-    # lesson count reading/homework material only.
-    core_units = [
-        unit for unit in module_tree_units
-        if not unit.effective_is_bonus and unit.kind != 'event'
-    ]
-    module_progress_total = len(core_units)
-    module_progress_completed = sum(
-        1 for unit in core_units if unit.pk in completed_unit_ids
+    cohort_query = cohort_query_for(cohort_param)
+    commitment_cohort = commitment_cohort_for(
+        course, user, viewer_cohort, viewer_is_preview, cohort_param,
     )
-    module_progress_pct = (
-        int(module_progress_completed / module_progress_total * 100)
-        if module_progress_total else 0
-    )
-    # An all-optional module (e.g. Bonus) still gets an entry point.
-    action_units = core_units or [
-        unit for unit in module_tree_units if unit.kind != 'event'
-    ]
-    module_next_action = None
-    if has_access and action_units:
-        next_unit = next(
-            (unit for unit in action_units if unit.pk not in completed_unit_ids),
-            None,
-        )
-        if next_unit is not None:
-            module_next_action = {
-                'unit': next_unit,
-                'url': next_unit.get_absolute_url() + cohort_query,
-                'label': 'Continue' if module_progress_completed else 'Start module',
-                'complete': False,
-            }
-        else:
-            first_unit = action_units[0]
-            module_next_action = {
-                'unit': first_unit,
-                'url': first_unit.get_absolute_url() + cohort_query,
-                'label': 'Review module',
-                'complete': True,
-            }
-
-    commitment_cohort = viewer_cohort if viewer_cohort and not viewer_is_preview else None
-    if user.is_staff and viewer_is_preview and cohort_param:
-        commitment_cohort = viewer_cohort
-    if commitment_cohort is None and user.is_authenticated and not cohort_param:
-        self_paced = CohortEnrollment.objects.filter(
-            user=user, cohort__course=course,
-            cohort__mode='self_paced', cohort__is_active=True,
-        ).select_related('cohort').first()
-        commitment_cohort = self_paced.cohort if self_paced else None
-    commitments = (
-        build_course_commitments(course, user, commitment_cohort)
-        if user.is_authenticated and has_access else {}
-    )
-    module_root_id = module.parent_id or module.pk
-    visible_project_ids = {project.pk for project in course_projects}
-    module_session_rows = [
-        row for row in commitments.get('live_session_schedule', [])
-        if row.get('session_unit') is not None
-        and (row['session_unit'].module.parent_id or row['session_unit'].module_id)
-        == module_root_id
-    ]
-    module_work_rows = [
-        row for row in (
-            commitments.get('open_assignments', [])
-            + commitments.get('completed_assignments', [])
-        )
-        if row.get('module_id') == module_root_id
-        and row['kind'] in ('Homework', 'Project')
-        # Projects follow the module page's cohort scoping (above), so an
-        # unscoped or other-cohort attempt does not surface here.
-        and (row['kind'] != 'Project' or row.get('project_id') in visible_project_ids)
-    ]
-    module_work_rows.sort(key=lambda row: (
-        row['kind'] != 'Homework', row['when'] is None, row['when'] or timezone.now(),
-    ))
-    for row in module_work_rows:
-        # The page already names the module; drop the per-row module label.
-        row['module_title'] = ''
-        # Project links are course-relative; keep the selected cohort on
-        # them like every other module-home link.
-        if cohort_query and row['url'].startswith('/courses/') and '?' not in row['url']:
-            row['url'] += cohort_query
-    module_show_timezone_notice = bool(
-        any(row.get('when') for row in module_session_rows)
-        or commitment_cohort is not None and commitment_cohort.mode == 'cohort'
-        and any(row.get('when') for row in module_work_rows)
+    module_home = build_module_home(
+        course, module, user,
+        tree_units=tree_units, completed_ids=completed_unit_ids,
+        has_access=has_access, cohort=commitment_cohort, cohort_query=cohort_query,
+        visible_project_ids={project.pk for project in course_projects},
     )
 
     cta_message = ''
@@ -1204,33 +1099,12 @@ def _render_module_overview(request, course, module):
     context = {
         'course': course,
         'module': module,
-        'modules': modules,
-        'scoped_module': scoped_module,
-        'previous_module': previous_module,
-        'next_module': next_module,
-        'reader_active_module': module,
-        'reader_active_submodule_id': (
-            reader_active_submodule.pk if reader_active_submodule else None
-        ),
+        **module_reader_navigation(course, module, children),
+        **module_home,
         'reader_cohort_param': cohort_param,
         'cohort_query': cohort_query,
         'units': units,
-        'module_tree_units': module_tree_units,
-        'module_session_rows': module_session_rows,
-        'module_work_rows': module_work_rows,
-        'module_homework_rows': [
-            row for row in module_work_rows if row['kind'] == 'Homework'
-        ],
-        'module_project_rows': [
-            row for row in module_work_rows if row['kind'] == 'Project'
-        ],
-        'module_next_action': module_next_action,
-        'module_progress_total': module_progress_total,
-        'module_progress_completed': module_progress_completed,
-        'module_progress_pct': module_progress_pct,
-        'cohort': commitment_cohort,
-        'commitment_timezone': commitments.get('commitment_timezone', ''),
-        'module_show_timezone_notice': module_show_timezone_notice,
+        'module_tree_units': tree_units,
         'submodules': submodules,
         'display_children': children,
         'course_projects': course_projects,

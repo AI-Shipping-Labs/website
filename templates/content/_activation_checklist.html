@@ -1,0 +1,71 @@
+{% load accounts_extras %}
+    <div class="overflow-hidden rounded-lg border border-border bg-card" data-testid="{{ checklist_testid }}">
+      <div class="relative border-b border-border p-6">
+        {% if checklist_allow_dismiss %}
+        {% if checklist_all_complete or checklist_all_resolved %}
+        <button type="button"
+                class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Dismiss getting started"
+                data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-dismiss{% else %}{{ checklist_testid }}-dismiss{% endif %}"
+                data-dismiss-card="{{ checklist_dismissal_key|default:'free_activation_checklist' }}">
+          <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
+        </button>
+        {% endif %}
+        {% endif %}
+        <div class="pr-10 sm:pr-12">
+          <p class="text-xs font-medium uppercase tracking-widest text-accent">{{ checklist_eyebrow }}</p>
+          <div class="mt-1 min-w-0">
+            {% if checklist_all_complete %}
+            <h3 class="text-lg font-semibold tracking-tight text-foreground">{{ checklist_complete_title }}</h3>
+            <p class="mt-1 text-sm text-muted-foreground">{{ checklist_complete_description }}</p>
+            {% else %}
+            <h3 class="text-lg font-semibold tracking-tight text-foreground">{{ checklist_title }}</h3>
+            {% endif %}
+          </div>
+        </div>
+        <p class="mt-3 text-right text-sm font-medium text-foreground" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-progress-copy{% else %}{{ checklist_testid }}-progress-copy{% endif %}">
+          {{ checklist_completed_count }} of {{ checklist_total_count }} {{ checklist_progress_label|default:'complete' }}
+        </p>
+        <div class="mt-2 h-2 overflow-hidden rounded-full bg-secondary" aria-hidden="true" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-progress-bar{% else %}{{ checklist_testid }}-progress-bar{% endif %}">
+          <div class="h-full rounded-full bg-accent transition-all" style="width: {{ checklist_percentage }}%"></div>
+        </div>
+      </div>
+      <ol class="divide-y divide-border">
+        {% for item in checklist_items %}
+        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-6"
+            data-testid="{% if checklist_testid == 'free-activation-checklist' and item.key == 'onboarding' and not item.completed %}onboarding-prompt{% elif checklist_testid == 'free-activation-checklist' and item.key == 'slack' and not item.completed %}dashboard-slack-callout{% elif checklist_testid == 'free-activation-checklist' %}free-activation-item-{{ item.key }}{% else %}{{ checklist_testid }}-item-{{ item.key }}{% endif %}"
+            data-activation-key="{{ item.key }}"
+            data-complete="{{ item.completed|yesno:'true,false' }}">
+          <div class="flex min-w-0 flex-1 items-start gap-3">
+            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border {% if item.skipped %}border-border bg-secondary text-muted-foreground{% elif item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
+              {% if item.skipped %}<i data-lucide="forward" class="h-4 w-4" aria-hidden="true"></i>{% elif item.completed %}<i data-lucide="check" class="h-4 w-4" aria-hidden="true"></i>{% else %}<span class="text-xs font-semibold">{{ forloop.counter }}</span>{% endif %}
+            </span>
+            <div class="min-w-0 pt-0.5">
+              <h4 class="flex flex-wrap items-center gap-2 text-sm font-semibold text-foreground">{{ item.title }}{% if item.skipped %}<span class="text-xs font-medium text-muted-foreground">Skipped</span>{% endif %}</h4>
+              <p class="mt-0.5 text-sm text-muted-foreground">{{ item.description }}</p>
+            </div>
+          </div>
+          <div class="shrink-0 pl-11 sm:pl-0">
+            {% if item.completed or item.skipped %}
+            <a href="{{ item.url }}" class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-completed-action-{{ item.key }}{% else %}{{ checklist_testid }}-completed-action-{{ item.key }}{% endif %}">
+              {{ item.cta_label }}
+              <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+            </a>
+            {% else %}
+            <div class="flex items-center justify-end gap-3">
+              {% if checklist_allow_skip %}<button type="button"
+                      class="inline-flex min-h-[44px] items-center justify-center px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                      aria-label="Skip {{ item.title }}"
+                      data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-skip-{{ item.key }}{% else %}{{ checklist_testid }}-skip-{{ item.key }}{% endif %}"
+                      data-skip-activation="{{ item.dismissal_key }}">Skip</button>{% endif %}
+              <a href="{{ item.url }}" class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' and item.key == 'onboarding' %}onboarding-prompt-cta{% elif checklist_testid == 'free-activation-checklist' and item.key == 'slack' %}slack-account-card-join{% elif checklist_testid == 'free-activation-checklist' %}free-activation-action-{{ item.key }}{% else %}{{ checklist_testid }}-action-{{ item.key }}{% endif %}"{% if checklist_testid == 'free-activation-checklist' and item.key == 'sprints' %} data-complete-card="free_activation_sprint_guide_seen"{% endif %}>
+                {{ item.cta_label }}
+                <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </li>
+        {% endfor %}
+      </ol>
+    </div>

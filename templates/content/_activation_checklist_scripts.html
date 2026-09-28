@@ -1,0 +1,77 @@
+<script>
+// Persist per-user checklist choices through the shared dashboard dismissal
+// endpoint. Both the main dashboard and course home use this behavior.
+(function() {
+  function getCsrfToken() {
+    var cookies = document.cookie.split(';');
+    for (var i = 0; i < cookies.length; i++) {
+      var cookie = cookies[i].trim();
+      if (cookie.startsWith('csrftoken=')) {
+        return cookie.substring('csrftoken='.length);
+      }
+    }
+    return '';
+  }
+
+  function persistCard(card) {
+    return fetch('/account/api/dismiss-card', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': getCsrfToken(),
+      },
+      body: JSON.stringify({ card: card }),
+    }).then(function(response) {
+      return response.json().then(function(data) {
+        if (!response.ok || data.status !== 'ok') {
+          throw new Error('Could not save checklist choice');
+        }
+        return data;
+      });
+    });
+  }
+
+  document.querySelectorAll('[data-dismiss-card]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      var container = button.closest('[data-dismiss-card-container]');
+      button.disabled = true;
+      persistCard(button.getAttribute('data-dismiss-card'))
+        .then(function() {
+          if (container) container.remove();
+        })
+        .catch(function() {
+          button.disabled = false;
+        });
+    });
+  });
+
+  document.querySelectorAll('[data-complete-card]').forEach(function(link) {
+    link.addEventListener('click', function(event) {
+      event.preventDefault();
+      var destination = link.href;
+      link.setAttribute('aria-disabled', 'true');
+      persistCard(link.getAttribute('data-complete-card'))
+        .then(function() {
+          window.location.assign(destination);
+        })
+        .catch(function() {
+          link.removeAttribute('aria-disabled');
+          window.location.assign(destination);
+        });
+    });
+  });
+
+  document.querySelectorAll('[data-skip-activation]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      button.disabled = true;
+      persistCard(button.getAttribute('data-skip-activation'))
+        .then(function() {
+          window.location.reload();
+        })
+        .catch(function() {
+          button.disabled = false;
+        });
+    });
+  });
+})();
+</script>

@@ -6,74 +6,7 @@
 <div class="space-y-12 sm:space-y-16" data-testid="dashboard-commitment-zones">
   {% if show_activation_checklist %}
   <section data-testid="dashboard-getting-started" data-dismiss-card-container>
-    <div class="overflow-hidden rounded-lg border border-border bg-card" data-testid="free-activation-checklist">
-      <div class="relative border-b border-border p-6">
-        {% if activation_checklist_all_complete %}
-        <button type="button"
-                class="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                aria-label="Dismiss getting started"
-                data-testid="free-activation-dismiss"
-                data-dismiss-card="free_activation_checklist">
-          <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
-        </button>
-        {% endif %}
-        <div class="pr-10 sm:pr-12">
-          <p class="text-xs font-medium uppercase tracking-widest text-accent">Getting started</p>
-          <div class="mt-1 min-w-0">
-            {% if free_activation_completed_count == free_activation_total_count %}
-            <h3 class="text-lg font-semibold tracking-tight text-foreground">You're ready to go</h3>
-            <p class="mt-1 text-sm text-muted-foreground">Your account is set up for learning and community activities.</p>
-            {% else %}
-            <h3 class="text-lg font-semibold tracking-tight text-foreground">Set up your account</h3>
-            {% endif %}
-          </div>
-        </div>
-        <p class="mt-3 text-right text-sm font-medium text-foreground" data-testid="free-activation-progress-copy">
-          {{ free_activation_completed_count }} of {{ free_activation_total_count }} complete
-        </p>
-        <div class="mt-2 h-2 overflow-hidden rounded-full bg-secondary" aria-hidden="true" data-testid="free-activation-progress-bar">
-          <div class="h-full rounded-full bg-accent transition-all" style="width: {{ free_activation_percentage }}%"></div>
-        </div>
-      </div>
-      <ol class="divide-y divide-border">
-        {% for item in free_activation_checklist_items %}
-        <li class="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:px-6"
-            data-testid="{% if item.key == 'onboarding' and not item.completed %}onboarding-prompt{% elif item.key == 'slack' and not item.completed %}dashboard-slack-callout{% else %}free-activation-item-{{ item.key }}{% endif %}"
-            data-activation-key="{{ item.key }}"
-            data-complete="{{ item.completed|yesno:'true,false' }}">
-          <div class="flex min-w-0 flex-1 items-start gap-3">
-            <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border {% if item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
-              {% if item.completed %}<i data-lucide="check" class="h-4 w-4" aria-hidden="true"></i>{% else %}<span class="text-xs font-semibold">{{ forloop.counter }}</span>{% endif %}
-            </span>
-            <div class="min-w-0 pt-0.5">
-              <h4 class="text-sm font-semibold text-foreground">{{ item.title }}</h4>
-              <p class="mt-0.5 text-sm text-muted-foreground">{{ item.description }}</p>
-            </div>
-          </div>
-          <div class="shrink-0 pl-11 sm:pl-0">
-            {% if item.completed %}
-            <a href="{{ item.url }}" class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}" data-testid="free-activation-completed-action-{{ item.key }}">
-              {{ item.cta_label }}
-              <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
-            </a>
-            {% else %}
-            <div class="flex items-center justify-end gap-3">
-              <button type="button"
-                      class="inline-flex min-h-[44px] items-center justify-center px-1 text-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                      aria-label="Skip {{ item.title }}"
-                      data-testid="free-activation-skip-{{ item.key }}"
-                      data-skip-activation="{{ item.dismissal_key }}">Skip</button>
-              <a href="{{ item.url }}" class="{% button_classes 'secondary' 'w-full justify-center sm:w-auto' %}" data-testid="{% if item.key == 'onboarding' %}onboarding-prompt-cta{% elif item.key == 'slack' %}slack-account-card-join{% else %}free-activation-action-{{ item.key }}{% endif %}"{% if item.key == 'sprints' %} data-complete-card="free_activation_sprint_guide_seen"{% endif %}>
-                {{ item.cta_label }}
-                <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
-              </a>
-            </div>
-            {% endif %}
-          </div>
-        </li>
-        {% endfor %}
-      </ol>
-    </div>
+    {% include "content/_activation_checklist.html" with checklist_testid="free-activation-checklist" checklist_eyebrow="Getting started" checklist_title="Set up your account" checklist_complete_title="You're ready to go" checklist_complete_description="Your account is set up for learning and community activities." checklist_items=free_activation_checklist_items checklist_completed_count=free_activation_completed_count checklist_total_count=free_activation_total_count checklist_percentage=free_activation_percentage checklist_all_complete=activation_checklist_all_complete checklist_allow_dismiss=True checklist_allow_skip=True %}
   </section>
   {% endif %}
 

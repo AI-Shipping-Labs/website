@@ -709,6 +709,9 @@ DISMISSABLE_DASHBOARD_CARDS = frozenset({
     "slack_join",
 })
 PLAN_CARRY_OVER_DISMISS_PREFIX = "plan_carry_over_prompt:"
+COURSE_CHECKLIST_DISMISS_PREFIX = "course_checklist_skip:"
+COURSE_CHECKLIST_CARD_DISMISS_PREFIX = "course_checklist_dismiss:"
+COURSE_CHECKLIST_ITEM_KEYS = frozenset({"orientation", "lesson", "homework"})
 
 
 def _is_owned_plan_carry_over_dismissal(card, user):
@@ -729,12 +732,39 @@ def _is_owned_plan_carry_over_dismissal(card, user):
     return Plan.objects.filter(pk=int(raw_plan_id), member=user).exists()
 
 
+def _is_accessible_course_checklist_dismissal(card, user):
+    """Validate course checklist skips and completed-card dismissals."""
+    if (
+        not isinstance(card, str)
+        or not card.startswith((
+            COURSE_CHECKLIST_DISMISS_PREFIX,
+            COURSE_CHECKLIST_CARD_DISMISS_PREFIX,
+        ))
+    ):
+        return False
+    parts = card.split(':')
+    is_skip = card.startswith(COURSE_CHECKLIST_DISMISS_PREFIX)
+    if is_skip and (len(parts) != 3 or parts[2] not in COURSE_CHECKLIST_ITEM_KEYS):
+        return False
+    if not is_skip and len(parts) != 2:
+        return False
+
+    from content.access import can_access
+    from content.models import Course
+
+    course = Course.objects.filter(slug=parts[1], status='published').first()
+    return bool(course and can_access(user, course))
+
+
 def _is_valid_dashboard_dismissal(card, user):
     if not isinstance(card, str):
         return False
     if card in DISMISSABLE_DASHBOARD_CARDS:
         return True
-    return _is_owned_plan_carry_over_dismissal(card, user)
+    return (
+        _is_owned_plan_carry_over_dismissal(card, user)
+        or _is_accessible_course_checklist_dismissal(card, user)
+    )
 
 
 @login_required
@@ -749,8 +779,9 @@ def dismiss_dashboard_card(request):
     operator-facing ``IntegrationSetting`` framework. Modeled on
     ``email_preferences_view``:
 
-    - Validates ``card`` against :data:`DISMISSABLE_DASHBOARD_CARDS`
-      or the owner-scoped ``plan_carry_over_prompt:<plan_id>`` key;
+    - Validates ``card`` against :data:`DISMISSABLE_DASHBOARD_CARDS`,
+      an accessible course checklist item, or the owner-scoped
+      ``plan_carry_over_prompt:<plan_id>`` key;
       an unknown, missing, malformed, or non-owned key returns ``400``
       with an ``error`` and does not modify ``dashboard_dismissals``.
     - Idempotent: adds the key only if absent, so dismissing an

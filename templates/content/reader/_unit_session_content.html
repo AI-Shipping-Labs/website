@@ -2,11 +2,10 @@
 {% if unit_session_entry %}
   {% with entry=unit_session_entry %}
   <div class="mb-8" data-testid="unit-session-content">
-    <div class="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
-      <span class="font-medium text-foreground">{{ entry.event.title }}</span>
-      {% include "events/_event_time_display.html" with event_time_display=entry.time_display %}
+    <div class="mb-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
+      {% include "events/_event_time_display.html" with event_time_display=entry.time_display event_time_hide_zone=True %}
       <a href="{{ entry.event.get_absolute_url }}"
-         class="inline-flex min-h-[36px] items-center gap-1 text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+         class="inline-flex items-center gap-1 text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
          data-testid="unit-session-event-details">
         Event details
         <i data-lucide="arrow-up-right" class="h-3.5 w-3.5" aria-hidden="true"></i>

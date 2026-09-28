@@ -6,5 +6,5 @@
     data-end-utc="{{ event_time_display.end_utc_iso }}"
     data-default-timezone="{{ event_time_display.fallback_timezone }}"
     data-browser-timezone-enabled="{% if event_time_display.browser_timezone_enabled %}true{% else %}false{% endif %}"
-  >{{ event_time_display.fallback_range }}</span>
+  >{% if event_time_hide_zone %}{{ event_time_display.fallback_range|cut:event_time_display.fallback_timezone }}{% else %}{{ event_time_display.fallback_range }}{% endif %}</span>
 </span>

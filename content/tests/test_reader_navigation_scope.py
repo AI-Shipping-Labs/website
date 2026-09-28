@@ -89,6 +89,8 @@ class ReaderNavigationScopeTest(TestCase):
         response = self.reader(self.middle)
         sidebar = self.sidebar(response)
         self.assertNotIn('data-testid="reader-previous-module"', sidebar)
+        # A missing neighbour stays in the icon group as a disabled control.
+        self.assertIn('data-testid="reader-previous-module-disabled"', sidebar)
         self.assertIn('href="/courses/scoped-reader/week-2"', sidebar)
         self.assertIn('href="/courses/scoped-reader/home/syllabus"', sidebar)
         first = self.reader(self.first)

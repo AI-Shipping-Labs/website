@@ -42,7 +42,8 @@ Cross-cutting:
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models import F, Q
+from django.db.models import Case, F, IntegerField, Q, Value, When
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -55,6 +56,7 @@ from accounts.services.slack_identity import (
     normalize_slack_user_id,
 )
 from accounts.utils.bounce import mark_permanent_bounce, record_soft_bounce
+from accounts.utils.display import display_name
 from accounts.utils.tags import (
     add_tag,
     normalize_tag,
@@ -72,6 +74,7 @@ from api.serializers.crm import (
     serialize_crm_record_for_operator,
     serialize_crm_record_summary,
 )
+from api.serializers.datetime import isoformat_or_none
 from api.serializers.users import (
     serialize_email_log,
     serialize_ses_event,
@@ -82,6 +85,14 @@ from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
 from community.tasks.slack_membership import check_user_slack_membership
+from content.models.course import (
+    UNIT_KIND_CHECKLIST_ITEM,
+    UNIT_KIND_EVENT,
+    UNIT_KIND_HOMEWORK,
+    UNIT_KIND_LESSON,
+    Course,
+    UserCourseProgress,
+)
 from crm.models import CRMRecord
 from crm.services.activity_context import (
     ACTIVITY_CATEGORIES,
@@ -1026,6 +1037,286 @@ def user_activity(request, email):
                 serialize_activity_for_api(activity)
                 for activity in context["activities"]
             ],
+        },
+        status=200,
+    )
+
+
+COURSE_PROGRESS_KINDS = (
+    UNIT_KIND_LESSON,
+    UNIT_KIND_HOMEWORK,
+    UNIT_KIND_EVENT,
+    UNIT_KIND_CHECKLIST_ITEM,
+)
+
+_COURSE_PROGRESS_EXAMPLE = {
+    "id": 91,
+    "completed_at": "2026-09-20T15:04:00+00:00",
+    "course": {"id": 4, "slug": "buildcamp", "title": "AI Engineering Buildcamp"},
+    "module": {
+        "id": 12,
+        "slug": "week-1",
+        "title": "Week 1",
+        "sort_order": 1,
+        "parent": None,
+    },
+    "unit": {
+        "id": 40,
+        "slug": "intro",
+        "title": "Intro",
+        "kind": "lesson",
+        "sort_order": 1,
+        "is_bonus": False,
+        "url": "/courses/buildcamp/week-1/intro",
+    },
+}
+
+
+def _parse_course_progress_kind(raw):
+    """Return a unit kind, or an error response.
+
+    Blank and omitted mean every kind. Anything else must be one of
+    ``COURSE_PROGRESS_KINDS`` after strip and lowercase. ``details.value``
+    keeps the raw query string.
+    """
+    if raw is None:
+        return None, None
+    normalized = raw.strip().lower()
+    if not normalized:
+        return None, None
+    if normalized not in COURSE_PROGRESS_KINDS:
+        return None, error_response(
+            f"Invalid unit kind: {raw!r}",
+            "validation_error",
+            status=422,
+            details={
+                "field": "kind",
+                "value": raw,
+                "allowed": list(COURSE_PROGRESS_KINDS),
+            },
+        )
+    return normalized, None
+
+
+def _parse_course_progress_course(raw):
+    """Return a course slug, or an error response.
+
+    Blank and omitted mean every course. A non-blank value is an exact
+    ``Course.slug`` match. Unknown slugs are 404, including drafts that
+    do not exist. A known course with zero rows is not an error.
+    """
+    if raw is None:
+        return None, None
+    slug = raw.strip()
+    if not slug:
+        return None, None
+    if not Course.objects.filter(slug=slug).exists():
+        return None, error_response(
+            "Course not found",
+            "course_not_found",
+            status=404,
+        )
+    return slug, None
+
+
+def _module_ref(module):
+    return {
+        "id": module.id,
+        "slug": module.slug,
+        "title": module.title,
+        "sort_order": module.sort_order,
+    }
+
+
+def _serialize_course_progress(row):
+    unit = row.unit
+    module = unit.module
+    parent = module.parent
+    course = module.course
+    return {
+        "id": row.id,
+        "completed_at": isoformat_or_none(row.completed_at),
+        "course": {
+            "id": course.id,
+            "slug": course.slug,
+            "title": course.title,
+        },
+        "module": {
+            **_module_ref(module),
+            "parent": None if parent is None else _module_ref(parent),
+        },
+        "unit": {
+            "id": unit.id,
+            "slug": unit.slug,
+            "title": unit.title,
+            "kind": unit.kind,
+            "sort_order": unit.sort_order,
+            "is_bonus": unit.effective_is_bonus,
+            "url": unit.get_absolute_url(),
+        },
+    }
+
+
+def _course_progress_queryset(user, *, course_slug, kind):
+    """Completed units for ``user``, in syllabus order.
+
+    Top-level position is the parent module when the unit sits under a
+    child module, otherwise the unit's own module. A top-level unit sorts
+    as child sort 0 so it stays with that module before any nested sibling
+    would. ``completed_at`` null is not a completion.
+    """
+    qs = UserCourseProgress.objects.filter(
+        user=user,
+        completed_at__isnull=False,
+    )
+    if course_slug is not None:
+        qs = qs.filter(unit__module__course__slug=course_slug)
+    if kind is not None:
+        qs = qs.filter(unit__kind=kind)
+    return (
+        qs.select_related(
+            "unit__module__course",
+            "unit__module__parent",
+        )
+        .annotate(
+            _top_sort=Coalesce(
+                "unit__module__parent__sort_order",
+                "unit__module__sort_order",
+            ),
+            _top_id=Coalesce(
+                "unit__module__parent__id",
+                "unit__module__id",
+            ),
+            _child_sort=Case(
+                When(
+                    unit__module__parent__isnull=False,
+                    then=F("unit__module__sort_order"),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+            _child_id=Case(
+                When(
+                    unit__module__parent__isnull=False,
+                    then=F("unit__module__id"),
+                ),
+                default=Value(0),
+                output_field=IntegerField(),
+            ),
+        )
+        .order_by(
+            "unit__module__course__slug",
+            "_top_sort",
+            "_top_id",
+            "_child_sort",
+            "_child_id",
+            "unit__sort_order",
+            "unit_id",
+        )
+    )
+
+
+@token_required
+@csrf_exempt
+@require_methods("GET")
+@openapi_spec(
+    tag="Users",
+    summary="List course units a member has marked complete",
+    methods={
+        "GET": {
+            "summary": "List course unit completions",
+            "description": (
+                "Staff-only read of ``UserCourseProgress`` rows whose "
+                "``completed_at`` is set. Opening a lesson does not count. "
+                "Every unit kind is included unless ``kind`` is set. Draft "
+                "courses and bonus units are included. No write, and no "
+                "audit row."
+            ),
+            "query": {
+                "course": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "Exact course slug. Unknown slug is 404 "
+                        "course_not_found. Blank means every course."
+                    ),
+                },
+                "kind": {
+                    "type": "string",
+                    "required": False,
+                    "description": (
+                        "One of lesson, homework, event, checklist_item. "
+                        "Blank means every kind."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Completions in syllabus order.",
+                    "example": {
+                        "user": {
+                            "email": "gmajivu@gmail.com",
+                            "display_name": "Gabriel Majivu",
+                        },
+                        "count": 1,
+                        "completions": [_COURSE_PROGRESS_EXAMPLE],
+                    },
+                },
+                404: {
+                    "description": (
+                        "Unknown primary email (user_not_found) or unknown "
+                        "course slug (course_not_found)."
+                    ),
+                    "example": {
+                        "error": "User not found",
+                        "code": "user_not_found",
+                    },
+                },
+                422: {
+                    "description": "Invalid kind.",
+                    "example": {
+                        "error": "Invalid unit kind: 'nope'",
+                        "code": "validation_error",
+                        "details": {
+                            "field": "kind",
+                            "value": "nope",
+                            "allowed": list(COURSE_PROGRESS_KINDS),
+                        },
+                    },
+                },
+            },
+        },
+    },
+)
+def user_course_progress(request, email):
+    """``GET /api/users/<email>/course-progress``."""
+    user = find_user_by_primary_email(email)
+    if user is None:
+        return user_not_found_response()
+
+    kind, err = _parse_course_progress_kind(request.GET.get("kind"))
+    if err is not None:
+        return err
+    course_slug, err = _parse_course_progress_course(request.GET.get("course"))
+    if err is not None:
+        return err
+
+    completions = [
+        _serialize_course_progress(row)
+        for row in _course_progress_queryset(
+            user,
+            course_slug=course_slug,
+            kind=kind,
+        )
+    ]
+    return JsonResponse(
+        {
+            "user": {
+                "email": user.email,
+                "display_name": display_name(user),
+            },
+            "count": len(completions),
+            "completions": completions,
         },
         status=200,
     )

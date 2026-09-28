@@ -201,6 +201,62 @@ def users_activity(email, limit, category, fmt):
     emit(get_client().get(f"{API}/users/{email}/activity", params=params), fmt)
 
 
+_COURSE_PROGRESS_TABLE_COLUMNS = [
+    "completed_at",
+    "course_slug",
+    "module_title",
+    "unit_kind",
+    "unit_title",
+    "unit_url",
+]
+
+
+def _course_progress_table_rows(data):
+    completions = data.get("completions", []) if isinstance(data, dict) else []
+    rows = []
+    for item in completions:
+        course = item.get("course") or {}
+        module = item.get("module") or {}
+        unit = item.get("unit") or {}
+        rows.append({
+            "completed_at": item.get("completed_at"),
+            "course_slug": course.get("slug"),
+            "module_title": module.get("title"),
+            "unit_kind": unit.get("kind"),
+            "unit_title": unit.get("title"),
+            "unit_url": unit.get("url"),
+        })
+    return rows
+
+
+@users.command("course-progress")
+@click.argument("email")
+@click.option("--course", default=None, help="Exact course slug.")
+@click.option(
+    "--kind",
+    default=None,
+    help="Unit kind: lesson, homework, event, or checklist_item.",
+)
+@format_option
+def users_course_progress(email, course, kind, fmt):
+    """Course units this member has marked complete."""
+    params = {}
+    if course:
+        params["course"] = course
+    if kind:
+        params["kind"] = kind
+    kwargs = {"params": params} if params else {}
+    data = get_client().get(f"{API}/users/{email}/course-progress", **kwargs)
+    if fmt == "table":
+        emit(
+            _course_progress_table_rows(data),
+            fmt,
+            columns=_COURSE_PROGRESS_TABLE_COLUMNS,
+        )
+    else:
+        emit(data, fmt)
+
+
 @users.command("crm-record")
 @click.argument("email")
 @format_option

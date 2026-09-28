@@ -17,9 +17,6 @@ def select_display_cohort(course, user, requested_key=''):
     active = Cohort.objects.filter(
         course=course, mode='cohort', is_active=True,
     ).order_by('start_date', 'pk')
-    if requested_key and user.is_authenticated and user.is_staff:
-        cohort = active.filter(external_key__iexact=requested_key).first()
-        return cohort, cohort is not None
 
     if user.is_authenticated:
         enrollments = list(
@@ -31,11 +28,16 @@ def select_display_cohort(course, user, requested_key=''):
             if requested_key:
                 cohort = next(
                     (enrollment.cohort for enrollment in enrollments
-                     if enrollment.cohort.external_key.lower() == requested_key.lower()
-                     and enrollment.cohort.external_key),
+                     if enrollment.cohort.external_key
+                     and enrollment.cohort.external_key.lower() == requested_key.lower()),
                     None,
                 )
-                return cohort, False
+                if cohort is not None:
+                    return cohort, False
+                if user.is_staff:
+                    cohort = active.filter(external_key__iexact=requested_key).first()
+                    return cohort, cohort is not None
+                return None, False
             today = timezone.localdate()
             cohorts = [enrollment.cohort for enrollment in enrollments]
             current = [cohort for cohort in cohorts if cohort.is_active
@@ -50,6 +52,10 @@ def select_display_cohort(course, user, requested_key=''):
             if past:
                 return max(past, key=lambda cohort: (cohort.end_date, cohort.pk)), False
             return max(cohorts, key=lambda cohort: (cohort.start_date, cohort.pk)), False
+
+        if requested_key and user.is_staff:
+            cohort = active.filter(external_key__iexact=requested_key).first()
+            return cohort, cohort is not None
 
     if requested_key:
         cohort = active.filter(external_key__iexact=requested_key).first()

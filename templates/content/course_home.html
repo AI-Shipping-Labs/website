@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 
-{% block title %}{{ course.title }} course home | AI Shipping Labs{% endblock %}
+{% block title %}{{ course.title }} · {{ section|title }} | AI Shipping Labs{% endblock %}
 
 {% block body %}
 {% include "includes/header.html" %}
@@ -9,58 +9,88 @@
 <main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
   <div class="mx-auto max-w-3xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8 lg:px-8">
     <header class="mb-5 sm:mb-6">
-      <p class="text-sm font-medium text-muted-foreground">Course home</p>
+      <p class="text-sm font-medium text-muted-foreground">Course</p>
       <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
       {% if cohort %}
       <p class="mt-2 text-sm text-muted-foreground" data-testid="course-home-cohort">
         {{ cohort.name }}
-        {% if cohort.start_date and cohort.end_date %}
-          <span aria-hidden="true">·</span>
-          <time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>
-        {% endif %}
+        {% if cohort.mode == 'self_paced' %}<span aria-hidden="true"> · </span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true"> · </span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
       </p>
+      {% endif %}
+      {% if preview_cohorts|length > 1 %}
+      <nav class="mt-4 flex flex-wrap gap-2" aria-label="Cohort schedule">
+        {% for option in preview_cohorts %}<a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="inline-flex min-h-[36px] items-center rounded-full border px-3 text-sm {% if cohort.pk == option.pk %}border-accent bg-accent/10 text-foreground{% else %}border-border text-muted-foreground hover:text-foreground{% endif %}">{{ option.name }}</a>{% endfor %}
+      </nav>
       {% endif %}
     </header>
 
-    <nav class="mb-5 flex flex-wrap gap-x-6 border-b border-border text-sm font-medium" aria-label="Course pages">
-      <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" aria-current="page" class="inline-flex min-h-[44px] items-center border-b-2 border-accent text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Home</a>
-      <a href="{{ course.get_absolute_url }}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center border-b-2 border-transparent text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Course materials</a>
+    <nav class="mb-6 flex gap-5 overflow-x-auto border-b border-border text-sm font-medium" aria-label="Course pages">
+      <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
+      <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
+      <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" {% if section == 'sessions' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'sessions' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Live sessions</a>
+      <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" {% if section == 'homework' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'homework' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Homework</a>
+      <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" {% if section == 'projects' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'projects' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Projects</a>
     </nav>
 
-    <div class="space-y-4">
+    {% if section == 'home' %}
+    <div class="space-y-5">
       {% if not cohort %}
       <section class="rounded-xl border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
         <h2 id="course-home-no-cohort-heading" class="text-base font-semibold text-foreground">No cohort is linked to your account</h2>
-        <p class="mt-1 text-sm text-muted-foreground">This page shows course materials without cohort dates, deadlines, or live sessions. If you expected cohort access, contact the course support team.</p>
-        <a href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access" class="mt-3 inline-flex min-h-[44px] items-center text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-cohort-support">Contact course support</a>
+        <p class="mt-1 text-sm text-muted-foreground">Your cohort's deadlines and sessions will appear here once it is linked.</p>
+        <a href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access" class="mt-3 inline-flex min-h-[44px] items-center text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Contact course support</a>
       </section>
       {% endif %}
-
-      {% for row in orientation_rows %}
-      <section class="flex flex-col gap-3 rounded-xl border border-border bg-card p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5" aria-labelledby="course-home-get-started-heading" data-testid="course-home-get-started">
-        <div class="min-w-0">
-          <p class="text-xs font-semibold uppercase tracking-wide text-accent">Get started</p>
-          <h2 id="course-home-get-started-heading" class="mt-1 break-words text-base font-semibold text-foreground">{{ row.module.title }}</h2>
-        </div>
-        <a href="{{ row.url }}{{ cohort_query }}" class="{% button_classes 'secondary' size='md' extra='w-full justify-center sm:w-auto' %}" data-testid="course-home-open-orientation">Open orientation</a>
+      {% if course_checklist_items and course_checklist_visible %}
+      <section aria-label="Course checklist" data-testid="course-home-checklist" data-dismiss-card-container>
+        {% include "content/_activation_checklist.html" with checklist_testid="course-checklist" checklist_eyebrow="Getting started" checklist_title="Get set up for this course" checklist_complete_title="You're underway" checklist_complete_description="You completed the first steps for this course." checklist_items=course_checklist_items checklist_completed_count=course_checklist_completed_count checklist_total_count=course_checklist_items|length checklist_percentage=course_checklist_percentage checklist_all_complete=course_checklist_all_complete checklist_all_resolved=course_checklist_all_resolved checklist_allow_dismiss=True checklist_dismissal_key=course_checklist_dismissal_key checklist_allow_skip=True checklist_progress_label="done" %}
       </section>
-      {% endfor %}
-
-      {% include "content/course_home/_progress.html" %}
-      {% include "content/course_home/_urgent.html" %}
+      {% endif %}
+      <section aria-label="Search the syllabus" data-cb-syllabus>
+        {% url 'course_syllabus' slug=course.slug as course_syllabus_url %}
+        {% with course_syllabus_search_url=course_syllabus_url|add:cohort_query %}
+        {% include "curriculum/includes/syllabus_search.html" with search_id="course-home-syllabus-search" results_id="course-home-syllabus-results" search_submit_url=course_syllabus_search_url search_input_class="mt-2 block w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" search_label_class="sr-only" search_status_class="sr-only" %}
+        {% endwith %}
+        <div hidden aria-hidden="true">
+          {% include "content/_course_syllabus.html" with section="home_search_index" %}
+        </div>
+      </section>
       {% include "content/course_home/_next_action.html" %}
-      {% include "content/course_home/_live_sessions.html" %}
+      {% include "content/course_home/_deadlines.html" %}
+      {% if home_office_hours %}
+      {% include "content/course_home/_live_sessions.html" with live_session_schedule=home_office_hours section="home" %}
+      {% endif %}
     </div>
-
-    {% if help_links %}
-    <nav class="mt-6 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-4 text-sm" aria-label="Course help and links" data-testid="course-home-help-links">
-      <span class="font-medium text-muted-foreground">Need help?</span>
-      {% for label, url in help_links %}
-      <a href="{{ url }}" class="inline-flex min-h-[44px] items-center text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"{% if '://' in url %} target="_blank" rel="noopener noreferrer"{% endif %}>{{ label }}</a>
-      {% endfor %}
-    </nav>
+    {% elif section == 'syllabus' %}
+      {% include "content/_course_syllabus.html" %}
+    {% elif section == 'sessions' %}
+      <div class="mb-5"><h2 id="course-live-sessions-heading" class="text-xl font-semibold text-foreground">Live sessions</h2><p class="mt-1 text-sm text-muted-foreground">All sessions for your course, with recaps where available.</p></div>
+      {% if not live_session_schedule %}<p class="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">{% if cohort %}No office hours are scheduled for this cohort yet.{% else %}Your office hours will appear once a cohort is linked to your account.{% endif %}</p>{% endif %}
+      {% include "content/course_home/_live_sessions.html" %}
+    {% elif section == 'homework' %}
+      <div class="mb-5"><h2 id="course-homework-heading" class="text-xl font-semibold text-foreground">Homework</h2><p class="mt-1 text-sm text-muted-foreground">Assignments and deadlines for your cohort.</p></div>
+      {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows completed_deadline_rows=completed_homework_rows deadline_heading="Homework deadlines" %}
+    {% elif section == 'projects' %}
+      <div class="mb-5"><h2 id="course-projects-heading" class="text-xl font-semibold text-foreground">Projects</h2><p class="mt-1 text-sm text-muted-foreground">Project submission deadlines.</p></div>
+      {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows completed_deadline_rows=completed_project_rows deadline_heading="Project deadlines" %}
+      {% if review_rows %}
+      <section class="mt-10" aria-labelledby="course-peer-reviews-heading">
+        <h2 id="course-peer-reviews-heading" class="text-lg font-semibold text-foreground">Peer reviews</h2>
+        <p class="mt-1 text-sm text-muted-foreground">Available after you submit a project and reviews are assigned.</p>
+        <ol class="mt-3 divide-y divide-border">{% for item in review_rows %}{% include "content/course_home/_deadline_row.html" with item=item %}{% endfor %}</ol>
+      </section>
+      {% endif %}
+    {% endif %}
+    {% if section == 'home' and cohort and homework_home_rows or section == 'home' and home_office_hours or section == 'homework' and homework_rows or section == 'projects' and project_rows or section == 'sessions' and live_session_schedule %}
+      {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-6" only %}
     {% endif %}
   </div>
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{% if section == 'home' %}
+{% include "content/_activation_checklist_scripts.html" %}
+{% endif %}
 {% endblock %}

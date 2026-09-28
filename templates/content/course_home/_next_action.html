@@ -1,6 +1,6 @@
 {% load accounts_extras member_badges %}
 <section class="rounded-xl border border-border bg-card p-5 sm:p-7" aria-labelledby="course-focus-heading" data-testid="course-home-focus">
-  <div class="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+  <div>
     <div class="min-w-0">
       <p class="text-xs font-semibold uppercase tracking-wide text-accent"{% if current_week and cohort_status == 'in progress' %} data-testid="course-home-week"{% endif %}>
         {% if cohort and cohort.mode == 'self_paced' %}Your next focus{% elif current_week and cohort_status == 'in progress' %}Cohort week {{ current_week }}{% elif cohort_status == 'upcoming' %}First cohort module{% elif cohort_status == 'completed' %}Final cohort module{% elif cohort %}Cohort focus{% else %}Your next focus{% endif %}
@@ -12,11 +12,11 @@
       {% if cohort_status == 'upcoming' and cohort.start_date %}<p class="mt-2 text-sm text-muted-foreground">Your cohort starts <time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_full_date }}</time>.</p>{% elif cohort_status == 'completed' %}<p class="mt-2 text-sm text-muted-foreground">Your cohort has ended. Pick up with the next lesson that is not marked complete.</p>{% endif %}
     </div>
     {% if focus_module and focus_module_row and focus_module_row.total %}
-    <p class="mt-2 shrink-0 text-xs text-muted-foreground sm:mt-1">{{ focus_module_row.completed }} of {{ focus_module_row.total }} materials marked complete in this module</p>
+    <p class="mt-2 text-sm text-muted-foreground">{{ focus_module_row.completed }} of {{ focus_module_row.total }} materials marked complete in this module</p>
     {% endif %}
   </div>
 
-  <div class="mt-6 grid gap-6 border-t border-border pt-5 md:grid-cols-2 md:gap-8">
+  <div class="mt-6 border-t border-border pt-5">
     <section class="min-w-0" aria-labelledby="course-home-position-heading" data-testid="course-home-position">
       <div class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <h3 id="course-home-position-heading" class="text-sm font-semibold text-foreground">Your learning position</h3>
@@ -40,31 +40,6 @@
       {% endif %}
     </section>
 
-    {% if focus_work_items %}
-    <section class="min-w-0" aria-labelledby="course-home-work-heading" data-testid="course-home-weekly-work">
-      <h3 id="course-home-work-heading" class="text-sm font-semibold text-foreground">Homework and project work</h3>
-      <ul class="mt-2 divide-y divide-border">
-        {% for work in focus_work_items %}
-        <li class="flex min-w-0 items-start justify-between gap-3 py-3 first:pt-1 last:pb-0">
-          <div class="min-w-0">
-            <p class="break-words text-sm font-medium text-foreground">{{ work.unit.title }}</p>
-            {% if work.commitment.status %}
-            <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              {% member_label_badge work.commitment.status tone=work.commitment.status_tone size="xs" %}
-              {% if work.due_soon %}<span class="font-medium text-accent">Due soon</span>{% endif %}
-              {% if work.commitment.when %}<span>Due <time datetime="{{ work.commitment.when.isoformat }}">{{ work.commitment.when_label }}</time></span>{% endif %}
-            </p>
-            {% elif work.available_date %}
-            <p class="mt-1 text-xs text-muted-foreground">Available <time datetime="{{ work.available_date|form_date_value }}">{{ work.available_date|member_short_date }}</time></p>
-            {% endif %}
-            {% if work.commitment.detail %}<p class="mt-1 text-xs text-muted-foreground">{{ work.commitment.detail }}</p>{% endif %}
-          </div>
-          {% if work.url %}<a href="{{ work.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-weekly-work-link">{{ work.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
-        </li>
-        {% endfor %}
-      </ul>
-    </section>
-    {% endif %}
   </div>
 
 </section>

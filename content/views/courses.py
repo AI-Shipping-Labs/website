@@ -1,12 +1,14 @@
 from collections import Counter
 from dataclasses import replace
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from community_base.homework_steps.state import homework_state_for
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import Http404, JsonResponse
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -29,6 +31,7 @@ from content.models import (
     UserCourseProgress,
 )
 from content.models.peer_review import CourseProject, ProjectSubmission
+from content.models.homework import Submission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
@@ -67,6 +70,7 @@ from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.display_time import build_event_time_display
+from events.services.timeline import group_timeline_days
 
 
 def _build_live_session_entries(events_qs, user):
@@ -175,7 +179,7 @@ def courses_list(request):
 
 @ensure_csrf_cookie
 def course_detail(request, slug):
-    """Course detail page: always visible for SEO.
+    """Public course overview; enrolled learners enter their course home.
 
     Shows title, description, instructor bio, full syllabus, tags,
     discussion link. Access-dependent elements:
@@ -187,6 +191,12 @@ def course_detail(request, slug):
     user = request.user
 
     has_access = can_access(user, course)
+    if request.GET.get('view') != 'overview' and has_access and is_enrolled(user, course):
+        destination = f'/courses/{course.slug}/home'
+        cohort_key = request.GET.get('cohort', '')
+        if cohort_key:
+            destination += f'?{urlencode({"cohort": cohort_key})}'
+        return redirect(destination)
     if has_access:
         # Issue #1674: "first gains course access" — the other of the two
         # points the spec names for implicit self-paced cohort membership.
@@ -443,7 +453,7 @@ def course_detail(request, slug):
 
 
 @login_required(login_url='/accounts/login/')
-def course_home(request, slug):
+def course_home(request, slug, section='home'):
     """Private learner orientation; the public overview remains at the course URL."""
     course = get_object_or_404(Course, slug=slug, status='published')
     if not can_access(request.user, course):
@@ -452,9 +462,9 @@ def course_home(request, slug):
     ensure_self_paced_cohort_enrollment(request.user, course)
     requested = request.GET.get('cohort', '')
     cohort, is_preview = select_display_cohort(course, request.user, requested)
-    if requested and (cohort is None or is_preview):
+    if requested and (cohort is None or (is_preview and not request.user.is_staff)):
         raise Http404('Cohort not found')
-    if is_preview:
+    if is_preview and not requested:
         cohort = None
     if cohort is None:
         cohort = (
@@ -466,6 +476,12 @@ def course_home(request, slug):
         cohort = cohort.cohort if cohort else None
 
     context = build_course_home(course, request.user, cohort)
+    context['section'] = section
+    context['is_cohort_preview'] = bool(requested and is_preview)
+    if request.user.is_staff:
+        context['preview_cohorts'] = course.aisl_cohorts.filter(
+            mode='cohort', is_active=True,
+        ).order_by('start_date')
     context['total_units'] = course.total_units()
     context['completed_units'] = course.completed_units(request.user)
     context['progress_pct'] = (
@@ -487,10 +503,245 @@ def course_home(request, slug):
         context['recommended_live_session'] = next_live_session
         commitments['next_live_session'] = None
     context.update(commitments)
+    dated_sessions = [
+        {'kind': 'course_session', 'event': row['event'], 'session': row}
+        for row in context['live_session_schedule'] if row.get('event')
+    ]
+    dated_sessions.sort(key=lambda row: row['event'].start_datetime)
+    context['course_session_days'] = group_timeline_days(
+        dated_sessions, ZoneInfo(context['commitment_timezone']),
+    )
+    context['unscheduled_session_rows'] = [
+        row for row in context['live_session_schedule'] if not row.get('event')
+    ]
+    context['homework_focus_items'] = [
+        item for item in context['focus_work_items']
+        if item['action'] != 'Open project step'
+    ]
+    context['project_focus_items'] = [
+        item for item in context['focus_work_items']
+        if item['action'] == 'Open project step'
+    ]
+    context['deadline_rows'] = sorted(
+        context['open_assignments'],
+        key=lambda row: (row['when'] is None, row['when'] or timezone.now()),
+    )
+    context['completed_deadline_rows'] = sorted(
+        context['completed_assignments'],
+        key=lambda row: row['when'] or timezone.now(), reverse=True,
+    )
     context['cohort_query'] = (
         f'?{urlencode({"cohort": cohort.external_key})}'
         if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
     )
+    context['overview_url'] = (
+        f'{course.get_absolute_url()}?view=overview'
+        + (f'&{context["cohort_query"][1:]}' if context['cohort_query'] else '')
+    )
+    context['homework_rows'] = [
+        row for row in context['deadline_rows']
+        if row['kind'] == 'Homework'
+    ]
+    context['project_rows'] = [
+        row for row in context['deadline_rows']
+        if row['kind'] == 'Project'
+    ]
+    context['review_rows'] = [
+        row for row in context['deadline_rows']
+        if row['kind'] == 'Peer reviews' and row['action']
+    ]
+    focus_module_id = context['focus_module'].pk if context.get('focus_module') else None
+    context['completed_homework_rows'] = [
+        row for row in context['completed_deadline_rows']
+        if row['kind'] == 'Homework'
+    ]
+    context['completed_project_rows'] = [
+        row for row in context['completed_deadline_rows']
+        if row['kind'] == 'Project'
+    ]
+    context['homework_home_rows'] = [
+        row for row in context['homework_rows'] + context['completed_homework_rows']
+        if row.get('module_id') == focus_module_id
+    ] if focus_module_id else []
+    context['homework_home_fallback'] = False
+    if not context['homework_home_rows'] and context['homework_rows']:
+        # A teaching module can have no assignment of its own. Keep the next
+        # actual homework due visible on Home instead of an empty work card.
+        first_due = context['homework_rows'][0]['when']
+        context['homework_home_rows'] = (
+            [row for row in context['homework_rows'] if row['when'] == first_due]
+            if first_due is not None else context['homework_rows'][:2]
+        )
+        context['homework_home_fallback'] = True
+    context['project_home_rows'] = [
+        row for row in context['project_rows'] + context['completed_project_rows']
+        if row.get('module_id') == focus_module_id
+    ] if focus_module_id else []
+    # Only a dated cohort gives these assignments a learner-specific calendar.
+    # Generic project rows remain useful as a course-work preview, but their
+    # stored dates must not read as this learner's deadlines.
+    context['show_deadline_dates'] = bool(cohort and cohort.mode == 'cohort')
+    context['next_home_session'] = next((
+        row for row in context['live_session_schedule']
+        if row['status'] != 'Past'
+    ), None)
+    context['latest_home_recap'] = next((
+        row for row in reversed(context['live_session_schedule'])
+        if row['recap_url']
+    ), None)
+    ordered_units = course_unit_service.get_all_units_ordered(course)
+    checklist_items = []
+
+    def checklist_item(*, key, title, description, url, cta_label, completed):
+        dismissal_key = f'course_checklist_skip:{course.slug}:{key}'
+        skipped = (
+            not completed
+            and dismissal_key in (request.user.dashboard_dismissals or [])
+        )
+        return {
+            'key': key,
+            'title': title,
+            'description': description,
+            'url': url,
+            'cta_label': cta_label,
+            'completed': completed,
+            'skipped': skipped,
+            'dismissal_key': dismissal_key,
+        }
+
+    first_orientation = next((
+        row for row in context['orientation_rows'] if row['total']
+    ), None)
+    if first_orientation:
+        orientation_module_id = first_orientation['module'].pk
+        first_orientation_unit = next((
+            unit for unit in ordered_units
+            if not unit.effective_is_bonus
+            and (unit.module.parent_id or unit.module_id) == orientation_module_id
+        ), None)
+    else:
+        first_orientation_unit = None
+    if first_orientation_unit:
+        checklist_items.append(checklist_item(
+            key='orientation', title='Get oriented',
+            description='Read the orientation, then use Mark as completed at the end.',
+            url=first_orientation_unit.get_absolute_url() + context['cohort_query'],
+            cta_label='Open orientation',
+            completed=UserCourseProgress.objects.filter(
+                user=request.user,
+                unit=first_orientation_unit,
+                completed_at__isnull=False,
+            ).exists(),
+        ))
+    orientation_module_id = (
+        first_orientation['module'].pk if first_orientation else None
+    )
+    first_lesson_unit = next((
+        unit for unit in ordered_units
+        if unit.kind == 'lesson'
+        and not unit.effective_is_bonus
+        and (unit.module.parent_id or unit.module_id) != orientation_module_id
+    ), None)
+    if first_lesson_unit:
+        checklist_items.append(checklist_item(
+            key='lesson', title='Start learning',
+            description='Read your first lesson, then mark it complete.',
+            url=first_lesson_unit.get_absolute_url() + context['cohort_query'],
+            cta_label='Open lesson',
+            completed=UserCourseProgress.objects.filter(
+                user=request.user,
+                unit=first_lesson_unit,
+                completed_at__isnull=False,
+            ).exists(),
+        ))
+    first_homework_unit = next((
+        unit for unit in ordered_units
+        if unit.kind == 'homework' and not unit.effective_is_bonus
+    ), None)
+    if first_homework_unit:
+        first_homework_completed = False
+        if first_homework_unit.content_id:
+            first_homework_submissions = Submission.objects.filter(
+                student=request.user,
+                homework__content_id=first_homework_unit.content_id,
+            )
+            if cohort:
+                first_homework_submissions = first_homework_submissions.filter(
+                    homework__cohort=cohort,
+                )
+            else:
+                first_homework_submissions = first_homework_submissions.filter(
+                    homework__cohort__course=course,
+                )
+            first_homework_completed = first_homework_submissions.exists()
+        checklist_items.append(checklist_item(
+            key='homework', title='Submit your first homework',
+            description='Practice the first lessons and share your work.',
+            url=first_homework_unit.get_absolute_url() + context['cohort_query'],
+            cta_label='Open homework',
+            completed=first_homework_completed,
+        ))
+    context['course_checklist_items'] = checklist_items
+    context['course_checklist_completed_count'] = sum(
+        item['completed'] or item['skipped'] for item in checklist_items
+    )
+    context['course_checklist_percentage'] = round(
+        context['course_checklist_completed_count'] / len(checklist_items) * 100
+    ) if checklist_items else 0
+    context['course_checklist_all_complete'] = bool(checklist_items) and all(
+        item['completed'] for item in checklist_items
+    )
+    context['course_checklist_all_resolved'] = bool(checklist_items) and all(
+        item['completed'] or item['skipped'] for item in checklist_items
+    )
+    context['course_checklist_dismissal_key'] = (
+        f'course_checklist_dismiss:{course.slug}'
+    )
+    context['course_checklist_visible'] = not (
+        context['course_checklist_all_resolved']
+        and context['course_checklist_dismissal_key']
+        in (request.user.dashboard_dismissals or [])
+    )
+    # Home renders the syllabus hidden as its search index, so every section
+    # gets the syllabus module context.
+    modules = course.get_syllabus()
+    progress_rows = UserCourseProgress.objects.filter(
+        user=request.user, unit__module__course=course,
+        completed_at__isnull=False,
+    ).values_list('unit_id', 'unit__module_id')
+    completed_unit_ids = set()
+    completed_counts = Counter()
+    for unit_id, module_id in progress_rows:
+        completed_unit_ids.add(unit_id)
+        completed_counts[module_id] += 1
+    projects = CourseProject.objects.filter(course=course).filter(
+        Q(cohort=cohort) | Q(cohort__isnull=True)
+    ).select_related('module')
+    projects_by_module = {}
+    for project in projects:
+        if project.module_id:
+            projects_by_module.setdefault(project.module_id, []).append(project)
+    unit_deadlines, module_deadline_summaries = build_deadline_context(course, cohort)
+    context.update({
+        'modules': modules,
+        'has_access': True,
+        'completed_unit_ids': completed_unit_ids,
+        'completed_count_by_module': dict(completed_counts),
+        'projects_by_module': projects_by_module,
+        'preview_project_ids': set(),
+        'module_week_ranges': {
+            module_id: course_unit_service.format_week_range(*week_range)
+            for module_id, week_range in course_unit_service.build_module_week_dates(
+                modules, cohort,
+                extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
+            ).items()
+        },
+        'unit_deadlines': unit_deadlines,
+        'module_deadline_summaries': module_deadline_summaries,
+        'schedule_cohort': cohort,
+        'schedule_is_preview': context['is_cohort_preview'],
+        'schedule_timezone': schedule_timezone_name(course, request.user),
+    })
     return render(request, 'content/course_home.html', context)
 
 

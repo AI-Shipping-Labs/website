@@ -115,6 +115,19 @@ class CourseHomeTests(TestCase):
         self.assertNotContains(overview, 'Your Progress')
         self.assertNotContains(overview, 'data-testid="course-home-progress"')
 
+    def test_enrolled_course_url_opens_home_and_overview_remains_available(self):
+        Enrollment.objects.create(user=self.user, course=self.course)
+        self.client.force_login(self.user)
+
+        self.assertRedirects(
+            self.client.get(self.course.get_absolute_url()),
+            f'{self.course.get_absolute_url()}/home',
+            fetch_redirect_response=False,
+        )
+        overview = self.client.get(f'{self.course.get_absolute_url()}?view=overview')
+        self.assertContains(overview, 'Syllabus')
+        self.assertContains(overview, 'data-testid="course-detail-home-link"')
+
     def test_lessons_take_priority_over_unscheduled_sessions(self):
         event = Unit.objects.create(
             module=self.first, title='Session 1', slug='session-1',
@@ -242,7 +255,7 @@ class CourseHomeTests(TestCase):
         self.assertContains(response, 'data-testid="course-home-no-cohort"')
         self.assertContains(response, 'data-testid="course-home-cohort-support"')
         self.assertContains(response, 'data-testid="course-home-get-started"')
-        self.assertContains(response, 'data-testid="course-home-weekly-work"')
+        self.assertContains(response, 'data-testid="course-home-undated-work"')
         self.assertEqual(response.context['live_session_schedule'], [])
         self.assertNotContains(response, cohort.name)
         self.assertNotContains(response, event.title)
@@ -277,7 +290,7 @@ class CourseHomeTests(TestCase):
         Enrollment.objects.create(user=self.user, course=python)
         self.client.force_login(self.user)
 
-        enrolled_detail = self.client.get('/courses/python-detail')
+        enrolled_detail = self.client.get('/courses/python-detail?view=overview')
 
         self.assertContains(enrolled_detail, 'data-testid="course-detail-enrolled-cohort"')
         self.assertContains(enrolled_detail, 'Self-paced')
@@ -295,7 +308,7 @@ class CourseHomeTests(TestCase):
         CohortEnrollment.objects.create(user=self.user, cohort=scheduled_cohort)
         Enrollment.objects.create(user=self.user, course=scheduled_course)
 
-        scheduled_detail = self.client.get('/courses/scheduled-detail')
+        scheduled_detail = self.client.get('/courses/scheduled-detail?view=overview')
 
         self.assertContains(scheduled_detail, 'data-testid="course-detail-enrolled-cohort"')
         self.assertContains(scheduled_detail, 'Cohort 4')
@@ -314,7 +327,7 @@ class CourseHomeTests(TestCase):
         )
         Enrollment.objects.create(user=self.user, course=buildcamp)
 
-        unlinked_detail = self.client.get('/courses/ai-buildcamp-detail')
+        unlinked_detail = self.client.get('/courses/ai-buildcamp-detail?view=overview')
 
         self.assertNotContains(unlinked_detail, 'data-testid="course-detail-enrolled-cohort"')
         self.assertContains(unlinked_detail, "You're taking this course.")
@@ -372,7 +385,7 @@ class CourseHomeTests(TestCase):
         response = self.client.get('/courses/course-home-test/home')
         self.assertContains(response, 'data-testid="course-home-open-lesson"')
         self.assertContains(response, f'href="{self.lesson1.get_absolute_url()}"')
-        self.assertContains(response, f'href="{self.course.get_absolute_url()}"')
+        self.assertContains(response, f'href="{self.course.get_absolute_url()}?view=overview#syllabus"')
         self.assertContains(response, 'data-testid="course-home-position"')
         self.assertContains(response, 'Next uncompleted course material')
         lesson = self.client.get(self.lesson1.get_absolute_url())

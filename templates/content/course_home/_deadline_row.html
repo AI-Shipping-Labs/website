@@ -1,0 +1,16 @@
+{% load member_badges %}
+<li class="flex min-w-0 flex-col gap-3 py-4 first:pt-2 last:pb-2 sm:flex-row sm:items-center sm:justify-between" data-testid="course-home-deadline-row">
+  <div class="min-w-0">
+    {% if not hide_kind %}<p class="text-xs font-medium text-muted-foreground">{{ item.kind }}</p>{% endif %}
+    <h4 class="{% if not hide_kind %}mt-1 {% endif %}break-words text-sm font-semibold text-foreground">{{ item.title }}</h4>
+    {% if item.kind == 'Homework' and item.module_title %}<p class="mt-1 text-xs text-muted-foreground">{{ item.module_title }}</p>{% endif %}
+    {% if not deadline_preview and item.status or not deadline_preview and cohort and item.when %}
+    <p class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+      {% if not deadline_preview and cohort and item.when %}<span>Due <time datetime="{{ item.when.isoformat }}">{{ item.when_label_without_timezone }}</time></span>{% endif %}
+      {% if not deadline_preview and item.status %}{% member_label_badge item.status tone=item.status_tone size="xs" %}{% endif %}
+    </p>
+    {% endif %}
+    {% if not deadline_preview and item.detail %}<p class="mt-1 text-xs text-muted-foreground">{{ item.detail }}</p>{% endif %}
+  </div>
+  {% if not deadline_preview and item.url and item.action %}<a href="{{ item.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{{ item.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+</li>

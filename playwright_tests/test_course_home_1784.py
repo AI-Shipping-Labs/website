@@ -72,6 +72,13 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
         end_datetime=now + datetime.timedelta(days=1, hours=1),
         series_position=1,
     )
+    past_event = Event.objects.create(
+        event_series=series, slug='past-practice-session',
+        title='Past practice session', status='completed',
+        start_datetime=now - datetime.timedelta(days=7),
+        end_datetime=now - datetime.timedelta(days=7) + datetime.timedelta(hours=1),
+        series_position=0, recap_notes='Questions and answers from the session.',
+    )
     project = CourseProject.objects.create(
         course=course, cohort=cohort, slug='first-attempt',
         title='Project attempt',
@@ -95,14 +102,18 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     page.set_viewport_size({'width': 1440, 'height': 900})
     page.goto(home_url, wait_until='domcontentloaded')
     expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text(event.title)
-    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text(homework.title)
-    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text('Due soon')
+    expect(page.locator('[data-testid="course-home-live-sessions"]')).to_contain_text(past_event.title)
+    expect(page.locator('[data-testid="course-home-recap-link"]')).to_have_attribute(
+        'href', past_event.get_recap_url(),
+    )
+    expect(page.locator('[data-testid="course-home-deadlines"]')).to_contain_text(homework.title)
+    expect(page.locator('[data-testid="course-home-deadlines"]')).to_contain_text('Due')
     expect(page.locator('[data-testid="course-home-focus"]')).not_to_contain_text(
         'Continue reviews',
     )
     course_pages = page.get_by_role('navigation', name='Course pages')
     expect(course_pages.get_by_role('link', name='Home')).to_be_visible()
-    expect(course_pages.get_by_role('link', name='Course materials')).to_be_visible()
+    expect(course_pages.get_by_role('link', name='Full syllabus')).to_be_visible()
     assert course_pages.get_by_role('link').count() == 2
     screenshots = Path('.tmp/screenshots/course-home-1784')
     screenshots.mkdir(parents=True, exist_ok=True)
@@ -110,8 +121,8 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
     assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['y'] < 844
-    assert page.locator('[data-testid="course-home-weekly-work-link"]').bounding_box()['height'] >= 44
-    assert page.locator('[data-testid="course-home-live-session-action"]').bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-deadlines"] a').first.bounding_box()['height'] >= 44
+    assert page.locator('[data-testid="course-home-live-session-action"]').first.bounding_box()['height'] >= 44
     assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     page.screenshot(path=str(screenshots / 'mobile-light.png'), full_page=True)
     page.evaluate("localStorage.setItem('theme', 'dark')")
@@ -125,17 +136,20 @@ def test_course_home_commitments_to_homework_event_and_reviews(django_server, br
     ).click()
     expect(page).to_have_url(f'{django_server}{event.get_absolute_url()}')
     page.goto(home_url, wait_until='domcontentloaded')
-    page.locator('[data-testid="course-home-weekly-work"]').get_by_role(
+    page.locator('[data-testid="course-home-recap-link"]').click()
+    expect(page).to_have_url(f'{django_server}{past_event.get_recap_url()}')
+    page.goto(home_url, wait_until='domcontentloaded')
+    page.locator('[data-testid="course-home-deadlines"]').get_by_role(
         'link', name='Start homework',
     ).click()
     expect(page).to_have_url(f'{django_server}{homework_unit.get_absolute_url()}?cohort=current')
     page.locator(f'[name="answer_{question.pk}"]').fill('A working prototype')
     page.get_by_role('button', name='Submit homework').click()
     page.goto(home_url, wait_until='domcontentloaded')
-    expect(page.locator('[data-testid="course-home-weekly-work"]')).to_contain_text(
+    expect(page.locator('[data-testid="course-home-deadlines"]')).to_contain_text(
         'Submitted',
     )
-    expect(page.locator('[data-testid="course-home-weekly-work"]')).not_to_contain_text(
+    expect(page.locator('[data-testid="course-home-deadlines"]')).not_to_contain_text(
         'Start homework',
     )
     context.close()

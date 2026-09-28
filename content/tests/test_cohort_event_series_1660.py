@@ -160,6 +160,9 @@ class CourseLiveSessionsHomeTest(TierSetupMixin, TestCase):
         self.assertContains(
             home, self.past_event.get_recap_url(),
         )
+        self.assertContains(home, f'href="{self.past_event.get_absolute_url()}"')
+        self.assertContains(home, 'data-testid="course-home-recap-link"')
+        self.assertEqual(len(home.context['live_session_schedule']), 2)
 
     def test_staff_does_not_get_a_private_session_list_on_course_detail(self):
         User.objects.create_user(

@@ -3403,6 +3403,137 @@
         ]
       }
     },
+    "/api/content/{content_id}": {
+      "get": {
+        "description": "Staff-only read of any synced content row addressable by ``/c/<uuid>``: metadata, source provenance, stored markdown, and stored HTML. Drafts, unpublished, and tier-gated rows are returned in full; ``is_public`` reports whether ``/c/<uuid>`` would redirect anonymous visitors. ``source.commit`` is the row's own last-sync commit, not the content source's latest synced commit.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "content_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "include_body",
+            "required": false,
+            "schema": {
+              "default": "true",
+              "description": "``false``/``0`` omits ``markdown``, ``html``, ``homework_markdown``, ``homework_html`` and returns ``markdown_length`` / ``html_length`` instead.",
+              "enum": [
+                "true",
+                "false",
+                "1",
+                "0"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "content_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "context": {
+                    "course_slug": "ai-buildcamp",
+                    "module_slug": "week-1"
+                  },
+                  "homework_html": "<p>Push your repo.</p>",
+                  "homework_markdown": "Push your repo.",
+                  "html": "<h2 id=\"setup\">Setup</h2>\n<p>Install uv first.</p>",
+                  "id": 412,
+                  "is_public": true,
+                  "markdown": "## Setup\n\nInstall uv first.\n",
+                  "required_level": 20,
+                  "share_url": "https://aishippinglabs.com/c/7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                  "slug": "setup",
+                  "source": {
+                    "commit": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+                    "github_url": "https://github.com/AI-Shipping-Labs/ai-buildcamp-course/blob/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678/week-1/01-setup.md",
+                    "path": "week-1/01-setup.md",
+                    "repo": "AI-Shipping-Labs/ai-buildcamp-course"
+                  },
+                  "title": "Setting up the environment",
+                  "type": "course_unit",
+                  "updated_at": null,
+                  "url": "https://aishippinglabs.com/courses/ai-buildcamp/week-1/setup"
+                }
+              }
+            },
+            "description": "The content row (course_unit example)."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "error": "Authentication token required"
+                }
+              }
+            },
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "content_not_found",
+                  "error": "Content not found"
+                }
+              }
+            },
+            "description": "No row uses this content_id."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "content_id_ambiguous",
+                  "error": "content_id matches more than one row",
+                  "matches": [
+                    {
+                      "id": 12,
+                      "title": "Intro",
+                      "type": "article",
+                      "url": "https://aishippinglabs.com/blog/intro"
+                    },
+                    {
+                      "id": 34,
+                      "title": "Intro",
+                      "type": "workshop_page",
+                      "url": "https://aishippinglabs.com/workshops/w/intro"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "More than one row uses this content_id."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "include_body"
+                  },
+                  "error": "include_body must be true or false"
+                }
+              }
+            },
+            "description": "Invalid include_body value."
+          }
+        },
+        "summary": "Get synced content by content_id UUID",
+        "tags": [
+          "Content"
+        ]
+      }
+    },
     "/api/courses/{slug}/certificates": {
       "get": {
         "description": "Staff-only. Lists certificates for a published course, ordered by ``-issued_at``.",

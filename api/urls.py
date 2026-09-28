@@ -56,6 +56,7 @@ from api.views.contacts import (
     contacts_import,
     contacts_set_tags,
 )
+from api.views.content_lookup import content_lookup_detail
 from api.views.course_certificates import (
     course_certificate_detail,
     course_certificates_collection,
@@ -600,6 +601,12 @@ urlpatterns = [
         "sync/history/<str:history_id>",
         sync_history_detail,
         name="api_sync_history_detail",
+    ),
+    # ---- Content lookup by content_id UUID (issue #1834) ---------------
+    path(
+        "content/<uuid:content_id>",
+        content_lookup_detail,
+        name="api_content_lookup_detail",
     ),
     # ---- URL redirects (issue #674) -----------------------------------
     # Register the ``bulk`` literal BEFORE the ``<int:id>`` capture so the

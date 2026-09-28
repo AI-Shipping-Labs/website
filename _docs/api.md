@@ -299,6 +299,61 @@ fields. There is intentionally no API to mark paid, force expiry, or extend
 grace; payment truth is repaired in Stripe and courtesy access uses
 `TierOverride`.
 
+## Content lookup API
+
+`GET /api/content/<content_id>` resolves any synced content row by its
+frontmatter `content_id` UUID and returns metadata, source provenance, stored
+markdown, and stored HTML. It uses the same lookup and "is public" rule as the
+public `/c/<uuid>` share link. It is read-only (other methods return `405`),
+staff-token only (member API keys and non-staff tokens get `401`), and returns
+drafts, unpublished, and tier-gated rows in full.
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/content/7c9e6679-7425-40de-944b-e07fc1f90ae7"
+
+# Metadata only: omits markdown/html/homework_* and returns markdown_length/html_length
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/content/7c9e6679-7425-40de-944b-e07fc1f90ae7?include_body=false"
+```
+
+CLI equivalent: `uv run asl content get <uuid> [--no-body] [--body markdown|html]`.
+
+| Field | Notes |
+|-------|-------|
+| `type` | `article`, `project`, `tutorial`, `download`, `workshop`, `workshop_page`, `marketing_page`, `event`, `course`, `course_module`, `course_unit` |
+| `url` / `share_url` | Absolute canonical URL and absolute `/c/<uuid>` link |
+| `slug` | Row slug; `public_path` for marketing pages |
+| `is_public` | Whether `/c/<uuid>` would redirect anonymous visitors |
+| `required_level` | Effective level (units and workshop pages resolve inheritance); null when the model has none |
+| `context` | Parent slugs for units, modules, and workshop pages; `{}` otherwise |
+| `source` | `repo`, `path`, `commit`, `github_url`; each null when unknown |
+| `updated_at` | ISO-8601; null for course modules and units |
+
+Body field mapping:
+
+| Type | `markdown` | `html` |
+|------|------------|--------|
+| `article`, `project`, `tutorial`, `marketing_page` | `content_markdown` | `content_html` |
+| `workshop`, `event`, `course` | `description` | `description_html` |
+| `workshop_page` | `body` | `body_html` |
+| `course_module` | `overview` | `overview_html` |
+| `course_unit` | `body` | `body_html`, plus `homework_markdown` / `homework_html` |
+| `download` | `description` | null |
+
+`include_body` accepts `true`/`1` (default) or `false`/`0`; any other value
+returns `422 validation_error`.
+
+`source.commit` is the row's own stored commit, i.e. the commit of the last
+sync that wrote this row. It is not the content source's latest synced commit
+(`asl sync sources`), so a row that was unchanged in later syncs keeps an older
+commit. For course modules and units, `source.repo` comes from the owning
+course. `github_url` is built only when repo, path, and commit are all known.
+
+Errors: unknown UUID returns `404 content_not_found`. A UUID used by more than
+one row returns `409 content_id_ambiguous` with a `matches` list of `type`,
+`id`, `title`, and `url` for each colliding row.
+
 ## Not exposed (Studio-only)
 
 By design, the API does NOT expose:

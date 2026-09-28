@@ -24,7 +24,7 @@
       {% endfor %}
     </ul>
     {% endif %}
-    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="mt-2 inline-flex min-h-[44px] items-center text-sm font-medium text-accent hover:underline">See all homework</a>
+    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="mt-3 inline-flex items-center text-sm font-medium text-accent hover:underline">See all homework</a>
   </div>
   {% endif %}
   {% if project_home_rows or project_focus_items %}
@@ -50,7 +50,7 @@
       {% endfor %}
     </ul>
     {% endif %}
-    <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" class="mt-2 inline-flex min-h-[44px] items-center text-sm font-medium text-accent hover:underline">See all projects</a>
+    <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" class="mt-3 inline-flex items-center text-sm font-medium text-accent hover:underline">See all projects</a>
   </div>
   {% endif %}
   {% if not homework_home_rows and not homework_focus_items and not project_home_rows and not project_focus_items %}

@@ -94,7 +94,7 @@ class TestStudioEditButtonOnEventDetail:
         assert button.is_visible()
         href = button.get_attribute("href")
         assert href == f"/studio/events/{event.pk}/edit"
-        assert "Edit in Studio" in button.inner_text()
+        assert "Open in Studio" in button.inner_text()
 
         # Clicking the button navigates to the Studio editor for that
         # exact event.

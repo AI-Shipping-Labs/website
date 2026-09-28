@@ -1,10 +1,10 @@
-"""View tests for the staff-only "Edit in Studio" button (issue #667).
+"""View tests for the staff-only "Open in Studio" button (issue #667).
 
 The floating button is rendered by ``templates/includes/_studio_edit_button.html``
 and included from every public content detail template. The contract:
 
-- Staff users see exactly one button per page, with ``href`` matching the
-  model's ``get_studio_edit_url()``.
+- Staff users see exactly one button per page. Course detail links to
+  the homework list; other pages link to ``get_studio_edit_url()``.
 - Anonymous and non-staff authenticated users see no button at all and
   no leaked ``/studio/`` URL in the HTML body.
 
@@ -127,7 +127,7 @@ class StudioEditButtonCourseDetailTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, STUDIO_BUTTON_TESTID, count=1)
         self.assertContains(
-            response, f'href="{self.course.get_studio_edit_url()}"',
+            response, f'href="/studio/courses/{self.course.pk}/homeworks"',
         )
 
     def test_anonymous_does_not_see_button(self):

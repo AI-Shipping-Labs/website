@@ -8,12 +8,25 @@
 {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
 {% studio_header_actions title="Homeworks" subtitle=course.title back_url=course_edit_url back_label='Back to course edit' testid='homework-list-title' %}{% endstudio_header_actions %}
 
-{% if homework_rows %}
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3">
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="homework-cohort-filter">Cohort</label>
+    <select id="homework-cohort-filter" name="cohort" data-testid="homework-cohort-filter" onchange="this.form.submit()" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      <option value="all" {% if not selected_cohort %}selected{% endif %}>All cohorts</option>
+      {% for cohort in cohorts %}
+      <option value="{{ cohort.pk }}" {% if selected_cohort.pk == cohort.pk %}selected{% endif %}>{{ cohort.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if homework_rows or cohort_filter_empty %}
 <div class="{% studio_list_class 'wrapper' %}">
   <table class="{% studio_list_class 'table' %}">
     <thead class="{% studio_list_class 'thead' %}">
       <tr>
         <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Module</th>
         <th class="{% studio_list_class 'th' %}">Cohort</th>
         <th class="{% studio_list_class 'th' %}">Due date</th>
         <th class="{% studio_list_class 'th' %}">State</th>
@@ -25,6 +38,7 @@
       {% for row in homework_rows %}
       <tr class="{% studio_list_class 'row' %}" data-testid="homework-row">
         <td class="px-6 py-4 text-sm font-medium text-foreground" data-testid="homework-title">{{ row.homework.title }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-module">{% if row.module_label %}{{ row.module_label }}{% else %}—{% endif %}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-cohort">{{ row.homework.cohort.name }}</td>
         <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="homework-due-date">{{ row.homework.due_date|operator_datetime }}</td>
         <td class="px-6 py-4" data-testid="homework-state">
@@ -38,6 +52,11 @@
           </div>
         </td>
       </tr>
+      {% empty %}
+      {% if cohort_filter_empty %}
+      {% url 'studio_homework_list' course_id=course.pk as homework_list_url %}
+      {% studio_empty_state 'filter' entity_label='homework' entity_label_plural='homeworks' clear_url=homework_list_url colspan=7 %}
+      {% endif %}
       {% endfor %}
     </tbody>
   </table>

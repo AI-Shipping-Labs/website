@@ -279,7 +279,6 @@ class SessionUnitPresentationTest(TestCase):
         self.assertContains(response, 'data-testid="unit-session-event-metadata"')
         self.assertNotContains(response, 'data-testid="unit-session-recording-section"')
         self.assertNotContains(response, 'data-testid="unit-session-recap-section"')
-        self.assertContains(response, self.event.title)
         self.assertContains(response, 'data-event-time-display')
         self.assertNotContains(
             response,

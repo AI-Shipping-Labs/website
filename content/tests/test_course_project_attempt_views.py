@@ -143,8 +143,10 @@ class CourseProjectAttemptViewsTest(TestCase):
             '/courses/ai-buildcamp/capstone',
         )
         self.assertContains(response, 'Capstone Overview')
-        self.assertContains(response, 'data-testid="module-submodule-link"', count=1)
-        self.assertNotContains(response, 'data-testid="module-lesson-list"')
+        self.assertEqual(
+            [module.title for module in response.context['submodules']],
+            ['Capstone Overview'],
+        )
 
     def test_submissions_are_isolated_per_attempt(self):
         for slug in ('first', 'second'):

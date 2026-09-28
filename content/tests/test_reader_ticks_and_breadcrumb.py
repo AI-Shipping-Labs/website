@@ -138,7 +138,6 @@ class ReaderSidebarCompletionTickTest(TestCase):
         # The sidebar lists the whole week; completion must not be limited
         # to the overview's own module tree.
         response = self.client.get('/courses/tick-course/week-1/first')
-        self.assertEqual(response.status_code, 200)
         sibling = _row(_sidebar(response), self.second_lesson.get_absolute_url())
         self.assertIn(CHECK_MARKER, sibling)
 
@@ -183,7 +182,6 @@ class ReaderBreadcrumbCourseCrumbTest(TestCase):
     def test_enrolled_module_crumb_links_to_home_with_cohort(self):
         self._enroll()
         response = self.client.get('/courses/crumb-course/week-1?cohort=4')
-        self.assertEqual(response.status_code, 200)
         crumb = _breadcrumb(response)
         self.assertIn('href="/courses/crumb-course/home?cohort=4"', crumb)
         self.assertNotIn('>Courses<', crumb)

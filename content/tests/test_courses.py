@@ -778,17 +778,15 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         response = self.client.get('/courses/paid-course')
         self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
 
-    def test_authorized_user_sees_progress_bar(self):
+    def test_authorized_user_home_offers_first_lesson(self):
         user = User.objects.create_user(email='main2@test.com', password='testpass')
         set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
         response = self.client.get('/courses/paid-course/home')
-        # Course Home reports progress in the focus-module card.
-        self.assertContains(response, 'data-testid="course-home-focus"')
-        self.assertContains(
-            response, '0 of 1 materials marked complete in this module',
-        )
+        # The compact Home focus card leads with the next lesson.
+        self.assertContains(response, 'data-testid="course-home-open-lesson"')
+        self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
 
     def test_unauthorized_user_no_progress_bar(self):
         response = self.client.get('/courses/paid-course')
@@ -873,17 +871,15 @@ class CourseProgressDisplayTest(TierSetupMixin, TestCase):
             module=cls.module, title='Unit 3', slug='unit-3', sort_order=3,
         )
 
-    def test_shows_progress_count(self):
+    def test_home_recommends_next_unfinished_unit(self):
         UserCourseProgress.objects.create(
             user=self.user, unit=self.unit1, completed_at=timezone.now(),
         )
         self.client.login(email='prog@test.com', password='testpass')
         landing = self.client.get('/courses/progress-course')
         response = self.client.get('/courses/progress-course/home')
-        self.assertNotContains(landing, 'materials marked complete')
-        self.assertContains(
-            response, '1 of 3 materials marked complete in this module',
-        )
+        self.assertNotContains(landing, 'data-testid="course-home-focus"')
+        self.assertEqual(response.context['recommended_unit'], self.unit2)
 
     def test_shows_completed_checkmark(self):
         UserCourseProgress.objects.create(

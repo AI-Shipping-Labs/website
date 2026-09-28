@@ -75,7 +75,7 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
     # lesson is a secondary line, not the primary action.
     expect(page.locator('[data-testid="course-home-recommendation"]')).to_have_text(current_unit.title)
     expect(page.locator('[data-testid="course-home-earlier-unfinished"]')).to_contain_text(
-        '1 earlier lesson unfinished in Foundations and tools',
+        'You also have 1 unfinished lesson from earlier weeks. Pick up in Foundations and tools',
     )
     screenshot_dir = Path('.tmp/screenshots/course-home-1783')
     screenshot_dir.mkdir(parents=True, exist_ok=True)

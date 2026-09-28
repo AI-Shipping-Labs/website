@@ -231,12 +231,14 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertTrue(response.context['schedule_is_preview'])
         self.assertNotContains(response, 'Attempt 4')
 
-    def test_module_overview_uses_selected_schedule_timezone_and_preview_gate(self):
+    def test_module_page_scopes_projects_to_selected_cohort_preview(self):
         response = self.client.get(f'{self.topic.get_absolute_url()}?cohort=5')
-        self.assertContains(response, 'Attempt 5')
-        # Rows omit the zone; one notice below the list names it.
-        self.assertContains(response, 'Feb 1, 2027 19:00')
-        self.assertContains(response, 'Deadline times are shown in Europe/Berlin.')
+        self.assertEqual(
+            [project.pk for project in response.context['course_projects']],
+            [self.attempt5.pk],
+        )
+        # An anonymous preview has no personal work rows on the module home.
+        self.assertEqual(response.context['module_project_rows'], [])
         self.assertNotContains(response, 'Attempt 4')
         submit_url = reverse('course_project_submit', kwargs={
             'slug': self.course.slug, 'attempt_slug': 'attempt-5',

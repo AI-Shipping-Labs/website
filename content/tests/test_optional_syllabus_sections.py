@@ -62,7 +62,7 @@ class OptionalSyllabusSectionRenderingTest(TestCase):
     def test_optional_module_overview_uses_source_sections(self):
         response = self.client.get(self.optional.get_absolute_url())
 
-        self._assert_section_labels(response, 'module-syllabus-section')
+        self._assert_section_labels(response, 'reader-syllabus-section')
 
     def test_course_reader_sidebar_uses_source_sections(self):
         response = self.client.get(self.optional_unit.get_absolute_url())

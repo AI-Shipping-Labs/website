@@ -113,10 +113,10 @@ class ReaderNavigationScopeTest(TestCase):
         self.assertIn('href="/courses/scoped-reader/week-1/first/lesson?cohort=4"', sidebar)
         self.assertIn('href="/courses/scoped-reader/home/syllabus?cohort=4"', sidebar)
         self.assertEqual(response.context['prev_item_url'], '/courses/scoped-reader/week-1/first/lesson?cohort=4')
-        redirected = self.client.get('/courses/scoped-reader/week-2?cohort=4')
-        self.assertRedirects(
-            redirected, '/courses/scoped-reader/week-2/last/lesson?cohort=4',
-            fetch_redirect_response=False,
+        module_home = self.client.get('/courses/scoped-reader/week-2?cohort=4')
+        self.assertEqual(
+            module_home.context['module_next_action']['url'],
+            '/courses/scoped-reader/week-2/last/lesson?cohort=4',
         )
 
     def test_legacy_submodule_value_uses_current_week(self):
@@ -152,19 +152,19 @@ class ReaderNavigationScopeTest(TestCase):
                 {'title': 'Invalid', 'description': 'A course', 'reader_navigation_scope': 'lessons'}, *args,
             )
 
-    def test_scoped_module_overviews_open_first_lesson(self):
+    def test_scoped_module_homes_offer_first_lesson(self):
         top = self.client.get('/courses/scoped-reader/week-1')
-        self.assertRedirects(
-            top, '/courses/scoped-reader/week-1/first/lesson',
-            fetch_redirect_response=False,
+        self.assertEqual(
+            top.context['module_next_action']['url'],
+            '/courses/scoped-reader/week-1/first/lesson',
         )
         topic = self.client.get('/courses/scoped-reader/week-1/middle')
-        self.assertRedirects(
-            topic, '/courses/scoped-reader/week-1/middle/lesson',
-            fetch_redirect_response=False,
+        self.assertEqual(
+            topic.context['module_next_action']['url'],
+            '/courses/scoped-reader/week-1/middle/lesson',
         )
 
-    def test_parent_overview_skips_event_for_first_lesson_page(self):
+    def test_parent_module_home_skips_event_for_next_lesson(self):
         week = Module.objects.create(
             course=self.course, title='Event then lesson',
             slug='event-then-lesson', sort_order=4,
@@ -186,11 +186,13 @@ class ReaderNavigationScopeTest(TestCase):
             slug='week-overview', sort_order=1, kind='lesson',
         )
         response = self.client.get('/courses/scoped-reader/event-then-lesson')
-        self.assertRedirects(response, lesson.get_absolute_url(), fetch_redirect_response=False)
-        # A module containing only events still has a usable destination.
+        self.assertEqual(response.context['module_next_action']['unit'], lesson)
+        # Sessions have their own section, so an events-only module offers
+        # no lesson action; the sidebar still links the session unit.
         lesson_module.delete()
         response = self.client.get('/courses/scoped-reader/event-then-lesson')
-        self.assertRedirects(response, event.get_absolute_url(), fetch_redirect_response=False)
+        self.assertIsNone(response.context['module_next_action'])
+        self.assertIn(f'href="{event.get_absolute_url()}"', self.sidebar(response))
 
     def test_empty_scoped_modules_keep_overview(self):
         empty = Module.objects.create(

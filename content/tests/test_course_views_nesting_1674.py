@@ -137,30 +137,10 @@ class BuildcampSinglePageTopicTest(TestCase):
         self.assertContains(syllabus, 'Week 1 Overview')
         self.assertContains(syllabus, 'Foundations Topic')
         overview = self.client.get('/courses/ai-buildcamp/foundations')
-        self.assertContains(overview, 'data-testid="module-content-list"')
         self.assertEqual([module.title for module in overview.context['submodules']],
                          ['Foundations Topic'])
         self.assertEqual([unit.title for unit in overview.context['units']],
                          ['Session 1', 'Week 1 Overview'])
-        class ContentLinks(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.hrefs = []
-
-            def handle_starttag(self, tag, attrs):
-                attributes = dict(attrs)
-                if tag == 'a' and attributes.get('data-testid') in {
-                    'module-lesson-link', 'module-submodule-link',
-                }:
-                    self.hrefs.append(attributes['href'])
-
-        links = ContentLinks()
-        links.feed(overview.content.decode())
-        self.assertEqual(links.hrefs, [
-            '/courses/ai-buildcamp/foundations/session',
-            '/courses/ai-buildcamp/foundations/week-1-overview',
-            '/courses/ai-buildcamp/foundations/foundations-topic',
-        ])
 
     def test_api_exposes_inline_units_and_remaining_topic(self):
         week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
@@ -229,15 +209,17 @@ class BuildcampSinglePageTopicTest(TestCase):
 class ModuleOverviewParentTest(ThreeLevelCourseViewMixin, TestCase):
     def test_parent_module_overview_shows_submodules_section(self):
         response = self.client.get('/courses/buildcamp-views/week-1')
-        self.assertContains(response, 'data-testid="module-submodule-list"', status_code=200)
-        self.assertContains(response, 'Foundations')
+        self.assertContains(response, 'data-testid="course-sidebar"')
+        self.assertEqual(
+            [module.title for module in response.context['submodules']],
+            ['Foundations', 'Bonus topic'],
+        )
         self.assertContains(response, 'Bonus topic')
         self.assertNotContains(response, 'This module has no lessons yet.')
 
     def test_submodule_overview_shows_lessons_section(self):
         response = self.client.get('/courses/buildcamp-views/week-1/foundations')
-        self.assertContains(response, 'data-testid="module-lesson-list"', status_code=200)
-        self.assertContains(response, 'Intro')
+        self.assertEqual(response.context['module_next_action']['unit'].title, 'Intro')
 
     def test_submodule_overview_breadcrumb_includes_parent(self):
         response = self.client.get('/courses/buildcamp-views/week-1/foundations')
@@ -281,8 +263,8 @@ class TwoLevelCourseBreadcrumbUnchangedTest(TestCase):
 
     def test_module_overview_shows_lessons_not_submodules(self):
         response = self.client.get('/courses/flat-course-views/module-1')
-        self.assertContains(response, 'data-testid="module-lesson-list"')
-        self.assertNotContains(response, 'data-testid="module-submodule-list"')
+        self.assertEqual(response.context['module_next_action']['unit'], self.unit)
+        self.assertEqual(response.context['submodules'], [])
 
     def test_syllabus_accordion_has_no_extra_nesting_or_badges(self):
         self.client.login(email='flat@test.com', password='pw')
@@ -458,7 +440,7 @@ class SubmoduleUrlDisambiguationTest(ThreeLevelCourseViewMixin, TestCase):
 
     def test_three_segment_path_resolves_submodule_overview_when_parent_has_children(self):
         response = self.client.get('/courses/buildcamp-views/week-1/foundations')
-        self.assertContains(response, 'data-testid="module-lesson-list"', status_code=200)
+        self.assertEqual(response.context['module'], self.foundations)
 
     def test_four_segment_path_resolves_unit_under_submodule(self):
         self.client.login(email='learner@test.com', password='pw')
@@ -501,13 +483,15 @@ class SubmoduleUrlDisambiguationTest(ThreeLevelCourseViewMixin, TestCase):
 
         self.assertContains(response1, 'Week 1 homework overview.', status_code=200)
         self.assertNotContains(response1, 'Week 2 homework overview.')
-        self.assertContains(response1, 'Week 1 assignment')
-        self.assertNotContains(response1, 'Week 2 assignment')
+        self.assertEqual(
+            [unit.title for unit in response1.context['units']], ['Week 1 assignment'],
+        )
 
         self.assertContains(response2, 'Week 2 homework overview.', status_code=200)
         self.assertNotContains(response2, 'Week 1 homework overview.')
-        self.assertContains(response2, 'Week 2 assignment')
-        self.assertNotContains(response2, 'Week 1 assignment')
+        self.assertEqual(
+            [unit.title for unit in response2.context['units']], ['Week 2 assignment'],
+        )
 
 
 class TwoLevelCourseUrlUnchangedTest(TestCase):

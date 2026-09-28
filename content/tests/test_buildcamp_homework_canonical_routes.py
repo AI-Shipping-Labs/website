@@ -97,7 +97,7 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
     def test_syllabus_and_week_overview_show_homework_units_as_sibling_rows(self):
         for url, testid in (
             ('/courses/ai-buildcamp', 'syllabus-unit-row'),
-            ('/courses/ai-buildcamp/foundation', 'module-lesson-link'),
+            ('/courses/ai-buildcamp/foundation', 'course-sidebar'),
         ):
             with self.subTest(url=url):
                 response = self.client.get(url)

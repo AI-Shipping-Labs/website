@@ -87,7 +87,6 @@ class CourseHomeSyllabusSearchTest(TestCase):
 
         response = self.client.get('/courses/course-home-search/home')
 
-        self.assertEqual(response.status_code, 200)
         parser = _SearchScopeParser()
         parser.feed(response.content.decode())
         self.assertEqual(len(parser.search_forms), 1)

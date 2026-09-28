@@ -212,6 +212,7 @@ from api.views.user_merge import merge_users
 from api.views.users import (
     user_activity,
     user_clear_bounce,
+    user_course_progress,
     user_crm_record,
     user_detail,
     user_email_log,
@@ -946,6 +947,11 @@ urlpatterns = [
         "users/<path:email>/activity",
         user_activity,
         name="api_user_activity",
+    ),
+    path(
+        "users/<path:email>/course-progress",
+        user_course_progress,
+        name="api_user_course_progress",
     ),
     path(
         "users/<path:email>/tags/<str:tag>",

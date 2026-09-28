@@ -17412,6 +17412,118 @@
         ]
       }
     },
+    "/api/users/{email}/course-progress": {
+      "get": {
+        "description": "Staff-only read of ``UserCourseProgress`` rows whose ``completed_at`` is set. Opening a lesson does not count. Every unit kind is included unless ``kind`` is set. Draft courses and bonus units are included. No write, and no audit row.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "description": "Exact course slug. Unknown slug is 404 course_not_found. Blank means every course.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "description": "One of lesson, homework, event, checklist_item. Blank means every kind.",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "completions": [
+                    {
+                      "completed_at": "2026-09-20T15:04:00+00:00",
+                      "course": {
+                        "id": 4,
+                        "slug": "buildcamp",
+                        "title": "AI Engineering Buildcamp"
+                      },
+                      "id": 91,
+                      "module": {
+                        "id": 12,
+                        "parent": null,
+                        "slug": "week-1",
+                        "sort_order": 1,
+                        "title": "Week 1"
+                      },
+                      "unit": {
+                        "id": 40,
+                        "is_bonus": false,
+                        "kind": "lesson",
+                        "slug": "intro",
+                        "sort_order": 1,
+                        "title": "Intro",
+                        "url": "/courses/buildcamp/week-1/intro"
+                      }
+                    }
+                  ],
+                  "count": 1,
+                  "user": {
+                    "display_name": "Gabriel Majivu",
+                    "email": "gmajivu@gmail.com"
+                  }
+                }
+              }
+            },
+            "description": "Completions in syllabus order."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "user_not_found",
+                  "error": "User not found"
+                }
+              }
+            },
+            "description": "Unknown primary email (user_not_found) or unknown course slug (course_not_found)."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "allowed": [
+                      "lesson",
+                      "homework",
+                      "event",
+                      "checklist_item"
+                    ],
+                    "field": "kind",
+                    "value": "nope"
+                  },
+                  "error": "Invalid unit kind: 'nope'"
+                }
+              }
+            },
+            "description": "Invalid kind."
+          }
+        },
+        "summary": "List course unit completions",
+        "tags": [
+          "Users"
+        ]
+      }
+    },
     "/api/users/{email}/crm-record": {
       "post": {
         "description": "Staff-token repair/automation endpoint. Resolves the path email through primary email or email aliases, refuses users without submitted onboarding, then creates or reuses the single ``CRMRecord`` for the canonical user. This is meant for pre-existing onboarding submissions and account-merge repairs, not arbitrary CRM imports.",

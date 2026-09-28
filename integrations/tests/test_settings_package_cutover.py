@@ -161,6 +161,15 @@ class PackageSettingsRouteTest(TestCase):
             kind=APIKey.Kind.STAFF,
         )
 
+    def setUp(self):
+        reset_local_config_cache()
+
+    def tearDown(self):
+        # The import test populates the process-local config cache with a
+        # value whose DB row is rolled back; without this reset it leaks into
+        # later tests in the same worker and beats their override_settings.
+        reset_local_config_cache()
+
     def test_studio_settings_uses_package_view_and_alias_reverse(self):
         resolved = resolve("/studio/settings/")
         self.assertEqual(resolved.func.__module__, "community_base.config.views")

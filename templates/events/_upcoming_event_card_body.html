@@ -1,3 +1,4 @@
+{% load event_copy %}
 {% comment %}
 Issue #1339 — upcoming event card body (title onward). Rendered inside the
 shared content/_content_card.html anchor, after the header row, via
@@ -13,9 +14,11 @@ HTML and a duplicate click target.
   Series: {{ event.event_series.name }}
 </p>
 {% endif %}
-{% if event.description_html %}
-<p class="mt-2 text-muted-foreground line-clamp-2">{{ event.description_html|striptags|truncatechars:200 }}</p>
+{% with public_description=event.description_html|strip_internal_notes %}
+{% if public_description %}
+<p class="mt-2 text-muted-foreground line-clamp-2">{{ public_description|striptags|truncatechars:200 }}</p>
 {% endif %}
+{% endwith %}
 <div class="mt-4 flex flex-wrap items-center gap-4 text-sm text-muted-foreground" data-testid="event-card-date">
   <span class="flex items-center gap-1.5">
     <i data-lucide="calendar" class="h-4 w-4"></i>

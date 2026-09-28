@@ -13,6 +13,7 @@ from django.utils.text import Truncator
 from content.access import LEVEL_OPEN, get_required_tier_label
 from content.templatetags.teaser_tags import strip_markdown
 from content.utils.tags import normalize_tags
+from events.services.public_copy import strip_internal_description_notes
 
 DEFAULT_RELATED_LIMIT = 3
 RELATED_TITLE = 'Related content'
@@ -324,7 +325,7 @@ def _description(obj: Any) -> str:
         raw_description = getattr(obj, 'description', '')
         text = strip_markdown(raw_description)
 
-    text = ' '.join(str(text).split())
+    text = strip_internal_description_notes(' '.join(str(text).split()))
     return Truncator(text).chars(DESCRIPTION_CHARS)
 
 

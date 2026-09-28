@@ -22,6 +22,7 @@ from content.access import LEVEL_OPEN
 from content.templatetags.teaser_tags import strip_markdown
 from content.utils.h1 import strip_leading_title_h1
 from events.services.display_time import format_event_tz_strip
+from events.services.public_copy import strip_internal_description_notes
 from integrations.config import site_base_url
 from integrations.services.banner_generator.resolve import effective_banner_url
 
@@ -268,7 +269,9 @@ def _event_preview_description(event):
     description when ``start_datetime`` is missing (defensive guard).
     """
     time_strip = format_event_tz_strip(getattr(event, 'start_datetime', None))
-    description = _clean_seo_source(getattr(event, 'description', '') or '')
+    description = strip_internal_description_notes(
+        _clean_seo_source(getattr(event, 'description', '') or ''),
+    )
 
     if not time_strip:
         if not description:

@@ -1,3 +1,4 @@
+{% load event_copy %}
 {% comment %}
 Issue #1458: the recap body no longer renders inline here. It lives at
 /events/<id>/<slug>/recap (templates/events/event_recap.html) and the detail
@@ -5,13 +6,25 @@ page links to it through events/_event_recap_cta.html. Rendering the same body
 at two URLs splits SEO and lets the event page grow without bound, so the
 event's own description always renders here — including on past events that
 have a recap.
+
+Operator notes stored in the description (Hidden series, Internal note, and
+the same family) are staff context. They are stripped before this render,
+matching the course session card.
 {% endcomment %}
 {% if event.description_html %}
+{% with public_description=event.description_html|strip_internal_notes %}
+{% if public_description %}
 <div class="prose min-w-0 max-w-full" data-testid="event-description">
-  {{ event.description_html|safe }}
+  {{ public_description|safe }}
 </div>
+{% endif %}
+{% endwith %}
 {% elif event.description %}
+{% with public_description=event.description|strip_internal_notes %}
+{% if public_description %}
 <div class="prose min-w-0 max-w-full" data-testid="event-description">
-  <p class="text-muted-foreground">{{ event.description }}</p>
+  <p class="text-muted-foreground">{{ public_description }}</p>
 </div>
+{% endif %}
+{% endwith %}
 {% endif %}

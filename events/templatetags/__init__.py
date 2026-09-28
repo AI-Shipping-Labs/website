@@ -1,0 +1,1 @@
+"""Event template tags."""

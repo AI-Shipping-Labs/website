@@ -215,7 +215,7 @@ class CourseRootReadmeAsDescriptionTest(_CourseSyncFixtureBase):
         # ``# Python Course`` H1 is dropped because it duplicates the course
         # title (issue #227); the page template renders the title itself.
         self.assertIn('Welcome to the course.', course.description_html)
-        self.assertNotIn('<h1>Python Course</h1>', course.description_html)
+        self.assertNotRegex(course.description_html, r'<h1(?: id="[^"]*")?>Python Course</h1>')
 
     def test_explicit_description_overrides_readme(self):
         self._write_root_course_yaml(

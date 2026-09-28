@@ -14,6 +14,7 @@ from content.markdown_extensions import (
     ExternalLinksExtension,
     MermaidExtension,
 )
+from content.utils.heading_ids import add_heading_ids
 from content.utils.linkify import linkify_urls
 
 # nh3 (ammonia) allowlist for sanitising rendered markdown HTML. It covers
@@ -49,6 +50,10 @@ _SANITIZE_ATTRIBUTES = {
     'pre': {'class'},
     'td': {'align'},
     'th': {'align'},
+    # Section anchors (issue #1833): headings keep their slug ``id`` so a
+    # ``#fragment`` link lands on an event description or homework step
+    # section. ``id`` is allowed on headings only.
+    **{f'h{level}': {'id'} for level in range(1, 7)},
 }
 
 
@@ -195,6 +200,7 @@ def render_markdown(
     include_event_widget=True,
     render_event_widget_placeholder=True,
     codehilite_guess_lang=False,
+    include_heading_ids=True,
 ):
     """Convert markdown to HTML with the platform's runtime extension set.
 
@@ -202,8 +208,13 @@ def render_markdown(
     fenced code blocks render as plain ``<pre><code>`` without the syntax-
     highlight CSS classes. Email callers use this because inboxes have no
     codehilite stylesheet (issue #989).
+
+    ``include_heading_ids=True`` (the default) gives every heading a slug
+    ``id`` via ``content.utils.heading_ids.add_heading_ids`` so sections can
+    be linked with a ``#fragment`` (issue #1833). Email rendering turns it
+    off.
     """
-    return markdown_lib.markdown(
+    html = markdown_lib.markdown(
         text,
         extensions=_build_extensions(
             include_mermaid=include_mermaid,
@@ -217,6 +228,9 @@ def render_markdown(
             include_codehilite=include_codehilite,
         ),
     )
+    if include_heading_ids:
+        html = add_heading_ids(html)
+    return html
 
 
 def markdown_to_plain_text(text):
@@ -236,6 +250,7 @@ def markdown_to_plain_text(text):
         include_external_links=False,
         include_codehilite=False,
         render_event_widget_placeholder=False,
+        include_heading_ids=False,
     )
     plain_text = html_lib.unescape(strip_tags(rendered))
     return re.sub(r'\s+', ' ', plain_text).strip()
@@ -263,6 +278,9 @@ def render_email_markdown(text):
         # The claim widget needs the site's JS hydration runtime, which an
         # inbox can't run — consume the directive without a placeholder.
         render_event_widget_placeholder=False,
+        # Fragment targets are useless in an inbox; email HTML stays as it
+        # was before section anchors (issue #1833).
+        include_heading_ids=False,
     )
 
 

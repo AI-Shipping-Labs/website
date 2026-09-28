@@ -77,7 +77,7 @@ class CourseModelPeerReviewFieldsTest(TestCase):
             title='Test', slug='test-pr-html',
             peer_review_criteria='# Hello',
         )
-        self.assertIn('<h1>Hello</h1>', course.peer_review_criteria_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', course.peer_review_criteria_html)
 
 
 class ProjectSubmissionModelTest(TestCase):

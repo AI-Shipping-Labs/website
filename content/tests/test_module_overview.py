@@ -49,7 +49,7 @@ class ModuleOverviewModelTest(TestCase):
             course=self.course, title='Intro', slug='intro', sort_order=1,
             overview='# Intro\n\nReal body.\n',
         )
-        self.assertNotIn('<h1>Intro</h1>', module.overview_html)
+        self.assertNotRegex(module.overview_html, r'<h1(?: id="[^"]*")?>Intro</h1>')
         self.assertIn('Real body.', module.overview_html)
 
     def test_overview_h1_distinct_from_title_is_kept(self):
@@ -57,7 +57,7 @@ class ModuleOverviewModelTest(TestCase):
             course=self.course, title='Intro', slug='intro2', sort_order=1,
             overview='# Welcome\n\nReal body.\n',
         )
-        self.assertIn('<h1>Welcome</h1>', module.overview_html)
+        self.assertIn('<h1 id="welcome">Welcome</h1>', module.overview_html)
 
     def test_empty_overview_clears_overview_html(self):
         module = Module.objects.create(
@@ -121,7 +121,7 @@ class ModuleOverviewViewTest(TestCase):
         response = self.client.get('/courses/python-course/fundamentals')
         # The page heading appears once via the template; the overview
         # body's `# Fundamentals` H1 was stripped on save.
-        self.assertNotContains(response, '<h1>Fundamentals</h1>')
+        self.assertNotRegex(response.content.decode(), r'<h1(?: id="[^"]*")?>Fundamentals</h1>')
 
     def test_overview_page_lists_units_separately_from_overview(self):
         """Lesson list is a distinct section, not interleaved with overview."""

@@ -67,7 +67,7 @@ class SharedMarkdownRuntimeTest(TestCase):
             ),
         )
 
-        self.assertNotIn('<h1>Runtime Article</h1>', article.content_html)
+        self.assertNotRegex(article.content_html, r'<h1(?: id="[^"]*")?>Runtime Article</h1>')
         self.assert_rich_markdown_rendered(article.content_html)
         self.assertIn('href="https://example.org/plain"', article.content_html)
 
@@ -92,9 +92,9 @@ class SharedMarkdownRuntimeTest(TestCase):
             homework=self.rich_markdown,
         )
 
-        self.assertNotIn('<h1>Runtime Course</h1>', course.description_html)
-        self.assertNotIn('<h1>Runtime Module</h1>', module.overview_html)
-        self.assertNotIn('<h1>Runtime Unit</h1>', unit.body_html)
+        self.assertNotRegex(course.description_html, r'<h1(?: id="[^"]*")?>Runtime Course</h1>')
+        self.assertNotRegex(module.overview_html, r'<h1(?: id="[^"]*")?>Runtime Module</h1>')
+        self.assertNotRegex(unit.body_html, r'<h1(?: id="[^"]*")?>Runtime Unit</h1>')
         self.assert_rich_markdown_rendered(course.description_html)
         self.assert_rich_markdown_rendered(module.overview_html)
         self.assert_rich_markdown_rendered(unit.body_html)
@@ -125,7 +125,7 @@ class SharedMarkdownRuntimeTest(TestCase):
         html = event.description_html
 
         # Leading H1 is preserved (no course-style strip).
-        self.assertIn('<h1>Runtime Event</h1>', html)
+        self.assertIn('<h1 id="runtime-event">Runtime Event</h1>', html)
         # Benign rich markdown survives sanitisation.
         self.assertIn('class="codehilite"', html)
         self.assertIn('<table>', html)

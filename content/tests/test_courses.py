@@ -100,7 +100,7 @@ class CourseModelTest(TestCase):
             title='MD Test', slug='md-test',
             description='# Hello\nThis is **bold**.',
         )
-        self.assertIn('<h1>Hello</h1>', course.description_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', course.description_html)
         self.assertIn('<strong>bold</strong>', course.description_html)
 
     def test_tags_field_is_list(self):
@@ -154,7 +154,7 @@ class UnitModelTest(TestCase):
             module=self.module, title='MD', slug='md', sort_order=0,
             body='# Lesson\nLearn **this**.',
         )
-        self.assertIn('<h1>Lesson</h1>', unit.body_html)
+        self.assertIn('<h1 id="lesson">Lesson</h1>', unit.body_html)
         self.assertIn('<strong>this</strong>', unit.body_html)
 
     def test_homework_markdown_rendered_on_save(self):
@@ -162,7 +162,7 @@ class UnitModelTest(TestCase):
             module=self.module, title='HW', slug='hw', sort_order=0,
             homework='## Exercise\nDo **that**.',
         )
-        self.assertIn('<h2>Exercise</h2>', unit.homework_html)
+        self.assertIn('<h2 id="exercise">Exercise</h2>', unit.homework_html)
         self.assertIn('<strong>that</strong>', unit.homework_html)
 
     def test_timestamps_json_field(self):
@@ -584,7 +584,7 @@ class CourseDetailViewTest(TierSetupMixin, TestCase):
 
     def test_shows_description_html(self):
         response = self.client.get('/courses/detail-course')
-        self.assertContains(response, '<h1>Course Description</h1>')
+        self.assertContains(response, '<h1 id="course-description">Course Description</h1>')
         self.assertContains(response, '<strong>great things</strong>')
 
     def test_shows_instructor_name(self):

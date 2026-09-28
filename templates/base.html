@@ -527,6 +527,8 @@
     ``templates/_partials/mermaid_script.html`` — included only from
     templates that render markdown-derived HTML (issue #320).
   {% endcomment %}
+  {# Section anchors (issue #1833): hover # links on prose headings and the #fragment carried through sign-in. #}
+  <script src="{% static 'js/section-anchors.js' %}" defer></script>
   {% block extra_scripts %}{% endblock %}
 </body>
 </html>

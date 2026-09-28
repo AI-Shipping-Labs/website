@@ -888,7 +888,7 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Production Agents')
         self.assertContains(response, 'data-testid="workshop-title"')
         # description_html is rendered (markdown -> HTML)
-        self.assertContains(response, '<h1>Hello</h1>')
+        self.assertContains(response, '<h1 id="hello">Hello</h1>')
 
     def test_landing_does_not_render_duplicate_preview_card(self):
         response = self.client.get('/workshops/ws')
@@ -1491,7 +1491,7 @@ class WorkshopPageDetailTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_basic)
         response = self.client.get('/workshops/ws/one')
         self.assertContains(response, 'data-testid="page-body"')
-        self.assertContains(response, '<h1>First page</h1>')
+        self.assertContains(response, '<h1 id="first-page">First page</h1>')
 
     def test_page_breadcrumb_links_to_landing(self):
         self.client.force_login(self.user_basic)

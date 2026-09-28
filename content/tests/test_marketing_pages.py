@@ -19,7 +19,7 @@ class MarketingPageModelTest(TestCase):
 
         self.assertIsInstance(page.content_id, uuid.UUID)
         self.assertIn('<p>Visit <a href="https://example.com"', page.content_html)
-        self.assertNotIn('<h1>Community Story</h1>', page.content_html)
+        self.assertNotRegex(page.content_html, r'<h1(?: id="[^"]*")?>Community Story</h1>')
         self.assertIsNotNone(page.published_at)
 
     def test_public_path_validation_rejects_invalid_or_reserved_paths(self):

@@ -16,7 +16,11 @@ class Migration(migrations.Migration):
         # Site overlay of the v0.5.3 package migration: the released file
         # pins package events 0003_provisional_integration_attempt, which
         # this repo's events app does not have. Host already exists here.
-        ('events', '__latest__'),
+        # Pinned to the events leaf that existed when this overlay was added
+        # (issue #1833): ``__latest__`` silently re-points at every new
+        # events migration, which makes already-applied databases fail with
+        # InconsistentMigrationHistory.
+        ('events', '0052_eventseries_visibility'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

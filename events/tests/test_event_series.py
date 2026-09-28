@@ -48,7 +48,7 @@ class EventSeriesModelTest(TestCase):
             description='# Heading\n\nA paragraph.',
             start_time=time(18, 0),
         )
-        self.assertIn('<h1>Heading</h1>', series.description_html)
+        self.assertIn('<h1 id="heading">Heading</h1>', series.description_html)
 
     def test_event_count_reflects_member_events(self):
         series = EventSeries.objects.create(

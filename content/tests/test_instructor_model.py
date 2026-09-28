@@ -20,7 +20,7 @@ class InstructorBioRenderingTest(TestCase):
         )
         # The rendered HTML should contain a real ``<h1>`` element, not
         # a string-equal copy of the markdown.
-        self.assertIn('<h1>Hello</h1>', instructor.bio_html)
+        self.assertIn('<h1 id="hello">Hello</h1>', instructor.bio_html)
         self.assertIn('AI/ML engineer.', instructor.bio_html)
 
     def test_empty_bio_yields_empty_bio_html(self):
@@ -60,7 +60,7 @@ class InstructorBioRenderingTest(TestCase):
         )
         instructor.bio = '## New heading'
         instructor.save()
-        self.assertIn('<h2>New heading</h2>', instructor.bio_html)
+        self.assertIn('<h2 id="new-heading">New heading</h2>', instructor.bio_html)
         self.assertNotIn('Original', instructor.bio_html)
 
     def test_save_update_fields_bio_keeps_bio_html_fresh(self):

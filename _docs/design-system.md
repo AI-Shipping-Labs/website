@@ -38,7 +38,7 @@ All theme-aware color should come from the variables in
 | `--secondary` | `0 0% 96%` | `0 0% 12%` | `bg-secondary` | Secondary buttons, tags, code |
 | `--secondary-foreground` | `0 0% 9%` | `0 0% 98%` | `text-secondary-foreground` | Text on secondary surfaces |
 | `--muted` | `0 0% 96%` | `0 0% 15%` | `bg-muted` | Subtle backgrounds and hover fills |
-| `--muted-foreground` | `0 0% 45%` | `0 0% 60%` | `text-muted-foreground` | Body copy, captions, metadata |
+| `--muted-foreground` | `0 0% 35%` | `0 0% 72%` | `text-muted-foreground` | Body copy, captions, metadata |
 | `--accent` | `75 100% 35%` | `75 100% 50%` | `bg-accent`, `text-accent`, `border-accent`, `ring-accent` | Brand actions, links, active states |
 | `--accent-foreground` | `0 0% 100%` | `0 0% 4%` | `text-accent-foreground` | Text on filled accent buttons |
 | `--destructive` | `0 84.2% 60.2%` | `0 84.2% 60.2%` | `text-destructive`, `bg-destructive` | Error/destructive states |
@@ -49,6 +49,13 @@ All theme-aware color should come from the variables in
 | `--hero-gradient-end` | `0 0% 100%` | `0 0% 4%` | `.hero-gradient` CSS | Hero gradient end |
 
 Raw Tailwind palette colors are allowed only when their meaning matches the tone table in [Pills, Badges, and Chips](#pills-badges-and-chips). Existing usage is not precedent by itself; check its semantic meaning. Theme-aware non-state UI continues to use design tokens.
+
+Muted foreground is the readable secondary text color in both themes. Use it directly for body copy, captions, and metadata; do not lower its contrast further with text opacity utilities unless a component has a specific disabled-state treatment.
+
+Reader sidebar lesson rows use a neutral selected surface (`--foreground` at
+5.5% opacity) and full `--foreground` text. The rule is owned by
+`content/reader/_styles.html` and applies to
+`.reader-list-row[aria-current="page"]` inside `#sidebar-nav` in both themes.
 
 Compact semantic status and categorical badges on public/member surfaces use
 `bg-<color>-500/15 text-<color>-800 dark:text-<color>-400`. Their normal-size
@@ -195,6 +202,14 @@ Variable-height detail cards:
 - When a section combines explanatory copy with one primary detail card, stack them as two rows: intro/description first, primary card second.
 - Inside detail cards, stack variable facts such as dates, duration, status, requirements, and next-step guidance as rows instead of splitting them into equal columns.
 - Use compact grouped rows (`gap-3` or `gap-4`) for facts; reserve grids for repeated cards of the same visual weight and predictable height.
+
+Dedicated detail tabs with a full-width list (sessions, homework, projects,
+deadlines, or recaps) render the list directly on the page background. Use row
+dividers and one page heading; do not put a rounded, bordered card around the
+entire list or repeat the heading inside it. A card is appropriate for a
+separate action or callout, not as a second frame around the page's primary
+content. Keep module focus, progress, and next-action text in one vertical
+reading order instead of pinning progress opposite a long module title.
 
 Comparison and progress lists:
 

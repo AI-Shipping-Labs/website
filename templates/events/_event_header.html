@@ -39,6 +39,7 @@
     </span>
     {% endif %}
   </div>
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=event_time_display.fallback_timezone timezone_login_next=request.get_full_path only %}
 
   {% comment %}
     Issue #668: social-proof attendee-count chip sits on its own row

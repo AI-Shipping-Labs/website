@@ -1,0 +1,30 @@
+<p class="{{ timezone_notice_class|default:'mt-3' }} flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"{% if timezone_notice_testid %} data-testid="{{ timezone_notice_testid }}"{% endif %}>
+  {% if timezone_notice_lead %}
+  <span>{{ timezone_notice_lead }}</span>
+  <span aria-hidden="true">&middot;</span>
+  {% endif %}
+  <span class="inline-flex items-center gap-1.5">
+    <i data-lucide="globe-2" class="h-4 w-4" aria-hidden="true"></i>
+    {% firstof timezone_notice_subject "Event times" as notice_subject %}
+    {% if timezone_notice_lead %}
+      {% if viewer.is_authenticated %}
+      Shown in your timezone.
+      {% elif anonymous_uses_event_timezone %}
+      Shown in each event's timezone.
+      {% else %}
+      Shown in {{ display_timezone }}.
+      {% endif %}
+    {% elif viewer.is_authenticated %}
+    Shown in your timezone.
+    {% elif anonymous_uses_event_timezone %}
+    {{ notice_subject }} are shown in each event's timezone.
+    {% else %}
+    {{ notice_subject }} are shown in {{ display_timezone }}.
+    {% endif %}
+  </span>
+  {% if viewer.is_authenticated %}
+  <a href="/account/#display-preferences-section" class="font-medium text-accent hover:underline">Change timezone</a>
+  {% else %}
+  <a href="/accounts/login/?next={{ timezone_login_next|urlencode }}" class="font-medium text-accent hover:underline">Sign in to use your timezone</a>
+  {% endif %}
+</p>

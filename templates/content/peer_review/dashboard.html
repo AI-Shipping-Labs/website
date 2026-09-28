@@ -21,6 +21,7 @@
     {% if course_project %}Peer reviews{% else %}Peer Review Dashboard{% endif %}
   </h1>
   <p class="-mt-6 mb-8 text-sm text-muted-foreground">{{ course.title }}{% if course_project %} · {{ course_project.title }} · Reviews due {% user_event_datetime course_project.review_due_at request.user "%b %d, %Y, %H:%M" %}{% endif %}</p>
+  {% if course_project %}{% include "includes/timezone_notice.html" with viewer=request.user timezone_login_next=request.get_full_path timezone_notice_class="-mt-6 mb-8" only %}{% endif %}
 
   {% if certificate %}
   <!-- Certificate earned -->

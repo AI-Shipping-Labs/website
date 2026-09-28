@@ -5,10 +5,15 @@
 {% load tz %}
 
 <section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
-  <div class="mb-4 flex flex-wrap items-center gap-2" data-testid="homework-deadline-status">
-    {% if homework_due_date_display and not homework_is_self_paced %}<p class="text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }} &mdash; shown in your account timezone</p>{% endif %}
+  <div class="mb-1 flex flex-wrap items-center gap-2" data-testid="homework-deadline-status">
+    {% if homework_due_date_display and not homework_is_self_paced %}
+    <span class="text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }}</span>
+    {% endif %}
     <span class="flex-shrink-0 rounded border border-border bg-card px-2 py-1 text-xs text-muted-foreground" data-testid="homework-page-state">{% include "homework_steps/_state_label.html" with homework_state=stepper.homework_state %}</span>
   </div>
+  {% if homework_due_date_display and not homework_is_self_paced %}
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4 mt-0" only %}
+  {% endif %}
   {% if stepper.has_pending_changes %}
   <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200" role="status" data-testid="homework-pending-draft-status">Your previous submission is still accepted. These saved changes are a draft and have not been submitted.</p>
   {% elif stepper.submitted %}
@@ -37,6 +42,9 @@
       <input type="hidden" name="revision" value="{{ stepper.revision }}">
       <fieldset class="min-w-0" aria-describedby="homework-question-prompt"{% if not stepper.can_write %} disabled{% endif %}>
         <legend class="sr-only">Answer for question {{ stepper.step_number }}</legend>
+        {% if stepper.step == 'learning-in-public' %}
+        <p class="mb-4 rounded-md border border-border bg-secondary/30 px-3 py-2 text-sm text-muted-foreground" data-testid="homework-learning-public-optional">Learning in Public is optional. {% if stepper.can_write %}Leave the links blank and select {% if stepper.next == 'review' %}Save &amp; review{% else %}Save &amp; continue{% endif %} to skip this step.{% else %}You can continue without adding links.{% endif %}</p>
+        {% endif %}
         <div id="homework-question-prompt" class="prose max-w-none{% if stepper.step == 'learning-in-public' %} homework-learning-public-prompt{% endif %}" data-testid="homework-question-prompt">{% render_homework_question_prompt stepper.question.prompt stepper.options stepper.question.type %}</div>
         {% if stepper.question.type != 'choice' and stepper.question.type != 'checkbox' %}
           {% if stepper.step == 'learning-in-public' %}

@@ -122,6 +122,9 @@
         looks exactly as before. Occurrences no chapter links to (the kickoff,
         an extra session) render as standalone rows before / after the week
         blocks. {% endcomment %}
+        {% if book.event_series_id and request.user.is_authenticated %}
+        {% include "includes/timezone_notice.html" with viewer=request.user timezone_login_next=request.get_full_path timezone_notice_class="mt-5" only %}
+        {% endif %}
         <div class="mt-4 space-y-4">
           {% if meetings_before %}
           <div class="space-y-0.5" data-testid="book-meetings-before">

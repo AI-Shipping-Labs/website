@@ -211,6 +211,7 @@
         </div>
 
         {% if sprint_call_entries %}
+        {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=sprint_call_entries.0.time_display.fallback_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4" only %}
         <ul class="space-y-4" data-testid="sprint-meeting-schedule-list">
           {% for call in sprint_call_entries %}
           <li class="rounded-lg border p-4 transition-colors {% if call.is_next_upcoming %}border-accent/60 bg-accent/10{% elif call.is_past %}border-border bg-background/40 opacity-75{% else %}border-border bg-background/60{% endif %}"

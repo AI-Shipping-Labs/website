@@ -1449,6 +1449,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_course_home_checklist_skip_updates_in_place",
     })
 
+    studio_sidebar_rail_owners = frozenset({
+        "playwright_tests/test_studio_sidebar_rail.py::"
+        "test_collapse_persists_and_expand_restores_labels",
+        "playwright_tests/test_studio_sidebar_rail.py::"
+        "test_mobile_drawer_ignores_collapsed_preference",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1577,8 +1584,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2692)
-        self.assertEqual(len(inventory.owners), 2488)
+        self.assertEqual(inventory.item_count, 2694)
+        self.assertEqual(len(inventory.owners), 2490)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1590,6 +1597,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1837_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners
+            | self.studio_sidebar_rail_owners
             | self.ses_1552_owners
             | self.issue_1551_owners
             | self.issue_1557_owners

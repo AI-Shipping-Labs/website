@@ -12,7 +12,114 @@ double-rendering. See issue #347.
 {% block messages %}{% endblock %}
 
 {% block body %}
+{% comment %}
+Desktop rail preference (collapsed icon rail vs full sidebar), applied
+before the sidebar paints so a collapsed Studio never flashes the full
+panel. Mirrors ``content/reader/_prepaint.html``. Mobile ignores it: every
+rail rule below is scoped to ``min-width: 768px``.
+{% endcomment %}
+<script>
+  (function() {
+    var state = 'expanded';
+    try {
+      if (localStorage.getItem('studio-sidebar-collapsed') === '1') {
+        state = 'collapsed';
+      }
+    } catch (e) { /* storage blocked: default to the full sidebar */ }
+    document.documentElement.setAttribute('data-studio-sidebar', state);
+  })();
+</script>
 <style>
+.studio-rail-only,
+.studio-rail-icon-expand {
+  display: none;
+}
+
+@media (min-width: 768px) {
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar {
+    width: 4rem;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar > div {
+    padding: 1.5rem 0.75rem;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar > div > div:first-child {
+    justify-content: center;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar > div > div:first-child > a,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav [data-studio-global-search],
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav > p,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav .studio-section-chevron,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav .studio-trigger-chevron,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav a > span ~ svg,
+  :root[data-studio-sidebar="collapsed"] .studio-rail-icon-collapse {
+    display: none;
+  }
+
+  :root[data-studio-sidebar="collapsed"] .studio-rail-icon-expand {
+    display: block;
+  }
+
+  :root[data-studio-sidebar="collapsed"] .studio-rail-only {
+    display: flex;
+  }
+
+  /* Icon-only rows: labels stay in the accessibility tree (sr-only) so
+     every control keeps its accessible name; JS adds matching tooltips. */
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav a,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button > span {
+    justify-content: center;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav a,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav a > span,
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button > span:not(:has(svg)),
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button > span > span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Section groups become dividers with the group icon as the disclosure
+     control; an open group lists its items' icons right below it. */
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav > div:has(> button[aria-controls^="studio-section-"]) {
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid hsl(var(--border));
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-sidebar-nav button[aria-controls^="studio-section-"] {
+    min-height: 2.25rem;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-triggers-children {
+    margin-left: 0;
+    padding-left: 0;
+    border-left: 0;
+  }
+
+  :root[data-studio-sidebar="collapsed"] #studio-main-inner {
+    max-width: calc(100vw - 16rem);
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
+
 @media (max-width: 767px) {
   #studio-sidebar {
     height: calc(100dvh - var(--analytics-consent-clearance, 0px));
@@ -170,6 +277,14 @@ double-rendering. See issue #347.
           </div>
           <span class="truncate text-lg font-semibold text-foreground">Studio</span>
         </a>
+        <button id="studio-sidebar-collapse" type="button"
+                class="hidden md:inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Collapse Studio sidebar" title="Collapse Studio sidebar"
+                aria-expanded="true" aria-controls="studio-sidebar"
+                data-testid="studio-sidebar-collapse-toggle">
+          <i data-lucide="panel-left-close" class="studio-rail-icon-collapse h-4 w-4"></i>
+          <i data-lucide="panel-left-open" class="studio-rail-icon-expand h-4 w-4"></i>
+        </button>
         <button id="studio-sidebar-close" type="button" class="md:hidden h-11 w-11 flex flex-shrink-0 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors" aria-label="Close Studio sidebar" aria-controls="studio-sidebar">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
@@ -219,6 +334,16 @@ double-rendering. See issue #347.
           </a>
         </div>
 
+        {% comment %}
+        Collapsed desktop rail only (hidden otherwise): the search input
+        does not fit a 64px rail, so this icon opens the existing quick-jump
+        dialog, which runs the same Studio search.
+        {% endcomment %}
+        <button type="button" data-studio-rail-search data-testid="studio-rail-search"
+                class="studio-rail-only w-full items-center px-3 py-2 rounded-lg text-sm text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                aria-label="Search Studio" title="Search Studio">
+          <i data-lucide="search" class="w-4 h-4"></i>
+        </button>
         <div class="relative py-2" data-studio-global-search data-search-endpoint="{% url 'studio_global_search' %}">
           <label for="studio-global-search-input" class="sr-only">Search Studio</label>
           <div class="relative">
@@ -817,7 +942,7 @@ double-rendering. See issue #347.
   <!-- Main content. Sidebar is in flex flow on md+ (issue #351) so no
        left-margin offset is needed; flex-1 takes the remaining width. -->
   <main class="flex-1 min-w-0 overflow-hidden">
-    <div class="p-4 pt-14 md:pt-8 md:p-8">
+    <div id="studio-main-inner" class="p-4 pt-14 md:pt-8 md:p-8">
       {% comment %}
       Render the Django messages queue exactly once per Studio response
       (issue #347). Leaf templates must NOT iterate ``messages`` again,
@@ -955,6 +1080,82 @@ document.addEventListener('click', function(event) {
       if (window.innerWidth < 768 && isStudioSidebarOpen()) {
         closeStudioSidebar({ returnFocus: false });
       }
+    });
+  });
+})();
+
+// Desktop icon rail: collapse/expand the Studio sidebar and remember the
+// choice per browser. The pre-paint script at the top of the body sets the
+// initial ``data-studio-sidebar`` attribute; this wires the toggle.
+(function() {
+  var STORAGE_KEY = 'studio-sidebar-collapsed';
+  var root = document.documentElement;
+  var toggle = document.getElementById('studio-sidebar-collapse');
+  var nav = document.getElementById('studio-sidebar-nav');
+  if (!toggle || !nav) { return; }
+
+  function labelFor(control) {
+    var labels = Array.prototype.filter.call(
+      control.querySelectorAll('span'),
+      function(span) {
+        return !span.querySelector('span') && !span.classList.contains('hidden') &&
+          span.textContent.trim();
+      }
+    );
+    return labels.length ? labels[0].textContent.trim() : '';
+  }
+
+  function applyTooltips(collapsed) {
+    nav.querySelectorAll('a, button').forEach(function(control) {
+      if (control.hasAttribute('data-studio-rail-title')) {
+        control.removeAttribute('title');
+        control.removeAttribute('data-studio-rail-title');
+      }
+      if (control.hasAttribute('data-studio-rail-label')) {
+        control.removeAttribute('aria-label');
+        control.removeAttribute('data-studio-rail-label');
+      }
+      if (!collapsed) { return; }
+      var label = labelFor(control);
+      if (!label) { return; }
+      if (!control.hasAttribute('title')) {
+        control.setAttribute('title', label);
+        control.setAttribute('data-studio-rail-title', '');
+      }
+      if (!control.hasAttribute('aria-label')) {
+        control.setAttribute('aria-label', label);
+        control.setAttribute('data-studio-rail-label', '');
+      }
+    });
+  }
+
+  function setCollapsed(collapsed, persist) {
+    if (persist) {
+      try { localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0'); }
+      catch (e) { /* storage blocked: this page still toggles */ }
+    }
+    root.setAttribute('data-studio-sidebar', collapsed ? 'collapsed' : 'expanded');
+    var label = collapsed ? 'Expand Studio sidebar' : 'Collapse Studio sidebar';
+    toggle.setAttribute('aria-label', label);
+    toggle.setAttribute('title', label);
+    toggle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+    applyTooltips(collapsed);
+  }
+
+  window.isStudioSidebarCollapsed = function() {
+    return root.getAttribute('data-studio-sidebar') === 'collapsed' && window.innerWidth >= 768;
+  };
+
+  setCollapsed(root.getAttribute('data-studio-sidebar') === 'collapsed', false);
+  toggle.addEventListener('click', function() {
+    setCollapsed(root.getAttribute('data-studio-sidebar') !== 'collapsed', true);
+  });
+  // The theme toggle swaps its visible label; keep the rail tooltip in sync.
+  nav.querySelectorAll('[data-testid="theme-toggle"]').forEach(function(button) {
+    button.addEventListener('click', function() {
+      window.setTimeout(function() {
+        applyTooltips(root.getAttribute('data-studio-sidebar') === 'collapsed');
+      }, 0);
     });
   });
 })();
@@ -1267,6 +1468,10 @@ document.addEventListener('click', function(event) {
     }
   }
 
+  document.querySelectorAll('[data-studio-rail-search]').forEach(function(button) {
+    button.addEventListener('click', openQuickJump);
+  });
+
   if (quickJump) {
     quickJump.addEventListener('click', function(event) {
       if (event.target === quickJump) {
@@ -1294,6 +1499,12 @@ document.addEventListener('click', function(event) {
       return;
     }
     var input = document.querySelector('[data-testid="studio-global-search-input"]');
+    if (window.isStudioSidebarCollapsed && window.isStudioSidebarCollapsed()) {
+      // The sidebar input is hidden in the collapsed rail; use quick jump.
+      event.preventDefault();
+      openQuickJump();
+      return;
+    }
     if (input) {
       event.preventDefault();
       input.focus();

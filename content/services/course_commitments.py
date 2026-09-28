@@ -312,6 +312,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
                 ),
             )
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
+        row['project_id'] = project.pk
         rows.append(row)
 
         if not submission or not course.peer_review_enabled:

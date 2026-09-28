@@ -1147,6 +1147,7 @@ def _render_module_overview(request, course, module):
         if user.is_authenticated and has_access else {}
     )
     module_root_id = module.parent_id or module.pk
+    visible_project_ids = {project.pk for project in course_projects}
     module_session_rows = [
         row for row in commitments.get('live_session_schedule', [])
         if row.get('session_unit') is not None
@@ -1160,6 +1161,9 @@ def _render_module_overview(request, course, module):
         )
         if row.get('module_id') == module_root_id
         and row['kind'] in ('Homework', 'Project')
+        # Projects follow the module page's cohort scoping (above), so an
+        # unscoped or other-cohort attempt does not surface here.
+        and (row['kind'] != 'Project' or row.get('project_id') in visible_project_ids)
     ]
     module_work_rows.sort(key=lambda row: (
         row['kind'] != 'Homework', row['when'] is None, row['when'] or timezone.now(),

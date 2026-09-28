@@ -227,6 +227,38 @@ notification state, or a grace deadline. Issue #1413 owns the future seven-day
 failed-payment grace policy. We can add new canonical server fields later
 without moving that policy into the CLI.
 
+### Content lookup by content_id
+
+Resolve any synced row (article, project, tutorial, download, workshop,
+workshop page, marketing page, event, course, course module, course unit) by
+its frontmatter `content_id` UUID. Staff see drafts and gated lessons in full.
+
+```bash
+# Full JSON: metadata, source repo/path/commit, stored markdown and HTML
+uv run asl content get 7c9e6679-7425-40de-944b-e07fc1f90ae7
+
+# Metadata and body lengths only (sends include_body=false)
+uv run asl content get 7c9e6679-7425-40de-944b-e07fc1f90ae7 --no-body
+
+# One-row summary: type, title, url, is_public, short commit, updated_at
+uv run asl content get 7c9e6679-7425-40de-944b-e07fc1f90ae7 -f table
+```
+
+Verify a content-repo edit reached prod: after pushing to, for example,
+`AI-Shipping-Labs/ai-buildcamp-course`, print the stored text of the edited
+lesson and compare `source.commit` with the pushed commit.
+
+```bash
+uv run asl content get <lesson-content-id> --body markdown | grep "New paragraph"
+uv run asl content get <lesson-content-id> --no-body | jq -r .source.commit
+uv run asl content get <lesson-content-id> --body html | grep -o '<h2 id="[^"]*"'
+```
+
+`--body markdown|html` writes only that raw string plus one newline, so it
+pipes cleanly into `grep` or `diff`; it ignores `--format` and cannot be
+combined with `--no-body`. Downloads store no HTML, so `--body html` exits
+non-zero for them. A non-UUID argument fails locally without an HTTP call.
+
 ### Escape hatch
 
 ```bash
@@ -236,4 +268,4 @@ uv run asl raw POST /api/v1/settings/import --data '{"settings":{"SITE_BASE_URL"
 
 ## Command groups
 
-`events`, `event-series`, `users`, `sprints`, `plans`, `comments`, `contacts`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`
+`events`, `event-series`, `users`, `sprints`, `plans`, `comments`, `contacts`, `content`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`

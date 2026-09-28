@@ -23,6 +23,7 @@ EXPECTED_GROUPS = {
     "comments",
     "cleanup-gates",
     "contacts",
+    "content",
     "crm-export",
     "event-series",
     "events",

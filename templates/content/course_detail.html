@@ -18,9 +18,9 @@
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-      <a href="/courses" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
+      <a href="{% if user_is_enrolled and has_access %}{% url 'course_home' slug=course.slug %}{% else %}/courses{% endif %}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        Back to Courses
+        {% if user_is_enrolled and has_access %}Back to course home{% else %}Back to Courses{% endif %}
       </a>
 
       <header class="mb-12">
@@ -118,7 +118,7 @@
               {% endif %}
               <a href="{% url 'course_home' slug=course.slug %}"
                  class="{% if next_unit_for_user %}{% button_classes 'secondary' size='md' extra='w-full justify-center sm:w-auto' %}{% else %}{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}{% endif %}"
-                 data-testid="course-detail-home-link">Course home</a>
+                 data-testid="course-detail-home-link">Open course</a>
             </div>
             <form method="post" action="/courses/{{ course.slug }}/unenroll" class="self-end sm:self-auto"
                   onsubmit="return confirm('Unenroll from this course? Your progress will be preserved.')">
@@ -234,54 +234,7 @@
       </div>
       {% endif %}
 
-      <!-- Syllabus -->
-      <style>
-        .module-details[open] > div {
-          animation: slideDown 0.2s ease-out;
-        }
-        .module-details[open] > summary .module-chevron {
-          transform: rotate(180deg);
-        }
-        .syllabus-topic[open] > summary .topic-chevron {
-          transform: rotate(90deg);
-        }
-        .syllabus-title, .module-details summary span {
-          overflow-wrap: anywhere;
-        }
-        @keyframes slideDown {
-          from { opacity: 0; transform: translateY(-4px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .module-details[open] > div { animation: none; }
-          .module-chevron { transition: none; }
-          .topic-chevron { transition: none; }
-        }
-        .module-details > summary::-webkit-details-marker,
-        .module-details > summary::marker {
-          display: none;
-        }
-      </style>
-      <div class="mb-12" id="syllabus">
-        <h2 class="text-2xl font-semibold tracking-tight mb-4">Syllabus</h2>
-        {% if schedule_cohort %}
-        <p class="mb-3 text-xs text-muted-foreground" data-testid="syllabus-schedule-cohort">
-          {{ schedule_cohort.name }} schedule{% if schedule_is_preview %} · Preview{% endif %} · Times shown in {{ schedule_timezone }}
-        </p>
-        {% endif %}
-        <div class="space-y-1">
-          {% for module in modules %}
-          {% if module.syllabus_section %}
-          <h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-section-heading">{{ module.syllabus_section }}</h3>
-          {% elif module.is_bonus %}
-          {% ifchanged module.is_bonus %}<h3 class="px-1 pt-8 pb-2 text-lg font-semibold text-foreground" data-testid="syllabus-optional-group">Optional</h3>{% endifchanged %}
-          {% endif %}
-          {% include "content/_syllabus_module.html" with module=module counter=forloop.counter course_slug=course.slug completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access projects_by_module=projects_by_module preview_project_ids=preview_project_ids module_week_range=module_week_ranges|dict_get:module.id unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone %}
-          {% empty %}
-          {% member_empty_state title='Syllabus coming soon' body='Lessons for this course will appear here when they are ready.' icon='book-open' kind='fresh' testid='syllabus-empty-state' %}
-          {% endfor %}
-        </div>
-      </div>
+      {% include "content/_course_syllabus.html" %}
 
       <!-- Testimonials -->
       {% if testimonials %}

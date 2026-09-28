@@ -10,7 +10,7 @@
 {% with children=module.children.all %}
 {% with topic_children=children|topic_course_modules:course_slug %}
 {% firstof module.is_bonus parent_optional as optional_here %}
-<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}">
+<details class="module-details {% if counter %}syllabus-week rounded-lg border border-border bg-card{% else %}syllabus-topic{% endif %}" data-testid="{% if children %}syllabus-parent-module{% else %}syllabus-module{% endif %}" data-cb-syllabus-search-section>
   <summary class="cursor-pointer list-none grid min-h-[44px] w-full items-center {% if counter %}grid-cols-[minmax(0,1fr)_auto] gap-x-3 rounded-lg px-3 py-2.5 text-base font-medium sm:px-4{% else %}grid-cols-[1rem_minmax(0,1fr)_auto] gap-x-2.5 px-3 py-2 text-sm font-normal{% endif %} text-foreground transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset" data-testid="syllabus-module-summary">
     {% if not counter %}<i data-lucide="chevron-right" class="topic-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>{% endif %}
     <span class="min-w-0 {% if counter %}col-start-1{% else %}col-start-2{% endif %}">
@@ -30,7 +30,7 @@
       </span>
       {% endif %}
       {% with deadline_summary=module_deadline_summaries|dict_get:module.id %}
-      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">Due {{ deadline_summary.next_due|schedule_datetime:schedule_timezone }}</span>{% endif %}
+      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">Due {{ deadline_summary.next_due|schedule_datetime_local:schedule_timezone }}</span>{% endif %}
       {% endwith %}
     </span>
     <span class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">

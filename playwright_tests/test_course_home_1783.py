@@ -111,3 +111,42 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
         f'{django_server}/courses/{course.slug}/home/syllabus?cohort=current-study',
     )
     context.close()
+
+
+@pytest.mark.core
+@browser_journey
+def test_course_home_checklist_skip_updates_in_place(django_server, browser):
+    from content.models import Course, Enrollment, Module, Unit
+
+    user = create_user('course-home-skip@test.com')
+    course = Course.objects.create(
+        title='Checklist skip course', slug='course-home-skip',
+        status='published', required_level=0,
+    )
+    module = Module.objects.create(
+        course=course, title='First steps', slug='first-steps', sort_order=1,
+    )
+    Unit.objects.create(module=module, title='First lesson', slug='first-lesson', sort_order=1)
+    Unit.objects.create(
+        module=module, title='First homework', slug='first-homework',
+        sort_order=2, kind='homework',
+    )
+    Enrollment.objects.create(user=user, course=course)
+    connection.close()
+
+    context = auth_context(browser, user.email)
+    page = context.new_page()
+    page.goto(f'{django_server}/courses/{course.slug}/home', wait_until='domcontentloaded')
+    progress = page.locator('[data-testid="course-checklist-progress-copy"]')
+    expect(progress).to_contain_text('0 of 2 done')
+
+    # A marker on window survives only if the page is not reloaded.
+    page.evaluate('window.__checklistNoReload = true')
+    page.locator('[data-testid="course-checklist-skip-lesson"]').click()
+
+    row = page.locator('[data-testid="course-checklist-item-lesson"]')
+    expect(row).to_contain_text('Skipped')
+    expect(progress).to_contain_text('1 of 2 done')
+    expect(page.locator('[data-testid="course-checklist-skip-homework"]')).to_be_focused()
+    assert page.evaluate('window.__checklistNoReload === true')
+    context.close()

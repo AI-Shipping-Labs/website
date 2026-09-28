@@ -24,6 +24,7 @@ from pathlib import Path
 import pytest
 from django.utils import timezone
 from freezegun import freeze_time
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     VIEWPORT,
@@ -823,18 +824,21 @@ class TestScenario3bFreeActivationDashboard:
 
         row = page.locator('[data-activation-key="ai-hero"]')
         assert row.get_attribute("data-complete") == "false"
+        # A marker on window survives only if the page is not reloaded.
+        page.evaluate("window.__checklistNoReload = true")
         with page.expect_response("**/account/api/dismiss-card") as response:
             page.locator(
                 '[data-testid="free-activation-skip-ai-hero"]'
             ).click()
         assert response.value.ok
-        page.wait_for_load_state("domcontentloaded")
 
         row = page.locator('[data-activation-key="ai-hero"]')
-        assert row.get_attribute("data-complete") == "true"
-        assert "1 of 3 complete" in page.locator(
-            '[data-testid="free-activation-progress-copy"]'
-        ).inner_text()
+        expect(row).to_have_attribute("data-complete", "true")
+        expect(row).to_contain_text("Skipped")
+        expect(
+            page.locator('[data-testid="free-activation-progress-copy"]')
+        ).to_contain_text("1 of 3 complete")
+        assert page.evaluate("window.__checklistNoReload === true")
         assert page.locator(
             '[data-testid="free-activation-completed-action-ai-hero"]'
         ).count() == 1

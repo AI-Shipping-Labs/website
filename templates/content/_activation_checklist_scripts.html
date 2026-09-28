@@ -31,47 +31,116 @@
     });
   }
 
-  document.querySelectorAll('[data-dismiss-card]').forEach(function(button) {
-    button.addEventListener('click', function() {
-      var container = button.closest('[data-dismiss-card-container]');
-      button.disabled = true;
-      persistCard(button.getAttribute('data-dismiss-card'))
-        .then(function() {
-          if (container) container.remove();
-        })
-        .catch(function() {
-          button.disabled = false;
-        });
-    });
-  });
+  function cssEscape(value) {
+    return window.CSS && CSS.escape ? CSS.escape(value) : String(value).replace(/"/g, '\\"');
+  }
 
-  document.querySelectorAll('[data-complete-card]').forEach(function(link) {
-    link.addEventListener('click', function(event) {
-      event.preventDefault();
-      var destination = link.href;
-      link.setAttribute('aria-disabled', 'true');
-      persistCard(link.getAttribute('data-complete-card'))
-        .then(function() {
-          window.location.assign(destination);
-        })
-        .catch(function() {
-          link.removeAttribute('aria-disabled');
-          window.location.assign(destination);
-        });
-    });
-  });
+  // After a Skip is saved, re-render only this checklist from the server so
+  // the counter, progress bar, Skipped labels, completion copy, and hiding
+  // once resolved all match the server output, without a page reload.
+  function refreshChecklist(container, skippedKey) {
+    var testid = container.getAttribute('data-testid');
+    if (!testid) return Promise.reject(new Error('Checklist has no data-testid'));
+    var selector = '[data-dismiss-card-container][data-testid="' + cssEscape(testid) + '"]';
+    var skippedRow = container.querySelector('[data-skip-activation="' + cssEscape(skippedKey) + '"]');
+    skippedRow = skippedRow && skippedRow.closest('[data-activation-key]');
+    var rowKeys = Array.prototype.map.call(
+      container.querySelectorAll('[data-activation-key]'),
+      function(row) { return row.getAttribute('data-activation-key'); }
+    );
+    var skippedIndex = skippedRow ? rowKeys.indexOf(skippedRow.getAttribute('data-activation-key')) : -1;
 
-  document.querySelectorAll('[data-skip-activation]').forEach(function(button) {
-    button.addEventListener('click', function() {
-      button.disabled = true;
-      persistCard(button.getAttribute('data-skip-activation'))
-        .then(function() {
-          window.location.reload();
-        })
-        .catch(function() {
-          button.disabled = false;
-        });
+    return fetch(window.location.href, { credentials: 'same-origin' })
+      .then(function(response) {
+        if (!response.ok) throw new Error('Could not refresh checklist');
+        return response.text();
+      })
+      .then(function(html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var fresh = doc.querySelector(selector);
+        if (!fresh) {
+          // The checklist is resolved and no longer rendered.
+          container.remove();
+          return;
+        }
+        container.outerHTML = fresh.outerHTML;
+        var swapped = document.querySelector(selector);
+        if (!swapped) throw new Error('Checklist swap failed');
+        bind(swapped);
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+        }
+        focusAfterSkip(swapped, rowKeys, skippedIndex);
+      });
+  }
+
+  function focusAfterSkip(root, rowKeys, skippedIndex) {
+    for (var i = skippedIndex + 1; i < rowKeys.length; i++) {
+      var later = root.querySelector('[data-activation-key="' + cssEscape(rowKeys[i]) + '"] [data-skip-activation]');
+      if (later) { later.focus(); return; }
+    }
+    var anySkip = root.querySelector('[data-skip-activation]');
+    if (anySkip) { anySkip.focus(); return; }
+    var heading = root.querySelector('h3');
+    if (heading) {
+      heading.setAttribute('tabindex', '-1');
+      heading.focus();
+    }
+  }
+
+  function bind(root) {
+    root.querySelectorAll('[data-dismiss-card]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var container = button.closest('[data-dismiss-card-container]');
+        button.disabled = true;
+        persistCard(button.getAttribute('data-dismiss-card'))
+          .then(function() {
+            if (container) container.remove();
+          })
+          .catch(function() {
+            button.disabled = false;
+          });
+      });
     });
-  });
+
+    root.querySelectorAll('[data-complete-card]').forEach(function(link) {
+      link.addEventListener('click', function(event) {
+        event.preventDefault();
+        var destination = link.href;
+        link.setAttribute('aria-disabled', 'true');
+        persistCard(link.getAttribute('data-complete-card'))
+          .then(function() {
+            window.location.assign(destination);
+          })
+          .catch(function() {
+            link.removeAttribute('aria-disabled');
+            window.location.assign(destination);
+          });
+      });
+    });
+
+    root.querySelectorAll('[data-skip-activation]').forEach(function(button) {
+      button.addEventListener('click', function() {
+        var key = button.getAttribute('data-skip-activation');
+        var container = button.closest('[data-dismiss-card-container]');
+        button.disabled = true;
+        persistCard(key)
+          .then(function() {
+            if (!container) {
+              window.location.reload();
+              return;
+            }
+            return refreshChecklist(container, key).catch(function() {
+              window.location.reload();
+            });
+          })
+          .catch(function() {
+            button.disabled = false;
+          });
+      });
+    });
+  }
+
+  bind(document);
 })();
 </script>

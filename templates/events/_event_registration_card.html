@@ -220,7 +220,7 @@
         {% endif %}
         <div class="mt-4">
           <button type="button"
-                  class="{% button_classes 'destructive' %}"
+                  class="{% button_classes 'destructive' extra='w-full sm:w-auto' %}"
                   id="unregister-btn"
                   data-testid="{% if event.event_series_id %}event-cancel-session-button{% else %}event-cancel-registration-button{% endif %}"
                   {% if event.event_series_id %}data-cancel-confirm="Cancel your spot for this session? You'll stay registered for the other sessions in {{ event.event_series.name }}."{% endif %}
@@ -263,9 +263,9 @@
     </p>
     {% endif %}
     {% endif %}
-    <div class="mt-6 flex flex-col items-start gap-3">
+    <div class="mt-6 flex flex-col items-stretch gap-3 sm:items-start">
       <button type="button"
-              class="{% button_classes 'primary' size='lg' %}"
+              class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"
               id="register-btn"
               data-register-scope="series"
               {% if event.event_series_id and series_session_accessible >= 2 %}data-series-url="{{ event.event_series.get_absolute_url }}"{% endif %}

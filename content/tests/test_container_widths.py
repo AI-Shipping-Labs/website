@@ -59,6 +59,7 @@ FRAME_DELEGATED_TO_INCLUDE = {
     "templates/accounts/password_reset_request.html": "templates/accounts/includes/_auth_card.html",
     "templates/content/workshops_catalog.html": "templates/content/_workshops_catalog.html",
     "templates/content/workshop_page_detail.html": "templates/content/reader/_layout.html",
+    "templates/content/module_overview.html": "templates/content/reader/_layout.html",
 }
 
 # Pages the width audits pinned to a specific tier.

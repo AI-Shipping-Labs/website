@@ -12,7 +12,7 @@
   {% if teaching_module and recommended_unit.module.parent_id != teaching_module.pk and recommended_unit.module_id != teaching_module.pk %}<p class="mt-1 break-words text-sm text-muted-foreground" data-testid="course-home-read-ahead">Reading ahead · {% if recommended_unit.module.parent %}{{ recommended_unit.module.parent.title }}{% else %}{{ recommended_unit.module.title }}{% endif %}</p>{% endif %}
   {% if recommended_live_session %}
   {% with session=recommended_live_session %}
-  <p class="mt-1 text-sm text-muted-foreground" data-testid="course-home-focus-session-time"><time datetime="{{ session.when|date:'c' }}">{{ session.when_label_without_timezone }}</time>{% if session.status %} · {{ session.status }}{% endif %}</p>
+  <p class="mt-1 text-sm text-muted-foreground" data-testid="course-home-focus-session-time"><time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time>{% if session.status %} · {{ session.status }}{% endif %}</p>
   {% if session.event.description %}<p class="mt-2 text-sm text-foreground" data-testid="course-home-focus-session-description">{{ session.event.description|truncatewords:40 }}</p>{% endif %}
   <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
     <a href="{{ session.session_unit.get_absolute_url }}{{ cohort_query }}" class="{% button_classes 'primary' size='md' extra='w-full justify-center sm:w-auto' %}" data-testid="course-home-open-session">{% if session.status == 'Live now' %}Join session{% else %}Open session{% endif %}</a>

@@ -1,0 +1,69 @@
+{% load member_badges %}
+{% load curriculum_tags %}
+{% load accounts_extras %}
+
+{% include "content/reader/_mobile_nav_toggle_gated.html" with reader_mobile_label="Course Navigation" %}
+
+{% include "content/reader/_breadcrumb.html" with breadcrumb_kind="module" breadcrumb_testid="module-breadcrumb" %}
+
+<header class="mb-8">
+  <div class="mb-3 flex items-center gap-2">
+    <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
+      <i data-lucide="book-open" class="h-4 w-4"></i>
+      {% if module.parent %}Submodule{% else %}Module{% endif %}
+    </span>
+    {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
+    {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
+    {% endif %}
+  </div>
+  <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="module-title">
+    {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
+  </h1>
+</header>
+
+{% if module.overview_html %}
+<div class="prose reader-prose mb-10 max-w-full overflow-x-auto" data-testid="module-overview">{{ module.overview_html|safe }}</div>
+{% endif %}
+
+{% if module_next_action %}
+<section class="mb-10" aria-labelledby="module-next-heading" data-testid="module-next-action">
+  {% if user_authenticated and module_progress_total %}
+  <div class="mb-2 flex items-center justify-between gap-4">
+    <p class="text-sm font-medium text-foreground">Module progress</p>
+    <span class="text-sm text-muted-foreground" data-testid="module-progress-count">{{ module_progress_completed }} of {{ module_progress_total }} complete</span>
+  </div>
+  <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Module progress" aria-valuemin="0" aria-valuemax="{{ module_progress_total }}" aria-valuenow="{{ module_progress_completed }}">
+    <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ module_progress_pct }}%"></div>
+  </div>
+  {% endif %}
+  <div class="{% if user_authenticated and module_progress_total %}mt-6{% endif %}">
+    <h2 id="module-next-heading" class="text-xs font-medium text-muted-foreground">{% if module_next_action.complete %}You have completed every lesson in this module{% else %}Next lesson{% endif %}</h2>
+    {% if not module_next_action.complete %}<p class="mt-1 break-words text-base font-semibold text-foreground" data-testid="module-next-lesson-title">{{ module_next_action.unit.title }}</p>{% endif %}
+    <a href="{{ module_next_action.url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="module-next-action-link">{{ module_next_action.label }}</a>
+  </div>
+</section>
+{% endif %}
+
+{% if module_session_rows %}
+<div class="mb-10" data-testid="module-session-details">
+  {% include "content/course_home/_live_sessions.html" with live_session_schedule=module_session_rows section="home" %}
+</div>
+{% endif %}
+
+{% if module_homework_rows or module_project_rows %}
+<div class="mb-10" data-testid="module-work-status">
+  {% include "content/course_home/_deadlines.html" with section="home" homework_home_rows=module_homework_rows project_home_rows=module_project_rows homework_home_fallback=False homework_focus_items=None project_focus_items=None deadlines_unframed=True deadline_heading="Homework and projects" %}
+</div>
+{% endif %}
+
+{% if module_show_timezone_notice %}
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-10" only %}
+{% endif %}
+
+{% if cta_message %}
+  {% if gated_entitlement %}
+  {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="This is an external course, run on another platform — it isn't included in any AI Shipping Labs membership plan." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="module-cta-button" gated_entitlement=True %}
+  {% else %}
+  {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="module-cta-button" %}
+  {% endif %}
+{% endif %}

@@ -9,16 +9,17 @@ Covers:
 - ``Module.overview_html`` is generated from ``overview`` markdown on save
 - The leading H1 in the overview is stripped when it duplicates the module
   title (via ``strip_leading_title_h1``)
-- ``/courses/<course>/<module>/`` renders the overview + lesson list
-- Module without an overview still renders the lesson list
+- ``/courses/<course>/<module>/`` renders the overview + module home (next lesson, progress)
+- Module without an overview still offers its next lesson
 - ``Module.get_absolute_url()``
 """
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 
 from content.access import LEVEL_MAIN
-from content.models import Course, Module, Unit
+from content.models import Course, Module, Unit, UserCourseProgress
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
@@ -85,7 +86,7 @@ class ModuleOverviewModelTest(TestCase):
 
 
 class ModuleOverviewViewTest(TestCase):
-    """``GET /courses/<course>/<module>/`` renders overview + lesson list."""
+    """``GET /courses/<course>/<module>/`` renders overview + module home."""
 
     @classmethod
     def setUpTestData(cls):
@@ -123,22 +124,66 @@ class ModuleOverviewViewTest(TestCase):
         # body's `# Fundamentals` H1 was stripped on save.
         self.assertNotRegex(response.content.decode(), r'<h1(?: id="[^"]*")?>Fundamentals</h1>')
 
-    def test_overview_page_lists_units_separately_from_overview(self):
-        """Lesson list is a distinct section, not interleaved with overview."""
+    def test_module_home_offers_next_lesson_instead_of_lesson_list(self):
+        """The module home links one next lesson; the sidebar owns the list."""
         response = self.client.get('/courses/python-course/fundamentals')
-        # Both real units appear as lesson rows.
-        self.assertContains(response, 'Why Python')
-        self.assertContains(response, 'Setup')
-        # Lesson list section exists.
-        self.assertContains(response, 'data-testid="module-lesson-list"')
-        # Lesson links point at the unit detail URLs (not the bare module).
+        self.assertNotContains(response, 'data-testid="module-lesson-list"')
+        next_action = response.context['module_next_action']
+        self.assertEqual(next_action['unit'], self.unit_a)
+        self.assertEqual(next_action['label'], 'Start module')
         self.assertContains(
-            response, 'href="/courses/python-course/fundamentals/why"',
+            response,
+            'href="/courses/python-course/fundamentals/why" class=',
         )
-        # Crucially, no /readme lesson row leaks through.
         self.assertNotContains(
             response, '/courses/python-course/fundamentals/readme',
         )
+
+    def test_next_lesson_link_preserves_selected_cohort(self):
+        response = self.client.get('/courses/python-course/fundamentals?cohort=4')
+        self.assertEqual(
+            response.context['module_next_action']['url'],
+            '/courses/python-course/fundamentals/why?cohort=4',
+        )
+
+    def test_progress_and_next_lesson_follow_completion(self):
+        user = User.objects.create_user(
+            email='module-home@test.com', password='testpass',
+            email_verified=True,
+        )
+        UserCourseProgress.objects.create(
+            user=user, unit=self.unit_a, completed_at=timezone.now(),
+        )
+        self.client.force_login(user)
+
+        response = self.client.get('/courses/python-course/fundamentals')
+
+        self.assertContains(
+            response,
+            '<span class="text-sm text-muted-foreground" '
+            'data-testid="module-progress-count">1 of 2 complete</span>',
+            html=True,
+        )
+        self.assertEqual(response.context['module_next_action']['unit'], self.unit_b)
+        self.assertEqual(response.context['module_next_action']['label'], 'Continue')
+
+    def test_completed_module_offers_review(self):
+        user = User.objects.create_user(
+            email='module-done@test.com', password='testpass',
+            email_verified=True,
+        )
+        for unit in (self.unit_a, self.unit_b):
+            UserCourseProgress.objects.create(
+                user=user, unit=unit, completed_at=timezone.now(),
+            )
+        self.client.force_login(user)
+
+        response = self.client.get('/courses/python-course/fundamentals')
+
+        next_action = response.context['module_next_action']
+        self.assertTrue(next_action['complete'])
+        self.assertEqual(next_action['label'], 'Review module')
+        self.assertEqual(next_action['unit'], self.unit_a)
 
     def test_overview_page_breadcrumb_links_back_to_course(self):
         response = self.client.get('/courses/python-course/fundamentals')
@@ -146,7 +191,7 @@ class ModuleOverviewViewTest(TestCase):
         self.assertContains(response, 'Python Course')
 
     def test_module_without_overview_still_renders_lesson_list(self):
-        """Falls back to lesson-list-only layout when overview is empty."""
+        """A module without an authored intro still offers its next lesson."""
         bare = Module.objects.create(
             course=self.course, title='Bare', slug='bare', sort_order=2,
         )
@@ -157,8 +202,13 @@ class ModuleOverviewViewTest(TestCase):
         response = self.client.get('/courses/python-course/bare')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="module-overview"')
-        self.assertContains(response, 'Lesson One')
-        self.assertContains(response, 'data-testid="module-lesson-list"')
+        self.assertEqual(
+            response.context['module_next_action']['url'],
+            '/courses/python-course/bare/lesson-one',
+        )
+        # Sections with nothing to show are omitted, not rendered empty.
+        self.assertNotContains(response, 'data-testid="module-session-details"')
+        self.assertNotContains(response, 'data-testid="module-work-status"')
 
     def test_unknown_course_returns_404(self):
         response = self.client.get('/courses/no-such-course/fundamentals')

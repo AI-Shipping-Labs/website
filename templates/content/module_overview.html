@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% load seo_tags %}
-{% load member_badges %}
-{% load curriculum_tags %}
+{% load course_links %}
 
 {% block title %}{{ module.title }} | {{ course.title }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}{% seo_description module "module" %}{% endblock %}
@@ -10,172 +9,18 @@
 {% block body %}
 {% include "includes/header.html" %}
 {% include "includes/_studio_edit_button.html" with obj=course studio_section="syllabus" %}
-<main class="min-h-screen pt-24">
-  <article class="py-8 sm:py-16 lg:py-24">
-    <div class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
-      <a href="/courses/{{ course.slug }}" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="module-back-link">
-        <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        Back to {{ course.title }}
-      </a>
-
-      <div class="mb-6 flex items-center gap-2 text-sm text-muted-foreground overflow-hidden" data-testid="module-breadcrumb">
-        <a href="/courses" class="hover:text-foreground transition-colors flex-shrink-0">Courses</a>
-        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-        <a href="/courses/{{ course.slug }}" class="hover:text-foreground transition-colors truncate">{{ course.title }}</a>
-        {% if module.parent %}
-        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-        <a href="{{ module.parent.get_absolute_url }}" class="hover:text-foreground transition-colors truncate" data-testid="module-breadcrumb-parent">{{ module.parent.title }}</a>
-        {% endif %}
-        <i data-lucide="chevron-right" class="h-3 w-3 flex-shrink-0"></i>
-        <span class="text-foreground truncate">{{ module.title }}</span>
-      </div>
-
-      <header class="mb-10">
-        <div class="mb-3 flex items-center gap-2">
-          <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
-            <i data-lucide="book-open" class="h-4 w-4"></i>
-            {% if module.parent %}Submodule{% else %}Module{% endif %}
-          </span>
-          {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
-          {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
-          {% endif %}
-        </div>
-        <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl" style="text-wrap: balance;" data-testid="module-title">
-          {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
-        </h1>
-      </header>
-
-      {% if module.overview_html %}
-      <div class="prose mb-12" data-testid="module-overview">
-        {{ module.overview_html|safe }}
-      </div>
-      {% endif %}
-
-      {% if units and submodules %}
-      <section class="mb-12" data-testid="module-content-list">
-        <h2 class="text-2xl font-semibold tracking-tight mb-4">Contents</h2>
-        <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for child in display_children %}
-          {% with inline_units=child|inline_course_units:course.slug %}
-          {% if inline_units %}
-          {% for inline_unit in inline_units %}
-          <a href="{{ inline_unit.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-lesson-link">
-            <i data-lucide="{{ inline_unit.kind|unit_kind_icon }}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
-            {{ inline_unit.title }}
-          </a>
-          {% endfor %}
-          {% else %}
-          <a href="{{ child.get_absolute_url }}" class="flex min-h-[44px] items-center gap-3 px-4 py-3 text-sm text-foreground hover:bg-muted/50" data-testid="module-submodule-link">
-            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>
-            {{ child.title }}
-          </a>
-          {% endif %}
-          {% endwith %}
-          {% endfor %}
-        </div>
-      </section>
-      {% endif %}
-
-      {% if submodules and not units %}
-      {% comment %}
-        Issue #1674: a parent module holds submodules, not units — this
-        section replaces "Lessons" and must never show "This module has
-        no lessons yet.", which is wrong for a parent module.
-      {% endcomment %}
-      <section class="mb-12" data-testid="module-submodule-list">
-        <h2 class="text-2xl font-semibold tracking-tight mb-4">
-          Submodules
-          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ submodules|length }}</span>
-        </h2>
-        <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for submodule in submodules %}
-          {% if submodule.syllabus_section %}<h3 class="px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="module-syllabus-section">{{ submodule.syllabus_section }}</h3>{% endif %}
-          <a href="{{ submodule.get_absolute_url }}"
-             class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]"
-             data-testid="module-submodule-link">
-            <i data-lucide="folder" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            <span class="text-sm text-foreground flex-1 py-2">{{ submodule.title }}</span>
-            {% if submodule.is_bonus and not module.is_bonus %}
-            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-submodule-bonus-badge" %}
-            {% endif %}
-            <i data-lucide="chevron-right" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-          </a>
-          {% endfor %}
-        </div>
-      </section>
-      {% elif not submodules %}
-      {% if module.slug != 'project-attempts' %}
-      <!-- Lesson list (always rendered as a separate section, never interleaved with overview) -->
-      <section class="mb-12" data-testid="module-lesson-list">
-        <h2 class="text-2xl font-semibold tracking-tight mb-4">
-          Lessons
-          {% if units %}
-          <span class="ml-2 text-sm font-normal text-muted-foreground">{{ units|length }}</span>
-          {% endif %}
-        </h2>
-        {% if units %}
-        <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for unit in units %}
-          <div class="flex items-center gap-3 px-4 py-3 hover:bg-muted/50 transition-colors min-h-[44px]">
-            {% if unit.pk in completed_unit_ids %}
-            <i data-lucide="check-circle-2" class="h-4 w-4 text-green-400 flex-shrink-0"></i>
-            {% elif unit.is_preview %}
-            <i data-lucide="eye" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% elif not has_access %}
-            <i data-lucide="lock" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% else %}
-            <i data-lucide="circle" class="h-4 w-4 text-muted-foreground flex-shrink-0"></i>
-            {% endif %}
-            <a href="{{ unit.get_absolute_url }}"
-               class="text-sm {% if has_access or unit.is_preview %}text-foreground{% else %}text-muted-foreground{% endif %} hover:text-accent transition-colors flex-1 py-2"
-               data-testid="module-lesson-link">
-              {{ unit.title }}
-            </a>
-            {% if unit.is_bonus and not module.is_bonus and not module.parent.is_bonus %}
-            {% member_label_badge "Optional" tone="accent" size="xs" testid="module-lesson-bonus-badge" %}
-            {% endif %}
-            {% if unit.is_preview and not has_access %}
-            <span class="ml-auto rounded-full bg-accent/10 px-2 py-0.5 text-xs text-accent">Preview</span>
-            {% endif %}
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <p class="text-sm text-muted-foreground" data-testid="module-no-lessons">
-          This module has no lessons yet.
-        </p>
-        {% endif %}
-      </section>
-      {% endif %}
-      {% if course_projects %}
-      <section class="mb-12" {% if module.slug != 'project-attempts' %}aria-labelledby="module-projects-heading"{% else %}aria-label="Project attempts"{% endif %} data-testid="module-project-attempts">
-        {% if module.slug != 'project-attempts' %}<h2 id="module-projects-heading" class="text-2xl font-semibold tracking-tight mb-4">Project attempts</h2>{% endif %}
-        <div class="rounded-lg border border-border bg-card divide-y divide-border">
-          {% for project in course_projects %}
-          {% include "content/_syllabus_project_row.html" with project=project course_slug=course.slug preview_project_ids=preview_project_ids schedule_timezone=schedule_timezone only %}
-          {% endfor %}
-        </div>
-        {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_subject="Deadline times" timezone_notice_testid="module-project-timezone-note" only %}
-      </section>
-      {% elif course.slug == 'ai-buildcamp' and module.slug == 'project-attempts' %}
-      <p class="mb-12 text-sm text-muted-foreground" data-testid="module-project-coming-soon">Attempt dates will be announced here.</p>
-      {% endif %}
-      {% endif %}
-
-      {% if cta_message %}
-      {% if gated_entitlement %}
-      {% comment %}
-        Issue #1673: entitlement-mode module — mirror the course-detail
-        entitlement CTA (external enroll link, no tier pill), not the
-        tier "Upgrade" CTA to /membership.
-      {% endcomment %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="This is an external course, run on another platform — it isn't included in any AI Shipping Labs membership plan." required_tier_name="" gated_cta_url=cta_url gated_cta_label="Enroll now" gated_cta_testid="module-cta-button" gated_entitlement=True %}
-      {% else %}
-      {% include "content/_gated_access_card.html" with gated_card_testid="module-cta" gated_icon="lock" gated_heading=cta_message gated_description="Get full access to this course and more with a membership." required_tier_name=required_tier_name gated_cta_url=cta_url gated_cta_label="Upgrade" gated_cta_testid="module-cta-button" %}
-      {% endif %}
-      {% endif %}
-    </div>
-  </article>
+<main class="min-h-screen">
+  {% comment %}The sidebar appends ?cohort itself for module-scoped navigation, so pass the cohort only when it will not.{% endcomment %}
+  {% if scoped_module %}{% course_entry_url course as reader_course_url %}{% else %}{% course_entry_url course cohort=reader_cohort_param as reader_course_url %}{% endif %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_module_overview_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_testid="course-sidebar" reader_nav_kind="course" %}
 </main>
 {% include "includes/footer.html" %}
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/mermaid_script.html" %}
+{% include "_partials/event_widget_script.html" %}
+{% include "content/reader/_scripts.html" %}
+{% include "comments/_qa_script.html" %}
 {% endblock %}

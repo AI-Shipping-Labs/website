@@ -1,4 +1,4 @@
-<section class="{% if section == 'home' %}rounded-xl border border-border bg-card p-5 sm:p-6{% endif %}" aria-labelledby="{% if section == 'home' %}course-home-deadlines-heading{% elif section == 'homework' %}course-homework-heading{% else %}course-projects-heading{% endif %}" data-testid="course-home-deadlines">
+<section class="{% if section == 'home' and not deadlines_unframed %}rounded-xl border border-border bg-card p-5 sm:p-6{% endif %}" aria-labelledby="{% if section == 'home' %}course-home-deadlines-heading{% elif section == 'homework' %}course-homework-heading{% else %}course-projects-heading{% endif %}" data-testid="course-home-deadlines">
   {% if section == 'home' %}
   <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
     <h2 id="course-home-deadlines-heading" class="text-lg font-semibold text-foreground">{{ deadline_heading|default:"Work and deadlines" }}</h2>

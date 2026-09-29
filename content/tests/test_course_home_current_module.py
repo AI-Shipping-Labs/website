@@ -24,7 +24,6 @@ from content.services.course_schedule import cohort_projects
 from content.services.current_module import module_progress
 from events.models import Event, EventSeries
 
-
 _VOID_TAGS = {
     'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
     'meta', 'source', 'track', 'wbr',

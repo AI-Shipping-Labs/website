@@ -140,7 +140,7 @@ class WorkshopPageQASectionTest(TierSetupMixin, TestCase):
         # Authenticated branch is rendered.
         self.assertContains(response, 'id="qa-new-question"')
         self.assertContains(response, 'id="qa-post-btn"')
-        self.assertContains(response, 'Post Question')
+        self.assertContains(response, 'Post question')
         # The anonymous-only CTA elements must NOT appear.
         self.assertNotContains(response, '/accounts/signup/?next=')
         self.assertNotContains(response, 'Already have an account? Sign in')

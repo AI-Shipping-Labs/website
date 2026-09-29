@@ -23,8 +23,8 @@
     {% endif %}
   </span>
   {% if viewer.is_authenticated %}
-  <a href="/account/#display-preferences-section" class="font-medium text-accent hover:underline">Change timezone</a>
+  <a href="/account/#display-preferences-section" class="inline-flex min-h-[44px] items-center font-medium text-accent hover:underline">Change timezone</a>
   {% else %}
-  <a href="/accounts/login/?next={{ timezone_login_next|urlencode }}" class="font-medium text-accent hover:underline">Sign in to use your timezone</a>
+  <a href="/accounts/login/?next={{ timezone_login_next|urlencode }}" class="inline-flex min-h-[44px] items-center font-medium text-accent hover:underline">Sign in to use your timezone</a>
   {% endif %}
 </p>

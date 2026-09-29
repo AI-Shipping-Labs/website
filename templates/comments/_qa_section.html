@@ -17,7 +17,7 @@ Parameters:
   heading text rendered above the thread.
 - ``composer_placeholder`` (optional, default "Ask a question about
   this lesson..."): placeholder text for the new-comment textarea.
-- ``composer_button_label`` (optional, default "Post Question"): label
+- ``composer_button_label`` (optional, default "Post question"): label
   for the submit button.
 - ``composer_signin_prompt`` (optional, default "to ask questions,
   track your progress, and get access to other workshops"): trailing
@@ -46,6 +46,7 @@ Parameters:
   Both default to the exact prior values so course / workshop / plan pages
   render byte-identically.
 {% endcomment %}
+{% load accounts_extras %}
 <div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}">
   <h2 class="mb-6 flex items-center gap-2 {{ heading_class|default:'text-xl' }} font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
@@ -68,9 +69,9 @@ Parameters:
       <button
         type="button"
         id="qa-post-btn{% if instance_id %}-{{ instance_id }}{% endif %}"
-        class="qa-post-btn mt-2 inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-colors hover:bg-accent/90"
+        class="qa-post-btn {% button_classes 'primary' extra='mt-2 w-full sm:w-auto' %}"
       >
-        {{ composer_button_label|default:"Post Question" }}
+        {{ composer_button_label|default:"Post question" }}
       </button>
     </div>
     {% endif %}

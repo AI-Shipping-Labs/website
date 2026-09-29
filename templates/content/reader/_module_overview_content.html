@@ -46,13 +46,13 @@
 
 {% if module_session_rows %}
 <div class="mb-10" data-testid="module-session-details">
-  {% include "content/course_home/_live_sessions.html" with live_session_schedule=module_session_rows section="home" %}
+  {% include "content/course_home/_live_sessions.html" with live_session_schedule=module_session_rows section="module" %}
 </div>
 {% endif %}
 
 {% if module_homework_rows or module_project_rows %}
 <div class="mb-10" data-testid="module-work-status">
-  {% include "content/course_home/_deadlines.html" with section="home" homework_home_rows=module_homework_rows project_home_rows=module_project_rows homework_home_fallback=False homework_focus_items=None project_focus_items=None deadlines_unframed=True deadline_heading="Homework and projects" %}
+  {% include "content/course_home/_deadlines.html" with section="module" deadline_rows=module_work_rows completed_deadline_rows=None %}
 </div>
 {% endif %}
 

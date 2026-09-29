@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from content.models import CohortEnrollment, UserCourseProgress
 from content.services.course_commitments import build_course_commitments
+from content.services.current_module import session_item
 
 WORK_KINDS = ('Homework', 'Project')
 
@@ -251,7 +252,9 @@ def build_module_home(course, module, user, *, tree_units, completed_ids, has_ac
     if user.is_authenticated and has_access:
         commitments = build_course_commitments(course, user, cohort)
     root_id = _root_module_id(module)
-    session_rows = _session_rows(commitments, root_id)
+    session_rows = [
+        session_item(row, cohort_query) for row in _session_rows(commitments, root_id)
+    ]
     work_rows = _work_rows(commitments, root_id, visible_project_ids, cohort_query)
     context.update({
         'module_session_rows': session_rows,

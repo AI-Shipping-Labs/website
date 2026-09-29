@@ -1432,6 +1432,7 @@ class RepoWideScannerDiscoveryTest(SimpleTestCase):
             ("accounts/tests/test_button_class_lint.py", "templates"),
             ("accounts/tests/test_template_date_vocabulary.py", "templates"),
             ("content/tests/test_container_widths.py", "templates"),
+            ("content/tests/test_design_layout_lint.py", "templates"),
             ("content/tests/test_design_system_lint.py", "templates"),
             ("content/tests/test_internal_copy_lint.py", "templates"),
             ("content/tests/test_status_contrast_1279.py", "templates"),
@@ -1908,11 +1909,11 @@ class RepoWideGuardEvidenceTest(SimpleTestCase):
 
     def test_rows_group_labels_only_when_the_checkers_share_a_scan_set(self):
         # Every label in a multi-label row must be a discovered scanner of the
-        # same tree with no exclusions of its own; the seven pure-`templates/`
+        # same tree with no exclusions of its own; the eight pure-`templates/`
         # lints are the only group that qualifies today. The comment lint is
         # deliberately outside it -- it also reads
         # `email_app/email_templates/*.md`, so grouping it here would declare
-        # seven checkers as reading a tree they never open.
+        # eight checkers as reading a tree they never open.
         grouped = [guard for guard in REPO_WIDE_GUARDS if len(guard.labels) > 1]
         self.assertEqual([guard.name for guard in grouped], ["repo-wide-template-lints"])
         row = _row("repo-wide-template-lints")

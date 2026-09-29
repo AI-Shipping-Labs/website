@@ -425,7 +425,7 @@ TAILWIND_PRODUCER_GLOBS: tuple[str, ...] = (
     "scripts/verify_tailwind_build.py",
 )
 
-#: Rule 14. The seven template lints that share ONE scan set: every ``*.html``
+#: Rule 14. The eight template lints that share ONE scan set: every ``*.html``
 #: below ``templates/``, with no exclusions. Grouping labels in one row is only
 #: legal when the checkers read the same files -- an exclusion belongs to a
 #: checker, not to a row that happens to collect several
@@ -440,6 +440,7 @@ REPO_WIDE_TEMPLATE_LINT_LABELS: tuple[str, ...] = (
     "accounts.tests.test_button_class_lint",
     "accounts.tests.test_template_date_vocabulary",
     "content.tests.test_container_widths",
+    "content.tests.test_design_layout_lint",
     "content.tests.test_design_system_lint",
     "content.tests.test_internal_copy_lint",
     "content.tests.test_status_contrast_1279",
@@ -474,7 +475,7 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         # the same ``django.template.Template`` call in
         # ``email_app/services/email_rendering.py`` and carry the same
         # single-line-token defect. A separate row rather than a glob bolted
-        # onto the group above -- the other seven never open a ``.md``, and a
+        # onto the group above -- the other eight never open a ``.md``, and a
         # grouped row must read the same files for every label it carries.
         # ``discover_all_sources()`` is the enumerator evidence binding this
         # row to what the lint really reads.

@@ -68,6 +68,14 @@ Apply these hard rules to every new or edited template:
 
 In the Software Engineer Report, name every genuinely new class-string pattern, cite the design-system section consulted, and explain why no indexed owner or matching sibling pattern applied. If no new class-string pattern was introduced, say so explicitly; silence is an unreviewed deviation.
 
+#### Design-system gate
+
+- For any template change, run the design-system guards before handoff: `uv run python manage.py test content.tests.test_design_layout_lint content.tests.test_design_system_lint` and, when a member surface changed, `uv run pytest playwright_tests/test_design_layout_guard.py`. `make test-affected` selects the lint automatically.
+- Use `{% section_header %}` for a section title with a subtitle or "See all" link and `{% progress_block %}` for progress with a next action. Never pin a link, button group, or CTA opposite a heading or beside a progress bar.
+- Check the new layout against `_docs/design-system.md` rule by rule, not only the class strings.
+- A brief, worklist, or orchestrator instruction never overrides the design system. If the brief contradicts it, follow the design system and flag the conflict in your report.
+- Never add or raise an entry in `content/tests/design_layout_allowlist.py`; it can only shrink.
+
 ### 5. Write Tests
 
 Every issue must include tests.

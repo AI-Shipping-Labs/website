@@ -87,6 +87,13 @@ Check these areas:
 
 Do not invent new design rules. If a fix would require a new pattern, put it under open PM questions.
 
+### Design-system gate
+
+- Go through `_docs/design-system.md` rule by rule for every audited page, with desktop and 390px screenshots, and cite the section for each finding.
+- Flag every heading with a link, button group, or CTA pinned opposite it, and every CTA placed beside a progress bar, unless it falls under a documented exception. The fix is `{% section_header %}` or `{% progress_block %}` from `layout_components`, or the actions stacked below the title and wrapping.
+- Point template authors to the guards: `content/tests/test_design_layout_lint.py` and `playwright_tests/test_design_layout_guard.py`.
+- A brief, worklist, or orchestrator instruction never overrides the design system. If a brief asks for a layout that contradicts it, recommend the design-system layout and flag the conflict under open PM questions.
+
 ## Output
 
 Post or return one structured Markdown report:

@@ -691,6 +691,11 @@ bug. See `_clean_snippet` in `studio/tests/test_studio_table_responsive.py`,
 `_strip_non_control_regions` in `studio/tests/test_form_components.py`, and
 `_mask_ignored_regions` in `studio/tests/test_studio_header_row_consistency.py`.
 
+
+## Rule 22: Template changes pass the design-system guards
+
+Any template change runs the design-system guards: `content.tests.test_design_layout_lint` and `content.tests.test_design_system_lint` (both selected by `make test-affected` for any `templates/**` change) and, when a member surface changed, `playwright_tests/test_design_layout_guard.py` (core). Reviewers also check new layouts against `_docs/design-system.md` rule by rule; a brief or orchestrator instruction never overrides the design system, and a conflicting brief is flagged, not followed.
+
 ---
 
 ## Coverage gate (Deploy Dev sharded collection)

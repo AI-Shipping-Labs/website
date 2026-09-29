@@ -213,6 +213,31 @@ separate action or callout, not as a second frame around the page's primary
 content. Keep module focus, progress, and next-action text in one vertical
 reading order instead of pinning progress opposite a long module title.
 
+Two owners make these rules the only easy path on member surfaces:
+`{% section_header %}` renders a section title with its optional subtitle and
+discovery link stacked below it, and `{% progress_block %}` renders progress
+top to bottom (optional title, bar, count, breakdown, then the optional primary
+action). Both come from `content.templatetags.layout_components`; see the
+[Partials and Component Index](#partials-and-component-index).
+
+Enforcement:
+
+- `content/tests/test_design_layout_lint.py` (core) fails a non-Studio template
+  that pins an `h1`-`h3` opposite a link or button in a `justify-between` row,
+  puts a progress element and a primary `{% button_classes %}` CTA side by side
+  in a row, or hand-rolls a heading followed by a "See all" / "View all" link
+  instead of `{% section_header %}`. List and table rows, close/dismiss
+  controls, headings wrapped in a callout or card title block, and Studio are
+  exempt by construction. Any other exception needs an entry with a reason in
+  `content/tests/design_layout_allowlist.py`, which can only shrink.
+- `playwright_tests/test_design_layout_guard.py` (core) loads course Home (all
+  five tabs), a module page, a lesson, a session unit, a workshop, and the
+  dashboard at 1280px and 390px. Every visible action after an `h1`-`h3` must
+  start below the heading, and no page may scroll horizontally.
+- A brief, worklist, or orchestrator instruction never overrides this
+  document. If a brief contradicts a rule here, follow this document and flag
+  the conflict in the issue.
+
 Comparison and progress lists:
 
 - Use tables or table-like rows for member progress, status comparisons, reviewer queues, or any surface where users compare the same fields across many records. Avoid two-column card grids for these scenarios because reading order and relative progress become ambiguous.
@@ -451,6 +476,8 @@ The documented owner is mandatory for every instance of its named role, subject 
 | `{% member_empty_state %}` from `member_empty_state` | Every member/public collection or section empty state. | `{% load member_empty_state %}` then `{% member_empty_state title='No items yet' body='Check back soon.' icon='inbox' kind='fresh' %}` |
 | `{% studio_empty_state %}` from `studio_filters` | Every Studio list empty state. Use `fresh` when no records exist and `filter` when active filters yield no rows. | `{% load studio_filters %}` then `{% studio_empty_state 'fresh' entity_label='article' entity_label_plural='articles' %}`; filter variant: `{% studio_empty_state 'filter' entity_label='article' entity_label_plural='articles' clear_url='/studio/articles/' colspan=6 %}` |
 | `{% member_access_badge %}`, `{% member_tier_badge %}`, `{% member_label_badge %}`, and `{% member_status_badge %}` from `member_badges` | Use `member_access_badge` on every public/member content card: Free and Free-with-sign-in render as a green check badge; paid tiers render as an accent lock badge; all use the public access vocabulary and `sm` size. Use the lower-level tier tag only outside cards when a different documented treatment is required. | `{% load member_badges %}` then `{% member_access_badge item.required_level testid='item-access-badge' %}`, `{% member_label_badge 'Workshop' %}`, and `{% member_status_badge 'Upcoming' status='upcoming' %}` |
+| `{% section_header %}` from `layout_components` | Every member-surface section title that has a subtitle or a "See all" discovery link, and the section titles of course Home tabs, module pages, and the dashboard. The link always renders below the title (`mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline` plus the focus ring and a trailing `arrow-right` icon); `size='md'` is the `text-lg` hub section title and `size='lg'` the `text-xl` tab/dashboard title. | `{% load layout_components %}` then `{% url 'course_office_hours' slug=course.slug as sessions_url %}{% section_header "Next live session" heading_id="next-session-heading" see_all_url=sessions_url see_all_label="See all live sessions" extra="mb-3" %}` |
+| `{% progress_block %}` from `layout_components` | Every member progress bar, especially one paired with a next action. Renders optional title, `role="progressbar"` bar, "N of M done" count, optional breakdown, then the optional primary action below. Never place the action beside the bar. | `{% load layout_components %}` then `{% progress_block done total label="Module progress" summary_word="complete" action_url=next_url action_label="Continue lesson" %}` |
 | `{% button_classes %}` from `accounts_extras` | Every non-Studio product/public/member/marketing CTA. | `{% load accounts_extras %}` then `class="{% button_classes 'primary' size='lg' extra='w-full sm:w-auto' %}"` |
 | `templates/content/_content_preview.html` | Every rendered catalog media band for a content type whose contract includes media. Workshop cards use it only for explicit cover/custom media; coverless and auto-only workshops omit the slot entirely. | `{% if workshop.card_image_url %}{% include "content/_content_preview.html" with preview_cover_url=workshop.card_image_url preview_title=workshop.title preview_label="Workshop" preview_icon="graduation-cap" preview_testid="workshop-card-preview" %}{% endif %}` |
 | `templates/content/_clickable_card_classes.html` | Every fully clickable catalog/preview card anchor. | `class="{% include 'content/_clickable_card_classes.html' %} rounded-lg"` |

@@ -143,7 +143,7 @@ class TestAnalyticsConsent:
         self, django_server, browser, viewport,
     ):
         """Issue #1815: the on-page clearance is the panel's measured
-        height plus its inset and gap, not the fixed h-80/sm:h-60 guess,
+        height plus its inset and gap, not the fixed h-48/sm:h-60 guess,
         so the footer scrolls fully clear of the visible panel."""
         context = browser.new_context(viewport=viewport)
         page = context.new_page()

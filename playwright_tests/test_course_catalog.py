@@ -512,7 +512,7 @@ class TestScenario3FreeUserFreeCourseProgress:
             wait_until="domcontentloaded",
         )
         body = page.content()
-        assert page.get_by_test_id("course-home-open-lesson").count() == 1
+        assert page.get_by_test_id("course-home-primary-action").count() == 1
 
         # No CTA block
         assert "Unlock with" not in body
@@ -637,7 +637,7 @@ class TestScenario4MainMemberPaidCourseProgress:
             f"{django_server}/courses/advanced-mlops/home",
             wait_until="domcontentloaded",
         )
-        assert page.get_by_test_id("course-home-open-lesson").count() == 1
+        assert page.get_by_test_id("course-home-primary-action").count() == 1
 
         # Step 2: back to the overview, then click on the first unit
         page.goto(

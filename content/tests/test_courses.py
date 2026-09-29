@@ -784,8 +784,8 @@ class CourseDetailAccessControlTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email='main2@test.com', password='testpass')
         response = self.client.get('/courses/paid-course/home')
-        # The compact Home focus card leads with the next lesson.
-        self.assertContains(response, 'data-testid="course-home-open-lesson"')
+        # The Current module card leads with the next lesson.
+        self.assertContains(response, 'data-testid="course-home-primary-action"')
         self.assertContains(response, 'href="/courses/paid-course/module-1/lesson-1"')
 
     def test_unauthorized_user_no_progress_bar(self):

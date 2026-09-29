@@ -1,8 +1,7 @@
-"""Course home entry, reader return, and responsive learner layout."""
+"""Course home: the Current module card, next session, and checklist."""
 
 import datetime
 import os
-from pathlib import Path
 
 import pytest
 from django.db import connection
@@ -19,13 +18,14 @@ pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
 @pytest.mark.core
 @browser_journey
-def test_course_home_entry_reader_return_and_mobile_themes(django_server, browser):
+def test_learner_uses_current_module_card_and_next_session(django_server, browser):
     from content.models import Cohort, CohortEnrollment, Course, Enrollment, Module, Unit, UserCourseProgress
+    from events.models import Event, EventSeries
 
-    user = create_user('course-home-browser@test.com')
+    user = create_user('course-home-module-card@test.com')
     course = Course.objects.create(
         title='A practical engineering course with a long title',
-        slug='course-home-browser', status='published', required_level=0,
+        slug='course-home-module-card', status='published', required_level=0,
         discussion_url='https://example.org/course-discussion',
     )
     first = Module.objects.create(
@@ -36,27 +36,45 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
         course=course, title='Build a useful system', slug='build-system',
         sort_order=2, available_after_days=7,
     )
-    optional = Module.objects.create(
-        course=course, title='Further experiments', slug='experiments',
-        sort_order=3, is_bonus=True,
+    third = Module.objects.create(
+        course=course, title='Agentic flows', slug='agentic-flows',
+        sort_order=3, available_after_days=14,
     )
     done = Unit.objects.create(module=first, title='Orientation', slug='orientation')
-    Unit.objects.create(
-        module=first, title='Retrieval-augmented generation',
-        slug='retrieval-augmented-generation', sort_order=1,
-        body='Practice reading and building.',
-    )
     current_unit = Unit.objects.create(module=second, title='Ship a prototype', slug='ship-prototype')
-    Unit.objects.create(module=optional, title='Try another model', slug='try-model')
+    Unit.objects.create(
+        module=second, title='Session 2', slug='session', kind='event',
+        sort_order=2, session_position=2,
+    )
+    Unit.objects.create(
+        module=third, title='Session 3', slug='session', kind='event',
+        sort_order=2, session_position=3,
+    )
     UserCourseProgress.objects.create(user=user, unit=done, completed_at=timezone.now())
     Enrollment.objects.create(user=user, course=course)
     today = timezone.localdate()
+    series = EventSeries.objects.create(name='Module card sessions', slug='module-card-sessions')
     cohort = Cohort.objects.create(
         course=course, name='Current study cohort', external_key='current-study',
-        start_date=today - datetime.timedelta(days=16),
+        start_date=today - datetime.timedelta(days=9),
         end_date=today + datetime.timedelta(days=20),
+        event_series=series,
     )
     CohortEnrollment.objects.create(user=user, cohort=cohort)
+    now = timezone.now()
+    Event.objects.create(
+        event_series=series, slug='module-card-session-2', title='Second session event',
+        status='completed', series_position=2,
+        start_datetime=now - datetime.timedelta(days=1),
+        end_datetime=now - datetime.timedelta(days=1) + datetime.timedelta(hours=1),
+    )
+    Event.objects.create(
+        event_series=series, slug='module-card-session-3', title='Third session event',
+        status='upcoming', series_position=3,
+        start_datetime=now + datetime.timedelta(days=6),
+        end_datetime=now + datetime.timedelta(days=6, hours=1),
+        description='Bring questions about the week.',
+    )
     connection.close()
 
     context = auth_context(browser, user.email)
@@ -65,54 +83,34 @@ def test_course_home_entry_reader_return_and_mobile_themes(django_server, browse
         'domain': '127.0.0.1', 'path': '/',
     }])
     page = context.new_page()
-    page.set_viewport_size({'width': 1440, 'height': 900})
+    page.set_viewport_size({'width': 1280, 'height': 900})
     page.goto(f'{django_server}/courses', wait_until='domcontentloaded')
     page.get_by_role('link', name=course.title).click()
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home')
-    expect(page.locator('[data-testid="course-home-focus"]')).to_contain_text(second.title)
-    expect(page.locator('[data-testid="course-home-week"]')).to_contain_text('Cohort week 3')
-    # The running cohort's current module leads; the unfinished earlier
-    # lesson is a secondary line, not the primary action.
-    expect(page.locator('[data-testid="course-home-recommendation"]')).to_have_text(current_unit.title)
-    expect(page.locator('[data-testid="course-home-earlier-unfinished"]')).to_contain_text(
-        'You also have 1 unfinished lesson from earlier weeks. Pick up in Foundations and tools',
+
+    search = page.locator('#course-home-syllabus-search')
+    card = page.get_by_test_id('course-home-current-module')
+    next_session = page.get_by_test_id('course-home-next-session')
+    expect(search).to_be_visible()
+    # Search comes first, then the module card, then the next session.
+    assert search.bounding_box()['y'] < card.bounding_box()['y'] < next_session.bounding_box()['y']
+    expect(card.get_by_test_id('course-home-current-module-link')).to_have_text(second.title)
+    expect(card.get_by_test_id('course-home-live-session-title')).to_have_text('Session 2')
+    expect(card).to_contain_text('No recap yet')
+    expect(next_session.get_by_test_id('course-home-next-session-module')).to_have_text(
+        'Week 3 · Agentic flows',
     )
-    screenshot_dir = Path('.tmp/screenshots/course-home-1783')
-    screenshot_dir.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(screenshot_dir / 'desktop-light.png'), full_page=True)
-    page.set_viewport_size({'width': 720, 'height': 450})
-    assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+    expect(next_session.get_by_role('link', name='Open session')).to_be_visible()
+    expect(page.get_by_role('navigation', name='Course help and links')).to_have_count(0)
+
     page.set_viewport_size({'width': 390, 'height': 844})
-    expect(page.locator('[data-testid="course-home-open-lesson"]')).to_be_visible()
-    # The next step is visible on a phone without scrolling.
-    assert page.evaluate('window.scrollY') == 0
-    open_lesson_box = page.locator('[data-testid="course-home-open-lesson"]').bounding_box()
-    assert open_lesson_box['y'] + open_lesson_box['height'] <= 844
-    assert page.locator('[data-testid="course-home-open-lesson"]').bounding_box()['height'] >= 44
-    assert page.locator('[data-testid="course-home-help-links"] a').first.bounding_box()['height'] >= 44
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
-    page.screenshot(path=str(screenshot_dir / 'mobile-light.png'), full_page=True)
+    expect(card.get_by_test_id('course-home-primary-action')).to_be_visible()
 
-    page.evaluate("localStorage.setItem('theme', 'dark')")
-    page.reload(wait_until='domcontentloaded')
-    expect(page.locator('html')).to_have_class('dark')
-    page.screenshot(path=str(screenshot_dir / 'mobile-dark.png'), full_page=True)
-    page.set_viewport_size({'width': 1440, 'height': 900})
-    page.screenshot(path=str(screenshot_dir / 'desktop-dark.png'), full_page=True)
-
-    help_links = page.get_by_role('navigation', name='Course help and links')
-    expect(help_links.get_by_role('link', name='Course communication')).to_be_visible()
-
-    page.locator('[data-testid="course-home-open-lesson"]').click()
+    card.get_by_role('link', name='Continue lesson').click()
     expect(page).to_have_url(f'{django_server}{current_unit.get_absolute_url()}?cohort=current-study')
     page.locator('[data-testid="reader-course-home"]').click()
     expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home?cohort=current-study')
-    page.get_by_role('navigation', name='Course pages').get_by_role(
-        'link', name='Syllabus', exact=True,
-    ).click()
-    expect(page).to_have_url(
-        f'{django_server}/courses/{course.slug}/home/syllabus?cohort=current-study',
-    )
     context.close()
 
 

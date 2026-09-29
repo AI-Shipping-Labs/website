@@ -105,14 +105,15 @@ class CourseCommitmentsTests(TestCase):
         first_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=first')
         self.assertContains(first_sessions, f'href="{event_one.get_absolute_url()}"')
         self.assertNotContains(first_sessions, 'second-session')
-        self.assertEqual(
-            first.context['urgent_commitment']['title'], 'First cohort homework',
+        self.assertIn(
+            'First cohort homework',
+            [row['title'] for row in first.context['current_module']['deliverables']],
         )
         self.assertIn(
             'First cohort project',
             [row['title'] for row in first.context['open_assignments']],
         )
-        self.assertContains(first, 'data-testid="course-home-deadlines"')
+        self.assertContains(first, 'data-testid="course-home-deliverables"')
         self.assertContains(
             self.client.get('/courses/commitment-course/home/projects?cohort=first'),
             'First cohort project',
@@ -125,8 +126,9 @@ class CourseCommitmentsTests(TestCase):
         second_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=second')
         self.assertContains(second_sessions, 'second-session')
         self.assertNotContains(second_sessions, f'href="{event_one.get_absolute_url()}"')
-        self.assertEqual(
-            second.context['urgent_commitment']['title'], 'Second cohort homework',
+        self.assertIn(
+            'Second cohort homework',
+            [row['title'] for row in second.context['current_module']['deliverables']],
         )
         self.assertIn(
             'Second cohort project',
@@ -472,7 +474,7 @@ class CourseCommitmentsTests(TestCase):
         )
         self.client.force_login(self.user)
         response = self.client.get('/courses/no-commitments/home')
-        self.assertContains(response, 'data-testid="course-home-focus"')
+        self.assertContains(response, 'id="course-home-syllabus-search"')
         self.assertIsNone(response.context['urgent_commitment'])
         self.assertFalse(response.context['focus_work_items'])
         self.assertIsNone(response.context['next_live_session'])

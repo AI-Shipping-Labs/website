@@ -1242,9 +1242,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
 
     issue_1782_owners = frozenset({
         "playwright_tests/test_course_home_1783.py::"
-        "test_course_home_entry_reader_return_and_mobile_themes",
-        "playwright_tests/test_course_home_1784.py::"
-        "test_course_home_commitments_to_homework_event_and_reviews",
+        "test_learner_uses_current_module_card_and_next_session",
     })
 
     issue_1802_owners = frozenset({
@@ -1584,8 +1582,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2694)
-        self.assertEqual(len(inventory.owners), 2490)
+        self.assertEqual(inventory.item_count, 2693)
+        self.assertEqual(len(inventory.owners), 2489)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

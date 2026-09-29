@@ -92,7 +92,6 @@ class CourseHomeTests(TestCase):
         self.assertEqual([row['module'] for row in model['optional_rows']], [self.optional])
         self.assertEqual(model['orientation_rows'], [])
         self.assertEqual(model['core_rows'][0]['module'], self.first)
-        self.assertIn(('Course communication', self.course.discussion_url), model['help_links'])
 
     def test_orientation_uses_authored_module_identity(self):
         self.first.title = 'Course Logistics'
@@ -101,15 +100,15 @@ class CourseHomeTests(TestCase):
         self.assertEqual(model['orientation_rows'][0]['module'], self.first)
         self.assertNotIn(self.first, [row['module'] for row in model['core_rows']])
 
-    def test_focus_card_is_on_home_and_progress_is_not_on_the_public_overview(self):
+    def test_current_module_card_is_on_home_and_progress_is_not_on_the_public_overview(self):
         self._complete(self.lesson1)
         self.client.login(email=self.user.email, password='testpass')
 
         home = self.client.get('/courses/course-home-test/home')
         overview = self.client.get('/courses/course-home-test')
 
-        self.assertContains(home, 'data-testid="course-home-focus"')
-        self.assertEqual(home.context['recommended_unit'], self.lesson2)
+        self.assertContains(home, 'data-testid="course-home-current-module"')
+        self.assertEqual(home.context['current_module']['module'], self.first)
         self.assertContains(overview, 'Syllabus')
         self.assertNotContains(overview, 'Your Progress')
         self.assertNotContains(overview, 'data-testid="course-home-progress"')
@@ -169,28 +168,6 @@ class CourseHomeTests(TestCase):
         self.assertEqual(model['recommended_unit'], ahead)
         self.assertEqual(model['earlier_unfinished']['count'], 2)
         self.assertEqual(model['earlier_unfinished']['unit'], self.lesson1)
-
-    def test_cohort_home_card_shows_current_module_action_and_earlier_line(self):
-        cohort = self._cohort()
-        self._complete(self.lesson1)
-        self.client.force_login(self.user)
-        response = self.client.get(
-            f'/courses/{self.course.slug}/home?cohort={cohort.external_key}',
-        )
-        self.assertEqual(response.context['recommended_unit'], self.lesson3)
-        self.assertContains(
-            response,
-            f'href="{self.lesson3.get_absolute_url()}?cohort={cohort.external_key}"',
-        )
-        self.assertContains(response, 'data-testid="course-home-week">Cohort week 4</span>')
-        self.assertContains(
-            response, 'You also have 1 unfinished lesson from earlier weeks.',
-        )
-        self.assertContains(
-            response,
-            f'href="{self.lesson2.get_absolute_url()}?cohort={cohort.external_key}"',
-        )
-        self.assertContains(response, 'data-testid="course-home-earlier-unfinished-link"')
 
     def test_no_cohort_home_card_has_no_week_or_earlier_line(self):
         self._complete(self.lesson1)
@@ -437,7 +414,7 @@ class CourseHomeTests(TestCase):
     def test_page_links_home_to_lesson_and_course_materials(self):
         self.client.force_login(self.user)
         response = self.client.get('/courses/course-home-test/home')
-        self.assertContains(response, 'data-testid="course-home-open-lesson"')
+        self.assertContains(response, 'data-testid="course-home-primary-action"')
         self.assertContains(response, f'href="{self.lesson1.get_absolute_url()}"')
         self.assertContains(response, 'href="/courses/course-home-test/home/syllabus"')
         self.assertEqual(response.context['recommended_unit'], self.lesson1)
@@ -450,12 +427,9 @@ class CourseHomeTests(TestCase):
         CourseAccess.objects.create(user=self.user, course=self.course, access_type='granted')
         self.client.force_login(self.user)
         response = self.client.get('/courses/course-home-test/home')
-        self.assertEqual(response.context['recommended_unit'], self.lesson1)
-        self.assertContains(response, 'data-testid="course-home-open-lesson"')
+        self.assertEqual(response.context['current_module']['action']['url'], self.lesson1.get_absolute_url())
 
-    def test_help_and_optional_child_use_database_curriculum(self):
-        self.course.discussion_url = ''
-        self.course.save(update_fields=['discussion_url'])
+    def test_optional_child_uses_database_curriculum(self):
         practice = Module.objects.create(
             course=self.course, title='Practice', slug='practice', sort_order=4,
         )
@@ -479,16 +453,6 @@ class CourseHomeTests(TestCase):
         model = build_course_home(self.course, self.user, None)
         self.assertEqual(model['core_total'], 4)
         self.assertIn(optional_child, [row['module'] for row in model['optional_rows']])
-        self.assertIn(
-            ('How the group communicates',
-             f'/courses/{self.course.slug}/{practice.slug}/{optional_child.slug}/communication'),
-            model['help_links'],
-        )
-        self.assertIn(
-            ('Live coaching sessions',
-             f'/courses/{self.course.slug}/{practice.slug}/{optional_child.slug}/office-hours'),
-            model['help_links'],
-        )
 
     def test_empty_course_has_no_invented_action_or_module(self):
         Course.objects.create(
@@ -496,50 +460,9 @@ class CourseHomeTests(TestCase):
         )
         self.client.force_login(self.user)
         response = self.client.get('/courses/empty-course-home/home')
-        self.assertEqual(response.context['action'], 'empty')
-        self.assertContains(response, 'Course materials have not been published yet')
-        self.assertNotContains(response, 'Open lesson')
-
-    def test_recommended_linked_session_uses_one_real_session_action(self):
-        event_unit = Unit.objects.create(
-            module=self.first, title='Session 1', slug='session-1', kind='event',
-            session_position=1,
-        )
-        self._complete(self.lesson1, self.lesson2, self.lesson3)
-        cohort = self._cohort()
-        series = EventSeries.objects.create(name='Course sessions', slug='course-sessions')
-        cohort.event_series = series
-        cohort.save(update_fields=['event_series'])
-        event = Event.objects.create(
-            event_series=series, slug='first-session', title='Session 1 for this course',
-            status='upcoming', start_datetime=timezone.now() + datetime.timedelta(days=1),
-            end_datetime=timezone.now() + datetime.timedelta(days=1, hours=1),
-            series_position=1,
-        )
-        self.client.force_login(self.user)
-
-        response = self.client.get(
-            f'/courses/{self.course.slug}/home?cohort={cohort.external_key}',
-        )
-
-        self.assertEqual(response.context['recommended_unit'], event_unit)
-        self.assertEqual(response.context['recommended_live_session']['title'], event.title)
-        self.assertIsNone(response.context['next_live_session'])
-        self.assertContains(response, 'data-testid="course-home-live-sessions"')
-        # The compact focus card opens the session unit itself.
-        self.assertContains(
-            response,
-            f'href="{event_unit.get_absolute_url()}?cohort={cohort.external_key}"',
-        )
-        self.assertContains(response, 'data-testid="course-home-open-session"')
-        self.assertContains(response, 'data-featured="true"')
-        # The session card names the authored session unit, once.
-        self.assertContains(
-            response,
-            f'data-testid="course-home-live-session-title">{event_unit.title}</a>',
-            count=1,
-        )
-        self.assertContains(response, f'href="{event.get_absolute_url()}"')
+        self.assertIsNone(response.context['current_module'])
+        self.assertNotContains(response, 'data-testid="course-home-current-module"')
+        self.assertNotContains(response, 'data-testid="course-home-primary-action"')
 
     def test_course_map_query_count_does_not_grow_per_module(self):
         with CaptureQueriesContext(connection) as base_queries:

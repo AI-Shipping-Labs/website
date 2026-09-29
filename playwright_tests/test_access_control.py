@@ -1585,7 +1585,7 @@ class TestScenario9MainMemberNavigatesCourseReadsUnit:
             f"{django_server}/courses/main-course/home",
             wait_until="domcontentloaded",
         )
-        assert page.get_by_test_id("course-home-open-lesson").count() == 1
+        assert page.get_by_test_id("course-home-primary-action").count() == 1
         page.goto(
             f"{django_server}/courses/main-course",
             wait_until="domcontentloaded",

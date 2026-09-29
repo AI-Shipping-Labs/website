@@ -402,8 +402,10 @@ class PublicEventSeriesViewTest(TestCase):
         response = self.client.get(self.series.get_absolute_url())
         self.assertContains(response, 'Mon, Jun 15, 2026 · 18:00')
         self.assertContains(response, 'Event times are shown in Europe/Berlin.')
-        # The raw UTC clock time labeled Berlin must NOT appear.
-        self.assertNotContains(response, '16:00')
+        # The raw UTC clock time labeled Berlin must NOT appear. Scoped to
+        # this event's date: the setUp events start at timezone.now(), so a
+        # page-wide '16:00' check fails whenever the suite runs at 14:00 UTC.
+        self.assertNotContains(response, 'Jun 15, 2026 · 16:00')
 
     def test_canonical_and_og_url_use_absolute_series_url(self):
         response = self.client.get(self.series.get_absolute_url())
@@ -446,7 +448,8 @@ class PublicEventSeriesViewTest(TestCase):
             response,
             'Shown in your timezone.',
         )
-        self.assertNotContains(response, '18:00')
+        # Scoped to this event's date; the setUp events start at now().
+        self.assertNotContains(response, 'Jun 15, 2026 · 18:00')
 
     def test_event_detail_url_still_resolves_after_series_route(self):
         """The ``/events/series/<id>/<slug>`` route must not swallow event ids.

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load member_empty_state %}
 
 {% block title %}{{ course.title }} · {{ section|title }} | AI Shipping Labs{% endblock %}
 
@@ -7,17 +8,16 @@
 {% include "includes/header.html" %}
 {% include "includes/_studio_edit_button.html" with obj=course %}
 <main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
-  <div class="mx-auto max-w-3xl px-4 pb-16 pt-5 sm:px-6 sm:pt-8 lg:px-8">
-    <header class="mb-5 sm:mb-6">
-      <p class="text-sm font-medium text-muted-foreground">Course</p>
-      <h1 class="mt-1 break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
+  <div class="mx-auto max-w-3xl px-4 pb-16 pt-2 sm:px-6 sm:pt-8 lg:px-8">
+    <header class="mb-2 sm:mb-4">
+      <h1 class="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
       {% if cohort %}
-      <div class="mt-2 flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
+      <div class="mt-1 flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
         {% if preview_cohorts|length > 1 %}
         <details class="relative" data-testid="course-home-cohort-switcher">
-          <summary class="inline-flex cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
+          <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
           <ul class="absolute left-0 z-20 mt-1 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg" aria-label="Cohort schedule">
-            {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="block px-3 py-2 {% if cohort.pk == option.pk %}text-foreground font-medium{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
+            {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="flex min-h-[44px] items-center px-3 {% if cohort.pk == option.pk %}bg-accent/10 font-medium text-accent{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
           </ul>
         </details>
         {% else %}
@@ -28,14 +28,18 @@
       {% endif %}
     </header>
 
-    <nav class="mb-6 flex gap-5 overflow-x-auto border-b border-border text-sm font-medium" aria-label="Course pages">
+    <div class="relative -mx-4 mb-4 sm:mx-0 sm:mb-6" data-course-tabs>
+    <nav class="flex gap-4 overflow-x-auto border-b border-border px-4 text-sm font-medium [scrollbar-width:none] sm:gap-5 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Course pages" data-course-tabs-scroller>
       <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
       <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
       <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" {% if section == 'sessions' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'sessions' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Live sessions</a>
       <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" {% if section == 'homework' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'homework' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Homework</a>
       <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" {% if section == 'projects' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'projects' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Projects</a>
     </nav>
+    <div class="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent sm:hidden" aria-hidden="true" data-testid="course-tabs-fade" data-course-tabs-fade></div>
+    </div>
 
+    {% button_classes 'secondary' as support_cta_classes %}
     {% if section == 'home' %}
     <div class="space-y-5">
       <section aria-label="Search the syllabus" data-cb-syllabus>
@@ -51,7 +55,7 @@
       {% include "content/course_home/_current_module.html" %}
       {% endif %}
       {% if not cohort %}
-      <section class="rounded-xl border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
+      <section class="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
         <h2 id="course-home-no-cohort-heading" class="text-base font-semibold text-foreground">No cohort is linked to your account</h2>
         <p class="mt-1 text-sm text-muted-foreground">Your cohort's deadlines and sessions will appear here once it is linked.</p>
         <a href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access" class="mt-3 inline-flex min-h-[44px] items-center text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent">Contact course support</a>
@@ -69,24 +73,36 @@
     {% elif section == 'syllabus' %}
       {% include "content/_course_syllabus.html" %}
     {% elif section == 'sessions' %}
-      <div class="mb-5"><h2 id="course-live-sessions-heading" class="text-xl font-semibold text-foreground">Live sessions</h2><p class="mt-1 text-sm text-muted-foreground">All sessions for your course, with recaps where available.</p></div>
-      {% if not live_session_schedule %}<p class="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">{% if cohort %}No office hours are scheduled for this cohort yet.{% else %}Your office hours will appear once a cohort is linked to your account.{% endif %}</p>{% endif %}
+      <h2 id="course-live-sessions-heading" class="sr-only">Live sessions</h2>
+      {% if not cohort %}
+      {% member_empty_state title='Live sessions appear once your cohort is linked' body="Your cohort's session dates, recordings, and recaps will show here." icon='calendar' kind='fresh' primary_cta_label='Contact course support' primary_cta_url='mailto:team@aishippinglabs.com?subject=Course%20cohort%20access' primary_cta_class=support_cta_classes testid='course-home-sessions-no-cohort' %}
+      {% elif not live_session_schedule %}
+      {% member_empty_state title='No live sessions scheduled yet' body='Sessions for this cohort will appear here once they are scheduled.' icon='calendar' kind='fresh' testid='course-home-sessions-empty' %}
+      {% else %}
       {% include "content/course_home/_live_sessions.html" %}
+      {% endif %}
     {% elif section == 'homework' %}
-      <div class="mb-5"><h2 id="course-homework-heading" class="text-xl font-semibold text-foreground">Homework</h2><p class="mt-1 text-sm text-muted-foreground">Assignments and deadlines for your cohort.</p></div>
-      {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows completed_deadline_rows=completed_homework_rows deadline_heading="Homework deadlines" %}
+      <h2 id="course-homework-heading" class="sr-only">Homework</h2>
+      {% if not cohort and not homework_rows and not completed_homework_rows %}
+      {% member_empty_state title='Homework deadlines appear once your cohort is linked' body="Your cohort's homework and due dates will show here. Homework inside the syllabus stays open to you." icon='clipboard-list' kind='fresh' primary_cta_label='Contact course support' primary_cta_url='mailto:team@aishippinglabs.com?subject=Course%20cohort%20access' primary_cta_class=support_cta_classes testid='course-home-homework-no-cohort' %}
+      {% else %}
+      {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows completed_deadline_rows=completed_homework_rows deadline_heading="Homework deadlines" empty_title="No homework yet" empty_body="Homework for this cohort will appear here." empty_icon="clipboard-list" %}
+      {% endif %}
     {% elif section == 'projects' %}
-      <div class="mb-5"><h2 id="course-projects-heading" class="text-xl font-semibold text-foreground">Projects</h2><p class="mt-1 text-sm text-muted-foreground">Project submission deadlines.</p></div>
-      {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows completed_deadline_rows=completed_project_rows deadline_heading="Project deadlines" %}
-      {% if review_rows %}
+      <h2 id="course-projects-heading" class="sr-only">Projects</h2>
+      {% if not cohort %}
+      {% member_empty_state title='Projects appear once your cohort is linked' body="Your cohort's project submission windows will show here." icon='folder-kanban' kind='fresh' primary_cta_label='Contact course support' primary_cta_url='mailto:team@aishippinglabs.com?subject=Course%20cohort%20access' primary_cta_class=support_cta_classes testid='course-home-projects-no-cohort' %}
+      {% else %}
+      {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows completed_deadline_rows=completed_project_rows deadline_heading="Project deadlines" empty_title="No projects yet" empty_body="Project submission windows for your cohort will appear here." empty_icon="folder-kanban" %}
+      {% endif %}
+      {% if cohort and review_rows %}
       <section class="mt-10" aria-labelledby="course-peer-reviews-heading">
         <h2 id="course-peer-reviews-heading" class="text-lg font-semibold text-foreground">Peer reviews</h2>
-        <p class="mt-1 text-sm text-muted-foreground">Available after you submit a project and reviews are assigned.</p>
-        <ol class="mt-3 divide-y divide-border">{% for item in review_rows %}{% include "content/course_home/_deadline_row.html" with item=item %}{% endfor %}</ol>
+        <ol class="mt-2 divide-y divide-border">{% for item in review_rows %}{% include "content/course_home/_deadline_row.html" with item=item hide_kind=True %}{% endfor %}</ol>
       </section>
       {% endif %}
     {% endif %}
-    {% if section == 'home' and home_next_session or section == 'home' and current_module.sessions or section == 'home' and cohort and current_module.deliverables or section == 'homework' and homework_rows or section == 'projects' and project_rows or section == 'sessions' and live_session_schedule %}
+    {% if section == 'home' and home_next_session or section == 'home' and current_module.sessions or section == 'home' and cohort and current_module.deliverables or section == 'homework' and homework_rows or section == 'projects' and cohort and project_rows or section == 'sessions' and cohort and live_session_schedule %}
       {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-6" only %}
     {% endif %}
   </div>
@@ -95,6 +111,25 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+  (function () {
+    var wrap = document.querySelector('[data-course-tabs]');
+    if (!wrap) return;
+    var scroller = wrap.querySelector('[data-course-tabs-scroller]');
+    var fade = wrap.querySelector('[data-course-tabs-fade]');
+    var current = scroller.querySelector('[aria-current="page"]');
+    if (current && current.offsetLeft + current.offsetWidth > scroller.clientWidth) {
+      scroller.scrollLeft = current.offsetLeft - 16;
+    }
+    function syncFade() {
+      var atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2;
+      fade.hidden = atEnd;
+    }
+    scroller.addEventListener('scroll', syncFade, { passive: true });
+    window.addEventListener('resize', syncFade);
+    syncFade();
+  })();
+</script>
 {% if section == 'home' %}
 {% include "content/_activation_checklist_scripts.html" %}
 {% endif %}

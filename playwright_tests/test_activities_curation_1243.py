@@ -213,14 +213,15 @@ def test_mobile_membership_is_centered_and_has_no_page_overflow(
     ).to_be_visible()
     assert page.get_by_test_id("pricing-tier-card").count() == 4
     expect(page.get_by_test_id("timeline-day-date")).to_be_visible()
-    expect(
-        page.get_by_test_id("events-timeline-day").locator("span.bg-accent")
-    ).to_be_visible()
+    # On phones the date rail stacks: the date sits above a full-width card.
+    date_box = page.get_by_test_id("timeline-day-date").bounding_box()
     day_box = page.get_by_test_id("events-timeline-day").bounding_box()
     card_box = page.get_by_test_id("upcoming-event-card").bounding_box()
+    assert date_box is not None
     assert day_box is not None
     assert card_box is not None
-    assert 0 <= day_box["x"] < card_box["x"]
+    assert date_box["y"] + date_box["height"] <= card_box["y"]
+    assert card_box["x"] == day_box["x"]
     assert card_box["x"] + card_box["width"] <= 390
     assert page.evaluate(
         "() => document.documentElement.scrollWidth <= "

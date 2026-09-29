@@ -186,7 +186,7 @@ class CurrentModuleHomeTests(TestCase):
         self.assertEqual(progress['done'], 1)
         response = self._home()
         self.assertContains(
-            response, 'data-testid="course-home-module-progress">1 of 5 done</p>',
+            response, 'data-testid="course-home-module-progress">1 of 5 done</span>',
         )
 
     def test_submitted_homework_counts_every_question(self):
@@ -265,6 +265,64 @@ class CurrentModuleHomeTests(TestCase):
         self.assertEqual(
             [action['label'] for action in sessions[0]['actions']], ['Open session'],
         )
+
+    def test_homework_tab_rows_drop_the_kind_label_and_default_not_submitted_badge(self):
+        self.client.force_login(self.user)
+        response = self.client.get(f'/courses/{self.course.slug}/home/homework?cohort=4')
+
+        rows = response.context['homework_rows']
+        self.assertEqual(
+            {row['title'] for row in rows}, {'Retrieval homework', 'Earlier homework'},
+        )
+        self.assertEqual({row['status'] for row in rows}, {'Not submitted'})
+        self.assertContains(response, 'data-testid="course-home-deadline-row"', count=2)
+        # The tab already says Homework; each row must not repeat it.
+        self.assertNotContains(response, 'data-testid="course-home-deadline-kind"')
+        self.assertNotContains(response, 'Not submitted')
+        self.assertContains(
+            response, '<h2 id="course-homework-heading" class="sr-only">Homework</h2>',
+            html=True,
+        )
+
+    def test_sessions_tab_course_session_card_has_status_badge_not_tier_or_tags(self):
+        self._session(
+            2, days=-1, title='Session 2', tags=['office-hours'],
+            recording_url='https://www.youtube.com/watch?v=abc123',
+        )
+        self.client.force_login(self.user)
+        response = self.client.get(f'/courses/{self.course.slug}/home/sessions?cohort=4')
+
+        self.assertContains(response, 'data-testid="past-recording-card"', count=1)
+        self.assertContains(response, 'data-testid="course-home-live-session-status"')
+        self.assertNotContains(response, 'data-testid="past-card-recording-tier"')
+        self.assertNotContains(response, 'data-testid="event-card-tags"')
+        self.assertNotContains(response, 'Session 2 · Past')
+
+    def test_unlinked_learner_sessions_projects_and_homework_tabs_show_empty_states(self):
+        CourseProject.objects.create(
+            course=self.course, cohort=None, slug='preview-attempt', title='Preview attempt',
+            submission_due_at=timezone.now() + datetime.timedelta(days=20),
+            review_due_at=timezone.now() + datetime.timedelta(days=27),
+        )
+        learner = User.objects.create_user(
+            email='current-module-unlinked@example.com', email_verified=True,
+        )
+        self.client.force_login(learner)
+
+        sessions = self.client.get(f'/courses/{self.course.slug}/home/sessions')
+        projects = self.client.get(f'/courses/{self.course.slug}/home/projects')
+        homework = self.client.get(f'/courses/{self.course.slug}/home/homework')
+
+        self.assertIsNone(sessions.context['cohort'])
+        # Authored session units exist, but no placeholder cards render.
+        self.assertTrue(sessions.context['live_session_schedule'])
+        self.assertContains(sessions, 'data-testid="course-home-sessions-no-cohort"')
+        self.assertNotContains(sessions, 'data-testid="course-home-live-session-row"')
+        self.assertTrue(projects.context['project_rows'])
+        self.assertContains(projects, 'data-testid="course-home-projects-no-cohort"')
+        self.assertNotContains(projects, 'data-testid="course-home-deadline-row"')
+        self.assertNotContains(projects, 'Preview attempt')
+        self.assertContains(homework, 'data-testid="course-home-homework-no-cohort"')
 
 
 class CohortProjectScopingTests(TestCase):

@@ -1,12 +1,16 @@
-<li class="flex min-w-0 flex-col gap-3 py-4 first:pt-2 last:pb-2 sm:flex-row sm:items-center sm:justify-between" data-testid="course-home-live-session-row">
-  <div class="min-w-0">
-    <p class="text-xs font-medium text-muted-foreground">{% if session.series_position %}Session {{ session.series_position }} · {% endif %}{{ session.status }}</p>
-    <h4 class="mt-1 break-words text-sm font-semibold text-foreground" data-testid="course-home-live-session-title">{{ session.display_title }}</h4>
-    {% if session.when %}<p class="mt-1 text-xs text-muted-foreground" data-testid="course-home-live-session-time"><time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time></p>{% endif %}
-    {% if session.status == 'Past' and not session.actions %}<p class="mt-1 text-xs text-muted-foreground">No recap yet</p>{% endif %}
+{% load member_badges %}
+<li class="flex min-w-0 items-center justify-between gap-3 py-2" data-testid="course-home-live-session-row">
+  <div class="min-w-0 flex-1">
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <h4 class="break-words text-sm font-semibold text-foreground" data-testid="course-home-live-session-title">{{ session.display_title }}</h4>
+      {% if session.status %}{% member_label_badge session.status tone=session.status_tone size="xs" testid="course-home-live-session-status" %}{% endif %}
+    </div>
+    {% if session.position_label or session.when or session.status == 'Past' and not session.actions %}
+    <p class="mt-0.5 text-xs text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}" data-testid="course-home-live-session-time">{{ session.when_short_label|default:session.when_label_without_timezone }}</time>{% endif %}{% if session.status == 'Past' and not session.actions %}{% if session.when or session.position_label %} · {% endif %}No recap yet{% endif %}</p>
+    {% endif %}
   </div>
   {% if session.actions %}
-  <div class="flex shrink-0 flex-wrap items-center gap-x-4">
+  <div class="flex shrink-0 flex-wrap items-center justify-end gap-x-4">
     {% for action in session.actions %}<a href="{{ action.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="{% if action.label == 'Read recap' %}course-home-recap-link{% else %}course-home-live-session-action{% endif %}">{{ action.label }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endfor %}
   </div>
   {% endif %}

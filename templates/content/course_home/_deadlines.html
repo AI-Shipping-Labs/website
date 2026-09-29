@@ -1,3 +1,4 @@
+{% load member_empty_state %}
 <section aria-labelledby="{% if section == 'module' %}module-work-heading{% elif section == 'homework' %}course-homework-heading{% else %}course-projects-heading{% endif %}" data-testid="course-home-deadlines">
   {% if section == 'module' %}
   <header class="mb-2">
@@ -18,12 +19,14 @@
   <ol class="divide-y divide-border">
     {% for item in deadline_rows %}
     {% if section == 'projects' and not cohort %}
-    {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=True %}
+    {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=True %}
     {% else %}
-      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
+    {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=False %}
     {% endif %}
     {% endfor %}
   </ol>
+  {% elif not completed_deadline_rows %}
+  {% member_empty_state title=empty_title body=empty_body icon=empty_icon kind='fresh' testid='course-home-deadlines-empty' %}
   {% else %}
   <p class="text-sm text-muted-foreground">No outstanding deadlines here.</p>
   {% endif %}

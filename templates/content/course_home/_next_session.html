@@ -1,21 +1,23 @@
 {% load accounts_extras %}
 {% load event_copy %}
+{% load member_badges %}
 {% with session=home_next_session %}
 <section aria-labelledby="course-home-next-session-heading" data-testid="course-home-next-session">
-  <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-    <h2 id="course-home-next-session-heading" class="text-lg font-semibold text-foreground">Next live session</h2>
-    <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" class="text-sm font-medium text-accent hover:underline">See all live sessions</a>
-  </header>
+  <h2 id="course-home-next-session-heading" class="mb-2 text-lg font-semibold text-foreground">Next live session</h2>
   <div class="rounded-lg border border-border bg-card p-4 sm:p-5">
-    <p class="text-xs font-medium text-muted-foreground">{% if session.series_position %}Session {{ session.series_position }} · {% endif %}{{ session.status }}{% if session.module_label %} · <span data-testid="course-home-next-session-module">{{ session.module_label }}</span>{% endif %}</p>
-    <h3 class="mt-1 break-words text-base font-semibold text-foreground" data-testid="course-home-next-session-title">{{ session.display_title }}</h3>
-    {% if session.when %}<p class="mt-1 text-sm text-muted-foreground"><time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time></p>{% endif %}
+    <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <h3 class="break-words text-base font-semibold text-foreground" data-testid="course-home-next-session-title">{{ session.display_title }}</h3>
+      {% if session.status and session.status != 'Upcoming' %}{% member_label_badge session.status tone=session.status_tone size="xs" %}{% endif %}
+    </div>
+    {% if session.when or session.module_label or session.position_label %}
+    <p class="mt-1 text-sm text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when or session.module_label %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time>{% endif %}{% if session.module_label %}{% if session.when %} · {% endif %}<span data-testid="course-home-next-session-module">{{ session.module_label }}</span>{% endif %}</p>
+    {% endif %}
     {% with public_description=session.event.description_html|strip_internal_notes %}
     {% if public_description %}<p class="mt-2 line-clamp-2 text-sm text-muted-foreground" data-testid="course-home-next-session-description">{{ public_description|striptags|truncatechars:160 }}</p>{% endif %}
     {% endwith %}
     {% if session.actions %}
     {% with action=session.actions.0 %}
-    <a href="{{ action.url }}" class="{% button_classes 'secondary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-next-session-action">{{ action.label }}</a>
+    <a href="{{ action.url }}" class="{% button_classes 'secondary' size='md' extra='mt-3 w-full justify-center sm:w-auto' %}" data-testid="course-home-next-session-action">{{ action.label }}</a>
     {% endwith %}
     {% endif %}
   </div>

@@ -111,6 +111,31 @@ class NestedModuleDirectSyncTest(DirectSyncFixtureBase):
         docker_unit = Unit.objects.get(module__slug='docker', slug='lesson')
         self.assertEqual(docker_unit.title, 'Docker basics')
 
+    def test_parent_and_leaf_readmes_become_their_own_module_overviews(self):
+        self._write_course_yaml()
+        self._write_yaml('02-deployment/module.yaml', {'title': 'Deployment'})
+        full = os.path.join(self.course_dir, '02-deployment/README.md')
+        with open(full, 'w') as f:
+            f.write('# Deployment\n\nParent overview body.\n')
+        self._write_yaml('02-deployment/01-docker/module.yaml', {'title': 'Docker'})
+        with open(os.path.join(self.course_dir, '02-deployment/01-docker/README.md'), 'w') as f:
+            f.write('# Docker\n\nLeaf overview body.\n')
+        self._write_markdown(
+            '02-deployment/01-docker/01-lesson.md',
+            {'title': 'Docker basics'}, 'Docker body.\n',
+        )
+
+        stats = self._sync()
+        self.assertEqual(stats['errors'], [])
+
+        parent = Module.objects.get(course__slug='buildcamp-direct', slug='deployment')
+        leaf = Module.objects.get(course__slug='buildcamp-direct', slug='docker')
+        self.assertIn('Parent overview body.', parent.overview)
+        self.assertNotIn('Leaf overview body.', parent.overview)
+        self.assertFalse(parent.units.exists())
+        self.assertIn('Leaf overview body.', leaf.overview)
+        self.assertEqual(list(leaf.units.values_list('slug', flat=True)), ['lesson'])
+
     def test_mixed_directory_rejected_and_creates_neither_side(self):
         self._write_course_yaml()
         self._write_yaml('03-mixed/module.yaml', {'title': 'Mixed module'})

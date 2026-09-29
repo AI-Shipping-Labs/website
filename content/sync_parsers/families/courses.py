@@ -1568,20 +1568,19 @@ def _sync_module_dir(
         allow_parent_with_pending_units=allow_parent_with_pending_units,
     )
 
-    if submodule_entries:
-        # Parent module: README (if any) is still its overview; it has no
-        # direct units (guarded above), so this only processes the README.
-        _sync_module_units(
-            module, entry.path, repo_dir, repo_name, commit_sha, stats,
-            known_images=known_images,
-            course_dir=course_dir,
-            course_ignore_patterns=course_ignore_patterns,
-            module_ignore_patterns=module_ignore_patterns,
-            course_slug=course_slug,
-            unit_lookup=unit_lookup,
-            unit_sync_state=unit_sync_state,
-        )
+    # Parent modules sync only their README overview; leaves also sync units.
+    _sync_module_units(
+        module, entry.path, repo_dir, repo_name, commit_sha, stats,
+        known_images=known_images,
+        course_dir=course_dir,
+        course_ignore_patterns=course_ignore_patterns,
+        module_ignore_patterns=module_ignore_patterns,
+        course_slug=course_slug,
+        unit_lookup=unit_lookup,
+        unit_sync_state=unit_sync_state,
+    )
 
+    if submodule_entries:
         # Issue #1721: a module that keeps its slug across a restructure
         # while gaining submodules this sync still holds its OLD direct
         # units at this point — the immediate sweep just above correctly
@@ -1619,18 +1618,6 @@ def _sync_module_dir(
             # course walk (for example, Week 5 lessons moving into Bonus).
             # Validate after every module has had a chance to claim them.
             unit_sync_state['pending_parent_modules'].append((module, rel_path))
-    else:
-        # Leaf module (today's two-level shape, unchanged behaviour).
-        _sync_module_units(
-            module, entry.path, repo_dir, repo_name, commit_sha, stats,
-            known_images=known_images,
-            course_dir=course_dir,
-            course_ignore_patterns=course_ignore_patterns,
-            module_ignore_patterns=module_ignore_patterns,
-            course_slug=course_slug,
-            unit_lookup=unit_lookup,
-            unit_sync_state=unit_sync_state,
-        )
 
 
 def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patterns):

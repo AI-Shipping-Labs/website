@@ -8,8 +8,8 @@ Covers (Django HTML-rendering layer):
 - Course detail syllabus: zero-count "0 lessons" string is suppressed
   for empty modules and remains correct for non-empty modules.
 - Reader bottom navigation has a stand-alone mobile completion row
-  rendered above the prev/next pair (sm:hidden) AND the desktop
-  inline placement (hidden sm:block) — both wired to the same
+  rendered above the prev/next pair (lg:hidden) AND the desktop
+  inline placement (hidden lg:block) — both wired to the same
   data-completion-toggle attribute so JS keeps them in sync.
 - Course unit and workshop tutorial reader sidebars use the same
   per-row spacing and the same circle/check completion glyph for
@@ -161,7 +161,9 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
     prev/next pair, plus an inline desktop placement.
 
     Course lessons with a next lesson use Complete & Next instead, so these
-    placement checks use the last lesson (u2), which has no next lesson."""
+    placement checks use the last lesson (u2), which has no next lesson.
+    Which placement is visible at which width is owned by the browser tests
+    in ``playwright_tests/test_reader_mobile_483.py``."""
 
     @classmethod
     def setUpTestData(cls):
@@ -192,36 +194,6 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         set_membership(user, tier=self.main_tier)
         user.save()
         self.client.login(email="bn@test.com", password="x")
-
-    def test_mobile_completion_row_present_and_hidden_on_desktop(self):
-        response = self.client.get(
-            "/courses/bottom-nav-course/m1/u2",
-        )
-        self.assertEqual(response.status_code, 200)
-        # The mobile-only wrapper is sm:hidden so it disappears on >=sm.
-        self.assertContains(
-            response,
-            'data-testid="reader-bottom-completion-mobile"',
-        )
-        body = response.content.decode()
-        idx = body.find('data-testid="reader-bottom-completion-mobile"')
-        self.assertNotEqual(idx, -1)
-        window = body[max(0, idx - 200):idx + 200]
-        self.assertIn('sm:hidden', window)
-
-    def test_desktop_completion_row_hidden_on_mobile(self):
-        response = self.client.get(
-            "/courses/bottom-nav-course/m1/u2",
-        )
-        self.assertContains(
-            response,
-            'data-testid="reader-bottom-completion-desktop"',
-        )
-        body = response.content.decode()
-        idx = body.find('data-testid="reader-bottom-completion-desktop"')
-        self.assertNotEqual(idx, -1)
-        window = body[max(0, idx - 200):idx + 200]
-        self.assertIn('hidden sm:block', window)
 
     def test_mobile_and_desktop_buttons_share_completion_url(self):
         """Both rendered buttons point at the same toggle endpoint so

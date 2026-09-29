@@ -102,12 +102,11 @@ class CourseDetailMobileCohortTest(CourseMobileSetupMixin, TestCase):
 
 
 class CourseUnitBottomNavMobileTest(CourseMobileSetupMixin, TestCase):
-    """Bottom prev/next buttons use truncate and stack on mobile."""
+    """Bottom prev/next buttons use short labels on mobile.
 
-    def test_bottom_nav_uses_flex_col(self):
-        self._login_main_user()
-        response = self.client.get("/courses/long-course/module-1/unit-1")
-        self.assertContains(response, "flex-col sm:flex-row items-stretch sm:items-center")
+    The sticky compact bar layout is owned by the browser test
+    ``playwright_tests/test_reader_mobile_drawer_bar.py``.
+    """
 
     def test_bottom_prev_uses_short_label_not_long_title(self):
         self._login_main_user()

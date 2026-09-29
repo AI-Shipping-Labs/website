@@ -455,6 +455,43 @@ class CourseCommitmentsTests(TestCase):
         self.assertIn('01:30 Europe/Berlin', labels['Before Clock Change'])
         self.assertIn('03:30 Europe/Berlin', labels['After Clock Change'])
 
+    def test_homework_row_names_parent_module_without_a_homework_child_suffix(self):
+        parent = Module.objects.create(
+            course=self.course, title='Foundations', slug='foundations', sort_order=2,
+        )
+        child = Module.objects.create(
+            course=self.course, parent=parent, title='Homework', slug='homework',
+        )
+        self.homework_unit.module = child
+        self.homework_unit.save(update_fields=['module'])
+
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+
+        homework = next(
+            row for row in model['open_assignments'] if row['kind'] == 'Homework'
+        )
+        self.assertEqual(homework['module_title'], 'Foundations')
+
+    def test_session_number_label_only_when_the_title_does_not_already_say_it(self):
+        start = self.now + datetime.timedelta(days=3)
+        self._event('office-hours', self.series_one, start=start, series_position=4)
+        self._event(
+            'cohort-office-hours-session-5', self.series_one,
+            start=start + datetime.timedelta(days=7), series_position=5,
+        )
+
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+
+        labels = {
+            row['title']: row['position_label'] for row in model['live_session_schedule']
+        }
+        self.assertEqual(labels['Office Hours'], 'Session 4')
+        self.assertEqual(labels['Cohort Office Hours Session 5'], '')
+
     def test_ended_course_keeps_allowed_unfinished_project_action(self):
         self.cohort_one.end_date = self.now.date() - datetime.timedelta(days=1)
         self.cohort_one.save(update_fields=['end_date'])

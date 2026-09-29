@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import datetime
+import re
 from collections import defaultdict
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from community_base.homework_steps.models import HomeworkDraft
 from django.core.exceptions import PermissionDenied
 from django.utils import timezone
 from django.utils.formats import date_format
 
+from accounts.services.timezones import is_valid_timezone
 from content.access import get_user_level
 from content.models import CohortEnrollment, CourseAccess, Unit
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
@@ -32,7 +35,29 @@ from content.services.course_units import (
 )
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
-from events.services.display_time import format_event_time_range, resolve_event_display_timezone
+from events.services.display_time import (
+    DEFAULT_EVENT_DISPLAY_TIMEZONE,
+    format_event_time_range,
+    resolve_event_display_timezone,
+)
+
+
+def _short_when_label(when, timezone_name):
+    """Compact ``Oct 6, 01:59`` label for one-line course Home rows."""
+    if not is_valid_timezone(timezone_name):
+        timezone_name = DEFAULT_EVENT_DISPLAY_TIMEZONE
+    local = when.astimezone(ZoneInfo(timezone_name))
+    return f'{local:%b} {local.day}, {local:%H:%M}'
+
+
+def _session_position_label(title, position):
+    """``Session N`` only when the title does not already say it."""
+    if position is None:
+        return ''
+    label = f'Session {position}'
+    if re.search(rf'\b{label}\b', title or '', re.IGNORECASE):
+        return ''
+    return label
 
 
 def _row(kind, title, *, when=None, status='', url='', action='', detail='', complete=False,
@@ -57,6 +82,7 @@ def _row(kind, title, *, when=None, status='', url='', action='', detail='', com
             format_event_time_range(when, None, timezone_name).rsplit(' ', 1)[0]
             if when else ''
         ),
+        'when_short_label': _short_when_label(when, timezone_name) if when else '',
         'status': status,
         'status_tone': status_tone,
         'url': url,
@@ -255,10 +281,13 @@ def _homework_rows(course, user, cohort, timezone_name, today):
         if unit is not None:
             row = rows[-1]
             row['module_id'] = unit.module.parent_id or unit.module_id
-            row['module_title'] = (
-                f'{unit.module.parent.title} · {unit.module.title}'
-                if unit.module.parent_id else unit.module.title
-            )
+            # A child module literally named "Homework" restates the row kind.
+            if unit.module.parent_id and unit.module.title.strip().lower() != 'homework':
+                row['module_title'] = f'{unit.module.parent.title} · {unit.module.title}'
+            elif unit.module.parent_id:
+                row['module_title'] = unit.module.parent.title
+            else:
+                row['module_title'] = unit.module.title
     return rows
 
 
@@ -556,6 +585,10 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
     )
     for row in live_session_schedule:
         row['featured'] = row is featured_live_session
+        unit = row.get('session_unit')
+        row['position_label'] = _session_position_label(
+            unit.title if unit is not None else row['title'], row['series_position'],
+        )
     deadline_tasks = sorted(
         (row for row in open_assignments
          if row['when'] and row['when'] >= now and row['action']),

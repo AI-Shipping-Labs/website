@@ -408,7 +408,7 @@ class TestPeerReviewBodyChromeIntact:
 
             # And the page-body H1 is still here.
             assert page.locator(
-                'h1:has-text("Peer Review Dashboard")'
+                'h1:has-text("Peer review dashboard")'
             ).is_visible()
         finally:
             page.close()

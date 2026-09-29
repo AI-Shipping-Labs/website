@@ -720,8 +720,6 @@ content/tests/test_course_mobile.py::CourseUnitBreadcrumbMobileTest.test_breadcr
 content/tests/test_course_mobile.py::CourseUnitBottomNavMobileTest.test_bottom_nav_uses_flex_col::direct-layout-token-assertion::81f9da0e5c6ee8a987931013fb185b1bb7c6b19f811aa09d9b684a5652622696::1
 content/tests/test_course_mobile.py::CourseUnitSidebarMobileTest.test_sidebar_nav_hidden_on_mobile_by_default::direct-layout-token-assertion::e95e9443d9abde49fff7adf8679ae4f3466f681f7aabc4c16ed796f3dd7faf52::1
 content/tests/test_courses.py::CoursesListViewTest.test_shows_cover_image::direct-layout-token-assertion::7425e703e11c771bef980d009c3b12ac0a0c2ae8876a78e176e199f60aa97c1a::1
-content/tests/test_courses.py::CoursesListViewTest.test_missing_cover_uses_decorative_fallback_preview::direct-layout-token-assertion::6b4096a7053ceb7219120725f8a3ff6b6546e01e7a03b82d8117e7c051e2da6f::1
-content/tests/test_courses.py::CoursesListViewTest.test_missing_cover_uses_decorative_fallback_preview::direct-layout-token-assertion::a1d9750e84ffc35932248f249617c4ac74fcea356ee539aa358c9e8789044eb1::1
 content/tests/test_courses.py::CourseDetailViewTest.test_cohort_actions_use_primary_and_secondary_canonical_chrome::direct-layout-token-assertion::008020102ee398d7effc62a783ac26f8d80bb8e7d658c6c5fa5486c393ff6638::1
 content/tests/test_courses.py::CourseDetailViewTest.test_cohort_actions_use_primary_and_secondary_canonical_chrome::direct-layout-token-assertion::89d536dce67be292b3b0a92a1b81cc451872e5e80e6790a2cbf48b338bc24ce8::1
 content/tests/test_courses.py::CourseDetailViewTest.test_cohort_actions_use_primary_and_secondary_canonical_chrome::direct-layout-token-assertion::456a72f4a3fbf5c761131de7f2d34a662b7570a53ea9f0e84da9ec66e4811cd9::1
@@ -843,8 +841,8 @@ studio/tests/test_worker_lock_display.py::PendingTasksTableLockColumnTest.test_h
 """.strip().splitlines())
 
 UNMARKED_DIRECT_LAYOUT_ASSERTION_GOLDEN_SHA256 = "a81ef3fcf14b6d73d5941fdc3fd8624b0c6cd4f9221e416df079e3107cdeacf1"
-UNKNOWN_UNMARKED_ASSERTION_CALL_GOLDEN_SHA256 = "7a7d63df738e2946ce6d637313f83df9499d45f00022d71d3122cfaf838032f8"
+UNKNOWN_UNMARKED_ASSERTION_CALL_GOLDEN_SHA256 = "75af00a56d6ac099cfe1022c7d75ad440cba1a0778becd45c08059abe45c7376"
 EXPECTED_CEILING_COUNTS = {
     "UNMARKED_DIRECT_LAYOUT_ASSERTION": 695,
-    "UNKNOWN_UNMARKED_ASSERTION_CALL": 138,
+    "UNKNOWN_UNMARKED_ASSERTION_CALL": 136,
 }

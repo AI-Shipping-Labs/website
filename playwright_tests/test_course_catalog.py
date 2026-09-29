@@ -224,7 +224,7 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
 
         # Page heading
         heading = page.locator("h1")
-        assert "Structured Learning Paths" in heading.inner_text()
+        assert "Structured learning paths" in heading.inner_text()
 
         # "Intro to ML" card: instructor, Free badge, tags
         assert "Intro to ML" in body
@@ -240,10 +240,6 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             'bg-green-500/15', 'text-green-800', 'dark:text-green-400',
         }.issubset(free_classes)
 
-        # "python" and "ai" tag badges
-        assert "python" in body
-        assert "ai" in body
-
         # Cover image present
         cover_img = page.locator(
             'img[src="https://example.com/intro-ml.jpg"]'
@@ -252,22 +248,20 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert cover_img.first.get_attribute("alt") == "Cover image for Intro to ML"
         assert cover_img.first.get_attribute("loading") == "lazy"
 
-        # Missing artwork uses a decorative fallback. The card body owns the
-        # readable title/tier/instructor/tags so mobile cards do not repeat
-        # the same metadata stack twice.
+        # Missing artwork renders no media band at all: the card starts
+        # with its signal row instead of a placeholder.
         advanced_card = page.locator(
             'article:has(a[href="/courses/advanced-mlops"])'
         )
         assert (
             advanced_card.locator(
-                '[data-testid="course-card-preview-fallback"]'
+                '[data-testid="course-card-preview"]'
             ).count()
-            == 1
+            == 0
         )
-        assert "Advanced MLOps" not in advanced_card.locator(
-            '[data-testid="course-card-preview-fallback"]'
-        ).inner_text()
-        assert advanced_card.locator(".h-12.w-12").count() == 0
+        assert advanced_card.locator(
+            '[data-testid="course-access-badge"]'
+        ).count() == 1
 
         # "Advanced MLOps" card with "Main or above" tier badge.
         # Issue #481: replaced legacy "Main+" shorthand.
@@ -404,14 +398,14 @@ class TestIssue480MobileCourseCards:
             "document.documentElement.clientWidth"
         )
         card = page.locator('article:has(a[href="/courses/python-ai-engineering"])')
-        fallback = card.locator('[data-testid="course-card-preview-fallback"]')
-        assert fallback.count() == 1
-        assert title not in fallback.inner_text()
+        # Coverless course: no media band, and the title renders once.
+        assert card.locator('[data-testid="course-card-preview"]').count() == 0
+        assert card.get_by_text(title, exact=True).count() == 1
         # Issue #481: Premium content shows "Premium" with no "+"/"or above"
         # suffix because there is no higher public tier.
-        assert "Premium+" not in fallback.inner_text()
-        assert "Premium or above" not in fallback.inner_text()
-        assert "Alexey Grigorev" not in fallback.inner_text()
+        card_text = card.inner_text()
+        assert "Premium+" not in card_text
+        assert "Premium or above" not in card_text
 
         card.locator("a").first.screenshot(
             path=str(tmp_path / "issue-480-courses-mobile-card.png"),
@@ -422,8 +416,8 @@ class TestIssue480MobileCourseCards:
 
         # Issue #651: detail page renders no hero block when
         # cover_image_url is empty (regression of the previous
-        # decorative fallback). Card on /courses still renders the
-        # fallback — see assertion on `fallback` above.
+        # decorative fallback). The /courses card likewise renders no
+        # media band for a coverless course.
         assert page.locator(
             '[data-testid="course-detail-preview-fallback"]',
         ).count() == 0
@@ -802,7 +796,7 @@ class TestScenario7EmptyCatalog:
 
         # Heading still shows
         heading = page.locator("h1")
-        assert "Structured Learning Paths" in heading.inner_text()
+        assert "Structured learning paths" in heading.inner_text()
 # ---------------------------------------------------------------
 # Scenario 8: Removed -- duplicate of gating tests in
 #   content/tests/test_access_control.py (CourseDetailAccessControlTest)

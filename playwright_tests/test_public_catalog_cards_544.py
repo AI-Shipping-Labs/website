@@ -123,6 +123,10 @@ def _capture(page, name):
 
 
 def _assert_card_signal(page, signal):
+    if signal["kind"] == "none":
+        expect(page.get_by_test_id(signal["testid"])).to_have_count(0)
+        return
+
     signal_element = page.get_by_test_id(signal["testid"])
     expect(signal_element).to_have_count(1)
 
@@ -190,7 +194,7 @@ def test_public_catalog_cards_have_consistent_density_screenshots(
     routes = [
         (
             "courses", "/courses", "Production AI Agents Course",
-            {"kind": "tags", "testid": "course-card-tags", "owner": "course"},
+            {"kind": "none", "testid": "course-card-tags"},
         ),
         (
             "workshops", "/workshops", "Agent Evaluation Workshop",

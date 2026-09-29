@@ -122,19 +122,40 @@ COHORT_WARNING_MISSING_SESSION_POSITIONS = 'missing_session_positions'
 # the other two are warnings about a linked series' contents.
 COHORT_WARNING_LEVEL_ERROR = 'error'
 COHORT_WARNING_LEVEL_WARNING = 'warning'
+# A dated cohort that ended without a series (e.g. ai-buildcamp cohorts 1-3,
+# which ran on Maven before AISL hosted sessions) will never get one, so it
+# is only an informational note.
+COHORT_WARNING_ENDED_WITHOUT_EVENT_SERIES = 'ended_without_event_series'
+COHORT_WARNING_LEVEL_INFO = 'info'
+
+
+def cohort_has_ended(cohort, today=None):
+    """True when ``cohort``'s ``end_date`` is before ``today``."""
+    today = today or timezone.localdate()
+    return cohort.end_date is not None and cohort.end_date < today
+
+
+def cohort_requires_event_series(cohort, today=None):
+    """True for a current or upcoming dated cohort.
+
+    Those must link an event series; self-paced cohorts never have one and
+    ended dated cohorts are exempt.
+    """
+    return cohort.mode == COHORT_MODE_COHORT and not cohort_has_ended(cohort, today)
 
 
 def _format_positions(positions):
     return ', '.join(str(position) for position in positions)
 
 
-def cohort_series_warnings(cohorts):
+def cohort_series_warnings(cohorts, today=None):
     """Return ``{cohort.pk: [warning, ...]}`` for ``cohorts``.
 
     Each warning is ``{'code': ..., 'level': ..., 'message': ...}`` (plus
     ``'missing_positions'`` for the coverage warning). ``level`` is
-    ``'error'`` for a missing link (every dated cohort must have one) and
-    ``'warning'`` otherwise. Only
+    ``'error'`` for a missing link on a current or upcoming cohort (those
+    must have one), ``'info'`` for a missing link on an ended cohort
+    (``ended_without_event_series``), and ``'warning'`` otherwise. Only
     ``mode='cohort'`` cohorts are diagnosed; self-paced cohorts never carry
     a series and always map to ``[]``. A dated cohort is flagged when:
 
@@ -174,9 +195,17 @@ def cohort_series_warnings(cohorts):
     ).values_list('module__course_id', 'session_position'):
         unit_positions_by_course[course_id].add(position)
 
+    today = today or timezone.localdate()
     for cohort in dated:
         warnings = result[cohort.pk]
         series_id = cohort.event_series_id
+        if not series_id and cohort_has_ended(cohort, today):
+            warnings.append({
+                'code': COHORT_WARNING_ENDED_WITHOUT_EVENT_SERIES,
+                'level': COHORT_WARNING_LEVEL_INFO,
+                'message': 'Ended cohort, no live sessions linked.',
+            })
+            continue
         if not series_id:
             warnings.append({
                 'code': COHORT_WARNING_NO_EVENT_SERIES,

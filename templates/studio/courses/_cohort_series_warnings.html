@@ -3,7 +3,8 @@ Cohort event-series banner. Receives cohort_warning_rows, a list of
 (cohort, warnings) pairs from content.services.course_cohorts
 .cohort_series_warnings; cohort_warnings_have_error, true when any warning
 is error level (a dated cohort with no series); and show_cohort_names (true
-on the list page). The error tone reuses the Studio destructive callout in
+on the list page). cohort_note_rows holds info-level notes (an ended
+cohort with no series), rendered as quiet muted text. The error tone reuses the Studio destructive callout in
 templates/studio/downloads/form.html; the warning tone reuses the amber
 callout in templates/studio/users/_merge_plan.html.
 {% endcomment %}
@@ -24,4 +25,13 @@ callout in templates/studio/users/_merge_plan.html.
     </div>
   </div>
 </div>
+{% endif %}
+{% if cohort_note_rows %}
+<ul class="mb-6 max-w-4xl space-y-1 text-sm text-muted-foreground" data-testid="cohort-series-notes">
+  {% for cohort, notes in cohort_note_rows %}
+  {% for note in notes %}
+  <li data-testid="cohort-series-note" data-warning-code="{{ note.code }}" data-warning-level="{{ note.level }}">{% if show_cohort_names %}{{ cohort.name }}: {% endif %}{{ note.message }}</li>
+  {% endfor %}
+  {% endfor %}
+</ul>
 {% endif %}

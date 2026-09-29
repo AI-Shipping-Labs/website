@@ -26,8 +26,11 @@ from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import body_must_be_object_response, parse_json_body, require_methods, validation_response
 from content.models import Cohort, Course
-from content.models.cohort import COHORT_MODE_COHORT
-from content.services.course_cohorts import cohort_series_warnings, get_course_cohort_by_key
+from content.services.course_cohorts import (
+    cohort_requires_event_series,
+    cohort_series_warnings,
+    get_course_cohort_by_key,
+)
 from events.models import EventSeries
 from events.models.event import PUBLIC_EVENT_STATUSES
 
@@ -164,7 +167,10 @@ def _parse_date_field(data, field):
                 "``missing_session_positions`` (published events' "
                 "``series_position`` values do not cover the course's "
                 "session units' ``session_position`` values; carries "
-                "``missing_positions``)."
+                "``missing_positions``). An ended dated cohort with no "
+                "series gets an ``info``-level "
+                "``ended_without_event_series`` note instead of the "
+                "error."
             ),
             "responses": {
                 200: {
@@ -223,9 +229,10 @@ def course_cohorts_collection(request, slug):
                 "value), case-insensitive. Partial update of "
                 "``event_series`` (an event-series id or slug), "
                 "``start_date`` and ``end_date`` (``YYYY-MM-DD``). Every "
-                "dated cohort must keep a linked series, so "
-                "``event_series: null`` on one returns 422 "
-                "``event_series_required``. "
+                "current or upcoming dated cohort must keep a linked "
+                "series, so ``event_series: null`` on one returns 422 "
+                "``event_series_required``; an ended cohort may be "
+                "unlinked. "
                 "The cohort's model validation still applies (a dated "
                 "cohort needs both dates; a self-paced cohort cannot have "
                 "a series). Returns the updated cohort, including fresh "
@@ -237,7 +244,7 @@ def course_cohorts_collection(request, slug):
                         "type": ["integer", "string", "null"],
                         "description": (
                             "Event-series id or slug. null is rejected for a "
-                            "dated cohort."
+                            "current or upcoming dated cohort."
                         ),
                     },
                     "start_date": {"type": ["string", "null"], "format": "date"},
@@ -312,10 +319,18 @@ def course_cohort_detail(request, slug, key):
             'allowed': list(_WRITABLE_FIELDS),
         }, message='Nothing to update')
 
+    # Dates first, so the series rule sees the cohort's new end date.
+    for field in ('start_date', 'end_date'):
+        if field in data:
+            value, date_error = _parse_date_field(data, field)
+            if date_error is not None:
+                return validation_response(date_error, message=f'Invalid {field}')
+            setattr(cohort, field, value)
+
     if 'event_series' in data:
-        if data['event_series'] is None and cohort.mode == COHORT_MODE_COHORT:
+        if data['event_series'] is None and cohort_requires_event_series(cohort):
             return error_response(
-                'A dated cohort must keep a linked event series; link a '
+                'A current or upcoming dated cohort must keep a linked event series; link a '
                 'different series instead of clearing it',
                 'event_series_required',
                 status=422,
@@ -325,12 +340,6 @@ def course_cohort_detail(request, slug, key):
         if series_error is not None:
             return series_error
         cohort.event_series = series
-    for field in ('start_date', 'end_date'):
-        if field in data:
-            value, date_error = _parse_date_field(data, field)
-            if date_error is not None:
-                return validation_response(date_error, message=f'Invalid {field}')
-            setattr(cohort, field, value)
 
     try:
         cohort.full_clean()

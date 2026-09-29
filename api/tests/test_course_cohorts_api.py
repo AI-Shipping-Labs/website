@@ -23,6 +23,8 @@ User = get_user_model()
 class CourseCohortsApiTest(TestCase):
     @classmethod
     def setUpTestData(cls):
+        # Relative dates keep Cohort 4 current, so the series rule applies.
+        cls.start = timezone.localdate() - datetime.timedelta(days=7)
         cls.staff = User.objects.create_user(
             email='staff@test.com', password='pw', is_staff=True,
         )
@@ -57,8 +59,8 @@ class CourseCohortsApiTest(TestCase):
         cls.cohort = Cohort.objects.create(
             course=cls.course, name='Cohort 4', mode='cohort',
             external_key='4',
-            start_date=datetime.date(2026, 9, 14),
-            end_date=datetime.date(2026, 11, 9),
+            start_date=cls.start,
+            end_date=cls.start + datetime.timedelta(days=56),
             event_series=cls.duplicate,
         )
         CohortEnrollment.objects.create(cohort=cls.cohort, user=cls.member)
@@ -77,7 +79,7 @@ class CourseCohortsApiTest(TestCase):
         response = self.client.get('/api/courses/ai-buildcamp/cohorts', **self._auth())
         [cohort] = response.json()['cohorts']
         self.assertEqual(cohort['external_key'], '4')
-        self.assertEqual(cohort['start_date'], '2026-09-14')
+        self.assertEqual(cohort['start_date'], self.start.isoformat())
         self.assertEqual(cohort['enrollment_count'], 1)
         self.assertEqual(cohort['event_series'], {
             'id': self.duplicate.pk,
@@ -142,6 +144,15 @@ class CourseCohortsApiTest(TestCase):
         self.cohort.refresh_from_db()
         self.assertEqual(self.cohort.event_series_id, self.duplicate.pk)
 
+    def test_ended_cohort_can_be_unlinked_and_is_only_noted(self):
+        Cohort.objects.filter(pk=self.cohort.pk).update(end_date=datetime.date(2020, 1, 31), start_date=datetime.date(2020, 1, 1))
+        response = self._patch({'event_series': None})
+        self.assertIsNone(response.json()['event_series'])
+        self.assertEqual(
+            [(w['code'], w['level']) for w in response.json()['warnings']],
+            [('ended_without_event_series', 'info')],
+        )
+
     def test_list_flags_an_unlinked_dated_cohort_as_an_error(self):
         Cohort.objects.filter(pk=self.cohort.pk).update(event_series=None)
         response = self.client.get('/api/courses/ai-buildcamp/cohorts', **self._auth())
@@ -171,4 +182,4 @@ class CourseCohortsApiTest(TestCase):
         response = self._patch({'start_date': None})
         self.assertEqual(response.status_code, 422)
         self.cohort.refresh_from_db()
-        self.assertEqual(self.cohort.start_date, datetime.date(2026, 9, 14))
+        self.assertEqual(self.cohort.start_date, self.start)

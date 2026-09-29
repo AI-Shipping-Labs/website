@@ -79,6 +79,16 @@ def test_staff_links_an_unlinked_cohort_to_its_series(django_server, browser):
     page.locator('[data-testid="cohort-edit-mode"]').select_option("cohort")
     assert select.is_enabled()
 
+    # An ended cohort is exempt from the series requirement.
+    end_input = page.locator('[data-testid="cohort-edit-end-date"]')
+    original_end = end_input.input_value()
+    end_input.fill("2020-01-31")
+    end_input.dispatch_event("change")
+    assert select.evaluate("el => el.required") is False
+    end_input.fill(original_end)
+    end_input.dispatch_event("change")
+    assert select.evaluate("el => el.required") is True
+
     select.select_option(str(series.pk))
     page.locator('[data-testid="cohort-edit-save"]').click()
     page.wait_for_load_state("domcontentloaded")

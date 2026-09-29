@@ -8,8 +8,9 @@ established (``studio/courses/<course_id>/cohorts/...``).
 Cohort creation happens from an inline form on the list page (same shape
 as the enrollments list's "Enroll a user" form) so operators don't need a
 separate create page; every field including the ``event_series`` link
-is editable both at creation time and later from the edit page. A dated
-cohort must link a series; the list and edit pages show the
+is editable both at creation time and later from the edit page. A current or
+upcoming dated cohort must link a series (ended ones are exempt); the list
+and edit pages show the
 ``cohort_series_warnings`` banner when a cohort's link is missing or broken.
 """
 
@@ -21,7 +22,11 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from content.models import Cohort, Course
-from content.services.course_cohorts import cohort_event_series_options, cohort_series_warnings
+from content.services.course_cohorts import (
+    cohort_event_series_options,
+    cohort_requires_event_series,
+    cohort_series_warnings,
+)
 from events.models import EventSeries
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
@@ -49,18 +54,31 @@ def _resolve_event_series(raw_id):
 
 
 SERIES_REQUIRED_MESSAGE = (
-    'Choose an event series: every dated cohort needs one, or its live '
-    'sessions show "Not scheduled".'
+    'Choose an event series: every current or upcoming dated cohort needs '
+    'one, or its live sessions show "Not scheduled".'
 )
 
 
 def _warning_context(rows):
-    """Template context for ``_cohort_series_warnings.html``."""
+    """Template context for ``_cohort_series_warnings.html``.
+
+    Info-level notes (an ended cohort with no series) render as a quiet
+    note, apart from the alert for real problems.
+    """
+    problems, notes = [], []
+    for cohort, warnings in rows:
+        real = [w for w in warnings if w['level'] != 'info']
+        info = [w for w in warnings if w['level'] == 'info']
+        if real:
+            problems.append((cohort, real))
+        if info:
+            notes.append((cohort, info))
     return {
-        'cohort_warning_rows': rows,
+        'cohort_warning_rows': problems,
+        'cohort_note_rows': notes,
         'cohort_warnings_have_error': any(
             warning['level'] == 'error'
-            for _cohort, warnings in rows for warning in warnings
+            for _cohort, warnings in problems for warning in warnings
         ),
     }
 
@@ -130,7 +148,7 @@ def cohort_create(request, course_id):
     if not name:
         messages.error(request, 'Name is required.')
         return redirect('studio_course_cohort_list', course_id=course.pk)
-    if cohort.mode == 'cohort' and cohort.event_series is None:
+    if cohort.event_series is None and cohort_requires_event_series(cohort):
         messages.error(request, SERIES_REQUIRED_MESSAGE)
         return redirect('studio_course_cohort_list', course_id=course.pk)
 
@@ -192,7 +210,7 @@ def cohort_edit(request, course_id, cohort_id):
             cohort.event_series = _resolve_event_series(
                 request.POST.get('event_series_id', ''),
             )
-            if cohort.event_series is None:
+            if cohort.event_series is None and cohort_requires_event_series(cohort):
                 messages.error(request, SERIES_REQUIRED_MESSAGE)
                 return redirect(
                     'studio_course_cohort_edit',
@@ -221,4 +239,5 @@ def cohort_edit(request, course_id, cohort_id):
         'cohort': cohort,
         'event_series_options': cohort_event_series_options(),
         **_warning_context([(cohort, warnings)] if warnings else []),
+        'series_required': cohort_requires_event_series(cohort),
     })

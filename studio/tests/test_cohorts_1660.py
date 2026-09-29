@@ -18,6 +18,10 @@ from events.models import Event, EventSeries
 User = get_user_model()
 
 
+def _days_from_today(days):
+    return (timezone.localdate() + datetime.timedelta(days=days)).isoformat()
+
+
 class StaffMixin:
     @classmethod
     def setUpTestData(cls):
@@ -101,8 +105,8 @@ class CohortCreateViewTest(StaffMixin, TestCase):
             f'/studio/courses/{self.course.pk}/cohorts/create',
             {
                 'name': 'No Series Cohort',
-                'start_date': '2026-09-01',
-                'end_date': '2026-12-01',
+                'start_date': _days_from_today(-1),
+                'end_date': _days_from_today(60),
                 'event_series_id': '',
             },
             follow=True,
@@ -111,7 +115,7 @@ class CohortCreateViewTest(StaffMixin, TestCase):
             Cohort.objects.filter(course=self.course, name='No Series Cohort').exists()
         )
         self.assertIn(
-            'every dated cohort needs one',
+            'every current or upcoming dated cohort needs one',
             [str(m) for m in response.context['messages']][0],
         )
 
@@ -189,8 +193,8 @@ class CohortEditViewTest(StaffMixin, TestCase):
         self.cohort.save()
         response = self.client.post(self._url(), {
             'name': 'Renamed Cohort',
-            'start_date': '2026-09-01',
-            'end_date': '2026-12-01',
+            'start_date': _days_from_today(-1),
+            'end_date': _days_from_today(60),
             'is_active': 'on',
             'max_participants': '',
             'event_series_id': '',
@@ -199,6 +203,23 @@ class CohortEditViewTest(StaffMixin, TestCase):
         self.cohort.refresh_from_db()
         self.assertEqual(self.cohort.event_series_id, self.series.pk)
         self.assertEqual(self.cohort.name, 'Editable Cohort')
+
+    def test_ended_cohort_saves_without_a_series(self):
+        response = self.client.post(self._url(), {
+            'name': 'Past Cohort',
+            'start_date': '2020-01-01',
+            'end_date': '2020-02-01',
+            'is_active': 'on',
+            'max_participants': '',
+            'event_series_id': '',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.cohort.refresh_from_db()
+        self.assertEqual(
+            (self.cohort.name, self.cohort.end_date),
+            ('Past Cohort', datetime.date(2020, 2, 1)),
+        )
+        self.assertIsNone(self.cohort.event_series)
 
     def test_max_participants_and_is_active_persist(self):
         response = self.client.post(self._url(), {
@@ -263,6 +284,15 @@ class CohortSeriesWarningBannerTest(StaffMixin, TestCase):
         self.assertTrue(response.context['cohort_warnings_have_error'])
         self.assertContains(response, 'data-testid="cohort-series-warnings"')
         self.assertContains(response, 'data-warning-code="no_event_series"')
+
+    def test_ended_unlinked_cohort_is_a_note_not_an_alert(self):
+        Cohort.objects.filter(pk=self.unlinked.pk).update(
+            start_date=datetime.date(2020, 1, 1), end_date=datetime.date(2020, 2, 1),
+        )
+        response = self.client.get(f'/studio/courses/{self.course.pk}/cohorts/')
+        self.assertEqual(response.context['cohort_warning_rows'], [])
+        self.assertNotContains(response, 'data-testid="cohort-series-warnings"')
+        self.assertContains(response, 'data-warning-code="ended_without_event_series"')
 
     def test_edit_page_banner_disappears_once_linked_to_a_populated_series(self):
         url = f'/studio/courses/{self.course.pk}/cohorts/{self.unlinked.pk}/edit'

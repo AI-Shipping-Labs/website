@@ -82,7 +82,7 @@ cohorts:                               # optional; upserted into content.Cohort
     name: Cohort 4
     start_date: 2026-09-21
     end_date: 2026-11-22
-    event_series: buildcamp-office-hours-cohort-4  # EventSeries slug; required for dated cohorts
+    event_series: buildcamp-office-hours-cohort-4  # EventSeries slug; required for current/upcoming dated cohorts
   - key: self-paced                    # optional second entry; mode: self_paced
     name: Self-paced
     mode: self_paced                   # optional; 'cohort' (default) or 'self_paced'
@@ -144,7 +144,8 @@ scheduled". Sync behaviour:
 | `event_series: <slug>` naming an existing series | Links the cohort; a changed slug relinks it. |
 | `event_series: <slug>` naming no series | Fails that course's sync, naming the cohort key and slug. Create the series in Studio first. |
 | Key absent | Leaves any link set in Studio or the API untouched. |
-| Dated cohort still unlinked after sync | Records a non-failing `severity: info` warning in the sync history, since the series may be created later in Studio. |
+| Current or upcoming dated cohort still unlinked after sync | Records a non-failing `severity: info` warning in the sync history, since the series may be created later in Studio. |
+| Ended dated cohort (`end_date` before today) with no series | No sync note. Past cohorts that ran before AISL hosted sessions never get a series. |
 
 A self-paced entry must not set `event_series:`. Staff can also inspect and
 relink cohorts with `asl sprints course-cohorts <course>` and
@@ -152,8 +153,10 @@ relink cohorts with `asl sprints course-cohorts <course>` and
 backed by `GET /api/courses/<slug>/cohorts` and
 `PATCH /api/courses/<slug>/cohorts/<key>`. Those responses, the Studio cohort
 pages, and the Studio dashboard report the same warnings: no linked series
-(error), a series with no published events, and a series whose published
-`series_position` values miss a session unit's `session_position`.
+on a current or upcoming cohort (error), a series with no published events,
+and a series whose published `series_position` values miss a session unit's
+`session_position`. An ended cohort with no series gets only an info note,
+and Studio and the API let it save or unlink without a series.
 
 ### Project attempts
 

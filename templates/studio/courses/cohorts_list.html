@@ -54,7 +54,7 @@
         <option value="">Choose an event series</option>
         {% include "studio/courses/_event_series_options.html" with selected_series_id=None %}
       </select>
-      <p class="text-xs text-muted-foreground mt-1">Required for a dated cohort. Each session unit shows the event at its session position in this series; without one, sessions show "Not scheduled".</p>
+      <p class="text-xs text-muted-foreground mt-1">Required for a current or upcoming dated cohort. Each session unit shows the event at its session position in this series; without one, sessions show "Not scheduled".</p>
     </div>
     <button type="submit"
             class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
@@ -76,9 +76,14 @@
         input.required = !selfPaced;
       });
       seriesSelect.disabled = selfPaced;
-      seriesSelect.required = !selfPaced;
+      // A current or upcoming dated cohort needs a series; an ended one
+      // is exempt. The server enforces the same rule.
+      var endInput = document.getElementById('new-cohort-end');
+      var ended = endInput && endInput.value && endInput.value < new Date().toISOString().slice(0, 10);
+      seriesSelect.required = !selfPaced && !ended;
     }
     modeSelect.addEventListener('change', applyMode);
+    document.getElementById('new-cohort-end').addEventListener('change', applyMode);
     applyMode();
   })();
 </script>

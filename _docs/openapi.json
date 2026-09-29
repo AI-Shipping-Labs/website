@@ -3711,7 +3711,7 @@
     },
     "/api/courses/{slug}/cohorts": {
       "get": {
-        "description": "Every cohort of the course (any course status), ordered by start date. ``event_series`` is the linked live-session series or ``null``. ``warnings`` lists event-series problems that make sessions render \"Not scheduled\" for a dated (``mode='cohort'``) cohort: ``no_event_series``, ``empty_event_series`` (no published events) and ``missing_session_positions`` (published events' ``series_position`` values do not cover the course's session units' ``session_position`` values; carries ``missing_positions``).",
+        "description": "Every cohort of the course (any course status), ordered by start date. ``event_series`` is the linked live-session series or ``null``. ``warnings`` lists event-series problems that make sessions render \"Not scheduled\" for a dated (``mode='cohort'``) cohort: ``no_event_series``, ``empty_event_series`` (no published events) and ``missing_session_positions`` (published events' ``series_position`` values do not cover the course's session units' ``session_position`` values; carries ``missing_positions``). An ended dated cohort with no series gets an ``info``-level ``ended_without_event_series`` note instead of the error.",
         "parameters": [
           {
             "in": "path",
@@ -3790,7 +3790,7 @@
     },
     "/api/courses/{slug}/cohorts/{key}": {
       "patch": {
-        "description": "``<key>`` is the cohort's external key (the ``?cohort=`` value), case-insensitive. Partial update of ``event_series`` (an event-series id or slug), ``start_date`` and ``end_date`` (``YYYY-MM-DD``). Every dated cohort must keep a linked series, so ``event_series: null`` on one returns 422 ``event_series_required``. The cohort's model validation still applies (a dated cohort needs both dates; a self-paced cohort cannot have a series). Returns the updated cohort, including fresh ``warnings``.",
+        "description": "``<key>`` is the cohort's external key (the ``?cohort=`` value), case-insensitive. Partial update of ``event_series`` (an event-series id or slug), ``start_date`` and ``end_date`` (``YYYY-MM-DD``). Every current or upcoming dated cohort must keep a linked series, so ``event_series: null`` on one returns 422 ``event_series_required``; an ended cohort may be unlinked. The cohort's model validation still applies (a dated cohort needs both dates; a self-paced cohort cannot have a series). Returns the updated cohort, including fresh ``warnings``.",
         "parameters": [
           {
             "in": "path",
@@ -3825,7 +3825,7 @@
                     ]
                   },
                   "event_series": {
-                    "description": "Event-series id or slug. null is rejected for a dated cohort.",
+                    "description": "Event-series id or slug. null is rejected for a current or upcoming dated cohort.",
                     "type": [
                       "integer",
                       "string",

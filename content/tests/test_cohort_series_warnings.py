@@ -90,6 +90,19 @@ class CohortSeriesWarningsTest(TestCase):
             (warning['code'], warning['level']), ('no_event_series', 'error'),
         )
 
+    def test_ended_cohort_without_series_is_only_an_info_note(self):
+        today = timezone.localdate()
+        ended = Cohort.objects.create(
+            course=self.course, name='Cohort 1', mode='cohort',
+            start_date=today - datetime.timedelta(days=90),
+            end_date=today - datetime.timedelta(days=1),
+        )
+        [warning] = cohort_series_warnings([ended])[ended.pk]
+        self.assertEqual(
+            (warning['code'], warning['level'], warning['message']),
+            ('ended_without_event_series', 'info', 'Ended cohort, no live sessions linked.'),
+        )
+
     def test_series_with_no_published_events_is_a_warning(self):
         [warning] = cohort_series_warnings([self.empty])[self.empty.pk]
         self.assertEqual(

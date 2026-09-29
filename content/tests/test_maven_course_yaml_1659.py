@@ -1,11 +1,13 @@
 """Course.maven_course_key / Cohort.external_key model + sync coverage (issue #1659)."""
 
+import datetime
 import os
 import shutil
 import tempfile
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 
 from content.models import Cohort, Course
 from events.models import EventSeries
@@ -257,13 +259,17 @@ class CohortEventSeriesYamlSyncTest(_CourseYamlSyncFixtureBase):
     """``event_series:`` on a ``cohorts:`` entry links the cohort's series."""
 
     def _cohort_yaml(self, series_line=""):
+        # Relative dates keep the cohort current, so the series rule applies.
+        today = timezone.localdate()
+        start = today - datetime.timedelta(days=1)
+        end = today + datetime.timedelta(days=60)
         self._write_course_yaml(
             extras=(
                 "cohorts:\n"
                 "  - key: cohort-4\n"
                 "    name: Cohort 4\n"
-                "    start_date: 2026-09-21\n"
-                "    end_date: 2026-11-22\n"
+                f"    start_date: {start.isoformat()}\n"
+                f"    end_date: {end.isoformat()}\n"
             ) + series_line,
         )
 
@@ -317,3 +323,21 @@ class CohortEventSeriesYamlSyncTest(_CourseYamlSyncFixtureBase):
         self.assertIn("has no event_series", note["error"])
         # The cohort itself is still synced.
         self.assertIsNone(self._cohort().event_series)
+
+    def test_ended_unlinked_cohort_records_no_sync_note(self):
+        self._write_course_yaml(
+            extras=(
+                "cohorts:\n"
+                "  - key: '1'\n"
+                "    name: Cohort 1\n"
+                "    start_date: 2025-10-06\n"
+                "    end_date: 2025-11-23\n"
+            ),
+        )
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        self.assertEqual(log.errors, [])
+        self.assertIsNone(
+            Cohort.objects.get(course__slug="buildcamp-1659", external_key="1").event_series
+        )

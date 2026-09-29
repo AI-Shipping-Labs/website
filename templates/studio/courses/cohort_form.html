@@ -64,13 +64,13 @@
   series (e.g. office hours) surfaced on the course page's live-sessions block.{% endcomment %}
   <div>
     <label class="block text-xs font-medium text-foreground mb-1" for="cohort-event-series">Event series</label>
-    <select id="cohort-event-series" name="event_series_id" {% if cohort.mode != 'self_paced' %}required{% endif %}
+    <select id="cohort-event-series" name="event_series_id" {% if series_required %}required{% endif %}
             class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
             data-testid="cohort-edit-event-series">
       <option value="">Choose an event series</option>
       {% include "studio/courses/_event_series_options.html" with selected_series_id=cohort.event_series_id %}
     </select>
-    <p class="text-xs text-muted-foreground mt-1">Required for a dated cohort. Each session unit shows the event at its session position in this series, and members see its occurrences on the course page even when the series is hidden from public discovery.</p>
+    <p class="text-xs text-muted-foreground mt-1">Required for a current or upcoming dated cohort. Each session unit shows the event at its session position in this series, and members see its occurrences on the course page even when the series is hidden from public discovery.</p>
   </div>
   <div class="flex flex-wrap items-center gap-2 pt-2">
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
@@ -98,9 +98,14 @@
         if (selfPaced) input.value = '';
       });
       seriesSelect.disabled = selfPaced;
-      seriesSelect.required = !selfPaced;
+      // A current or upcoming dated cohort needs a series; an ended one
+      // is exempt. The server enforces the same rule.
+      var endInput = document.getElementById('cohort-end');
+      var ended = endInput && endInput.value && endInput.value < new Date().toISOString().slice(0, 10);
+      seriesSelect.required = !selfPaced && !ended;
     }
     modeSelect.addEventListener('change', applyMode);
+    document.getElementById('cohort-end').addEventListener('change', applyMode);
     applyMode();
   })();
 </script>

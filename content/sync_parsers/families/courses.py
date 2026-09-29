@@ -747,8 +747,8 @@ def _sync_course_cohorts(course, course_data, rel_path, stats=None):
     An optional ``event_series: <series slug>`` key links the cohort to the
     live-session series its session units resolve against. An unknown slug
     fails the course; an absent key keeps any Studio-set link. A dated
-    cohort still unlinked after sync is recorded as a non-failing
-    info-severity entry (the series may be created later in Studio), so
+    cohort that has not ended and is still unlinked after sync is recorded
+    as a non-failing info-severity entry (the series may be created later in Studio), so
     the sync history shows it without blocking stale-content sweeps.
 
     Raises :class:`GitHubSyncError` on a malformed entry so the caller's
@@ -866,8 +866,13 @@ def _sync_course_cohorts(course, course_data, rel_path, stats=None):
 
 
 def _note_unlinked_dated_cohort(cohort, rel_path, stats):
-    """Record a non-failing sync note for a dated cohort with no series."""
-    if cohort.mode != 'cohort' or cohort.event_series_id:
+    """Record a non-failing sync note for a current or upcoming dated
+    cohort with no series. Ended cohorts are skipped: they will never get
+    one, and the note would leave every sync "Partial" for good.
+    """
+    from content.services.course_cohorts import cohort_requires_event_series
+
+    if cohort.event_series_id or not cohort_requires_event_series(cohort):
         return
     msg = (
         f"Warning: cohort '{cohort.external_key}' ({cohort.name}) in "

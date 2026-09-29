@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
+{% load layout_components %}
 
 {% block title %}{{ course.title }} · {{ section|title }} | AI Shipping Labs{% endblock %}
 
@@ -69,19 +70,18 @@
     {% elif section == 'syllabus' %}
       {% include "content/_course_syllabus.html" %}
     {% elif section == 'sessions' %}
-      <div class="mb-5"><h2 id="course-live-sessions-heading" class="text-xl font-semibold text-foreground">Live sessions</h2><p class="mt-1 text-sm text-muted-foreground">All sessions for your course, with recaps where available.</p></div>
+      {% section_header "Live sessions" size="lg" heading_id="course-live-sessions-heading" subtitle="All sessions for your course, with recaps where available." extra="mb-5" %}
       {% if not live_session_schedule %}<p class="rounded-xl border border-border bg-card p-5 text-sm text-muted-foreground">{% if cohort %}No office hours are scheduled for this cohort yet.{% else %}Your office hours will appear once a cohort is linked to your account.{% endif %}</p>{% endif %}
       {% include "content/course_home/_live_sessions.html" %}
     {% elif section == 'homework' %}
-      <div class="mb-5"><h2 id="course-homework-heading" class="text-xl font-semibold text-foreground">Homework</h2><p class="mt-1 text-sm text-muted-foreground">Assignments and deadlines for your cohort.</p></div>
+      {% section_header "Homework" size="lg" heading_id="course-homework-heading" subtitle="Assignments and deadlines for your cohort." extra="mb-5" %}
       {% include "content/course_home/_deadlines.html" with deadline_rows=homework_rows completed_deadline_rows=completed_homework_rows deadline_heading="Homework deadlines" %}
     {% elif section == 'projects' %}
-      <div class="mb-5"><h2 id="course-projects-heading" class="text-xl font-semibold text-foreground">Projects</h2><p class="mt-1 text-sm text-muted-foreground">Project submission deadlines.</p></div>
+      {% section_header "Projects" size="lg" heading_id="course-projects-heading" subtitle="Project submission deadlines." extra="mb-5" %}
       {% include "content/course_home/_deadlines.html" with deadline_rows=project_rows completed_deadline_rows=completed_project_rows deadline_heading="Project deadlines" %}
       {% if review_rows %}
       <section class="mt-10" aria-labelledby="course-peer-reviews-heading">
-        <h2 id="course-peer-reviews-heading" class="text-lg font-semibold text-foreground">Peer reviews</h2>
-        <p class="mt-1 text-sm text-muted-foreground">Available after you submit a project and reviews are assigned.</p>
+        {% section_header "Peer reviews" heading_id="course-peer-reviews-heading" subtitle="Available after you submit a project and reviews are assigned." %}
         <ol class="mt-3 divide-y divide-border">{% for item in review_rows %}{% include "content/course_home/_deadline_row.html" with item=item %}{% endfor %}</ol>
       </section>
       {% endif %}

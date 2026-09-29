@@ -1,0 +1,10 @@
+{% comment %}
+Owner: {% section_header %} from content.templatetags.layout_components.
+Title first, optional one-line subtitle, then the optional discovery link on
+its own line below. Never pin the link opposite the title.
+{% endcomment %}
+<header{% if extra %} class="{{ extra }}"{% endif %} data-section-header{% if testid %} data-testid="{{ testid }}"{% endif %}>
+  {% if level == 3 %}<h3{% if heading_id %} id="{{ heading_id }}"{% endif %} class="{% if size == 'lg' %}break-words text-xl font-semibold tracking-tight text-foreground{% else %}break-words text-lg font-semibold text-foreground{% endif %}"{% if heading_testid %} data-testid="{{ heading_testid }}"{% endif %}>{{ title }}</h3>{% else %}<h2{% if heading_id %} id="{{ heading_id }}"{% endif %} class="{% if size == 'lg' %}break-words text-xl font-semibold tracking-tight text-foreground{% else %}break-words text-lg font-semibold text-foreground{% endif %}"{% if heading_testid %} data-testid="{{ heading_testid }}"{% endif %}>{{ title }}</h2>{% endif %}
+  {% if subtitle %}<p class="mt-1 text-sm text-muted-foreground">{{ subtitle }}</p>{% endif %}
+  {% if see_all_url %}<a href="{{ see_all_url }}" class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"{% if see_all_testid %} data-testid="{{ see_all_testid }}"{% endif %}>{{ see_all_label }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+</header>

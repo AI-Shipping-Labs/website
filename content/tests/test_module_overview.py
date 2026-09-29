@@ -158,12 +158,7 @@ class ModuleOverviewViewTest(TestCase):
 
         response = self.client.get('/courses/python-course/fundamentals')
 
-        self.assertContains(
-            response,
-            '<span class="text-sm text-muted-foreground" '
-            'data-testid="module-progress-count">1 of 2 complete</span>',
-            html=True,
-        )
+        self.assertContains(response, 'data-testid="module-progress-count">1 of 2 complete</p>')
         self.assertEqual(response.context['module_next_action']['unit'], self.unit_b)
         self.assertEqual(response.context['module_next_action']['label'], 'Continue')
 

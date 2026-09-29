@@ -1,6 +1,7 @@
 {% load member_badges %}
 {% load curriculum_tags %}
 {% load accounts_extras %}
+{% load layout_components %}
 
 {% include "content/reader/_mobile_nav_toggle_gated.html" with reader_mobile_label="Course Navigation" %}
 
@@ -28,13 +29,7 @@
 {% if module_next_action %}
 <section class="mb-10" aria-labelledby="module-next-heading" data-testid="module-next-action">
   {% if user_authenticated and module_progress_total %}
-  <div class="mb-2 flex items-center justify-between gap-4">
-    <p class="text-sm font-medium text-foreground">Module progress</p>
-    <span class="text-sm text-muted-foreground" data-testid="module-progress-count">{{ module_progress_completed }} of {{ module_progress_total }} complete</span>
-  </div>
-  <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Module progress" aria-valuemin="0" aria-valuemax="{{ module_progress_total }}" aria-valuenow="{{ module_progress_completed }}">
-    <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ module_progress_pct }}%"></div>
-  </div>
+  {% progress_block module_progress_completed module_progress_total label="Module progress" title="Module progress" summary_word="complete" summary_testid="module-progress-count" %}
   {% endif %}
   <div class="{% if user_authenticated and module_progress_total %}mt-6{% endif %}">
     <h2 id="module-next-heading" class="text-xs font-medium text-muted-foreground">{% if module_next_action.complete %}You have completed every lesson in this module{% else %}Next lesson{% endif %}</h2>

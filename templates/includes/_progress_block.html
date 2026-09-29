@@ -1,0 +1,15 @@
+{% load accounts_extras %}
+{% comment %}
+Owner: {% progress_block %} from content.templatetags.layout_components.
+One vertical reading order: optional title, bar, count, breakdown, then the
+optional primary action below. Never place the action beside the bar.
+{% endcomment %}
+<div data-progress-block{% if testid %} data-testid="{{ testid }}"{% endif %}>
+  {% if title %}<p class="mb-2 text-sm font-medium text-foreground">{{ title }}</p>{% endif %}
+  <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="{{ label }}" aria-valuemin="0" aria-valuemax="{{ total }}" aria-valuenow="{{ done }}">
+    <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ percent }}%"></div>
+  </div>
+  <p class="mt-2 text-sm text-foreground"{% if summary_testid %} data-testid="{{ summary_testid }}"{% endif %}>{{ done }} of {{ total }} {{ summary_word }}</p>
+  {% if breakdown %}<p class="mt-1 text-xs text-muted-foreground"{% if breakdown_testid %} data-testid="{{ breakdown_testid }}"{% endif %}>{{ breakdown }}</p>{% endif %}
+  {% if action_url %}<a href="{{ action_url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}"{% if action_testid %} data-testid="{{ action_testid }}"{% endif %}>{{ action_label }}</a>{% endif %}
+</div>

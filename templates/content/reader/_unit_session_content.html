@@ -2,13 +2,13 @@
 {% if unit_session_entry %}
   {% with entry=unit_session_entry %}
   <div class="mb-8" data-testid="unit-session-content">
-    <div class="mb-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
+    <div class="flex flex-wrap items-center gap-x-4 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
       {% include "events/_event_time_display.html" with event_time_display=entry.time_display event_time_hide_zone=True %}
       <a href="{{ entry.event.get_absolute_url }}"
-         class="inline-flex items-center gap-1 text-xs text-muted-foreground underline decoration-border underline-offset-4 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+         class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
          data-testid="unit-session-event-details">
         Event details
-        <i data-lucide="arrow-up-right" class="h-3.5 w-3.5" aria-hidden="true"></i>
+        <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
       </a>
     </div>
     {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=entry.time_display.fallback_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-6 mt-0" only %}
@@ -16,7 +16,7 @@
     {% if not entry.is_past %}
     <div class="mb-8 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
       {% if entry.session_join_url %}
-      <a href="{{ entry.session_join_url }}" class="{% button_classes 'primary' %}" data-testid="unit-session-join">
+      <a href="{{ entry.session_join_url }}" class="{% button_classes 'primary' extra='w-full sm:w-auto' %}" data-testid="unit-session-join">
         Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
       </a>
       {% if not entry.can_join_now and not entry.event.is_external %}<span class="text-sm text-muted-foreground">Opens 5 minutes before the session.</span>{% endif %}
@@ -32,8 +32,6 @@
     <div class="prose reader-prose mb-8 max-w-full overflow-x-auto" data-testid="unit-session-description">
       {{ entry.description_html|safe }}
     </div>
-    {% elif not entry.is_past %}
-    <p class="mb-8 text-sm text-muted-foreground">This live session is part of your course schedule.</p>
     {% endif %}
 
     {% if entry.is_past %}

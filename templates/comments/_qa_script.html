@@ -1,3 +1,4 @@
+{% load accounts_extras %}
 <script>
   // Q&A Section — multi-instance safe.
   //
@@ -99,7 +100,7 @@
             '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
             '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
               '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
-              '<button class="qa-reply-btn mt-1 inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground transition-colors hover:bg-accent/90" data-comment-id="' + comment.id + '">Post Reply</button>' +
+              '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
             '</div>' +
             repliesHtml +
           '</div>' +

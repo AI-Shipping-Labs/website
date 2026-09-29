@@ -11,24 +11,25 @@
   NO progress semantics: there is no "Page N of M" text
   (`reader-mobile-progress-text`) and no green completion fill
   (`reader-mobile-progress-fill`), both of which would be misleading when
-  the body is paywalled. It shows only the drawer label and the chevron.
+  the body is paywalled. It shows only the drawer label; the drawer opens
+  as a modal overlay, so there is no accordion chevron.
 
   Required context:
-    reader_mobile_label   Drawer button text, e.g. "Workshop Navigation".
+    reader_mobile_label   Drawer button text, e.g. "Workshop navigation".
 {% endcomment %}
-<div class="lg:hidden mb-4" data-testid="reader-mobile-nav-toggle-gated">
+<div class="lg:hidden mb-3" data-testid="reader-mobile-nav-toggle-gated">
   <button
     type="button"
     id="sidebar-toggle-btn"
-    class="w-full flex items-center justify-between rounded-lg border border-border bg-card px-4 py-2.5 min-h-[44px] text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+    class="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-2 min-h-[44px] text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
     aria-expanded="false"
     aria-controls="sidebar-nav"
+    aria-haspopup="dialog"
     data-testid="reader-mobile-drawer-toggle"
   >
-    <span class="flex items-center gap-2">
-      <i data-lucide="list" class="h-4 w-4"></i>
-      {{ reader_mobile_label }}
+    <span class="flex min-w-0 items-center gap-2">
+      <i data-lucide="list" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
+      <span class="truncate">{{ reader_mobile_label }}</span>
     </span>
-    <i data-lucide="chevron-down" class="h-4 w-4 transition-transform duration-200" id="sidebar-toggle-chevron"></i>
   </button>
 </div>

@@ -94,17 +94,53 @@
   @media (max-width: 1023px) {
     #content-sidebar-collapse-btn,
     #content-sidebar-floating-toggle { display: none !important; }
-    #sidebar-nav.reader-scoped-nav:not(.hidden) {
+    /* Every reader opens its nav as a modal drawer below `lg`; the
+       backdrop, scroll lock, and dialog semantics come from _scripts.html.
+       `--site-header-offset` is the measured header height plus 16px. */
+    #sidebar-nav:not(.hidden) {
       position: fixed;
       z-index: 60;
-      top: 5rem;
+      top: var(--site-header-offset, 5rem);
       left: 1rem;
       right: 1rem;
-      max-height: calc(100dvh - 6rem);
+      margin-top: 0;
+      max-height: calc(100dvh - var(--site-header-offset, 5rem) - 1rem);
       overflow-y: auto;
+      overscroll-behavior: contain;
       box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
     }
+    @media (min-width: 640px) {
+      /* Tablets get a left sheet at reading-nav width, not a 700px slab. */
+      #sidebar-nav:not(.hidden) {
+        right: auto;
+        width: min(26rem, calc(100vw - 2rem));
+      }
+    }
+    .reader-drawer-header {
+      position: sticky;
+      top: -0.5rem;
+      z-index: 1;
+      margin-top: -0.5rem;
+      padding-top: 0.5rem;
+      background-color: hsl(var(--card));
+    }
+    .reader-drawer-backdrop:not([hidden]) {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      background-color: hsl(var(--background) / 0.7);
+      backdrop-filter: blur(2px);
+    }
+    :root.reader-drawer-open,
+    :root.reader-drawer-open body {
+      overflow: hidden;
+    }
+    /* The compact sticky Previous / primary bar clears the home indicator. */
+    .reader-bottom-bar {
+      padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    }
   }
+  .reader-drawer-backdrop[hidden] { display: none; }
   .sidebar-module > summary::-webkit-details-marker,
   .sidebar-module > summary::marker { display: none; }
   .sidebar-module > summary .sidebar-chevron { transition: transform 140ms ease-out; }

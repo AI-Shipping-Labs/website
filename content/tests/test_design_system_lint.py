@@ -181,8 +181,6 @@ BASELINE: dict[str, dict[str, int]] = {
     "legacy_px5_py25_pair": {  # Initial legacy debt: #1240.
         "templates/content/_verify_email_required.html": 1,
         "templates/content/course_detail.html": 1,
-        "templates/content/reader/_bottom_nav.html": 2,
-        "templates/content/reader/_completion_button.html": 1,
     },
     "public_font_bold": {  # Initial legacy debt: #1240.
         "templates/base.html": 1,

@@ -518,8 +518,11 @@ class TestWorkshopSidebarTopAlignment:
                 f'{django_server}/workshops/gap-1080-ws/overview',
                 wait_until='domcontentloaded',
             )
-            link = page.locator('[data-testid="sidebar-back-to-workshop"]')
-            link.wait_for(state='visible')
+            # Since the reader-shell redesign (bb068c695) the sticky
+            # wrapper holds the page nav; the back link scrolls with the
+            # page above it.
+            nav = page.locator('[data-testid="workshop-sidebar"]')
+            nav.wait_for(state='visible')
 
             header = page.locator('#site-header')
             header_box = header.bounding_box()
@@ -529,17 +532,17 @@ class TestWorkshopSidebarTopAlignment:
             page.evaluate('window.scrollTo(0, 1200)')
             page.wait_for_function('window.scrollY >= 1000')
 
-            link_box = link.bounding_box()
-            assert link_box is not None
-            # The back-link stays visible and its top is at or below the
+            nav_box = nav.bounding_box()
+            assert nav_box is not None
+            # The page nav stays visible and its top is at or below the
             # header bottom — it is pinned, not hidden behind the header
             # and not scrolled off the top.
-            assert link_box['y'] >= header_bottom - 1, (
-                f'Sidebar back-link top {link_box["y"]:.1f} is above header '
+            assert nav_box['y'] >= header_bottom - 1, (
+                f'Sidebar nav top {nav_box["y"]:.1f} is above header '
                 f'bottom {header_bottom:.1f} — it slid under the header'
             )
-            assert link_box['y'] < 400, (
-                f'Sidebar back-link top {link_box["y"]:.1f} did not pin '
+            assert nav_box['y'] < 400, (
+                f'Sidebar nav top {nav_box["y"]:.1f} did not pin '
                 f'near the header — it scrolled away'
             )
         finally:

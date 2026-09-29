@@ -13,11 +13,6 @@
 {% include "content/reader/_breadcrumb.html" with breadcrumb_kind="workshop_page" breadcrumb_testid="page-breadcrumb" %}
 
 {% if is_gated %}
-<a href="{{ workshop.get_absolute_url }}" class="mb-6 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="teaser-back-link">
-  <i data-lucide="arrow-left" class="h-4 w-4"></i>
-  Back to {{ workshop.title }}
-</a>
-
 {% if workshop.pages_required_level < 10 %}
 <span class="mb-3 inline-flex items-center gap-1 rounded-full bg-accent/20 px-2.5 py-0.5 text-xs font-medium text-accent" data-testid="page-free-badge">
   <i data-lucide="badge-check" class="h-3 w-3"></i>
@@ -26,11 +21,11 @@
 {% endif %}
 {% endif %}
 
-<h1 class="{% if show_watch_bar %}mb-4{% else %}mb-8{% endif %} text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
+<h1 class="{% if show_watch_bar %}mb-4{% else %}mb-6 lg:mb-8{% endif %} break-words text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="page-title">{{ page.title }}</h1>
 
 {% if show_watch_bar %}
 <a href="{{ watch_bar_url }}"
-   class="mb-8 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
+   class="mb-6 inline-flex min-h-[44px] items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1.5 text-sm text-accent transition-colors hover:bg-accent/20"
    data-testid="watch-this-section">
   <i data-lucide="play" class="h-3.5 w-3.5"></i>
   Watch this section ({{ watch_bar_label }})

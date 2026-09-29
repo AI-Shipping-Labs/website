@@ -423,7 +423,7 @@ def build_course_unit_navigation_context(user, course, module, unit, *, request=
         'completion_url': f'/api/courses/{course.slug}/units/{unit.pk}/complete',
         'bottom_prev_testid': 'bottom-prev-btn',
         'bottom_next_testid': 'bottom-next-btn',
-        'reader_mobile_label': 'Course Navigation',
+        'reader_mobile_label': 'Course navigation',
         'reader_progress_kind': 'lesson',
         'reader_progress_current': reader_progress_current,
         'reader_progress_total': reader_progress_total,

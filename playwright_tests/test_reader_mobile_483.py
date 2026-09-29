@@ -257,20 +257,22 @@ class TestCourseUnitReaderMobileCompletionPlacement:
         ctx = _mobile_context(browser, "bn-483@test.com")
         page = ctx.new_page()
         try:
+            # The last unit has no Next, so the completion toggle renders
+            # instead of Complete & Next.
             page.goto(
-                f"{django_server}{unit1.get_absolute_url()}",
+                f"{django_server}{unit2.get_absolute_url()}",
                 wait_until="domcontentloaded",
             )
 
-            # The mobile-only wrapper exists and is visible (sm:hidden
-            # is "show below 640px"). Bottom of the page.
+            # The stand-alone wrapper exists and is visible (lg:hidden
+            # is "show below 1024px"). Bottom of the page.
             mobile_wrap = page.locator(
                 '[data-testid="reader-bottom-completion-mobile"]',
             )
             mobile_wrap.wait_for(state="visible")
 
             # The desktop wrapper is in the DOM but hidden by
-            # `hidden sm:block`.
+            # `hidden lg:block`.
             desktop_wrap = page.locator(
                 '[data-testid="reader-bottom-completion-desktop"]',
             )
@@ -278,18 +280,19 @@ class TestCourseUnitReaderMobileCompletionPlacement:
             # is_visible() respects display:none.
             assert not desktop_wrap.is_visible()
 
-            # The mobile button must be vertically above the next link
+            # The mobile button must sit above the Previous / Next bar
             # so the action is not stranded between prev/next.
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
             mob_box = mobile_wrap.bounding_box()
-            next_link = page.locator(
-                '[data-testid="bottom-next-btn"]',
+            prev_link = page.locator(
+                '[data-testid="bottom-prev-btn"]',
             )
-            next_box = next_link.bounding_box()
+            prev_box = prev_link.bounding_box()
             assert mob_box is not None
-            assert next_box is not None
-            assert mob_box["y"] < next_box["y"], (
-                "Mobile mark-complete row must render above the Next "
-                "link on a 390px viewport."
+            assert prev_box is not None
+            assert mob_box["y"] < prev_box["y"], (
+                "Mobile mark-complete row must render above the "
+                "Previous link on a 390px viewport."
             )
 
             # Click the mobile button → state flips to Completed.
@@ -475,11 +478,10 @@ class TestDesktopBottomNavRegression:
             required_level=0,
         )
         module = _create_module(course, "Module 1", sort_order=1)
-        unit1 = _create_unit(
-            module, "Unit One", sort_order=1, body="A",
-        )
-        _create_unit(module, "Unit Two", sort_order=2, body="B")
-        return unit1
+        _create_unit(module, "Unit One", sort_order=1, body="A")
+        # The last unit renders the completion toggle; earlier units
+        # show Complete & Next instead.
+        return _create_unit(module, "Unit Two", sort_order=2, body="B")
 
     def test_inline_completion_visible_on_desktop(
         self, browser, django_server,

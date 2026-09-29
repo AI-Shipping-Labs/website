@@ -254,8 +254,8 @@ class TestFreeUserOpensDrawerFromTop:
 
             _shot(page, "02-drawer-open-free-user")
 
-            # Tap the toggle again to collapse.
-            toggle.click()
+            # The modal drawer covers the toggle; close it from its header.
+            page.locator('[data-testid="reader-drawer-close"]').click()
             nav.wait_for(state="hidden")
         finally:
             ctx.close()

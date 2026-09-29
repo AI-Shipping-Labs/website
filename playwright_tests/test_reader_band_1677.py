@@ -56,9 +56,11 @@ from playwright_tests.test_workshops import (  # noqa: E402
 )
 from scripts.browser_journey_policy import browser_journey  # noqa: E402
 
-# The `py-8` / `lg:py-12` Tailwind values in rem, at the default 16px
-# root font: py-8 => 2rem => 32px, lg:py-12 => 3rem => 48px.
-EXPECTED_PADDING_PX = '32px'
+# The reader band's computed padding-top at the default 16px root font.
+# Desktop keeps `lg:pt-5` => 1.25rem => 20px; mobile polish
+# (Group B) trimmed the phone band to `pt-2` => 0.5rem => 8px.
+EXPECTED_PADDING_PX = '20px'
+MOBILE_PADDING_PX = '8px'
 REGRESSED_PADDING_PX = '48px'
 
 # The floating "Edit in Studio" button (`_studio_edit_button.html`) uses
@@ -123,7 +125,7 @@ class TestPayingMemberCourseUnitDesktopGap:
             padding_top = _band_padding_top(page)
             assert padding_top == EXPECTED_PADDING_PX, (
                 f'Reader band padding-top at 1280px should be '
-                f'{EXPECTED_PADDING_PX} (py-8, no lg: escalation), got '
+                f'{EXPECTED_PADDING_PX} (lg:pt-5, no lg:py-12 escalation), got '
                 f'{padding_top!r}'
             )
             assert padding_top != REGRESSED_PADDING_PX
@@ -144,10 +146,9 @@ class TestPayingMemberCourseUnitDesktopGap:
                 wait_until='domcontentloaded',
             )
 
-            # Mobile spacing was never touched by this fix (bare `py-8`
-            # applies at every breakpoint); assert it stays at 32px.
+            # Mobile polish trimmed the phone band to `pt-2`.
             padding_top = _band_padding_top(page)
-            assert padding_top == EXPECTED_PADDING_PX
+            assert padding_top == MOBILE_PADDING_PX
 
             progress_bar = page.locator(
                 '[data-testid="reader-mobile-progress-bar"]',
@@ -219,7 +220,7 @@ class TestAnonymousFreeWorkshopTutorial:
         toggle = page.locator('[data-testid="reader-mobile-drawer-toggle"]')
         toggle.wait_for(state='visible')
         mobile_padding_top = _band_padding_top(page)
-        assert mobile_padding_top == EXPECTED_PADDING_PX
+        assert mobile_padding_top == MOBILE_PADDING_PX
 
 
 # ----------------------------------------------------------------------
@@ -295,7 +296,7 @@ class TestGatedWorkshopTutorial:
             )
 
             mobile_padding_top = _band_padding_top(page)
-            assert mobile_padding_top == EXPECTED_PADDING_PX
+            assert mobile_padding_top == MOBILE_PADDING_PX
 
             gated_toggle = page.locator(
                 '[data-testid="reader-mobile-nav-toggle-gated"]',

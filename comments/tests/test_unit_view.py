@@ -118,11 +118,11 @@ class CourseUnitDetailContentIdTest(TestCase):
 
     def test_authenticated_visitor_does_not_see_signup_cta(self):
         """Issue #792: signed-in visitor on a course unit page sees the
-        textarea + Post Question composer, never the anonymous CTA.
+        textarea + Post question composer, never the anonymous CTA.
         """
         self.client.login(email='test@test.com', password='pass')
         response = self.client.get('/courses/test-course/module-1/unit-1')
         self.assertContains(response, 'id="qa-new-question"')
-        self.assertContains(response, 'Post Question')
+        self.assertContains(response, 'Post question')
         self.assertNotContains(response, '/accounts/signup/?next=')
         self.assertNotContains(response, 'Already have an account? Sign in')

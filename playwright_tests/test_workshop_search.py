@@ -39,6 +39,11 @@ def _seed_workshops():
         workshop=rag, slug='evaluate-rag', title='Evaluate RAG answers',
         sort_order=1,
     )
+    for number in range(1, 26):
+        WorkshopPage.objects.create(
+            workshop=rag, slug=f'chunking-step-{number}',
+            title=f'Chunking step {number}', sort_order=number + 1,
+        )
     Workshop.objects.create(
         slug='agents-search-e2e', title='Agents with tools', status='published',
         date=datetime.date(2026, 8, 19), tags=['ai-agents'],
@@ -87,8 +92,36 @@ def test_workshop_catalog_search_suggests_workshops_and_pages(django_server, pag
     expect(page.locator('[data-testid="workshops-list"]')).to_be_hidden()
     assert page.url.endswith('/workshops/catalog?q=rag')
 
+    # The matching tutorial page is nested under its workshop instead of
+    # repeating the workshop title as a breadcrumb row.
+    nested_pages = results.locator('.cb-syllabus-search__group-pages')
+    expect(
+        nested_pages.get_by_role('link', name='Evaluate RAG answers', exact=True),
+    ).to_have_attribute(
+        'href', f'{django_server}/workshops/rag-search-e2e/evaluate-rag',
+    )
+
     results.get_by_role('link', name='Build a RAG assistant', exact=True).click()
     page.wait_for_url(f'{django_server}/workshops/rag-search-e2e')
+
+    # 25 matching pages under one workshop: 20 rows (the workshop plus 19
+    # pages) show first, and "Show more results" reveals the rest.
+    page.goto(
+        f'{django_server}/workshops/catalog?q=chunking',
+        wait_until='domcontentloaded',
+    )
+    results = page.locator('[data-cb-syllabus-search-results]')
+    page_links = results.locator('.cb-syllabus-search__group-pages a')
+    expect(results.get_by_role('link', name='Build a RAG assistant', exact=True)).to_be_visible()
+    expect(page_links.filter(visible=True)).to_have_count(19)
+    expect(page_links.filter(visible=False)).to_have_count(6)
+    show_more = results.get_by_role('button', name='Show more results')
+    show_more.click()
+    expect(page_links.filter(visible=True)).to_have_count(25)
+    expect(show_more).to_be_hidden()
+    expect(
+        results.get_by_role('link', name='Chunking step 20', exact=True),
+    ).to_be_focused()
 
 
 @browser_journey

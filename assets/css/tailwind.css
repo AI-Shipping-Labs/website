@@ -114,6 +114,12 @@ body {
 /* Prose styles for markdown content */
 .prose h1 { font-size: 1.875rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
 .prose h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 2rem; margin-bottom: 1rem; }
+/* Phones: step the section heading down so a long h2 does not rival the
+   page h1 or wrap to three lines at 360px. Declared before the
+   `.prose-note` / `.prose-tight` modifiers so their smaller sizes still win. */
+@media (max-width: 639px) {
+  .prose h2 { font-size: 1.375rem; }
+}
 .prose h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 1.5rem; margin-bottom: 0.75rem; }
 .prose { overflow-wrap: break-word; word-break: break-word; }
 .prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(var(--muted-foreground)); }
@@ -447,9 +453,21 @@ select.studio-select {
 }
 .code-copy-btn:hover { color: hsl(var(--foreground)); }
 .code-copy-btn.is-copied { color: hsl(var(--accent)); opacity: 1; }
-/* Touch devices (no hover): always show the button so it's tappable. */
+/* Touch devices (no hover): always show the button so it's tappable, give
+   it a 44px tap target, and reserve a right gutter on the code block so the
+   always-visible button never sits on top of the first code lines. */
 @media (hover: none) {
-  .code-copy-btn { opacity: 1; }
+  .code-copy-btn {
+    opacity: 1;
+    top: 0.375rem;
+    right: 0.375rem;
+    min-height: 2.75rem;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    border-radius: 0.375rem;
+  }
+  .code-copy-wrapper > pre,
+  .code-copy-wrapper > .codehilite { padding-right: 4.5rem; }
 }
 @media (max-width: 639px) {
   .prose .code-annotation-note {

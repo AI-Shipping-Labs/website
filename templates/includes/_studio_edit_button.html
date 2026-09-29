@@ -1,7 +1,8 @@
 {% load studio_open %}
 {# Floating "Open in Studio" button. Server-side gated on ``request.user.is_staff``. #}
 {# Renders nothing for non-staff or when no Studio destination resolves. #}
-{# Optional studio_edit_top_class overrides the default top-20 position. #}
+{# Below lg it is a 44px icon-only circle pinned bottom-right (above any mobile bottom bar that sets --mobile-bottom-bar-height), so it never covers titles, progress text, or the search dropdown near the top. #}
+{# From lg it is the labelled pill under the header. Optional studio_edit_top_class="top-24" moves the desktop pill down (default top-20). #}
 {# Optional studio_section selects a course destination when the URL name is not enough. #}
 {# Usage: {% include "includes/_studio_edit_button.html" with obj=<model_instance> studio_edit_top_class="top-24" %} #}
 {% if request.user.is_staff %}
@@ -10,9 +11,9 @@
 <a href="{{ studio_edit_url }}"
    data-testid="studio-edit-button"
    aria-label="Open in Studio"
-   class="fixed right-4 {{ studio_edit_top_class|default:'top-20' }} z-40 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-sm hover:bg-secondary transition-colors">
-  <i data-lucide="external-link" class="h-3.5 w-3.5" aria-hidden="true"></i>
-  <span>Open in Studio</span>
+   class="fixed right-4 bottom-[calc(1rem+var(--mobile-bottom-bar-height,0px)+env(safe-area-inset-bottom))] z-30 inline-flex h-11 w-11 items-center justify-center gap-1.5 rounded-full border border-border bg-card text-xs font-medium text-foreground shadow-md transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:bottom-auto {% if studio_edit_top_class == 'top-24' %}lg:top-24{% else %}lg:top-20{% endif %} lg:h-auto lg:w-auto lg:px-3 lg:py-1.5 lg:shadow-sm">
+  <i data-lucide="external-link" class="h-4 w-4 lg:h-3.5 lg:w-3.5" aria-hidden="true"></i>
+  <span class="sr-only lg:not-sr-only">Open in Studio</span>
 </a>
 {% endif %}
 {% endif %}

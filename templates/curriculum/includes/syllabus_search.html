@@ -1,4 +1,4 @@
-{% load static %}
+{% load static accounts_extras %}
 {% comment %}
 Reusable client-side search for a server-rendered curriculum syllabus.
 The surrounding syllabus should use these hooks:
@@ -16,6 +16,13 @@ The surrounding syllabus should use these hooks:
   - Include this partial inside the `data-cb-syllabus` container. Optional
     `search_input_class`, `search_label_class`, `search_button_class`, and
     `search_status_class` values override the matching elements' classes.
+  - The search button defaults to `{% button_classes 'secondary' %}` and stays
+    inline beside the input at every width.
+  - Submitted inline results show 20 rows at a time with a "Show more
+    results" button. A hit whose breadcrumb (`data-search-context`) equals
+    another indexed item's title is nested under that item (for example a
+    workshop's tutorial pages under the workshop), so one parent is not
+    repeated as a breadcrumb on every row.
   - `search_submit_url` optionally sends form submissions to a results page;
     without it, results continue to render inline as before.
   - Optional copy overrides for non-syllabus catalogs: `search_label_text`
@@ -55,7 +62,8 @@ preservation of unrelated query parameters such as `cohort`.
     top: calc(100% + 0.25rem);
     right: 0;
     left: 0;
-    max-height: min(24rem, 60vh);
+    max-height: min(24rem, 50vh);
+    max-height: min(24rem, 50svh);
     overflow-y: auto;
     margin: 0;
     padding: 0.25rem;
@@ -157,11 +165,31 @@ preservation of unrelated query parameters such as `cohort`.
   [data-cb-syllabus-search-results-active] [data-cb-syllabus-search-item] {
     display: none !important;
   }
-  @media (max-width: 36rem) {
-    .cb-syllabus-search__controls {
-      align-items: stretch;
-      flex-direction: column;
-    }
+  .cb-syllabus-search__group-pages {
+    margin: 0.5rem 0 0;
+    padding: 0 0 0 0.75rem;
+    list-style: none;
+    border-left: 2px solid hsl(var(--border, 0 0% 88%));
+  }
+  .cb-syllabus-search__group-page a {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    color: hsl(var(--foreground, 0 0% 10%));
+    font-size: 0.9375rem;
+    font-weight: 500;
+    text-decoration: none;
+  }
+  .cb-syllabus-search__group-page a:hover {
+    color: hsl(var(--accent, 220 70% 45%));
+    text-decoration: underline;
+    text-underline-offset: 0.2em;
+  }
+  .cb-syllabus-search__show-more {
+    margin-top: 1rem;
+  }
+  .cb-syllabus-search__show-more[hidden] {
+    display: none !important;
   }
 </style>
 <form data-cb-syllabus-search class="cb-form" role="search" method="get"{% if search_no_results_text %} data-cb-syllabus-search-no-results-text="{{ search_no_results_text }}"{% endif %}{% if search_no_matches_status %} data-cb-syllabus-search-no-matches-status="{{ search_no_matches_status }}"{% endif %}{% if search_submit_url %} action="{{ search_submit_url }}" data-cb-syllabus-search-submit-url="{{ search_submit_url }}"{% endif %}>
@@ -175,7 +203,7 @@ preservation of unrelated query parameters such as `cohort`.
              role="combobox" aria-autocomplete="list" aria-expanded="false"
              aria-controls="{{ results_id }}-suggestions {{ results_id }}">
       <button type="submit" data-cb-syllabus-search-submit
-              class="{{ search_button_class|default:'cb-button cb-button-primary' }}">Search</button>
+              class="{% if search_button_class %}{{ search_button_class }}{% else %}{% button_classes 'secondary' extra='shrink-0' %}{% endif %}">Search</button>
     </div>
     <ul id="{{ results_id }}-suggestions" class="cb-syllabus-search__suggestions"
         data-cb-syllabus-search-suggestions role="listbox" hidden></ul>
@@ -185,5 +213,6 @@ preservation of unrelated query parameters such as `cohort`.
 <section data-cb-syllabus-search-results aria-labelledby="{{ results_id }}-heading" hidden>
   <h3 id="{{ results_id }}-heading" class="cb-syllabus-search__results-heading" data-cb-syllabus-search-results-heading></h3>
   <div data-cb-syllabus-search-results-list></div>
+  <button type="button" class="cb-syllabus-search__show-more {% button_classes 'secondary' extra='w-full sm:w-auto' %}" data-cb-syllabus-search-show-more hidden>Show more results</button>
 </section>
 <script src="{% static 'community_base/curriculum/syllabus-search.js' %}" defer></script>

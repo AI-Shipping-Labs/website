@@ -3,6 +3,7 @@
 
   const MAX_SUGGESTIONS = 6;
   const MAX_EXCERPT_LENGTH = 220;
+  const RESULTS_PAGE_SIZE = 20;
 
   function normalize(value) {
     return (value || "")
@@ -60,6 +61,8 @@
       results.querySelector("[data-cb-syllabus-search-results-heading]");
     const resultsList = results &&
       results.querySelector("[data-cb-syllabus-search-results-list]");
+    const showMoreButton = results &&
+      results.querySelector("[data-cb-syllabus-search-show-more]");
     const scope = root.closest("[data-cb-syllabus]") || root.parentElement;
     const submitUrl = root.dataset.cbSyllabusSearchSubmitUrl || "";
     const noResultsText = root.dataset.cbSyllabusSearchNoResultsText ||
@@ -184,6 +187,20 @@
         url: contextualUrl(explicitUrl, item, index),
         usesFallbackUrl: !explicitUrl,
       };
+    });
+
+    // A record whose breadcrumb is exactly another record's title belongs
+    // to that record (a workshop's tutorial pages carry the workshop title
+    // as their context). Full results nest such hits under the parent.
+    const recordsByTitle = new Map();
+    records.forEach((record) => {
+      if (!recordsByTitle.has(record.title)) {
+        recordsByTitle.set(record.title, record);
+      }
+    });
+    records.forEach((record) => {
+      const parent = record.context ? recordsByTitle.get(record.context) : null;
+      record.parent = parent && parent !== record ? parent : null;
     });
 
     function scoreRecord(record, query, terms) {
@@ -335,9 +352,102 @@
       results.hidden = true;
       resultsHeading.textContent = "";
       resultsList.replaceChildren();
+      if (showMoreButton) showMoreButton.hidden = true;
       status.textContent = "";
       if (updateHistory) updateUrl("", "replaceState");
     }
+
+    function groupMatches(matches) {
+      // Keep rank order: a group sits where its best hit (the parent itself
+      // or its first matching child) ranks.
+      const entries = [];
+      const groups = new Map();
+      matches.forEach((record) => {
+        const parent = record.parent;
+        if (!parent) {
+          const existing = groups.get(record);
+          if (existing) {
+            existing.parentMatched = true;
+          } else {
+            const entry = { record, parentMatched: true, children: [] };
+            groups.set(record, entry);
+            entries.push(entry);
+          }
+          return;
+        }
+        let entry = groups.get(parent);
+        if (!entry) {
+          entry = { record: parent, parentMatched: false, children: [] };
+          groups.set(parent, entry);
+          entries.push(entry);
+        }
+        entry.children.push(record);
+      });
+      return entries;
+    }
+
+    function renderResultEntry(entry) {
+      const record = entry.record;
+      const listItem = document.createElement("li");
+      listItem.className = "cb-syllabus-search__result";
+      listItem.setAttribute("data-cb-syllabus-search-row", "");
+      const article = document.createElement("article");
+
+      if (record.context && !record.parent) {
+        const context = document.createElement("div");
+        context.className = "cb-syllabus-search__result-context";
+        context.textContent = record.context;
+        article.append(context);
+      }
+
+      const title = document.createElement("h4");
+      title.className = "cb-syllabus-search__result-title";
+      const link = createResultLink(record, "");
+      link.textContent = record.title;
+      title.append(link);
+      article.append(title);
+
+      if (entry.parentMatched || !entry.children.length) {
+        const excerpt = document.createElement("p");
+        excerpt.className = "cb-syllabus-search__result-excerpt";
+        excerpt.textContent = record.excerpt;
+        article.append(excerpt);
+      }
+
+      if (entry.children.length) {
+        const pages = document.createElement("ol");
+        pages.className = "cb-syllabus-search__group-pages";
+        entry.children.forEach((child) => {
+          const page = document.createElement("li");
+          page.className = "cb-syllabus-search__group-page";
+          page.setAttribute("data-cb-syllabus-search-row", "");
+          const pageLink = createResultLink(child, "");
+          pageLink.textContent = child.title;
+          page.append(pageLink);
+          pages.append(page);
+        });
+        article.append(pages);
+      }
+
+      listItem.append(article);
+      return listItem;
+    }
+
+    function revealRows(limit) {
+      // Rows are parents and nested hits in document order. Hide everything
+      // past the limit; a group whose parent row is hidden hides its
+      // children with it.
+      const rows = Array.from(
+        resultsList.querySelectorAll("[data-cb-syllabus-search-row]")
+      );
+      rows.forEach((row, index) => {
+        row.hidden = index >= limit;
+      });
+      if (showMoreButton) showMoreButton.hidden = rows.length <= limit;
+      return rows.length;
+    }
+
+    let visibleRowLimit = RESULTS_PAGE_SIZE;
 
     function renderFullResults(rawQuery, updateHistory, moveFocus) {
       const query = cleanText(rawQuery);
@@ -361,37 +471,14 @@
       } else {
         const list = document.createElement("ol");
         list.className = "cb-syllabus-search__result-list";
-
-        matches.forEach((record) => {
-          const listItem = document.createElement("li");
-          listItem.className = "cb-syllabus-search__result";
-          const article = document.createElement("article");
-
-          if (record.context) {
-            const context = document.createElement("div");
-            context.className = "cb-syllabus-search__result-context";
-            context.textContent = record.context;
-            article.append(context);
-          }
-
-          const title = document.createElement("h4");
-          title.className = "cb-syllabus-search__result-title";
-          const link = createResultLink(record, "");
-          link.textContent = record.title;
-          title.append(link);
-          article.append(title);
-
-          const excerpt = document.createElement("p");
-          excerpt.className = "cb-syllabus-search__result-excerpt";
-          excerpt.textContent = record.excerpt;
-          article.append(excerpt);
-
-          listItem.append(article);
-          list.append(listItem);
+        groupMatches(matches).forEach((entry) => {
+          list.append(renderResultEntry(entry));
         });
-
         resultsList.append(list);
       }
+
+      visibleRowLimit = RESULTS_PAGE_SIZE;
+      revealRows(visibleRowLimit);
 
       status.textContent =
         `${matches.length} ${matches.length === 1 ? "result" : "results"}`;
@@ -401,6 +488,19 @@
         results.focus({ preventScroll: true });
         results.scrollIntoView({ behavior: "smooth", block: "start" });
       }
+    }
+
+    if (showMoreButton) {
+      showMoreButton.addEventListener("click", () => {
+        const rows = Array.from(
+          resultsList.querySelectorAll("[data-cb-syllabus-search-row]")
+        );
+        const firstNew = rows[visibleRowLimit];
+        visibleRowLimit += RESULTS_PAGE_SIZE;
+        revealRows(visibleRowLimit);
+        const firstLink = firstNew && firstNew.querySelector("a[href]");
+        if (firstLink) firstLink.focus();
+      });
     }
 
     root.addEventListener("submit", (event) => {

@@ -8,9 +8,9 @@ Covers the sync-pipeline guarantee that motivated this issue:
 - Moving a course between repos (same ``content_id``, different
   ``source_repo``) re-uses the existing row instead of creating a
   duplicate row that ``content_id`` ``unique=True`` would reject anyway.
-- The stale-course sweep at the end of ``_dispatch_courses`` reattaches
-  Enrollment / CourseAccess / Cohort / UserCourseProgress FKs from any
-  draft row whose ``content_id`` matches a live published row, then
+- The ``CoursesParser`` cleanup via ``_cleanup_stale_courses_for_source`` reattaches
+  Enrollment / CourseAccess / Cohort / UserCourseProgress FKs from a
+  stale published row whose ``content_id`` matches another live row, then
   deletes the orphan.
 - A brand-new ``content_id`` still creates a fresh Course row (regression
   guard so the matcher does not silently merge unrelated courses).

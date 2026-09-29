@@ -173,39 +173,6 @@ def _parse_access_value(raw, *, field_name, rel_path):
     )
 
 
-def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
-                      known_images=None):
-    """Walker dispatch handler: process course directories.
-
-    Iterates ``course_dirs`` (absolute paths to dirs containing
-    ``course.yaml``) and upserts a ``Course`` row plus its Modules and
-    Units for each. Performs the stale-Course sweep at the end:
-
-    - When a stale row's ``content_id`` matches an active published row
-      (anywhere in the DB, not just this repo), the stale row is treated
-      as an orphan from a rename / cross-repo move: enrollments,
-      individual access grants, cohorts, and per-unit progress are
-      reattached to the published row by ``Unit.content_id``, then the
-      orphan is deleted (issue #366).
-    - Otherwise the row is soft-deleted to ``status='draft'`` so any
-      historical FKs are preserved (legacy behavior, unchanged).
-    """
-
-    seen_course_slugs = set()
-    failed_course_slugs = set()
-
-    for course_dir in course_dirs:
-        _sync_single_course(
-            course_dir, repo_dir, source, commit_sha, stats,
-            seen_course_slugs, failed_course_slugs,
-            known_images=known_images,
-        )
-
-    _cleanup_stale_courses_for_source(
-        source, seen_course_slugs, failed_course_slugs, stats,
-    )
-
-
 class CoursesParser(FamilyParser):
     content_type = 'courses'
     state_name = 'courses'

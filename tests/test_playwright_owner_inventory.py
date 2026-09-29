@@ -1437,6 +1437,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_hides_learner_emails_across_submissions_pages",
     })
 
+    design_layout_guard_owners = frozenset({
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_course_home_tabs_keep_actions_below_their_headings",
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_course_reader_pages_keep_actions_below_their_headings",
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_workshop_and_dashboard_keep_actions_below_their_headings",
+    })
+
     workshop_search_owners = frozenset({
         "playwright_tests/test_workshop_search.py::"
         "test_workshop_catalog_search_suggests_workshops_and_pages",
@@ -1589,8 +1598,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2696)
-        self.assertEqual(len(inventory.owners), 2492)
+        self.assertEqual(inventory.item_count, 2699)
+        self.assertEqual(len(inventory.owners), 2495)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1601,6 +1610,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1815_owners
             | self.issue_1837_owners
             | self.hotfix_cohort_owners
+            | self.design_layout_guard_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners
             | self.studio_sidebar_rail_owners

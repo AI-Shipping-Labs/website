@@ -252,8 +252,17 @@ def test_stale_dashboard_and_account_controls_remain_usable(
         onboarding_cta = page.get_by_test_id("onboarding-prompt-cta")
         slack = page.get_by_test_id("dashboard-slack-callout")
         slack_cta = page.get_by_test_id("slack-account-card-join")
+        # Checklist row CTAs are compact size="sm" buttons (no 44px minimum
+        # per the design-system tap-target table); they must still fit the
+        # 320px viewport. Skip is the page-level control and keeps 44px.
         for button in (onboarding_cta, slack_cta):
             box = button.bounding_box()
+            assert box["x"] >= 0 and box["x"] + box["width"] <= 320
+        for skip in (
+            page.get_by_test_id("free-activation-skip-onboarding"),
+            page.get_by_test_id("free-activation-skip-slack"),
+        ):
+            box = skip.bounding_box()
             assert box["width"] >= 44 and box["height"] >= 44
         expect(onboarding).to_be_visible()
         expect(slack).to_be_visible()

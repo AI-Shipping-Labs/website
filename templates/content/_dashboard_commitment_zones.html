@@ -4,22 +4,18 @@
 {% load sprint_extras %}
 
 <div class="space-y-12 sm:space-y-16" data-testid="dashboard-commitment-zones">
-  {% if show_activation_checklist %}
-  <section data-testid="dashboard-getting-started" data-dismiss-card-container>
-    {% include "content/_activation_checklist.html" with checklist_testid="free-activation-checklist" checklist_eyebrow="Getting started" checklist_title="Set up your account" checklist_complete_title="You're ready to go" checklist_complete_description="Your account is set up for learning and community activities." checklist_items=free_activation_checklist_items checklist_completed_count=free_activation_completed_count checklist_total_count=free_activation_total_count checklist_percentage=free_activation_percentage checklist_all_complete=activation_checklist_all_complete checklist_allow_dismiss=True checklist_allow_skip=True %}
-  </section>
-  {% endif %}
+  {% if not plan %}{% include "content/_dashboard_getting_started.html" %}{% endif %}
 
   {% if plan or show_plan_preparing or dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
   <section class="space-y-4" data-testid="dashboard-this-week">
-    <h2 class="text-xl font-semibold tracking-tight text-foreground">Your week</h2>
+    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Your week</h2>
 
     {% if plan %}
     <div class="rounded-lg border border-accent/30 bg-card p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
       <p class="text-xs font-medium uppercase tracking-widest text-accent" data-testid="account-sprint-plan-eyebrow">
         {% if plan_has_ended %}Your latest sprint plan{% else %}Your sprint plan{% endif %}
       </p>
-      <h3 class="mt-2 text-2xl font-semibold tracking-tight text-foreground" data-testid="account-sprint-plan-heading">{{ plan.sprint.name }}</h3>
+      <h3 class="mt-2 text-lg font-semibold text-foreground" data-testid="account-sprint-plan-heading">{{ plan.sprint.name }}</h3>
       <p class="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="account-sprint-plan-meta">
         <span data-testid="account-sprint-plan-dates">{% sprint_date_range plan.sprint %}</span>
         <span aria-hidden="true">&middot;</span>
@@ -59,7 +55,7 @@
     <div class="rounded-lg border border-border bg-card p-6" data-testid="dashboard-plan-preparing-section">
       <div data-testid="dashboard-plan-preparing-card">
         <p class="text-xs font-medium uppercase tracking-widest text-accent">Your sprint plan</p>
-        <h3 class="mt-2 text-lg font-semibold tracking-tight text-foreground" data-testid="dashboard-plan-preparing-heading">Your plan is being prepared</h3>
+        <h3 class="mt-2 text-lg font-semibold text-foreground" data-testid="dashboard-plan-preparing-heading">Your plan is being prepared</h3>
         <p class="mt-2 text-sm text-muted-foreground" data-testid="dashboard-plan-preparing-copy">Alexey is using your onboarding answers to prepare your sprint plan. This usually takes 1-2 business days, and you will get a bell notification and email when it is ready.</p>
         <a href="{% url 'onboarding_start' %}" class="{% button_classes 'secondary' 'mt-5' %}" data-testid="dashboard-plan-preparing-cta">Review onboarding answers</a>
       </div>
@@ -85,9 +81,11 @@
   </section>
   {% endif %}
 
+  {% if plan %}{% include "content/_dashboard_getting_started.html" %}{% endif %}
+
   {% if in_progress_learning %}
   <section class="space-y-4" data-testid="dashboard-continue-learning-section">
-    <h2 class="text-xl font-semibold tracking-tight text-foreground">Continue learning</h2>
+    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Continue learning</h2>
     <div class="border-t border-border/70" data-testid="continue-learning-list">
       {% for item in in_progress_learning %}
         {% if item.kind == 'workshop' %}
@@ -106,7 +104,7 @@
   {% endif %}
 
   <section class="space-y-4" data-testid="dashboard-home-feed">
-    <h2 class="text-xl font-semibold tracking-tight text-foreground">For you</h2>
+    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">For you</h2>
     {% if dashboard_feed %}
     <div class="border-t border-border/70" data-testid="dashboard-feed-list">
       {% for item in dashboard_feed %}
@@ -127,9 +125,9 @@
 
   {% if show_free_plan_teaser %}
   <section class="space-y-4" data-testid="dashboard-unlock-more">
-    <h2 class="text-xl font-semibold tracking-tight text-foreground">Unlock more</h2>
+    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Unlock more</h2>
     <div class="rounded-lg border border-border bg-card p-6" data-testid="free-plan-teaser">
-      <h3 class="text-lg font-semibold tracking-tight text-foreground">What community members are doing this month</h3>
+      <h3 class="text-lg font-semibold text-foreground">What community members are doing this month</h3>
       <ul class="mt-4 space-y-3 text-sm text-foreground">
         {% if free_unlock_sprint %}<li><a href="{{ free_unlock_sprint.get_absolute_url }}" class="group -mx-2 flex min-h-[44px] items-start gap-3 rounded-md px-2 py-1 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="target" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span class="min-w-0 flex-1"><span class="font-medium">Community sprints:</span> {{ free_unlock_sprint_count }} active cohort{{ free_unlock_sprint_count|pluralize }}</span><i data-lucide="arrow-right" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-accent" aria-hidden="true"></i></a></li>{% endif %}
         {% if free_unlock_book_count %}<li><a href="{{ free_unlock_book.get_absolute_url }}" class="group -mx-2 flex min-h-[44px] items-start gap-3 rounded-md px-2 py-1 transition-colors hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="book-open" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true"></i><span class="min-w-0 flex-1"><span class="font-medium">Book Club:</span> We read {{ free_unlock_book_count }} book{{ free_unlock_book_count|pluralize }} together</span><i data-lucide="arrow-right" class="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground group-hover:text-accent" aria-hidden="true"></i></a></li>{% endif %}

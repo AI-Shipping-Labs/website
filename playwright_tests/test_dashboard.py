@@ -1592,7 +1592,9 @@ class TestIssue1211SprintAndPlanSurfaces:
         slack_y = page.locator(
             '[data-testid="dashboard-slack-callout"]'
         ).bounding_box()["y"]
-        assert slack_y < plan_y
+        # With a sprint plan, "Your week" leads and the setup checklist
+        # follows it.
+        assert plan_y < slack_y
         _shot(page, "main-planned-dashboard-desktop")
 
     @pytest.mark.core

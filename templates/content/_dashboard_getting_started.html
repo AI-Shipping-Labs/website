@@ -1,0 +1,11 @@
+{% comment %}
+Dashboard "Getting started" checklist section. Included from
+_dashboard_commitment_zones.html in one of two positions: before "Your week"
+normally, after it when the member has a sprint plan (the plan is the more
+important commitment, so it leads).
+{% endcomment %}
+{% if show_activation_checklist %}
+  <section data-testid="dashboard-getting-started" data-dismiss-card-container>
+    {% include "content/_activation_checklist.html" with checklist_testid="free-activation-checklist" checklist_eyebrow="Getting started" checklist_title="Set up your account" checklist_complete_title="You're ready to go" checklist_complete_description="Your account is set up for learning and community activities." checklist_items=free_activation_checklist_items checklist_completed_count=free_activation_completed_count checklist_total_count=free_activation_total_count checklist_percentage=free_activation_percentage checklist_all_complete=activation_checklist_all_complete checklist_allow_dismiss=True checklist_allow_skip=True %}
+  </section>
+{% endif %}

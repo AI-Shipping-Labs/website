@@ -245,7 +245,7 @@ def test_member_event_list_cards_use_saved_timezone_and_utc_fallback(
     card = page.get_by_test_id("upcoming-event-card")
     _assert_timeline_card_datetime(card, expected_ny)
     expect(page.get_by_test_id("events-timezone-note")).to_contain_text(
-        "America/New_York"
+        "Shown in your timezone."
     )
     context.close()
 
@@ -256,7 +256,7 @@ def test_member_event_list_cards_use_saved_timezone_and_utc_fallback(
     card = page.get_by_test_id("upcoming-event-card")
     _assert_timeline_card_datetime(card, expected_utc)
     expect(page.get_by_test_id("events-timezone-note")).to_contain_text(
-        "your timezone: UTC"
+        "Shown in your timezone."
     )
     context.close()
 

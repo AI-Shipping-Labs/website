@@ -19,6 +19,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -377,7 +378,7 @@ class TestScenario5FreeMemberTracksProgress:
 
     def test_progress_bar_shows_completed_units(self, django_server, browser):
         """A Free tier user who has completed Day 1 and Day 2 sees the
-        progress bar showing 2 of 7 units completed."""
+        syllabus module count showing 2 of 7 lessons completed."""
         _ensure_tiers()
         _ensure_aihero_course()
         user = _create_user("free-prog@test.com", tier_slug="free")
@@ -398,10 +399,10 @@ class TestScenario5FreeMemberTracksProgress:
             f"{django_server}/courses/aihero",
             wait_until="domcontentloaded",
         )
-        body = page.content()
-
-        # Progress shows 2 of 7 completed
-        assert "2 of 7 completed" in body
+        # The syllabus module summary reports progress as completed/total.
+        expect(
+            page.get_by_test_id("module-lesson-count").first
+        ).to_have_text("2/7 lessons")
 
         # Day 1 and Day 2 appear as completed (checkmark icons)
         check_icons = page.locator(

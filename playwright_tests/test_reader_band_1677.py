@@ -360,15 +360,17 @@ class TestStaffEditInStudioButtonUnaffected:
 
             box = edit_button.bounding_box()
             assert box is not None
-            # `fixed right-4 top-20` => 16px from the right edge, 80px
-            # from the top, regardless of the reader band padding value.
+            # Course units pass studio_edit_top_class="top-24", so from
+            # `lg` the pill is `fixed right-4 lg:top-24`: 16px from the
+            # right edge and 96px from the top, regardless of the reader
+            # band padding. (Below `lg` it is a bottom-right icon instead.)
             assert 900 <= box['x'] <= 1280, (
                 f'Edit in Studio button x={box["x"]} should be near the '
                 f'right edge of a 1280px viewport.'
             )
-            assert 75 <= box['y'] <= 85, (
+            assert 91 <= box['y'] <= 101, (
                 f'Edit in Studio button y={box["y"]} should stay pinned '
-                f'at the fixed top-20 offset (80px).'
+                f'at the fixed lg:top-24 offset (96px).'
             )
 
             # It must not overlap/clip the (now tighter) breadcrumb row.

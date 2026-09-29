@@ -237,7 +237,12 @@ def test_member_understands_free_and_enrolled_course_state(django_server, browse
     page = context.new_page()
     page.set_viewport_size(DESKTOP)
     for theme in ('light', 'dark'):
-        page.goto(f'{django_server}{course.get_absolute_url()}', wait_until='domcontentloaded')
+        # Enrolled learners' course links open course Home, which has no
+        # access badges; the Free / Enrolled state lives on the overview.
+        page.goto(
+            f'{django_server}{course.get_absolute_url()}?view=overview',
+            wait_until='domcontentloaded',
+        )
         _set_theme(page, theme)
         free = page.locator('[data-component="member-badge"]', has_text='Free').first
         enrolled = page.locator('[data-component="member-badge"]', has_text='Enrolled').first

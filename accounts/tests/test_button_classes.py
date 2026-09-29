@@ -16,7 +16,7 @@ from accounts.templatetags.accounts_extras import (
     PRODUCT_BUTTON_VARIANT_CLASSES,
     button_classes,
 )
-from plans.models import Plan, Sprint
+from plans.models import Plan, Sprint, SprintEnrollment
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
@@ -165,13 +165,18 @@ class ProductButtonRenderedClassTest(TierSetupMixin, TestCase):
         plan = Plan.objects.create(
             member=user, sprint=sprint, shared_at=timezone.now(),
         )
+        teammate = User.objects.create_user(email='dashboard-teammate@test.com', password='pw')
+        SprintEnrollment.objects.create(sprint=sprint, user=teammate)
         self.client.force_login(user)
 
         response = self.client.get('/')
         html = response.content.decode()
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(f'class="{PRODUCT_BUTTON_CLASSES["secondary"]}"', html)
+        self.assertEqual(
+            _tag_class(html, 'data-testid="account-sprint-plan-cohort"'),
+            PRODUCT_BUTTON_CLASSES['secondary'],
+        )
         self.assertEqual(
             _tag_class(html, 'data-testid="account-sprint-plan-open"'),
             button_classes(

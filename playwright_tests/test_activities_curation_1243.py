@@ -325,8 +325,10 @@ def test_registered_member_sees_events_timezone_and_registration_context(
     )
 
     page.goto(f"{django_server}/events", wait_until="domcontentloaded")
+    # The shared timezone notice no longer names the zone; the card
+    # date/time below are the authoritative Asia/Kolkata check.
     expect(page.get_by_test_id("events-timezone-note")).to_contain_text(
-        "Asia/Kolkata"
+        "Shown in your timezone."
     )
     assert page.get_by_test_id("timeline-day-date").inner_text() == membership_date
     assert page.get_by_test_id("event-card-time").inner_text() == membership_time

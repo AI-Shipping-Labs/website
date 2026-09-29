@@ -151,8 +151,9 @@ class EventsPresentationClassTest(TestCase):
             ROOT / "templates/events/_timeline_listing_card.html"
         ).read_text()
 
-        # Day column stacks its cards with the compact catalog rhythm.
-        self.assertIn('class="space-y-4"', timeline)
+        # Day column stacks its cards with the compact catalog rhythm,
+        # tighter on phones.
+        self.assertIn('class="space-y-3 sm:space-y-4"', timeline)
         self.assertIn('data-testid="events-timeline"', timeline)
         self.assertIn('data-testid="event-series-card"', listing_card)
         self.assertIn('past-recording-card', listing_card)

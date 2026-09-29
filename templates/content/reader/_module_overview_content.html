@@ -8,7 +8,7 @@
 {% include "content/reader/_breadcrumb.html" with breadcrumb_kind="module" breadcrumb_testid="module-breadcrumb" %}
 
 <header class="mb-6 flex flex-wrap items-center gap-3 lg:mb-8">
-  <h1 class="min-w-0 break-words text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="module-title">
+  <h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="module-title">
     {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
   </h1>
   {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}

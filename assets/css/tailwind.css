@@ -123,6 +123,10 @@ body {
 .prose h3 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.025em; margin-top: 1.5rem; margin-bottom: 0.75rem; }
 .prose { overflow-wrap: break-word; word-break: break-word; }
 .prose p { margin-top: 1rem; font-size: 1rem; line-height: 1.75; color: hsl(var(--muted-foreground)); }
+/* Phones: a slightly tighter reading rhythm (16px text stays). */
+@media (max-width: 639px) {
+  .prose p { margin-top: 0.75rem; line-height: 1.65; }
+}
 .prose a,
 .prose a:visited { color: hsl(var(--accent)); text-decoration: underline; text-underline-offset: 4px; }
 .prose .event-widget-link,

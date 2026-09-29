@@ -7,7 +7,7 @@ The meta line is the due date, the homework question counts, and the status,
 which is always shown. ``deadline_preview`` (no linked cohort) keeps only the
 title: stored dates are not this learner's deadlines.
 {% endcomment %}
-<li class="flex min-w-0 items-center justify-between gap-3 py-3" data-testid="course-home-deadline-row">
+<li class="flex min-w-0 items-center justify-between gap-3 py-2 sm:py-3" data-testid="course-home-deadline-row">
   <div class="min-w-0 flex-1">
     {% if not hide_kind or item.module_title %}
     <p class="text-xs text-muted-foreground" data-testid="course-home-deadline-eyebrow">{% if not hide_kind %}<span class="font-medium" data-testid="course-home-deadline-kind">{{ item.kind }}</span>{% endif %}{% if item.module_title %}{% if not hide_kind %}<span aria-hidden="true"> · </span>{% endif %}<span class="break-words" data-testid="course-home-deadline-module">{{ item.module_title }}</span>{% endif %}</p>

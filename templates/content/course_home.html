@@ -7,10 +7,10 @@
 
 {% block body %}
 {% include "includes/header.html" with studio_obj=course %}
-<main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
+<main class="min-h-screen pt-20 sm:pt-24" id="main-content" data-testid="course-home">
   <div class="mx-auto max-w-3xl px-4 pb-16 pt-2 sm:px-6 sm:pt-8 lg:px-8">
     <header class="mb-2 sm:mb-4">
-      <h1 class="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
+      <h1 class="break-words text-xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
       {% if cohort %}
       <div class="mt-1 flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
         {% if preview_cohorts|length > 1 %}
@@ -28,7 +28,7 @@
       {% endif %}
     </header>
 
-    <div class="relative -mx-4 mb-4 sm:mx-0 sm:mb-6" data-course-tabs>
+    <div class="relative -mx-4 mb-3 sm:mx-0 sm:mb-6" data-course-tabs>
     <nav class="flex gap-4 overflow-x-auto border-b border-border px-4 text-sm font-medium [scrollbar-width:none] sm:gap-5 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Course pages" data-course-tabs-scroller>
       <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
       <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
@@ -41,7 +41,7 @@
 
     {% button_classes 'secondary' as support_cta_classes %}
     {% if section == 'home' %}
-    <div class="space-y-5">
+    <div class="space-y-4 sm:space-y-5">
       {% if not cohort %}
       {% include "content/course_home/_cohort_picker.html" %}
       {% endif %}

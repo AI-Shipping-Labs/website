@@ -34,7 +34,7 @@ from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
 from content.services.course_commitments import build_course_commitments
-from content.services.course_home import build_course_home, next_lesson_after
+from content.services.course_home import build_course_home
 from content.services.course_inline import (
     inline_homework_capstone_for_parent,
     inline_homework_unit_for,
@@ -53,6 +53,7 @@ from content.services.course_schedule import (
     schedule_timezone_name,
     select_display_cohort,
 )
+from content.services.current_module import build_current_module
 from content.services.enrollment import (
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
@@ -497,38 +498,10 @@ def course_home(request, slug, section='home'):
         int(context['completed_units'] / context['total_units'] * 100)
         if context['total_units'] else 0
     )
-    commitments = build_course_commitments(course, request.user, cohort)
-    recommended_unit = context['recommended_unit']
-    next_live_session = commitments['next_live_session']
-    if (
-        recommended_unit is not None
-        and next_live_session is not None
-        and next_live_session.get('session_unit') is not None
-        and next_live_session['session_unit'].pk == recommended_unit.pk
-    ):
-        # A linked session that is also the next course material has one
-        # presentation on Home. Keep the live event action and time, which
-        # are more useful than the generic course-unit reader link.
-        context['recommended_live_session'] = next_live_session
-        context['next_lesson_after_session'] = next_lesson_after(
-            next_live_session['session_unit'],
-            set(UserCourseProgress.objects.filter(
-                user=request.user, unit__module__course=course,
-                completed_at__isnull=False,
-            ).values_list('unit_id', flat=True)),
-        )
-        commitments['next_live_session'] = None
+    commitments = build_course_commitments(
+        course, request.user, cohort, focus_module=context['current_module'],
+    )
     context.update(commitments)
-    recommended_session = context.get('recommended_live_session')
-    if recommended_session is not None and not any(
-        row is recommended_session for row in context['home_office_hours']
-    ):
-        # Home says the recommended session is highlighted in the schedule
-        # below, so keep it there even when it belongs to an earlier module
-        # than the current focus module.
-        context['home_office_hours'] = [
-            recommended_session, *context['home_office_hours'],
-        ]
     dated_sessions = [
         {'kind': 'course_session', 'event': row['event'], 'session': row}
         for row in context['live_session_schedule'] if row.get('event')
@@ -539,14 +512,6 @@ def course_home(request, slug, section='home'):
     )
     context['unscheduled_session_rows'] = [
         row for row in context['live_session_schedule'] if not row.get('event')
-    ]
-    context['homework_focus_items'] = [
-        item for item in context['focus_work_items']
-        if item['action'] != 'Open project step'
-    ]
-    context['project_focus_items'] = [
-        item for item in context['focus_work_items']
-        if item['action'] == 'Open project step'
     ]
     context['deadline_rows'] = sorted(
         context['open_assignments'],
@@ -575,7 +540,6 @@ def course_home(request, slug, section='home'):
         row for row in context['deadline_rows']
         if row['kind'] == 'Peer reviews' and row['action']
     ]
-    focus_module_id = context['focus_module'].pk if context.get('focus_module') else None
     context['completed_homework_rows'] = [
         row for row in context['completed_deadline_rows']
         if row['kind'] == 'Homework'
@@ -584,45 +548,19 @@ def course_home(request, slug, section='home'):
         row for row in context['completed_deadline_rows']
         if row['kind'] == 'Project'
     ]
-    context['homework_home_rows'] = [
-        row for row in context['homework_rows'] + context['completed_homework_rows']
-        if row.get('module_id') == focus_module_id
-    ] if focus_module_id else []
-    context['homework_home_fallback'] = False
-    if not context['homework_home_rows'] and context['homework_rows']:
-        # A teaching module can have no assignment of its own. Keep the next
-        # actual homework due visible on Home instead of an empty work card.
-        first_due = context['homework_rows'][0]['when']
-        context['homework_home_rows'] = (
-            [row for row in context['homework_rows'] if row['when'] == first_due]
-            if first_due is not None else context['homework_rows'][:2]
-        )
-        context['homework_home_fallback'] = True
-    context['project_home_rows'] = [
-        row for row in context['project_rows'] + context['completed_project_rows']
-        if row.get('module_id') == focus_module_id
-    ] if focus_module_id else []
     # Only a dated cohort gives these assignments a learner-specific calendar.
     # Generic project rows remain useful as a course-work preview, but their
     # stored dates must not read as this learner's deadlines.
     context['show_deadline_dates'] = bool(cohort and cohort.mode == 'cohort')
-    context['next_home_session'] = next((
-        row for row in context['live_session_schedule']
-        if row['status'] != 'Past'
-    ), None)
-    context['latest_home_recap'] = next((
-        row for row in reversed(context['live_session_schedule'])
-        if row['recap_url']
-    ), None)
-    latest_home_recap = context['latest_home_recap']
-    if latest_home_recap is not None and not any(
-        row is latest_home_recap for row in context['home_office_hours']
-    ):
-        # Home otherwise lists only the focus module's linked sessions, which
-        # drops a past recap that has no session unit. Keep that recap on Home.
-        context['home_office_hours'] = [
-            *context['home_office_hours'], latest_home_recap,
-        ]
+    context.update(build_current_module(
+        course, request.user, cohort, context, commitments,
+        completed_ids=set(UserCourseProgress.objects.filter(
+            user=request.user, unit__module__course=course,
+            completed_at__isnull=False,
+        ).values_list('unit_id', flat=True)),
+        cohort_query=context['cohort_query'],
+        today=timezone.localdate(),
+    ))
     ordered_units = course_unit_service.get_all_units_ordered(course)
     checklist_items = []
 

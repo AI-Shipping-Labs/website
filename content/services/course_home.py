@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import datetime
 import re
-from urllib.parse import urlencode
 
 from django.utils import timezone
 
@@ -18,11 +17,10 @@ from content.services.course_units import (
     decide_course_unit_drip_lock,
     format_week_range,
 )
+from events.models import Event
+from events.models.event import PUBLIC_EVENT_STATUSES
 
 MATERIAL_KINDS = {UNIT_KIND_LESSON, UNIT_KIND_EVENT}
-# Source-authored curriculum identities. Labels and destinations are read from
-# synced Unit rows, so no help text or invitation is copied into application code.
-HELP_UNIT_SLUGS = ('communication', 'office-hours')
 ORIENTATION_WORDS = {'orientation', 'logistics', 'welcome', 'introduction'}
 
 
@@ -86,6 +84,32 @@ def _current_cohort_module(modules, week_dates, cohort, today):
     if earlier:
         return earlier[-1]
     return dated[0]
+
+
+def next_core_module(modules, module):
+    """Return the required top-level module that follows ``module``, if any."""
+    if module is None:
+        return None
+    core = [candidate for candidate in modules if not candidate.is_bonus]
+    for index, candidate in enumerate(core):
+        if candidate.pk == module.pk:
+            return core[index + 1] if index + 1 < len(core) else None
+    return None
+
+
+def _ended_session_positions(cohort):
+    """Series positions of this cohort's sessions that have already ended."""
+    if cohort is None or not cohort.event_series_id:
+        return set()
+    return {
+        event.series_position
+        for event in Event.objects.filter(
+            event_series_id=cohort.event_series_id,
+            status__in=PUBLIC_EVENT_STATUSES,
+            series_position__isnull=False,
+        )
+        if event.is_past
+    }
 
 
 def _top_level_module(module):
@@ -178,12 +202,14 @@ def build_course_home(course, user, cohort, *, today=None):
     unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
 
     locked_dates = []
+    ended_session_positions = _ended_session_positions(cohort)
 
     def first_openable(units, *, skip_module_ids=()):
         """Return the first incomplete unit the reader would open, lessons first.
 
         Session units can be schedule-only stubs. Keep them in core progress,
         but lead with an actual lesson while one is available in ``units``.
+        A cohort session that has already ended is never the next step.
         """
         ordered = [unit for unit in units if unit.kind == UNIT_KIND_LESSON]
         ordered += [unit for unit in units if unit.kind == UNIT_KIND_EVENT]
@@ -191,6 +217,11 @@ def build_course_home(course, user, cohort, *, today=None):
             if _top_level_module(unit.module).pk in skip_module_ids:
                 continue
             if unit.pk in completed_ids:
+                continue
+            if (
+                unit.kind == UNIT_KIND_EVENT
+                and unit.session_position in ended_session_positions
+            ):
                 continue
             available_date = _unit_available_on(unit, cohort)
             if available_date and today < available_date:
@@ -330,31 +361,33 @@ def build_course_home(course, user, cohort, *, today=None):
         if unit.kind == 'homework' and not unit.effective_is_bonus
     ] if focus_module else []
 
-    help_links = []
-    help_units = {unit.slug: unit for unit in all_units if unit.slug in HELP_UNIT_SLUGS}
-    cohort_suffix = (
-        f'?{urlencode({"cohort": cohort.external_key})}'
-        if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
-    )
-    if course.discussion_url:
-        help_links.append(('Course communication', course.discussion_url))
-    elif 'communication' in help_units:
-        unit = help_units['communication']
-        help_links.append((unit.title, unit.get_absolute_url() + cohort_suffix))
-    if cohort and cohort.event_series_id:
-        help_links.append((cohort.event_series.name, cohort.event_series.get_absolute_url()))
-    elif 'office-hours' in help_units:
-        unit = help_units['office-hours']
-        help_links.append((unit.title, unit.get_absolute_url() + cohort_suffix))
-    if course.faq_url:
-        help_links.append(('Frequently asked questions', course.faq_url))
-    if course.docs_url:
-        help_links.append(('Course documentation', course.docs_url))
+    if unscheduled_cohort:
+        # Without a calendar week, the learner is in the module that holds
+        # their first unfinished core lesson. Orientation has its own
+        # checklist step, so it is the current module only when nothing
+        # else is left.
+        unfinished_lessons = [
+            unit for unit in required_units
+            if unit.kind == UNIT_KIND_LESSON and unit.pk not in completed_ids
+        ]
+        first_unfinished_lesson = next((
+            unit for unit in unfinished_lessons
+            if _top_level_module(unit.module).pk not in orientation_module_ids
+        ), unfinished_lessons[0] if unfinished_lessons else None)
+        current_module = (
+            _top_level_module(first_unfinished_lesson.module)
+            if first_unfinished_lesson else focus_module
+        )
+    else:
+        current_module = current_cohort_module or focus_module
 
     return {
         'course': course,
         'cohort': cohort,
         'cohort_status': cohort_status,
+        'current_module': current_module,
+        'ordered_modules': modules,
+        'week_dates': week_dates,
         'current_week': current_week,
         'current_cohort_module': current_cohort_module,
         'focus_module': focus_module,
@@ -379,43 +412,4 @@ def build_course_home(course, user, cohort, *, today=None):
         ],
         'capstone_rows': [row for row in rows if not row['optional'] and row['capstone']],
         'optional_rows': [row for row in rows if row['optional']] + optional_child_rows,
-        'help_links': help_links,
     }
-
-
-def next_lesson_after(unit, completed_unit_ids):
-    """First unfinished lesson after ``unit`` in the same top-level module.
-
-    Used when Home recommends a live session: the card also points to the
-    lesson the learner should read next in that week.
-    """
-    module = _top_level_module(unit.module)
-    units = _all_module_units(module)
-    after = False
-    for candidate in units:
-        if candidate.pk == unit.pk:
-            after = True
-            continue
-        if after and candidate.kind == UNIT_KIND_LESSON and candidate.pk not in completed_unit_ids:
-            return candidate
-    earlier_in_module = next(
-        (candidate for candidate in units
-         if candidate.pk != unit.pk and candidate.kind == UNIT_KIND_LESSON
-         and candidate.pk not in completed_unit_ids),
-        None,
-    )
-    if earlier_in_module is not None:
-        return earlier_in_module
-    # This week is done: point at the first unfinished lesson in a later week.
-    modules = _ordered_modules(module.course)
-    later = False
-    for candidate_module in modules:
-        if candidate_module.pk == module.pk:
-            later = True
-            continue
-        if not later:
-            continue
-        for candidate in _all_module_units(candidate_module):
-            if candidate.kind == UNIT_KIND_LESSON and candidate.pk not in completed_unit_ids:
-                return candidate
-    return None

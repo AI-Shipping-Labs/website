@@ -1,0 +1,55 @@
+{% load accounts_extras %}
+{% with card=current_module progress=current_module.progress %}
+<section class="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="course-current-module-heading" data-testid="course-home-current-module">
+  <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="course-home-current-module-eyebrow">Current module{% if card.week_label %} · {{ card.week_label }}{% endif %}{% if card.week_range %} · {{ card.week_range }}{% endif %}</p>
+  <h2 id="course-current-module-heading" class="mt-1 break-words text-lg font-semibold text-foreground"><a href="{{ card.url }}" class="hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-current-module-link">{{ card.module.title }}</a></h2>
+  <div class="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    {% if progress.total %}
+    <div class="min-w-0 flex-1">
+      <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Module progress" aria-valuemin="0" aria-valuemax="{{ progress.total }}" aria-valuenow="{{ progress.done }}">
+        <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ progress.percent }}%"></div>
+      </div>
+      <p class="mt-2 text-sm text-foreground" data-testid="course-home-module-progress">{{ progress.done }} of {{ progress.total }} done</p>
+      <p class="mt-1 text-xs text-muted-foreground" data-testid="course-home-module-progress-breakdown">{% if progress.lessons_total %}{{ progress.lessons_done }} of {{ progress.lessons_total }} lesson{{ progress.lessons_total|pluralize }}{% endif %}{% if progress.questions_total %}{% if progress.lessons_total %} · {% endif %}{{ progress.questions_done }} of {{ progress.questions_total }} homework question{{ progress.questions_total|pluralize }}{% endif %}{% if progress.projects_total %}{% if progress.lessons_total or progress.questions_total %} · {% endif %}{{ progress.projects_done }} of {{ progress.projects_total }} project{% endif %}</p>
+    </div>
+    {% endif %}
+    {% if card.action %}<a href="{{ card.action.url }}" class="{% button_classes 'primary' size='md' extra='w-full shrink-0 justify-center sm:w-auto' %}" data-testid="course-home-primary-action">{{ card.action.label }}</a>{% endif %}
+  </div>
+  {% if card.deliverables or card.undated_work %}
+  <div class="mt-5 border-t border-border pt-4" data-testid="course-home-deliverables">
+    <h3 class="text-sm font-semibold text-foreground">Deliverables</h3>
+    {% if card.deliverables %}
+    <ol class="mt-2 divide-y divide-border">
+      {% for item in card.deliverables %}
+      {% if cohort %}
+      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=False %}
+      {% else %}
+      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=True %}
+      {% endif %}
+      {% endfor %}
+    </ol>
+    {% endif %}
+    {% if card.undated_work %}
+    <ul class="mt-2 divide-y divide-border" data-testid="course-home-undated-work">
+      {% for work in card.undated_work %}
+      <li class="flex flex-wrap items-center justify-between gap-2 py-3">
+        <span class="text-sm font-medium text-foreground">{{ work.unit.title }}</span>
+        {% if work.url %}<a href="{{ work.url }}" class="inline-flex min-h-[44px] items-center text-sm font-medium text-accent hover:underline">{{ work.action }}</a>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if card.sessions %}
+  <div class="mt-5 border-t border-border pt-4" data-testid="course-home-module-sessions">
+    <h3 class="text-sm font-semibold text-foreground">Live session{{ card.sessions|length|pluralize }}</h3>
+    <ol class="mt-2 divide-y divide-border">
+      {% for session in card.sessions %}
+      {% include "content/course_home/_session_row.html" with session=session %}
+      {% endfor %}
+    </ol>
+  </div>
+  {% endif %}
+</section>
+{% endwith %}

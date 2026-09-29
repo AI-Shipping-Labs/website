@@ -491,8 +491,12 @@ def _home_project_commitment_rows(assignments):
     return collapsed
 
 
-def build_course_commitments(course, user, cohort, *, now=None):
-    """Build schedule and tasks without mixing data from another cohort."""
+def build_course_commitments(course, user, cohort, *, now=None, focus_module=None):
+    """Build schedule and tasks without mixing data from another cohort.
+
+    ``focus_module`` lets course Home pass the module it presents as current;
+    other callers get the cohort's scheduled module.
+    """
     now = now or timezone.now()
     if cohort is not None and (
         cohort.course_id != course.pk
@@ -510,7 +514,8 @@ def build_course_commitments(course, user, cohort, *, now=None):
     completed_assignments = [row for row in assignments if row['complete']]
 
     homework_rows = [row for row in assignments if row['kind'] == 'Homework']
-    focus_module = _focus_module(course, cohort, now)
+    if focus_module is None:
+        focus_module = _focus_module(course, cohort, now)
     focus_work_items = _focus_work_items(
         course, user, cohort, homework_rows, now=now, module=focus_module,
     )
@@ -551,12 +556,6 @@ def build_course_commitments(course, user, cohort, *, now=None):
     )
     for row in live_session_schedule:
         row['featured'] = row is featured_live_session
-    home_office_hours = [
-        row for row in live_session_schedule
-        if focus_module and row.get('session_unit')
-        and (row['session_unit'].module.parent_id or row['session_unit'].module_id)
-        == focus_module.pk
-    ]
     deadline_tasks = sorted(
         (row for row in open_assignments
          if row['when'] and row['when'] >= now and row['action']),
@@ -593,7 +592,6 @@ def build_course_commitments(course, user, cohort, *, now=None):
         'commitment_timezone': timezone_name,
         'focus_work_items': focus_work_items,
         'focus_module': focus_module,
-        'home_office_hours': home_office_hours,
         'next_live_session': next_live_session,
         'urgent_commitment': urgent_commitment,
     }

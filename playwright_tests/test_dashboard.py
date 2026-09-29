@@ -719,12 +719,14 @@ class TestScenario3bFreeActivationDashboard:
         progress_bar_box = page.locator(
             '[data-testid="free-activation-progress-bar"]'
         ).bounding_box()
+        title_box = checklist.get_by_role("heading", name="Set up your account").bounding_box()
         assert progress_copy_box is not None
         assert progress_bar_box is not None
-        assert abs(
-            (progress_copy_box["x"] + progress_copy_box["width"])
-            - (progress_bar_box["x"] + progress_bar_box["width"])
-        ) < 1
+        # The count reads with the title (following it on the same line),
+        # above the bar, and is not pinned to the bar's far edge.
+        assert progress_copy_box["x"] >= title_box["x"] + title_box["width"]
+        assert abs(progress_copy_box["y"] - title_box["y"]) < title_box["height"]
+        assert progress_copy_box["y"] + progress_copy_box["height"] <= progress_bar_box["y"]
 
         teaser = page.locator('[data-testid="free-plan-teaser"]')
         checklist_box = checklist.bounding_box()

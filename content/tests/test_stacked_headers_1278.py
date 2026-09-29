@@ -173,11 +173,12 @@ class PublicStackedHeaderStaticTest(TestCase):
     def test_dashboard_justify_between_survivors_are_only_exempt_roles(self):
         source = _source(DASHBOARD) + _source(DASHBOARD_ZONES)
         lines = [line.strip() for line in source.splitlines() if 'justify-between' in line]
-        self.assertEqual(len(lines), 3)
+        # The plan-progress count now sits below its bar, so only the two
+        # exempt rows remain.
+        self.assertEqual(len(lines), 2)
         exempt_signatures = (
             'dismiss-success-banner',
             'dashboard-header',
-            'checkpoints done',
         )
         for line_number, line in enumerate(source.splitlines()):
             if 'justify-between' not in line:

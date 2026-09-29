@@ -23,13 +23,10 @@
       </p>
       {% if plan_progress_total %}
       <div class="mt-4" data-testid="account-sprint-plan-progress">
-        <div class="flex items-center justify-between gap-4 text-sm">
-          <span class="text-foreground">{{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done</span>
-          <span class="text-muted-foreground">{% widthratio plan_progress_done plan_progress_total 100 %}%</span>
-        </div>
-        <div class="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+        <div class="h-2 overflow-hidden rounded-full bg-secondary">
           <div class="h-full rounded-full bg-accent" style="width: {% widthratio plan_progress_done plan_progress_total 100 %}%"></div>
         </div>
+        <p class="mt-2 text-sm text-foreground">{{ plan_progress_done }} of {{ plan_progress_total }} checkpoints done <span class="text-muted-foreground"><span aria-hidden="true">·</span> {% widthratio plan_progress_done plan_progress_total 100 %}%</span></p>
       </div>
       {% endif %}
       {% if plan_has_ended %}

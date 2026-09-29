@@ -296,7 +296,7 @@ class DashboardTypographyTest(TierSetupMixin, TestCase):
         )
         self.assertContains(
             response,
-            '<h3 class="text-lg font-semibold tracking-tight '
+            '<h3 class="mt-1 text-lg font-semibold tracking-tight '
             'text-foreground">Set up your account</h3>',
             html=False,
         )

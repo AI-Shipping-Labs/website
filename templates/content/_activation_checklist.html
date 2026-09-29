@@ -14,12 +14,10 @@
         {% endif %}
         <div class="{% if checklist_allow_dismiss and checklist_all_complete or checklist_allow_dismiss and checklist_all_resolved %}pr-10 {% endif %}">
           <p class="text-xs font-medium uppercase tracking-widest text-accent">{{ checklist_eyebrow }}</p>
-          <div class="mt-1 flex items-baseline justify-between gap-3">
-            <h3 class="text-lg font-semibold tracking-tight text-foreground">{% if checklist_all_complete %}{{ checklist_complete_title }}{% else %}{{ checklist_title }}{% endif %}</h3>
-            <p class="shrink-0 text-sm font-medium text-muted-foreground" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-progress-copy{% else %}{{ checklist_testid }}-progress-copy{% endif %}">
-              {{ checklist_completed_count }} of {{ checklist_total_count }} {{ checklist_progress_label|default:'complete' }}
-            </p>
-          </div>
+          <h3 class="mt-1 text-lg font-semibold tracking-tight text-foreground">{% if checklist_all_complete %}{{ checklist_complete_title }}{% else %}{{ checklist_title }}{% endif %}</h3>
+          <p class="mt-0.5 text-sm font-medium text-muted-foreground" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-progress-copy{% else %}{{ checklist_testid }}-progress-copy{% endif %}">
+            {{ checklist_completed_count }} of {{ checklist_total_count }} {{ checklist_progress_label|default:'complete' }}
+          </p>
           {% if checklist_all_complete %}
           <p class="mt-1 text-sm text-muted-foreground">{{ checklist_complete_description }}</p>
           {% endif %}

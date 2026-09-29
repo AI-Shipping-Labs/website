@@ -26,18 +26,11 @@ DESIGN_LAYOUT_ALLOWLIST: dict[str, dict[str, tuple[int, str]]] = {
             "exempts from the title-first header rule.",
         ),
     },
-    "progress_cta_row": {
-        "templates/content/course_home/_current_module.html": (
-            1,
-            "Fixed in hotfix-session-cohort. Remove this entry when that branch "
-            "lands on main; do not copy this layout.",
-        ),
-    },
+    "progress_cta_row": {},
 }
 
 # Frozen upper bound (seeded 2026-09-29 from origin/main 9505beb90). Entries may
 # only disappear or shrink; see the module docstring.
 DESIGN_LAYOUT_CEILING: dict[tuple[str, str], int] = {
     ("heading_action_opposite", "templates/plans/_plan_body.html"): 1,
-    ("progress_cta_row", "templates/content/course_home/_current_module.html"): 1,
 }

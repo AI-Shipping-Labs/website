@@ -16,6 +16,7 @@ from django.utils.formats import date_format
 from accounts.services.timezones import is_valid_timezone
 from content.access import get_user_level
 from content.models import CohortEnrollment, CourseAccess, Unit
+from content.models.cohort import COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.homework import Homework, Submission
 from content.models.peer_review import PeerReview, ProjectSubmission
@@ -31,6 +32,7 @@ from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
     decide_course_unit_drip_lock,
+    preferred_dated_enrollment_cohorts,
     resolve_session_event,
 )
 from events.models import Event
@@ -95,6 +97,31 @@ def _row(kind, title, *, when=None, status='', url='', action='', detail='', com
         'project_group_id': project_group_id,
         'project_group_title': project_group_title,
     }
+
+
+def is_self_paced_view(course, user, cohort):
+    """True when ``cohort`` is self-paced and the learner has no dated cohort.
+
+    A self-paced learner has no calendar: no live sessions and no due dates.
+    Course access auto-creates a self-paced enrollment, so a learner in a
+    dated cohort can hold both; the dated cohort always wins.
+    """
+    return (
+        cohort is not None
+        and cohort.mode == COHORT_MODE_SELF_PACED
+        and not preferred_dated_enrollment_cohorts(user, course)
+    )
+
+
+def _without_date(row):
+    """Drop a row's date so no self-paced surface can present it as a deadline."""
+    row.update({
+        'when': None,
+        'when_label': '',
+        'when_label_without_timezone': '',
+        'when_short_label': '',
+    })
+    return row
 
 
 def _event_row(event, timezone_name, now):
@@ -537,9 +564,13 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
         raise PermissionDenied('Cohort is not available to this learner')
 
     timezone_name = resolve_event_display_timezone(user)
-    events = _event_rows(course, user, cohort, timezone_name, now)
+    # Homework and projects stay listed for a self-paced learner, undated.
+    self_paced = is_self_paced_view(course, user, cohort)
+    events = [] if self_paced else _event_rows(course, user, cohort, timezone_name, now)
     assignments = _homework_rows(course, user, cohort, timezone_name, now.date())
     assignments += _project_rows(course, user, cohort, timezone_name, now)
+    if self_paced:
+        assignments = [_without_date(row) for row in assignments]
     open_assignments = [row for row in assignments if not row['complete']]
     completed_assignments = [row for row in assignments if row['complete']]
 

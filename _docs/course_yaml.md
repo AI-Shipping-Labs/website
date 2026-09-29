@@ -126,6 +126,18 @@ membership in it (no self-enroll action), which is what makes a
 self-paced learner resolve to a real `Cohort` row for drip-lock and
 event-slot resolution instead of "no cohort at all".
 
+A learner whose course Home resolves to the self-paced cohort, with no
+dated cohort enrollment, sees no calendar
+(`content.services.course_commitments.is_self_paced_view`). Course Home,
+its tabs, the module page and the Current module card show no live
+sessions, no "Due" dates and no timezone notice. The Live sessions tab is
+hidden and `/courses/<slug>/home/sessions` redirects to Home. Homework and
+projects stay listed with their status and no dates. Session units stay in
+the syllabus and sidebar as plain links with no date or join wording.
+The session unit page is unchanged. `resolve_session_event` falls back
+to the most recently started dated cohort's occurrence, so the page shows
+its recording and recap.
+
 `maven_course_key` and cohort `key` values must exactly match what the real
 Maven webhook sends in `course_key`/`cohort_key` — confirm this with a live
 test enrollment before relying on it (see `_docs/integrations/maven.md`,

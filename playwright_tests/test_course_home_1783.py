@@ -164,3 +164,79 @@ def test_course_home_checklist_skip_updates_in_place(django_server, browser):
     expect(page.locator('[data-testid="course-checklist-skip-homework"]')).to_be_focused()
     assert page.evaluate('window.__checklistNoReload === true')
     context.close()
+
+
+@pytest.mark.core
+@browser_journey
+def test_self_paced_learner_sees_work_without_sessions_or_dates(django_server, browser):
+    import uuid
+
+    from content.models import Cohort, CohortEnrollment, Course, Module, Unit
+    from content.models.homework import Homework
+    from events.models import Event, EventSeries
+
+    user = create_user('course-home-self-paced@test.com')
+    course = Course.objects.create(
+        title='Self-paced course', slug='course-home-self-paced',
+        status='published', required_level=0,
+    )
+    module = Module.objects.create(
+        course=course, title='Retrieval basics', slug='retrieval', sort_order=1,
+    )
+    Unit.objects.create(module=module, title='First lesson', slug='first-lesson', sort_order=1)
+    Unit.objects.create(
+        module=module, title='Session 1', slug='session', kind='event',
+        sort_order=2, session_position=1,
+    )
+    homework_unit = Unit.objects.create(
+        module=module, title='Retrieval homework', slug='retrieval-homework',
+        kind='homework', sort_order=3, content_id=uuid.uuid4(),
+    )
+    # A running dated cohort's session: the session resolver falls back to it.
+    today = timezone.localdate()
+    series = EventSeries.objects.create(name='Dated sessions', slug='dated-sessions')
+    Cohort.objects.create(
+        course=course, name='Dated cohort', external_key='dated',
+        start_date=today - datetime.timedelta(days=3),
+        end_date=today + datetime.timedelta(days=30), event_series=series,
+    )
+    start = timezone.now() + datetime.timedelta(days=2)
+    Event.objects.create(
+        event_series=series, slug='dated-session-1', title='Dated session event',
+        status='upcoming', series_position=1,
+        start_datetime=start, end_datetime=start + datetime.timedelta(hours=1),
+    )
+    self_paced = Cohort.objects.create(
+        course=course, name='Self-paced', external_key='self-paced', mode='self_paced',
+    )
+    CohortEnrollment.objects.create(user=user, cohort=self_paced)
+    Homework.objects.create(
+        cohort=self_paced, content_id=homework_unit.content_id,
+        slug='retrieval-homework', title='Retrieval homework',
+    )
+    connection.close()
+
+    context = auth_context(browser, user.email)
+    page = context.new_page()
+    page.goto(f'{django_server}/courses/{course.slug}/home', wait_until='domcontentloaded')
+
+    tabs = page.get_by_role('navigation', name='Course pages')
+    expect(tabs.get_by_role('link', name='Homework', exact=True)).to_be_visible()
+    expect(tabs.get_by_role('link', name='Live sessions')).to_have_count(0)
+    card = page.get_by_test_id('course-home-current-module')
+    expect(card.get_by_test_id('course-home-deliverables')).to_contain_text('Retrieval homework')
+    expect(page.get_by_test_id('course-home-next-session')).to_have_count(0)
+    expect(page.get_by_test_id('course-home-module-sessions')).to_have_count(0)
+    expect(page.get_by_test_id('course-home-due-next')).to_have_count(0)
+    expect(page.get_by_text('Shown in your timezone.')).to_have_count(0)
+
+    tabs.get_by_role('link', name='Homework', exact=True).click()
+    expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home/homework')
+    row = page.get_by_test_id('course-home-deadline-row')
+    expect(row).to_contain_text('Retrieval homework')
+    expect(row.locator('time')).to_have_count(0)
+    expect(page.get_by_text('Shown in your timezone.')).to_have_count(0)
+
+    page.goto(f'{django_server}/courses/{course.slug}/home/sessions', wait_until='domcontentloaded')
+    expect(page).to_have_url(f'{django_server}/courses/{course.slug}/home')
+    context.close()

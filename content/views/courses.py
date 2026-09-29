@@ -33,7 +33,7 @@ from content.models.homework import Submission
 from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
-from content.services.course_commitments import build_course_commitments
+from content.services.course_commitments import build_course_commitments, is_self_paced_view
 from content.services.course_home import build_course_home
 from content.services.course_inline import (
     inline_homework_capstone_for_parent,
@@ -485,9 +485,15 @@ def course_home(request, slug, section='home'):
             ).select_related('cohort').first()
         )
         cohort = cohort.cohort if cohort else None
+    # Self-paced learners have no calendar: no live sessions, due dates, or
+    # timezone notice anywhere on course Home and its tabs.
+    self_paced_view = is_self_paced_view(course, request.user, cohort)
+    if section == 'sessions' and self_paced_view:
+        return redirect('course_home', slug=course.slug)
 
     context = build_course_home(course, request.user, cohort)
     context['section'] = section
+    context['self_paced_view'] = self_paced_view
     context['is_cohort_preview'] = bool(requested and is_preview)
     if request.user.is_staff:
         context['preview_cohorts'] = course.aisl_cohorts.filter(
@@ -698,9 +704,11 @@ def course_home(request, slug, section='home'):
     projects = cohort_projects(course, cohort).select_related('module')
     projects_by_module = {}
     for project in projects:
+        project.hide_dates = self_paced_view
         if project.module_id:
             projects_by_module.setdefault(project.module_id, []).append(project)
-    unit_deadlines, module_deadline_summaries = build_deadline_context(course, cohort)
+    schedule_cohort = None if self_paced_view else cohort
+    unit_deadlines, module_deadline_summaries = build_deadline_context(course, schedule_cohort)
     context.update({
         'modules': modules,
         'has_access': True,
@@ -717,7 +725,7 @@ def course_home(request, slug, section='home'):
         },
         'unit_deadlines': unit_deadlines,
         'module_deadline_summaries': module_deadline_summaries,
-        'schedule_cohort': cohort,
+        'schedule_cohort': schedule_cohort,
         'schedule_is_preview': context['is_cohort_preview'],
         'schedule_timezone': schedule_timezone_name(course, request.user),
     })

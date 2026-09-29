@@ -32,7 +32,9 @@
     <nav class="flex gap-4 overflow-x-auto border-b border-border px-4 text-sm font-medium [scrollbar-width:none] sm:gap-5 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Course pages" data-course-tabs-scroller>
       <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
       <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
+      {% if not self_paced_view %}
       <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" {% if section == 'sessions' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'sessions' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Live sessions</a>
+      {% endif %}
       <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" {% if section == 'homework' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'homework' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Homework</a>
       <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" {% if section == 'projects' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'projects' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Projects</a>
     </nav>
@@ -101,8 +103,10 @@
       </section>
       {% endif %}
     {% endif %}
+    {% if not self_paced_view %}
     {% if section == 'home' and home_next_session or section == 'home' and cohort and current_module.sessions or section == 'home' and due_next or section == 'home' and cohort and current_module.deliverables or section == 'homework' and homework_rows or section == 'projects' and cohort and project_rows or section == 'sessions' and cohort and live_session_schedule %}
       {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-6" only %}
+    {% endif %}
     {% endif %}
   </div>
 </main>

@@ -103,7 +103,13 @@ class StudioOpenCoursePageTest(TestCase):
         )
 
     def test_course_home_sessions_opens_cohort_list(self):
-        response = self.client.get(f'/courses/{self.course.slug}/home/sessions')
+        # Live sessions belong to a dated cohort; a self-paced view has none.
+        today = timezone.localdate()
+        Cohort.objects.create(
+            course=self.course, name='Dated', external_key='dated',
+            start_date=today, end_date=today + timedelta(days=30),
+        )
+        response = self.client.get(f'/courses/{self.course.slug}/home/sessions?cohort=dated')
         self.assertEqual(
             _button_href(response),
             reverse(

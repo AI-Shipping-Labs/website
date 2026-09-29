@@ -1036,30 +1036,16 @@ def _build_course_unit_lookup(course_dir, course_ignore_patterns=None, stats=Non
 
     course_ignore_patterns = course_ignore_patterns or []
 
-    for entry in checkout_scandir(course_dir):
-        if (
-            not entry.is_dir()
-            or entry.name.startswith('.')
-            or entry.name == 'images'
-        ):
-            continue
-
-        # Mirror _sync_course_modules: a module dir matched by a course-level
-        # ignore glob (e.g. ``docs/**``) is skipped entirely — its files
-        # never become Units, so they must not appear in the lookup.
-        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
-        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
-            continue
-
+    for entry in _find_module_dir_entries(
+        course_dir, course_ignore_patterns, course_dir,
+    ):
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
-        if not checkout_exists(module_yaml_path):
-            continue
 
         module_slug, module_ignore_patterns = _parse_module_yaml_for_lookup(
             module_yaml_path, course_dir, entry.name, stats,
         )
 
-        submodule_entries = _find_submodule_dir_entries(
+        submodule_entries = _find_module_dir_entries(
             entry.path, course_ignore_patterns, course_dir,
         )
 
@@ -1379,15 +1365,15 @@ def _resolve_workshop_landing_copy(
     return body
 
 
-def _find_submodule_dir_entries(module_dir, course_ignore_patterns, course_dir):
-    """Return dir entries under ``module_dir`` that are themselves modules.
+def _find_module_dir_entries(parent_dir, course_ignore_patterns, course_dir):
+    """Select immediate module directories for lookup, identity scans and sync.
 
-    A subdirectory is a submodule when it carries its own ``module.yaml``
-    (issue #1674) — exactly mirroring how a course directory's
-    subdirectories become modules today, one level deeper.
+    The same selection applies under a course or a parent module. Keep
+    the existence check: callers retain responsibility for reporting an
+    invalid ``module.yaml`` entry when they parse it.
     """
     entries = []
-    for entry in checkout_scandir(module_dir):
+    for entry in checkout_scandir(parent_dir):
         if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
             continue
         dir_rel_to_course = os.path.relpath(entry.path, course_dir)
@@ -1603,7 +1589,7 @@ def _sync_module_dir(
     raw_module_ignore = module_data.get('ignore', []) or []
     module_ignore_patterns = [str(p) for p in raw_module_ignore]
 
-    submodule_entries = _find_submodule_dir_entries(
+    submodule_entries = _find_module_dir_entries(
         entry.path, course_ignore_patterns, course_dir,
     )
     has_direct_units = _has_direct_unit_files(
@@ -1736,15 +1722,10 @@ def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patte
             seen_paths.add(os.path.relpath(filepath, repo_dir))
             seen_content_ids.add(content_id)
 
-    for entry in checkout_scandir(course_dir):
-        if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
-            continue
-        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
-        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
-            continue
+    for entry in _find_module_dir_entries(
+        course_dir, course_ignore_patterns, course_dir,
+    ):
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
-        if not checkout_exists(module_yaml_path):
-            continue
         try:
             module_data = _parse_yaml_file(module_yaml_path) or {}
         except ValueError:
@@ -1755,7 +1736,7 @@ def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patte
 
         _collect_dir(entry.path, module_ignore_patterns)
 
-        for sub_entry in _find_submodule_dir_entries(
+        for sub_entry in _find_module_dir_entries(
             entry.path, course_ignore_patterns, course_dir,
         ):
             sub_yaml_path = os.path.join(sub_entry.path, 'module.yaml')
@@ -1882,19 +1863,10 @@ def _sync_course_modules(course, course_dir, repo_dir, repo_name, commit_sha, st
         course_dir, course_ignore_patterns=course_ignore_patterns,
     )
 
-    for entry in checkout_scandir(course_dir):
-        if not entry.is_dir() or entry.name.startswith('.') or entry.name == 'images':
-            continue
-
-        # Skip whole module dirs that match course-level ignore globs
-        # (e.g. `docs/**` ignores the docs/ directory in addition to its files).
-        dir_rel_to_course = os.path.relpath(entry.path, course_dir)
-        if _matches_ignore_patterns(dir_rel_to_course, course_ignore_patterns):
-            continue
-
+    for entry in _find_module_dir_entries(
+        course_dir, course_ignore_patterns, course_dir,
+    ):
         module_yaml_path = os.path.join(entry.path, 'module.yaml')
-        if not checkout_exists(module_yaml_path):
-            continue
 
         try:
             _sync_module_dir(

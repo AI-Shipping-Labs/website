@@ -4,11 +4,13 @@ Originally introduced in #236 as a top-level Studio page; refactored in #293
 to live under each course alongside ``access`` and ``peer-reviews``.
 """
 
+import datetime
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
-from content.models import Course, Enrollment, Module, Unit
+from content.models import Cohort, CohortEnrollment, Course, Enrollment, Module, Unit
 from content.models.enrollment import (
     SOURCE_ADMIN,
     SOURCE_AUTO_PROGRESS,
@@ -408,3 +410,131 @@ class LegacyPathsNoLongerResolveTest(TierSetupMixin, TestCase):
     def test_legacy_subscribers_export_returns_404(self):
         response = self.client.get('/studio/subscribers/export')
         self.assertEqual(response.status_code, 404)
+
+
+# ---------------------------------------------------------------------------
+# Cohort assignment (hotfix: staff put a user into a specific cohort)
+# ---------------------------------------------------------------------------
+
+class CourseScopedEnrollmentCohortTest(TierSetupMixin, TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.staff = User.objects.create_user(
+            email='staff@example.com', password='testpass', is_staff=True,
+        )
+        cls.learner = User.objects.create_user(
+            email='learner@example.com', password='testpass',
+        )
+        cls.course = _make_course(slug='c-cohort')
+        today = timezone.localdate()
+        cls.cohort3 = Cohort.objects.create(
+            course=cls.course, name='Cohort 3', external_key='3',
+            start_date=today - datetime.timedelta(days=120),
+            end_date=today - datetime.timedelta(days=60),
+        )
+        cls.cohort4 = Cohort.objects.create(
+            course=cls.course, name='Cohort 4', external_key='4',
+            start_date=today - datetime.timedelta(days=7),
+            end_date=today + datetime.timedelta(days=60),
+        )
+        cls.self_paced = Cohort.objects.create(
+            course=cls.course, name='Self-paced', mode='self_paced',
+        )
+        cls.other_course = _make_course(slug='c-other')
+        cls.other_cohort = Cohort.objects.create(
+            course=cls.other_course, name='Other', external_key='1',
+            start_date=today, end_date=today + datetime.timedelta(days=30),
+        )
+
+    def setUp(self):
+        self.client.force_login(self.staff)
+
+    def _cohort_ids(self):
+        return set(CohortEnrollment.objects.filter(
+            user=self.learner,
+        ).values_list('cohort_id', flat=True))
+
+    def test_create_with_cohort_enrolls_into_course_and_cohort(self):
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/enrollments/create',
+            {'email': 'learner@example.com', 'cohort_id': str(self.cohort4.pk)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Enrollment.objects.filter(
+            user=self.learner, course=self.course, source=SOURCE_ADMIN,
+            unenrolled_at__isnull=True,
+        ).exists())
+        self.assertEqual(self._cohort_ids(), {self.cohort4.pk})
+
+    def test_create_rejects_cohort_from_another_course(self):
+        self.client.post(
+            f'/studio/courses/{self.course.pk}/enrollments/create',
+            {'email': 'learner@example.com', 'cohort_id': str(self.other_cohort.pk)},
+        )
+
+        self.assertFalse(Enrollment.objects.filter(user=self.learner).exists())
+        self.assertEqual(self._cohort_ids(), set())
+
+    def test_change_cohort_moves_dated_cohort_and_keeps_self_paced(self):
+        enrollment = Enrollment.objects.create(
+            user=self.learner, course=self.course, source=SOURCE_ADMIN,
+        )
+        CohortEnrollment.objects.create(user=self.learner, cohort=self.cohort3)
+        CohortEnrollment.objects.create(user=self.learner, cohort=self.self_paced)
+
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/enrollments/{enrollment.pk}/cohort',
+            {'cohort_id': str(self.cohort4.pk)},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            self._cohort_ids(), {self.cohort4.pk, self.self_paced.pk},
+        )
+
+    def test_change_cohort_under_wrong_course_returns_404(self):
+        enrollment = Enrollment.objects.create(
+            user=self.learner, course=self.course, source=SOURCE_ADMIN,
+        )
+
+        response = self.client.post(
+            f'/studio/courses/{self.other_course.pk}/enrollments/{enrollment.pk}/cohort',
+            {'cohort_id': str(self.other_cohort.pk)},
+        )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self._cohort_ids(), set())
+
+    def test_non_staff_cannot_change_cohort(self):
+        enrollment = Enrollment.objects.create(
+            user=self.learner, course=self.course, source=SOURCE_ADMIN,
+        )
+        self.client.force_login(self.learner)
+
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/enrollments/{enrollment.pk}/cohort',
+            {'cohort_id': str(self.cohort4.pk)},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self._cohort_ids(), set())
+
+    def test_list_orders_cohort_choices_and_shows_row_cohort(self):
+        Enrollment.objects.create(
+            user=self.learner, course=self.course, source=SOURCE_ADMIN,
+        )
+        CohortEnrollment.objects.create(user=self.learner, cohort=self.self_paced)
+        CohortEnrollment.objects.create(user=self.learner, cohort=self.cohort4)
+
+        response = self.client.get(f'/studio/courses/{self.course.pk}/enrollments/')
+
+        self.assertEqual(
+            [cohort.name for cohort in response.context['cohorts']],
+            ['Cohort 4', 'Cohort 3', 'Self-paced'],
+        )
+        row = response.context['enrollments'][0]
+        self.assertEqual(
+            [cohort.name for cohort in row.cohorts], ['Cohort 4', 'Self-paced'],
+        )

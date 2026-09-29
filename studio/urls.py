@@ -140,6 +140,7 @@ from studio.views.email_templates import (
 from studio.views.enrollments import (
     enrollment_create,
     enrollment_list,
+    enrollment_set_cohort,
     enrollment_unenroll,
 )
 from studio.views.event_duplicates import (
@@ -471,6 +472,11 @@ urlpatterns = [
         'courses/<int:course_id>/enrollments/<int:enrollment_id>/unenroll',
         enrollment_unenroll,
         name='studio_course_enrollment_unenroll',
+    ),
+    path(
+        'courses/<int:course_id>/enrollments/<int:enrollment_id>/cohort',
+        enrollment_set_cohort,
+        name='studio_course_enrollment_set_cohort',
     ),
 
     # Cohorts scoped to a course (issue #1660)

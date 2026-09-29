@@ -3770,7 +3770,7 @@
         ]
       },
       "post": {
-        "description": "Accepts either ``{\"user_email\": \"...\"}`` (single) or ``{\"user_emails\": [...]}`` (bulk). Tier mismatches are flagged as ``under_tier`` (warning) but the enrollment is still created -- staff are explicitly choosing to enroll the user.",
+        "description": "Accepts either ``{\"user_email\": \"...\"}`` (single) or ``{\"user_emails\": [...]}`` (bulk). Tier mismatches are flagged as ``under_tier`` (warning) but the enrollment is still created -- staff are explicitly choosing to enroll the user. Optional ``cohort`` is the cohort's external key (the ``?cohort=`` value, e.g. ``4``): each known user also gets an idempotent ``CohortEnrollment`` in that cohort (an existing self-paced membership is kept; the dated cohort wins on course Home), and the response adds ``cohort_enrollments``.",
         "parameters": [
           {
             "in": "path",
@@ -3792,6 +3792,10 @@
               },
               "schema": {
                 "properties": {
+                  "cohort": {
+                    "description": "Cohort external key under this course (case-insensitive), e.g. ``4``.",
+                    "type": "string"
+                  },
                   "user_email": {
                     "format": "email",
                     "type": "string"
@@ -3816,6 +3820,14 @@
               "application/json": {
                 "example": {
                   "already_enrolled": 1,
+                  "cohort_enrollments": [
+                    {
+                      "cohort": "4",
+                      "cohort_name": "Cohort 4",
+                      "created": true,
+                      "user_email": "alice@example.com"
+                    }
+                  ],
                   "enrolled": 1,
                   "under_tier": [],
                   "unknown_emails": []
@@ -3823,6 +3835,17 @@
               }
             },
             "description": "Bulk enroll summary."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_cohort",
+                  "error": "Unknown cohort '9' for course 'ai-buildcamp'"
+                }
+              }
+            },
+            "description": "Unknown ``cohort`` for this course."
           },
           "403": {
             "content": {

@@ -154,6 +154,7 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_course_enrollment_list',
         'studio_course_enrollment_create',
         'studio_course_enrollment_unenroll',
+        'studio_course_enrollment_set_cohort',
         'studio_course_instructor_add',
         'studio_course_instructor_remove',
         'studio_course_instructor_reorder',

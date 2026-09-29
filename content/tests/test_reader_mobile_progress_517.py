@@ -119,7 +119,7 @@ class WorkshopMobileProgressBarContextTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['reader_progress_completed'], 0)
         self.assertEqual(response.context['reader_progress_kind'], 'page')
         self.assertEqual(
-            response.context['reader_mobile_label'], 'Workshop Navigation',
+            response.context['reader_mobile_label'], 'Workshop navigation',
         )
         self.assertContains(
             response, 'data-testid="reader-mobile-progress-bar"',
@@ -295,7 +295,7 @@ class CourseUnitReaderMobileProgressBarTest(TierSetupMixin, TestCase):
         self.assertEqual(response.context['reader_progress_total'], 9)
         self.assertEqual(response.context['reader_progress_kind'], 'lesson')
         self.assertEqual(
-            response.context['reader_mobile_label'], 'Course Navigation',
+            response.context['reader_mobile_label'], 'Course navigation',
         )
         self.assertContains(response, 'Lesson 6 of 9')
         self.assertContains(

@@ -1118,7 +1118,7 @@ def workshop_page_detail(request, slug, page_slug):
         # only on the non-gated branch; we still provide values on the
         # gated branch so any test that inspects the context after a
         # gated render gets stable defaults instead of KeyError.
-        'reader_mobile_label': 'Workshop Navigation',
+        'reader_mobile_label': 'Workshop navigation',
         'reader_progress_kind': 'page',
         'reader_progress_current': idx + 1,
         'reader_progress_total': len(pages),

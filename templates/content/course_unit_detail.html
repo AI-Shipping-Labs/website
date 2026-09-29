@@ -130,7 +130,7 @@
   {% else %}
   {% comment %}The sidebar appends ?cohort itself for module-scoped navigation, so pass the cohort only when it will not.{% endcomment %}
   {% if scoped_module %}{% course_entry_url course as reader_course_url %}{% else %}{% course_entry_url course cohort=reader_cohort_param as reader_course_url %}{% endif %}
-  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_course_unit_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course Navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
+  {% include "content/reader/_layout.html" with reader_content_template="content/reader/_course_unit_content.html" reader_back_url=reader_course_url reader_back_title=course.title reader_sidebar_label="course navigation" reader_mobile_label="Course navigation" reader_nav_aria_label="Course navigation" reader_nav_kind="course" %}
   {% endif %}
 </main>
 {% include "includes/footer.html" %}

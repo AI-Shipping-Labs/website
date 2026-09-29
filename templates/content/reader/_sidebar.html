@@ -1,9 +1,14 @@
 {% load curriculum_tags %}
 <aside id="content-sidebar-aside" class="lg:w-72 xl:w-80 flex-shrink-0 order-2 lg:order-1"{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
-  <div class="flex items-center justify-between gap-2">
+  {% comment %}
+    The back link and collapse control are desktop chrome. Below `lg` the
+    aside renders after the reading column, so a back link here would dangle
+    below Q&A; the breadcrumb and the drawer own that navigation instead.
+  {% endcomment %}
+  <div class="hidden items-center justify-between gap-2 lg:flex">
     <a href="{{ reader_back_url }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
        title="{{ reader_back_title }}"
-       class="mb-4 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0"
+       class="mb-4 hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0 lg:inline-flex"
        {% if reader_back_testid %}data-testid="{{ reader_back_testid }}"{% endif %}>
       <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
       <span class="truncate">{{ reader_back_title }}</span>
@@ -32,18 +37,23 @@
       `_scripts.html` toggle handler works without changes.
     {% endcomment %}
 
+    {% comment %}
+      Below `lg` every reader (course unit, module home, workshop tutorial)
+      opens this nav as a modal drawer: `_styles.html` pins it under the
+      site header, `_scripts.html` adds role="dialog" / aria-modal, the
+      backdrop, scroll lock, focus loop, and scrolls the current row into
+      view. On `lg+` it is the persistent sidebar navigation landmark.
+    {% endcomment %}
     <nav id="sidebar-nav" class="mt-4 rounded-lg border border-border bg-card p-2 hidden lg:block{% if scoped_module %} reader-scoped-nav{% endif %}"
          aria-label="{{ reader_nav_aria_label }}"
          {% if reader_nav_testid %}data-testid="{{ reader_nav_testid }}"{% endif %}>
       <h2 class="sr-only">{{ reader_nav_aria_label }}</h2>
-      {% if scoped_module %}
-      <div class="mb-2 flex items-center justify-between border-b border-border px-2 pb-2 lg:hidden">
-        <span class="text-sm font-medium">Course navigation</span>
-        <button type="button" id="reader-scoped-nav-close" aria-label="Close course navigation" class="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+      <div class="reader-drawer-header mb-2 flex items-center justify-between border-b border-border pb-2 pl-2 lg:hidden">
+        <span class="text-sm font-medium" aria-hidden="true">{{ reader_nav_aria_label }}</span>
+        <button type="button" id="reader-scoped-nav-close" aria-label="Close {{ reader_nav_aria_label|lower }}" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:h-8 lg:w-8" data-testid="reader-drawer-close">
           <i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i>
         </button>
       </div>
-      {% endif %}
 
       {% if reader_nav_kind == "course" %}
         {% if scoped_module %}
@@ -54,16 +64,16 @@
             <p class="flex min-w-0 flex-wrap items-center gap-2 pt-1.5 text-sm font-semibold leading-snug text-foreground break-words">{% if scoped_module.is_bonus and scoped_module.title == 'Bonus' %}Optional{% else %}{{ scoped_module.title }}{% endif %}{% if scoped_module.is_bonus and '(Optional)' not in scoped_module.title and scoped_module.title != 'Bonus' and scoped_module.title != 'Optional' %}<span class="rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}</p>
             {% comment %}Up to the syllabus, then previous/next module. A missing neighbour renders as a disabled icon so the group never shifts.{% endcomment %}
             <div class="-mr-1 flex flex-shrink-0 items-center" data-testid="reader-module-navigation">
-              <a href="{% url 'course_syllabus' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Up to course syllabus" title="Up to course syllabus" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-view-syllabus"><i data-lucide="corner-left-up" class="h-4 w-4" aria-hidden="true"></i></a>
+              <a href="{% url 'course_syllabus' slug=course.slug %}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Up to course syllabus" title="Up to course syllabus" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground lg:h-8 lg:w-8 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-view-syllabus"><i data-lucide="corner-left-up" class="h-4 w-4" aria-hidden="true"></i></a>
               {% if previous_module %}
-              <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Previous module: {{ previous_module.title }}" title="Previous module: {{ previous_module.title }}" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i></a>
+              <a href="/courses/{{ course.slug }}/{{ previous_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Previous module: {{ previous_module.title }}" title="Previous module: {{ previous_module.title }}" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground lg:h-8 lg:w-8 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-previous-module"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i></a>
               {% else %}
-              <span role="link" aria-disabled="true" aria-label="No previous module" title="No previous module" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground opacity-40" data-testid="reader-previous-module-disabled"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i></span>
+              <span role="link" aria-disabled="true" aria-label="No previous module" title="No previous module" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground lg:h-8 lg:w-8 opacity-40" data-testid="reader-previous-module-disabled"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i></span>
               {% endif %}
               {% if next_module %}
-              <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Next module: {{ next_module.title }}" title="Next module: {{ next_module.title }}" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module"><i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></a>
+              <a href="/courses/{{ course.slug }}/{{ next_module.slug }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" aria-label="Next module: {{ next_module.title }}" title="Next module: {{ next_module.title }}" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground lg:h-8 lg:w-8 hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="reader-next-module"><i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></a>
               {% else %}
-              <span role="link" aria-disabled="true" aria-label="No next module" title="No next module" class="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground opacity-40" data-testid="reader-next-module-disabled"><i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></span>
+              <span role="link" aria-disabled="true" aria-label="No next module" title="No next module" class="inline-flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground lg:h-8 lg:w-8 opacity-40" data-testid="reader-next-module-disabled"><i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></span>
               {% endif %}
             </div>
             </div>

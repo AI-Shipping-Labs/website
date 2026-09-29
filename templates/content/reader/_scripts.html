@@ -67,37 +67,108 @@
   })();
 
   (function() {
+    /* Below `lg` the reader nav is a modal drawer on every reader: backdrop
+       that closes on tap, scroll lock, role="dialog" + aria-modal, focus
+       loop, Escape to close, and focus returned to the toggle. On `lg+`
+       the same <nav> is the persistent sidebar, so the dialog semantics are
+       only applied while the drawer is open. */
     var toggleBtn = document.getElementById('sidebar-toggle-btn');
     var nav = document.getElementById('sidebar-nav');
-    var chevron = document.getElementById('sidebar-toggle-chevron');
-    var discussion = document.getElementById('sidebar-discussion');
-    var scopedClose = document.getElementById('reader-scoped-nav-close');
+    var closeBtn = document.getElementById('reader-scoped-nav-close');
     if (!toggleBtn || !nav) return;
+    var desktop = window.matchMedia('(min-width: 1024px)');
+    var backdrop = document.createElement('div');
+    backdrop.id = 'reader-drawer-backdrop';
+    backdrop.className = 'reader-drawer-backdrop';
+    backdrop.hidden = true;
+    backdrop.setAttribute('aria-hidden', 'true');
+    backdrop.setAttribute('data-testid', 'reader-drawer-backdrop');
+    nav.parentNode.insertBefore(backdrop, nav);
 
+    function isOpen() { return !nav.classList.contains('hidden'); }
+    function focusables() {
+      return Array.prototype.filter.call(
+        nav.querySelectorAll('a[href], button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'),
+        function(el) { return el.offsetParent !== null || el === document.activeElement; }
+      );
+    }
+    /* Group D hook: the row marked `data-reader-current` (for example the
+       current homework step) wins over the current lesson/page row. */
+    function scrollCurrentIntoView() {
+      var current = nav.querySelector('[data-reader-current]') || nav.querySelector('[aria-current="page"]');
+      if (!current) return;
+      var navRect = nav.getBoundingClientRect();
+      var rowRect = current.getBoundingClientRect();
+      nav.scrollTop += (rowRect.top - navRect.top) - (nav.clientHeight - rowRect.height) / 2;
+    }
     function setOpen(open) {
       if (open) {
         nav.classList.remove('hidden');
-        if (discussion) discussion.classList.remove('hidden');
+        nav.setAttribute('role', 'dialog');
+        nav.setAttribute('aria-modal', 'true');
+        backdrop.hidden = false;
+        document.documentElement.classList.add('reader-drawer-open');
         toggleBtn.setAttribute('aria-expanded', 'true');
-        if (chevron) chevron.style.transform = 'rotate(180deg)';
-        if (scopedClose) scopedClose.focus();
+        scrollCurrentIntoView();
+        (closeBtn || nav).focus();
       } else {
         nav.classList.add('hidden');
-        if (discussion) discussion.classList.add('hidden');
+        nav.removeAttribute('role');
+        nav.removeAttribute('aria-modal');
+        backdrop.hidden = true;
+        document.documentElement.classList.remove('reader-drawer-open');
         toggleBtn.setAttribute('aria-expanded', 'false');
-        if (chevron) chevron.style.transform = 'rotate(0deg)';
-        if (scopedClose) toggleBtn.focus();
+        toggleBtn.focus();
       }
     }
-    toggleBtn.addEventListener('click', function() {
-      setOpen(nav.classList.contains('hidden'));
+    toggleBtn.addEventListener('click', function() { setOpen(!isOpen()); });
+    backdrop.addEventListener('click', function() { setOpen(false); });
+    if (closeBtn) closeBtn.addEventListener('click', function() { setOpen(false); });
+    document.addEventListener('keydown', function(event) {
+      if (!isOpen() || desktop.matches) return;
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      var items = focusables();
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !nav.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !nav.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     });
-    if (scopedClose) {
-      scopedClose.addEventListener('click', function() { setOpen(false); });
-      document.addEventListener('keydown', function(event) {
-        if (event.key === 'Escape' && !nav.classList.contains('hidden')) setOpen(false);
-      });
+    /* Crossing into `lg` turns the drawer back into the sidebar. */
+    desktop.addEventListener('change', function(event) {
+      if (!event.matches || !isOpen()) return;
+      nav.classList.add('hidden');
+      nav.removeAttribute('role');
+      nav.removeAttribute('aria-modal');
+      backdrop.hidden = true;
+      document.documentElement.classList.remove('reader-drawer-open');
+      toggleBtn.setAttribute('aria-expanded', 'false');
+    });
+  })();
+
+  (function() {
+    /* Publish the sticky reader bar's height so other fixed bottom chrome
+       (the Open in Studio control) can sit above it below `lg`. */
+    var bar = document.querySelector('[data-testid="reader-bottom-nav-bar"]');
+    var root = document.documentElement;
+    var desktop = window.matchMedia('(min-width: 1024px)');
+    function publish() {
+      var height = bar && !desktop.matches ? bar.getBoundingClientRect().height : 0;
+      root.style.setProperty('--mobile-bottom-bar-height', Math.ceil(height) + 'px');
     }
+    publish();
+    if (bar && typeof ResizeObserver === 'function') new ResizeObserver(publish).observe(bar);
+    desktop.addEventListener('change', publish);
   })();
 
   (function() {
@@ -207,12 +278,12 @@
 
     function renderButton(btn, completed) {
       if (completed) {
-        btn.classList.remove('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+        btn.classList.remove('border-border', 'bg-transparent', 'text-foreground', 'hover:bg-secondary');
         btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
         btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
       } else {
         btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
-        btn.classList.add('border-border', 'bg-card', 'text-foreground', 'hover:bg-muted');
+        btn.classList.add('border-border', 'bg-transparent', 'text-foreground', 'hover:bg-secondary');
         btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
       }
       if (typeof lucide !== 'undefined') lucide.createIcons();

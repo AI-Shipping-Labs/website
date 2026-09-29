@@ -1101,7 +1101,9 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     selected_cohort, selected_is_preview = select_display_cohort(
         course, user, request.GET.get('cohort', ''),
     )
-    if request.GET.get('cohort') and (selected_cohort is None or selected_is_preview):
+    if request.GET.get('cohort') and (
+        selected_cohort is None or (selected_is_preview and not user.is_staff)
+    ):
         raise Http404('Cohort not found')
     if selected_cohort is not None and not selected_is_preview:
         drip_decision = course_unit_service.decide_course_unit_drip_lock(
@@ -1139,6 +1141,7 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
 
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit, request=request,
+        session_cohort=selected_cohort,
     )
     context['reader_cohort_param'] = request.GET.get('cohort', '')
     if context['reader_cohort_param'] and context['scoped_module']:

@@ -154,7 +154,7 @@ def _event_rows(course, user, cohort, timezone_name, now):
         # lost. A hidden series never resolves for an unentitled user.
         resolved_event = None
         for unit in units:
-            resolved_event = resolve_session_event(unit, user)
+            resolved_event = resolve_session_event(unit, user, cohort=cohort)
             if resolved_event is not None:
                 break
         events = list(Event.objects.filter(

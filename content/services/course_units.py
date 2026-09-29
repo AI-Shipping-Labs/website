@@ -331,7 +331,9 @@ def build_drip_locked_course_unit_context(
     }
 
 
-def build_course_unit_navigation_context(user, course, module, unit, *, request=None):
+def build_course_unit_navigation_context(
+    user, course, module, unit, *, request=None, session_cohort=None,
+):
     """Build navigation, completion, discussion, and mobile progress context."""
     modules = course.get_syllabus()
     scoped_module = None
@@ -393,7 +395,9 @@ def build_course_unit_navigation_context(user, course, module, unit, *, request=
     # resolved for any cohort yet" — the template distinguishes those with
     # unit.kind, rendering the clean empty state only for the latter.
     unit_session_entry = (
-        build_unit_session_card_context(unit, user, request=request)
+        build_unit_session_card_context(
+            unit, user, request=request, cohort=session_cohort,
+        )
         if unit.kind == UNIT_KIND_EVENT else None
     )
 
@@ -495,6 +499,41 @@ def get_prev_unit(course, current_unit):
 # ``Module.available_after_days``, never stored on ``Module``.
 
 
+def preferred_dated_enrollment_cohorts(user, course, *, active_only=False):
+    """Return the viewer's enrolled ``mode='cohort'`` Cohorts, best first.
+
+    The cohort running today comes first, then the rest by latest start.
+    Self-paced enrollments are excluded so they never shadow a dated one.
+    """
+    if not is_authenticated_user(user):
+        return []
+    filters = {
+        'user': user,
+        'cohort__course': course,
+        'cohort__mode': COHORT_MODE_COHORT,
+    }
+    if active_only:
+        filters['cohort__is_active'] = True
+    cohorts = [
+        enrollment.cohort
+        for enrollment in CohortEnrollment.objects
+        .filter(**filters)
+        .select_related('cohort')
+        .order_by(models.F('cohort__start_date').desc(nulls_last=True), '-cohort_id')
+    ]
+    today = timezone.localdate()
+
+    def is_current(cohort):
+        return bool(
+            cohort.start_date and cohort.end_date
+            and cohort.start_date <= today <= cohort.end_date
+        )
+
+    return [c for c in cohorts if is_current(c)] + [
+        c for c in cohorts if not is_current(c)
+    ]
+
+
 def resolve_viewer_dated_cohort(user, course):
     """Return the viewer's active ``mode='cohort'`` Cohort, or ``None``.
 
@@ -503,20 +542,8 @@ def resolve_viewer_dated_cohort(user, course):
     -cohort enrollment all get ``None``, which callers treat as "show no
     date range" (not an error).
     """
-    if not is_authenticated_user(user):
-        return None
-    enrollment = (
-        CohortEnrollment.objects
-        .filter(
-            user=user,
-            cohort__course=course,
-            cohort__mode=COHORT_MODE_COHORT,
-            cohort__is_active=True,
-        )
-        .select_related('cohort')
-        .first()
-    )
-    return enrollment.cohort if enrollment else None
+    cohorts = preferred_dated_enrollment_cohorts(user, course, active_only=True)
+    return cohorts[0] if cohorts else None
 
 
 def build_module_week_dates(top_level_modules, cohort, *, extend_final_to_cohort_end=False):
@@ -585,7 +612,7 @@ def format_week_range(week_start, week_end):
 # time.
 
 
-def resolve_session_event(unit: Unit, user) -> Event | None:
+def resolve_session_event(unit: Unit, user, *, cohort=None) -> Event | None:
     """Resolve the ``Event`` for a ``kind='event'`` unit, or ``None``.
 
     1. The viewer's own ``CohortEnrollment`` for this unit's course, when
@@ -611,27 +638,35 @@ def resolve_session_event(unit: Unit, user) -> Event | None:
         return None
     course = unit.module.course
 
+    # A learner who gains course access gets an auto-created self-paced
+    # enrollment, so one user can hold both a self-paced and a dated
+    # enrollment. The page's selected cohort wins, then the viewer's dated
+    # cohorts (current first, then latest start); a self-paced enrollment
+    # never shadows a dated one.
+    preferred_cohorts = []
+    if cohort is not None and cohort.course_id == course.pk:
+        preferred_cohorts.append(cohort)
     if is_authenticated_user(user):
-        enrollment = (
-            CohortEnrollment.objects
-            .filter(user=user, cohort__course=course)
-            .select_related('cohort')
-            .first()
-        )
+        preferred_cohorts.extend(preferred_dated_enrollment_cohorts(user, course))
+    seen_series_ids = set()
+    for candidate in preferred_cohorts:
+        series_id = candidate.event_series_id
         if (
-            enrollment is not None
-            and enrollment.cohort.mode == COHORT_MODE_COHORT
-            and enrollment.cohort.event_series_id
+            candidate.mode != COHORT_MODE_COHORT
+            or not series_id
+            or series_id in seen_series_ids
         ):
-            event = Event.objects.select_related(
-                'event_series', 'workshop',
-            ).filter(
-                event_series_id=enrollment.cohort.event_series_id,
-                series_position=unit.session_position,
-                status__in=PUBLIC_EVENT_STATUSES,
-            ).first()
-            if event is not None and _can_view_session_event(user, event):
-                return event
+            continue
+        seen_series_ids.add(series_id)
+        event = Event.objects.select_related(
+            'event_series', 'workshop',
+        ).filter(
+            event_series_id=series_id,
+            series_position=unit.session_position,
+            status__in=PUBLIC_EVENT_STATUSES,
+        ).first()
+        if event is not None and _can_view_session_event(user, event):
+            return event
 
     today = timezone.now().date()
     fallback_series_ids = (
@@ -665,7 +700,7 @@ def _can_view_session_event(user, event):
     return not (series and series.is_hidden) or is_entitled_for_series(user, series)
 
 
-def build_unit_session_card_context(unit: Unit, user, *, request=None):
+def build_unit_session_card_context(unit: Unit, user, *, request=None, cohort=None):
     """Build the session-card entry for a ``kind='event'`` unit, or ``None``.
 
     ``None`` means no ``Event`` resolved anywhere — the template renders
@@ -675,7 +710,7 @@ def build_unit_session_card_context(unit: Unit, user, *, request=None):
     workshop recording access. Private S3 URLs and Zoom meeting/download
     URLs are never added to this context.
     """
-    event = resolve_session_event(unit, user)
+    event = resolve_session_event(unit, user, cohort=cohort)
     if event is None:
         return None
     is_past = event.is_past
@@ -781,16 +816,20 @@ def resolve_homework_for_unit(unit: Unit, user, *, cohort=None) -> Homework | No
         ).select_related('cohort').first()
 
     if is_authenticated_user(user):
-        enrollment = (
-            CohortEnrollment.objects
+        # Dated cohorts first so the auto-created self-paced enrollment
+        # never shadows a dated one; self-paced enrollments still resolve.
+        enrolled_cohorts = preferred_dated_enrollment_cohorts(user, course) + [
+            enrollment.cohort
+            for enrollment in CohortEnrollment.objects
             .filter(user=user, cohort__course=course)
+            .exclude(cohort__mode=COHORT_MODE_COHORT)
             .select_related('cohort')
-            .first()
-        )
-        if enrollment is not None:
+            .order_by('pk')
+        ]
+        for enrolled_cohort in enrolled_cohorts:
             homework = (
                 Homework.objects
-                .filter(content_id=unit.content_id, cohort=enrollment.cohort)
+                .filter(content_id=unit.content_id, cohort=enrolled_cohort)
                 .select_related('cohort')
                 .first()
             )

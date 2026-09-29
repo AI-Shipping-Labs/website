@@ -1454,6 +1454,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_mobile_drawer_ignores_collapsed_preference",
     })
 
+    hotfix_cohort_owners = frozenset({
+        "playwright_tests/test_studio_enrollment_cohort.py::"
+        "test_staff_picks_and_changes_a_users_cohort",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1582,8 +1587,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2693)
-        self.assertEqual(len(inventory.owners), 2489)
+        self.assertEqual(inventory.item_count, 2694)
+        self.assertEqual(len(inventory.owners), 2490)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1593,6 +1598,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1531_owners
             | self.issue_1815_owners
             | self.issue_1837_owners
+            | self.hotfix_cohort_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners
             | self.studio_sidebar_rail_owners

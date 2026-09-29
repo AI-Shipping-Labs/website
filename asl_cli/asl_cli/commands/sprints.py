@@ -111,6 +111,23 @@ def sprints_course_enrollments(slug, fmt):
     emit(get_client().get(f"{API}/courses/{slug}/enrollments"), fmt)
 
 
+@sprints.command("course-enroll")
+@click.argument("slug")
+@click.argument("emails", nargs=-1, required=True)
+@click.option(
+    "--cohort",
+    default=None,
+    help="Cohort external key (the ?cohort= value, e.g. 4); also puts each user in that cohort.",
+)
+@format_option
+def sprints_course_enroll(slug, emails, cohort, fmt):
+    """Enroll one or more users in a course (staff-only)."""
+    body = {"user_emails": list(emails)}
+    if cohort:
+        body["cohort"] = cohort
+    emit(get_client().post(f"{API}/courses/{slug}/enrollments", json_body=body), fmt)
+
+
 @sprints.command("course-certificates")
 @click.argument("slug")
 @format_option

@@ -30,6 +30,17 @@
       {% include "studio/includes/_people_picker.html" with name="user_id" input_name="email" id_prefix="enroll" input_id="enroll-email" list_id="enroll-suggestions" hidden_id="enroll-user-id" label="User email or ID" placeholder="user@example.com or numeric ID" search_url=course_user_search_url selection_value="email" input_required=True input_testid="enroll-email-input" list_testid="enroll-suggestions" suggestion_testid="enroll-suggestion" hidden_testid="enroll-user-id-input" %}
       <p class="text-xs text-muted-foreground mt-1">Search by email fragment or paste a numeric user ID. Enter an exact email to enroll by typed email.</p>
     </div>
+    {% if cohorts %}
+    <div>
+      <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1" for="enroll-cohort">Cohort</label>
+      <select id="enroll-cohort" name="cohort_id" data-testid="enroll-cohort-select" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+        <option value="">No cohort</option>
+        {% for cohort in cohorts %}
+        <option value="{{ cohort.pk }}">{{ cohort.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <button type="submit"
             class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]">
       Enroll user
@@ -58,6 +69,7 @@
       <thead class="{% studio_list_class 'thead' %}">
         <tr>
           <th class="{% studio_list_class 'th' %}">User</th>
+          <th class="{% studio_list_class 'th' %}">Cohort</th>
           <th class="{% studio_list_class 'th' %}">Source</th>
           <th class="{% studio_list_class 'th' %}">Enrolled</th>
           <th class="{% studio_list_class 'th' %}">Unenrolled</th>
@@ -70,6 +82,20 @@
           <td class="px-6 py-4 text-sm text-foreground" data-label="User">
             <div class="font-medium break-all sm:break-normal sm:whitespace-nowrap">{{ enr.user.email }}</div>
             <div class="text-xs text-muted-foreground">ID: {{ enr.user.pk }}</div>
+          </td>
+          <td class="px-6 py-4 text-sm text-foreground" data-label="Cohort" data-testid="enrollment-cohort">
+            <div data-testid="enrollment-cohort-names">{% for cohort in enr.cohorts %}{{ cohort.name }}{% if not forloop.last %}, {% endif %}{% empty %}<span class="text-muted-foreground">-</span>{% endfor %}</div>
+            {% if cohorts and not enr.unenrolled_at %}
+            <form method="post" action="{% url 'studio_course_enrollment_set_cohort' course_id=course.pk enrollment_id=enr.pk %}" class="mt-2 flex flex-wrap items-center gap-2" data-testid="change-cohort-form">
+              {% csrf_token %}
+              <select name="cohort_id" aria-label="Cohort for {{ enr.user.email }}" data-testid="change-cohort-select" class="studio-select bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+                {% for cohort in cohorts %}
+                <option value="{{ cohort.pk }}" {% if enr.cohorts and enr.cohorts.0.pk == cohort.pk %}selected{% endif %}>{{ cohort.name }}</option>
+                {% endfor %}
+              </select>
+              <button type="submit" class="{% studio_action_class 'primary' %} min-h-[44px]" data-testid="change-cohort-btn">Change cohort</button>
+            </form>
+            {% endif %}
           </td>
           <td class="px-6 py-4" data-label="Source">
             <span class="text-xs px-2 py-1 rounded-full
@@ -99,7 +125,7 @@
         </tr>
         {% empty %}
           {% url 'studio_course_enrollment_list' course_id=course.pk as enrollments_clear_url %}
-          {% studio_empty_state 'filter' entity_label='enrollment' entity_label_plural='enrollments' clear_url=enrollments_clear_url colspan=5 empty_message='No enrollments match this status filter.' %}
+          {% studio_empty_state 'filter' entity_label='enrollment' entity_label_plural='enrollments' clear_url=enrollments_clear_url colspan=6 empty_message='No enrollments match this status filter.' %}
         {% endfor %}
       </tbody>
     </table>

@@ -34,6 +34,10 @@ from api.views._permissions import bearer_is_admin
 from content.access import can_access
 from content.models import Course
 from content.models.enrollment import SOURCE_ADMIN, Enrollment
+from content.services.course_cohorts import (
+    assign_cohort_enrollment,
+    get_course_cohort_by_key,
+)
 from content.services.enrollment import ensure_enrollment, unenroll
 
 _ENROLLMENT_EXAMPLE = {
@@ -112,7 +116,13 @@ def _get_published_course(slug):
                 "or ``{\"user_emails\": [...]}`` (bulk). Tier mismatches "
                 "are flagged as ``under_tier`` (warning) but the "
                 "enrollment is still created -- staff are explicitly "
-                "choosing to enroll the user."
+                "choosing to enroll the user. Optional ``cohort`` is the "
+                "cohort's external key (the ``?cohort=`` value, e.g. "
+                "``4``): each known user also gets an idempotent "
+                "``CohortEnrollment`` in that cohort (an existing "
+                "self-paced membership is kept; the dated cohort wins on "
+                "course Home), and the response adds "
+                "``cohort_enrollments``."
             ),
             "request_body": {
                 "properties": {
@@ -120,6 +130,13 @@ def _get_published_course(slug):
                     "user_emails": {
                         "type": "array",
                         "items": {"type": "string", "format": "email"},
+                    },
+                    "cohort": {
+                        "type": "string",
+                        "description": (
+                            "Cohort external key under this course "
+                            "(case-insensitive), e.g. ``4``."
+                        ),
                     },
                 },
                 "example": {
@@ -137,6 +154,23 @@ def _get_published_course(slug):
                         "already_enrolled": 1,
                         "under_tier": [],
                         "unknown_emails": [],
+                        "cohort_enrollments": [
+                            {
+                                "user_email": "alice@example.com",
+                                "cohort": "4",
+                                "cohort_name": "Cohort 4",
+                                "created": True,
+                            },
+                        ],
+                    },
+                },
+                400: {
+                    "description": "Unknown ``cohort`` for this course.",
+                    "example": {
+                        "error": (
+                            "Unknown cohort '9' for course 'ai-buildcamp'"
+                        ),
+                        "code": "unknown_cohort",
                     },
                 },
                 403: {
@@ -210,11 +244,32 @@ def course_enrollments_collection(request, slug):
     if isinstance(raw_list, list):
         combined.extend(raw_list)
 
+    raw_cohort = data.get('cohort')
+    cohort = None
+    if raw_cohort is not None:
+        if not isinstance(raw_cohort, (str, int)) or isinstance(raw_cohort, bool):
+            return error_response(
+                'cohort must be a string',
+                'invalid_type',
+                status=422,
+                details={'field': 'cohort', 'expected': 'string'},
+            )
+        cohort_key = str(raw_cohort).strip()
+        cohort = get_course_cohort_by_key(course, cohort_key)
+        if cohort is None:
+            return error_response(
+                f'Unknown cohort {cohort_key!r} for course {course.slug!r}',
+                'unknown_cohort',
+                status=400,
+                details={'field': 'cohort'},
+            )
+
     emails = _normalize_emails(combined)
     enrolled = []
     already = []
     under_tier = []
     unknown = []
+    cohort_enrollments = []
 
     with transaction.atomic():
         users_by_email = {
@@ -234,16 +289,24 @@ def course_enrollments_collection(request, slug):
                 already.append(email)
             if not can_access(user, course):
                 under_tier.append(email)
+            if cohort is not None:
+                _, cohort_created = assign_cohort_enrollment(user, cohort)
+                cohort_enrollments.append({
+                    'user_email': email,
+                    'cohort': cohort.external_key,
+                    'cohort_name': cohort.name,
+                    'created': cohort_created,
+                })
 
-    return JsonResponse(
-        {
-            'enrolled': len(enrolled),
-            'already_enrolled': len(already),
-            'under_tier': under_tier,
-            'unknown_emails': unknown,
-        },
-        status=200,
-    )
+    body = {
+        'enrolled': len(enrolled),
+        'already_enrolled': len(already),
+        'under_tier': under_tier,
+        'unknown_emails': unknown,
+    }
+    if cohort is not None:
+        body['cohort_enrollments'] = cohort_enrollments
+    return JsonResponse(body, status=200)
 
 
 @token_required

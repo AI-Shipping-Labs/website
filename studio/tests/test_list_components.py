@@ -543,6 +543,9 @@ class StudioListRowActionPillStyleTest(TestCase):
                 # Book Club chapter row "Save" button (POST mutation) — #1362.
                 "templates/studio/books/detail.html:"
                 "studio_action_class 'primary'",
+                # Course enrollment row "Change cohort" button (POST mutation).
+                "templates/studio/courses/enrollments_list.html:"
+                "studio_action_class 'primary'",
                 "templates/studio/events/form.html:"
                 "studio_action_class 'primary'",
                 "templates/studio/questionnaires/response_queue.html:"

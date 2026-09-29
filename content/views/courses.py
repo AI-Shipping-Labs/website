@@ -50,10 +50,11 @@ from content.services.course_navigation import (
 from content.services.course_schedule import (
     build_deadline_context,
     cohort_projects,
+    pickable_cohorts,
     schedule_timezone_name,
     select_display_cohort,
 )
-from content.services.current_module import build_current_module
+from content.services.current_module import build_current_module, build_due_next
 from content.services.enrollment import (
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
@@ -552,6 +553,10 @@ def course_home(request, slug, section='home'):
     # Generic project rows remain useful as a course-work preview, but their
     # stored dates must not read as this learner's deadlines.
     context['show_deadline_dates'] = bool(cohort and cohort.mode == 'cohort')
+    context.update(build_due_next(
+        course, request.user, cohort, commitments,
+        cohort_query=context['cohort_query'], now=timezone.now(),
+    ))
     context.update(build_current_module(
         course, request.user, cohort, context, commitments,
         completed_ids=set(UserCourseProgress.objects.filter(
@@ -560,7 +565,11 @@ def course_home(request, slug, section='home'):
         ).values_list('unit_id', flat=True)),
         cohort_query=context['cohort_query'],
         today=timezone.localdate(),
+        due_next_keys=context['due_next']['keys'] if context['due_next'] else frozenset(),
     ))
+    context['pickable_cohorts'] = (
+        [] if cohort is not None else pickable_cohorts(course)
+    )
     ordered_units = course_unit_service.get_all_units_ordered(course)
     checklist_items = []
 
@@ -1514,21 +1523,28 @@ def api_cohort_enroll(request, slug, cohort_id):
             status=400,
         )
 
-    # Issue #1658: entitlement-mode courses are never self-enroll — this
-    # applies unconditionally, including to staff and users who already
-    # hold CourseAccess. Cohort membership for these courses comes only
-    # from staff admin (CohortEnrollmentInline) or the enrollment
-    # integration (#1659), never this student-facing endpoint.
+    # Issue #1658: course access for entitlement-mode (external) courses
+    # comes only from staff or the enrollment integration (#1659). A learner
+    # who already has that access may still pick their dated cohort from
+    # course Home, once: this never grants the course itself.
     if course.access_mode == 'entitlement':
-        return JsonResponse(
-            {
-                'error': (
-                    'This is an external course; enrollment is '
-                    'managed by staff or the enrollment integration.'
-                ),
-            },
-            status=403,
-        )
+        if not can_access(user, course):
+            return JsonResponse(
+                {
+                    'error': (
+                        'This is an external course; enrollment is '
+                        'managed by staff or the enrollment integration.'
+                    ),
+                },
+                status=403,
+            )
+        if CohortEnrollment.objects.filter(
+            user=user, cohort__course=course, cohort__mode='cohort',
+        ).exists():
+            return JsonResponse(
+                {'error': 'You already belong to a cohort of this course.'},
+                status=409,
+            )
 
     # Must have required tier to enroll
     if not can_access(user, course):

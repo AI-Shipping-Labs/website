@@ -102,6 +102,19 @@ def test_learner_uses_current_module_card_and_next_session(django_server, browse
     )
     expect(next_session.get_by_role('link', name='Open session')).to_be_visible()
     expect(page.get_by_role('navigation', name='Course help and links')).to_have_count(0)
+    # Design system: the primary action follows the progress in one vertical
+    # order, never pinned beside it in a shared flex row, even at desktop width.
+    layout = card.evaluate("""card => {
+        const progress = card.querySelector('[data-testid="course-home-module-progress-block"]');
+        const action = card.querySelector('[data-testid="course-home-primary-action"]');
+        const row = action.parentElement;
+        return {
+            follows: Boolean(progress.compareDocumentPosition(action) & Node.DOCUMENT_POSITION_FOLLOWING),
+            sharesFlexRow: row.contains(progress) && getComputedStyle(row).display.includes('flex'),
+            below: action.getBoundingClientRect().top >= progress.getBoundingClientRect().bottom,
+        };
+    }""")
+    assert layout == {'follows': True, 'sharesFlexRow': False, 'below': True}
 
     page.set_viewport_size({'width': 390, 'height': 844})
     assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')

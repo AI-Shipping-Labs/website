@@ -105,15 +105,16 @@ class CourseCommitmentsTests(TestCase):
         first_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=first')
         self.assertContains(first_sessions, f'href="{event_one.get_absolute_url()}"')
         self.assertNotContains(first_sessions, 'second-session')
+        # Due this week, so Home lists it under "Due next" (not the card).
         self.assertIn(
             'First cohort homework',
-            [row['title'] for row in first.context['current_module']['deliverables']],
+            [row['title'] for row in first.context['due_next']['rows']],
         )
         self.assertIn(
             'First cohort project',
             [row['title'] for row in first.context['open_assignments']],
         )
-        self.assertContains(first, 'data-testid="course-home-deliverables"')
+        self.assertContains(first, 'data-testid="course-home-due-next"')
         self.assertContains(
             self.client.get('/courses/commitment-course/home/projects?cohort=first'),
             'First cohort project',
@@ -128,7 +129,7 @@ class CourseCommitmentsTests(TestCase):
         self.assertNotContains(second_sessions, f'href="{event_one.get_absolute_url()}"')
         self.assertIn(
             'Second cohort homework',
-            [row['title'] for row in second.context['current_module']['deliverables']],
+            [row['title'] for row in second.context['due_next']['rows']],
         )
         self.assertIn(
             'Second cohort project',

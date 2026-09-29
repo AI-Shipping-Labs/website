@@ -233,7 +233,10 @@ class CourseHomeTests(TestCase):
         self.client.force_login(self.user)
         response = self.client.get('/courses/ai-buildcamp/home')
         self.assertIsNone(response.context['cohort'])
-        self.assertNotContains(response, 'Public preview')
+        # Not shown as the learner's cohort; only offered in the picker.
+        self.assertNotContains(response, 'data-testid="course-home-cohort"')
+        self.assertContains(response, 'data-testid="course-home-cohort-picker"')
+        self.assertFalse(CohortEnrollment.objects.filter(user=self.user).exists())
 
     def test_unlinked_buildcamp_learner_gets_foundations_and_work_without_cohort_data(self):
         course = Course.objects.create(
@@ -286,9 +289,14 @@ class CourseHomeTests(TestCase):
             response, 'href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access"',
         )
         self.assertContains(response, 'data-testid="course-home-checklist"')
-        self.assertContains(response, 'data-testid="course-home-undated-work"')
+        self.assertEqual(
+            [row['title'] for row in response.context['current_module']['deliverables']],
+            ['Foundations project step'],
+        )
         self.assertEqual(response.context['live_session_schedule'], [])
-        self.assertNotContains(response, cohort.name)
+        # The cohort is offered in the picker, never adopted as the learner's.
+        self.assertNotContains(response, 'data-testid="course-home-cohort"')
+        self.assertContains(response, f'data-cohort-key="{cohort.external_key}"')
         self.assertNotContains(response, event.title)
         self.assertFalse(CohortEnrollment.objects.filter(user=self.user, cohort=cohort).exists())
 

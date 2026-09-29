@@ -1,0 +1,64 @@
+{% load accounts_extras %}
+{% comment %}
+No linked cohort: the first thing on course Home, because without a cohort
+there are no deadlines or live sessions. A learner with course access picks
+their cohort (content.services.course_schedule.pickable_cohorts), which posts
+to api_cohort_enroll and reloads Home into that cohort.
+{% endcomment %}
+<section class="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="course-home-no-cohort-heading" data-testid="course-home-no-cohort">
+  <h2 id="course-home-no-cohort-heading" class="text-base font-semibold text-foreground">No cohort is linked to your account</h2>
+  <p class="mt-1 text-sm text-muted-foreground">Choose your cohort to see its deadlines and live sessions.</p>
+  {% if pickable_cohorts %}
+  <form class="mt-3" data-testid="course-home-cohort-picker" data-cohort-picker data-home-url="{% url 'course_home' slug=course.slug %}">
+    {% csrf_token %}
+    <fieldset>
+      <legend class="sr-only">Your cohort</legend>
+      <div class="divide-y divide-border border-y border-border">
+        {% for option in pickable_cohorts %}
+        <label class="flex min-h-[44px] cursor-pointer items-center gap-3 py-2 text-sm text-foreground">
+          <input type="radio" name="cohort" value="{% url 'api_cohort_enroll' slug=course.slug cohort_id=option.pk %}" data-cohort-key="{{ option.external_key }}" class="h-4 w-4 accent-accent"{% if forloop.first %} checked{% endif %}>
+          <span class="font-medium">{{ option.name }}</span>
+          {% if option.start_date and option.end_date %}<span class="text-muted-foreground"><time datetime="{{ option.start_date|form_date_value }}">{{ option.start_date|member_short_date }}</time>–<time datetime="{{ option.end_date|form_date_value }}">{{ option.end_date|member_short_date }}</time></span>{% endif %}
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <p class="mt-2 hidden text-sm text-red-600 dark:text-red-400" role="alert" data-cohort-picker-error></p>
+    <button type="submit" class="{% button_classes 'primary' size='md' extra='mt-3 w-full justify-center sm:w-auto' %}" data-testid="course-home-cohort-picker-submit">Join cohort</button>
+  </form>
+  {% endif %}
+  <a href="mailto:team@aishippinglabs.com?subject=Course%20cohort%20access" class="mt-2 inline-flex min-h-[44px] items-center text-sm font-medium text-accent underline decoration-accent/40 underline-offset-4 hover:decoration-accent" data-testid="course-home-cohort-support">Contact course support</a>
+</section>
+{% if pickable_cohorts %}
+<script>
+  (function() {
+    var form = document.querySelector('[data-cohort-picker]');
+    if (!form) return;
+    var error = form.querySelector('[data-cohort-picker-error]');
+    form.addEventListener('submit', function(event) {
+      event.preventDefault();
+      var choice = form.querySelector('input[name="cohort"]:checked');
+      if (!choice) return;
+      var button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      error.classList.add('hidden');
+      fetch(choice.value, {
+        method: 'POST',
+        headers: {'X-CSRFToken': form.querySelector('[name="csrfmiddlewaretoken"]').value},
+        credentials: 'same-origin',
+      }).then(function(response) {
+        return response.json().then(function(data) {
+          if (!response.ok) throw new Error(data.error || 'We could not join that cohort.');
+        });
+      }).then(function() {
+        var key = choice.getAttribute('data-cohort-key');
+        window.location.href = form.getAttribute('data-home-url') + (key ? '?cohort=' + encodeURIComponent(key) : '');
+      }).catch(function(problem) {
+        button.disabled = false;
+        error.textContent = problem.message;
+        error.classList.remove('hidden');
+      });
+    });
+  })();
+</script>
+{% endif %}

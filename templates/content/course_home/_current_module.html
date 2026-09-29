@@ -1,53 +1,43 @@
 {% load accounts_extras %}
+{% comment %}
+Current module card: one vertical reading order at every width (design
+system: progress and actions are never pinned opposite the title). Eyebrow,
+title, progress bar, counts, the primary action below them, then the module's
+deliverables and its live session.
+{% endcomment %}
 {% with card=current_module progress=current_module.progress %}
 <section class="rounded-lg border border-border bg-card p-4 sm:p-5" aria-labelledby="course-current-module-heading" data-testid="course-home-current-module">
-  <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="course-home-current-module-eyebrow">Current module{% if card.week_label %} · {{ card.week_label }}{% endif %}{% if card.week_range %} · {{ card.week_range }}{% endif %}</p>
-  <h2 id="course-current-module-heading" class="mt-1 break-words text-lg font-semibold text-foreground"><a href="{{ card.url }}" class="-my-2 block py-2 hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-current-module-link">{{ card.module.title }}</a></h2>
-  <div class="mt-3 flex flex-col gap-3 sm:flex-row sm:gap-4 sm:items-center sm:justify-between">
-    {% if progress.total %}
-    <div class="min-w-0 flex-1">
-      <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Module progress" aria-valuemin="0" aria-valuemax="{{ progress.total }}" aria-valuenow="{{ progress.done }}">
-        <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ progress.percent }}%"></div>
-      </div>
-      <p class="mt-2 text-sm text-foreground"><span data-testid="course-home-module-progress">{{ progress.done }} of {{ progress.total }} done</span> <span class="text-muted-foreground" aria-hidden="true">·</span> <span class="text-muted-foreground" data-testid="course-home-module-progress-breakdown">{% if progress.lessons_total %}{{ progress.lessons_done }} of {{ progress.lessons_total }} lesson{{ progress.lessons_total|pluralize }}{% endif %}{% if progress.questions_total %}{% if progress.lessons_total %} · {% endif %}{{ progress.questions_done }} of {{ progress.questions_total }} homework question{{ progress.questions_total|pluralize }}{% endif %}{% if progress.projects_total %}{% if progress.lessons_total or progress.questions_total %} · {% endif %}{{ progress.projects_done }} of {{ progress.projects_total }} project{% endif %}</span></p>
+  <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground" data-testid="course-home-current-module-eyebrow">{{ card.eyebrow }}{% if card.week_label %} · {{ card.week_label }}{% endif %}{% if card.week_range %} · {{ card.week_range }}{% endif %}</p>
+  <h2 id="course-current-module-heading" class="mt-1 break-words text-lg font-semibold text-foreground"><a href="{{ card.url }}" class="hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-current-module-link">{{ card.module.title }}</a></h2>
+  {% if progress.total %}
+  <div class="mt-3" data-testid="course-home-module-progress-block">
+    <div class="h-2.5 w-full rounded-full bg-muted" role="progressbar" aria-label="Module progress" aria-valuemin="0" aria-valuemax="{{ progress.total }}" aria-valuenow="{{ progress.done }}">
+      <div class="h-2.5 rounded-full bg-accent transition-all" style="width: {{ progress.percent }}%"></div>
     </div>
-    {% endif %}
-    {% if card.action %}<a href="{{ card.action.url }}" class="{% button_classes 'primary' size='md' extra='w-full shrink-0 justify-center sm:w-auto' %}" data-testid="course-home-primary-action">{{ card.action.label }}</a>{% endif %}
+    <p class="mt-2 text-sm text-foreground"><span data-testid="course-home-module-progress">{{ progress.done }} of {{ progress.total }} done</span> <span class="text-muted-foreground" aria-hidden="true">·</span> <span class="text-muted-foreground" data-testid="course-home-module-progress-breakdown">{% if progress.lessons_total %}{{ progress.lessons_done }} of {{ progress.lessons_total }} lesson{{ progress.lessons_total|pluralize }}{% endif %}{% if progress.questions_total %}{% if progress.lessons_total %} · {% endif %}{{ progress.questions_done }} of {{ progress.questions_total }} homework question{{ progress.questions_total|pluralize }}{% endif %}{% if progress.projects_total %}{% if progress.lessons_total or progress.questions_total %} · {% endif %}{{ progress.projects_done }} of {{ progress.projects_total }} project{% endif %}</span></p>
   </div>
-  {% if card.deliverables or card.undated_work %}
+  {% endif %}
+  {% if card.action %}<a href="{{ card.action.url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="course-home-primary-action">{{ card.action.label }}</a>{% endif %}
+  {% if card.deliverables %}
   <div class="mt-4 border-t border-border pt-3" data-testid="course-home-deliverables">
     <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Deliverables</h3>
-    {% if card.deliverables %}
-    <ol class="mt-1 divide-y divide-border">
+    <ol class="divide-y divide-border">
       {% for item in card.deliverables %}
-      {% if cohort %}
-      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=False %}
-      {% else %}
-      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=True deadline_preview=True %}
-      {% endif %}
+      {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
       {% endfor %}
     </ol>
-    {% endif %}
-    {% if card.undated_work %}
-    <ul class="mt-1 divide-y divide-border" data-testid="course-home-undated-work">
-      {% for work in card.undated_work %}
-      <li class="flex items-center justify-between gap-3 py-1">
-        <span class="min-w-0 break-words text-sm font-semibold text-foreground">{{ work.unit.title }}</span>
-        {% if work.url %}{% with action_words=work.action.split %}<a href="{{ work.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"><span>{{ action_words.0 }}</span>{% if action_words|length > 1 %} <span class="sr-only sm:not-sr-only">{{ action_words|slice:"1:"|join:" " }}</span>{% endif %}<i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endwith %}{% endif %}
-      </li>
-      {% endfor %}
-    </ul>
-    {% endif %}
+    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-homework">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   </div>
   {% endif %}
   {% if card.sessions %}
   <div class="mt-4 border-t border-border pt-3" data-testid="course-home-module-sessions">
     <h3 class="text-xs font-medium uppercase tracking-wide text-muted-foreground">Live session{{ card.sessions|length|pluralize }}</h3>
-    <ol class="mt-1 divide-y divide-border">
+    <ol class="divide-y divide-border">
       {% for session in card.sessions %}
       {% include "content/course_home/_session_row.html" with session=session %}
       {% endfor %}
     </ol>
+    <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="course-home-see-all-sessions">See all live sessions <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   </div>
   {% endif %}
 </section>

@@ -66,6 +66,25 @@ def select_display_cohort(course, user, requested_key=''):
     return None, False
 
 
+def pickable_cohorts(course, *, today=None):
+    """Dated cohorts a learner with course access may join from course Home.
+
+    Current and upcoming cohorts, earliest first. Past cohorts are offered
+    (latest first) only when nothing is current or upcoming.
+    """
+    today = today or timezone.localdate()
+    active = list(Cohort.objects.filter(
+        course=course, mode='cohort', is_active=True,
+    ).order_by('start_date', 'pk'))
+    open_cohorts = [
+        cohort for cohort in active
+        if cohort.end_date is None or cohort.end_date >= today
+    ]
+    if open_cohorts:
+        return open_cohorts
+    return sorted(active, key=lambda cohort: (cohort.start_date, cohort.pk), reverse=True)
+
+
 def schedule_timezone_name(course, user):
     """Use the learner's timezone, or the Buildcamp's Berlin schedule zone."""
     preferred = getattr(user, 'preferred_timezone', '') if user.is_authenticated else ''

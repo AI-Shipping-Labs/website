@@ -5,7 +5,9 @@
       <h4 class="break-words text-sm font-semibold text-foreground" data-testid="course-home-live-session-title">{{ session.display_title }}</h4>
       {% if session.status %}{% member_label_badge session.status tone=session.status_tone size="xs" testid="course-home-live-session-status" %}{% endif %}
     </div>
-    {% if session.position_label or session.when or session.status == 'Past' and not session.actions %}
+    {% if session.date_to_be_announced %}
+    <p class="mt-0.5 text-xs text-muted-foreground" data-testid="course-home-live-session-tba">{% if session.position_label %}{{ session.position_label }} · {% endif %}Date to be announced</p>
+    {% elif session.position_label or session.when or session.status == 'Past' and not session.actions %}
     <p class="mt-0.5 text-xs text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}" data-testid="course-home-live-session-time">{{ session.when_short_label|default:session.when_label_without_timezone }}</time>{% endif %}{% if session.status == 'Past' and not session.actions %}{% if session.when or session.position_label %} · {% endif %}No recap yet{% endif %}</p>
     {% endif %}
   </div>

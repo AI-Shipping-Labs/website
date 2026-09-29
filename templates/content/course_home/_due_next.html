@@ -1,0 +1,13 @@
+{% comment %}
+"Due next": the nearest open homework and project deliverables from any
+module (content/services/current_module.py build_due_next). A plain section
+heading, then one card of rows naming each deliverable's kind and module.
+{% endcomment %}
+<section aria-labelledby="course-home-due-next-heading" data-testid="course-home-due-next">
+  <h2 id="course-home-due-next-heading" class="text-lg font-semibold text-foreground">{{ due_next.title }}</h2>
+  <ol class="mt-2 divide-y divide-border rounded-lg border border-border bg-card px-4 sm:px-5">
+    {% for item in due_next.rows %}
+    {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
+    {% endfor %}
+  </ol>
+</section>

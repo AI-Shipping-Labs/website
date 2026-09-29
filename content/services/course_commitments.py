@@ -43,11 +43,11 @@ from events.services.display_time import (
 
 
 def _short_when_label(when, timezone_name):
-    """Compact ``Oct 6, 01:59`` label for one-line course Home rows."""
+    """Compact ``Mon Oct 6, 01:59`` label for one-line course Home rows."""
     if not is_valid_timezone(timezone_name):
         timezone_name = DEFAULT_EVENT_DISPLAY_TIMEZONE
     local = when.astimezone(ZoneInfo(timezone_name))
-    return f'{local:%b} {local.day}, {local:%H:%M}'
+    return f'{local:%a %b} {local.day}, {local:%H:%M}'
 
 
 def _session_position_label(title, position):
@@ -341,6 +341,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
                 ),
             )
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
+        row['module_title'] = row['project_group_title'] if project.module_id else ''
         row['project_id'] = project.pk
         rows.append(row)
 

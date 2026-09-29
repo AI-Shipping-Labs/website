@@ -24,7 +24,7 @@ from content.services.current_module import module_progress
 from events.models import Event, EventSeries
 
 
-class CurrentModuleHomeTests(TestCase):
+class CurrentModuleFixture(TestCase):
     """A dated cohort in its second week: ``second`` is the current module."""
 
     @classmethod
@@ -135,13 +135,19 @@ class CurrentModuleHomeTests(TestCase):
             user=self.user, completed_at__isnull=False,
         ).values_list('unit_id', flat=True))
 
-    def test_home_order_is_search_card_next_session_checklist_without_help_links(self):
+
+
+class CurrentModuleHomeTests(CurrentModuleFixture):
+    """The enrolled learner's Home."""
+
+    def test_home_order_is_search_card_due_next_next_session_checklist_without_help_links(self):
         self._session(3, days=6, title='Session three event')
         response = self._home()
         html = response.content.decode()
         positions = [
             html.index('id="course-home-syllabus-search"'),
             html.index('data-testid="course-home-current-module"'),
+            html.index('data-testid="course-home-due-next"'),
             html.index('data-testid="course-home-next-session"'),
             html.index('data-testid="course-home-checklist"'),
         ]
@@ -150,12 +156,15 @@ class CurrentModuleHomeTests(TestCase):
         self.assertNotContains(response, 'Need help?')
         self.assertNotContains(response, 'data-testid="course-home-focus"')
         self.assertNotContains(response, 'data-testid="course-home-deadlines"')
+        # A linked cohort needs no picker.
+        self.assertNotContains(response, 'data-testid="course-home-no-cohort"')
 
     def test_card_names_the_cohort_week_and_links_the_module_home(self):
         response = self._home()
         card = response.context['current_module']
         self.assertEqual(card['module'], self.second)
         self.assertEqual(card['week_label'], 'Week 2')
+        self.assertEqual(card['eyebrow'], 'Current module')
         self.assertContains(
             response,
             f'href="/courses/{self.course.slug}/retrieval?cohort=4"',
@@ -163,11 +172,73 @@ class CurrentModuleHomeTests(TestCase):
         self.assertNotContains(response, 'data-testid="course-home-earlier-unfinished"')
         self.assertNotContains(response, 'unfinished lesson')
 
+    def _due_in(self, homework, days):
+        homework.due_date = timezone.now() + datetime.timedelta(days=days)
+        homework.save(update_fields=['due_date'])
+
     def test_deliverables_are_scoped_to_the_current_module(self):
+        # Neither is due soon, so "Due next" falls forward to the earlier
+        # homework's week and the card keeps only its own module's work.
+        self._due_in(self.homework, 40)
+        self._due_in(self.earlier_homework, 20)
         response = self._home()
-        titles = [row['title'] for row in response.context['current_module']['deliverables']]
-        self.assertEqual(titles, ['Retrieval homework'])
-        self.assertNotContains(response, 'Earlier homework</h4>')
+        rows = response.context['current_module']['deliverables']
+        self.assertEqual([row['title'] for row in rows], ['Retrieval homework'])
+        # Kind, due date, question count and status on every row.
+        self.assertEqual(rows[0]['question_label'], '3 questions')
+        self.assertEqual(rows[0]['status'], 'Not started')
+        self.assertEqual(rows[0]['action'], 'Start homework')
+
+    def test_due_next_lists_this_weeks_work_from_another_module(self):
+        self._due_in(self.homework, 40)
+        # The Foundations homework is due within minutes, so it is this week's.
+        self.earlier_homework.due_date = timezone.now() + datetime.timedelta(minutes=5)
+        self.earlier_homework.save(update_fields=['due_date'])
+        response = self._home()
+        due_next = response.context['due_next']
+        self.assertEqual(due_next['title'], 'Due this week')
+        self.assertEqual(
+            [(row['title'], row['module_title']) for row in due_next['rows']],
+            [('Earlier homework', 'Foundations')],
+        )
+        self.assertContains(
+            response,
+            'id="course-home-due-next-heading" class="text-lg font-semibold text-foreground">'
+            'Due this week</h2>',
+        )
+
+    def test_due_next_falls_forward_to_the_next_week_with_every_item(self):
+        from zoneinfo import ZoneInfo
+        zone = ZoneInfo(self._home().context['commitment_timezone'])
+        today = timezone.now().astimezone(zone).date()
+        monday = today - datetime.timedelta(days=today.weekday()) + datetime.timedelta(weeks=3)
+        for homework, day in ((self.earlier_homework, monday),
+                              (self.homework, monday + datetime.timedelta(days=2))):
+            homework.due_date = datetime.datetime.combine(
+                day, datetime.time(12), tzinfo=zone,
+            )
+            homework.save(update_fields=['due_date'])
+        due_next = self._home().context['due_next']
+        self.assertEqual(due_next['title'], f'Due next · week of {monday:%b} {monday.day}')
+        self.assertEqual(
+            [row['title'] for row in due_next['rows']],
+            ['Earlier homework', 'Retrieval homework'],
+        )
+
+    def test_due_next_excludes_submitted_work_and_the_card_does_not_repeat_it(self):
+        self._due_in(self.homework, 1)
+        self._due_in(self.earlier_homework, 2)
+        Submission.objects.create(
+            homework=self.earlier_homework, student=self.user, enrollment=self.enrollment,
+        )
+        response = self._home()
+        self.assertEqual(
+            [row['title'] for row in response.context['due_next']['rows']],
+            ['Retrieval homework'],
+        )
+        # Shown under "Due next", so the card does not list it again.
+        self.assertEqual(response.context['current_module']['deliverables'], [])
+        self.assertContains(response, 'Retrieval homework</h4>', count=1)
 
     def test_progress_counts_units_and_each_homework_question_but_not_optional_or_sessions(self):
         self._complete(self.lesson_a, self.optional_lesson, self.session_two_unit)
@@ -195,6 +266,27 @@ class CurrentModuleHomeTests(TestCase):
         )
         progress = module_progress(self.second, self.user, self.cohort, self._completed_ids())
         self.assertEqual((progress['questions_done'], progress['questions_total']), (3, 3))
+
+    def test_continue_lesson_never_targets_a_session_unit(self):
+        # A session authored before the lessons must not become the target.
+        Unit.objects.create(
+            module=self.second, title='Kickoff session', slug='kickoff', kind='event',
+            sort_order=0, session_position=9,
+        )
+        action = self._home().context['current_module']['action']
+        self.assertEqual(action['label'], 'Continue lesson')
+        self.assertEqual(action['url'], f'{self.lesson_a.get_absolute_url()}?cohort=4')
+
+    def test_unscheduled_session_says_date_to_be_announced_without_a_link(self):
+        response = self._home()
+        sessions = response.context['current_module']['sessions']
+        self.assertEqual(len(sessions), 1)
+        self.assertTrue(sessions[0]['date_to_be_announced'])
+        self.assertEqual(sessions[0]['actions'], [])
+        self.assertContains(response, 'data-testid="course-home-live-session-tba"')
+        self.assertContains(response, 'Date to be announced')
+        self.assertNotContains(response, 'Not scheduled')
+        self.assertNotContains(response, 'Open session')
 
     def test_button_continues_lesson_then_open_homework_then_next_module(self):
         response = self._home()
@@ -255,18 +347,18 @@ class CurrentModuleHomeTests(TestCase):
         )
         self.assertContains(response, 'We review questions from the week.')
 
-    def test_next_session_block_is_omitted_when_it_is_the_cards_own_session(self):
+    def test_next_session_block_shows_the_cohorts_next_session_even_in_this_module(self):
         self._session(2, days=2, title='Session two event')
         self._session(3, days=9, title='Session three event')
         response = self._home()
-        self.assertIsNone(response.context['home_next_session'])
-        self.assertNotContains(response, 'data-testid="course-home-next-session"')
+        self.assertEqual(response.context['home_next_session']['display_title'], 'Session 2')
+        self.assertContains(response, 'data-testid="course-home-next-session"')
         sessions = response.context['current_module']['sessions']
         self.assertEqual(
             [action['label'] for action in sessions[0]['actions']], ['Open session'],
         )
 
-    def test_homework_tab_rows_drop_the_kind_label_and_default_not_submitted_badge(self):
+    def test_homework_tab_rows_name_the_module_with_due_date_and_status(self):
         self.client.force_login(self.user)
         response = self.client.get(f'/courses/{self.course.slug}/home/homework?cohort=4')
 
@@ -276,9 +368,14 @@ class CurrentModuleHomeTests(TestCase):
         )
         self.assertEqual({row['status'] for row in rows}, {'Not submitted'})
         self.assertContains(response, 'data-testid="course-home-deadline-row"', count=2)
-        # The tab already says Homework; each row must not repeat it.
+        # The tab already says Homework; each row names its module instead.
         self.assertNotContains(response, 'data-testid="course-home-deadline-kind"')
-        self.assertNotContains(response, 'Not submitted')
+        self.assertContains(
+            response,
+            'data-testid="course-home-deadline-module">Retrieval in practice</span>',
+        )
+        # Due date and status share the meta line.
+        self.assertContains(response, 'data-testid="course-home-deadline-status"', count=2)
         self.assertContains(
             response, '<h2 id="course-homework-heading" class="sr-only">Homework</h2>',
             html=True,
@@ -323,6 +420,77 @@ class CurrentModuleHomeTests(TestCase):
         self.assertNotContains(projects, 'data-testid="course-home-deadline-row"')
         self.assertNotContains(projects, 'Preview attempt')
         self.assertContains(homework, 'data-testid="course-home-homework-no-cohort"')
+
+
+class NoCohortHomeTests(CurrentModuleFixture):
+    """A learner with course access but no cohort, on the same course."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.learner = User.objects.create_user(
+            email='no-cohort-home@example.com', email_verified=True,
+        )
+
+    def _home(self):
+        self.client.force_login(self.learner)
+        return self.client.get(f'/courses/{self.course.slug}/home')
+
+    def test_cohort_picker_comes_first_and_next_session_is_left_to_it(self):
+        start = timezone.now() + datetime.timedelta(days=3)
+        Event.objects.create(
+            event_series=self.series, slug='no-cohort-session', title='Session 2',
+            status='upcoming', start_datetime=start,
+            end_datetime=start + datetime.timedelta(hours=1), series_position=2,
+        )
+        response = self._home()
+        html = response.content.decode()
+        self.assertLess(
+            html.index('data-testid="course-home-no-cohort"'),
+            html.index('id="course-home-syllabus-search"'),
+        )
+        self.assertEqual(
+            [cohort.name for cohort in response.context['pickable_cohorts']], ['Cohort 4'],
+        )
+        self.assertContains(response, 'data-testid="course-home-cohort-picker"')
+        self.assertContains(response, 'data-testid="course-home-cohort-support"')
+        # No cohort: no dated "Due next" and no next-session block.
+        self.assertIsNone(response.context['due_next'])
+        self.assertIsNone(response.context['home_next_session'])
+        self.assertNotContains(response, 'data-testid="course-home-next-session"')
+
+    def test_card_says_your_next_module_and_rows_carry_counts_status_and_action(self):
+        response = self._home()
+        card = response.context['current_module']
+        self.assertEqual(card['eyebrow'], 'Your next module')
+        self.assertContains(
+            response, 'data-testid="course-home-current-module-eyebrow">Your next module',
+        )
+        rows = {row['title']: row for row in card['deliverables']}
+        row = rows['Earlier homework'] if card['module'] == self.first else rows['Retrieval homework']
+        self.assertEqual(row['status'], 'Not started')
+        self.assertEqual(row['action'], 'Start homework')
+        self.assertIsNone(row['when'])
+
+    def test_choosing_a_cohort_links_it_and_home_shows_its_sessions(self):
+        start = timezone.now() + datetime.timedelta(days=3)
+        Event.objects.create(
+            event_series=self.series, slug='picked-cohort-session', title='Session 2',
+            status='upcoming', start_datetime=start,
+            end_datetime=start + datetime.timedelta(hours=1), series_position=2,
+        )
+        self.client.force_login(self.learner)
+        response = self.client.post(
+            f'/api/courses/{self.course.slug}/cohorts/{self.cohort.pk}/enroll',
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            CohortEnrollment.objects.filter(user=self.learner, cohort=self.cohort).exists()
+        )
+        home = self.client.get(f'/courses/{self.course.slug}/home?cohort=4')
+        self.assertEqual(home.context['cohort'], self.cohort)
+        self.assertNotContains(home, 'data-testid="course-home-no-cohort"')
+        self.assertEqual(home.context['home_next_session']['display_title'], 'Session 2')
 
 
 class CohortProjectScopingTests(TestCase):

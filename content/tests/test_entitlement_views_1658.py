@@ -256,7 +256,11 @@ class CourseDetailEntitlementCohortTest(TierSetupMixin, TestCase):
 
 @tag('core')
 class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
-    """POST /api/courses/{slug}/cohorts/{id}/enroll|unenroll — 403 for entitlement courses."""
+    """POST /api/courses/{slug}/cohorts/{id}/enroll|unenroll on entitlement courses.
+
+    Only learners who already have course access may choose a cohort, and
+    only once; nobody can leave through this endpoint.
+    """
 
     @classmethod
     def setUpTestData(cls):
@@ -293,8 +297,8 @@ class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
             CohortEnrollment.objects.filter(cohort=self.cohort, user=user).exists()
         )
 
-    def test_enroll_refused_for_entitled_user(self):
-        """Even a user who already holds CourseAccess cannot self-enroll."""
+    def test_entitled_user_picks_one_cohort(self):
+        """A user who already holds CourseAccess may choose their cohort once."""
         user = User.objects.create_user(email='entitled-api@test.com', password='testpass')
         set_membership(user, tier=self.free_tier)
         CourseAccess.objects.create(user=user, course=self.course, access_type='granted')
@@ -302,17 +306,23 @@ class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
 
         response = self.client.post(self._enroll_url())
 
-        self.assertEqual(response.status_code, 403)
-
-    def test_enroll_refused_for_staff(self):
-        User.objects.create_user(
-            email='staff-api@test.com', password='testpass', is_staff=True,
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            CohortEnrollment.objects.filter(cohort=self.cohort, user=user).exists()
         )
-        self.client.login(email='staff-api@test.com', password='testpass')
-
-        response = self.client.post(self._enroll_url())
-
-        self.assertEqual(response.status_code, 403)
+        other = Cohort.objects.create(
+            course=self.course, name='Cohort 5',
+            start_date=datetime.date(2027, 1, 11),
+            end_date=datetime.date(2027, 3, 1),
+            is_active=True,
+        )
+        second = self.client.post(
+            f'/api/courses/{self.course.slug}/cohorts/{other.pk}/enroll',
+        )
+        self.assertEqual(second.status_code, 409)
+        self.assertFalse(
+            CohortEnrollment.objects.filter(cohort=other, user=user).exists()
+        )
 
     def test_unenroll_refused_for_entitled_user(self):
         user = User.objects.create_user(email='unenroll-api@test.com', password='testpass')

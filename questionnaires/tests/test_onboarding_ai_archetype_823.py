@@ -5,7 +5,7 @@ DURING the conversation (not only repoint at completion), while still
 asking the shared ``COMMON_SPINE``. The mechanism is PROMPT-LEVEL: the
 system prompt instructs the model to commit to one working archetype
 early and prioritise that archetype's deltas, and
-``_render_persona_catalog`` now separates the shared spine from each
+``render_persona_catalog`` separates the shared spine from each
 archetype's deltas so the model can branch on the deltas.
 
 These are the deterministic CI gate: the LLM is mocked at the
@@ -19,6 +19,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+from community_base.questionnaires.persona_catalog import render_persona_catalog
 from django.test import SimpleTestCase, tag
 
 from integrations.services.llm import (
@@ -31,7 +32,6 @@ from questionnaires.onboarding_ai import (
     PersonaInfo,
     PersonaQuestion,
     _build_system_prompt,
-    _render_persona_catalog,
     run_onboarding_turn,
     stream_onboarding_turn,
 )
@@ -150,7 +150,7 @@ class SystemPromptArchetypeCommitTest(SimpleTestCase):
         self.assertIn('shared spine', lowered)
 
     def test_catalog_separates_shared_spine_from_deltas(self):
-        rendered = _render_persona_catalog(FULL_CATALOG)
+        rendered = render_persona_catalog(FULL_CATALOG)
         # The shared spine is rendered once under its own labelled block.
         self.assertIn('Shared spine', rendered)
         self.assertIn(SHARED_PROMPT, rendered)

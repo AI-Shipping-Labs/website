@@ -9,6 +9,8 @@
 
 {% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
 
+{% include "studio/courses/_cohort_series_warnings.html" with show_cohort_names=False %}
+
 <form id="cohort-form" method="post" class="bg-card border border-border rounded-lg p-4 sm:p-6 max-w-xl space-y-4"
       data-testid="cohort-edit-form">
   {% csrf_token %}
@@ -62,15 +64,13 @@
   series (e.g. office hours) surfaced on the course page's live-sessions block.{% endcomment %}
   <div>
     <label class="block text-xs font-medium text-foreground mb-1" for="cohort-event-series">Event series</label>
-    <select id="cohort-event-series" name="event_series_id"
+    <select id="cohort-event-series" name="event_series_id" {% if cohort.mode != 'self_paced' %}required{% endif %}
             class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
             data-testid="cohort-edit-event-series">
-      <option value="">No linked series</option>
-      {% for series in event_series_options %}
-      <option value="{{ series.pk }}" {% if cohort.event_series_id == series.pk %}selected{% endif %}>{{ series.name }}</option>
-      {% endfor %}
+      <option value="">Choose an event series</option>
+      {% include "studio/courses/_event_series_options.html" with selected_series_id=cohort.event_series_id %}
     </select>
-    <p class="text-xs text-muted-foreground mt-1">Members enrolled in this cohort see the series' upcoming and past occurrences on the course page, even when the series is hidden from public discovery.</p>
+    <p class="text-xs text-muted-foreground mt-1">Required for a dated cohort. Each session unit shows the event at its session position in this series, and members see its occurrences on the course page even when the series is hidden from public discovery.</p>
   </div>
   <div class="flex flex-wrap items-center gap-2 pt-2">
     <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
@@ -85,7 +85,8 @@
     var modeSelect = document.getElementById('cohort-mode');
     var datedFields = document.querySelector('[data-testid="cohort-dated-fields"]');
     var capacityField = document.querySelector('[data-testid="cohort-capacity-field"]');
-    if (!modeSelect || !datedFields || !capacityField) return;
+    var seriesSelect = document.getElementById('cohort-event-series');
+    if (!modeSelect || !datedFields || !capacityField || !seriesSelect) return;
     function applyMode() {
       var selfPaced = modeSelect.value === 'self_paced';
       datedFields.querySelectorAll('input').forEach(function (input) {
@@ -96,6 +97,8 @@
         input.disabled = selfPaced;
         if (selfPaced) input.value = '';
       });
+      seriesSelect.disabled = selfPaced;
+      seriesSelect.required = !selfPaced;
     }
     modeSelect.addEventListener('change', applyMode);
     applyMode();

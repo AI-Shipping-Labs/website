@@ -7,8 +7,10 @@ established (``studio/courses/<course_id>/cohorts/...``).
 
 Cohort creation happens from an inline form on the list page (same shape
 as the enrollments list's "Enroll a user" form) so operators don't need a
-separate create page; every field including the new ``event_series`` link
-is editable both at creation time and later from the edit page.
+separate create page; every field including the ``event_series`` link
+is editable both at creation time and later from the edit page. A dated
+cohort must link a series; the list and edit pages show the
+``cohort_series_warnings`` banner when a cohort's link is missing or broken.
 """
 
 import datetime
@@ -19,6 +21,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from content.models import Cohort, Course
+from content.services.course_cohorts import cohort_event_series_options, cohort_series_warnings
 from events.models import EventSeries
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
@@ -45,6 +48,23 @@ def _resolve_event_series(raw_id):
     return EventSeries.objects.filter(pk=series_id).first()
 
 
+SERIES_REQUIRED_MESSAGE = (
+    'Choose an event series: every dated cohort needs one, or its live '
+    'sessions show "Not scheduled".'
+)
+
+
+def _warning_context(rows):
+    """Template context for ``_cohort_series_warnings.html``."""
+    return {
+        'cohort_warning_rows': rows,
+        'cohort_warnings_have_error': any(
+            warning['level'] == 'error'
+            for _cohort, warnings in rows for warning in warnings
+        ),
+    }
+
+
 @staff_required
 def cohort_list(request, course_id):
     """List cohorts for a single course (Studio List Page Baseline)."""
@@ -56,11 +76,19 @@ def cohort_list(request, course_id):
         cohorts = cohorts.filter(name__icontains=search)
 
     pager = studio_pagination_context(request, cohorts)
+    # Banner covers every cohort of the course, not just the current page or
+    # search hits, so a broken cohort is never hidden by pagination.
+    all_cohorts = list(course.aisl_cohorts.order_by('start_date', 'pk'))
+    warnings = cohort_series_warnings(all_cohorts)
     return render(request, 'studio/courses/cohorts_list.html', {
         'course': course,
         'cohorts': pager['page'].object_list,
         'search': search,
-        'event_series_options': EventSeries.objects.order_by('name'),
+        'event_series_options': cohort_event_series_options(),
+        **_warning_context([
+            (cohort, warnings[cohort.pk])
+            for cohort in all_cohorts if warnings[cohort.pk]
+        ]),
         'cohorts_subtitle': (
             f'Manage time-bound cohorts for "{course.title}", including '
             'the office-hours series a cohort links to.'
@@ -72,7 +100,7 @@ def cohort_list(request, course_id):
 @staff_required
 @require_POST
 def cohort_create(request, course_id):
-    """Create a cohort for this course, including an optional series link.
+    """Create a cohort for this course, including its event-series link.
 
     Issue #1674: a ``mode`` selector. ``mode='self_paced'`` hides/ignores
     the date inputs and event series/max participants — ``Cohort.clean()``
@@ -102,6 +130,9 @@ def cohort_create(request, course_id):
     if not name:
         messages.error(request, 'Name is required.')
         return redirect('studio_course_cohort_list', course_id=course.pk)
+    if cohort.mode == 'cohort' and cohort.event_series is None:
+        messages.error(request, SERIES_REQUIRED_MESSAGE)
+        return redirect('studio_course_cohort_list', course_id=course.pk)
 
     try:
         cohort.full_clean()
@@ -116,7 +147,11 @@ def cohort_create(request, course_id):
 
 @staff_required
 def cohort_edit(request, course_id, cohort_id):
-    """Edit an existing cohort, including setting/clearing the series link."""
+    """Edit an existing cohort, including relinking its event series.
+
+    A dated cohort must keep a linked series (its session units resolve
+    their events through it); a self-paced cohort never has one.
+    """
     course = get_object_or_404(Course, pk=course_id)
     cohort = get_object_or_404(Cohort, pk=cohort_id, course=course)
 
@@ -157,6 +192,12 @@ def cohort_edit(request, course_id, cohort_id):
             cohort.event_series = _resolve_event_series(
                 request.POST.get('event_series_id', ''),
             )
+            if cohort.event_series is None:
+                messages.error(request, SERIES_REQUIRED_MESSAGE)
+                return redirect(
+                    'studio_course_cohort_edit',
+                    course_id=course.pk, cohort_id=cohort.pk,
+                )
 
         try:
             cohort.full_clean()
@@ -174,8 +215,10 @@ def cohort_edit(request, course_id, cohort_id):
             course_id=course.pk, cohort_id=cohort.pk,
         )
 
+    warnings = cohort_series_warnings([cohort])[cohort.pk]
     return render(request, 'studio/courses/cohort_form.html', {
         'course': course,
         'cohort': cohort,
-        'event_series_options': EventSeries.objects.order_by('name'),
+        'event_series_options': cohort_event_series_options(),
+        **_warning_context([(cohort, warnings)] if warnings else []),
     })

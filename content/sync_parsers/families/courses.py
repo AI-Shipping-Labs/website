@@ -383,7 +383,7 @@ def _sync_single_course(
             course, course_data, course_dir, repo_dir, rel_path, source,
             commit_sha, stats, known_images, course_ignore_patterns,
         )
-        _sync_course_cohorts(course, course_data, rel_path)
+        _sync_course_cohorts(course, course_data, rel_path, stats)
         _sync_course_projects(course, course_data, rel_path)
 
         # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
@@ -699,7 +699,35 @@ def _sync_course_projects(course, course_data, rel_path):
         CourseProject.objects.update_or_create(course=course, slug=slug, defaults=defaults)
 
 
-def _sync_course_cohorts(course, course_data, rel_path):
+def _resolve_cohort_event_series(entry, key, rel_path):
+    """Return ``(present, series)`` for a ``cohorts:`` entry's ``event_series``.
+
+    ``present`` is False when the key is absent, so sync leaves a
+    Studio-set link untouched. A present key must name an existing
+    ``EventSeries`` slug; an unknown slug fails that course's sync.
+    """
+    if 'event_series' not in entry:
+        return False, None
+    # Model imports stay lazy in this parser module, like ``Cohort`` below.
+    from events.models import EventSeries
+
+    raw = entry['event_series']
+    slug = str(raw).strip() if raw is not None and not isinstance(raw, bool) else ''
+    if not slug:
+        raise GitHubSyncError(
+            f"Invalid cohorts entry '{key}' in {rel_path}: event_series must "
+            'be an event series slug'
+        )
+    series = EventSeries.objects.filter(slug=slug).first()
+    if series is None:
+        raise GitHubSyncError(
+            f"Invalid cohorts entry '{key}' in {rel_path}: unknown "
+            f"event_series '{slug}' (create the series in Studio first)"
+        )
+    return True, series
+
+
+def _sync_course_cohorts(course, course_data, rel_path, stats=None):
     """Upsert ``course.yaml``'s ``cohorts:`` list into ``content.Cohort``.
 
     Issue #1659: each entry is keyed on ``(course, external_key=key)`` — a
@@ -715,6 +743,13 @@ def _sync_course_cohorts(course, course_data, rel_path):
     cohort key if either is present. A second ``mode: self_paced`` entry
     for the same course fails sync too, via ``Cohort.full_clean()``
     surfacing the partial unique constraint as a ``ValidationError``.
+
+    An optional ``event_series: <series slug>`` key links the cohort to the
+    live-session series its session units resolve against. An unknown slug
+    fails the course; an absent key keeps any Studio-set link. A dated
+    cohort still unlinked after sync is recorded as a non-failing
+    info-severity entry (the series may be created later in Studio), so
+    the sync history shows it without blocking stale-content sweeps.
 
     Raises :class:`GitHubSyncError` on a malformed entry so the caller's
     per-course exception handler records it against this course's sync only
@@ -787,6 +822,10 @@ def _sync_course_cohorts(course, course_data, rel_path):
                 'mode': 'cohort',
             }
 
+        has_series, series = _resolve_cohort_event_series(entry, key, rel_path)
+        if has_series:
+            defaults['event_series'] = series
+
         cohort = Cohort.objects.filter(course=course, external_key=key).first()
         if cohort is None:
             cohort = Cohort(course=course, external_key=key, **defaults)
@@ -798,6 +837,7 @@ def _sync_course_cohorts(course, course_data, rel_path):
                     f'{"; ".join(exc.messages)}'
                 ) from exc
             cohort.save()
+            _note_unlinked_dated_cohort(cohort, rel_path, stats)
             continue
 
         changed_fields = [
@@ -815,6 +855,7 @@ def _sync_course_cohorts(course, course_data, rel_path):
                     f'{"; ".join(exc.messages)}'
                 ) from exc
             cohort.save(update_fields=changed_fields)
+        _note_unlinked_dated_cohort(cohort, rel_path, stats)
 
     # Course YAML may omit cohorts entirely when it has no scheduled
     # offering. Give those courses one real, date-free cohort row. Existing
@@ -822,6 +863,21 @@ def _sync_course_cohorts(course, course_data, rel_path):
     from content.services.course_cohorts import ensure_course_self_paced_cohort
 
     ensure_course_self_paced_cohort(course)
+
+
+def _note_unlinked_dated_cohort(cohort, rel_path, stats):
+    """Record a non-failing sync note for a dated cohort with no series."""
+    if cohort.mode != 'cohort' or cohort.event_series_id:
+        return
+    msg = (
+        f"Warning: cohort '{cohort.external_key}' ({cohort.name}) in "
+        f'{rel_path} has no event_series, so its live sessions show "Not '
+        'scheduled". Add event_series: <series slug> to the cohorts entry '
+        'or link a series in Studio.'
+    )
+    logger.warning(msg)
+    if stats is not None:
+        stats['errors'].append({'file': rel_path, 'error': msg, 'severity': 'info'})
 
 
 def _parse_cohort_date(value, *, field_name, rel_path):

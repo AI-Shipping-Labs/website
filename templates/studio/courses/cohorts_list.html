@@ -9,6 +9,8 @@
 
 {% comment %}Messages render once at the top of the studio main content area via studio/base.html (issue #347).{% endcomment %}
 
+{% include "studio/courses/_cohort_series_warnings.html" with show_cohort_names=True %}
+
 <!-- New cohort form -->
 <div class="bg-card border border-border rounded-lg p-4 sm:p-6 mb-8 max-w-xl">
   <h2 class="text-lg font-semibold text-foreground mb-4">New cohort</h2>
@@ -46,15 +48,13 @@
     </div>
     <div>
       <label class="block text-xs font-medium text-foreground mb-1" for="new-cohort-series">Event series</label>
-      <select id="new-cohort-series" name="event_series_id"
+      <select id="new-cohort-series" name="event_series_id" required
               class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
               data-testid="cohort-create-event-series">
-        <option value="">No linked series</option>
-        {% for series in event_series_options %}
-        <option value="{{ series.pk }}">{{ series.name }}</option>
-        {% endfor %}
+        <option value="">Choose an event series</option>
+        {% include "studio/courses/_event_series_options.html" with selected_series_id=None %}
       </select>
-      <p class="text-xs text-muted-foreground mt-1">Optional. Links this cohort's members to a recurring meeting series (e.g. office hours) surfaced on the course page.</p>
+      <p class="text-xs text-muted-foreground mt-1">Required for a dated cohort. Each session unit shows the event at its session position in this series; without one, sessions show "Not scheduled".</p>
     </div>
     <button type="submit"
             class="bg-accent text-accent-foreground px-4 py-3 sm:py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px]"
@@ -67,13 +67,16 @@
   (function () {
     var modeSelect = document.getElementById('new-cohort-mode');
     var datedFields = document.querySelector('[data-testid="cohort-create-dated-fields"]');
-    if (!modeSelect || !datedFields) return;
+    var seriesSelect = document.getElementById('new-cohort-series');
+    if (!modeSelect || !datedFields || !seriesSelect) return;
     function applyMode() {
       var selfPaced = modeSelect.value === 'self_paced';
       datedFields.querySelectorAll('input').forEach(function (input) {
         input.disabled = selfPaced;
         input.required = !selfPaced;
       });
+      seriesSelect.disabled = selfPaced;
+      seriesSelect.required = !selfPaced;
     }
     modeSelect.addEventListener('change', applyMode);
     applyMode();

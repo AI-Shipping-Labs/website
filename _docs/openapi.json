@@ -3709,6 +3709,209 @@
         ]
       }
     },
+    "/api/courses/{slug}/cohorts": {
+      "get": {
+        "description": "Every cohort of the course (any course status), ordered by start date. ``event_series`` is the linked live-session series or ``null``. ``warnings`` lists event-series problems that make sessions render \"Not scheduled\" for a dated (``mode='cohort'``) cohort: ``no_event_series``, ``empty_event_series`` (no published events) and ``missing_session_positions`` (published events' ``series_position`` values do not cover the course's session units' ``session_position`` values; carries ``missing_positions``).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohorts": [
+                    {
+                      "end_date": "2026-11-09",
+                      "enrollment_count": 42,
+                      "event_series": {
+                        "event_count": 9,
+                        "id": 5,
+                        "name": "Buildcamp office hours - Cohort 4",
+                        "published_event_count": 9,
+                        "slug": "buildcamp-office-hours-cohort-4"
+                      },
+                      "external_key": "4",
+                      "id": 12,
+                      "is_active": true,
+                      "mode": "cohort",
+                      "name": "Cohort 4",
+                      "start_date": "2026-09-14",
+                      "warnings": []
+                    },
+                    {
+                      "end_date": "2026-11-09",
+                      "enrollment_count": 0,
+                      "event_series": null,
+                      "external_key": "5",
+                      "id": 13,
+                      "is_active": true,
+                      "mode": "cohort",
+                      "name": "Cohort 5",
+                      "start_date": "2026-09-14",
+                      "warnings": [
+                        {
+                          "code": "no_event_series",
+                          "message": "No event series is linked, so every live session in this cohort shows \"Not scheduled\"."
+                        }
+                      ]
+                    }
+                  ],
+                  "course": "ai-buildcamp"
+                }
+              }
+            },
+            "description": "Cohorts for the course."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found."
+          }
+        },
+        "summary": "List course cohorts (staff-only)",
+        "tags": [
+          "Course Cohorts"
+        ]
+      }
+    },
+    "/api/courses/{slug}/cohorts/{key}": {
+      "patch": {
+        "description": "``<key>`` is the cohort's external key (the ``?cohort=`` value), case-insensitive. Partial update of ``event_series`` (an event-series id or slug), ``start_date`` and ``end_date`` (``YYYY-MM-DD``). Every dated cohort must keep a linked series, so ``event_series: null`` on one returns 422 ``event_series_required``. The cohort's model validation still applies (a dated cohort needs both dates; a self-paced cohort cannot have a series). Returns the updated cohort, including fresh ``warnings``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "event_series": "buildcamp-office-hours-cohort-4"
+              },
+              "schema": {
+                "properties": {
+                  "end_date": {
+                    "format": "date",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "event_series": {
+                    "description": "Event-series id or slug. null is rejected for a dated cohort.",
+                    "type": [
+                      "integer",
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "start_date": {
+                    "format": "date",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "end_date": "2026-11-09",
+                  "enrollment_count": 42,
+                  "event_series": {
+                    "event_count": 9,
+                    "id": 5,
+                    "name": "Buildcamp office hours - Cohort 4",
+                    "published_event_count": 9,
+                    "slug": "buildcamp-office-hours-cohort-4"
+                  },
+                  "external_key": "4",
+                  "id": 12,
+                  "is_active": true,
+                  "mode": "cohort",
+                  "name": "Cohort 4",
+                  "start_date": "2026-09-14",
+                  "warnings": []
+                }
+              }
+            },
+            "description": "Updated cohort."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_event_series",
+                  "error": "Unknown event series 'no-such-series'"
+                }
+              }
+            },
+            "description": "Unknown event series."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_cohort",
+                  "error": "Unknown cohort '9' for course 'ai-buildcamp'"
+                }
+              }
+            },
+            "description": "Course or cohort not found."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "event_series_required",
+                  "error": "A dated cohort must keep a linked event series; link a different series instead of clearing it"
+                }
+              }
+            },
+            "description": "Invalid field, bad date, model validation error, or clearing a dated cohort's series."
+          }
+        },
+        "summary": "Update a cohort (staff-only)",
+        "tags": [
+          "Course Cohorts"
+        ]
+      }
+    },
     "/api/courses/{slug}/enrollments": {
       "get": {
         "description": "Active enrollments by default; ``?include_unenrolled=1`` includes soft-deleted rows. Staff sees all rows; non-staff sees only their own.",

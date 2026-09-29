@@ -1452,6 +1452,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_on_phone_opens_studio_from_the_header_menu",
     })
 
+    cohort_series_owners = frozenset({
+        "playwright_tests/test_studio_cohort_series.py::"
+        "test_staff_links_an_unlinked_cohort_to_its_series",
+    })
+
     design_layout_guard_owners = frozenset({
         "playwright_tests/test_design_layout_guard.py::"
         "test_course_home_tabs_keep_actions_below_their_headings",
@@ -1613,8 +1618,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2704)
-        self.assertEqual(len(inventory.owners), 2500)
+        self.assertEqual(inventory.item_count, 2705)
+        self.assertEqual(len(inventory.owners), 2501)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1625,6 +1630,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1815_owners
             | self.issue_1837_owners
             | self.reader_mobile_polish_owners
+            | self.cohort_series_owners
             | self.hotfix_cohort_owners
             | self.design_layout_guard_owners
             | self.workshop_search_owners

@@ -82,6 +82,7 @@ cohorts:                               # optional; upserted into content.Cohort
     name: Cohort 4
     start_date: 2026-09-21
     end_date: 2026-11-22
+    event_series: buildcamp-office-hours-cohort-4  # EventSeries slug; required for dated cohorts
   - key: self-paced                    # optional second entry; mode: self_paced
     name: Self-paced
     mode: self_paced                   # optional; 'cohort' (default) or 'self_paced'
@@ -131,6 +132,28 @@ test enrollment before relying on it (see `_docs/integrations/maven.md`,
 "Testing live"). A mismatch fails the enrollment `enrollment` step silently
 from the enrollee's perspective (they still get the community welcome, just
 not the course grant) — visible on `/studio/maven-events/<pk>/`.
+
+Each dated (`mode: cohort`) entry should set `event_series:` to the slug of
+the `EventSeries` holding that cohort's live sessions. A `kind: event` unit
+shows the series event whose `series_position` equals the unit's
+`session_position`; without a linked series every session shows "Not
+scheduled". Sync behaviour:
+
+| YAML | Result |
+|---|---|
+| `event_series: <slug>` naming an existing series | Links the cohort; a changed slug relinks it. |
+| `event_series: <slug>` naming no series | Fails that course's sync, naming the cohort key and slug. Create the series in Studio first. |
+| Key absent | Leaves any link set in Studio or the API untouched. |
+| Dated cohort still unlinked after sync | Records a non-failing `severity: info` warning in the sync history, since the series may be created later in Studio. |
+
+A self-paced entry must not set `event_series:`. Staff can also inspect and
+relink cohorts with `asl sprints course-cohorts <course>` and
+`asl sprints course-cohort-update <course> <key> --event-series <id|slug>`,
+backed by `GET /api/courses/<slug>/cohorts` and
+`PATCH /api/courses/<slug>/cohorts/<key>`. Those responses, the Studio cohort
+pages, and the Studio dashboard report the same warnings: no linked series
+(error), a series with no published events, and a series whose published
+`series_position` values miss a session unit's `session_position`.
 
 ### Project attempts
 
@@ -182,7 +205,7 @@ Studio writes nothing back to GitHub. Some operational fields therefore live onl
 | `required_level`, `default_unit_access` | YAML | Edit in GitHub, then re-sync. |
 | `instructors` | YAML | Order matters — first instructor is primary on cards. |
 | `discussion_url`, `testimonials` | YAML | Edit in GitHub, then re-sync. |
-| `maven_course_key`, `cohorts:` | YAML | Edit in GitHub, then re-sync. Cohorts are upserted, never deleted, by sync. |
+| `maven_course_key`, `cohorts:` | YAML | Edit in GitHub, then re-sync. Cohorts are upserted, never deleted, by sync. A cohort's `event_series:` link is YAML-owned only when the key is present; otherwise Studio or the API sets it. |
 | `access_mode`, `enroll_url`, `program_label` | YAML | Edit in GitHub, then re-sync. `access_mode: entitlement` requires `enroll_url`, and requires `required_level` and `default_unit_access` to both be Basic or above; sync fails the course otherwise. |
 | `status` | Always `published` (not sourced) | Source-synced courses are always written as `status='published'` on upsert; there is no `published:` source key. Admin status changes are overwritten on the next sync (a non-`published` row is marked dirty and forced back to `published`). |
 | `individual_price_eur` | DB only | Not yet editable for source-managed courses in Studio; use an explicit low-level maintenance change. Not in `course.yaml`. |

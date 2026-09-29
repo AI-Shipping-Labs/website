@@ -61,6 +61,10 @@ from api.views.course_certificates import (
     course_certificate_detail,
     course_certificates_collection,
 )
+from api.views.course_cohorts import (
+    course_cohort_detail,
+    course_cohorts_collection,
+)
 from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
@@ -774,6 +778,17 @@ urlpatterns = [
         "courses/<slug:slug>/enrollments/<path:email>",
         course_enrollment_detail,
         name="api_course_enrollment_detail",
+    ),
+    # ---- Course cohorts (event-series link diagnostics) ----------------
+    path(
+        "courses/<slug:slug>/cohorts",
+        course_cohorts_collection,
+        name="api_course_cohorts_collection",
+    ),
+    path(
+        "courses/<slug:slug>/cohorts/<str:key>",
+        course_cohort_detail,
+        name="api_course_cohort_detail",
     ),
     # ---- Course certificates (issue #445) -----------------------------
     path(

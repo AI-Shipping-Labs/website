@@ -259,6 +259,20 @@ pipes cleanly into `grep` or `diff`; it ignores `--format` and cannot be
 combined with `--no-body`. Downloads store no HTML, so `--body html` exits
 non-zero for them. A non-UUID argument fails locally without an HTTP call.
 
+### Course cohorts and their event series
+
+A dated cohort's session units show the event at their `session_position` in
+the cohort's linked event series. List a course's cohorts with their series,
+enrollment counts, and `warnings` (`no_event_series`, `empty_event_series`,
+`missing_session_positions`), then relink a cohort by series slug or id. `KEY`
+is the cohort's external key (the `?cohort=` value).
+
+```bash
+uv run asl sprints course-cohorts ai-buildcamp
+uv run asl sprints course-cohort-update ai-buildcamp 4 --event-series buildcamp-office-hours-cohort-4
+uv run asl sprints course-cohort-update ai-buildcamp 4 --start-date 2026-09-14 --end-date 2026-11-09
+```
+
 ### Escape hatch
 
 ```bash

@@ -1,0 +1,13 @@
+{% comment %}
+Event-series <option>s for the cohort pickers. event_series_options comes
+from content.services.course_cohorts.cohort_event_series_options: active
+series first, then inactive and "DELETE ME" series in a separate group.
+{% endcomment %}
+{% regroup event_series_options by is_retired as series_groups %}
+{% for group in series_groups %}
+{% if group.grouper %}<optgroup label="Inactive or marked for deletion">{% endif %}
+{% for series in group.list %}
+<option value="{{ series.pk }}" {% if selected_series_id == series.pk %}selected{% endif %}>{{ series.name }} ({{ series.num_events }} event{{ series.num_events|pluralize }})</option>
+{% endfor %}
+{% if group.grouper %}</optgroup>{% endif %}
+{% endfor %}

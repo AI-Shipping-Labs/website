@@ -10,9 +10,10 @@ import datetime
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.utils import timezone
 
 from content.models import Cohort, Course
-from events.models import EventSeries
+from events.models import Event, EventSeries
 
 User = get_user_model()
 
@@ -95,7 +96,7 @@ class CohortCreateViewTest(StaffMixin, TestCase):
         cohort = Cohort.objects.get(course=self.course, name='September 2026')
         self.assertEqual(cohort.event_series_id, self.series.pk)
 
-    def test_create_cohort_without_event_series(self):
+    def test_create_dated_cohort_requires_an_event_series(self):
         response = self.client.post(
             f'/studio/courses/{self.course.pk}/cohorts/create',
             {
@@ -104,9 +105,23 @@ class CohortCreateViewTest(StaffMixin, TestCase):
                 'end_date': '2026-12-01',
                 'event_series_id': '',
             },
+            follow=True,
+        )
+        self.assertFalse(
+            Cohort.objects.filter(course=self.course, name='No Series Cohort').exists()
+        )
+        self.assertIn(
+            'every dated cohort needs one',
+            [str(m) for m in response.context['messages']][0],
+        )
+
+    def test_create_self_paced_cohort_needs_no_series(self):
+        response = self.client.post(
+            f'/studio/courses/{self.course.pk}/cohorts/create',
+            {'name': 'Self-paced', 'mode': 'self_paced', 'event_series_id': ''},
         )
         self.assertEqual(response.status_code, 302)
-        cohort = Cohort.objects.get(course=self.course, name='No Series Cohort')
+        cohort = Cohort.objects.get(course=self.course, name='Self-paced')
         self.assertIsNone(cohort.event_series)
 
     def test_create_requires_name_and_dates(self):
@@ -169,11 +184,11 @@ class CohortEditViewTest(StaffMixin, TestCase):
             f'<option value="{self.series.pk}" selected>',
         )
 
-    def test_clearing_event_series_link_persists(self):
+    def test_clearing_a_dated_cohorts_series_is_refused(self):
         self.cohort.event_series = self.series
         self.cohort.save()
         response = self.client.post(self._url(), {
-            'name': 'Editable Cohort',
+            'name': 'Renamed Cohort',
             'start_date': '2026-09-01',
             'end_date': '2026-12-01',
             'is_active': 'on',
@@ -182,7 +197,8 @@ class CohortEditViewTest(StaffMixin, TestCase):
         })
         self.assertEqual(response.status_code, 302)
         self.cohort.refresh_from_db()
-        self.assertIsNone(self.cohort.event_series)
+        self.assertEqual(self.cohort.event_series_id, self.series.pk)
+        self.assertEqual(self.cohort.name, 'Editable Cohort')
 
     def test_max_participants_and_is_active_persist(self):
         response = self.client.post(self._url(), {
@@ -190,7 +206,7 @@ class CohortEditViewTest(StaffMixin, TestCase):
             'start_date': '2026-09-01',
             'end_date': '2026-12-01',
             'max_participants': '25',
-            'event_series_id': '',
+            'event_series_id': str(self.series.pk),
         })
         self.assertEqual(response.status_code, 302)
         self.cohort.refresh_from_db()
@@ -209,3 +225,66 @@ class CourseEditPageLinksToCohortsTest(StaffMixin, TestCase):
         self.assertContains(
             response, f'/studio/courses/{course.pk}/cohorts/',
         )
+
+
+class CohortSeriesWarningBannerTest(StaffMixin, TestCase):
+    """The Studio cohort pages surface ``cohort_series_warnings``."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.course = Course.objects.create(
+            title='Banner Course', slug='banner-course-cohorts', status='published',
+        )
+        cls.unlinked = Cohort.objects.create(
+            course=cls.course, name='Cohort 4',
+            start_date=datetime.date(2026, 9, 1),
+            end_date=datetime.date(2026, 12, 1),
+        )
+        cls.live_series = EventSeries.objects.create(
+            name='Live series', slug='banner-live-series',
+            cadence='none', day_of_week=None, start_time=None,
+        )
+        cls.retired_series = EventSeries.objects.create(
+            name='[DELETE ME in Studio] duplicate', slug='banner-dup-series',
+            cadence='none', day_of_week=None, start_time=None,
+        )
+
+    def _warnings(self, response):
+        return [
+            (w['code'], cohort.name)
+            for cohort, warnings in response.context['cohort_warning_rows']
+            for w in warnings
+        ]
+
+    def test_list_page_banner_names_the_unlinked_cohort(self):
+        response = self.client.get(f'/studio/courses/{self.course.pk}/cohorts/')
+        self.assertEqual(self._warnings(response), [('no_event_series', 'Cohort 4')])
+        self.assertTrue(response.context['cohort_warnings_have_error'])
+        self.assertContains(response, 'data-testid="cohort-series-warnings"')
+        self.assertContains(response, 'data-warning-code="no_event_series"')
+
+    def test_edit_page_banner_disappears_once_linked_to_a_populated_series(self):
+        url = f'/studio/courses/{self.course.pk}/cohorts/{self.unlinked.pk}/edit'
+        self.assertContains(self.client.get(url), 'data-testid="cohort-series-warnings"')
+
+        Cohort.objects.filter(pk=self.unlinked.pk).update(event_series=self.live_series)
+        Event.objects.create(
+            title='S1', slug='banner-s1', event_series=self.live_series,
+            series_position=1, status='upcoming', published=True, origin='studio',
+            start_datetime=timezone.now(),
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.context['cohort_warning_rows'], [])
+        self.assertNotContains(response, 'data-testid="cohort-series-warnings"')
+
+    def test_series_picker_shows_counts_and_puts_delete_me_series_last(self):
+        response = self.client.get(
+            f'/studio/courses/{self.course.pk}/cohorts/{self.unlinked.pk}/edit'
+        )
+        self.assertEqual(
+            [(s.slug, s.num_events) for s in response.context['event_series_options']],
+            [('banner-live-series', 0), ('banner-dup-series', 0)],
+        )
+        self.assertContains(response, '<optgroup label="Inactive or marked for deletion">')
+        self.assertContains(response, 'Live series (0 events)')

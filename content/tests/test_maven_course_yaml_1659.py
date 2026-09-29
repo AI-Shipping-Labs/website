@@ -8,6 +8,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from content.models import Cohort, Course
+from events.models import EventSeries
 from integrations.models import ContentSource
 from integrations.services.github import sync_content_source
 
@@ -63,6 +64,13 @@ class CohortExternalKeyModelTest(TestCase):
             start_date="2026-09-21", end_date="2026-11-22",
         )
         self.assertEqual(Cohort.objects.filter(external_key="cohort-4").count(), 2)
+
+
+def _series(slug):
+    return EventSeries.objects.create(
+        name=f"Office hours {slug}", slug=slug,
+        cadence="none", day_of_week=None, start_time=None,
+    )
 
 
 class _CourseYamlSyncFixtureBase(TestCase):
@@ -130,6 +138,7 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
         self.assertEqual(cohort.external_key, "")
 
     def test_cohorts_list_creates_cohort_rows(self):
+        series = _series("oh-cohort-4")
         self._write_course_yaml(
             extras=(
                 "cohorts:\n"
@@ -137,6 +146,7 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
                 "    name: Cohort 4\n"
                 "    start_date: 2026-09-21\n"
                 "    end_date: 2026-11-22\n"
+                "    event_series: oh-cohort-4\n"
             ),
         )
 
@@ -148,9 +158,11 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
         self.assertEqual(cohort.name, "Cohort 4")
         self.assertEqual(str(cohort.start_date), "2026-09-21")
         self.assertEqual(str(cohort.end_date), "2026-11-22")
+        self.assertEqual(cohort.event_series, series)
         self.assertEqual(Cohort.objects.filter(course=course).count(), 1)
 
     def test_resync_updates_changed_cohort_fields(self):
+        _series("oh-cohort-4")
         self._write_course_yaml(
             extras=(
                 "cohorts:\n"
@@ -158,6 +170,7 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
                 "    name: Cohort 4\n"
                 "    start_date: 2026-09-21\n"
                 "    end_date: 2026-11-22\n"
+                "    event_series: oh-cohort-4\n"
             ),
         )
         sync_content_source(self.source, repo_dir=self.temp_dir)
@@ -169,6 +182,7 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
                 "    name: Cohort 4 (renamed)\n"
                 "    start_date: 2026-09-22\n"
                 "    end_date: 2026-11-23\n"
+                "    event_series: oh-cohort-4\n"
             ),
         )
         log = sync_content_source(self.source, repo_dir=self.temp_dir)
@@ -237,3 +251,69 @@ class CohortsYamlSyncTest(_CourseYamlSyncFixtureBase):
 
         self.assertTrue(log.errors)
         self.assertTrue(Course.objects.filter(slug="buildcamp-1659").exists())
+
+
+class CohortEventSeriesYamlSyncTest(_CourseYamlSyncFixtureBase):
+    """``event_series:`` on a ``cohorts:`` entry links the cohort's series."""
+
+    def _cohort_yaml(self, series_line=""):
+        self._write_course_yaml(
+            extras=(
+                "cohorts:\n"
+                "  - key: cohort-4\n"
+                "    name: Cohort 4\n"
+                "    start_date: 2026-09-21\n"
+                "    end_date: 2026-11-22\n"
+            ) + series_line,
+        )
+
+    def _cohort(self):
+        return Cohort.objects.get(course__slug="buildcamp-1659", external_key="cohort-4")
+
+    def test_sync_sets_then_changes_the_linked_series(self):
+        first = _series("oh-cohort-4")
+        second = _series("oh-cohort-4-v2")
+        self._cohort_yaml("    event_series: oh-cohort-4\n")
+        self.assertEqual(sync_content_source(self.source, repo_dir=self.temp_dir).errors, [])
+        self.assertEqual(self._cohort().event_series, first)
+
+        self._cohort_yaml("    event_series: oh-cohort-4-v2\n")
+        self.assertEqual(sync_content_source(self.source, repo_dir=self.temp_dir).errors, [])
+        self.assertEqual(self._cohort().event_series, second)
+
+    def test_absent_key_keeps_a_studio_set_link(self):
+        self._cohort_yaml()
+        sync_content_source(self.source, repo_dir=self.temp_dir)
+        studio_series = _series("studio-picked")
+        Cohort.objects.filter(pk=self._cohort().pk).update(event_series=studio_series)
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir, force=True)
+
+        self.assertEqual(self._cohort().event_series, studio_series)
+        self.assertEqual(log.errors, [])
+
+    def test_unknown_series_slug_fails_the_course_naming_cohort_and_slug(self):
+        self._cohort_yaml("    event_series: no-such-series\n")
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        messages = [str(e.get("error", "")) for e in log.errors]
+        self.assertTrue(
+            any("'cohort-4'" in m and "no-such-series" in m for m in messages),
+            messages,
+        )
+        self.assertFalse(
+            Cohort.objects.filter(course__slug="buildcamp-1659", external_key="cohort-4").exists()
+        )
+
+    def test_unlinked_dated_cohort_records_a_non_failing_sync_note(self):
+        self._cohort_yaml()
+
+        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+
+        [note] = log.errors
+        self.assertEqual(note["severity"], "info")
+        self.assertIn("cohort 'cohort-4'", note["error"])
+        self.assertIn("has no event_series", note["error"])
+        # The cohort itself is still synced.
+        self.assertIsNone(self._cohort().event_series)

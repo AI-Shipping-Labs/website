@@ -128,6 +128,48 @@ def sprints_course_enroll(slug, emails, cohort, fmt):
     emit(get_client().post(f"{API}/courses/{slug}/enrollments", json_body=body), fmt)
 
 
+@sprints.command("course-cohorts")
+@click.argument("slug")
+@format_option
+def sprints_course_cohorts(slug, fmt):
+    """List a course's cohorts with their event series and warnings (staff-only)."""
+    emit(get_client().get(f"{API}/courses/{slug}/cohorts"), fmt)
+
+
+@sprints.command("course-cohort-update")
+@click.argument("slug")
+@click.argument("key")
+@click.option(
+    "--event-series",
+    "event_series",
+    default=None,
+    help="Event series id or slug to link; pass 'none' to unlink.",
+)
+@click.option("--start-date", default=None, help="Cohort start date (YYYY-MM-DD).")
+@click.option("--end-date", default=None, help="Cohort end date (YYYY-MM-DD).")
+@format_option
+def sprints_course_cohort_update(slug, key, event_series, start_date, end_date, fmt):
+    """Update a cohort's event series and/or dates (staff-only).
+
+    KEY is the cohort's external key (the ?cohort= value, e.g. 4).
+    """
+    body = {}
+    if event_series is not None:
+        if event_series.lower() == "none":
+            body["event_series"] = None
+        elif event_series.isdigit():
+            body["event_series"] = int(event_series)
+        else:
+            body["event_series"] = event_series
+    if start_date is not None:
+        body["start_date"] = start_date
+    if end_date is not None:
+        body["end_date"] = end_date
+    if not body:
+        raise click.UsageError("Pass at least one of --event-series, --start-date, --end-date.")
+    emit(get_client().patch(f"{API}/courses/{slug}/cohorts/{key}", json_body=body), fmt)
+
+
 @sprints.command("course-certificates")
 @click.argument("slug")
 @format_option

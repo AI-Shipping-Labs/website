@@ -10,6 +10,7 @@ from django_q.models import OrmQ, Task
 
 from accounts.models import ImportBatch
 from content.models import Article, Course, Download, Project
+from content.services.course_cohorts import active_cohorts_with_series_warnings
 from email_app.models import EmailCampaign
 from events.models import Event
 from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES
@@ -189,6 +190,20 @@ def dashboard(request):
             'triangle-alert',
             tone='critical',
             description='Automatic recovery stalled or exhausted; fix the cause and retry safely.',
+        ))
+    cohort_series_problems = active_cohorts_with_series_warnings()
+    if cohort_series_problems:
+        first_cohort = cohort_series_problems[0][0]
+        attention_items.append(_attention_item(
+            'Cohort live sessions not scheduled',
+            len(cohort_series_problems),
+            reverse('studio_course_cohort_list', kwargs={'course_id': first_cohort.course_id}),
+            'calendar-x',
+            tone='critical',
+            description=(
+                'A running cohort has no event series, an empty one, or '
+                'missing session positions; learners see "Not scheduled".'
+            ),
         ))
     if worker_info['expect_worker'] and not worker_info['alive']:
         queued_tasks = f"{queue_depth} queued task{'s' if queue_depth != 1 else ''}"

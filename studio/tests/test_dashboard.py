@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from content.models import Article, Course, Project
+from content.models import Article, Cohort, Course, Project
 from events.models import Event
 
 User = get_user_model()
@@ -327,6 +327,23 @@ class StudioDashboardTest(TestCase):
         self.assertContains(
             response,
             f'{reverse("studio_project_list")}?status=pending_review',
+        )
+
+    def test_dashboard_flags_running_cohort_without_event_series(self):
+        course = Course.objects.create(title='Buildcamp', slug='dash-buildcamp')
+        today = timezone.localdate()
+        Cohort.objects.create(
+            course=course, name='Cohort 4', mode='cohort',
+            start_date=today, end_date=today + timezone.timedelta(days=30),
+        )
+
+        response = self.client.get('/studio/')
+
+        item = self._attention_item(response, 'Cohort live sessions not scheduled')
+        self.assertEqual(item['count'], 1)
+        self.assertEqual(
+            item['url'],
+            reverse('studio_course_cohort_list', kwargs={'course_id': course.pk}),
         )
 
     def test_dashboard_missing_zoom_link_attention_counts_one(self):

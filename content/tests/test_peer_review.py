@@ -226,7 +226,7 @@ class ProjectSubmitViewTest(TestCase):
     def test_submit_page_loads(self):
         response = self.client.get('/courses/test-course/submit')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Submit Project')
+        self.assertContains(response, 'Submit project</h1>')
 
     def test_submit_project(self):
         response = self.client.post('/courses/test-course/submit', {
@@ -321,7 +321,7 @@ class ProjectSubmitViewTest(TestCase):
         response = self.client.get('/courses/test-course/submit')
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'In Review')
-        self.assertContains(response, 'Review Dashboard')
+        self.assertContains(response, 'Go to review dashboard')
 
 
 # ============================================================
@@ -341,7 +341,8 @@ class ReviewDashboardViewTest(TestCase):
     def test_dashboard_no_submission(self):
         response = self.client.get('/courses/test-course/reviews')
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Submit Project')
+        self.assertContains(response, 'data-testid="peer-review-no-submission"')
+        self.assertContains(response, 'href="/courses/test-course/submit"')
         self.assertContains(response, 'Test Course')
         self.assertNotContains(response, 'Reviews to complete')
 

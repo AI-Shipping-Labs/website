@@ -134,9 +134,9 @@ class PeerReviewSubmitChromeTest(TestCase):
         response = self.client.get(url)
         _assert_header_chrome(self, response, url)
         # And the existing page body is still rendered (no regression).
-        self.assertContains(response, 'Submit Project')
+        self.assertContains(response, 'Submit project</h1>')
         self.assertContains(
-            response, f'&larr; Back to {self.course.title}',
+            response, f'<span class="truncate">Back to {self.course.title}</span>',
         )
 
     def test_post_success_renders_full_chrome(self):
@@ -169,9 +169,9 @@ class PeerReviewDashboardChromeTest(TestCase):
         response = self.client.get(url)
         _assert_header_chrome(self, response, url)
         # Page-specific markup still renders.
-        self.assertContains(response, 'Peer Review Dashboard')
+        self.assertContains(response, 'Peer review dashboard</h1>')
         self.assertContains(
-            response, f'&larr; Back to {self.course.title}',
+            response, f'<span class="truncate">Back to {self.course.title}</span>',
         )
 
     def test_dashboard_with_submission_renders_chrome(self):
@@ -216,8 +216,8 @@ class PeerReviewFormChromeTest(TestCase):
         response = self.client.get(url)
         _assert_header_chrome(self, response, url)
         # Page-specific markup still renders.
-        self.assertContains(response, 'Peer Review')
-        self.assertContains(response, 'Back to Peer Reviews')
+        self.assertContains(response, 'Peer review</h1>')
+        self.assertContains(response, 'Back to peer reviews')
 
 
 class CertificatePageChromeTest(TestCase):

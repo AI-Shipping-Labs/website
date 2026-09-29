@@ -187,7 +187,6 @@ BASELINE: dict[str, dict[str, int]] = {
         "templates/includes/header.html": 2,
     },
     "public_tracking_wider": {  # Initial legacy debt: #1240.
-        "templates/content/peer_review/review_form.html": 4,
         "templates/events/_event_post_resources.html": 1,
         "templates/events/_recording_materials.html": 1,
         "templates/events/events_calendar.html": 7,

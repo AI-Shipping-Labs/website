@@ -1,10 +1,10 @@
 <section aria-labelledby="{% if section == 'module' %}module-work-heading{% elif section == 'homework' %}course-homework-heading{% else %}course-projects-heading{% endif %}" data-testid="course-home-deadlines">
   {% if section == 'module' %}
-  <header class="mb-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+  <header class="mb-2">
     <h2 id="module-work-heading" class="text-lg font-semibold text-foreground">Homework and projects</h2>
-    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="text-sm font-medium text-accent hover:underline">See all homework</a>
+    <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">See all homework <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   </header>
-  <ol class="divide-y divide-border rounded-lg border border-border bg-card px-4 py-2 sm:px-5">
+  <ol class="divide-y divide-border border-y border-border">
     {% for item in deadline_rows %}
     {% if item.kind == 'Project' and not cohort %}
     {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=True %}

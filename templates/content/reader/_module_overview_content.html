@@ -2,23 +2,17 @@
 {% load curriculum_tags %}
 {% load accounts_extras %}
 
-{% include "content/reader/_mobile_nav_toggle_gated.html" with reader_mobile_label="Course Navigation" %}
+{% include "content/reader/_mobile_nav_toggle_gated.html" with reader_mobile_label="Course navigation" %}
 
 {% include "content/reader/_breadcrumb.html" with breadcrumb_kind="module" breadcrumb_testid="module-breadcrumb" %}
 
-<header class="mb-8">
-  <div class="mb-3 flex items-center gap-2">
-    <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
-      <i data-lucide="book-open" class="h-4 w-4"></i>
-      {% if module.parent %}Submodule{% else %}Module{% endif %}
-    </span>
-    {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
-    {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
-    {% endif %}
-  </div>
-  <h1 class="text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="module-title">
+<header class="mb-6 flex flex-wrap items-center gap-3 lg:mb-8">
+  <h1 class="min-w-0 break-words text-2xl font-semibold tracking-tight sm:text-3xl" data-testid="module-title">
     {% if course.slug == 'ai-buildcamp' and not module.parent and module.sort_order > 0 and module.sort_order < 10 %}<span class="text-muted-foreground">Week {{ module.sort_order }} · </span>{% endif %}{{ module.title }}
   </h1>
+  {% if module.is_bonus and not module.parent.is_bonus and module.title != 'Bonus' %}
+  {% member_label_badge "Optional" tone="accent" size="sm" testid="module-overview-bonus-badge" %}
+  {% endif %}
 </header>
 
 {% if module.overview_html %}
@@ -37,7 +31,7 @@
   </div>
   {% endif %}
   <div class="{% if user_authenticated and module_progress_total %}mt-6{% endif %}">
-    <h2 id="module-next-heading" class="text-xs font-medium text-muted-foreground">{% if module_next_action.complete %}You have completed every lesson in this module{% else %}Next lesson{% endif %}</h2>
+    <h2 id="module-next-heading" class="text-sm font-medium text-muted-foreground">{% if module_next_action.complete %}You have completed every lesson in this module{% else %}Next lesson{% endif %}</h2>
     {% if not module_next_action.complete %}<p class="mt-1 break-words text-base font-semibold text-foreground" data-testid="module-next-lesson-title">{{ module_next_action.unit.title }}</p>{% endif %}
     <a href="{{ module_next_action.url }}" class="{% button_classes 'primary' size='md' extra='mt-4 w-full justify-center sm:w-auto' %}" data-testid="module-next-action-link">{{ module_next_action.label }}</a>
   </div>

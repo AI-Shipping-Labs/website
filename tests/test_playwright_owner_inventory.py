@@ -1264,6 +1264,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_section_anchors_1833.py::test_section_link_clears_header_with_announcement_banner",
         "playwright_tests/test_section_anchors_1833.py::test_event_description_section_link",
         "playwright_tests/test_section_anchors_1833.py::test_section_link_stays_on_target_while_lazy_image_above_loads",
+        "playwright_tests/test_section_anchors_1833.py::test_phone_reader_taps_visible_section_link_and_shares_it",
+        "playwright_tests/test_section_anchors_1833.py::test_phone_long_heading_wraps_with_its_section_link",
     })
 
     issue_1597_owners = frozenset({
@@ -1587,8 +1589,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2694)
-        self.assertEqual(len(inventory.owners), 2490)
+        self.assertEqual(inventory.item_count, 2696)
+        self.assertEqual(len(inventory.owners), 2492)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

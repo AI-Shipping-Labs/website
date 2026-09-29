@@ -1437,6 +1437,32 @@ class FreeActivationDashboardTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'data-testid="free-activation-checklist"')
         self.assertContains(response, 'data-testid="free-plan-teaser"')
 
+    def test_sprint_plan_puts_your_week_before_setup_checklist(self):
+        user = User.objects.create_user(email='plan-order@test.com', password='testpass')
+        set_membership(user, tier=self.main_tier)
+        sprint = self._create_active_sprint(slug='order-sprint')
+        Plan.objects.create(member=user, sprint=sprint, shared_at=timezone.now())
+        self._login_user(user)
+
+        content = self.client.get('/').content.decode()
+
+        week = content.index('data-testid="dashboard-this-week"')
+        checklist = content.index('data-testid="dashboard-getting-started"')
+        self.assertLess(week, checklist)
+        self.assertEqual(content.count('data-testid="dashboard-getting-started"'), 1)
+
+    def test_without_sprint_plan_setup_checklist_leads(self):
+        user = User.objects.create_user(email='free-noplan-order@test.com', password='testpass')
+        set_membership(user, tier=self.free_tier)
+        self._login_user(user)
+
+        content = self.client.get('/').content.decode()
+
+        zones = content.index('data-testid="dashboard-commitment-zones"')
+        checklist = content.index('data-testid="dashboard-getting-started"')
+        # The checklist's own <section> is the first one inside the zones.
+        self.assertEqual(content[zones:checklist].count('<section'), 1)
+
     def test_buildcamp_item_visible_with_course_access_grant(self):
         user = User.objects.create_user(email='buildcamp-grant@test.com', password='testpass')
         set_membership(user, tier=self.free_tier)

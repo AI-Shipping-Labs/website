@@ -100,7 +100,7 @@ class PublicPolishTemplateContractTest(SimpleTestCase):
     def test_stale_controls_keep_accessible_existing_contracts(self):
         dashboard = self._read("templates/content/dashboard.html")
         getting_started = self._read(
-            "templates/content/_dashboard_commitment_zones.html"
+            "templates/content/_dashboard_getting_started.html"
         )
         slack = self._read("templates/includes/_slack_account_card.html")
         account = self._read("templates/accounts/account.html")

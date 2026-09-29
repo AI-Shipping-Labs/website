@@ -275,7 +275,7 @@ Current per-type decisions:
 | Content type | Media band |
 |---|---|
 | Workshops | Conditional explicit media: render exactly one slot for an authored `cover_image_url` or operator `custom_banner_url`; render no slot for coverless or auto-only cards. Generated `auto_banner_url` remains social/Studio media only. |
-| Courses | Render |
+| Courses | Conditional explicit media: render the `_content_preview.html` band only when `cover_image_url` is set; coverless cards start with the signal row. |
 | Projects | Render |
 | Downloads | Do not render |
 | Curated Links (`/resources`) | Do not render |

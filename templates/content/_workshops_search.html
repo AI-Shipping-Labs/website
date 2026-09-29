@@ -1,3 +1,4 @@
+{% load accounts_extras %}
 {% comment %}
 Client-side workshop search, reusing the shared curriculum syllabus search
 (templates/curriculum/includes/syllabus_search.html). The caller must wrap
@@ -9,7 +10,8 @@ content.views.workshops), and each workshop's tutorial page titles, with the
 workshop title as each page result's breadcrumb.
 {% endcomment %}
 {% if workshop_search_index %}
-{% include "curriculum/includes/syllabus_search.html" with search_id=search_id|default:"workshops-search" results_id=results_id|default:"workshops-search-results" search_label_text="Search workshops" search_placeholder="Search workshops or tutorial pages..." search_no_results_text="No workshops or tutorial pages match this search. Try fewer or broader words." search_no_matches_status="No matching workshops" search_input_class="mt-2 block w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" search_label_class="sr-only" search_status_class="sr-only" %}
+{% button_classes 'secondary' as workshop_search_button_class %}
+{% include "curriculum/includes/syllabus_search.html" with search_id=search_id|default:"workshops-search" results_id=results_id|default:"workshops-search-results" search_label_text="Search workshops" search_placeholder="Search workshops or tutorial pages..." search_no_results_text="No workshops or tutorial pages match this search. Try fewer or broader words." search_no_matches_status="No matching workshops" search_button_class=workshop_search_button_class search_input_class="block w-full rounded-lg border border-border bg-card px-4 py-3 text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30" search_label_class="sr-only" search_status_class="sr-only" %}
 {% comment %}
 Attribute-only index: items carry no text nodes, so hidden titles never
 collide with the visible cards in text lookups or assistive tech.

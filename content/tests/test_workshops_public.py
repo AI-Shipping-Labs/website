@@ -261,7 +261,7 @@ class WorkshopsCatalogTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Hands-on AI workshops')
         self.assertContains(response, 'Practical AI engineering sessions')
         self.assertContains(response, 'a step-by-step tutorial')
-        self.assertContains(response, 'runnable code or materials')
+        self.assertContains(response, 'runnable code')
         # Value props moved to the "How workshops work" trio at the bottom.
         self.assertContains(response, 'How workshops work')
         self.assertContains(response, 'Guided build flow')
@@ -1142,15 +1142,13 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/ws')
         self.assertContains(response, 'data-testid="workshop-video-link"')
-        self.assertContains(response, 'Watch the recording')
+        self.assertContains(response, 'Watch recording')
 
-    def test_landing_video_card_shows_full_video_copy_when_unlocked(self):
+    def test_landing_video_button_has_no_lock_caption_when_unlocked(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/ws')
-        self.assertContains(
-            response,
-            'Full workshop video with timestamps and downloadable materials.',
-        )
+        self.assertContains(response, 'data-testid="workshop-video-link"')
+        self.assertNotContains(response, 'data-testid="workshop-video-locked"')
 
     def test_landing_video_card_omitted_when_no_event(self):
         # No linked event -> no recording -> card must be absent even for a
@@ -1239,7 +1237,9 @@ class WorkshopLandingTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'Landing-gated')
         self.assertContains(response, 'April 21, 2026')
         self.assertContains(response, 'Alice')
-        self.assertContains(response, 'agents')
+        # Tags stay visible above the paywall, humanized for display.
+        self.assertContains(response, 'data-testid="workshop-tags"')
+        self.assertContains(response, 'Agents</span>')
         self.assertContains(response, 'data-testid="workshop-landing-paywall"')
         self.assertContains(response, 'Upgrade to Basic to view this workshop')
         self.assertContains(

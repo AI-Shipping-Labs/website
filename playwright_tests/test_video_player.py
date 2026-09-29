@@ -361,14 +361,14 @@ class TestScenario1YouTubeRecordingTimestamps:
         assert "AI Workshop" in page.content()
 
         # The past-card links to /workshops/<slug>; from the workshop
-        # landing the visitor follows "Watch the recording" to /video.
+        # landing the visitor follows "Watch recording" to /video.
         page.locator(
             'a[data-testid="past-card-workshop-link"]'
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
         assert workshop_path in page.url
 
-        page.locator('a:has-text("Watch the recording")').first.click()
+        page.locator('[data-testid="workshop-video-link"]').first.click()
         page.wait_for_load_state("domcontentloaded")
         assert f"{workshop_path}/video" in page.url
 

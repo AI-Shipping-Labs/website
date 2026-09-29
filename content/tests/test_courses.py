@@ -434,10 +434,10 @@ class CoursesListViewTest(TestCase):
         response = self.client.get('/courses')
         self.assertContains(response, 'Free')
 
-    def test_shows_tag_badges(self):
+    def test_card_renders_no_raw_tag_chips(self):
         response = self.client.get('/courses')
-        self.assertContains(response, 'python')
-        self.assertContains(response, 'ai')
+        self.assertContains(response, 'Published Course')
+        self.assertNotContains(response, 'data-testid="course-card-tags"')
 
     def test_uses_correct_template(self):
         response = self.client.get('/courses')
@@ -501,29 +501,15 @@ class CoursesListViewTest(TestCase):
             'data-testid="course-card-preview-fallback" hidden',
         )
 
-    def test_missing_cover_uses_decorative_fallback_preview(self):
+    def test_missing_cover_renders_no_media_band(self):
+        """A coverless course card starts with its signal row: no
+        placeholder band, no decorative fallback (conditional-explicit
+        media policy in _docs/design-system.md)."""
         response = self.client.get('/courses')
-        body = response.content.decode()
-        fallback = body.split(
-            'data-testid="course-card-preview-fallback"', 1,
-        )[1].split('<div class="min-w-0 p-4 sm:p-5"', 1)[0]
-        self.assertContains(response, 'data-testid="course-card-preview-fallback"')
-        self.assertNotIn('Published Course', fallback)
-        self.assertNotIn('Test Instructor', fallback)
-        self.assertNotIn('python', fallback)
-        self.assertContains(response, 'group block focus-visible:outline-none')
-        self.assertNotContains(response, 'h-12 w-12 text-muted-foreground')
-
-    def test_course_catalog_card_still_uses_fallback(self):
-        """Issue #651 regression guard: detail pages no longer render
-        the decorative fallback when cover_image_url is empty, but
-        listing cards still do — a grid of cards needs a visual anchor
-        per row.
-        """
-        response = self.client.get('/courses')
-        self.assertContains(
-            response, 'data-testid="course-card-preview-fallback"',
-        )
+        self.assertContains(response, 'Published Course')
+        self.assertNotContains(response, 'data-testid="course-card-preview"')
+        self.assertNotContains(response, 'data-testid="course-card-preview-fallback"')
+        self.assertContains(response, 'data-testid="course-access-badge"')
 
 
 # ============================================================

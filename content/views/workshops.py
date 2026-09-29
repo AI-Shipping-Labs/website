@@ -412,12 +412,11 @@ def workshops_catalog(request):
         request,
         base_path=WORKSHOPS_CATALOG_PATH,
         show_filters=True,
-        catalog_eyebrow='Archive',
+        catalog_eyebrow='Workshops',
         catalog_heading='All workshops',
         catalog_intro=(
-            'Browse the full AI Shipping Labs workshop archive, newest first, '
-            'with recordings, step-by-step tutorials, materials, and '
-            'membership access labels.'
+            'Every workshop, newest first, with recordings, tutorials, and '
+            'materials.'
         ),
         catalog_section_id='workshop-catalog',
         catalog_testid='workshop-catalog',

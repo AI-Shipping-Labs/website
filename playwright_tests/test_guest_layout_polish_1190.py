@@ -270,7 +270,7 @@ def test_courses_two_card_catalog_grid_stays_left_aligned(django_server, page):
     assert "mx-auto" not in classes
     assert "max-w-" not in classes
 
-    heading = page.get_by_role("heading", name="Structured Learning Paths")
+    heading = page.get_by_role("heading", name="Structured learning paths")
     heading_box = heading.bounding_box()
     grid_box = grid.bounding_box()
     assert heading_box is not None
@@ -301,7 +301,7 @@ def test_courses_one_card_filtered_catalog_grid_stays_left_aligned(django_server
     assert "mx-auto" not in classes
     assert "max-w-" not in classes
 
-    heading = page.get_by_role("heading", name="Structured Learning Paths")
+    heading = page.get_by_role("heading", name="Structured learning paths")
     heading_box = heading.bounding_box()
     grid_box = grid.bounding_box()
     assert heading_box is not None

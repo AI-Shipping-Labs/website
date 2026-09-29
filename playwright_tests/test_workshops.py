@@ -191,7 +191,7 @@ class TestVisitorBrowsesCatalog:
         assert 'Practical AI engineering sessions' in landing_text
         assert 'recording' in landing_text
         assert 'a step-by-step tutorial' in landing_text
-        assert 'runnable code or materials' in landing_text
+        assert 'runnable code' in landing_text
 
         # The newest workshop is featured above the grid (mirrors the /books
         # "Reading now" card); the remaining preview workshop renders below.
@@ -934,7 +934,7 @@ class TestWorkshopSitemap:
 
 
 # ----------------------------------------------------------------------
-# Scenario 6: Action buttons render below the README and tutorial pages list.
+# Scenario 6: Action buttons render in the header, above the README.
 # ----------------------------------------------------------------------
 
 
@@ -943,9 +943,11 @@ class TestWorkshopActionsBelowTutorialPages:
     def test_action_buttons_render_below_description_and_pages_list(
         self, browser, django_server,
     ):
-        """Visitor with access sees recording / GitHub actions below the
-        README description and tutorial pages list, without a duplicate
-        tutorial card."""
+        """Visitor with access sees recording / GitHub actions in the
+        header CTA row, above the README description and tutorial pages
+        list, without a duplicate tutorial card. (The class/test names
+        predate the move and stay stable for the Playwright owner
+        inventory.)"""
         _clear_workshops()
         _create_workshop(
             slug='ws',
@@ -994,11 +996,13 @@ class TestWorkshopActionsBelowTutorialPages:
         assert description_box is not None
         assert pages_box is not None
 
-        # Description and tutorial page list are read before action cards.
+        # The header CTA row sits above the README and page list.
+        assert video_box['y'] < description_box['y']
         assert description_box['y'] < pages_box['y']
-        assert pages_box['y'] < video_box['y']
-        # The code link is grouped under the recording card.
-        assert video_box['y'] < repo_box['y']
+        # The code link follows the recording button (stacked on phones,
+        # side by side on wider screens).
+        assert (video_box['y'], video_box['x']) <= (repo_box['y'], repo_box['x'])
+        assert repo_box['y'] < description_box['y']
 
         ctx.close()
 
@@ -1031,8 +1035,8 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         repo_link = page.locator('[data-testid="workshop-code-repo-link"]')
         assert repo_link.count() == 0
 
-        # Video card still renders below the description, while the
-        # duplicate tutorial card remains absent.
+        # The recording button still renders in the header above the
+        # description, while the duplicate tutorial card remains absent.
         video_link = page.locator('[data-testid="workshop-video-link"]')
         tutorial_link = page.locator('[data-testid="workshop-tutorial-link"]')
         description = page.locator('[data-testid="workshop-description"]')
@@ -1047,13 +1051,12 @@ class TestWorkshopWithoutCodeRepoNoEmptySlot:
         assert video_box is not None
         assert description_box is not None
 
-        assert description_box['y'] < video_box['y']
+        assert video_box['y'] < description_box['y']
 
-        # No empty wrapper sits where the repo button used to be: the
-        # template gates the entire `<div class="mb-12">…</div>` wrapper
-        # behind `{% if workshop.code_repo_url %}`, so no element with
+        # No empty slot sits where the repo button would be: the button is
+        # gated behind `{% if workshop.code_repo_url %}`, so no element with
         # the repo testid exists, and there's no anchor pointing at
-        # github.com from the action block.
+        # github.com from the action row.
         github_anchors = page.locator('a[href*="github.com"]').count()
         assert github_anchors == 0
 

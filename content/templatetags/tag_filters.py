@@ -85,7 +85,14 @@ def humanize_tag(value):
     override = _TAG_LABEL_OVERRIDES.get(slug.lower())
     if override:
         return override
-    return slug.replace('-', ' ').replace('_', ' ').title()
+    # Word-level fallback: a compound slug such as ``llm-engineering`` keeps
+    # its acronym words (``LLM Engineering``) via the single-word overrides.
+    words = slug.replace('_', '-').split('-')
+    return ' '.join(
+        _TAG_LABEL_OVERRIDES.get(word.lower(), word.title())
+        for word in words
+        if word
+    )
 
 
 @register.filter

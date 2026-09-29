@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% load access_tags %}
+{% load accounts_extras %}
 {% load member_badges %}
 {% load seo_tags %}
+{% load tag_filters %}
 {% load teaser_tags %}
 
 {% block title %}{{ workshop.title }} | AI Shipping Labs{% endblock %}
@@ -17,24 +19,22 @@
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-      <a href="/workshops" class="mb-8 inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="back-to-workshops">
-        <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        Back to Workshops
+      <a href="/workshops" class="mb-4 inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:mb-8" data-testid="back-to-workshops">
+        <i data-lucide="arrow-left" class="h-4 w-4" aria-hidden="true"></i>
+        Back to workshops
       </a>
 
       {% with workshop_primary_instructor=workshop.primary_instructor %}
-      <header class="mb-12">
+      <header class="mb-10 sm:mb-12">
         <div class="mb-4 flex flex-wrap items-center gap-2">
-          {% member_label_badge "Workshop" tone="accent_outline" size="md" icon="graduation-cap" %}
+          {% member_label_badge "Workshop" tone="accent_outline" size="sm" icon="graduation-cap" %}
           {% if workshop.pages_required_level >= 10 %}
           {% member_tier_badge workshop.pages_required_level tone="accent_strong" size="sm" icon="lock" testid="workshop-tier-badge" %}
           {% else %}
           {% member_tier_badge workshop.pages_required_level tone="accent_strong" size="sm" icon="badge-check" testid="workshop-free-badge" %}
           {% endif %}
           {% if workshop.skill_level %}
-          <span class="inline-flex items-center rounded-full border border-border bg-background px-3 py-1 text-xs font-medium text-muted-foreground" data-testid="workshop-skill-badge">
-            Skill: {{ workshop.skill_level_label }}
-          </span>
+          {% member_label_badge "Skill: "|add:workshop.skill_level_label tone="neutral" size="sm" testid="workshop-skill-badge" %}
           {% endif %}
         </div>
 
@@ -63,11 +63,48 @@
         {% endif %}
 
         {% if workshop.tags %}
-        <div class="mt-4 flex flex-wrap gap-2">
+        <div class="mt-4 flex flex-wrap gap-2" data-testid="workshop-tags">
           {% for tag in workshop.tags %}
-          <span class="max-w-full truncate rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
+          <span class="inline-flex max-w-full items-center gap-1 truncate rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">{{ tag|humanize_tag }}</span>
           {% endfor %}
         </div>
+        {% endif %}
+
+        {% comment %}
+          Recording and repository actions live in the header CTA row so they
+          are reachable on the first phone screen. Rendered only when the
+          landing is accessible and at least one action exists. Issue #844:
+          the recording button only renders when a recording exists on the
+          linked event (`has_recording`); access-gating is separate and the
+          locked caption names the required tier.
+        {% endcomment %}
+        {% if can_access_landing %}
+        {% if event and event.has_recording or workshop.code_repo_url %}
+        <div class="mt-6" data-testid="workshop-actions">
+          <div class="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+            {% if event and event.has_recording %}
+            <a href="{% url 'workshop_video' workshop.url_key %}"
+               class="{% if can_access_recording %}{% button_classes 'primary' extra='w-full sm:w-auto' %}{% else %}{% button_classes 'secondary' extra='w-full sm:w-auto' %}{% endif %}"
+               data-testid="workshop-video-link">
+              <i data-lucide="{% if can_access_recording %}play{% else %}lock{% endif %}" class="h-4 w-4" aria-hidden="true"></i>
+              Watch recording
+            </a>
+            {% endif %}
+            {% if workshop.code_repo_url %}
+            <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
+               class="{% button_classes 'secondary' extra='w-full sm:w-auto' %}"
+               data-testid="workshop-code-repo-link">
+              {% include 'includes/_icon_github.html' with css='h-4 w-4' %}
+              View code on GitHub
+              <i data-lucide="external-link" class="h-3.5 w-3.5" aria-hidden="true"></i>
+            </a>
+            {% endif %}
+          </div>
+          {% if event and event.has_recording and not can_access_recording %}
+          <p class="mt-2 text-xs text-muted-foreground" data-testid="workshop-video-locked">Recording available with {{ workshop.recording_required_level|required_tier_label }}.</p>
+          {% endif %}
+        </div>
+        {% endif %}
         {% endif %}
 
         {% if can_access_landing and workshop.core_tools %}
@@ -102,8 +139,7 @@
 
       {% comment %}
         Issue #646/#980: workshop-level Materials section, lifted directly
-        under the description and above the Tutorial pages list + actions
-        card so members notice the slides/links (they were buried at the
+        under the description and above the Tutorial pages list so members notice the slides/links (they were buried at the
         bottom). Rendered only when `can_show_materials` is True; the view
         resolves both the list (workshop materials win over event
         materials) and the gate (workshop -> pages_required_level,
@@ -152,7 +188,7 @@
           lesson rows in font-size, weight, color, padding, marker style,
           and inter-row gap.
         {% endcomment %}
-        <ol class="space-y-0.5 rounded-lg border border-border bg-card p-1">
+        <ol class="-mx-3 space-y-0.5">
           {% for page in pages %}
           <li>
             {% if not can_access_pages %}
@@ -165,54 +201,6 @@
         </ol>
       </div>
       {% endif %}
-
-      <!-- Recording and repository actions follow the README and tutorial
-           page list; individual tutorial pages are already linked above. -->
-      <div class="mb-12 space-y-4" data-testid="workshop-actions">
-        {% comment %}
-          Issue #844: only render the "Watch the recording" card when a
-          recording actually exists on the linked event. `has_recording`
-          is true when any of recording_s3_url / recording_url /
-          recording_embed_url is set. Otherwise the card is omitted
-          entirely so we never promise a recording that does not exist.
-        {% endcomment %}
-        {% if event and event.has_recording %}
-        <!-- Video card -->
-        <a href="{% url 'workshop_video' workshop.url_key %}"
-           class="group flex flex-col rounded-lg border border-border bg-card p-6 transition-colors hover:border-accent/50"
-           data-testid="workshop-video-link">
-          <div class="mb-3 flex items-center gap-3">
-            <div class="rounded-lg bg-accent/10 p-2">
-              <i data-lucide="play" class="h-5 w-5 text-accent"></i>
-            </div>
-            <h2 class="text-lg font-semibold text-foreground group-hover:text-accent transition-colors">Watch the recording</h2>
-          </div>
-          <p class="text-sm text-muted-foreground flex-1">
-            {% if can_access_recording %}
-              Full workshop video with timestamps and downloadable materials.
-            {% else %}
-              Recording available with {{ workshop.recording_required_level|required_tier_label }}.
-            {% endif %}
-          </p>
-          {% if not can_access_recording %}
-          <span class="mt-3 inline-flex items-center gap-1 text-xs text-muted-foreground" data-testid="workshop-video-locked">
-            <i data-lucide="lock" class="h-3 w-3"></i>
-            {{ workshop.recording_required_level|required_tier_label }}
-          </span>
-          {% endif %}
-        </a>
-        {% endif %}
-
-        {% if workshop.code_repo_url %}
-        <a href="{{ workshop.code_repo_url }}" target="_blank" rel="noopener noreferrer"
-           class="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-5 py-3 text-sm font-medium text-foreground transition-colors hover:border-accent/50 hover:text-accent"
-           data-testid="workshop-code-repo-link">
-          {% include 'includes/_icon_github.html' with css='h-4 w-4' %}
-          View code on GitHub
-          <i data-lucide="external-link" class="h-3 w-3"></i>
-        </a>
-        {% endif %}
-      </div>
 
       {% endif %}
 

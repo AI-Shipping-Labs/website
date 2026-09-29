@@ -14,12 +14,12 @@
       and intro. The /workshops landing passes a compact "Latest workshops"
       h2 with blank eyebrow/intro values above its three-card preview.
       {% endcomment %}
-      <div class="max-w-2xl">
+      <div class="max-w-3xl{% if show_catalog_filters %} mb-12{% endif %}">
         {% if catalog_eyebrow %}
         <p class="text-sm font-medium uppercase tracking-widest text-accent">{{ catalog_eyebrow }}</p>
         {% endif %}
         {% if catalog_heading_tag == "h1" %}
-        <h1 class="{% if catalog_eyebrow %}mt-3 {% endif %}text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
+        <h1 class="{% if catalog_eyebrow %}mt-4 {% endif %}text-3xl font-semibold tracking-tight text-foreground sm:text-4xl" style="text-wrap: balance;">
           {{ catalog_heading }}
         </h1>
         {% else %}
@@ -28,14 +28,14 @@
         </h2>
         {% endif %}
         {% if catalog_intro %}
-        <p class="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
+        <p class="mt-4 max-w-3xl text-lg text-muted-foreground">
           {{ catalog_intro }}
         </p>
         {% endif %}
       </div>
       {% if show_catalog_filters %}
       {% if workshop_search_index %}
-      <div class="mt-6" data-testid="workshop-search">
+      <div data-testid="workshop-search">
         {% include "content/_workshops_search.html" %}
       </div>
       {% endif %}

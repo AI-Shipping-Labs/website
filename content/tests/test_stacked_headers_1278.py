@@ -18,6 +18,7 @@ MEMBERSHIP_PREVIEWS = (
 WORKSHOPS = BASE_DIR / 'templates' / 'content' / '_workshops_catalog.html'
 DASHBOARD = BASE_DIR / 'templates' / 'content' / 'dashboard.html'
 DASHBOARD_ZONES = BASE_DIR / 'templates' / 'content' / '_dashboard_commitment_zones.html'
+DASHBOARD_GETTING_STARTED = BASE_DIR / 'templates' / 'content' / '_dashboard_getting_started.html'
 ACTIVATION_CHECKLIST = BASE_DIR / 'templates' / 'content' / '_activation_checklist.html'
 NOTIFICATIONS = BASE_DIR / 'templates' / 'notifications' / 'notification_list.html'
 
@@ -160,7 +161,10 @@ class PublicStackedHeaderStaticTest(TestCase):
             self.assertIn(heading, zones)
         for href in ('/courses', '/workshops', '/events', '/blog', '/sprints'):
             self.assertIn(f'href="{href}"', zones)
-        self.assertIn('checklist_eyebrow="Getting started"', zones)
+        self.assertIn(
+            'checklist_eyebrow="Getting started"',
+            _source(DASHBOARD_GETTING_STARTED),
+        )
         checklist = _source(ACTIVATION_CHECKLIST)
         self.assertLess(
             checklist.index('{{ checklist_eyebrow }}'), checklist.index('<ol'),

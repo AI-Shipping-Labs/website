@@ -4,14 +4,15 @@ clean density as the book card body (templates/bookclub/_secondary_book_card_bod
 title, a 2-line description, then a bottom-pinned meta line. Reads the context
 variable ``workshop``.
 
-Grid alignment: the title uses line-clamp-2 + min-h-[44px] so single- and
-two-line titles reserve the same height, and the meta row uses mt-auto so it
+Grid alignment: the title uses line-clamp-2 + sm:min-h-[44px] so single- and
+two-line titles reserve the same height in multi-column grids (a phone's
+one-column list reserves nothing), and the meta row uses mt-auto so it
 bottom-pins across equal-height cards. Editorial rows instead use a larger
 title, more readable metadata, and place skill level in the quiet meta line.
 Workshop deliverables ("Includes") live on the workshop detail page, not the card.
 {% endcomment %}
 {% if not card_editorial %}
-<h3 class="min-w-0 line-clamp-2 font-semibold leading-snug text-foreground transition-colors group-hover:text-accent {% if card_featured %}text-xl sm:text-2xl{% else %}min-h-[44px] text-base{% endif %}" data-testid="workshop-card-title">{{ workshop.title }}</h3>
+<h3 class="min-w-0 line-clamp-2 font-semibold leading-snug text-foreground transition-colors group-hover:text-accent {% if card_featured %}text-xl sm:text-2xl{% else %}text-base sm:min-h-[44px]{% endif %}" data-testid="workshop-card-title">{{ workshop.title }}</h3>
 {% endif %}
 {% if workshop.description_html %}
 <p class="mt-2 line-clamp-2 text-muted-foreground {% if card_editorial or card_featured %}text-sm leading-6 sm:text-base{% else %}text-sm{% endif %}" data-testid="workshop-card-description">{{ workshop.description_html|striptags|truncatechars:140 }}</p>

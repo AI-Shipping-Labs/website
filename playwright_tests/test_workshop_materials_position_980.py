@@ -231,7 +231,7 @@ class TestLandingMaterialsBelowDescription:
         )
         assert slides_link.get_attribute('target') == '_blank'
 
-        # description -> Materials -> pages list -> actions ordering.
+        # header actions -> description -> Materials -> pages list.
         assert _b_follows_a(
             page, '[data-testid="workshop-description"]',
             '[data-testid="workshop-materials"]',
@@ -241,9 +241,9 @@ class TestLandingMaterialsBelowDescription:
             '[data-testid="workshop-pages-list"]',
         ) is True, 'Materials must come BEFORE the Tutorial pages list'
         assert _b_follows_a(
-            page, '[data-testid="workshop-materials"]',
-            '[data-testid="workshop-actions"]',
-        ) is True, 'Materials must come BEFORE the actions card'
+            page, '[data-testid="workshop-actions"]',
+            '[data-testid="workshop-description"]',
+        ) is True, 'Header actions must come BEFORE the description'
 
         ctx.close()
 

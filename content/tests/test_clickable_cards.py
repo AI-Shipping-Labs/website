@@ -246,20 +246,18 @@ class DownloadsListClickableCardTest(TestCase):
 class CatalogTagDensityTest(TestCase):
     """Compact catalog cards cap visible tags and expose an overflow chip."""
 
-    def test_courses_card_caps_visible_tag_chips(self):
+    def test_courses_card_renders_no_raw_tag_chips(self):
+        # Course cards follow the content-card contract: no raw-tag chip row.
         Course.objects.create(
             title='Course With Many Tags',
             slug='many-course-tags',
             status='published',
-            tags=['one', 'two', 'three', 'four'],
+            tags=['zz-raw-one', 'zz-raw-two'],
         )
         response = self.client.get('/courses')
-        body = response.content.decode()
-        tags_block = body.split('data-testid="course-card-tags"', 1)[1].split('</div>', 1)[0]
-        self.assertIn('one', tags_block)
-        self.assertIn('three', tags_block)
-        self.assertIn('+1', tags_block)
-        self.assertNotIn('four', tags_block)
+        self.assertContains(response, 'Course With Many Tags')
+        self.assertNotContains(response, 'data-testid="course-card-tags"')
+        self.assertNotContains(response, 'zz-raw-one')
 
     # Workshop cards moved onto the shared content/_content_card.html at the
     # book-card density (badge + title + description + meta); they no longer

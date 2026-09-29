@@ -173,39 +173,6 @@ def _parse_access_value(raw, *, field_name, rel_path):
     )
 
 
-def _dispatch_courses(source, repo_dir, course_dirs, commit_sha, stats,
-                      known_images=None):
-    """Walker dispatch handler: process course directories.
-
-    Iterates ``course_dirs`` (absolute paths to dirs containing
-    ``course.yaml``) and upserts a ``Course`` row plus its Modules and
-    Units for each. Performs the stale-Course sweep at the end:
-
-    - When a stale row's ``content_id`` matches an active published row
-      (anywhere in the DB, not just this repo), the stale row is treated
-      as an orphan from a rename / cross-repo move: enrollments,
-      individual access grants, cohorts, and per-unit progress are
-      reattached to the published row by ``Unit.content_id``, then the
-      orphan is deleted (issue #366).
-    - Otherwise the row is soft-deleted to ``status='draft'`` so any
-      historical FKs are preserved (legacy behavior, unchanged).
-    """
-
-    seen_course_slugs = set()
-    failed_course_slugs = set()
-
-    for course_dir in course_dirs:
-        _sync_single_course(
-            course_dir, repo_dir, source, commit_sha, stats,
-            seen_course_slugs, failed_course_slugs,
-            known_images=known_images,
-        )
-
-    _cleanup_stale_courses_for_source(
-        source, seen_course_slugs, failed_course_slugs, stats,
-    )
-
-
 class CoursesParser(FamilyParser):
     content_type = 'courses'
     state_name = 'courses'
@@ -1601,20 +1568,19 @@ def _sync_module_dir(
         allow_parent_with_pending_units=allow_parent_with_pending_units,
     )
 
-    if submodule_entries:
-        # Parent module: README (if any) is still its overview; it has no
-        # direct units (guarded above), so this only processes the README.
-        _sync_module_units(
-            module, entry.path, repo_dir, repo_name, commit_sha, stats,
-            known_images=known_images,
-            course_dir=course_dir,
-            course_ignore_patterns=course_ignore_patterns,
-            module_ignore_patterns=module_ignore_patterns,
-            course_slug=course_slug,
-            unit_lookup=unit_lookup,
-            unit_sync_state=unit_sync_state,
-        )
+    # Parent modules sync only their README overview; leaves also sync units.
+    _sync_module_units(
+        module, entry.path, repo_dir, repo_name, commit_sha, stats,
+        known_images=known_images,
+        course_dir=course_dir,
+        course_ignore_patterns=course_ignore_patterns,
+        module_ignore_patterns=module_ignore_patterns,
+        course_slug=course_slug,
+        unit_lookup=unit_lookup,
+        unit_sync_state=unit_sync_state,
+    )
 
+    if submodule_entries:
         # Issue #1721: a module that keeps its slug across a restructure
         # while gaining submodules this sync still holds its OLD direct
         # units at this point — the immediate sweep just above correctly
@@ -1652,18 +1618,6 @@ def _sync_module_dir(
             # course walk (for example, Week 5 lessons moving into Bonus).
             # Validate after every module has had a chance to claim them.
             unit_sync_state['pending_parent_modules'].append((module, rel_path))
-    else:
-        # Leaf module (today's two-level shape, unchanged behaviour).
-        _sync_module_units(
-            module, entry.path, repo_dir, repo_name, commit_sha, stats,
-            known_images=known_images,
-            course_dir=course_dir,
-            course_ignore_patterns=course_ignore_patterns,
-            module_ignore_patterns=module_ignore_patterns,
-            course_slug=course_slug,
-            unit_lookup=unit_lookup,
-            unit_sync_state=unit_sync_state,
-        )
 
 
 def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patterns):

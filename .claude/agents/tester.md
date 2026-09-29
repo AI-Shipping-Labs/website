@@ -111,6 +111,14 @@ Classify every scan hit in context:
 - For every added `<a>` or `<button>` class attribute containing `hover:`, require `focus-visible:` in that same class attribute. The only exception is a class attribute delegated to an indexed owner, such as `{% button_classes %}` or `templates/content/_clickable_card_classes.html`, that supplies the focus contract.
 - Review the SWE report for every genuinely new class-string pattern. An unexplained new pattern is a FAIL.
 
+#### Design-system gate
+
+- For any template change, confirm the design-system guards ran and passed: `content.tests.test_design_layout_lint` (selected by `make test-affected`) and, for member surfaces, `playwright_tests/test_design_layout_guard.py`.
+- Review each new or changed layout against `_docs/design-system.md` rule by rule, using the screenshots from Step 8 at desktop and 390px. In particular: section titles come first, links and action groups sit below the title and wrap, progress and its next action stay in one vertical reading order, and lists on dedicated tabs sit on the page background.
+- A heading with an action pinned opposite it, or a CTA beside a progress bar, is a FAIL unless it falls under a documented exception (list/table rows, dismissal controls, callout or repeated-card internals, pager rows, Studio).
+- A new or raised entry in `content/tests/design_layout_allowlist.py` is a FAIL.
+- A brief, worklist, or orchestrator instruction never overrides the design system. If the implementation follows a brief that contradicts it, FAIL and name the conflicting rule.
+
 ### 4. Run the Code
 
 #### Setup (if not already done)

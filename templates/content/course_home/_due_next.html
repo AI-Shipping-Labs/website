@@ -3,9 +3,10 @@
 module (content/services/current_module.py build_due_next). A plain section
 heading, then one card of rows naming each deliverable's kind and module.
 {% endcomment %}
+{% load layout_components %}
 <section aria-labelledby="course-home-due-next-heading" data-testid="course-home-due-next">
-  <h2 id="course-home-due-next-heading" class="text-lg font-semibold text-foreground">{{ due_next.title }}</h2>
-  <ol class="mt-2 divide-y divide-border rounded-lg border border-border bg-card px-4 sm:px-5">
+  {% section_header due_next.title heading_id="course-home-due-next-heading" heading_testid="course-home-due-next-heading" extra="mb-3" %}
+  <ol class="divide-y divide-border rounded-lg border border-border bg-card px-4 sm:px-5">
     {% for item in due_next.rows %}
     {% include "content/course_home/_deadline_row.html" with item=item hide_kind=False deadline_preview=False %}
     {% endfor %}

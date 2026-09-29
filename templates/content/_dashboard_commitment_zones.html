@@ -2,13 +2,14 @@
 {% load member_badges %}
 {% load teaser_tags %}
 {% load sprint_extras %}
+{% load layout_components %}
 
 <div class="space-y-12 sm:space-y-16" data-testid="dashboard-commitment-zones">
   {% if not plan %}{% include "content/_dashboard_getting_started.html" %}{% endif %}
 
   {% if plan or show_plan_preparing or dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
   <section class="space-y-4" data-testid="dashboard-this-week">
-    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Your week</h2>
+    {% section_header "Your week" size="lg" %}
 
     {% if plan %}
     <div class="rounded-lg border border-accent/30 bg-card p-6" id="sprint-plan-section" data-testid="account-sprint-plan-card">
@@ -82,7 +83,7 @@
 
   {% if in_progress_learning %}
   <section class="space-y-4" data-testid="dashboard-continue-learning-section">
-    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Continue learning</h2>
+    {% section_header "Continue learning" size="lg" %}
     <div class="border-t border-border/70" data-testid="continue-learning-list">
       {% for item in in_progress_learning %}
         {% if item.kind == 'workshop' %}
@@ -101,7 +102,7 @@
   {% endif %}
 
   <section class="space-y-4" data-testid="dashboard-home-feed">
-    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">For you</h2>
+    {% section_header "For you" size="lg" %}
     {% if dashboard_feed %}
     <div class="border-t border-border/70" data-testid="dashboard-feed-list">
       {% for item in dashboard_feed %}
@@ -122,7 +123,7 @@
 
   {% if show_free_plan_teaser %}
   <section class="space-y-4" data-testid="dashboard-unlock-more">
-    <h2 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Unlock more</h2>
+    {% section_header "Unlock more" size="lg" %}
     <div class="rounded-lg border border-border bg-card p-6" data-testid="free-plan-teaser">
       <h3 class="text-lg font-semibold text-foreground">What community members are doing this month</h3>
       <ul class="mt-4 space-y-3 text-sm text-foreground">

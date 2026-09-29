@@ -4,12 +4,16 @@
  * Rendered markdown headings carry slug ids (content/utils/heading_ids.py).
  * This script adds the two client-side pieces:
  *
- * 1. Hover link: each h2/h3/h4 with an id inside `.prose` (excluding
+ * 1. Section link: each h2/h3/h4 with an id inside `.prose` (excluding
  *    `.prose-note` member notes and code-annotation panels) gets a trailing
- *    `<a class="section-anchor" href="#id">#</a>`. It is invisible until the
- *    heading is hovered or the link is focused (see `.section-anchor` in
- *    assets/css/tailwind.css). It is added here, never in stored HTML, so
- *    excerpts, plain text, RSS and emails never contain the `#`.
+ *    inline `<a class="section-anchor" href="#id">` holding a link icon,
+ *    after the heading text. On hover-capable pointers it shows while the
+ *    heading is hovered or the link has keyboard focus; on touch
+ *    (`@media (hover: none)`) it is always shown, muted, with a 44px tap
+ *    target (see `.section-anchor` in assets/css/tailwind.css). Activating
+ *    it copies the section URL to the clipboard, sets `location.hash` and
+ *    announces "Link copied" through a polite live-region toast. It is added here, never in stored HTML, so
+ *    excerpts, plain text, RSS and emails never contain the link.
  *
  * 2. Fragment through sign-in: a gated page renders a teaser, so a
  *    `#section` link has no target. The fragment never reaches the server,
@@ -201,37 +205,142 @@
     window.setTimeout(settle, 1000);
   }
 
-  // The md+ gutter position sits left of the heading box. A wrapper that
-  // clips overflow (e.g. `overflow-x-auto` on reader/project prose) would
-  // hide it, so those headings get the trailing inline position instead.
-  var GUTTER_PX = 32;
+  // Lucide `link` icon, inlined so it does not depend on lucide.createIcons()
+  // having run before this script.
+  var LINK_ICON_SVG =
+    '<svg class="section-anchor-icon" xmlns="http://www.w3.org/2000/svg" ' +
+    'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' +
+    '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>' +
+    '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>' +
+    '</svg>';
+  var TOAST_MS = 2000;
+  var toast = null;
+  var toastTimer = null;
 
-  function gutterIsClipped(heading) {
-    var headingLeft = heading.getBoundingClientRect().left;
-    for (var el = heading.parentElement; el && el !== document.body; el = el.parentElement) {
-      var style = window.getComputedStyle(el);
-      if (style.overflowX !== 'visible' &&
-          el.getBoundingClientRect().left > headingLeft - GUTTER_PX) {
-        return true;
-      }
-    }
-    return false;
+  function ensureToast() {
+    if (toast && toast.isConnected) return toast;
+    // Created up front (empty) so assistive tech has registered the live
+    // region before the first announcement.
+    toast = document.createElement('div');
+    toast.className = 'section-anchor-toast';
+    toast.setAttribute('role', 'status');
+    toast.setAttribute('aria-live', 'polite');
+    toast.setAttribute('data-testid', 'section-anchor-toast');
+    document.body.appendChild(toast);
+    return toast;
   }
 
-  function addHoverLinks() {
+  // Height of whatever is pinned over the bottom of the viewport (consent
+  // banner, a reader's sticky bottom bar), so the toast sits above it.
+  // Floating panels keep a gap to the viewport edge, so sample a band of
+  // points up the bottom-centre rather than only the last pixel row.
+  var CLEARANCE_SAMPLES = [1, 8, 16, 24, 32, 48];
+
+  function bottomClearance(toastEl) {
+    if (!document.elementsFromPoint) return 0;
+    var clearance = 0;
+    var viewport = window.innerHeight;
+    var seen = [];
+    CLEARANCE_SAMPLES.forEach(function (offset) {
+      document.elementsFromPoint(window.innerWidth / 2, viewport - offset)
+        .forEach(function (el) {
+          for (var node = el; node && node !== document.body; node = node.parentElement) {
+            if (node === toastEl) return;
+            if (seen.indexOf(node) !== -1) return;
+            var position = window.getComputedStyle(node).position;
+            if (position === 'fixed' || position === 'sticky') {
+              seen.push(node);
+              clearance = Math.max(clearance, viewport - node.getBoundingClientRect().top);
+              return;
+            }
+          }
+        });
+    });
+    return Math.min(clearance, viewport / 2);
+  }
+
+  function showToast(message) {
+    var el = ensureToast();
+    el.style.setProperty(
+      '--section-anchor-toast-clearance', Math.ceil(bottomClearance(el)) + 'px'
+    );
+    el.textContent = message;
+    el.classList.add('is-visible');
+    if (toastTimer) window.clearTimeout(toastTimer);
+    toastTimer = window.setTimeout(function () {
+      el.classList.remove('is-visible');
+      toastTimer = null;
+    }, TOAST_MS);
+  }
+
+  function legacyCopy(text) {
+    var field = document.createElement('textarea');
+    field.value = text;
+    field.setAttribute('readonly', '');
+    field.style.position = 'fixed';
+    field.style.top = '0';
+    field.style.opacity = '0';
+    document.body.appendChild(field);
+    field.select();
+    var ok = false;
+    try {
+      ok = document.execCommand('copy');
+    } catch (e) {
+      ok = false;
+    }
+    field.remove();
+    return ok;
+  }
+
+  function copyText(text) {
+    if (navigator.clipboard && window.isSecureContext) {
+      return navigator.clipboard.writeText(text).then(
+        function () { return true; },
+        function () { return legacyCopy(text); }
+      );
+    }
+    return Promise.resolve(legacyCopy(text));
+  }
+
+  function onAnchorClick(event) {
+    var link = event.target.closest && event.target.closest('a.section-anchor');
+    if (!link) return;
+    // Let modified clicks (new tab, new window) keep the browser default.
+    if (event.button !== 0 || event.metaKey || event.ctrlKey ||
+        event.shiftKey || event.altKey) {
+      return;
+    }
+    var heading = link.parentElement;
+    if (!heading || !heading.id) return;
+    event.preventDefault();
+    var hash = '#' + encodeURIComponent(heading.id);
+    var url = window.location.href.split('#')[0] + hash;
+    if (window.location.hash === hash) {
+      onHashChange();
+    } else {
+      window.location.hash = hash;
+    }
+    copyText(url).then(function (ok) {
+      showToast(ok ? 'Link copied' : 'Link ready in the address bar');
+    });
+  }
+
+  function addSectionLinks() {
     var headings = document.querySelectorAll(ANCHOR_SELECTOR);
     Array.prototype.forEach.call(headings, function (heading) {
       if (heading.closest('.prose-note, .code-annotations')) return;
       if (heading.querySelector(':scope > a.section-anchor')) return;
       var text = (heading.textContent || '').replace(/\s+/g, ' ').trim();
       var link = document.createElement('a');
-      link.className = gutterIsClipped(heading)
-        ? 'section-anchor section-anchor-inline'
-        : 'section-anchor';
+      link.className = 'section-anchor';
       link.href = '#' + encodeURIComponent(heading.id);
       link.setAttribute('aria-label', 'Link to section: ' + text);
       link.setAttribute('data-testid', 'section-anchor');
-      link.textContent = '#';
+      // U+2060 WORD JOINER forbids a line break between the heading's last
+      // word and the icon, so on a long title the icon wraps with that word
+      // instead of dangling alone on a new line.
+      link.innerHTML = '\u2060' + LINK_ICON_SVG;
       // Keep the heading's accessible name equal to its own text; without
       // this a screen reader announces "X Link to section: X".
       if (!heading.hasAttribute('aria-label')) {
@@ -242,7 +351,11 @@
   }
 
   function init() {
-    addHoverLinks();
+    addSectionLinks();
+    if (document.querySelector('a.section-anchor')) {
+      ensureToast();
+      document.addEventListener('click', onAnchorClick);
+    }
     savePendingSection();
     watchLayout();
     restorePendingSection();

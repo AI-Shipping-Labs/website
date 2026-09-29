@@ -21,6 +21,7 @@ from playwright_tests.conftest import (
     DEFAULT_PASSWORD,
     SETTLE_TIMEOUT_MS,
     auth_context,
+    create_session_for_user,
     create_user,
     ensure_tiers,
 )
@@ -32,6 +33,8 @@ pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
 SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1833")
 DESKTOP = {"width": 1280, "height": 800}
+PHONE = {"width": 390, "height": 844}
+CLIPBOARD = ["clipboard-read", "clipboard-write"]
 
 
 def _filler(label, paragraphs=8):
@@ -178,6 +181,19 @@ def _wait_for_heading_position(page, heading_id):
     )
 
 
+def _wait_heading_at_scroll_margin(page, heading_id):
+    """Wait until the jump settles with the heading at its scroll margin."""
+    page.wait_for_function(
+        """(id) => {
+            const heading = document.getElementById(id);
+            const margin = parseFloat(getComputedStyle(heading).scrollMarginTop);
+            return Math.abs(heading.getBoundingClientRect().top - margin) <= 4;
+        }""",
+        arg=heading_id,
+        timeout=SETTLE_TIMEOUT_MS,
+    )
+
+
 def _heading_rect(page, heading_id):
     return page.evaluate(
         """(id) => {
@@ -187,6 +203,108 @@ def _heading_rect(page, heading_id):
         }""",
         heading_id,
     )
+
+
+def _touch_member_context(browser, django_server, email):
+    """A signed-in phone context: 390px, touch, no hover (`hover: none`)."""
+    context = browser.new_context(
+        viewport=PHONE, is_mobile=True, has_touch=True,
+    )
+    context.add_cookies([{
+        "name": "sessionid",
+        "value": create_session_for_user(email),
+        "domain": "127.0.0.1",
+        "path": "/",
+    }])
+    context.grant_permissions(CLIPBOARD, origin=django_server)
+    return context
+
+
+def _anchor_geometry(page, heading_id):
+    """Where the section link sits relative to its heading's own text."""
+    return page.evaluate(
+        """(id) => {
+            const heading = document.getElementById(id);
+            const link = heading.querySelector(':scope > a.section-anchor');
+            const range = document.createRange();
+            range.setStartBefore(heading.firstChild);
+            range.setEndBefore(link);
+            const lines = [...range.getClientRects()].filter((r) => r.width > 0);
+            const last = lines[lines.length - 1];
+            const icon = link.querySelector('svg').getBoundingClientRect();
+            const hit = link.getBoundingClientRect();
+            const box = heading.getBoundingClientRect();
+            return {
+                linkIsLastChild: heading.lastElementChild === link
+                    && heading.lastChild === link,
+                textLines: lines.length,
+                textRight: last.right,
+                lastLineTop: last.top,
+                lastLineBottom: last.bottom,
+                iconLeft: icon.left,
+                iconRight: icon.right,
+                iconMiddle: (icon.top + icon.bottom) / 2,
+                headingLeft: box.left,
+                headingRight: box.right,
+                hitWidth: hit.width,
+                hitHeight: hit.height,
+                opacity: getComputedStyle(link).opacity,
+            };
+        }""",
+        heading_id,
+    )
+
+
+def _assert_link_trails_heading_text(geometry):
+    # After the text in DOM order and visually right of the last line, with
+    # a small gap; never in the left gutter and never past the heading box.
+    assert geometry["linkIsLastChild"], geometry
+    assert geometry["iconLeft"] > geometry["headingLeft"], geometry
+    gap = geometry["iconLeft"] - geometry["textRight"]
+    assert 2 <= gap <= 14, geometry
+    assert (
+        geometry["lastLineTop"] <= geometry["iconMiddle"] <= geometry["lastLineBottom"]
+    ), geometry
+    assert geometry["iconRight"] <= geometry["headingRight"] + 1, geometry
+
+
+def _assert_copied(page, url):
+    toast = page.get_by_test_id("section-anchor-toast")
+    expect(toast).to_have_attribute("role", "status")
+    expect(toast).to_have_attribute("aria-live", "polite")
+    expect(toast).to_have_text("Link copied")
+    expect(toast).to_be_visible()
+    assert page.evaluate("navigator.clipboard.readText()") == url
+
+
+def _assert_toast_clear_of_section(page, heading_id):
+    """Once the jump settles, the toast box (its position does not change
+    when it fades) must not cover the linked heading, and must sit above
+    the consent banner pinned to the viewport bottom."""
+    layout = page.evaluate(
+        """(id) => {
+            const toast = document.querySelector('[data-testid="section-anchor-toast"]')
+                .getBoundingClientRect();
+            const heading = document.getElementById(id).getBoundingClientRect();
+            const panel = document.getElementById('analytics-consent-panel');
+            const panelRect = panel && getComputedStyle(panel).display !== 'none'
+                ? panel.getBoundingClientRect() : null;
+            return {
+                toastTop: toast.top, toastBottom: toast.bottom,
+                headingTop: heading.top, headingBottom: heading.bottom,
+                panelTop: panelRect ? panelRect.top : null,
+                viewport: window.innerHeight,
+            };
+        }""",
+        heading_id,
+    )
+    assert (
+        layout["toastTop"] >= layout["headingBottom"]
+        or layout["toastBottom"] <= layout["headingTop"]
+    ), layout
+    assert layout["toastBottom"] <= layout["viewport"], layout
+    if layout["panelTop"] is not None:
+        assert layout["toastBottom"] <= layout["panelTop"], layout
 
 
 def _sign_in_on_login_page(page, email):
@@ -422,6 +540,7 @@ def test_member_copies_section_link_with_hover_affordance(django_server, browser
     content_id, lesson_url = _lesson(required_level=20)
     create_user("main-hover-1833@test.com", tier_slug="main")
     context = auth_context(browser, "main-hover-1833@test.com")
+    context.grant_permissions(CLIPBOARD, origin=django_server)
     page = context.new_page()
     page.set_viewport_size(DESKTOP)
     try:
@@ -434,6 +553,7 @@ def test_member_copies_section_link_with_hover_affordance(django_server, browser
         )
         expect(anchor).to_have_attribute("href", "#streaming-responses")
         expect(anchor).to_have_css("opacity", "0")
+        expect(page.get_by_test_id("section-anchor-toast")).to_be_hidden()
 
         # The injected link must not leak into the heading's accessible
         # name: screen readers announce the heading text once, and the link
@@ -448,14 +568,99 @@ def test_member_copies_section_link_with_hover_affordance(django_server, browser
 
         heading.hover()
         expect(anchor).to_have_css("opacity", "1")
+        _assert_link_trails_heading_text(
+            _anchor_geometry(page, "streaming-responses"),
+        )
         _capture(page, "hover-anchor-visible")
 
         anchor.click()
-        page.wait_for_url(f"{django_server}{lesson_url}#streaming-responses")
+        section_url = f"{django_server}{lesson_url}#streaming-responses"
+        page.wait_for_url(section_url)
+        _assert_copied(page, section_url)
+        _capture(page, "desktop-toast")
         _wait_heading_below_header(page, "streaming-responses")
+        _wait_heading_at_scroll_margin(page, "streaming-responses")
+        _assert_toast_clear_of_section(page, "streaming-responses")
+        heading.hover()
+        _capture(page, "desktop-link-copied")
 
         page.reload(wait_until="load")
         _wait_heading_below_header(page, "streaming-responses")
+    finally:
+        context.close()
+
+
+@pytest.mark.core
+@browser_journey
+def test_phone_reader_taps_visible_section_link_and_shares_it(
+    django_server, browser,
+):
+    _reset()
+    _, lesson_url = _lesson(required_level=20)
+    create_user("main-touch-1833@test.com", tier_slug="main")
+    context = _touch_member_context(
+        browser, django_server, "main-touch-1833@test.com",
+    )
+    page = context.new_page()
+    try:
+        page.goto(f"{django_server}{lesson_url}", wait_until="load")
+        assert page.evaluate("matchMedia('(hover: none)').matches")
+        heading = _heading(page, "Streaming Responses")
+        heading.scroll_into_view_if_needed()
+        anchor = page.get_by_role(
+            "link", name="Link to section: Streaming Responses", exact=True,
+        )
+        # No hover on a phone: the link icon is always shown, muted, and is
+        # a full 44px tap target that trails the heading text.
+        expect(anchor).to_be_visible()
+        geometry = _anchor_geometry(page, "streaming-responses")
+        assert geometry["opacity"] == "1", geometry
+        assert geometry["hitWidth"] >= 44 and geometry["hitHeight"] >= 44, geometry
+        _assert_link_trails_heading_text(geometry)
+        _capture(page, "touch-anchor-visible")
+
+        anchor.tap()
+        section_url = f"{django_server}{lesson_url}#streaming-responses"
+        page.wait_for_url(section_url)
+        _assert_copied(page, section_url)
+        _capture(page, "touch-toast")
+        _wait_heading_below_header(page, "streaming-responses")
+        _wait_heading_at_scroll_margin(page, "streaming-responses")
+        _assert_toast_clear_of_section(page, "streaming-responses")
+        _capture(page, "touch-link-copied")
+
+        # The copied link, opened fresh, lands on the section below the
+        # fixed header.
+        fresh = context.new_page()
+        fresh.goto(f"{django_server}{lesson_url}#error-handling", wait_until="load")
+        _wait_heading_below_header(fresh, "error-handling")
+        _wait_heading_at_scroll_margin(fresh, "error-handling")
+        expect(_heading(fresh, "Error Handling")).to_be_in_viewport()
+        _capture(fresh, "touch-opened-section")
+    finally:
+        context.close()
+
+
+@browser_journey
+def test_phone_long_heading_wraps_with_its_section_link(django_server, browser):
+    _reset()
+    long_title = (
+        "Retrieval augmented generation versus agentic retrieval with "
+        "tool calling loops"
+    )
+    url = _article("long-heading", f"## {long_title}\n\nBody text.\n")
+    context = browser.new_context(viewport=PHONE, is_mobile=True, has_touch=True)
+    page = context.new_page()
+    try:
+        page.goto(f"{django_server}{url}", wait_until="load")
+        heading_id = page.locator(".prose h2[id]").first.get_attribute("id")
+        geometry = _anchor_geometry(page, heading_id)
+        assert geometry["textLines"] > 1, geometry
+        _assert_link_trails_heading_text(geometry)
+        assert page.evaluate(
+            "document.documentElement.scrollWidth <= window.innerWidth"
+        )
+        _capture(page, "touch-long-heading")
     finally:
         context.close()
 

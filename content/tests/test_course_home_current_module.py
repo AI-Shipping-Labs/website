@@ -245,9 +245,7 @@ class CurrentModuleHomeTests(CurrentModuleFixture):
             [('Earlier homework', 'Foundations')],
         )
         self.assertContains(
-            response,
-            'id="course-home-due-next-heading" class="text-lg font-semibold text-foreground">'
-            'Due this week</h2>',
+            response, 'data-testid="course-home-due-next-heading">Due this week</h2>',
         )
 
     def test_due_next_falls_forward_to_the_next_week_with_every_item(self):

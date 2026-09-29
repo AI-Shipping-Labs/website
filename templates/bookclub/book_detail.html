@@ -92,9 +92,9 @@
           </div>
         </div>
         {% endif %}
-        <div class="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
           <h2 class="text-lg font-semibold tracking-tight">Contents</h2>
-          <div class="flex flex-wrap items-baseline gap-3">
+          <div class="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
             {% if viewer_total %}
             <span class="text-sm text-muted-foreground" data-testid="book-reading-progress">{{ viewer_done }} of {{ viewer_total }} read</span>
             {% endif %}

@@ -1,10 +1,9 @@
+{% load layout_components %}
 {% if live_session_schedule %}
 <section aria-labelledby="{% if section == 'module' %}module-live-sessions-heading{% else %}course-live-sessions-heading{% endif %}" data-testid="course-home-live-sessions">
   {% if section == 'module' %}
-  <header class="mb-2">
-    <h2 id="module-live-sessions-heading" class="text-lg font-semibold text-foreground">Live sessions</h2>
-    <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">See all live sessions <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
-  </header>
+  {% url 'course_office_hours' slug=course.slug as all_sessions_url %}
+  {% section_header "Live sessions" heading_id="module-live-sessions-heading" see_all_url=all_sessions_url|add:cohort_query see_all_label="See all live sessions" see_all_testid="module-live-sessions-see-all" extra="mb-3" %}
   <ol class="divide-y divide-border border-y border-border">
     {% for session in live_session_schedule %}
     {% include "content/course_home/_session_row.html" with session=session %}

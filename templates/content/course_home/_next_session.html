@@ -1,9 +1,11 @@
 {% load accounts_extras %}
 {% load event_copy %}
+{% load layout_components %}
 {% load member_badges %}
 {% with session=home_next_session %}
 <section aria-labelledby="course-home-next-session-heading" data-testid="course-home-next-session">
-  <h2 id="course-home-next-session-heading" class="mb-2 text-lg font-semibold text-foreground">Next live session</h2>
+  {% url 'course_office_hours' slug=course.slug as all_sessions_url %}
+  {% section_header "Next live session" heading_id="course-home-next-session-heading" see_all_url=all_sessions_url|add:cohort_query see_all_label="See all live sessions" see_all_testid="course-home-next-session-see-all" extra="mb-3" %}
   <div class="rounded-lg border border-border bg-card p-4 sm:p-5">
     <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
       <h3 class="break-words text-base font-semibold text-foreground" data-testid="course-home-next-session-title">{{ session.display_title }}</h3>

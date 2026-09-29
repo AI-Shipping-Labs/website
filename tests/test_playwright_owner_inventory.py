@@ -1267,6 +1267,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_section_anchors_1833.py::test_section_link_clears_header_with_announcement_banner",
         "playwright_tests/test_section_anchors_1833.py::test_event_description_section_link",
         "playwright_tests/test_section_anchors_1833.py::test_section_link_stays_on_target_while_lazy_image_above_loads",
+        "playwright_tests/test_section_anchors_1833.py::test_phone_reader_taps_visible_section_link_and_shares_it",
+        "playwright_tests/test_section_anchors_1833.py::test_phone_long_heading_wraps_with_its_section_link",
     })
 
     issue_1597_owners = frozenset({
@@ -1450,6 +1452,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_on_phone_opens_studio_from_the_header_menu",
     })
 
+    design_layout_guard_owners = frozenset({
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_course_home_tabs_keep_actions_below_their_headings",
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_course_reader_pages_keep_actions_below_their_headings",
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_workshop_and_dashboard_keep_actions_below_their_headings",
+    })
+
     workshop_search_owners = frozenset({
         "playwright_tests/test_workshop_search.py::"
         "test_workshop_catalog_search_suggests_workshops_and_pages",
@@ -1602,8 +1613,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2699)
-        self.assertEqual(len(inventory.owners), 2495)
+        self.assertEqual(inventory.item_count, 2704)
+        self.assertEqual(len(inventory.owners), 2500)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1615,6 +1626,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1837_owners
             | self.reader_mobile_polish_owners
             | self.hotfix_cohort_owners
+            | self.design_layout_guard_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners
             | self.studio_sidebar_rail_owners

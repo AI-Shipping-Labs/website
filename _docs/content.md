@@ -10,7 +10,7 @@ Webhook deliveries are idempotent: the handler claims each `X-GitHub-Delivery` i
 
 Manual sync: `uv run python manage.py sync_content` (all sources) or `uv run python manage.py sync_content --from-disk <path>` (local clone, useful for previewing changes before they land in GitHub).
 
-Sync code: `integrations/services/github_sync/orchestration.py` (contains `_sync_repo`) plus the per-type dispatchers in `integrations/services/github_sync/dispatchers/*.py`. `integrations/services/github.py` is now a compatibility facade that re-exports from `github_sync/`. The per-type dispatch functions follow the pattern `_dispatch_<type>(source, repo_dir, file_list, commit_sha, stats, ...)` — e.g. `_dispatch_articles`, `_dispatch_courses`, `_dispatch_events`.
+Sync code: `community_base.content_sync` drives the sync. Site-specific parsers live in `content/sync_parsers/families/` and register through `content/sync_parsers/__init__.py`. `integrations/services/content_sync.py` connects the site to the package engine; `integrations/services/github.py` preserves the historical import path and queued task name.
 
 ## ContentSource
 
@@ -543,7 +543,7 @@ Same steps regardless of which content type the repo holds.
 
 ### Single-course repos
 
-`_dispatch_courses` walks the repo tree and treats every folder with a `course.yaml` as a course. Standalone single-course repos (where `course.yaml` lives at the repo root) are supported: the dispatcher detects that shape and syncs the root as a single course.
+The registered `CoursesParser` processes each directory classified as a course, including the repository root when it contains `course.yaml`. It calls `_sync_single_course` for each course and `_cleanup_stale_courses_for_source` after processing the source.
 
 ## Conventions and gotchas
 

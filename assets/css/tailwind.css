@@ -171,40 +171,93 @@ body {
    headings instead of `html { scroll-padding-top }` so it does not stack
    with the homepage's `scroll-mt-24` sections. */
 .prose :is(h1, h2, h3, h4, h5, h6)[id] { scroll-margin-top: var(--site-header-offset, 6rem); }
-/* Hover `#` link appended to h2-h4 by static/js/section-anchors.js. It is
-   absolutely positioned in the left gutter on md+ so heading layout does not
-   move. It is trailing inline on small screens and inside overflow-clipping
-   wrappers (`.section-anchor-inline`, set by the script). It stays invisible
-   (opacity 0, still focusable) until the heading is hovered or the link has
-   keyboard focus. */
-.prose :is(h2, h3, h4)[id] { position: relative; }
+/* Section link appended to h2-h4 by static/js/section-anchors.js: a lucide
+   `link` icon trailing the heading text inline (never in the left gutter),
+   joined to the last word so it wraps with the title and never overflows.
+   Muted-foreground, accent on hover/focus, canonical accent focus ring.
+   Hover-capable pointers: invisible (opacity 0, still focusable) until the
+   heading is hovered or the link has keyboard focus. Touch (`hover: none`):
+   always visible with a 44px hit area built from padding cancelled by
+   negative margins, so the heading layout does not move. */
 .prose a.section-anchor,
 .prose a.section-anchor:visited {
-  margin-left: 0.375rem;
+  margin-left: 0.25rem;
+  margin-right: -0.25rem;
+  padding: 0.25rem;
   border-radius: 0.25rem;
   color: hsl(var(--muted-foreground));
-  font-weight: 500;
   text-decoration: none;
-  opacity: 0;
+  white-space: nowrap;
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
   transition: opacity 150ms ease, color 150ms ease;
 }
-.prose :is(h2, h3, h4):hover > a.section-anchor,
-.prose a.section-anchor:focus-visible { opacity: 1; }
-.prose a.section-anchor:hover { color: hsl(var(--accent)); }
+.prose a.section-anchor .section-anchor-icon {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  min-width: 0.875rem;
+  min-height: 0.875rem;
+  vertical-align: -0.0625em;
+}
+.prose a.section-anchor:hover,
+.prose a.section-anchor:focus-visible { color: hsl(var(--accent)); }
 .prose a.section-anchor:focus-visible {
+  opacity: 1;
   outline: none;
   box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--accent));
 }
-@media (min-width: 768px) {
-  .prose a.section-anchor:not(.section-anchor-inline),
-  .prose a.section-anchor:not(.section-anchor-inline):visited {
-    position: absolute;
-    top: 0;
-    right: 100%;
-    margin-left: 0;
-    padding-right: 0.375rem;
+@media (hover: hover) {
+  .prose a.section-anchor { opacity: 0; }
+  .prose :is(h2, h3, h4):hover > a.section-anchor,
+  .prose a.section-anchor:focus-visible { opacity: 1; }
+}
+@media (hover: none) {
+  .prose a.section-anchor,
+  .prose a.section-anchor:visited {
+    opacity: 1;
+    margin-left: -0.4375rem;
+    margin-right: -0.9375rem;
+    padding: 0.875rem 0.9375rem;
   }
+}
+/* "Link copied" toast from static/js/section-anchors.js (polite live
+   region). Bottom-centred, clear of the iOS home indicator; the script
+   raises it above whatever is pinned to the viewport bottom (the analytics
+   consent banner, a reader's sticky bottom bar) through
+   --section-anchor-toast-clearance. Never at the top: that is where the
+   just-linked heading lands. */
+.section-anchor-toast {
+  position: fixed;
+  bottom: calc(1rem + var(--section-anchor-toast-clearance, 0px) + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 70;
+  transform: translate(-50%, 0.25rem);
+  max-width: calc(100vw - 2rem);
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  background: hsl(var(--card));
+  padding: 0.5rem 0.75rem;
+  color: hsl(var(--foreground));
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 150ms;
+}
+.section-anchor-toast.is-visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translate(-50%, 0);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+@media (prefers-reduced-motion: reduce) {
+  .prose a.section-anchor,
+  .section-anchor-toast,
+  .section-anchor-toast.is-visible { transition: none; }
 }
 .prose code { border-radius: 0.25rem; background: hsl(var(--secondary)); padding: 0.125rem 0.375rem; font-size: 0.875rem; font-family: 'JetBrains Mono', monospace; color: hsl(var(--foreground)); border: 1px solid hsl(var(--border)); font-variant-ligatures: none; }
 .prose pre { margin-top: 1rem; border-radius: 0.5rem; border: 1px solid hsl(var(--border)); background: hsl(var(--card)); padding: 1rem; font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; overflow-x: auto; font-variant-ligatures: none; }

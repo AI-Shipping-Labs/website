@@ -526,7 +526,7 @@ class NoCohortHomeTests(CurrentModuleFixture):
         response = self.client.post(
             f'/api/courses/{self.course.slug}/cohorts/{self.cohort.pk}/enroll',
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'enrolled': True, 'cohort_id': self.cohort.pk})
         self.assertTrue(
             CohortEnrollment.objects.filter(user=self.learner, cohort=self.cohort).exists()
         )

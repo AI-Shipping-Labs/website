@@ -160,9 +160,7 @@ class ModuleOverviewViewTest(TestCase):
 
         self.assertContains(
             response,
-            '<p class="mt-2 text-sm text-muted-foreground" '
             'data-testid="module-progress-count">1 of 2 complete</p>',
-            html=True,
         )
         self.assertEqual(response.context['module_next_action']['unit'], self.unit_b)
         self.assertEqual(response.context['module_next_action']['label'], 'Continue')

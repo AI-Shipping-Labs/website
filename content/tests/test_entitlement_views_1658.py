@@ -306,7 +306,7 @@ class CohortSelfEnrollApiRefusalTest(TierSetupMixin, TestCase):
 
         response = self.client.post(self._enroll_url())
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {'enrolled': True, 'cohort_id': self.cohort.pk})
         self.assertTrue(
             CohortEnrollment.objects.filter(cohort=self.cohort, user=user).exists()
         )

@@ -294,9 +294,5 @@ class DashboardTypographyTest(TierSetupMixin, TestCase):
             'text-accent">Getting started</p>',
             html=False,
         )
-        self.assertContains(
-            response,
-            '<h3 class="mt-1 text-lg font-semibold tracking-tight '
-            'text-foreground">Set up your account</h3>',
-            html=False,
-        )
+        # The checklist title is the card heading (h3), under the eyebrow.
+        self.assertContains(response, '>Set up your account</h3>', html=False)

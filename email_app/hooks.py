@@ -233,6 +233,7 @@ def _resolve_recap_context(delivery, context):
 
     from events.services.event_recap_notification import (  # noqa: PLC0415
         absolute_recap_url,
+        cohort_session_url,
     )
     from integrations.config import site_base_url  # noqa: PLC0415
 
@@ -244,7 +245,11 @@ def _resolve_recap_context(delivery, context):
         raise PermanentJobError("recap_url_missing")
     event_url = f"{site_base_url().rstrip('/')}{event.get_absolute_url()}"
     context["event_title"] = event.title
-    context["recap_url"] = recap_url
+    # A cohort member reads the recap on the course session unit, which holds
+    # both the recording and the recap; everyone else gets the event recap.
+    context["recap_url"] = (
+        cohort_session_url(event, delivery.recipient_user_id) or recap_url
+    )
     context["event_url"] = event_url
     # The recording plays on the canonical (access-gated) event page, so the
     # watch link never exposes a raw storage URL to the wider audience.

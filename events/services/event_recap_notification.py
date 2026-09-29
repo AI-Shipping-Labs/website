@@ -21,6 +21,7 @@ is unchanged.
 import logging
 from collections.abc import Iterator
 from dataclasses import dataclass, field
+from urllib.parse import urlencode
 
 from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
@@ -30,7 +31,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from bookclub.models import Book, ChapterRead, Note
-from content.models import CohortEnrollment
+from content.models import CohortEnrollment, Unit
 from email_app.models import EmailLog, SesEvent
 from email_app.package_mail import send_package_mail
 from events.models import Event, EventRegistration
@@ -156,6 +157,34 @@ def absolute_recap_url(event, recap_path=None):
     if not recap_path:
         return ""
     return f"{site_base_url().rstrip('/')}{recap_path}"
+
+
+def cohort_session_url(event, user_id):
+    """Absolute URL of the course session unit a cohort recipient should open.
+
+    The recording and the recap of a course session live on its syllabus
+    session unit, so a recipient who is in the audience through a cohort on
+    the event's series (``REASON_COHORT``) is sent to the unit at the event's
+    ``series_position``, with ``?cohort=<key>``. Returns ``""`` when the user
+    is not such a cohort member or the course has no unit at that position;
+    registrants and book-club readers keep the event recap link.
+    """
+    if event.event_series_id is None or event.series_position is None:
+        return ""
+    enrollments = CohortEnrollment.objects.filter(
+        user_id=user_id, cohort__event_series_id=event.event_series_id,
+    ).select_related("cohort").order_by("pk")
+    for enrollment in enrollments:
+        cohort = enrollment.cohort
+        unit = Unit.objects.filter(
+            module__course_id=cohort.course_id, kind="event",
+            session_position=event.series_position,
+        ).order_by("pk").first()
+        if unit is None:
+            continue
+        query = f"?{urlencode({'cohort': cohort.external_key})}" if cohort.external_key else ""
+        return f"{site_base_url().rstrip('/')}{unit.get_absolute_url()}{query}"
+    return ""
 
 
 def registrant_reasons(event) -> Iterator[tuple[int, AudienceReason]]:

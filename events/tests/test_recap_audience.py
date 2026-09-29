@@ -18,7 +18,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from bookclub.models import Book, Chapter, ChapterRead, Note
-from content.models import Cohort, CohortEnrollment, Course
+from content.models import Cohort, CohortEnrollment, Course, Module, Unit
 from email_app.testing import StubSESClient, deliver_pending_mail
 from events.models import Event, EventRegistration, EventSeries
 from events.services.event_recap_notification import (
@@ -221,6 +221,66 @@ class RecapAudienceTest(TestCase):
 
         html = self._rendered_html()[0]
         self.assertNotIn('Watch the recording', html)
+
+
+@tag('core')
+class RecapEmailLinkByAudienceTest(TestCase):
+    """A cohort member's recap email opens the course session unit.
+
+    The recording and the recap of a course session live on its syllabus
+    session unit, so a recipient included through a cohort on the event's
+    series gets that unit (with ``?cohort=``); a registrant-only recipient
+    keeps the event recap page.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        now = timezone.now()
+        series = EventSeries.objects.create(name='Buildcamp sessions', slug='buildcamp-link-sessions')
+        cls.event = Event.objects.create(
+            title='Office Hours: Session 2', slug='link-session-2',
+            start_datetime=now - timedelta(hours=3), end_datetime=now - timedelta(hours=1),
+            status='completed', published=True, event_series=series, series_position=2,
+            recap_notes='## What we covered\n\nEvaluation.',
+        )
+        course = Course.objects.create(title='Buildcamp', slug='buildcamp-recap-link', status='published')
+        module = Module.objects.create(course=course, title='RAG', slug='rag', sort_order=1)
+        cls.unit = Unit.objects.create(
+            module=module, title='Session 2', slug='session', kind='event',
+            sort_order=1, session_position=2,
+        )
+        cohort = Cohort.objects.create(
+            course=course, name='Cohort 4', external_key='4',
+            start_date=datetime.date(2026, 9, 1), end_date=datetime.date(2026, 12, 1),
+            event_series=series,
+        )
+        cls.cohort_member = User.objects.create_user(email='cohort-link@test.com', email_verified=True)
+        cls.registrant = User.objects.create_user(email='registrant-link@test.com', email_verified=True)
+        CohortEnrollment.objects.create(cohort=cohort, user=cls.cohort_member)
+        EventRegistration.objects.create(event=cls.event, user=cls.registrant)
+
+    def _html_by_recipient(self):
+        stub = StubSESClient()
+        with patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ):
+            deliver_pending_mail()
+        return {
+            call['Destination']['ToAddresses'][0]: call['Content']['Simple']['Body']['Html']['Data']
+            for call in stub.calls
+        }
+
+    def test_cohort_member_gets_the_session_unit_and_registrant_the_event_recap(self):
+        notify_recap_ready(self.event)
+
+        html = self._html_by_recipient()
+        unit_url = f'https://aishippinglabs.com{self.unit.get_absolute_url()}?cohort=4'
+        recap_url = f'https://aishippinglabs.com{self.event.get_recap_url()}'
+        self.assertIn(f'href="{unit_url}">Read the event recap', html['cohort-link@test.com'])
+        self.assertNotIn(recap_url, html['cohort-link@test.com'])
+        self.assertIn(f'href="{recap_url}">Read the event recap', html['registrant-link@test.com'])
+        self.assertNotIn(self.unit.get_absolute_url(), html['registrant-link@test.com'])
 
 
 @tag('core')

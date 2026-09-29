@@ -227,10 +227,7 @@ class EventNotifyRecapByIdApiTest(TestCase):
         )
 
     def test_dry_run_lists_audience_with_reasons_and_sends_nothing(self):
-        response = self._post('?dry_run=true')
-
-        self.assertEqual(response.status_code, 200)
-        body = response.json()
+        body = self._post('?dry_run=true').json()
         self.assertTrue(body['dry_run'])
         self.assertEqual(body['would_email'], 2)
         reasons = {

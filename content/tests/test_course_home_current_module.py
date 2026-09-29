@@ -2,6 +2,7 @@
 
 import datetime
 import uuid
+from html.parser import HTMLParser
 
 from community_base.homework_steps.models import HomeworkDraft
 from django.test import TestCase
@@ -22,6 +23,38 @@ from content.services.course_home import build_course_home
 from content.services.course_schedule import cohort_projects
 from content.services.current_module import module_progress
 from events.models import Event, EventSeries
+
+
+_VOID_TAGS = {
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+    'meta', 'source', 'track', 'wbr',
+}
+
+
+class _AncestryParser(HTMLParser):
+    """Record each element's ancestor chain so tests can compare nesting."""
+
+    def __init__(self):
+        super().__init__()
+        self.stack = []
+        self.counter = 0
+        self.found = {}
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        self.counter += 1
+        node = (self.counter, attrs.get('data-testid', ''))
+        key = attrs.get('data-testid') or (
+            'progressbar' if attrs.get('role') == 'progressbar' else None
+        )
+        if key and key not in self.found:
+            self.found[key] = self.stack + [node]
+        if tag not in _VOID_TAGS:
+            self.stack.append(node)
+
+    def handle_endtag(self, tag):
+        if tag not in _VOID_TAGS and self.stack:
+            self.stack.pop()
 
 
 class CurrentModuleHomeTests(TestCase):
@@ -150,6 +183,17 @@ class CurrentModuleHomeTests(TestCase):
         self.assertNotContains(response, 'Need help?')
         self.assertNotContains(response, 'data-testid="course-home-focus"')
         self.assertNotContains(response, 'data-testid="course-home-deadlines"')
+
+    def test_primary_button_sits_below_progress_not_beside_it(self):
+        parser = _AncestryParser()
+        parser.feed(self._home().content.decode())
+        progress = parser.found['progressbar']
+        button = parser.found['course-home-primary-action']
+        # Vertical reading order: progress first, then the button.
+        self.assertLess(progress[-1][0], button[-1][0])
+        # No shared row wrapper: the closest common ancestor is the card.
+        common = [a for a, b in zip(progress, button) if a == b]
+        self.assertEqual(common[-1][1], 'course-home-current-module')
 
     def test_card_names_the_cohort_week_and_links_the_module_home(self):
         response = self._home()

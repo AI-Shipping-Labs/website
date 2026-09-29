@@ -311,7 +311,7 @@ def events_notify_workshop_ready(slug, fmt):
 @click.argument("slug")
 @format_option
 def events_notify_recap_ready(slug, fmt):
-    """Notify exact registrants that a verified public recap is ready."""
+    """Notify everyone interested that a verified public recap is ready (by slug)."""
     client = get_client()
     before = client.get(f"{API}/events/{slug}")
     if before.get("slug") != slug:
@@ -328,6 +328,33 @@ def events_notify_recap_ready(slug, fmt):
         raise click.ClickException(
             "Recap notification target verification failed."
         )
+    emit(result, fmt)
+    if result.get("failed", 0):
+        raise click.exceptions.Exit(1)
+
+
+@events.command("notify-recap")
+@click.argument("event_id", type=int)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="List the audience with reasons and predicted statuses; send nothing.",
+)
+@format_option
+def events_notify_recap(event_id, dry_run, fmt):
+    """Email everyone interested in an event that its recap is ready.
+
+    The audience is the event's registrants/attendees, members of cohorts
+    linked to its series, and readers of a linked book club. Re-running
+    never double-emails.
+    """
+    path = f"{API}/events/{event_id}/notify-recap"
+    if dry_run:
+        path += "?dry_run=true"
+    result = get_client().post(path)
+    event = result.get("event", {}) if isinstance(result, dict) else {}
+    if event.get("id") != event_id:
+        raise click.ClickException("Recap notification target verification failed.")
     emit(result, fmt)
     if result.get("failed", 0):
         raise click.exceptions.Exit(1)

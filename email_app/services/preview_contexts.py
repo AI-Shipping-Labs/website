@@ -220,6 +220,9 @@ PREVIEW_CONTEXTS = {
         'event_url': (
             'https://aishippinglabs.com/events/42/ai-shipping-workshop'
         ),
+        'recording_url': (
+            'https://aishippinglabs.com/events/42/ai-shipping-workshop'
+        ),
     },
     'event_recording_ready': {
         'user_name': 'Ada',

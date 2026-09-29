@@ -1506,7 +1506,7 @@ def event_notify_workshop_ready(request, event_id):
 @staff_required
 @require_POST
 def event_notify_recap_ready(request, event_id):
-    """Notify exact event registrants after the public recap is verified."""
+    """Notify everyone interested in the event after the public recap is verified."""
     event = get_object_or_404(Event, pk=event_id)
     try:
         result = notify_recap_ready(event, actor=request.user)

@@ -1,6 +1,6 @@
 ---
 name: ai-shipping-labs-event-recaps
-description: Create and publish an AI Shipping Labs event recap from a YouTube recording, verify the anonymous recap page and canonical links, then explicitly notify the exact event registrants. Use when an operator provides a recording and asks to add, publish, or announce an event recap; do not use for generic event editing without a recap.
+description: Create and publish an AI Shipping Labs event recap from a YouTube recording, verify the anonymous recap page and canonical links, then explicitly notify everyone interested in the event (registrants, linked cohort members, linked book club readers). Use when an operator provides a recording and asks to add, publish, or announce an event recap; do not use for generic event editing without a recap.
 ---
 
 # AI Shipping Labs event recaps
@@ -77,30 +77,55 @@ source-sync conflict instead of overwriting newer content.
   `recap_url`. If the event is draft, unpublished, cancelled, not public, or
   not ended, do not announce it; fix the state or report the exact blocker.
 
-## 5. Explicitly notify registrants
+## 5. Explicitly notify everyone interested
 
 Saving the recap, syncing content, publishing an event, and elapsed time never
 send this message automatically. Only perform this step when the operator’s
-request includes the announcement or explicitly approves it after verification:
+request includes the announcement or explicitly approves it after verification.
+
+Always preview first. The dry run sends and writes nothing; it lists every
+recipient with the reasons they are included and the predicted email status,
+and reports `ready: false` with a `reason_code` instead of failing when the
+recap is not announceable yet:
 
 ```bash
-uv run asl events notify-recap-ready <slug>
+uv run asl events notify-recap <event-id> --dry-run
+uv run asl events notify-recap <event-id>
 ```
 
-The action is staff-only and targets active registrations for this exact event
-occurrence. It sends the direct absolute recap link by transactional email and
-creates an in-app notification. Newsletter unsubscribe does not suppress this
-registration-related notice; normal invalid-address and provider bounce/complaint
-protections still apply. Hosts, series-only members, sibling occurrences, and
-unrelated event registrants are not added to the audience.
+The API equivalent is `POST /api/events/<event-id>/notify-recap?dry_run=true`
+(omit `dry_run` to send). Inside the app container the same service runs as
+`uv run python manage.py notify_recap_ready <event-id> [--dry-run]`.
 
-Read the returned `eligible`, `emailed`, `notified`, `already_sent`,
-`skipped_inactive`, and `failed` counts. A partial failure does not justify a
-manual resend: rerun the same command to retry only missing channels. If the
-result is ambiguous, inspect the delivery/readiness state before retrying.
+The audience is the deduplicated union of:
+
+| Reason (`source`) | Who |
+|---|---|
+| `attended` / `registered` | Registrants of this exact occurrence (`attended` = joined live) |
+| `cohort` | Enrolled members of every cohort whose `event_series` is the event's series; `label` is `<course> - <cohort>` |
+| `book_club` | Readers (marked a chapter read or wrote a chapter note) of a book whose series is the event's series or with a chapter linked to this event; `label` is the book title |
+
+Each person gets one transactional email (recap link, plus a `Watch the
+recording` link to the event page when the event has a recording) and one
+in-app notification. Complaints, permanent bounces, invalid addresses and
+inactive accounts are skipped. A newsletter unsubscribe does not suppress
+registrants or cohort members, but it does suppress people included only as
+book-club readers (`skipped_unsubscribed`). Hosts, series-only registrants of
+sibling occurrences, and unrelated users are not added.
+
+Sends are recorded per event and user (`EventReminderLog`, `recap_email` /
+`recap_in_app`), so a rerun only reaches people not yet emailed — including
+anyone who registered or enrolled after the first send. Review the dry-run
+`results`, `by_reason` and `would_email` before sending, then read the send's
+`eligible`, `emailed`, `notified`, `already_emailed`, `skipped`, and `failed`
+counts. A partial failure does not justify a manual resend: rerun the same
+command to retry only missing channels.
+
+`asl events notify-recap-ready <slug>` is the older slug-based entrypoint to
+the same service and audience; prefer the id-based command with its dry run.
 
 ## Completion report
 
 Report the event title and slug, canonical `recap_url`, verification result,
-notification counts, and any failed or skipped channels. Do not include the
+notification counts (including `by_reason`), and any failed or skipped channels. Do not include the
 full transcript, attendee email addresses, message bodies, or provider IDs.

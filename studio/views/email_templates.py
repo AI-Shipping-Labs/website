@@ -119,7 +119,7 @@ TEMPLATE_SENT_WHEN = {
     'email_verification_subscribe_reminder': 'Sent when an unverified newsletter subscriber is reminded to verify.',
     'event_cancelled': 'Sent to registered attendees when an event is cancelled.',
     'event_recording_ready': 'Sent to event hosts when a recording is ready for Studio review.',
-    'event_recap_ready': 'Sent to active registrants when staff explicitly announces a verified public event recap.',
+    'event_recap_ready': 'Sent to everyone interested in an event (registrants, linked cohort members, linked book club readers) when staff explicitly announces a verified public event recap.',
     'event_registration': 'Sent when a member successfully registers for an event.',
     'event_reminder': 'Sent to registered attendees before an upcoming event.',
     'event_rescheduled': 'Sent to registered attendees when an event schedule changes.',

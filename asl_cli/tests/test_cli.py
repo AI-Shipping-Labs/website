@@ -534,6 +534,45 @@ def test_events_notify_recap_ready_verifies_event_identity(monkeypatch):
     assert '"failed": 0' in result.output
 
 
+def test_events_notify_recap_dry_run_posts_dry_run_query(monkeypatch):
+    client = RecordingEventsClient()
+    client.post_results = [{
+        "dry_run": True,
+        "event": {"id": 58, "slug": "office-hours", "title": "Office Hours"},
+        "eligible": 2,
+        "would_email": 2,
+    }]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(
+        cli,
+        ["events", "notify-recap", "58", "--dry-run", "--format", "json"],
+    )
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        ("POST", "/api/events/58/notify-recap?dry_run=true", None),
+    ]
+    assert '"would_email": 2' in result.output
+
+
+def test_events_notify_recap_send_fails_on_target_mismatch_and_failures(monkeypatch):
+    client = RecordingEventsClient()
+    client.post_results = [
+        {"event": {"id": 59}, "failed": 0},
+        {"event": {"id": 58}, "emailed": 1, "failed": 1},
+    ]
+    monkeypatch.setattr(events_module, "get_client", lambda: client)
+
+    mismatch = CliRunner().invoke(cli, ["events", "notify-recap", "58"])
+    partial = CliRunner().invoke(cli, ["events", "notify-recap", "58"])
+
+    assert mismatch.exit_code != 0
+    assert "target verification failed" in mismatch.output
+    assert partial.exit_code == 1
+    assert client.calls[-1] == ("POST", "/api/events/58/notify-recap", None)
+
+
 def test_event_series_create_accepts_cadence_none(monkeypatch):
     client = RecordingEventsClient()
     monkeypatch.setattr(event_series_module, "get_client", lambda: client)

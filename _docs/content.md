@@ -324,11 +324,14 @@ Use this sequence when converting an existing article:
    status to be publicly visible (`upcoming` or `completed`), and it must not
    be `draft` or `cancelled`. A recap is public only after the event's
    effective end time; a staff preview does not satisfy the public guard.
-6. If the recap is public and the registrants should be told now, explicitly
-   run `uv run asl events notify-recap-ready <slug>`. This sends the canonical
-   absolute `recap_url` by transactional email and in-app notification to
-   active registrants of this exact occurrence. Saving or syncing a recap
-   never sends automatically; retries are per-channel idempotent.
+6. If the recap is public and interested members should be told now, preview
+   with `uv run asl events notify-recap <event-id> --dry-run`, then run it
+   without `--dry-run`. This sends the canonical absolute `recap_url` (plus a
+   recording link when there is one) by transactional email and in-app
+   notification to everyone interested: registrants of this occurrence,
+   members of cohorts linked to its series, and readers of a linked book
+   club. Saving or syncing a recap never sends automatically; sends are
+   idempotent per event, user and channel.
 7. After the recap is verified, choose what to do with the source article:
    remove `event_slug`/`event_id` if the article should remain a standalone
    blog post, or delete its file from `blog/` if it is being fully converted.

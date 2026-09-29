@@ -242,11 +242,13 @@ def _resolve_recap_context(delivery, context):
     recap_url = absolute_recap_url(event)
     if not recap_url:
         raise PermanentJobError("recap_url_missing")
+    event_url = f"{site_base_url().rstrip('/')}{event.get_absolute_url()}"
     context["event_title"] = event.title
     context["recap_url"] = recap_url
-    context["event_url"] = (
-        f"{site_base_url().rstrip('/')}{event.get_absolute_url()}"
-    )
+    context["event_url"] = event_url
+    # The recording plays on the canonical (access-gated) event page, so the
+    # watch link never exposes a raw storage URL to the wider audience.
+    context["recording_url"] = event_url if event.has_recording else ""
 
 
 def _resolve_followup_context(delivery, context):

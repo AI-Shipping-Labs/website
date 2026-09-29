@@ -102,6 +102,19 @@ Repeats after a successful send return `already_registered` / `already_sent`
 without sending again. `failed_retryable` exits non-zero; rerun the same command
 to retry the existing registration.
 
+Announce a verified recap to everyone interested in an event by numeric ID:
+registrants/attendees, members of cohorts linked to the event's series, and
+readers of a linked book club. Preview first; the dry run sends nothing and
+lists each recipient with the reasons they are included:
+
+```bash
+uv run asl events notify-recap 58 --dry-run
+uv run asl events notify-recap 58
+```
+
+Each person gets one email per event; rerunning only reaches people not yet
+emailed. A non-zero `failed` count exits non-zero; rerun to retry.
+
 ### Sharing one sprint plan with its member
 
 A plan is a draft until it is shared. Until `shared_at` is set, the member's

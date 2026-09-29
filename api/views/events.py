@@ -53,6 +53,7 @@ from events.services.display_time import resolve_event_creation_timezone
 from events.services.event_recap_notification import (
     EventRecapNotReady,
     notify_recap_ready,
+    preview_recap_audience,
 )
 from events.services.event_series_lookup import (
     EventSeriesLookupStatus,
@@ -212,21 +213,57 @@ _RECAP_NOTES_REQUEST_SCHEMA = {
     ),
 }
 
+_RECAP_AUDIENCE_REASON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "source": {
+            "type": "string",
+            "enum": ["attended", "registered", "cohort", "book_club"],
+        },
+        "label": {
+            "type": "string",
+            "description": "Cohort (course - cohort name) or book title; empty for registrants.",
+        },
+    },
+    "required": ["source", "label"],
+    "additionalProperties": False,
+}
 _RECAP_NOTIFICATION_OUTCOME_SCHEMA = {
     "type": "object",
     "properties": {
         "user_id": {"type": "integer"},
+        "reasons": {"type": "array", "items": _RECAP_AUDIENCE_REASON_SCHEMA},
         "email_status": {"type": "string"},
         "in_app_status": {"type": "string"},
         "email_log_id": {"type": ["integer", "null"]},
         "notification_id": {"type": ["integer", "null"]},
     },
-    "required": ["user_id", "email_status", "in_app_status"],
+    "required": ["user_id", "reasons", "email_status", "in_app_status"],
     "additionalProperties": False,
     "description": (
-        "Per-registrant channel outcomes. No email address, recap body, "
+        "Per-recipient channel outcomes. No email address, recap body, "
         "secret, or provider payload is returned."
     ),
+}
+_RECAP_PREVIEW_RECIPIENT_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "user_id": {"type": "integer"},
+        "email": {"type": "string"},
+        "name": {"type": "string"},
+        "reasons": {"type": "array", "items": _RECAP_AUDIENCE_REASON_SCHEMA},
+        "email_status": {
+            "type": "string",
+            "description": (
+                "would_send, already_sent, or a skipped_* reason "
+                "(complaint, permanent_bounce, invalid_address, unsubscribed)."
+            ),
+        },
+        "in_app_status": {"type": "string"},
+    },
+    "required": ["user_id", "email", "reasons", "email_status", "in_app_status"],
+    "additionalProperties": False,
+    "description": "Dry-run recipient: who would be notified and why.",
 }
 _ERROR_RESPONSE_SCHEMA = {"$ref": "#/components/schemas/ErrorResponse"}
 
@@ -1817,15 +1854,18 @@ def event_notify_workshop_ready(request, slug):
 @require_methods("POST")
 @openapi_spec(
     tag="Events",
-    summary="Notify event registrants that its recap is ready",
+    summary="Notify everyone interested in an event that its recap is ready",
     methods={
         "POST": {
             "summary": "Send recap-ready notification",
             "description": (
                 "After an operator verifies the anonymous public recap page, "
                 "send one transactional email and one in-app notification to "
-                "active users registered for this exact event occurrence. "
-                "The action is explicit and idempotent per channel."
+                "everyone interested in this event occurrence: its "
+                "registrants/attendees, members of cohorts linked to its "
+                "series, and readers of a linked book club. The action is "
+                "explicit and idempotent per channel. Same service as "
+                "POST /api/events/{event_id}/notify-recap."
             ),
             "request_body": {"body_required": False},
             "responses": {
@@ -1876,6 +1916,7 @@ def event_notify_workshop_ready(request, slug):
                         "results": [
                             {
                                 "user_id": 7,
+                                "reasons": [{"source": "registered", "label": ""}],
                                 "email_status": "sent",
                                 "in_app_status": "sent",
                                 "email_log_id": 101,
@@ -1922,6 +1963,173 @@ def event_notify_recap_ready(request, slug):
             status=404,
         )
 
+    try:
+        result = notify_recap_ready(event, actor=request.user)
+    except EventRecapNotReady as exc:
+        return error_response(
+            str(exc),
+            "recap_not_ready",
+            status=422,
+            details={"reason": exc.reason},
+        )
+    return JsonResponse(result, status=200)
+
+
+_DRY_RUN_TRUE = {"1", "true", "yes"}
+_DRY_RUN_FALSE = {"", "0", "false", "no"}
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Events",
+    summary="Notify everyone interested in an event that its recap is ready",
+    methods={
+        "POST": {
+            "summary": "Send or preview the recap-ready notification",
+            "description": (
+                "Resolve the recap audience for the event by id: its "
+                "registrants/attendees, members of cohorts whose event "
+                "series is the event's series, and readers of a book club "
+                "linked to the event (series or chapter link). Each person "
+                "is emailed once (plus one in-app notification) with the "
+                "recap link and, when the event has a recording, the watch "
+                "link. Sends are idempotent per event and user: re-running "
+                "only reaches people not yet emailed. Complaints, permanent "
+                "bounces and invalid addresses are skipped; a newsletter "
+                "unsubscribe only suppresses recipients with no explicit "
+                "sign-up (book-club readers). With dry_run=true nothing is "
+                "sent or written: the response lists every recipient with "
+                "the reasons they are included and the predicted status, "
+                "and reports the readiness guard instead of failing on it."
+            ),
+            "path_params": {
+                "event_id": {"type": "integer", "description": "Event id."},
+            },
+            "query": {
+                "dry_run": {
+                    "type": "boolean",
+                    "required": False,
+                    "description": "true to preview the audience without sending.",
+                },
+            },
+            "request_body": {"body_required": False},
+            "responses": {
+                200: {
+                    "description": (
+                        "Send summary (same shape as notify-recap-ready, "
+                        "plus by_reason counts), or the dry-run preview when "
+                        "dry_run=true."
+                    ),
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "dry_run": {"type": "boolean"},
+                            "event": {"type": "object"},
+                            "ready": {"type": "boolean"},
+                            "reason": {"type": "string"},
+                            "reason_code": {"type": "string"},
+                            "recap_url": {"type": "string"},
+                            "eligible": {"type": "integer"},
+                            "would_email": {"type": "integer"},
+                            "emailed": {"type": "integer"},
+                            "notified": {"type": "integer"},
+                            "already_emailed": {"type": "integer"},
+                            "already_sent": {"type": "integer"},
+                            "skipped": {"type": "integer"},
+                            "failed": {"type": "integer"},
+                            "by_reason": {
+                                "type": "object",
+                                "additionalProperties": {"type": "integer"},
+                            },
+                            "results": {
+                                "type": "array",
+                                "items": {
+                                    "oneOf": [
+                                        _RECAP_PREVIEW_RECIPIENT_SCHEMA,
+                                        _RECAP_NOTIFICATION_OUTCOME_SCHEMA,
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                    "example": {
+                        "dry_run": True,
+                        "event": {
+                            "id": 58,
+                            "slug": "office-hours-session-2",
+                            "title": "Office Hours: Session 2",
+                        },
+                        "ready": True,
+                        "reason": "",
+                        "reason_code": "",
+                        "recap_url": (
+                            "https://aishippinglabs.com/events/58/"
+                            "office-hours-session-2/recap"
+                        ),
+                        "eligible": 1,
+                        "would_email": 1,
+                        "already_emailed": 0,
+                        "skipped": 0,
+                        "by_reason": {"cohort": 1, "registered": 1},
+                        "results": [
+                            {
+                                "user_id": 7,
+                                "email": "member@example.com",
+                                "name": "Ada Lovelace",
+                                "reasons": [
+                                    {"source": "registered", "label": ""},
+                                    {
+                                        "source": "cohort",
+                                        "label": "AI Engineering Buildcamp - Cohort 4",
+                                    },
+                                ],
+                                "email_status": "would_send",
+                                "in_app_status": "would_notify",
+                            },
+                        ],
+                    },
+                },
+                400: {
+                    "description": "dry_run is not a boolean (code invalid_dry_run).",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                401: {
+                    "description": "Missing or invalid staff token.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                404: {
+                    "description": "Event not found.",
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+                422: {
+                    "description": (
+                        "Send only: the public recap-ready guard failed. The "
+                        "stable code is recap_not_ready and details.reason "
+                        "identifies why."
+                    ),
+                    "schema": _ERROR_RESPONSE_SCHEMA,
+                },
+            },
+        },
+    },
+)
+def event_notify_recap(request, event_id):
+    """POST ``/api/events/<event_id>/notify-recap[?dry_run=true]``."""
+    raw_dry_run = request.GET.get("dry_run", "").strip().lower()
+    if raw_dry_run not in _DRY_RUN_TRUE | _DRY_RUN_FALSE:
+        return error_response(
+            "dry_run must be true or false.",
+            "invalid_dry_run",
+            status=400,
+        )
+    event = Event.objects.filter(pk=event_id).first()
+    if event is None:
+        return error_response("Event not found", "unknown_event", status=404)
+
+    if raw_dry_run in _DRY_RUN_TRUE:
+        return JsonResponse(preview_recap_audience(event), status=200)
     try:
         result = notify_recap_ready(event, actor=request.user)
     except EventRecapNotReady as exc:

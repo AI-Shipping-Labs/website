@@ -15,7 +15,7 @@ _VOID_TAGS = {
     "area", "base", "br", "col", "embed", "hr", "img", "input", "link",
     "meta", "param", "source", "track", "wbr",
 }
-_OPTION_CONTROL_CLASS = "homework-option-control h-4 w-4 shrink-0 border-border text-accent"
+_OPTION_CONTROL_CLASS = "homework-option-control h-5 w-5 shrink-0 border-border text-accent"
 
 
 class _Raw:

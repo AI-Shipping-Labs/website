@@ -31,6 +31,7 @@ from content.services.homework_step_sections import (
     validate_question_bindings,
 )
 from content.services.homework_submissions import save_submission
+from content.templatetags.homework_step_tags import render_homework_question_prompt
 from content.tests.test_homework_submission_view import HomeworkUnitSetupMixin
 
 
@@ -49,6 +50,87 @@ def checked_radio_values(response):
     parser = CheckedRadioParser()
     parser.feed(response.content.decode())
     return parser.values
+
+
+class StepPillsParser(HTMLParser):
+    """Collect the mobile step position line and the step pill links."""
+
+    def __init__(self):
+        super().__init__()
+        self.position = ''
+        self.pill_labels = []
+        self.current_pills = []
+        self._in_position = False
+        self._in_pills = False
+        self._pill = None
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        testid = attributes.get('data-testid')
+        if testid == 'homework-step-position':
+            self._in_position = True
+        elif testid == 'homework-step-pills':
+            self._in_pills = True
+        elif self._in_pills and tag == 'a':
+            self._pill = {'text': '', 'current': attributes.get('aria-current') == 'step'}
+
+    def handle_endtag(self, tag):
+        if tag == 'p' and self._in_position:
+            self._in_position = False
+        elif tag == 'a' and self._pill is not None:
+            label = self._pill['text'].strip()
+            self.pill_labels.append(label)
+            if self._pill['current']:
+                self.current_pills.append(label)
+            self._pill = None
+        elif tag == 'nav' and self._in_pills:
+            self._in_pills = False
+
+    def handle_data(self, data):
+        if self._in_position:
+            self.position += data
+        elif self._pill is not None:
+            self._pill['text'] += data
+
+
+class OptionRowParser(HTMLParser):
+    """Record each option row: its label class and its control's classes."""
+
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if tag == 'li' and attributes.get('data-homework-option') == 'true':
+            self.rows.append({'label': None, 'control': None, 'value': None})
+        elif tag == 'label' and self.rows and self.rows[-1]['label'] is None:
+            self.rows[-1]['label'] = attributes.get('class', '')
+        elif tag == 'input' and self.rows and self.rows[-1]['control'] is None:
+            self.rows[-1]['control'] = attributes.get('class', '').split()
+            self.rows[-1]['value'] = attributes.get('value')
+
+
+class HomeworkOptionRowMarkupTest(SimpleTestCase):
+    def test_authored_option_list_items_become_labelled_option_rows(self):
+        class Option:
+            def __init__(self, key, label):
+                self.key, self.label = key, label
+
+        options = [(Option('a', '5,703'), False), (Option('b', '7,703'), True)]
+        html = render_homework_question_prompt(
+            '<p>How many lines?</p><ul><li>5,703</li><li>7,703</li></ul>',
+            options,
+            'choice',
+        )
+
+        parser = OptionRowParser()
+        parser.feed(str(html))
+        self.assertEqual([row['value'] for row in parser.rows], ['a', 'b'])
+        for row in parser.rows:
+            with self.subTest(value=row['value']):
+                self.assertEqual(row['label'], 'homework-option-label')
+                self.assertIn('homework-option-control', row['control'])
 
 
 class HomeworkStepBindingsTest(SimpleTestCase):
@@ -122,7 +204,6 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(intro, 'data-testid="homework-due-date"')
         self.assertEqual(intro.context['homework_state'].value, 'not_submitted')
         self.assertContains(intro, 'data-homework-state="not_submitted"', count=2)
-        self.assertNotContains(intro, 'Step 1 of')
         self.assertNotContains(intro, 'What was difficult?')
         self.assertNotContains(intro, 'homework-submission-form')
         question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
@@ -287,6 +368,27 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(response, 'Explain the result.')
         self.assertEqual(response.context['stepper']['step'], 'q1-nested')
         self.assertEqual(response.context['stepper']['action'], canonical_url)
+
+    def test_step_pills_show_position_and_mark_only_the_current_step(self):
+        response = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+
+        parser = StepPillsParser()
+        parser.feed(response.content.decode())
+        step_count = response.context['stepper']['step_count']
+        self.assertEqual(
+            ' '.join(parser.position.split()),
+            f'Step 2 of {step_count} · Question 1',
+        )
+        self.assertEqual(parser.pill_labels, [str(n) for n in range(1, step_count + 1)])
+        self.assertEqual(parser.current_pills, ['2'])
+
+    def test_timezone_notice_renders_on_intro_step_only(self):
+        intro = self.client.get(self.unit_url)
+        question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+
+        self.assertContains(intro, 'Shown in your timezone.')
+        self.assertContains(question, 'data-testid="homework-due-date"')
+        self.assertNotContains(question, 'Shown in your timezone.')
 
     def test_short_text_question_uses_one_line_input(self):
         response = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
@@ -510,7 +612,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         self.assertEqual(response.context['homework_due_date_display'], '')
         self.assertNotContains(response, 'data-testid="homework-due-date"')
-        self.assertNotContains(response, 'Step 1 of')
+        self.assertNotContains(response, 'Shown in your timezone.')
 
     def test_closed_no_deadline_homework_uses_closed_copy(self):
         self.homework.due_date = None

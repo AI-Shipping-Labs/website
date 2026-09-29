@@ -4,7 +4,6 @@ The cohort is selected from an enrollment or a validated public preview. Nothing
 in this module grants course access or changes submission permissions.
 """
 
-from django.db.models import Q
 from django.utils import timezone
 
 from accounts.services.timezones import is_valid_timezone
@@ -75,6 +74,18 @@ def schedule_timezone_name(course, user):
     return 'Europe/Berlin' if course.slug == 'ai-buildcamp' else 'UTC'
 
 
+def cohort_projects(course, cohort):
+    """Project attempts for one cohort.
+
+    A cohort's own attempts replace the course-wide (unscoped) ones; the
+    unscoped attempts apply only when the cohort has none of its own.
+    """
+    projects = CourseProject.objects.filter(course=course)
+    if cohort is not None and projects.filter(cohort=cohort).exists():
+        return projects.filter(cohort=cohort)
+    return projects.filter(cohort__isnull=True)
+
+
 def build_deadline_context(course, cohort):
     """Map homework by content ID and projects by module, including ancestors."""
     if cohort is None:
@@ -89,8 +100,7 @@ def build_deadline_context(course, cohort):
                  .values('id', 'module_id', 'kind', 'source_content_id'))
     module_parents = dict(Module.objects.filter(course=course)
                           .values_list('id', 'parent_id'))
-    project_rows = list(CourseProject.objects.filter(course=course)
-                        .filter(Q(cohort=cohort) | Q(cohort__isnull=True))
+    project_rows = list(cohort_projects(course, cohort)
                         .values('module_id', 'submission_due_at', 'review_due_at'))
     deadlines = {}
     per_module = {}

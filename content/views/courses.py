@@ -7,7 +7,6 @@ from community_base.homework_steps.state import homework_state_for
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.db.models import Q
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -50,6 +49,7 @@ from content.services.course_navigation import (
 )
 from content.services.course_schedule import (
     build_deadline_context,
+    cohort_projects,
     schedule_timezone_name,
     select_display_cohort,
 )
@@ -748,9 +748,7 @@ def course_home(request, slug, section='home'):
     for unit_id, module_id in progress_rows:
         completed_unit_ids.add(unit_id)
         completed_counts[module_id] += 1
-    projects = CourseProject.objects.filter(course=course).filter(
-        Q(cohort=cohort) | Q(cohort__isnull=True)
-    ).select_related('module')
+    projects = cohort_projects(course, cohort).select_related('module')
     projects_by_module = {}
     for project in projects:
         if project.module_id:

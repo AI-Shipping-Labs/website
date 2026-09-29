@@ -100,7 +100,8 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertEqual(response.context['schedule_cohort'], self.c4)
         self.assertFalse(response.context['schedule_is_preview'])
         self.assertEqual(response.context['unit_deadlines'][self.unit.pk], self.due4)
-        self.assertEqual(response.context['module_deadline_summaries'][self.week.pk]['count'], 5)
+        # Cohort 4's own attempt replaces the unscoped attempt's two dates.
+        self.assertEqual(response.context['module_deadline_summaries'][self.week.pk]['count'], 3)
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
         self.assertContains(
             response,

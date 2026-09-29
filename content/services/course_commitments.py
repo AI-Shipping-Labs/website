@@ -8,7 +8,6 @@ from urllib.parse import urlencode
 
 from community_base.homework_steps.models import HomeworkDraft
 from django.core.exceptions import PermissionDenied
-from django.db.models import Q
 from django.utils import timezone
 from django.utils.formats import date_format
 
@@ -16,7 +15,7 @@ from content.access import get_user_level
 from content.models import CohortEnrollment, CourseAccess, Unit
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
 from content.models.homework import Homework, Submission
-from content.models.peer_review import CourseProject, PeerReview, ProjectSubmission
+from content.models.peer_review import PeerReview, ProjectSubmission
 from content.services.course_home import (
     _all_module_units,
     _can_open_unit,
@@ -24,6 +23,7 @@ from content.services.course_home import (
     _is_orientation_module,
     _ordered_modules,
 )
+from content.services.course_schedule import cohort_projects
 from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
@@ -263,9 +263,9 @@ def _homework_rows(course, user, cohort, timezone_name, today):
 
 
 def _project_rows(course, user, cohort, timezone_name, now):
-    projects = list(CourseProject.objects.filter(course=course).filter(
-        Q(cohort=cohort) | Q(cohort__isnull=True),
-    ).select_related('module__parent').order_by('submission_due_at', 'pk'))
+    projects = list(cohort_projects(course, cohort).select_related(
+        'module__parent',
+    ).order_by('submission_due_at', 'pk'))
     if not projects:
         return []
     submissions = {

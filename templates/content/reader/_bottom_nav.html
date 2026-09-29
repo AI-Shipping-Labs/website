@@ -9,6 +9,9 @@
   (`#content-sidebar-main`), not this short wrapper. The bar settles into
   its natural slot above Q&A, so it never covers the last paragraph or the
   discussion. Safe-area padding lives in `content/reader/_styles.html`.
+  While the first-visit analytics consent panel is open, the bar sticks
+  above it via `--analytics-consent-clearance` (published by
+  `includes/analytics_consent.html`, 0px once a choice is saved).
 
   The stand-alone mark-complete row (workshop pages and the last course
   unit) stays in the flow above the bar on `<lg`; `lg+` keeps the
@@ -32,7 +35,7 @@
     {% endif %}
   </div>
 
-  <div class="reader-bottom-bar sticky bottom-0 z-30 -mx-4 flex items-center gap-3 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:gap-4 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none{% if not prev_item_url and not next_item_url %} max-lg:hidden{% endif %}" data-testid="reader-bottom-nav-bar">
+  <div class="reader-bottom-bar sticky bottom-[var(--analytics-consent-clearance,0px)] z-30 -mx-4 flex items-center gap-3 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:gap-4 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none{% if not prev_item_url and not next_item_url %} max-lg:hidden{% endif %}" data-testid="reader-bottom-nav-bar">
     {% if prev_item_url %}
     <a href="{{ prev_item_url }}"
        class="{% button_classes 'secondary' extra='min-w-0 flex-none' %}"

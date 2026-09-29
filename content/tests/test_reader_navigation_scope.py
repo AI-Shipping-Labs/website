@@ -77,6 +77,21 @@ class ReaderNavigationScopeTest(TestCase):
         self.assertEqual(response.context['prev_unit'].title, 'First topic lesson')
         self.assertEqual(response.context['next_unit'].title, 'Last topic lesson')
 
+    def test_module_icons_sit_on_the_eyebrow_row_not_beside_the_title(self):
+        sidebar = self.sidebar(self.reader(self.middle))
+        row = re.search(
+            r'data-testid="reader-module-eyebrow-row">(.*?)</div>\s*</div>',
+            sidebar, re.S,
+        ).group(1)
+        # Not a buildcamp week, so the eyebrow still renders as "Module".
+        self.assertIn('>Module</p>', row)
+        self.assertIn('data-testid="reader-module-navigation"', row)
+        self.assertNotIn('data-testid="reader-scoped-module-title"', row)
+        self.assertLess(
+            sidebar.index('data-testid="reader-module-eyebrow-row"'),
+            sidebar.index('data-testid="reader-scoped-module-title"'),
+        )
+
     def test_only_current_submodule_is_open(self):
         response = self.reader(self.middle)
         sidebar = self.sidebar(response)

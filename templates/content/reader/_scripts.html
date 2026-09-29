@@ -157,21 +157,6 @@
   })();
 
   (function() {
-    /* Publish the sticky reader bar's height so other fixed bottom chrome
-       (the Open in Studio control) can sit above it below `lg`. */
-    var bar = document.querySelector('[data-testid="reader-bottom-nav-bar"]');
-    var root = document.documentElement;
-    var desktop = window.matchMedia('(min-width: 1024px)');
-    function publish() {
-      var height = bar && !desktop.matches ? bar.getBoundingClientRect().height : 0;
-      root.style.setProperty('--mobile-bottom-bar-height', Math.ceil(height) + 'px');
-    }
-    publish();
-    if (bar && typeof ResizeObserver === 'function') new ResizeObserver(publish).observe(bar);
-    desktop.addEventListener('change', publish);
-  })();
-
-  (function() {
     var duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 150;
 
     function disclosureContent(details) {

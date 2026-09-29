@@ -141,7 +141,7 @@ def _scroll_mid_lesson(page):
 
 @pytest.mark.django_db(transaction=True)
 @browser_journey
-def test_first_visit_consent_panel_keeps_sticky_bar_and_studio_icon_reachable(
+def test_first_visit_consent_panel_keeps_sticky_bar_reachable(
     django_server, browser,
 ):
     _clear_courses()
@@ -150,7 +150,7 @@ def test_first_visit_consent_panel_keeps_sticky_bar_and_studio_icon_reachable(
     _create_unit(module, "First lesson", sort_order=1, body="Short.")
     lesson = _create_unit(module, "Long lesson", sort_order=2, body=LONG_BODY)
     _create_unit(module, "Third lesson", sort_order=3, body="Short.")
-    _create_user("consent-stack@test.com", tier_slug="free", is_staff=True)
+    _create_user("consent-stack@test.com", tier_slug="free")
     context = _auth_context(browser, "consent-stack@test.com")
     page = context.new_page()
     page.set_viewport_size(PHONE)
@@ -159,26 +159,19 @@ def test_first_visit_consent_panel_keeps_sticky_bar_and_studio_icon_reachable(
 
     panel = page.get_by_test_id("analytics-consent-panel")
     bar = page.get_by_test_id("reader-bottom-nav-bar")
-    studio = page.get_by_test_id("studio-edit-button")
     expect(panel).to_be_visible()
     expect(bar.get_by_role("link", name="Previous")).to_be_in_viewport()
-    # First visit: the bar sticks above the consent panel, not under it,
-    # and the Studio icon floats above the bar.
+    # First visit: the bar sticks above the consent panel, not under it.
     bar_box = bar.bounding_box()
     assert bar_box["y"] + bar_box["height"] <= panel.bounding_box()["y"]
-    studio_box = studio.bounding_box()
-    assert studio_box["y"] + studio_box["height"] <= bar_box["y"]
 
     page.get_by_test_id("analytics-consent-deny").click()
     expect(panel).to_be_hidden()
     page.wait_for_load_state("domcontentloaded")
     _scroll_mid_lesson(page)
 
-    # With a saved choice the bar returns to the viewport edge and the
-    # Studio icon still clears it.
+    # With a saved choice the bar returns to the viewport edge.
     expect(bar.get_by_role("link", name="Previous")).to_be_in_viewport()
     bar_box = bar.bounding_box()
     assert abs(bar_box["y"] + bar_box["height"] - PHONE["height"]) <= 1
-    studio_box = studio.bounding_box()
-    assert studio_box["y"] + studio_box["height"] <= bar_box["y"]
     context.close()

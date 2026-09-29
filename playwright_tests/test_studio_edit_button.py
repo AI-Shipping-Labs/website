@@ -3,9 +3,10 @@
 Three scenarios on a single representative surface — the event detail
 page:
 
-1. A staff user sees the floating button and clicking it lands on the
+1. A staff user sees the desktop pill (lg+) and clicking it lands on the
    Studio editor for that exact event (URL matches the event's
-   ``get_studio_edit_url()``).
+   ``get_studio_edit_url()``). On a phone the pill is hidden and the same
+   link is a row in the header menu.
 2. An anonymous visitor never sees the button and the page source has
    no ``data-testid="studio-edit-button"`` and no ``/studio/`` link.
 3. A free authenticated user has the same anonymous-visibility contract.
@@ -21,6 +22,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -109,6 +111,43 @@ class TestStudioEditButtonOnEventDetail:
         assert title_input.input_value() == "Event With Typo"
         assert page.locator('[href*="/admin/"]').count() == 0
         assert "Django admin" not in page.content()
+
+    @pytest.mark.core
+    @browser_journey
+    def test_staff_on_phone_opens_studio_from_the_header_menu(
+        self, django_server, browser,
+    ):
+        _clear_events()
+        _ensure_tiers()
+        _create_staff_user(email="staff@test.com")
+        event = _create_event(
+            slug="event-with-typo", title="Event With Typo",
+        )
+
+        context = _auth_context(browser, "staff@test.com")
+        context.add_cookies([{
+            "name": "aslab_analytics_consent", "value": "denied",
+            "domain": "127.0.0.1", "path": "/",
+        }])
+        page = context.new_page()
+        page.set_viewport_size({"width": 390, "height": 844})
+        page.goto(
+            f"{django_server}{event.get_absolute_url()}",
+            wait_until="domcontentloaded",
+        )
+
+        # Nothing floats over the page below lg; the link lives in the menu.
+        expect(page.get_by_test_id("studio-edit-button")).to_be_hidden()
+        page.locator("#mobile-menu-btn").click()
+        link = page.get_by_test_id("mobile-studio-open-link")
+        expect(link).to_be_visible()
+        expect(link).to_have_text("Open in Studio")
+        assert link.bounding_box()["height"] >= 44
+
+        link.click()
+        page.wait_for_url(f"**/studio/events/{event.pk}/edit", timeout=10000)
+        expect(page.locator('input[name="title"]')).to_have_value("Event With Typo")
+        context.close()
 
     @pytest.mark.core
     def test_anonymous_does_not_see_button(self, django_server, page):

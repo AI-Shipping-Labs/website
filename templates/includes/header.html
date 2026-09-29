@@ -1,5 +1,13 @@
 {% load plan_nav %}
 {% load accounts_extras %}
+{% load studio_open %}
+{% comment %}
+Staff "Open in Studio": pages pass the object on screen as `studio_obj`
+(optional `studio_section`, `studio_edit_top_class`). The URL is resolved
+once here and shown as the desktop pill (lg+), an account-dropdown item
+(md to lg), and a mobile-menu row (below md).
+{% endcomment %}
+{% if studio_obj and request.user.is_staff %}{% studio_open_url studio_obj studio_section as header_studio_open_url %}{% endif %}
 {% current_user_sprint_shortcut as header_sprint_shortcut %}
 {% logout_url as header_logout_url %}
 {% login_url as header_login_url %}
@@ -112,6 +120,9 @@
             <a href="{{ header_sprint_shortcut.href }}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none" data-testid="header-plan-link">{{ header_sprint_shortcut.label }}</a>
             {% endif %}
             {% endif %}
+            {% if header_studio_open_url %}
+            <a href="{{ header_studio_open_url }}" role="menuitem" class="flex items-center gap-2 rounded-sm px-3 py-2 text-sm text-popover-foreground hover:bg-secondary focus:bg-secondary focus:outline-none lg:hidden" data-testid="account-menu-studio-open-link"><i data-lucide="external-link" class="h-4 w-4" aria-hidden="true"></i>Open in Studio</a>
+            {% endif %}
             {% if user.is_staff %}
             <a href="{% url 'studio_dashboard' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">Studio</a>
             {% endif %}
@@ -215,6 +226,12 @@
           {{ header_sprint_shortcut.label }}
         </a>
         {% endif %}
+        {% if header_studio_open_url %}
+        <a href="{{ header_studio_open_url }}" class="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary mb-2" data-testid="mobile-studio-open-link">
+          <i data-lucide="external-link" class="h-4 w-4" aria-hidden="true"></i>
+          Open in Studio
+        </a>
+        {% endif %}
         {% if user.is_staff %}
         <a href="{% url 'studio_dashboard' %}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
           Studio
@@ -237,6 +254,8 @@
     </div>
   </div>
 </header>
+{% comment %}Outside <header>: its backdrop-blur would make it the containing block for this fixed pill.{% endcomment %}
+{% include "includes/_studio_edit_button.html" with studio_edit_url=header_studio_open_url %}
 
 <script>
   // Section anchors (issue #1833): keep --site-header-offset equal to the

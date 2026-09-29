@@ -1,20 +1,13 @@
-{% load studio_open %}
-{# Floating "Open in Studio" button. Server-side gated on ``request.user.is_staff``. #}
-{# Renders nothing for non-staff or when no Studio destination resolves. #}
-{# Below lg it is a 44px icon-only circle pinned bottom-right, so it never covers titles, progress text, or the search dropdown near the top. #}
-{# It sits above the reader's sticky bar (--mobile-bottom-bar-height, which already includes the bar's safe-area padding, hence max()) and above the consent panel (--analytics-consent-clearance). #}
-{# From lg it is the labelled pill under the header. Optional studio_edit_top_class="top-24" moves the desktop pill down (default top-20). #}
-{# Optional studio_section selects a course destination when the URL name is not enough. #}
-{# Usage: {% include "includes/_studio_edit_button.html" with obj=<model_instance> studio_edit_top_class="top-24" %} #}
-{% if request.user.is_staff %}
-{% studio_open_url obj studio_section as studio_edit_url %}
+{# Desktop "Open in Studio" pill, fixed under the header from lg. #}
+{# Rendered by includes/header.html, which resolves the staff-only studio_edit_url once and also shows the same link as a row in the mobile menu (and in the account dropdown between md and lg), so nothing floats over content below lg. #}
+{# Pages opt in through the header include: {% include "includes/header.html" with studio_obj=<model_instance> studio_section="syllabus" studio_edit_top_class="top-24" %} #}
+{# Renders nothing when studio_edit_url is empty. studio_edit_top_class="top-24" moves the pill down (default top-20). #}
 {% if studio_edit_url %}
 <a href="{{ studio_edit_url }}"
    data-testid="studio-edit-button"
    aria-label="Open in Studio"
-   class="fixed right-4 bottom-[calc(1rem+max(var(--mobile-bottom-bar-height,0px),env(safe-area-inset-bottom))+var(--analytics-consent-clearance,0px))] z-30 inline-flex h-11 w-11 items-center justify-center gap-1.5 rounded-full border border-border bg-card text-xs font-medium text-foreground shadow-md transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:bottom-auto {% if studio_edit_top_class == 'top-24' %}lg:top-24{% else %}lg:top-20{% endif %} lg:h-auto lg:w-auto lg:px-3 lg:py-1.5 lg:shadow-sm">
-  <i data-lucide="external-link" class="h-4 w-4 lg:h-3.5 lg:w-3.5" aria-hidden="true"></i>
-  <span class="sr-only lg:not-sr-only">Open in Studio</span>
+   class="fixed right-4 {% if studio_edit_top_class == 'top-24' %}top-24{% else %}top-20{% endif %} z-30 hidden items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:inline-flex">
+  <i data-lucide="external-link" class="h-3.5 w-3.5" aria-hidden="true"></i>
+  <span>Open in Studio</span>
 </a>
-{% endif %}
 {% endif %}

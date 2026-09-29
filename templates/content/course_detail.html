@@ -13,8 +13,7 @@
 {% block structured_data %}{% structured_data course %}{% endblock %}
 
 {% block body %}
-{% include "includes/header.html" %}
-{% include "includes/_studio_edit_button.html" with obj=course %}
+{% include "includes/header.html" with studio_obj=course %}
 <main class="min-h-screen pt-24">
   <article class="py-8 sm:py-16 lg:py-24">
     <div class="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">

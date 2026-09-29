@@ -1,7 +1,8 @@
 """View tests for the staff-only "Open in Studio" button (issue #667).
 
-The floating button is rendered by ``templates/includes/_studio_edit_button.html``
-and included from every public content detail template. The contract:
+The desktop pill is rendered by ``templates/includes/_studio_edit_button.html``
+from ``includes/header.html`` when a page passes ``studio_obj``; the header
+also shows the link in its menus below ``lg``. The contract:
 
 - Staff users see exactly one button per page. Course detail links to
   the homework list; other pages link to ``get_studio_edit_url()``.
@@ -59,8 +60,16 @@ class StudioEditButtonBlogDetailTest(TestCase):
         self.assertContains(
             response, STUDIO_BUTTON_TESTID, count=1,
         )
+        # The header resolves the URL once and uses it for the desktop
+        # pill, the md-to-lg account dropdown item, and the mobile menu row.
         self.assertContains(
-            response, f'href="{self.article.get_studio_edit_url()}"',
+            response, f'href="{self.article.get_studio_edit_url()}"', count=3,
+        )
+        self.assertContains(
+            response, 'data-testid="account-menu-studio-open-link"', count=1,
+        )
+        self.assertContains(
+            response, 'data-testid="mobile-studio-open-link"', count=1,
         )
 
     def test_anonymous_does_not_see_button(self):

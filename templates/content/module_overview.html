@@ -7,8 +7,7 @@
 {% block canonical %}<link rel="canonical" href="{{ site_url }}{{ module.get_absolute_url }}">{% endblock %}
 
 {% block body %}
-{% include "includes/header.html" %}
-{% include "includes/_studio_edit_button.html" with obj=course studio_section="syllabus" %}
+{% include "includes/header.html" with studio_obj=course studio_section="syllabus" %}
 <main class="min-h-screen">
   {% comment %}The sidebar appends ?cohort itself for module-scoped navigation, so pass the cohort only when it will not.{% endcomment %}
   {% if scoped_module %}{% course_entry_url course as reader_course_url %}{% else %}{% course_entry_url course cohort=reader_cohort_param as reader_course_url %}{% endif %}

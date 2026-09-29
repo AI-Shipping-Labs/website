@@ -5,8 +5,7 @@
 {% block title %}{{ course.title }} · {{ section|title }} | AI Shipping Labs{% endblock %}
 
 {% block body %}
-{% include "includes/header.html" %}
-{% include "includes/_studio_edit_button.html" with obj=course %}
+{% include "includes/header.html" with studio_obj=course %}
 <main class="min-h-screen pt-24" id="main-content" data-testid="course-home">
   <div class="mx-auto max-w-3xl px-4 pb-16 pt-2 sm:px-6 sm:pt-8 lg:px-8">
     <header class="mb-2 sm:mb-4">

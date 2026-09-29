@@ -10,8 +10,7 @@
 {% block structured_data %}{% structured_data page "workshop_page" %}{% endblock %}
 
 {% block body %}
-{% include "includes/header.html" %}
-{% include "includes/_studio_edit_button.html" with obj=workshop %}
+{% include "includes/header.html" with studio_obj=workshop %}
 <main class="min-h-screen">
   {% include "content/reader/_layout.html" with reader_content_template="content/reader/_workshop_page_content.html" reader_back_url=workshop.get_absolute_url reader_back_title=workshop.title reader_back_testid="sidebar-back-to-workshop" reader_sidebar_label="workshop navigation" reader_mobile_label="Workshop navigation" reader_nav_aria_label="Workshop pages" reader_nav_testid="workshop-sidebar" reader_nav_kind="workshop" %}
 </main>

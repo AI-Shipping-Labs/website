@@ -189,6 +189,10 @@ class HumanizeTagFilterTest(SimpleTestCase):
         self.assertEqual(humanize_tag('some-random-tag'), 'Some Random Tag')
         self.assertEqual(humanize_tag('design-patterns'), 'Design Patterns')
 
+    def test_compound_slug_keeps_acronym_words(self):
+        self.assertEqual(humanize_tag('llm-engineering'), 'LLM Engineering')
+        self.assertEqual(humanize_tag('rag_evaluation'), 'RAG Evaluation')
+
     def test_blank_and_none_render_empty(self):
         self.assertEqual(humanize_tag(None), '')
         self.assertEqual(humanize_tag(''), '')

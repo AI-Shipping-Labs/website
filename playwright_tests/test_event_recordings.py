@@ -201,8 +201,8 @@ class TestScenario1VisitorBrowsesAndWatchesOpen:
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/building-ai-agents" in page.url
 
-        # Step 3: Follow "Watch the recording" to the canonical video page.
-        page.locator('a:has-text("Watch the recording")').first.click()
+        # Step 3: Follow "Watch recording" to the canonical video page.
+        page.locator('[data-testid="workshop-video-link"]').first.click()
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/building-ai-agents/video" in page.url
 
@@ -382,7 +382,7 @@ class TestScenario3FreeUserSeesUpgradePath:
         ).first.click()
         page.wait_for_load_state("domcontentloaded")
         # Workshop landing -> follow to video page, which is gated.
-        page.locator('a:has-text("Watch the recording")').first.click()
+        page.locator('[data-testid="workshop-video-link"]').first.click()
         page.wait_for_load_state("domcontentloaded")
         assert "/workshops/premium-workshop-fine-tuning/video" in page.url
 
@@ -858,10 +858,10 @@ class TestScenario10InsufficientTierSeesCTAWithCorrectName:
         assert "exclusive deep dive" in body
 
         # The workshop landing surfaces the recording-tier requirement on
-        # the "Watch the recording" card -- it must mention Main, not Basic.
+        # the "Watch recording" locked caption -- it must mention Main, not Basic.
         assert "Recording available with Main or above" in body
         assert "Recording available with Basic or above" not in body
 
-        # The video locked badge is rendered on the recording card.
+        # The locked caption is rendered under the recording button.
         locked_badge = page.locator('[data-testid="workshop-video-locked"]')
         assert locked_badge.count() >= 1

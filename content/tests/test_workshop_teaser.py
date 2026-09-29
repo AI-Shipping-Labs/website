@@ -729,7 +729,7 @@ class LandingRecordingTeaserGateTest(TierSetupMixin, TestCase):
     def setUpTestData(cls):
         super().setUpTestData()
         # Landing + pages open, recording gated at Main, with a recording
-        # on the linked event so the "Watch the recording" card renders.
+        # on the linked event so the "Watch recording" button renders.
         cls.workshop = _make_workshop(
             'rec-teaser', pages=LEVEL_OPEN, recording=LEVEL_MAIN,
         )

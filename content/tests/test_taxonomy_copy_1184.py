@@ -220,7 +220,7 @@ class PublicTaxonomyCopy1184Test(TierSetupMixin, TestCase):
         self.assertContains(workshops_response, 'Hands-on AI workshops')
         self.assertContains(
             workshops_response,
-            'In each workshop we turn an idea into a concrete guided path',
+            'Practical AI engineering sessions, each with a recording',
         )
         self.assertContains(
             workshops_response,

@@ -187,7 +187,8 @@ class TestGatedContentMessaging:
 
         assert "Landing Gated Workshop" in body
         assert "Landing Gate Instructor" in body
-        assert "guardrails" in body
+        # Tags stay visible above the landing paywall, humanized.
+        assert "Guardrails" in body
         assert 'data-testid="workshop-landing-paywall"' in body
         assert "Upgrade to Basic to view this workshop" in body
         assert (

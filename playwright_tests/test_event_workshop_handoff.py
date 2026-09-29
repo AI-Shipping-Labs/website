@@ -240,8 +240,8 @@ class TestWorkshopLinkedEventHandsOff:
         page.wait_for_load_state('domcontentloaded')
         assert workshop_url in page.url
 
-        # Step 3: From the workshop landing, click "Watch the recording".
-        watch = page.locator('a:has-text("Watch the recording")')
+        # Step 3: From the workshop landing, click "Watch recording".
+        watch = page.locator('[data-testid="workshop-video-link"]')
         assert watch.count() >= 1
         watch.first.click()
         page.wait_for_load_state('domcontentloaded')

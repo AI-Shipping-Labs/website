@@ -144,7 +144,7 @@ class CourseLiveSessionsHomeTest(TierSetupMixin, TestCase):
         self.assertNotContains(home, self.upcoming_event.title)
         self.assertFalse(CohortEnrollment.objects.filter(user=user).exists())
 
-    def test_course_detail_hides_full_list_and_home_shows_join_and_recap_links(self):
+    def test_course_detail_hides_full_list_and_home_links_each_session_once(self):
         user = User.objects.create_user(
             email='entitled-1660@test.com', password='testpass',
         )
@@ -157,11 +157,14 @@ class CourseLiveSessionsHomeTest(TierSetupMixin, TestCase):
         self.assertContains(home, 'data-testid="course-home-live-sessions"')
         self.assertContains(home, self.upcoming_event.title)
         self.assertContains(home, self.past_event.title)
-        self.assertContains(
-            home, self.past_event.get_recap_url(),
-        )
+        # Course session cards never link out to the event recap; with no
+        # syllabus unit the one action falls back to the event page, and the
+        # meta names the recap the session holds.
+        self.assertNotContains(home, self.past_event.get_recap_url())
         self.assertContains(home, f'href="{self.past_event.get_absolute_url()}"')
-        self.assertContains(home, 'data-testid="course-home-recap-link"')
+        self.assertContains(
+            home, '<span data-testid="course-home-live-session-contents">Recap</span>', html=True,
+        )
         self.assertEqual(len(home.context['live_session_schedule']), 2)
 
     def test_staff_does_not_get_a_private_session_list_on_course_detail(self):

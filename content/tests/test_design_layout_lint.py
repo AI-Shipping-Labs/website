@@ -7,7 +7,7 @@ reading order.  The shared owners are ``{% section_header %}`` and
 ``{% progress_block %}`` from ``content.templatetags.layout_components``.
 
 This guard parses every non-Studio template under ``templates/`` into a
-tolerant element tree and flags three hand-rolled patterns:
+tolerant element tree and flags four hand-rolled patterns:
 
 ``heading_action_opposite``
     A ``justify-between`` container whose direct children include an
@@ -15,6 +15,10 @@ tolerant element tree and flags three hand-rolled patterns:
 ``progress_cta_row``
     A row (``flex`` without ``flex-col``, or ``*:flex-row``) whose direct
     children hold a progress element and a primary ``button_classes`` CTA.
+``row_actions_beside_meta``
+    Inside a list row, a ``justify-between`` container that pins a group of
+    two or more actions (``{% if %}`` arms count once, a ``{% for %}`` loop
+    counts as many) beside the row's meta block.
 ``handrolled_see_all_link``
     An ``h1``-``h3`` immediately followed by a "See all" / "View all" link,
     which is what ``{% section_header %}`` renders.
@@ -54,6 +58,7 @@ TEMPLATE_COMMENT_RE = re.compile(
     r"\{%\s*comment\b.*?%\}.*?\{%\s*endcomment\s*%\}|\{#.*?#\}|<!--.*?-->",
     re.DOTALL,
 )
+TEMPLATE_FLOW_RE = re.compile(r"\{%\s*(for|endfor|else|elif|empty)\b")
 SEE_ALL_RE = re.compile(r"^\s*(see|view) all\b", re.IGNORECASE)
 DISMISS_LABEL_RE = re.compile(r"^\s*(close|dismiss)\b", re.IGNORECASE)
 
@@ -65,6 +70,14 @@ class Element:
     line: int
     children: list[Element] = field(default_factory=list)
     own_text: list[str] = field(default_factory=list)
+    # Template control flow seen in the parent before this element opened:
+    # ``branch`` numbers the ``{% if %}``/``{% else %}`` arm it renders in, and
+    # ``looped`` is true inside a ``{% for %}`` body.  Only
+    # ``row_actions_beside_meta`` reads them, to count rendered actions.
+    branch: int = 0
+    looped: bool = False
+    open_branch: int = 0
+    loop_depth: int = 0
 
     @property
     def classes(self) -> list[str]:
@@ -88,7 +101,10 @@ class _TreeBuilder(HTMLParser):
         self.stack = [self.root]
 
     def _element(self, tag, attrs):
+        parent = self.stack[-1]
         element = Element(tag, {name: value or "" for name, value in attrs}, self.getpos()[0])
+        element.branch = parent.open_branch
+        element.looped = parent.loop_depth > 0
         self.stack[-1].children.append(element)
         return element
 
@@ -107,7 +123,15 @@ class _TreeBuilder(HTMLParser):
                 return
 
     def handle_data(self, data):
-        self.stack[-1].own_text.append(data)
+        parent = self.stack[-1]
+        parent.own_text.append(data)
+        for keyword in TEMPLATE_FLOW_RE.findall(data):
+            if keyword in {"else", "elif", "empty"}:
+                parent.open_branch += 1
+            elif keyword == "for":
+                parent.loop_depth += 1
+            elif keyword == "endfor":
+                parent.loop_depth = max(parent.loop_depth - 1, 0)
 
 
 def _blank(match: re.Match[str]) -> str:
@@ -183,6 +207,74 @@ def heading_action_opposite(root: Element) -> list[Element]:
     return matches
 
 
+def _is_justify_between(element: Element) -> bool:
+    return any(token.split(":")[-1] == "justify-between" for token in element.classes)
+
+
+def _action_count(element: Element) -> int:
+    """How many real actions ``element`` renders at most.
+
+    Mutually exclusive ``{% if %}``/``{% else %}`` arms count once, and an
+    action repeated by a ``{% for %}`` loop counts as two.
+    """
+    if _is_action(element):
+        return 0 if _is_dismissal(element) else 1
+    arms: dict[int, int] = {}
+    for child in element.children:
+        count = _action_count(child)
+        if child.looped and count:
+            count = max(count, 2)
+        arms[child.branch] = arms.get(child.branch, 0) + count
+    return max(arms.values(), default=0)
+
+
+def _pinned_action_count(container: Element) -> int:
+    """Actions ``container`` renders beside its meta: the biggest action group
+    child, or the direct actions of one ``{% if %}`` arm, whichever is larger."""
+    groups = [0]
+    direct: dict[int, int] = {}
+    for child in container.children:
+        if _has_meta(child):
+            continue
+        count = _action_count(child)
+        if child.looped and count:
+            count = max(count, 2)
+        if _is_action(child):
+            direct[child.branch] = direct.get(child.branch, 0) + count
+        else:
+            groups.append(count)
+    return max(max(groups), max(direct.values(), default=0))
+
+
+def _has_meta(element: Element) -> bool:
+    return not _real_actions(element) and bool(element.text().strip() or element.children)
+
+
+def row_actions_beside_meta(root: Element) -> list[Element]:
+    """A list row that pins a group of two or more actions beside its meta.
+
+    Two or more row actions always sit in an action row below the meta, so a
+    ``justify-between`` container (at any breakpoint) inside a list row
+    (``li``, or a child of a ``divide-y`` list) whose direct children are a
+    meta block and 2+ rendered actions is the pattern that squeezed course
+    Home's session rows.  Banners, cards, and toolbars outside list rows are
+    out of scope; a single pinned action is left to the rendered guard.
+    """
+    matches = []
+
+    def visit(element: Element, in_row: bool):
+        in_row = in_row or element.tag == "li"
+        if in_row and _is_justify_between(element) and any(_has_meta(child) for child in element.children):
+            if _pinned_action_count(element) >= 2:
+                matches.append(element)
+        row_list = any(token.startswith("divide-y") for token in element.classes)
+        for child in element.children:
+            visit(child, in_row or row_list)
+
+    visit(root, False)
+    return matches
+
+
 def progress_cta_row(root: Element) -> list[Element]:
     matches = []
     for container in root.walk():
@@ -228,6 +320,7 @@ RULES = (
     Rule("handrolled_see_all_link", handrolled_see_all_link, (SECTION_HEADER_OWNER,)),
     Rule("heading_action_opposite", heading_action_opposite),
     Rule("progress_cta_row", progress_cta_row),
+    Rule("row_actions_beside_meta", row_actions_beside_meta),
 )
 RULE_BY_ID = {rule.rule_id: rule for rule in RULES}
 
@@ -336,6 +429,83 @@ PROGRESS_BESIDE_CTA = (
     "  <a href=\"/x\" class=\"{% button_classes 'primary' size='md' %}\">Continue lesson</a>\n"
     "</div>"
 )
+
+
+# The course Home session row before it stacked its actions: "Watch recording"
+# and "Read recap" were pinned beside the title, badge, and date, which
+# squeezed the date into a wrapping column at 390px.
+SESSION_ROW_ACTIONS_BESIDE_META = (
+    '<li class="flex min-w-0 items-center justify-between gap-3 py-2">\n'
+    '  <div class="min-w-0 flex-1"><h4>{{ session.display_title }}</h4><p>{{ session.when }}</p></div>\n'
+    "  {% if session.actions %}\n"
+    '  <div class="flex shrink-0 flex-wrap items-center justify-end gap-x-4">\n'
+    '    {% for action in session.actions %}<a href="{{ action.url }}">{{ action.label }}</a>{% endfor %}\n'
+    "  </div>\n"
+    "  {% endif %}\n"
+    "</li>"
+)
+SESSION_ROW_ACTIONS_BELOW_META = (
+    '<li class="min-w-0 py-2">\n'
+    '  <div class="min-w-0"><h4>{{ session.display_title }}</h4><p>{{ session.when }}</p></div>\n'
+    '  <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1">\n'
+    '    {% for action in session.actions %}<a href="{{ action.url }}">{{ action.label }}</a>{% endfor %}\n'
+    "  </div>\n"
+    "</li>"
+)
+
+
+@tag("core")
+class RowActionsBesideMetaRuleTest(SimpleTestCase):
+    def _count(self, source, path="templates/content/sample.html"):
+        return len(find_matches(RULE_BY_ID["row_actions_beside_meta"], path, source))
+
+    def test_old_session_row_is_flagged_and_the_stacked_row_is_not(self):
+        self.assertEqual(self._count(SESSION_ROW_ACTIONS_BESIDE_META), 1)
+        self.assertEqual(self._count(SESSION_ROW_ACTIONS_BELOW_META), 0)
+
+    def test_two_pinned_actions_are_flagged_even_when_pinned_only_from_sm(self):
+        cases = {
+            "group of two": (
+                '<li><div class="flex flex-col sm:flex-row sm:justify-between"><span>Ana · Mar 3</span>'
+                '<span><button>Edit</button><button>Delete</button></span></div></li>'
+            ),
+            "two direct actions": (
+                '<ul class="divide-y"><div class="flex justify-between"><p>Session 2</p>'
+                '<a href="/r">Watch recording</a><a href="/c">Read recap</a></div></ul>'
+            ),
+        }
+        for name, source in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self._count(source), 1)
+
+    def test_one_action_or_non_row_layouts_are_not_flagged(self):
+        cases = {
+            "one pinned action": (
+                '<li class="flex flex-col sm:flex-row sm:justify-between"><div><h4>Homework</h4></div>'
+                '<a href="/h">Continue</a></li>'
+            ),
+            "if/else arms render one action": (
+                '<li><div class="flex justify-between"><h4>Step</h4>'
+                '{% if done %}<a href="/a">Review</a>{% else %}<a href="/b">Start</a>{% endif %}</div></li>'
+            ),
+            "banner outside a list row": (
+                '<div role="alert"><div class="flex sm:flex-row sm:justify-between"><p>Checkout failed</p>'
+                '<div><a href="/a">View tiers</a><a href="/b">Contact support</a></div></div></div>'
+            ),
+            "icon navigation beside an eyebrow outside a list": (
+                '<div class="flex justify-between"><p>Module</p>'
+                '<div><a href="/up" aria-label="Up">^</a><a href="/next" aria-label="Next">&gt;</a></div></div>'
+            ),
+            "row with a dismiss control": (
+                '<li class="flex justify-between"><p>Tip</p>'
+                '<div><a href="/a">Open</a><button aria-label="Dismiss tip">x</button></div></li>'
+            ),
+            "studio": SESSION_ROW_ACTIONS_BESIDE_META,
+        }
+        for name, source in cases.items():
+            path = "templates/studio/page.html" if name == "studio" else "templates/content/sample.html"
+            with self.subTest(name):
+                self.assertEqual(self._count(source, path), 0)
 
 
 @tag("core")

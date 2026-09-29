@@ -54,7 +54,7 @@ from content.services.course_schedule import (
     schedule_timezone_name,
     select_display_cohort,
 )
-from content.services.current_module import build_current_module, build_due_next
+from content.services.current_module import build_current_module, build_due_next, session_item
 from content.services.enrollment import (
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
@@ -509,17 +509,26 @@ def course_home(request, slug, section='home'):
         course, request.user, cohort, focus_module=context['current_module'],
     )
     context.update(commitments)
+    cohort_query = (
+        f'?{urlencode({"cohort": cohort.external_key})}'
+        if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
+    )
+    # Every scheduled course session card offers one action, to its syllabus
+    # unit (``session_item``), which holds the recording, recap, and join
+    # button.  An unscheduled authored session already links to its unit.
+    session_cards = [
+        session_item(row, cohort_query) if row.get('event') else row
+        for row in context['live_session_schedule']
+    ]
     dated_sessions = [
         {'kind': 'course_session', 'event': row['event'], 'session': row}
-        for row in context['live_session_schedule'] if row.get('event')
+        for row in session_cards if row.get('event')
     ]
     dated_sessions.sort(key=lambda row: row['event'].start_datetime)
     context['course_session_days'] = group_timeline_days(
         dated_sessions, ZoneInfo(context['commitment_timezone']),
     )
-    context['unscheduled_session_rows'] = [
-        row for row in context['live_session_schedule'] if not row.get('event')
-    ]
+    context['unscheduled_session_rows'] = [row for row in session_cards if not row.get('event')]
     context['deadline_rows'] = sorted(
         context['open_assignments'],
         key=lambda row: (row['when'] is None, row['when'] or timezone.now()),
@@ -528,10 +537,7 @@ def course_home(request, slug, section='home'):
         context['completed_assignments'],
         key=lambda row: row['when'] or timezone.now(), reverse=True,
     )
-    context['cohort_query'] = (
-        f'?{urlencode({"cohort": cohort.external_key})}'
-        if cohort and cohort.external_key and cohort.mode == 'cohort' else ''
-    )
+    context['cohort_query'] = cohort_query
     context['overview_url'] = course_overview_url(
         course, cohort=cohort if context['cohort_query'] else '',
     )

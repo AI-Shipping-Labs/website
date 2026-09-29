@@ -366,7 +366,7 @@ class CurrentModuleHomeTests(CurrentModuleFixture):
         )
 
     def test_next_module_session_shows_when_the_current_one_is_past(self):
-        self._session(
+        past = self._session(
             2, days=-1, title='Session two event',
             recap_notes='What we covered.', recording_url='https://www.youtube.com/watch?v=abc123',
         )
@@ -375,10 +375,19 @@ class CurrentModuleHomeTests(CurrentModuleFixture):
 
         sessions = response.context['current_module']['sessions']
         self.assertEqual([row['display_title'] for row in sessions], ['Session 2'])
-        self.assertEqual(
-            [action['label'] for action in sessions[0]['actions']],
-            ['Watch recording', 'Read recap'],
+        # One action, to the session unit that holds the recording and the
+        # recap; the meta names what is there.
+        self.assertEqual(sessions[0]['actions'], [{
+            'label': 'Open session',
+            'url': f'{self.session_two_unit.get_absolute_url()}?cohort=4',
+        }])
+        self.assertContains(
+            response,
+            '<span data-testid="course-home-live-session-contents">Recording · Recap</span>',
+            html=True,
         )
+        self.assertNotContains(response, past.get_recap_url())
+        self.assertNotContains(response, past.get_recording_url())
         next_session = response.context['home_next_session']
         self.assertEqual(next_session['display_title'], 'Session 3')
         self.assertEqual(next_session['module_label'], 'Week 3 · Agentic flows')
@@ -430,8 +439,13 @@ class CurrentModuleHomeTests(CurrentModuleFixture):
         self.client.force_login(self.user)
         response = self.client.get(f'/courses/{self.course.slug}/home/sessions?cohort=4')
 
-        self.assertContains(response, 'data-testid="past-recording-card"', count=1)
         self.assertContains(response, 'data-testid="course-home-live-session-status"')
+        # The card's one action opens the session unit, not the event recording.
+        [card] = [row['session'] for day in response.context['course_session_days'] for row in day['rows']]
+        unit_url = f'{self.session_two_unit.get_absolute_url()}?cohort=4'
+        self.assertEqual(card['actions'], [{'label': 'Open session', 'url': unit_url}])
+        self.assertContains(response, f'href="{unit_url}"')
+        self.assertNotContains(response, 'data-testid="past-card-recording-cta"')
         self.assertNotContains(response, 'data-testid="past-card-recording-tier"')
         self.assertNotContains(response, 'data-testid="event-card-tags"')
         self.assertNotContains(response, 'Session 2 · Past')

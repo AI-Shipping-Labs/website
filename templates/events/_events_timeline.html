@@ -19,7 +19,7 @@ series card, or a past recording card by ``row.kind``.
       <div class="space-y-3 sm:space-y-4">
         {% for row in day.rows %}
         {% if row.kind == 'course_session' %}
-        {% include "events/_timeline_listing_card.html" with card_variant=row.session.card_variant event=row.event display_time=row.display_time course_session=row.session %}
+        {% include "events/_timeline_listing_card.html" with card_variant="course_session" session=row.session event=row.event display_time=row.display_time %}
         {% elif row.kind == 'series' %}
         {% include "events/_timeline_listing_card.html" with card_variant="series" row=row %}
         {% elif row.kind == 'past' %}

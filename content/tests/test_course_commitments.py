@@ -87,7 +87,7 @@ class CourseCommitmentsTests(TestCase):
         )
 
     def test_switching_owned_cohort_switches_every_scheduled_source(self):
-        Unit.objects.create(
+        session_unit = Unit.objects.create(
             module=self.module, title='Session 1', slug='session-1', kind='event',
             session_position=1,
         )
@@ -103,8 +103,11 @@ class CourseCommitmentsTests(TestCase):
         first = self.client.get('/courses/commitment-course/home?cohort=first')
         self.assertContains(first, 'First cohort homework')
         first_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=first')
-        self.assertContains(first_sessions, f'href="{event_one.get_absolute_url()}"')
-        self.assertNotContains(first_sessions, 'second-session')
+        self.assertContains(first_sessions, f'href="{session_unit.get_absolute_url()}?cohort=first"')
+        self.assertEqual(
+            [row['event'] for day in first_sessions.context['course_session_days'] for row in day['rows']],
+            [event_one],
+        )
         # Due this week, so Home lists it under "Due next" (not the card).
         self.assertIn(
             'First cohort homework',
@@ -125,8 +128,11 @@ class CourseCommitmentsTests(TestCase):
         second = self.client.get('/courses/commitment-course/home?cohort=second')
         self.assertContains(second, 'Second cohort homework')
         second_sessions = self.client.get('/courses/commitment-course/home/sessions?cohort=second')
-        self.assertContains(second_sessions, 'second-session')
-        self.assertNotContains(second_sessions, f'href="{event_one.get_absolute_url()}"')
+        self.assertEqual(
+            [row['event'].slug for day in second_sessions.context['course_session_days'] for row in day['rows']],
+            ['second-session'],
+        )
+        self.assertContains(second_sessions, f'href="{session_unit.get_absolute_url()}?cohort=second"')
         self.assertIn(
             'Second cohort homework',
             [row['title'] for row in second.context['due_next']['rows']],

@@ -27,6 +27,7 @@ DESIGN_LAYOUT_ALLOWLIST: dict[str, dict[str, tuple[int, str]]] = {
         ),
     },
     "progress_cta_row": {},
+    "row_actions_beside_meta": {},
 }
 
 # Frozen upper bound (seeded 2026-09-29 from origin/main 9505beb90). Entries may

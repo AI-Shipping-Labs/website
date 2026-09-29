@@ -10,27 +10,41 @@ Upcoming rows.
 
 Required context: ``card_variant`` ("upcoming", "series", "past", or
 "course_session") plus ``event`` + ``display_time`` for event variants,
-``row`` for Series, or ``session`` for course session rows.
+``row`` for Series, or ``session`` (plus ``event`` + ``display_time`` when
+dated) for course session rows.
 
-Dated course sessions pass ``course_session`` into the event variants. They
-skip the access badge and tag chips (the whole course shares one access
-level) and show the session status as a badge on the title line. The
-decorative arrow only appears on cards whose whole body is one link, so the
-unscheduled ``course_session`` card (title + separate action links) has none.
+Course sessions (dated, with ``event`` + ``display_time``, or unscheduled)
+use the ``course_session`` card: no access badge or tag chips (the whole
+course shares one access level), the status badge on the title line, and one
+action to the session's syllabus unit, which holds the recording, the recap,
+and the join button. Course surfaces never link out to the event page's
+recording or recap.
 {% endcomment %}
 {% if card_variant == 'course_session' %}
 <article class="rounded-lg border {% if session.featured %}border-accent/50 bg-accent/5{% else %}border-border bg-card{% endif %} p-4 sm:p-5" data-testid="course-home-live-session-row"{% if session.featured %} data-featured="true"{% endif %}>
   <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-    <h3 class="text-lg font-semibold text-foreground"><a href="{{ session.event_url }}" class="hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-title">{% if session.session_unit %}{{ session.session_unit.title }}{% else %}{{ session.title }}{% endif %}</a></h3>
+    <h3 class="text-lg font-semibold text-foreground" data-testid="course-home-live-session-title">{% if session.session_unit %}{{ session.session_unit.title }}{% elif event %}{{ event.title }}{% else %}{{ session.title }}{% endif %}</h3>
     {% if session.status %}{% member_label_badge session.status tone=session.status_tone size="xs" testid="course-home-live-session-status" %}{% endif %}
   </div>
-  {% if session.position_label or session.when %}<p class="mt-1 text-sm text-muted-foreground" data-testid="course-home-live-session-time">{% if session.position_label %}{{ session.position_label }}{% if session.when %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time>{% endif %}</p>{% endif %}
-  {% if session.url and session.status != 'Past' or session.action == 'Watch recording' or session.recap_url %}
-  <div class="mt-1 flex flex-wrap items-center gap-x-4">
-    {% if session.url and session.status != 'Past' or session.action == 'Watch recording' %}<a href="{{ session.url }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-action">{{ session.action|default:"View event" }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
-    {% if session.recap_url %}<a href="{{ session.recap_url }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-recap-link">Read recap <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  {% if event %}
+  {% with public_description=event.description_html|strip_internal_notes %}
+  {% if public_description %}<p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ public_description|striptags|truncatechars:160 }}</p>{% endif %}
+  {% endwith %}
+  <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
+    {% include "events/_timeline_platform_label.html" with event=event %}
+    {% if session.position_label %}<span>{{ session.position_label }}</span><span aria-hidden="true">·</span>{% endif %}
+    <span data-testid="event-card-time">{% if display_time %}{{ display_time }}{% else %}{% include "events/_event_list_datetime.html" with event=event %}{% endif %}</span>
+    <span aria-hidden="true">·</span>
+    {% include "events/_timeline_registered_count.html" with event=event %}
+    {% if session.contents_label %}<span aria-hidden="true">·</span><span data-testid="course-home-live-session-contents">{{ session.contents_label }}</span>{% endif %}
   </div>
-  {% elif session.status == 'Past' %}<p class="mt-1 text-sm text-muted-foreground">No recap available yet</p>{% endif %}
+  {% elif session.position_label or session.when %}<p class="mt-1 text-sm text-muted-foreground" data-testid="course-home-live-session-time">{% if session.position_label %}{{ session.position_label }}{% if session.when %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time>{% endif %}</p>{% endif %}
+  {% comment %}One action, to the session's syllabus unit: it holds the recording, the recap, and the join button.{% endcomment %}
+  {% if session.actions %}{% with action=session.actions.0 %}
+  <a href="{{ action.url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-action">{{ action.label }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+  {% endwith %}{% elif session.url %}
+  <a href="{{ session.url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-action">Open session <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+  {% endif %}
 </article>
 {% elif card_variant == 'series' %}{% with series=row.series occ=row.next_occurrence %}
 <article class="group rounded-lg border border-border bg-card p-4 transition-colors hover:border-accent/50 sm:p-5" data-testid="event-series-card" data-series-slug="{{ series.slug }}">
@@ -72,18 +86,11 @@ unscheduled ``course_session`` card (title + separate action links) has none.
   {% elif card_variant == 'past' %}
     <a href="{{ event.get_absolute_url }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="past-card-event-link">
   {% else %}
-    {% if course_session %}{% firstof event.get_absolute_url as event_card_href %}{% else %}{% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}{% endif %}
+    {% firstof event.event_series.get_absolute_url event.get_absolute_url as event_card_href %}
     <a href="{{ event_card_href }}" class="{% include 'content/_clickable_card_classes.html' %}" data-testid="event-card-link">
   {% endif %}
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0 flex-1">
-        {% if course_session %}
-        {% comment %}Course sessions already sit under the course's access, so no tier badge; the status badge rides on the title line instead of a "Session N · Past" eyebrow.{% endcomment %}
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <h3 class="text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{% if course_session.session_unit %}{{ course_session.session_unit.title }}{% else %}{{ event.title }}{% endif %}</h3>
-          {% if course_session.status %}{% member_label_badge course_session.status tone=course_session.status_tone size="xs" testid="course-home-live-session-status" %}{% endif %}
-        </div>
-        {% else %}
         <div class="flex flex-wrap items-center gap-2">
           {% if card_variant == 'past' and event.has_recording and event.kind == 'workshop' and event.workshop %}
           {% member_access_badge event.workshop.recording_required_level testid="past-card-recording-tier" %}
@@ -97,21 +104,19 @@ unscheduled ``course_session`` card (title + separate action links) has none.
           </p>
         </div>
         <h3 class="mt-2 text-lg font-semibold text-foreground transition-colors group-hover:text-accent">{{ event.title }}</h3>
-        {% endif %}
         {% with public_description=event.description_html|strip_internal_notes %}
         {% if public_description %}
         <p class="mt-2 line-clamp-2 text-sm text-muted-foreground">{{ public_description|striptags|truncatechars:160 }}</p>
         {% endif %}
         {% endwith %}
-        {% if card_variant != 'past' and event.event_series and not course_session %}
+        {% if card_variant != 'past' and event.event_series %}
         <p class="mt-2 text-sm text-muted-foreground" data-testid="series-cadence-line">
           {% if event.event_series.cadence_prefix %}{{ event.event_series.cadence_prefix }} <span aria-hidden="true">·</span> {% endif %}part of {{ event.event_series.name }}
         </p>
         {% endif %}
         <div class="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground" data-testid="event-card-meta">
           {% include "events/_timeline_platform_label.html" with event=event %}
-          {% if course_session.position_label %}<span>{{ course_session.position_label }}</span><span aria-hidden="true">·</span>{% endif %}
-          <span data-testid="event-card-time">{% if display_time %}{{ display_time }}{% else %}{% include "events/_event_list_datetime.html" with event=event %}{% endif %}</span>
+            <span data-testid="event-card-time">{% if display_time %}{{ display_time }}{% else %}{% include "events/_event_list_datetime.html" with event=event %}{% endif %}</span>
           <span aria-hidden="true">·</span>
           {% include "events/_timeline_registered_count.html" with event=event %}
         </div>
@@ -136,10 +141,9 @@ unscheduled ``course_session`` card (title + separate action links) has none.
     </div>
   </a>
   {% if card_variant == 'past' %}
-    {% if not course_session %}{% include "events/_upcoming_event_card_tags.html" with tag_row_class="mt-3 flex flex-wrap gap-1.5" %}{% endif %}
-    {% if event.has_recording or course_session.recap_url %}
-    <div class="mt-2 flex flex-wrap items-center gap-x-4">
+    {% include "events/_upcoming_event_card_tags.html" with tag_row_class="mt-3 flex flex-wrap gap-1.5" %}
     {% if event.has_recording %}
+    <div class="mt-2 flex flex-wrap items-center gap-x-4">
     {% if event.kind == 'workshop' and event.workshop %}
     <a href="{% url 'workshop_video' event.workshop.url_key %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="past-card-recording-cta">
     {% else %}
@@ -149,12 +153,8 @@ unscheduled ``course_session`` card (title + separate action links) has none.
       Watch recording
       <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
     </a>
-    {% endif %}
-    {% if course_session.recap_url %}<a href="{{ course_session.recap_url }}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-recap-link">Read recap <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
     </div>
     {% endif %}
-  {% elif course_session and course_session.action == 'Join now' %}
-    <a href="{{ course_session.url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-live-session-action">Join session <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   {% endif %}
 </article>
 {% endif %}

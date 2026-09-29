@@ -314,19 +314,31 @@ def _session_url(row, cohort_query):
 
 
 def _session_actions(row, cohort_query):
-    """The action links one session row offers for its current stage."""
-    if row['status'] == 'Past':
-        actions = []
-        event = row.get('event')
-        if event is not None and event.has_recording:
-            actions.append({'label': 'Watch recording', 'url': event.get_recording_url()})
-        if row['recap_url']:
-            actions.append({'label': 'Read recap', 'url': row['recap_url']})
-        return actions
-    if row['status'] == 'Live now' and row['url']:
-        return [{'label': 'Join session', 'url': row['url']}]
+    """The one action a course session row offers: open its syllabus unit.
+
+    The session unit page carries the recording embed, the recap, and the
+    join button, so course surfaces never link out to the event page's
+    recording or recap.  Only a session without a unit falls back to the
+    event page.
+    """
     url = _session_url(row, cohort_query)
-    return [{'label': 'Open session', 'url': url}] if url else []
+    if not url:
+        return []
+    label = 'Join session' if row['status'] == 'Live now' else 'Open session'
+    return [{'label': label, 'url': url}]
+
+
+def _session_contents(row):
+    """What a past session's unit holds: ``Recording · Recap`` or neither."""
+    if row['status'] != 'Past':
+        return ''
+    event = row.get('event')
+    parts = []
+    if event is not None and event.has_recording:
+        parts.append('Recording')
+    if row.get('recap_url'):
+        parts.append('Recap')
+    return ' · '.join(parts) or 'No recap yet'
 
 
 def session_item(row, cohort_query):
@@ -339,9 +351,11 @@ def session_item(row, cohort_query):
         item['status'] = ''
         item['date_to_be_announced'] = True
         item['actions'] = []
+        item['contents_label'] = ''
         return item
     item['date_to_be_announced'] = False
     item['actions'] = _session_actions(row, cohort_query)
+    item['contents_label'] = _session_contents(row)
     return item
 
 

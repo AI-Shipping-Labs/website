@@ -1,13 +1,14 @@
 {% load member_badges %}
 {% comment %}
-One compact deadline row. It is a list row, so its single action sits on the
-right. The eyebrow names the kind (unless ``hide_kind``: the tab already
+One compact deadline row. It is a list row with one action: below ``sm`` the
+action sits under the meta, and from ``sm`` up it is pinned right
+(_docs/design-system.md, Row actions). The eyebrow names the kind (unless ``hide_kind``: the tab already
 filters to one kind) and the module (unless the section already names it).
 The meta line is the due date, the homework question counts, and the status,
 which is always shown. ``deadline_preview`` (no linked cohort) keeps only the
 title: stored dates are not this learner's deadlines.
 {% endcomment %}
-<li class="flex min-w-0 items-center justify-between gap-3 py-2 sm:py-3" data-testid="course-home-deadline-row">
+<li class="flex min-w-0 flex-col gap-1 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-3" data-testid="course-home-deadline-row">
   <div class="min-w-0 flex-1">
     {% if not hide_kind or item.module_title %}
     <p class="text-xs text-muted-foreground" data-testid="course-home-deadline-eyebrow">{% if not hide_kind %}<span class="font-medium" data-testid="course-home-deadline-kind">{{ item.kind }}</span>{% endif %}{% if item.module_title %}{% if not hide_kind %}<span aria-hidden="true"> · </span>{% endif %}<span class="break-words" data-testid="course-home-deadline-module">{{ item.module_title }}</span>{% endif %}</p>
@@ -23,8 +24,6 @@ title: stored dates are not this learner's deadlines.
     {% endif %}
   </div>
   {% if not deadline_preview and item.url and item.action %}
-  {% with action_words=item.action.split %}
-  <a href="{{ item.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="course-home-deadline-action"><span>{{ action_words.0 }}</span>{% if action_words|length > 1 %} <span class="sr-only sm:not-sr-only">{{ action_words|slice:"1:"|join:" " }}</span>{% endif %}<i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
-  {% endwith %}
+  <a href="{{ item.url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:self-auto" data-testid="course-home-deadline-action">{{ item.action }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   {% endif %}
 </li>

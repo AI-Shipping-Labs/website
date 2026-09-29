@@ -141,7 +141,7 @@ is already copied (count == 0) we show an "all caught up" notice instead.
         {% if note %}
         <ul class="divide-y divide-border" data-testid="plan-week-notes-list">
           <li class="py-3 first:pt-0" data-testid="plan-week-note" data-note-id="{{ note.pk }}">
-            <div class="flex flex-col gap-1 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <div class="flex flex-col gap-1 text-xs text-muted-foreground">
               <span>
                 {% if note.author %}{{ note.author|display_name }}{% else %}Member{% endif %}
                 &middot; {{ note.created_at|member_short_datetime }}
@@ -150,7 +150,7 @@ is already copied (count == 0) we show an "all caught up" notice instead.
                 {% endif %}
               </span>
               {% if plan_can_edit and note.author_id == request.user.id %}
-              <span class="space-x-2 whitespace-nowrap">
+              <span class="flex flex-wrap gap-x-4 gap-y-1">
                 <button type="button"
                         class="text-accent hover:underline"
                         data-week-note-edit

@@ -213,6 +213,37 @@ separate action or callout, not as a second frame around the page's primary
 content. Keep module focus, progress, and next-action text in one vertical
 reading order instead of pinning progress opposite a long module title.
 
+### Row actions
+
+A list row is a meta block (title, badges, date or status line) plus its
+actions. Where the actions go depends on how many there are:
+
+| Actions in the row | Below `sm` (under 640px) | `sm` and up |
+|---|---|---|
+| Two or more | Action row below the meta | Action row below the meta |
+| One | Below the meta | May be pinned right (`sm:flex-row sm:items-center sm:justify-between`) |
+
+- The action row is `mt-2 flex flex-wrap gap-x-4 gap-y-1`, directly after the
+  meta block. Never put two or more actions in a group pinned opposite the
+  meta with `justify-between`, at any breakpoint: it squeezes the meta into a
+  narrow column and wraps the date.
+- A single-action row is `flex min-w-0 flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-3`,
+  with `self-start sm:self-auto` on the action so it does not stretch on phones.
+- Every navigation action in one row uses the same discovery-link style:
+  `inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline`
+  plus the canonical focus-visible ring and a trailing `h-4 w-4` `arrow-right`
+  icon. No action is underlined at rest, and siblings never mix colours or
+  decorations. A destructive text action keeps `text-destructive`.
+- Close, dismiss, and skip controls retire the row rather than act on it and
+  are exempt from both rules.
+- Course session rows (Home module card, Next live session, module page, Live
+  sessions tab) carry exactly one action, to the session's syllabus unit with
+  `?cohort=`: `Open session`, or `Join session` while live. The unit page holds
+  the recording, the recap, and the join button, so course rows never link out
+  to an event's recording or recap; the meta line says what the unit holds
+  (`Recording · Recap`, or `No recap yet`). A session with no unit falls back
+  to its event page.
+
 Two owners make these rules the only easy path on member surfaces:
 `{% section_header %}` renders a section title with its optional subtitle and
 discovery link stacked below it, and `{% progress_block %}` renders progress
@@ -228,12 +259,19 @@ Enforcement:
   in a row, or hand-rolls a heading followed by a "See all" / "View all" link
   instead of `{% section_header %}`. List and table rows, close/dismiss
   controls, headings wrapped in a callout or card title block, and Studio are
-  exempt by construction. Any other exception needs an entry with a reason in
+  exempt by construction. Its `row_actions_beside_meta` rule fails a list row
+  (an `li`, or a child of a `divide-y` list) whose `justify-between`
+  container, at any breakpoint, pins a group of two or more actions beside the
+  meta; mutually exclusive `{% if %}` arms count once and a `{% for %}` loop
+  of actions counts as many. Any other exception needs an entry with a reason in
   `content/tests/design_layout_allowlist.py`, which can only shrink.
 - `playwright_tests/test_design_layout_guard.py` (core) loads course Home (all
   five tabs), a module page, a lesson, a session unit, a workshop, and the
   dashboard at 1280px and 390px. Every visible action after an `h1`-`h3` must
-  start below the heading, and no page may scroll horizontally.
+  start below the heading, and no page may scroll horizontally. In every
+  `main li` with a heading, at 390px each row action must start below the
+  row's meta block, and at both widths the actions sharing one group must share
+  the same computed text decoration and colour.
 - A brief, worklist, or orchestrator instruction never overrides this
   document. If a brief contradicts a rule here, follow this document and flag
   the conflict in the issue.

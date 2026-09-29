@@ -30,8 +30,11 @@
       <ol class="divide-y divide-border">
         {% for item in checklist_items %}
         {% comment %}
-          Compact row: the size="sm" CTA sits on the title line and Skip on the
-          description line, right-aligned under it. Skip keeps a 44px tap
+          Compact row: from sm up the size="sm" CTA sits on the title line and
+          Skip on the description line, right-aligned under it. Below sm the
+          CTA moves under the title and description (the row-actions rule in
+          _docs/design-system.md); the title/CTA wrapper is `contents` there so
+          `order-last` can place the CTA after the description. Skip keeps a 44px tap
           target; its negative margin pulls the extra height into the row
           padding so it adds none.
         {% endcomment %}
@@ -42,13 +45,13 @@
           <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border {% if item.skipped %}border-border bg-secondary text-muted-foreground{% elif item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
             {% if item.skipped %}<i data-lucide="forward" class="h-3.5 w-3.5" aria-hidden="true"></i>{% elif item.completed %}<i data-lucide="check" class="h-3.5 w-3.5" aria-hidden="true"></i>{% else %}<span class="text-xs font-semibold">{{ forloop.counter }}</span>{% endif %}
           </span>
-          <div class="min-w-0 flex-1">
-            <div class="flex items-start justify-between gap-3">
+          <div class="flex min-w-0 flex-1 flex-col sm:block">
+            <div class="contents sm:flex sm:items-start sm:justify-between sm:gap-3">
               <h4 class="min-w-0 pt-1 text-sm font-semibold text-foreground">{{ item.title }}{% if item.skipped %} <span class="ml-1 text-xs font-medium text-muted-foreground">Skipped</span>{% endif %}</h4>
               {% if item.completed or item.skipped %}
-              <a href="{{ item.url }}" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-completed-action-{{ item.key }}{% else %}{{ checklist_testid }}-completed-action-{{ item.key }}{% endif %}">{{ item.cta_label }}</a>
+              <a href="{{ item.url }}" class="{% button_classes 'secondary' size='sm' extra='order-last mt-2 shrink-0 self-start sm:order-none sm:mt-0' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-completed-action-{{ item.key }}{% else %}{{ checklist_testid }}-completed-action-{{ item.key }}{% endif %}">{{ item.cta_label }}</a>
               {% else %}
-              <a href="{{ item.url }}" class="{% button_classes 'secondary' size='sm' extra='shrink-0' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' and item.key == 'onboarding' %}onboarding-prompt-cta{% elif checklist_testid == 'free-activation-checklist' and item.key == 'slack' %}slack-account-card-join{% elif checklist_testid == 'free-activation-checklist' %}free-activation-action-{{ item.key }}{% else %}{{ checklist_testid }}-action-{{ item.key }}{% endif %}"{% if checklist_testid == 'free-activation-checklist' and item.key == 'sprints' %} data-complete-card="free_activation_sprint_guide_seen"{% endif %}>{{ item.cta_label }}</a>
+              <a href="{{ item.url }}" class="{% button_classes 'secondary' size='sm' extra='order-last mt-2 shrink-0 self-start sm:order-none sm:mt-0' %}" data-testid="{% if checklist_testid == 'free-activation-checklist' and item.key == 'onboarding' %}onboarding-prompt-cta{% elif checklist_testid == 'free-activation-checklist' and item.key == 'slack' %}slack-account-card-join{% elif checklist_testid == 'free-activation-checklist' %}free-activation-action-{{ item.key }}{% else %}{{ checklist_testid }}-action-{{ item.key }}{% endif %}"{% if checklist_testid == 'free-activation-checklist' and item.key == 'sprints' %} data-complete-card="free_activation_sprint_guide_seen"{% endif %}>{{ item.cta_label }}</a>
               {% endif %}
             </div>
             <div class="mt-0.5 flex items-start justify-between gap-3">

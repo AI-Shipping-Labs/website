@@ -11,6 +11,13 @@ in the heading's following siblings must start below the heading's bottom
 edge.  List and table rows, dialogs, and close/dismiss controls are the
 documented exceptions.  Every page must also fit the viewport without
 horizontal scrolling.  Each surface is checked at 1280px and 390px.
+
+List rows follow the row-actions rule: for every ``<li>`` inside ``<main>``
+with a heading, at 390px each row action must start below the row's meta
+block (the row child holding the heading) or, for an action inside that block,
+below the heading itself.  At every width, the actions that share one action
+group must share the same text decoration and colour.  Close, dismiss, and
+skip controls are exempt.
 """
 
 import datetime
@@ -67,6 +74,64 @@ LAYOUT_PROBLEMS_JS = """
 """
 
 
+ROW_ACTION_PROBLEMS_JS = """
+(checkPlacement) => {
+  const shown = (el) => {
+    const box = el.getBoundingClientRect();
+    if (box.width <= 1 || box.height <= 1) return false;
+    const style = getComputedStyle(el);
+    return style.visibility !== 'hidden' && style.display !== 'none';
+  };
+  // Close, dismiss, and skip controls retire the row rather than act on it.
+  const dismissal = (el) => /^(close|dismiss|skip)/i.test(el.getAttribute('aria-label') || '')
+    || [...el.attributes].some((attr) => attr.name.includes('dismiss'));
+  const text = (el) => ((el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ')).slice(0, 60);
+  const own = (row, el) => el.closest('li') === row;
+  const problems = [];
+  for (const row of document.querySelectorAll('main li')) {
+    if (!shown(row) || row.closest('dialog, [role="dialog"]')) continue;
+    const title = [...row.querySelectorAll('h1, h2, h3, h4, h5, h6')].find((el) => own(row, el) && shown(el));
+    if (!title) continue;
+    const meta = [...row.children].find((child) => child.contains(title));
+    const actions = [...row.querySelectorAll('a[href], button')].filter(
+      (el) => own(row, el) && shown(el) && !title.contains(el) && !dismissal(el));
+    if (checkPlacement) {
+      const titleBottom = title.getBoundingClientRect().bottom;
+      for (const action of actions) {
+        const floor = meta && !meta.contains(action) ? meta.getBoundingClientRect().bottom : titleBottom;
+        const top = action.getBoundingClientRect().top;
+        if (top < floor - 2) {
+          problems.push(`row "${text(title)}" has "${text(action)}" beside its meta `
+            + `(action top ${Math.round(top)} < meta bottom ${Math.round(floor)})`);
+        }
+      }
+    }
+    const groups = new Map();
+    for (const action of actions) {
+      const group = groups.get(action.parentElement) || [];
+      group.push(action);
+      groups.set(action.parentElement, group);
+    }
+    for (const group of groups.values()) {
+      const looks = group.map((el) => {
+        const style = getComputedStyle(el);
+        return `${style.textDecorationLine} ${style.color}`;
+      });
+      if (new Set(looks).size > 1) {
+        problems.push(`row "${text(title)}" mixes action styles: `
+          + group.map((el, i) => `"${text(el)}" ${looks[i]}`).join(', '));
+      }
+    }
+  }
+  return problems;
+}
+"""
+
+
+def _row_action_problems(page, viewport):
+    return page.evaluate(ROW_ACTION_PROBLEMS_JS, viewport["width"] < 640)
+
+
 def _assert_layout(page, base_url, paths):
     """``paths`` maps each path to headings that must render there.
 
@@ -85,7 +150,8 @@ def _assert_layout(page, base_url, paths):
                     page.locator("main").get_by_role("heading", name=heading).first
                 ).to_be_visible()
             found = page.evaluate(LAYOUT_PROBLEMS_JS)
-            for problem in found["pinned"] + found["overflow"]:
+            found_rows = _row_action_problems(page, viewport)
+            for problem in found["pinned"] + found["overflow"] + found_rows:
                 problems.append(f"{viewport['width']}px {path}: {problem}")
     assert problems == [], "Design-system layout violations:\n" + "\n".join(problems)
 
@@ -171,6 +237,8 @@ def _course_with_cohort(email):
         start_datetime=now - datetime.timedelta(days=1),
         end_datetime=now - datetime.timedelta(days=1) + datetime.timedelta(hours=1),
         description="Bring questions about retrieval.",
+        recording_url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        recap_notes="What we covered in session 2.",
     )
     Event.objects.create(
         event_series=series, slug="layout-guard-session-3", title="Third session event",
@@ -197,7 +265,49 @@ def test_course_home_tabs_keep_actions_below_their_headings(django_server, brows
         f"{base}/homework?cohort=layout": ["Homework"],
         f"{base}/projects?cohort=layout": ["Projects"],
     })
+    _assert_row_guard_rejects_the_old_session_row(page, django_server, f"{base}?cohort=layout")
     context.close()
+
+
+# Rebuilds the course Home session row as it shipped before the row-actions
+# rule: "Watch recording" and "Read recap" in a group pinned beside the meta
+# by a ``justify-between`` row (the owner's 390px screenshot).
+OLD_SESSION_ROW_JS = """
+(row) => {
+  row.className = 'flex min-w-0 items-center justify-between gap-3 py-2';
+  row.firstElementChild.className = 'min-w-0 flex-1';
+  const action = row.lastElementChild;
+  const group = document.createElement('div');
+  group.className = 'flex shrink-0 flex-wrap items-center justify-end gap-x-4';
+  for (const label of ['Watch recording', 'Read recap']) {
+    const link = action.cloneNode(true);
+    link.className = 'inline-flex min-h-[44px] shrink-0 items-center gap-1 text-sm font-medium text-accent hover:underline';
+    link.firstChild.textContent = `${label} `;
+    group.appendChild(link);
+  }
+  action.replaceWith(group);
+}
+"""
+
+
+def _assert_row_guard_rejects_the_old_session_row(page, base_url, path):
+    """The row-action checks pass on the shipped row and fail on the old one."""
+    phone = VIEWPORTS[1]
+    page.set_viewport_size(phone)
+    page.goto(f"{base_url}{path}", wait_until="load")
+    card = page.get_by_test_id("course-home-current-module")
+    row = card.get_by_test_id("course-home-live-session-row").filter(has_text="Recording · Recap")
+    expect(row.get_by_role("link", name="Open session")).to_be_visible()
+    assert _row_action_problems(page, phone) == []
+
+    row.evaluate(OLD_SESSION_ROW_JS)
+    pinned = _row_action_problems(page, phone)
+    assert any('"Watch recording" beside its meta' in problem for problem in pinned), pinned
+    assert any('"Read recap" beside its meta' in problem for problem in pinned), pinned
+
+    row.get_by_role("link", name="Read recap").evaluate("(link) => link.classList.add('underline')")
+    mixed = _row_action_problems(page, phone)
+    assert any("mixes action styles" in problem for problem in mixed), mixed
 
 
 @pytest.mark.core

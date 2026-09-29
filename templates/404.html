@@ -10,10 +10,26 @@
 
   <section class="px-4 pt-32 pb-16 sm:px-6 lg:px-8 lg:pt-40 lg:pb-24">
     <div class="mx-auto max-w-3xl">
-      <a href="/" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-8">
-        <i data-lucide="arrow-left" class="h-4 w-4"></i>
-        Back to home
+      {% comment %}
+      "Go back" returns to the previous page when the visitor came from this
+      site; otherwise (direct hit, external referrer, no JS) it links to /.
+      {% endcomment %}
+      <a href="/" class="mb-8 inline-flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground" data-testid="page-not-found-go-back">
+        <i data-lucide="arrow-left" class="h-4 w-4" aria-hidden="true"></i>
+        Go back
       </a>
+      <script>
+        (function() {
+          var link = document.querySelector('[data-testid="page-not-found-go-back"]');
+          var sameSite = false;
+          try { sameSite = new URL(document.referrer).origin === window.location.origin; } catch (e) {}
+          if (!link || !sameSite || window.history.length < 2) return;
+          link.addEventListener('click', function(event) {
+            event.preventDefault();
+            window.history.back();
+          });
+        })();
+      </script>
 
       {% member_empty_state title="We couldn't find that page" body="The page you're looking for doesn't exist or may have moved. Try one of the links below, or head back to the homepage." icon="search-x" kind="fresh" primary_cta_label="Go to homepage" primary_cta_url="/" secondary_cta_label=secondary_cta_label secondary_cta_url=secondary_cta_url testid="page-not-found" %}
     </div>

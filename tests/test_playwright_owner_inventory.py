@@ -1173,6 +1173,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_friendly_404_page_1724.py::"
         "TestArbitraryDeadUrlShowsGenericHomepageCta::"
         "test_arbitrary_dead_url_has_no_workshop_link_and_returns_home",
+        "playwright_tests/test_friendly_404_page_1724.py::"
+        "TestGoBackReturnsToThePreviousPage::"
+        "test_go_back_uses_history_from_this_site_else_homepage",
     })
 
     template_comment_guard_owners = frozenset({
@@ -1594,8 +1597,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2697)
-        self.assertEqual(len(inventory.owners), 2493)
+        self.assertEqual(inventory.item_count, 2698)
+        self.assertEqual(len(inventory.owners), 2494)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

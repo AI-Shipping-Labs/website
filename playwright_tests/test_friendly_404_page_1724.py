@@ -151,3 +151,31 @@ class TestArbitraryDeadUrlShowsGenericHomepageCta:
         assert page.url == f'{django_server}/'
         # The visitor can keep browsing normally via the header nav.
         assert page.locator('[data-testid="desktop-primary-nav"]').count() == 1
+
+
+# ---------------------------------------------------------------------
+# Scenario 3: "Go back" returns to the previous page on this site, and
+# falls back to the homepage on a direct hit.
+# ---------------------------------------------------------------------
+
+
+@pytest.mark.core
+@pytest.mark.django_db(transaction=True)
+class TestGoBackReturnsToThePreviousPage:
+    @browser_journey
+    def test_go_back_uses_history_from_this_site_else_homepage(
+        self, django_server, page,
+    ):
+        page.goto(f'{django_server}/faq', wait_until='domcontentloaded')
+        with page.expect_navigation():
+            page.evaluate("window.location.href = '/dead-link-from-faq'")
+        go_back = page.get_by_role('link', name='Go back', exact=True)
+        go_back.click()
+        page.wait_for_url(f'{django_server}/faq')
+
+        # A direct hit has no same-site history, so it goes to the homepage.
+        page.goto(
+            f'{django_server}/dead-link-direct-hit', wait_until='domcontentloaded',
+        )
+        page.get_by_role('link', name='Go back', exact=True).click()
+        page.wait_for_url(f'{django_server}/')

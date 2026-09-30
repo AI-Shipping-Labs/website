@@ -1,4 +1,8 @@
-"""Tier-override grant API endpoint (issue #833).
+"""Tier-override grant and revoke API endpoints (issue #833).
+
+``POST /api/tier-overrides/revoke`` deactivates active overrides through
+``payments.services.tier_override_revoke``, the same service the Studio revoke
+button uses.
 
 ``POST /api/tier-overrides`` grants the same long-lived ``TierOverride`` the
 Studio bulk contact-import gives non-paying members: a 10-year ``main`` override
@@ -38,11 +42,16 @@ from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
+from accounts.services.email_resolution import resolve_user_by_email
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
 from payments.models import Tier, TierOverride
+from payments.services.tier_override_revoke import (
+    active_overrides_for,
+    revoke_active_overrides,
+)
 from studio.services.contacts_import import import_contact_rows
 
 User = get_user_model()
@@ -381,3 +390,146 @@ def _grant_batch(emails, tier, granted_by, actor_label, *, expires_at=None):
             }
 
     return results
+
+
+@token_required
+@csrf_exempt
+@require_methods("POST")
+@openapi_spec(
+    tag="Tier overrides",
+    summary="Revoke active tier overrides",
+    methods={
+        "POST": {
+            "summary": "Revoke every active tier override for each email",
+            "description": (
+                "Deactivates each user's active ``TierOverride`` rows (manual "
+                "and source-specific grants such as Maven) through the same "
+                "service as the Studio revoke button, and writes one "
+                "``tier_override_revoked`` audit row per revoked override. "
+                "Rows stay as history. Emails resolve by primary email, then "
+                "alias. Per-email ``status``: ``revoked``, "
+                "``no_active_override``, ``user_not_found``, or ``malformed``. "
+                "Re-running is idempotent (``no_active_override``). "
+                "``dry_run: true`` reports ``would_revoke`` and writes "
+                f"nothing. Batch cap {BATCH_CAP}."
+            ),
+            "request_body": {
+                "required": ["emails"],
+                "properties": {
+                    "emails": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                    "dry_run": {"type": "boolean"},
+                },
+                "example": {"emails": ["refunded@example.com"]},
+            },
+            "responses": {
+                200: {
+                    "description": "Per-email revoke results plus counts.",
+                    "example": {
+                        "dry_run": False,
+                        "revoked": 1,
+                        "no_active_override": 1,
+                        "user_not_found": 1,
+                        "malformed": 0,
+                        "results": [
+                            {
+                                "email": "refunded@example.com",
+                                "status": "revoked",
+                                "overrides": [
+                                    {
+                                        "id": 42,
+                                        "tier": "main",
+                                        "expires_at": "2036-05-06T00:00:00+00:00",
+                                        "source": "maven:abc123",
+                                    },
+                                ],
+                            },
+                            {
+                                "email": "free@example.com",
+                                "status": "no_active_override",
+                                "overrides": [],
+                            },
+                            {
+                                "email": "ghost@example.com",
+                                "status": "user_not_found",
+                            },
+                        ],
+                    },
+                },
+                400: {
+                    "description": (
+                        "Malformed body or over-cap batch. Codes: "
+                        "``missing_emails``, ``batch_too_large``."
+                    ),
+                    "example": {
+                        "error": "emails must be a list",
+                        "code": "missing_emails",
+                    },
+                },
+            },
+        },
+    },
+)
+def tier_overrides_revoke(request):
+    """Revoke the active tier overrides of one or many members by email."""
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+
+    emails = data.get("emails") if isinstance(data, dict) else None
+    if not isinstance(emails, list):
+        return error_response("emails must be a list", "missing_emails")
+    if len(emails) > BATCH_CAP:
+        return error_response(
+            f"Batch too large: {len(emails)} exceeds cap of {BATCH_CAP}",
+            "batch_too_large",
+        )
+    dry_run = data.get("dry_run") is True
+
+    actor = f"actor_token={_actor_label(request)}"
+    results = []
+    with transaction.atomic():
+        for raw in _dedupe_emails(emails):
+            results.append(_revoke_one(raw, actor=actor, dry_run=dry_run))
+
+    counts = {
+        status: sum(1 for r in results if r["status"] == status)
+        for status in ("no_active_override", "user_not_found", "malformed")
+    }
+    revoked = sum(
+        1 for r in results if r["status"] in ("revoked", "would_revoke")
+    )
+    return JsonResponse(
+        {"dry_run": dry_run, "revoked": revoked, **counts, "results": results},
+        status=200,
+    )
+
+
+def _serialize_override(override):
+    return {
+        "id": override.pk,
+        "tier": override.override_tier.slug,
+        "expires_at": override.expires_at.isoformat(),
+        "source": override.source,
+    }
+
+
+def _revoke_one(raw, *, actor, dry_run):
+    if not _is_valid_email(raw):
+        return {"email": raw, "status": "malformed"}
+    user = resolve_user_by_email(raw)
+    if user is None:
+        return {"email": raw, "status": "user_not_found"}
+    if dry_run:
+        overrides = active_overrides_for(user)
+        status = "would_revoke" if overrides else "no_active_override"
+    else:
+        overrides = revoke_active_overrides(user, actor=actor)
+        status = "revoked" if overrides else "no_active_override"
+    return {
+        "email": raw,
+        "status": status,
+        "overrides": [_serialize_override(o) for o in overrides],
+    }

@@ -36,6 +36,13 @@ Cohort convention: `llm-zoomcamp-2026` for committed members, `llm-zoomcamp-2026
 - `asl users notes <email>` — list member notes (returns `{"interview_notes":[...]}`).
 - `asl users add-note <email> --body "..." [--kind ...] [--visibility internal|external] [--plan-id N]`
 
+## Tier overrides
+
+- `asl tier-overrides grant --emails a@x.com,b@x.com --tier main` — grant a tier override (idempotent).
+- `asl tier-overrides revoke <email>... [--dry-run]` — revoke every active override for each email, including Maven-sourced ones. Per-email status: `revoked`, `no_active_override`, `user_not_found`, or `malformed`.
+
+Always `--dry-run` a revoke first. Revoke never touches a paid Stripe tier; it only deactivates `TierOverride` rows (kept as history) and writes a `tier_override_revoked` audit row per override. Re-running is safe.
+
 ## Aliases and merge
 
 - `asl users add-alias <email> --alias-email <alias> [--note "..."]`

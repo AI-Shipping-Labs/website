@@ -40,6 +40,11 @@ class CommunityAuditLog(models.Model):
         # rides in ``details`` as ``actor_token=<label>`` alongside the tier
         # slug. Idempotent skips do NOT write a row.
         ("api_tier_override", "API: tier override grant"),
+        # Tier override revoke from Studio or ``POST /api/tier-overrides/revoke``
+        # via ``payments.services.tier_override_revoke``. The ``user`` FK is the
+        # SUBJECT; ``details`` carries the actor (``staff=<email>`` or
+        # ``actor_token=<label>``) plus override id, tier, expiry and source.
+        ("tier_override_revoked", "Tier override revoked"),
         # Operator-managed email aliases via the alias API (issue #840a).
         # The audit row's ``user`` FK is the alias OWNER (the canonical
         # account); the actor (API token name) rides in ``details`` as

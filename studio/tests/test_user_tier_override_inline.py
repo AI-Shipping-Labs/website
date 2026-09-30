@@ -22,6 +22,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from community.models import CommunityAuditLog
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -436,6 +437,11 @@ class UserTierOverrideRevokeEndpointTest(_InlineOverrideTestBase):
         self.assertRedirects(response, f'/studio/users/{member.pk}/')
         override.refresh_from_db()
         self.assertFalse(override.is_active)
+        audit = CommunityAuditLog.objects.get(
+            user=member, action='tier_override_revoked',
+        )
+        self.assertIn('staff=staff@test.com', audit.details)
+        self.assertIn(f'override_id={override.pk}', audit.details)
 
     def test_revoke_does_not_touch_other_users_override(self):
         # Defensive: an attacker who knows another user's override id

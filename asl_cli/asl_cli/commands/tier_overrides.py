@@ -1,4 +1,4 @@
-"""``asl tier-overrides`` -- grant tier overrides."""
+"""``asl tier-overrides`` -- grant and revoke tier overrides."""
 
 from __future__ import annotations
 
@@ -25,6 +25,23 @@ def tier_overrides_grant(emails, tier, fmt):
         "tier": tier,
     }
     emit(get_client().post(f"{API}/tier-overrides", json_body=body), fmt)
+
+
+@tier_overrides.command("revoke")
+@click.argument("emails", nargs=-1, required=True)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    help="Report which overrides would be revoked without changing anything.",
+)
+@format_option
+def tier_overrides_revoke(emails, dry_run, fmt):
+    """Revoke every active tier override for one or more users.
+
+    Each email reports revoked, no_active_override, or user_not_found.
+    """
+    body = {"emails": list(emails), "dry_run": dry_run}
+    emit(get_client().post(f"{API}/tier-overrides/revoke", json_body=body), fmt)
 
 
 groups = [tier_overrides]

@@ -201,7 +201,7 @@ from api.views.sync_sources import (
     sync_source_webhook_secret,
     sync_sources_collection,
 )
-from api.views.tier_overrides import tier_overrides_grant
+from api.views.tier_overrides import tier_overrides_grant, tier_overrides_revoke
 from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
@@ -697,6 +697,13 @@ urlpatterns = [
         "tier-overrides",
         tier_overrides_grant,
         name="api_tier_overrides_grant",
+    ),
+    # Revoke every active override for each email through the same service
+    # as the Studio revoke button (``payments.services.tier_override_revoke``).
+    path(
+        "tier-overrides/revoke",
+        tier_overrides_revoke,
+        name="api_tier_overrides_revoke",
     ),
     # ---- Book Club (issue #1362) --------------------------------------
     # Register the chapters sub-routes (more segments) BEFORE the bare

@@ -16536,6 +16536,94 @@
         ]
       }
     },
+    "/api/tier-overrides/revoke": {
+      "post": {
+        "description": "Deactivates each user's active ``TierOverride`` rows (manual and source-specific grants such as Maven) through the same service as the Studio revoke button, and writes one ``tier_override_revoked`` audit row per revoked override. Rows stay as history. Emails resolve by primary email, then alias. Per-email ``status``: ``revoked``, ``no_active_override``, ``user_not_found``, or ``malformed``. Re-running is idempotent (``no_active_override``). ``dry_run: true`` reports ``would_revoke`` and writes nothing. Batch cap 1000.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "emails": [
+                  "refunded@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "emails": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "emails"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "dry_run": false,
+                  "malformed": 0,
+                  "no_active_override": 1,
+                  "results": [
+                    {
+                      "email": "refunded@example.com",
+                      "overrides": [
+                        {
+                          "expires_at": "2036-05-06T00:00:00+00:00",
+                          "id": 42,
+                          "source": "maven:abc123",
+                          "tier": "main"
+                        }
+                      ],
+                      "status": "revoked"
+                    },
+                    {
+                      "email": "free@example.com",
+                      "overrides": [],
+                      "status": "no_active_override"
+                    },
+                    {
+                      "email": "ghost@example.com",
+                      "status": "user_not_found"
+                    }
+                  ],
+                  "revoked": 1,
+                  "user_not_found": 1
+                }
+              }
+            },
+            "description": "Per-email revoke results plus counts."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "missing_emails",
+                  "error": "emails must be a list"
+                }
+              }
+            },
+            "description": "Malformed body or over-cap batch. Codes: ``missing_emails``, ``batch_too_large``."
+          }
+        },
+        "summary": "Revoke every active tier override for each email",
+        "tags": [
+          "Tier overrides"
+        ]
+      }
+    },
     "/api/triggers/deliveries": {
       "get": {
         "parameters": [

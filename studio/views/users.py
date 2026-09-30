@@ -94,6 +94,7 @@ from payments.models import (
     TierOverride,
 )
 from payments.services.backfill_tiers import backfill_user_from_stripe
+from payments.services.tier_override_revoke import revoke_tier_override
 from plans.models import Plan, SprintEnrollment
 from studio.decorators import staff_required, superuser_required
 from studio.utils import (
@@ -1657,9 +1658,9 @@ def user_tier_override_create(request, user_id):
 def user_tier_override_revoke(request, user_id):
     """Revoke a user's active override and return to the detail page.
 
-    Kept as a thin wrapper around the same row update the standalone
-    revoke view performs so the standalone page's semantics
-    (``tier_override_revoke``) stay untouched.
+    The deactivate + audit write lives in
+    ``payments.services.tier_override_revoke`` so the staff API
+    (``POST /api/tier-overrides/revoke``) shares the same implementation.
     """
     user = get_object_or_404(User, pk=user_id)
     redirect_url = _tier_override_redirect_url(request, user)
@@ -1676,8 +1677,7 @@ def user_tier_override_revoke(request, user_id):
         messages.error(request, 'Override not found or already inactive.')
         return redirect(redirect_url)
 
-    override.is_active = False
-    override.save(update_fields=['is_active'])
+    revoke_tier_override(override, actor=f'staff={request.user.email}')
 
     messages.success(request, f'Override revoked for {user.email}.')
     return redirect(redirect_url)

@@ -29,8 +29,15 @@ DEFAULT_POLL_SECONDS = 5
 # deploys have shown publish→observe gaps of ~12ms, so tens-of-ms ingestion
 # or container skew can invert them. A 5s bound still fails a stale Redis
 # observe (worker sees a previous same-tag publish, then this web publishes
-# after migrate/reconcile).
+# after migrate/reconcile) unless that earlier publish is itself proven.
 MARKER_TIMESTAMP_SKEW_MS = 5000
+# The barrier key is tag-scoped, not task-scoped. When ECS replaces a failed
+# first task of the same revision, the replacement worker legitimately
+# observes the marker the replaced task's web published after migrating this
+# exact tag, before its own web re-publishes. Accept that only with a proven
+# earlier publish of the same key from another web stream in the log group,
+# bounded by the barrier's one-hour cache TTL.
+PRIOR_PUBLISH_LOOKBACK_MS = 3600 * 1000
 
 _TAG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _REPOSITORY_URI_RE = re.compile(
@@ -47,6 +54,14 @@ class VerificationError(RuntimeError):
     def __init__(self, invariant: str):
         self.invariant = invariant
         super().__init__(invariant)
+
+
+class _PublishAfterObserve(Exception):
+    """The selected web published after its worker observed the marker."""
+
+    def __init__(self, evidence: MarkerEvidence):
+        self.evidence = evidence
+        super().__init__("marker-order-publish-after-observe")
 
 
 @dataclass(frozen=True)
@@ -77,6 +92,7 @@ class MarkerEvidence:
     publish_timestamp: int
     observe_timestamp: int
     qcluster_timestamp: int
+    publish_source: str = "selected-task"
 
 
 class AwsCli:
@@ -600,11 +616,82 @@ def _get_stream_events(
         next_token = token
 
 
+def _publish_message(tag: str) -> str:
+    return f"Published serving schema readiness marker r1_serving_schema_ready:{tag}"
+
+
+def _prior_publish_timestamp(
+    aws: AwsCli,
+    *,
+    log_group: str,
+    web_stream_prefix: str,
+    selected_web_stream: str,
+    tag: str,
+    observe_timestamp: int,
+) -> int | None:
+    """Return the latest same-tag publish from another web stream, if any.
+
+    Only an exact publish line from a different web stream of the same
+    container name, at or before the observe (plus skew), counts.
+    """
+    message = _publish_message(tag)
+    latest: int | None = None
+    next_token: str | None = None
+    seen_tokens: set[str] = set()
+    while True:
+        arguments = [
+            "--log-group-name",
+            log_group,
+            "--log-stream-name-prefix",
+            web_stream_prefix,
+            "--filter-pattern",
+            json.dumps(message),
+            "--start-time",
+            str(max(0, observe_timestamp - PRIOR_PUBLISH_LOOKBACK_MS)),
+            "--end-time",
+            str(observe_timestamp + MARKER_TIMESTAMP_SKEW_MS),
+        ]
+        if next_token is not None:
+            arguments.extend(["--next-token", next_token])
+        payload = aws.call("logs", "filter-log-events", *arguments)
+        page = payload.get("events")
+        if not isinstance(page, list):
+            raise VerificationError("cloudwatch-events-malformed")
+        for event in page:
+            if not isinstance(event, dict):
+                raise VerificationError("cloudwatch-events-malformed")
+            timestamp = event.get("timestamp")
+            text = event.get("message")
+            stream = event.get("logStreamName")
+            if (
+                not isinstance(timestamp, int)
+                or isinstance(timestamp, bool)
+                or not isinstance(text, str)
+                or not isinstance(stream, str)
+            ):
+                raise VerificationError("cloudwatch-events-malformed")
+            if (
+                text.strip() == message
+                and stream != selected_web_stream
+                and stream.startswith(web_stream_prefix)
+                and timestamp <= observe_timestamp + MARKER_TIMESTAMP_SKEW_MS
+                and (latest is None or timestamp > latest)
+            ):
+                latest = timestamp
+        token = payload.get("nextToken")
+        if token is None:
+            return latest
+        if not isinstance(token, str) or not token or token in seen_tokens:
+            raise VerificationError("cloudwatch-pagination-malformed")
+        seen_tokens.add(token)
+        next_token = token
+
+
 def _marker_evidence(
     *, web_events: list[tuple[int, str]], worker_events: list[tuple[int, str]], tag: str
 ) -> tuple[MarkerEvidence | None, list[str]]:
     key = f"r1_serving_schema_ready:{tag}"
-    publish_message = f"Published serving schema readiness marker {key}"
+    publish_message = _publish_message(tag)
     observe_message = f"Serving schema readiness marker observed: {key}"
     qcluster_message = "Starting django-q cluster"
 
@@ -630,10 +717,16 @@ def _marker_evidence(
     qcluster_index = qcluster_indexes[0]
     observe_event = worker_events[observe_index]
     qcluster_event = worker_events[qcluster_index]
-    if publish_event[0] > observe_event[0] + MARKER_TIMESTAMP_SKEW_MS:
-        raise VerificationError("marker-order-publish-after-observe")
     if qcluster_index <= observe_index:
         raise VerificationError("marker-order-qcluster-before-observe")
+    if publish_event[0] > observe_event[0] + MARKER_TIMESTAMP_SKEW_MS:
+        raise _PublishAfterObserve(
+            MarkerEvidence(
+                publish_timestamp=publish_event[0],
+                observe_timestamp=observe_event[0],
+                qcluster_timestamp=qcluster_event[0],
+            )
+        )
     return (
         MarkerEvidence(
             publish_timestamp=publish_event[0],
@@ -652,10 +745,10 @@ def _wait_for_markers(
     tag: str,
     poll_seconds: int,
 ) -> MarkerEvidence:
-    web_stream = (
-        f"{task_definition.web.log_prefix}/"
-        f"{task_definition.web.name}/{runtime.task_id}"
+    web_stream_prefix = (
+        f"{task_definition.web.log_prefix}/{task_definition.web.name}/"
     )
+    web_stream = f"{web_stream_prefix}{runtime.task_id}"
     worker_stream = (
         f"{task_definition.worker.log_prefix}/"
         f"{task_definition.worker.name}/{runtime.task_id}"
@@ -676,11 +769,31 @@ def _wait_for_markers(
             log_group=task_definition.worker.log_group,
             stream_name=worker_stream,
         )
-        evidence, last_missing = _marker_evidence(
-            web_events=web_events,
-            worker_events=worker_events,
-            tag=tag,
-        )
+        try:
+            evidence, last_missing = _marker_evidence(
+                web_events=web_events,
+                worker_events=worker_events,
+                tag=tag,
+            )
+        except _PublishAfterObserve as inverted:
+            prior = _prior_publish_timestamp(
+                aws,
+                log_group=task_definition.web.log_group,
+                web_stream_prefix=web_stream_prefix,
+                selected_web_stream=web_stream,
+                tag=tag,
+                observe_timestamp=inverted.evidence.observe_timestamp,
+            )
+            if prior is None:
+                raise VerificationError(
+                    "marker-order-publish-after-observe"
+                ) from None
+            return MarkerEvidence(
+                publish_timestamp=prior,
+                observe_timestamp=inverted.evidence.observe_timestamp,
+                qcluster_timestamp=inverted.evidence.qcluster_timestamp,
+                publish_source="prior-same-tag-task",
+            )
         if evidence is not None:
             return evidence
         remaining = aws.deadline - time.monotonic()
@@ -769,7 +882,8 @@ def main(argv: list[str] | None = None) -> int:
         "markers=publish:"
         f"{_iso8601_milliseconds(markers.publish_timestamp)},"
         f"observe:{_iso8601_milliseconds(markers.observe_timestamp)},"
-        f"qcluster:{_iso8601_milliseconds(markers.qcluster_timestamp)}"
+        f"qcluster:{_iso8601_milliseconds(markers.qcluster_timestamp)} "
+        f"publish_source={markers.publish_source}"
     )
     return 0
 

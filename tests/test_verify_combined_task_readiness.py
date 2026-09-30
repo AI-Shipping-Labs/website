@@ -247,7 +247,11 @@ if service == "logs" and operation == "get-log-events":
                 events.append(qcluster)
     else:
         if SCENARIO != "missing_publish":
-            if SCENARIO == "publish_after_observe":
+            if SCENARIO in {
+                "publish_after_observe",
+                "replaced_task_prior_publish",
+                "prior_publish_not_proven",
+            }:
                 timestamp = 20000
             elif SCENARIO == "publish_within_skew":
                 timestamp = 1051
@@ -258,6 +262,34 @@ if service == "logs" and operation == "get-log-events":
                 "message": "Published serving schema readiness marker " + key,
             })
     output({"events": events, "nextForwardToken": stream_token})
+
+if service == "logs" and operation == "filter-log-events":
+    prefix = value_after("--log-stream-name-prefix", "")
+    key = "r1_serving_schema_ready:" + TAG
+    message = "Published serving schema readiness marker " + key
+    events = []
+    if SCENARIO == "replaced_task_prior_publish":
+        # The replaced first task of the same revision published after
+        # migrating this exact tag, before the selected worker observed.
+        events.append({
+            "logStreamName": prefix + "task-replaced",
+            "timestamp": 950,
+            "message": message,
+        })
+    if SCENARIO == "prior_publish_not_proven":
+        # Neither the selected task's own late publish, another tag, nor a
+        # publish after the observe can prove the observed marker.
+        events.extend([
+            {"logStreamName": prefix + "task-abc", "timestamp": 950, "message": message},
+            {
+                "logStreamName": prefix + "task-replaced",
+                "timestamp": 950,
+                "message": message.replace(TAG, "20260101-000000-0000000"),
+            },
+            {"logStreamName": prefix + "task-replaced", "timestamp": 19000, "message": message},
+            {"logStreamName": prefix + "task-replaced", "timestamp": 960, "message": SENTINEL_LOG},
+        ])
+    output({"events": events})
 
 output({})
 '''
@@ -350,6 +382,8 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
         self.assertIn("ai-shipping-labs:RUNNING", result.stdout)
         self.assertIn("ai-shipping-labs-worker:RUNNING", result.stdout)
         self.assertIn("markers=publish:", result.stdout)
+        self.assertIn("publish_source=selected-task", result.stdout)
+        self.assertNotIn("logs filter-log-events", calls)
         self.assertEqual(calls.count("ecs describe-tasks"), 2)
         self.assertIn(
             "--log-stream-name ecs/ai-shipping-labs/task-abc",
@@ -457,6 +491,34 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
                 self.assertNotEqual(result.returncode, 0)
                 self.assertIn(f"invariant={invariant}", result.stderr)
                 self.assertSanitized(result)
+
+    def test_replaced_task_observe_is_accepted_with_prior_same_tag_publish(self):
+        # ECS replaced the first task of this revision after its web had
+        # migrated and published; the replacement worker observed that
+        # still-valid tag-scoped marker before its own web re-published.
+        result, calls = self._run_scenario("replaced_task_prior_publish")
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            msg=f"stdout={result.stdout}\nstderr={result.stderr}",
+        )
+        self.assertIn("publish_source=prior-same-tag-task", result.stdout)
+        self.assertIn(
+            "--log-stream-name-prefix ecs/ai-shipping-labs/ ",
+            calls,
+        )
+        self.assertSanitized(result)
+
+    def test_unproven_prior_publish_keeps_order_invariant_fail_closed(self):
+        result, calls = self._run_scenario("prior_publish_not_proven")
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "invariant=marker-order-publish-after-observe", result.stderr
+        )
+        self.assertIn("logs filter-log-events", calls)
+        self.assertSanitized(result)
 
     def test_small_cross_stream_timestamp_skew_is_accepted(self):
         result, _ = self._run_scenario("publish_within_skew")

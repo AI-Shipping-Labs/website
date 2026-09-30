@@ -65,6 +65,7 @@ from api.views.course_cohorts import (
     course_cohort_detail,
     course_cohorts_collection,
 )
+from api.views.course_coursework_inventory import course_coursework_inventory
 from api.views.course_enrollments import (
     course_enrollment_detail,
     course_enrollments_collection,
@@ -795,6 +796,12 @@ urlpatterns = [
         "courses/<slug:slug>/cohorts/<str:key>",
         course_cohort_detail,
         name="api_course_cohort_detail",
+    ),
+    # ---- Course coursework inventory (issue #1696) --------------------
+    path(
+        "courses/<slug:slug>/coursework-inventory",
+        course_coursework_inventory,
+        name="api_course_coursework_inventory",
     ),
     # ---- Course certificates (issue #445) -----------------------------
     path(

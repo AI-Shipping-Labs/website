@@ -216,7 +216,9 @@ class Submission(models.Model):
     )
     student = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-        related_name='homework_submissions',
+        # ``aisl_`` prefix: community_base.coursework.Submission.student owns
+        # ``homework_submissions`` on User (#1696 F2).
+        related_name='aisl_homework_submissions',
     )
     # community_base.curriculum.Enrollment (user+cohort) is what the donor's
     # Submission.enrollment actually points to -- CohortEnrollment is this

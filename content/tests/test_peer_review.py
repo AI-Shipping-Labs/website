@@ -679,7 +679,7 @@ class BatchFormationTest(TestCase):
         for sub in ProjectSubmission.objects.filter(course_project=first):
             self.assertEqual(sub.review_deadline, first.review_due_at)
             self.assertEqual(sub.reviews.count(), 1)
-            self.assertEqual(sub.reviews.first().reviewer.project_submissions.get(
+            self.assertEqual(sub.reviews.first().reviewer.aisl_project_submissions.get(
                 course_project=first,
             ).course_project_id, first.pk)
 

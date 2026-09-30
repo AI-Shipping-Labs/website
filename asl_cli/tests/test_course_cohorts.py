@@ -1,4 +1,5 @@
-"""``asl sprints course-cohorts`` / ``course-cohort-update`` wiring tests."""
+"""``asl sprints course-cohorts`` / ``course-cohort-update`` /
+``course-coursework-inventory`` wiring tests."""
 
 from __future__ import annotations
 
@@ -36,6 +37,15 @@ def test_course_cohorts_lists_cohorts(client):
     result = CliRunner().invoke(cli, ["sprints", "course-cohorts", "ai-buildcamp"])
     assert result.exit_code == 0, result.output
     assert client.calls == [("GET", "/api/courses/ai-buildcamp/cohorts", {})]
+    assert json.loads(result.output) == RESPONSE
+
+
+def test_course_coursework_inventory_gets_the_inventory(client):
+    result = CliRunner().invoke(cli, [
+        "sprints", "course-coursework-inventory", "ai-buildcamp",
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [("GET", "/api/courses/ai-buildcamp/coursework-inventory", {})]
     assert json.loads(result.output) == RESPONSE
 
 

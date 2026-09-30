@@ -136,6 +136,14 @@ def sprints_course_cohorts(slug, fmt):
     emit(get_client().get(f"{API}/courses/{slug}/cohorts"), fmt)
 
 
+@sprints.command("course-coursework-inventory")
+@click.argument("slug")
+@format_option
+def sprints_course_coursework_inventory(slug, fmt):
+    """Count a course's legacy projects, submissions, reviews and certificates (staff-only)."""
+    emit(get_client().get(f"{API}/courses/{slug}/coursework-inventory"), fmt)
+
+
 @sprints.command("course-cohort-update")
 @click.argument("slug")
 @click.argument("key")

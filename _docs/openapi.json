@@ -3912,6 +3912,149 @@
         ]
       }
     },
+    "/api/courses/{slug}/coursework-inventory": {
+      "get": {
+        "description": "Counts the course's current legacy project rows, the baseline for moving projects onto ``community_base.coursework``. Sections: ``cohorts`` (per mode, with enrollment, project and submission counts), ``enrollments`` (``CohortEnrollment`` rows in cohorts that have projects; a self-paced cohort has projects when an unscoped attempt exists), ``projects`` (``CourseProject`` per cohort, ``null_cohort`` counted separately, and unscoped attempts with zero submissions), ``submissions`` (per ``status``, ``course_project=NULL``, blank versus non-blank ``description``), ``reviews`` (complete or incomplete, scored or null, and reviewers with no submission in the reviewed attempt as distinct ``pairs`` and ``reviews``), ``batches`` (legacy self-paced pooled groups sharing ``batch_assigned_at``) and ``certificates`` (``with_submission`` has the submission FK). Writes nothing.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "batches": {
+                    "groups": [],
+                    "legacy_pooled_groups": 0,
+                    "submissions_in_groups": 0
+                  },
+                  "certificates": {
+                    "revoked": 0,
+                    "total": 0,
+                    "with_submission": 0
+                  },
+                  "cohorts": {
+                    "by_mode": {
+                      "cohort": 1,
+                      "self_paced": 1
+                    },
+                    "items": [
+                      {
+                        "cohort_id": 12,
+                        "end_date": "2026-11-09",
+                        "enrollment_count": 57,
+                        "external_key": "4",
+                        "has_projects": true,
+                        "is_active": true,
+                        "mode": "cohort",
+                        "name": "Cohort 4",
+                        "project_count": 2,
+                        "start_date": "2026-09-14",
+                        "submission_count": 0
+                      }
+                    ],
+                    "total": 2
+                  },
+                  "course": "ai-buildcamp",
+                  "enrollments": {
+                    "by_cohort": [
+                      {
+                        "cohort_id": 12,
+                        "count": 57,
+                        "external_key": "4",
+                        "mode": "cohort",
+                        "name": "Cohort 4"
+                      }
+                    ],
+                    "cohort_enrollments": 57,
+                    "cohorts_with_projects": 1
+                  },
+                  "projects": {
+                    "by_cohort": [
+                      {
+                        "cohort_id": 12,
+                        "count": 2,
+                        "external_key": "4",
+                        "mode": "cohort",
+                        "name": "Cohort 4"
+                      }
+                    ],
+                    "items": [
+                      {
+                        "cohort_id": 12,
+                        "id": 7,
+                        "peer_review_count": null,
+                        "review_due_at": "2026-11-23T23:59:00+00:00",
+                        "slug": "attempt-1",
+                        "submission_count": 0,
+                        "submission_due_at": "2026-11-16T23:59:00+00:00",
+                        "title": "Attempt 1"
+                      }
+                    ],
+                    "null_cohort": 1,
+                    "total": 3,
+                    "unscoped_without_submissions": {
+                      "count": 1,
+                      "slugs": [
+                        "preview"
+                      ]
+                    }
+                  },
+                  "reviews": {
+                    "complete": 0,
+                    "incomplete": 0,
+                    "reviewers_without_submission": {
+                      "pairs": 0,
+                      "reviews": 0
+                    },
+                    "scored": 0,
+                    "total": 0,
+                    "unscored": 0
+                  },
+                  "submissions": {
+                    "by_status": {
+                      "certified": 0,
+                      "in_review": 0,
+                      "review_complete": 0,
+                      "submitted": 0
+                    },
+                    "description": {
+                      "blank": 0,
+                      "non_blank": 0
+                    },
+                    "total": 0,
+                    "without_course_project": 0
+                  }
+                }
+              }
+            },
+            "description": "Inventory for the course."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found."
+          }
+        },
+        "summary": "Coursework inventory (staff-only, read-only)",
+        "tags": [
+          "Course Cohorts"
+        ]
+      }
+    },
     "/api/courses/{slug}/enrollments": {
       "get": {
         "description": "Active enrollments by default; ``?include_unenrolled=1`` includes soft-deleted rows. Staff sees all rows; non-staff sees only their own.",

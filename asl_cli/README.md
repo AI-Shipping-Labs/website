@@ -286,6 +286,16 @@ uv run asl sprints course-cohort-update ai-buildcamp 4 --event-series buildcamp-
 uv run asl sprints course-cohort-update ai-buildcamp 4 --start-date 2026-09-14 --end-date 2026-11-09
 ```
 
+### Course coursework inventory
+
+Count a course's legacy project attempts, submissions, peer reviews, pooled
+batches and certificates (read-only). This is the baseline for moving projects
+onto `community_base.coursework`.
+
+```bash
+uv run asl sprints course-coursework-inventory ai-buildcamp
+```
+
 ### Escape hatch
 
 ```bash

@@ -71,7 +71,9 @@ class ProjectSubmission(models.Model):
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
-        related_name='project_submissions',
+        # ``aisl_`` prefix: community_base.coursework.ProjectSubmission.student
+        # owns ``project_submissions`` on User (#1696 F2).
+        related_name='aisl_project_submissions',
     )
     course = models.ForeignKey(
         'cb_curriculum.Course',

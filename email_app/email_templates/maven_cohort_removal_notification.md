@@ -1,5 +1,5 @@
 ---
-subject: "Maven cohort removal — review needed"
+subject: "Maven cohort removal — what was changed"
 ---
 
 A student was removed from a Maven cohort.
@@ -12,11 +12,17 @@ A student was removed from a Maven cohort.
 - Cohort: {{ cohort }}
 - Course: {{ course }}
 
-No automatic change was made. Their tier override, access, and Slack
-membership are all unchanged.
+What was done automatically:
 
-You may want to suspend their tier override / subscription. Their access is
-unchanged until you act — the decision is yours.
+- Course access: {{ course_access_result }}
+- Cohort enrollment: {{ cohort_enrollment_result }}
+- Event series: {{ series_registration_result }}
+- Tags: {{ tags_result }}
+- Tier override: {{ override_result }}
+- Student email: {{ student_email_result }}
+- Slack: {{ slack_result }}
+
+A paid Stripe subscription is never changed by this flow.
 {% else %}
 - Email: {{ removed_user_email }}
 - Cohort: {{ cohort }}

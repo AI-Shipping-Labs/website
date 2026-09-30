@@ -126,6 +126,7 @@ from api.views.marketing_pages import (
 from api.views.maven_occurrences import (
     maven_occurrence_detail,
     maven_occurrence_key_correction,
+    maven_occurrence_removal_reapply,
     maven_occurrence_step_retry,
     maven_occurrences_collection,
 )
@@ -578,6 +579,11 @@ urlpatterns = [
         "integrations/maven/occurrences/<int:occurrence_id>/steps/<str:step>/retry",
         maven_occurrence_step_retry,
         name="api_maven_occurrence_step_retry",
+    ),
+    path(
+        "integrations/maven/occurrences/<int:occurrence_id>/removal/reapply",
+        maven_occurrence_removal_reapply,
+        name="api_maven_occurrence_removal_reapply",
     ),
     # ---- Plan-sprints ingest / backfill trigger (issue #904) ----------
     # Staff-token POST that enqueues the same capture + parse + auto-apply

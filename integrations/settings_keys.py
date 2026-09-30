@@ -124,6 +124,8 @@ _KEY_ORDER = {
         "MAVEN_OVERRIDE_DURATION_DAYS",
         "MAVEN_COURSE_SLACK_CHANNEL",
         "MAVEN_COURSE_TAG_PREFIXES",
+        "MAVEN_REMOVAL_REVOKES_OVERRIDE",
+        "MAVEN_REMOVAL_STUDENT_EMAIL",
     ),
     "observability": ("LOGFIRE_ENABLED", "LOGFIRE_TOKEN", "LOGFIRE_ENVIRONMENT"),
     "s3_content": ("AWS_S3_CONTENT_BUCKET", "AWS_S3_CONTENT_REGION", "CONTENT_CDN_BASE", "S3_ENABLED"),
@@ -1988,6 +1990,26 @@ MAVEN_COURSE_TAG_PREFIXES = declare(
     secret=False,
     optional=True,
     docs_url="_docs/integrations/maven.md#maven_course_tag_prefixes",
+)
+MAVEN_REMOVAL_REVOKES_OVERRIDE = declare(
+    key="MAVEN_REMOVAL_REVOKES_OVERRIDE",
+    group="maven",
+    label="Maven Removal Revokes Override",
+    description="When on, a Maven user_cohort.removed webhook also revokes the Maven-granted tier override (source maven:*) once the member has no other active Maven cohort. Overrides staff granted by hand and paid Stripe tiers are never touched. The staff removal heads-up reports what was revoked or kept. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/maven.md#maven_removal_revokes_override",
+)
+MAVEN_REMOVAL_STUDENT_EMAIL = declare(
+    key="MAVEN_REMOVAL_STUDENT_EMAIL",
+    group="maven",
+    label="Maven Removal Student Email",
+    description="When on, a Maven user_cohort.removed webhook emails the removed student (maven_removal) after the automatic removal: their course and membership access ended, the account still exists, and how to request account deletion. Not sent while they are still active in another cohort of the same course, or to complained, permanently bounced, or invalid addresses. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/maven.md#maven_removal_student_email",
 )
 
 # --- Event triggers (triggers) ---

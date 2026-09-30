@@ -9006,6 +9006,124 @@
         ]
       }
     },
+    "/api/integrations/maven/occurrences/{occurrence_id}/removal/reapply": {
+      "post": {
+        "description": "Re-runs the ``removal`` step for an occurrence already in ``lifecycle=removed``, even when the step previously succeeded. Use it for removals processed before the step revoked the Maven tier override and sent the real-outcome staff summary. Every change is idempotent (course access, cohort enrollment, series registration, tags, Maven override); the staff summary is sent again. The student ``maven_removal`` email is sent only when ``send_student_email`` is true, and at most once per occurrence.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "occurrence_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "send_student_email": false
+              },
+              "schema": {
+                "properties": {
+                  "send_student_email": {
+                    "description": "Also email the removed student. Default false.",
+                    "type": "boolean"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "occurrence": {
+                    "id": 37,
+                    "lifecycle": "removed"
+                  },
+                  "reapply": {
+                    "actions": [
+                      "Revoked Maven tier override(s): 42.",
+                      "Sent staff removal summary."
+                    ],
+                    "attempted": true,
+                    "outcome": "succeeded",
+                    "send_student_email": false
+                  }
+                }
+              }
+            },
+            "description": "Removal re-applied; persisted outcome and actions."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_token",
+                  "error": "Missing or invalid staff-owned operator token."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_occurrence_not_found",
+                  "error": "Maven occurrence not found."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Maven occurrence not found."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "maven_occurrence_not_removed",
+                  "error": "The occurrence is not removed, or its removal step is running."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The occurrence is not removed, or its removal step is running."
+          }
+        },
+        "summary": "Re-apply the removal step to a removed Maven occurrence",
+        "tags": [
+          "Maven Integrations"
+        ]
+      }
+    },
     "/api/integrations/maven/occurrences/{occurrence_id}/steps/{step}/retry": {
       "post": {
         "description": "Force one incomplete step through the shared durable Maven retry service. The URL fully identifies the operation; no request body or caller-controlled retry options are accepted. A caught provider failure is a completed request with ``retry.outcome=failed``.",

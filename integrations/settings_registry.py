@@ -112,6 +112,8 @@ SETTING_VALUE_TYPES = {
     "NEXT_SPRINT_DRAFT_USE_PROFILE": "boolean",
     "LOGFIRE_ENABLED": "boolean",
     "MAVEN_ENROLLMENT_ENABLED": "boolean",
+    "MAVEN_REMOVAL_REVOKES_OVERRIDE": "boolean",
+    "MAVEN_REMOVAL_STUDENT_EMAIL": "boolean",
     "TRIGGERS_ENABLED": "boolean",
     # Base-10 integers
     "CHECKOUT_BINDING_TTL_MINUTES": "integer",

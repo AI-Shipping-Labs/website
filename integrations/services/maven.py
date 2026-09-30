@@ -22,14 +22,21 @@ from content.models import Course, CourseAccess
 from content.models.cohort import Cohort, CohortEnrollment
 from content.services.course_cohorts import apply_cohort_enrollment_tags
 from email_app.package_mail import send_package_mail
+from events.services.event_audience import email_skip_status
 from integrations.config import get_config, validate_email_config_value
 from integrations.maven_config import (
     maven_course_tag_prefix,
     maven_override_duration_days,
     maven_override_tier_slug,
+    maven_removal_revokes_override,
+    maven_removal_student_email_enabled,
 )
 from integrations.models import MavenEnrollmentEvent
 from payments.models import Tier, TierOverride
+from payments.services.tier_override_revoke import (
+    active_overrides_for,
+    revoke_tier_override,
+)
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -287,7 +294,7 @@ def _is_database_contention(exc):
 def _dry_run(event_type, email, course, cohort):
     user = resolve_user_by_email(email)
     if event_type == EVENT_REMOVED:
-        return MavenResult("removal_notified", actions=["Would close the active occurrence and revoke its course access and cohort membership (tier override and Slack membership are never touched).", "Would persist and attempt the independent removal notification step."], user_id=user.pk if user else None)
+        return MavenResult("removal_notified", actions=["Would close the active occurrence and revoke its course access, cohort membership, and Maven-granted tier override (manual overrides, paid tiers, and Slack membership are never touched).", "Would email the removed student and send staff a summary of what was changed."], user_id=user.pk if user else None)
     return MavenResult(
         "already_member" if user and _is_active_community_member(user) else "onboarded",
         actions=[
@@ -497,6 +504,11 @@ def _grant_or_refresh_override(user, tier, target_expiry, cohort, course, *, sou
             grant.save(update_fields=["source", "is_active"])
     if grant:
         changed = []
+        if not grant.is_active:
+            # A removal revoked this source's grant; re-enrolling in the same
+            # course/cohort restores it rather than leaving it inactive.
+            grant.is_active = True
+            changed.append("is_active")
         if grant.override_tier.level < tier.level:
             grant.override_tier = tier
             changed.append("override_tier")
@@ -628,10 +640,10 @@ def _retract_maven_tags(row, actions):
     already absent are no-ops rather than errors.
     """
     if row.user_id is None:
-        return
+        return []
     prefix = normalize_tag(maven_course_tag_prefix(row.course_key))
     if not prefix:
-        return
+        return []
     user = row.user
     retracted = []
     cohort_tag = normalize_tag(f"{prefix}-{row.cohort_key or ''}")
@@ -647,6 +659,7 @@ def _retract_maven_tags(row, actions):
         retracted.append(prefix)
     if retracted:
         actions.append(f"Retracted contact tags: {', '.join(retracted)}.")
+    return retracted
 
 
 def _staff_welcome_bcc():
@@ -799,7 +812,7 @@ def retry_occurrence_step(occurrence, step):
     return result
 
 
-def _run_step(pk, name, actions, *, force=False):
+def _run_step(pk, name, actions, *, force=False, send_student_email=True):
     if name not in STEP_NAMES:
         raise ValueError("unknown Maven step")
     status_field = f"{name}_status"
@@ -995,11 +1008,7 @@ def _run_step(pk, name, actions, *, force=False):
                 )
             _send_welcome(row, actions)
         elif name == "removal":
-            from community.services.staff_notifications import notify_maven_cohort_removal
-            notify_maven_cohort_removal(row.user, row.cohort, row.course, email=row.email)
-            actions.append("Sent staff removal heads-up.")
-            _revoke_maven_grants(row, actions)
-            _retract_maven_tags(row, actions)
+            _run_removal_step(row, actions, send_student_email=send_student_email)
     except Exception as exc:
         # Provider exception messages can contain addresses, response bodies,
         # or tokens. Persist and log only the safe exception class.
@@ -1147,7 +1156,7 @@ def _run_enrollment_step(row, actions):
         actions.append("Registered for the cohort's office-hours series.")
 
 
-def _revoke_maven_grants(row, actions):
+def _revoke_maven_grants(row, actions, outcome=None):
     """Best-effort revoke of the course grant and cohort membership on removal.
 
     Resolution mirrors the ``enrollment`` step, but an unresolvable
@@ -1162,12 +1171,17 @@ def _revoke_maven_grants(row, actions):
     same resolved course — a member holding a second active cohort under
     the same course keeps access. ``access_type="purchased"`` rows are
     never touched.
+
+    ``outcome`` (a :class:`RemovalOutcome`) records what actually changed so
+    the staff summary reports real results rather than static text.
     """
+    outcome = outcome if outcome is not None else RemovalOutcome()
     if row.user_id is None:
         return
     try:
         course = resolve_maven_course(row.course_key)
     except MavenUnknownCourseError:
+        outcome.course_access = "Unchanged: the Maven course key is not linked to a course."
         return
     cohort = None
     try:
@@ -1181,6 +1195,7 @@ def _revoke_maven_grants(row, actions):
         ).delete()
         if deleted:
             actions.append("Revoked cohort enrollment.")
+            outcome.cohort_enrollment = f"Removed from cohort {cohort.external_key}."
         series = _cohort_event_series(cohort)
         if series is not None:
             from events.models import SeriesRegistration
@@ -1190,18 +1205,222 @@ def _revoke_maven_grants(row, actions):
             ).delete()
             if series_deleted:
                 actions.append("Revoked standing series registration.")
+                outcome.series_registration = "Removed from the cohort's event series."
 
-    other_active = MavenEnrollmentEvent.objects.filter(
+    other_active = _other_active_occurrence(row, course_key=course.maven_course_key)
+    if other_active is not None:
+        outcome.course_access = (
+            f"Kept: still active in cohort {_occurrence_label(other_active)} of this course."
+        )
+        return
+    deleted, _counts = CourseAccess.objects.filter(
+        user_id=row.user_id, course=course, access_type="granted",
+    ).delete()
+    if deleted:
+        actions.append("Revoked course access.")
+        outcome.course_access = f"Revoked access to {course.title}."
+    elif CourseAccess.objects.filter(user_id=row.user_id, course=course).exists():
+        outcome.course_access = "Kept: the member purchased this course directly."
+
+
+@dataclass
+class RemovalOutcome:
+    """What the ``removal`` step actually changed, one line per area.
+
+    Each field is the human line the staff summary renders verbatim, so the
+    heads-up reports real outcomes instead of promising "no change".
+    """
+
+    course_access: str = "No granted course access to revoke."
+    cohort_enrollment: str = "No cohort enrollment to remove."
+    series_registration: str = "No cohort event-series registration to remove."
+    tags: str = "No course tags to retract."
+    override: str = "No account, so no tier override to revoke."
+    student_email: str = "Not sent: no account."
+    slack: str = "Unchanged: Slack membership is never changed automatically."
+
+    def as_context(self):
+        return {
+            "course_access_result": self.course_access,
+            "cohort_enrollment_result": self.cohort_enrollment,
+            "series_registration_result": self.series_registration,
+            "tags_result": self.tags,
+            "override_result": self.override,
+            "student_email_result": self.student_email,
+            "slack_result": self.slack,
+        }
+
+
+def _occurrence_label(occurrence):
+    return occurrence.cohort or occurrence.cohort_key or f"#{occurrence.pk}"
+
+
+def _other_active_occurrence(row, *, course_key=None):
+    """Return another ``lifecycle=active`` occurrence for the same member.
+
+    ``course_key`` narrows it to the same Maven course (course access and the
+    student email); without it any active Maven cohort counts (the tier
+    override is shared across courses).
+    """
+    qs = MavenEnrollmentEvent.objects.filter(
         user_id=row.user_id,
         lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE,
-        course_key__iexact=course.maven_course_key,
-    ).exists()
-    if not other_active:
-        deleted, _counts = CourseAccess.objects.filter(
-            user_id=row.user_id, course=course, access_type="granted",
-        ).delete()
-        if deleted:
-            actions.append("Revoked course access.")
+    ).exclude(pk=row.pk)
+    if course_key is not None:
+        qs = qs.filter(course_key__iexact=course_key)
+    return qs.order_by("-created_at").first()
+
+
+def _describe_override(override):
+    return (
+        f"#{override.pk} ({override.override_tier.slug}, expires "
+        f"{override.expires_at.date().isoformat()})"
+    )
+
+
+def _revoke_maven_override(row, actions):
+    """Revoke the Maven-granted tier override; return the staff summary line.
+
+    Only rows whose ``source`` starts with ``maven:`` are Maven grants. A
+    staff-granted row (``source`` ``staff``, or any row with ``granted_by``)
+    is kept and named. A sourceless row with no granter could be a pre-source
+    Maven grant or an old manual one, so it is kept and flagged for review
+    rather than guessed at. Paid Stripe tiers live on ``Membership`` and are
+    never touched. Revoked rows go through the shared
+    ``payments.services.tier_override_revoke`` service (same audit trail as
+    Studio and the API).
+    """
+    if row.user_id is None:
+        return "No account, so no tier override to revoke."
+    if not maven_removal_revokes_override():
+        return "Kept: MAVEN_REMOVAL_REVOKES_OVERRIDE is off."
+    other_active = _other_active_occurrence(row)
+    if other_active is not None:
+        return (
+            f"Kept: still active in Maven cohort {_occurrence_label(other_active)}"
+            f"{' (' + other_active.course + ')' if other_active.course else ''}."
+        )
+    overrides = active_overrides_for(row.user)
+    maven = [o for o in overrides if (o.source or "").startswith("maven:")]
+    unclear = [o for o in overrides if not o.source and o.granted_by_id is None]
+    manual = [o for o in overrides if o not in maven and o not in unclear]
+    for override in maven:
+        revoke_tier_override(
+            override, actor=f"actor=maven_removal occurrence={row.pk}",
+        )
+    parts = []
+    if maven:
+        tiers = ", ".join(sorted({o.override_tier.name for o in maven}))
+        parts.append(
+            f"{tiers} access revoked: Maven override "
+            f"{', '.join(_describe_override(o) for o in maven)}."
+        )
+        actions.append(
+            f"Revoked Maven tier override(s): {', '.join(str(o.pk) for o in maven)}."
+        )
+    if manual:
+        parts.append(
+            "Kept: manual override "
+            f"{', '.join(_describe_override(o) for o in manual)} was granted by staff."
+        )
+    if unclear:
+        parts.append(
+            "Kept: override "
+            f"{', '.join(_describe_override(o) for o in unclear)} has no recorded "
+            "source, so it may or may not be a Maven grant. Review it by hand."
+        )
+    if not parts:
+        return "No active tier override to revoke."
+    return " ".join(parts)
+
+
+def _send_removal_student_email(row, actions, course, *, send_student_email):
+    """Email the removed student; return the staff summary line."""
+    if row.user_id is None:
+        return "Not sent: no account."
+    if not send_student_email:
+        return "Not sent: re-applied without the send-student-email flag."
+    if not maven_removal_student_email_enabled():
+        return "Not sent: MAVEN_REMOVAL_STUDENT_EMAIL is off."
+    other_active = _other_active_occurrence(row, course_key=row.course_key)
+    if other_active is not None:
+        return (
+            f"Not sent: still active in cohort {_occurrence_label(other_active)} "
+            "of the same course."
+        )
+    skip = email_skip_status(row.user, True)
+    if skip:
+        reason = skip.removeprefix("skipped_").replace("_", " ")
+        return f"Not sent: {reason}."
+    delivery = send_package_mail(
+        row.user,
+        "maven_removal",
+        {"course_name": ""},
+        related=course,
+        idempotency_key=f"maven_removal:{row.pk}",
+    )
+    if delivery.state == EmailDelivery.State.SUPPRESSED:
+        return "Not sent: suppressed by the member's email preferences."
+    actions.append("Sent maven_removal email to the student.")
+    return "Sent the maven_removal email."
+
+
+def _run_removal_step(row, actions, *, send_student_email=True):
+    """Apply every automatic removal change, then tell staff what happened.
+
+    Order matters: course access, cohort enrollment, series registration,
+    tags and the Maven override are all changed first, the student email is
+    queued, and only then does the staff summary go out, built from the real
+    outcomes. Every change is idempotent, so a replay or re-apply is safe.
+    """
+    from community.services.staff_notifications import (  # noqa: PLC0415 -- same lazy edge as the notification step above
+        notify_maven_cohort_removal,
+    )
+
+    outcome = RemovalOutcome()
+    course = None
+    if row.user_id is not None:
+        try:
+            course = resolve_maven_course(row.course_key)
+        except MavenUnknownCourseError:
+            course = None
+        _revoke_maven_grants(row, actions, outcome)
+        retracted = _retract_maven_tags(row, actions)
+        if retracted:
+            outcome.tags = f"Retracted: {', '.join(retracted)}."
+        outcome.override = _revoke_maven_override(row, actions)
+    outcome.student_email = _send_removal_student_email(
+        row, actions, course, send_student_email=send_student_email,
+    )
+    notify_maven_cohort_removal(
+        row.user, row.cohort, row.course, email=row.email,
+        outcome=outcome.as_context(),
+    )
+    actions.append("Sent staff removal summary.")
+    return outcome
+
+
+def reapply_removal(occurrence, *, send_student_email=False):
+    """Re-run the ``removal`` step for an already-removed occurrence.
+
+    For removals processed before the step revoked overrides and sent the
+    real-outcome staff summary. Every change is idempotent; the staff summary
+    is sent again with the corrected outcome. The student email is sent only
+    when ``send_student_email`` is true (its per-occurrence idempotency key
+    still prevents a second copy).
+    """
+    if occurrence.lifecycle != MavenEnrollmentEvent.LIFECYCLE_REMOVED:
+        raise ValueError("occurrence is not removed")
+    MavenEnrollmentEvent.objects.filter(pk=occurrence.pk).update(
+        removal_status=MavenEnrollmentEvent.STEP_PENDING,
+        updated_at=timezone.now(),
+    )
+    actions = []
+    result = _run_step(
+        occurrence.pk, "removal", actions,
+        force=True, send_student_email=send_student_email,
+    )
+    return result, actions
 
 
 def _finish_step(pk, name, status, error):

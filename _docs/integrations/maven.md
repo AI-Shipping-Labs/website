@@ -5,8 +5,9 @@ Auto-onboards Maven cohort enrollees into the AI Shipping Labs community
 `POST /api/webhooks/maven` resolves/creates their account, grants a long-lived
 `main` tier override, and sends a course-framed welcome email that carries the
 Slack workspace join link (issue #1665: enrollees are never invited to Slack
-directly). A cohort removal sends a staff heads-up but never auto-revokes
-access.
+directly). A cohort removal automatically ends the course and membership
+access Maven granted, emails the removed student, and then sends staff a
+summary of what was changed.
 
 The whole feature is off by default (`MAVEN_ENROLLMENT_ENABLED`). It is
 payment-independent (instructors free-enroll people), idempotent under Maven
@@ -17,7 +18,7 @@ to choose (issue #1593).
 
 ## Settings
 
-All six settings live in the `Maven` group in Studio settings
+All eight settings live in the `Maven` group in Studio settings
 (`/studio/settings/`). Read via `get_config` / `is_enabled`, never raw env.
 
 ### MAVEN_ENROLLMENT_ENABLED
@@ -69,6 +70,22 @@ broad `maven` tag and the `tagging` step finishes `succeeded` with a
 `/studio/maven-events/<pk>/`. Invalid JSON, a non-object payload, or
 non-string members log a warning and fall back to the built-in default map
 rather than leaving enrollees untagged.
+
+### MAVEN_REMOVAL_REVOKES_OVERRIDE
+
+Boolean, default `true`. When on, the `removal` step revokes the tier
+override the Maven flow granted (`source` starting with `maven:`) once the
+member has no other `lifecycle=active` Maven occurrence. Overrides staff
+granted by hand and paid Stripe tiers are never touched. When off, the
+override is kept and the staff summary says so.
+
+### MAVEN_REMOVAL_STUDENT_EMAIL
+
+Boolean, default `true`. When on, the `removal` step sends the removed
+student the `maven_removal` email after the automatic changes. It is not
+sent while the student is still active in another cohort of the same
+course, or to an address with an SES complaint, a permanent bounce, or an
+invalid format.
 
 ## Contact tags
 
@@ -336,11 +353,34 @@ given row and a person needs a manual nudge.
 
 `user_cohort.removed`:
 
-- Makes NO change to the Maven tier override or Slack membership — those are
-  never touched by removal.
-- Sends a staff heads-up (same recipients/style as the paid-signup
-  notification) naming the user, user ID, a clickable Studio link, the cohort
-  (and course), and suggested manual actions. A human decides.
+- Makes every automatic change first, then sends staff a summary built from
+  the real outcomes (same recipients as the paid-signup notification): course
+  access, cohort enrollment, event-series registration, tags, tier override,
+  student email, and Slack. The summary names the user, user ID, a Studio
+  link, and the cohort and course.
+- Revokes the Maven-granted tier override (`MAVEN_REMOVAL_REVOKES_OVERRIDE`,
+  default on) when the member has no other `lifecycle=active` Maven
+  occurrence. Only overrides whose `source` starts with `maven:` are revoked,
+  through `payments.services.tier_override_revoke`, the same service as the
+  Studio revoke button and `POST /api/tier-overrides/revoke`; each revoked row
+  gets a `tier_override_revoked` audit row with `actor=maven_removal`. A
+  staff-granted override is kept and named as "manual override". A
+  sourceless override with no granter is kept and flagged for manual review,
+  because it cannot be told apart from an old manual grant. A member still in
+  another active cohort keeps the override. Paid Stripe tiers are never
+  touched. Re-enrolling in the same course and cohort reactivates the grant.
+- Emails the removed student (`maven_removal`,
+  `MAVEN_REMOVAL_STUDENT_EMAIL`, default on) after the automatic changes:
+  their course and membership access ended, the account still exists, and
+  how to have it deleted (Account, Privacy and data, Request account
+  deletion, or email the `PRIVACY_REQUEST_EMAIL` address). One email per
+  occurrence at most (idempotency key `maven_removal:<occurrence_id>`). Not
+  sent while the student is still active in another cohort of the same
+  course, or to complained, permanently bounced, or invalid addresses. The
+  copy is editable in Studio email templates.
+- Never changes Slack membership. Slack's API can only remove members from
+  the configured community channels (`conversations.kick`), not deactivate a
+  workspace account.
 - An email that resolves to no account is handled gracefully (lighter
   "unknown user" note, no error).
 - Revokes the course grant and cohort membership (issue #1659): deletes the
@@ -371,7 +411,7 @@ course and cohort identity. Provider IDs are preferred; normalized labels are
 the fallback. Thus identically named cohorts in different courses do not
 collide. One active `MavenEnrollmentEvent` occurrence is admitted under a
 database constraint. Removal closes the occurrence and revokes the course
-grant and cohort membership it created, but never the tier override or Slack
+grant, cohort membership, and Maven tier override it created, but never Slack
 membership; a later enrollment creates a genuine new occurrence.
 
 The CRM tagging, entitlement, course-access enrollment, staff heads-up
@@ -423,6 +463,7 @@ The three slashless routes are:
 | `GET` | `/api/integrations/maven/occurrences` | Filtered occurrence summaries |
 | `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and every current step |
 | `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/steps/<step>/retry` | One forced safe retry and the refreshed occurrence |
+| `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/removal/reapply` | Re-run the removal step on a removed occurrence |
 
 List filters combine with AND. `email` is a case-insensitive exact lookup that
 matches the short-lived occurrence email and, when the canonical primary/alias
@@ -496,6 +537,23 @@ is never reconstructed from the linked account. The separately returned
 support. The full contract is also available under the Maven Integrations
 section at `/api/docs`.
 
+### Re-applying a past removal
+
+Removals processed before the override revoke and the real-outcome staff
+summary existed have `removal` already `succeeded`, so the step retry route
+declines them. The reapply route re-runs the `removal` step for a
+`lifecycle=removed` occurrence regardless of its status. Every change is
+idempotent, the staff summary is sent again with the real outcomes, and the
+student email is sent only when `send_student_email` is `true`:
+
+```bash
+uv run asl raw POST /api/integrations/maven/occurrences/37/removal/reapply --data '{}'
+uv run asl raw POST /api/integrations/maven/occurrences/37/removal/reapply --data '{"send_student_email": true}'
+```
+
+An occurrence that is not removed returns `409 maven_occurrence_not_removed`.
+Each call writes a `maven_step_retry` audit row.
+
 ## Data minimization and retention
 
 The ledger never stores the webhook secret and stores only operational event,
@@ -513,8 +571,10 @@ It redacts email and payload fields once an occurrence is older than 30 days.
 ## Rollback and incident operations
 
 Turn `MAVEN_ENROLLMENT_ENABLED` off first. The endpoint then acknowledges with
-`disabled` and performs no work. Do not revoke Maven grants or Slack access as
-part of rollback. Inspect failed steps in Studio, fix the provider/configuration
+`disabled` and performs no work. To stop removals from revoking overrides or
+emailing students without disabling the flow, turn off
+`MAVEN_REMOVAL_REVOKES_OVERRIDE` or `MAVEN_REMOVAL_STUDENT_EMAIL`. Do not
+revoke Maven grants or Slack access as part of rollback. Inspect failed steps in Studio, fix the provider/configuration
 cause, and retry only that step. Logs and ledger errors contain occurrence IDs
 and exception classes, never payloads, email addresses, tokens, or secrets.
 

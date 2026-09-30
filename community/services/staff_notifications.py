@@ -220,13 +220,15 @@ def notify_paid_signup(
             )
 
 
-def notify_maven_cohort_removal(user, cohort, course="", *, email=None):
-    """Send a staff heads-up that a Maven cohort removal arrived (issue #960).
+def notify_maven_cohort_removal(user, cohort, course="", *, email=None, outcome=None):
+    """Send staff a summary of a Maven cohort removal (issue #960).
 
     Mirrors ``notify_paid_signup``'s staff paths (recipient =
-    ``STAFF_SIGNUP_NOTIFY_EMAIL`` plus the optional Slack staff channel) but
-    makes NO change to the user's access — a cohort removal is not a decision
-    to revoke community access. The notification suggests, never commands.
+    ``STAFF_SIGNUP_NOTIFY_EMAIL`` plus the optional Slack staff channel).
+    Called by the Maven ``removal`` step AFTER it has made every automatic
+    change; ``outcome`` is ``RemovalOutcome.as_context()`` — one human line
+    per area (course access, cohort enrollment, series registration, tags,
+    tier override, student email, Slack) describing what actually happened.
 
     Best-effort: both sends are wrapped so a mail/Slack failure never raises
     out of this function (the webhook must not 500 on a notification failure).
@@ -243,6 +245,7 @@ def notify_maven_cohort_removal(user, cohort, course="", *, email=None):
     slack_channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
 
     ctx = _build_removal_context(user, cohort, course, email)
+    ctx.update(outcome or {})
 
     if staff_email:
         try:
@@ -511,6 +514,17 @@ def _post_slack_removal_notification(channel_id, ctx):
     return True
 
 
+_REMOVAL_RESULT_LINES = (
+    ("Course access", "course_access_result"),
+    ("Cohort enrollment", "cohort_enrollment_result"),
+    ("Event series", "series_registration_result"),
+    ("Tags", "tags_result"),
+    ("Tier override", "override_result"),
+    ("Student email", "student_email_result"),
+    ("Slack", "slack_result"),
+)
+
+
 def _build_removal_slack_text(ctx):
     """Compose the plain mrkdwn body for the removal staff heads-up."""
     cohort_line = ctx["cohort"]
@@ -523,8 +537,11 @@ def _build_removal_slack_text(ctx):
             f"`{cohort_line}`.\n"
             f"*User ID:* {ctx['removed_user_id']} | "
             f"*Studio:* <{ctx['studio_user_url']}|user page>\n"
-            "You may want to suspend their tier override / subscription. "
-            "Their access is unchanged until you act."
+            + "\n".join(
+                f"*{label}:* {ctx[key]}"
+                for label, key in _REMOVAL_RESULT_LINES
+                if ctx.get(key)
+            )
         )
     return (
         f"*Maven cohort removal:* unknown user `{ctx['removed_user_email']}` "

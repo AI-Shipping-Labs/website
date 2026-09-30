@@ -129,17 +129,19 @@ class MavenCorrectionsTest(TestCase):
         self.assertEqual(event.cohort_key, "stable-cohort-456")
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="active").count(), 1)
 
-    def test_removal_closes_without_revoke_and_reenrollment_is_new_occurrence(self, email_service):
+    def test_removal_revokes_grant_and_reenrollment_restores_it(self, email_service):
         course = {"id": "course-a", "name": "Course"}
         cohort = {"id": "spring", "name": "Spring"}
         self.post("user_cohort.enrolled", course=course, cohort=cohort)
         grant = TierOverride.objects.get(source__startswith="maven:")
         self.post("user_cohort.removed", course=course, cohort=cohort)
         grant.refresh_from_db()
-        self.assertTrue(grant.is_active)
+        self.assertFalse(grant.is_active)
         self.post("user_cohort.enrolled", course=course, cohort=cohort)
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="removed").count(), 1)
         self.assertEqual(MavenEnrollmentEvent.objects.filter(lifecycle="active").count(), 1)
+        grant.refresh_from_db()
+        self.assertTrue(grant.is_active)
 
     def test_maven_entitlement_coexists_with_stronger_temporary_grant(self, email_service):
         user = User.objects.create_user(email="member@example.com")

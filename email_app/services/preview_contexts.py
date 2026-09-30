@@ -118,6 +118,30 @@ PREVIEW_CONTEXTS = {
             '?token=preview-token'
         ),
     },
+    'maven_cohort_removal_notification': {
+        'user_known': True,
+        'removed_user_name': 'Ada Lovelace',
+        'removed_user_email': 'ada@example.com',
+        'removed_user_id': '42',
+        'studio_user_url': 'https://aishippinglabs.com/studio/users/42/',
+        'cohort': 'Cohort 5',
+        'course': 'AI Engineering Buildcamp',
+        'course_access_result': 'Revoked access to AI Engineering Buildcamp.',
+        'cohort_enrollment_result': 'Removed from cohort 5.',
+        'series_registration_result': "Removed from the cohort's event series.",
+        'tags_result': 'Retracted: ai-buildcamp-5, ai-buildcamp.',
+        'override_result': 'Main access revoked: Maven override #7 (main, expires 2031-09-01).',
+        'student_email_result': 'Sent the maven_removal email.',
+        'slack_result': 'Unchanged: Slack membership is never changed automatically.',
+    },
+    'maven_removal': {
+        'user_name': 'Ada',
+        'course_name': 'AI Engineering Buildcamp: From RAG to Agents',
+        'account_deletion_url': (
+            'https://aishippinglabs.com/account/#privacy-data-section'
+        ),
+        'privacy_email': 'team@aishippinglabs.com',
+    },
     'community_invite': {
         'user_name': 'Ada',
         # Issue #953: the invite now links to the gated /community/slack

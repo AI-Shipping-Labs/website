@@ -765,6 +765,41 @@ def _resolve_download_delivery_context(delivery, context):
     context["expires_hours"] = expires_hours
 
 
+def _resolve_maven_removal_context(delivery, context):
+    """Mint the removed-student email's greeting, course title and links.
+
+    The course title comes from the delivery's course relation (like the
+    welcome, issue #1682); a missing relation renders the course-free copy.
+    The deletion link points at the account page's Privacy and data section,
+    where ``Request account deletion`` lives, and ``privacy_email`` is the
+    same ``PRIVACY_REQUEST_EMAIL`` address that request is sent to.
+    """
+
+    from accounts.services.privacy import (  # noqa: PLC0415
+        DEFAULT_PRIVACY_REQUEST_EMAIL,
+        PRIVACY_REQUEST_EMAIL_KEY,
+    )
+    from integrations.config import (  # noqa: PLC0415
+        get_config,
+        site_base_url,
+        validate_email_config_value,
+    )
+
+    if _is_course_related(delivery):
+        from content.models import Course  # noqa: PLC0415
+
+        course = Course.objects.filter(pk=delivery.related_object_id).first()
+        if course is not None:
+            context["course_name"] = course.title
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+    context["account_deletion_url"] = f"{base_url}/account/#privacy-data-section"
+    context["privacy_email"] = validate_email_config_value(
+        PRIVACY_REQUEST_EMAIL_KEY,
+        get_config(PRIVACY_REQUEST_EMAIL_KEY, DEFAULT_PRIVACY_REQUEST_EMAIL),
+    ) or DEFAULT_PRIVACY_REQUEST_EMAIL
+
+
 def _resolve_maven_welcome_context(delivery, context):
     """Mint every welcome link, token and config scalar at delivery time.
 
@@ -967,6 +1002,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_download_delivery_context(delivery, context)
     elif delivery.purpose == "maven_welcome":
         _resolve_maven_welcome_context(delivery, context)
+    elif delivery.purpose == "maven_removal":
+        _resolve_maven_removal_context(delivery, context)
     elif delivery.purpose == "lead_magnet_delivery":
         _resolve_lead_magnet_context(delivery, context)
     elif delivery.purpose == "welcome_imported":

@@ -108,6 +108,9 @@ EMAIL_TYPES_WITHOUT_VERIFY_FOOTER = {
     "payment_grace_expired_member",
     "checkout_payment_failed",
     "maven_welcome",
+    # The removed-student notice ends access; a verify-your-email footer
+    # would be noise next to its account-deletion instructions.
+    "maven_removal",
     "campaign_repermission",
 }
 

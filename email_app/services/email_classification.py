@@ -97,6 +97,10 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "maven_welcome",
     "maven_enrollment_notification",
     "maven_cohort_removal_notification",
+    # The removed-student notice: account-continuity information about
+    # access that just ended, so it stays deliverable to an unsubscribed
+    # member (complaint / bounce suppression is applied by the caller).
+    "maven_removal",
     # Issue #1133: one-week reminder nudging a paid member who received
     # their onboarding-link welcome but has not completed onboarding.
     # Transactional for the same reason as the welcomes and event_reminder

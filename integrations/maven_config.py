@@ -150,3 +150,26 @@ def maven_course_tag_prefix(course_key):
     if not key:
         return ""
     return maven_course_tag_prefixes().get(key, "")
+
+
+def _default_on(key):
+    raw = get_config(key, "true")
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ("true", "1", "yes")
+
+
+def maven_removal_revokes_override():
+    """True when a Maven removal revokes the Maven-granted tier override.
+
+    Default-on: ``get_config('MAVEN_REMOVAL_REVOKES_OVERRIDE', 'true')``.
+    """
+    return _default_on("MAVEN_REMOVAL_REVOKES_OVERRIDE")
+
+
+def maven_removal_student_email_enabled():
+    """True when a Maven removal emails the removed student (``maven_removal``).
+
+    Default-on: ``get_config('MAVEN_REMOVAL_STUDENT_EMAIL', 'true')``.
+    """
+    return _default_on("MAVEN_REMOVAL_STUDENT_EMAIL")

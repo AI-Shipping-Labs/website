@@ -422,7 +422,7 @@ class MavenRemovedTest(TestCase):
         )
 
     @patch("community.services.staff_notifications.notify_maven_cohort_removal")
-    def test_removal_notifies_staff_and_makes_no_access_change(self, notify):
+    def test_removal_keeps_sourceless_override_and_slack(self, notify):
         user = User.objects.create_user(
             email="removed@test.com", password="x", slack_member=True,
         )
@@ -440,9 +440,11 @@ class MavenRemovedTest(TestCase):
                 "cohort": "Spring 2026",
             }
         )
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "removal_notified"})
-        notify.assert_called_once()
+        self.assertIn(
+            f"Kept: override #{override.pk}",
+            notify.call_args.kwargs["outcome"]["override_result"],
+        )
 
         override.refresh_from_db()
         self.assertTrue(override.is_active)
@@ -530,6 +532,9 @@ class MavenSettingsRegistryTest(TestCase):
                 "MAVEN_COURSE_SLACK_CHANNEL",
                 # Course -> contact-tag prefix map (#1732).
                 "MAVEN_COURSE_TAG_PREFIXES",
+                # Removal automation toggles (default on).
+                "MAVEN_REMOVAL_REVOKES_OVERRIDE",
+                "MAVEN_REMOVAL_STUDENT_EMAIL",
             },
         )
         for key in group["keys"]:

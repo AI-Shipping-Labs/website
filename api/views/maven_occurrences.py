@@ -18,6 +18,7 @@ from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven import (
     STEP_NAMES,
     _identity,
+    reapply_removal,
     retry_occurrence_step,
 )
 from integrations.services.maven_attention import (
@@ -441,6 +442,115 @@ def maven_occurrence_step_retry(request, occurrence_id, step):
                 "step": result.step,
                 "outcome": result.outcome,
                 "attempted": result.attempted,
+            },
+            "occurrence": serialize_maven_occurrence(occurrence, detail=True),
+        }
+    )
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods("POST", structured_errors=True)
+@openapi_spec(
+    tag="Maven Integrations",
+    summary="Re-apply the removal step to a removed Maven occurrence",
+    methods={
+        "POST": {
+            "description": (
+                "Re-runs the ``removal`` step for an occurrence already in "
+                "``lifecycle=removed``, even when the step previously "
+                "succeeded. Use it for removals processed before the step "
+                "revoked the Maven tier override and sent the real-outcome "
+                "staff summary. Every change is idempotent (course access, "
+                "cohort enrollment, series registration, tags, Maven "
+                "override); the staff summary is sent again. The student "
+                "``maven_removal`` email is sent only when "
+                "``send_student_email`` is true, and at most once per "
+                "occurrence."
+            ),
+            "request_body": {
+                "properties": {
+                    "send_student_email": {
+                        "type": "boolean",
+                        "description": "Also email the removed student. Default false.",
+                    },
+                },
+                "example": {"send_student_email": False},
+            },
+            "responses": {
+                200: {
+                    "description": "Removal re-applied; persisted outcome and actions.",
+                    "example": {
+                        "reapply": {
+                            "outcome": "succeeded",
+                            "attempted": True,
+                            "send_student_email": False,
+                            "actions": [
+                                "Revoked Maven tier override(s): 42.",
+                                "Sent staff removal summary.",
+                            ],
+                        },
+                        "occurrence": {"id": 37, "lifecycle": "removed"},
+                    },
+                },
+                401: _AUTH_ERROR_SPEC,
+                404: _NOT_FOUND_SPEC,
+                405: _METHOD_ERROR_SPEC,
+                409: _error_spec(
+                    "The occurrence is not removed, or its removal step is running.",
+                    "maven_occurrence_not_removed",
+                ),
+            },
+        }
+    },
+)
+def maven_occurrence_removal_reapply(request, occurrence_id):
+    """POST ``/api/integrations/maven/occurrences/<id>/removal/reapply``."""
+    data = {}
+    if request.body:
+        data, parse_error = parse_json_body(request)
+        if parse_error is not None:
+            return parse_error
+    send_student_email = isinstance(data, dict) and data.get("send_student_email") is True
+
+    occurrence = (
+        MavenEnrollmentEvent.objects.select_related("user")
+        .filter(pk=occurrence_id)
+        .first()
+    )
+    if occurrence is None:
+        return _occurrence_not_found()
+    if occurrence.lifecycle != MavenEnrollmentEvent.LIFECYCLE_REMOVED:
+        return error_response(
+            "Maven occurrence is not removed",
+            "maven_occurrence_not_removed",
+            status=409,
+            details={"lifecycle": occurrence.lifecycle},
+        )
+    if occurrence.removal_status == MavenEnrollmentEvent.STEP_RUNNING:
+        return _retry_conflict(
+            occurrence,
+            "removal",
+            code="maven_step_in_progress",
+            message="Maven step is already in progress",
+        )
+
+    result, actions = reapply_removal(
+        occurrence, send_student_email=send_student_email,
+    )
+    occurrence.refresh_from_db()
+    _write_retry_audit(
+        request, occurrence, "removal",
+        f"reapply:{result.reason or result.outcome}"
+        f"{':student_email' if send_student_email else ''}",
+    )
+    return JsonResponse(
+        {
+            "reapply": {
+                "outcome": result.outcome,
+                "attempted": result.attempted,
+                "send_student_email": send_student_email,
+                "actions": actions,
             },
             "occurrence": serialize_maven_occurrence(occurrence, detail=True),
         }

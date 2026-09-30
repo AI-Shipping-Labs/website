@@ -450,7 +450,7 @@ class MavenRemovalRevocationTest(_MavenFixtureMixin, TestCase):
             SeriesRegistration.objects.filter(series=series, user=self.user).exists()
         )
 
-    def test_removal_never_touches_tier_override_or_slack_field(self):
+    def test_removal_revokes_maven_override_but_never_touches_slack_field(self):
         tier = Tier.objects.get(slug="main")
         from datetime import timedelta
 
@@ -470,7 +470,7 @@ class MavenRemovalRevocationTest(_MavenFixtureMixin, TestCase):
 
         override.refresh_from_db()
         self.user.refresh_from_db()
-        self.assertTrue(override.is_active)
+        self.assertFalse(override.is_active)
         self.assertTrue(self.user.slack_member)
 
     def test_removal_with_unresolvable_keys_is_best_effort_and_still_succeeds(self):

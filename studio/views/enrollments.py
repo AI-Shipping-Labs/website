@@ -9,7 +9,6 @@ unchanged; only the surface (URL + scoping) moves.
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from content.models import Cohort, CohortEnrollment, Course, Enrollment
@@ -18,7 +17,11 @@ from content.services.course_cohorts import (
     assign_cohort_enrollment,
     ordered_course_cohorts,
 )
-from content.services.enrollment import ensure_enrollment
+from content.services.enrollment import (
+    UNENROLL_CAUSE_STAFF,
+    ensure_enrollment,
+    unenroll,
+)
 from studio.decorators import staff_required
 
 User = get_user_model()
@@ -170,9 +173,10 @@ def enrollment_unenroll(request, course_id, enrollment_id):
     enrollment = get_object_or_404(
         Enrollment, pk=enrollment_id, course_id=course_id,
     )
-    if enrollment.unenrolled_at is None:
-        enrollment.unenrolled_at = timezone.now()
-        enrollment.save(update_fields=['unenrolled_at'])
+    if enrollment.unenrolled_at is None and unenroll(
+        enrollment.user, enrollment.course,
+        cause=UNENROLL_CAUSE_STAFF, actor=request.user,
+    ):
         messages.success(
             request,
             f'Unenrolled {enrollment.user.email} from "{enrollment.course.title}".',

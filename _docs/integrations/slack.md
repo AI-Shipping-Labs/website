@@ -622,6 +622,15 @@ Separate from `SLACK_ANNOUNCEMENTS_CHANNEL_ID` — that channel is
 public/member-visible content announcements; this one is the
 founder-only signup feed.
 
+The same channel also receives the course unenroll heads-up
+(`community/services/staff_notifications.py::notify_course_unenroll`):
+one post whenever a learner unenrolls from a course or leaves a cohort,
+naming the learner, course, cohort, the cause (left on their own,
+removed by staff, or lost course access) and the active enrollment
+count afterwards. It is queued as a background task from
+`content.services.enrollment.record_unenrollment`. Maven cohort
+removals keep their own Maven removal heads-up instead.
+
 Without it (blank): The Slack post is skipped silently. The email
 sides of the heads-up (welcome to user, internal email to staff)
 still fire if their setting is configured.

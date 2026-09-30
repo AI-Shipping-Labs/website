@@ -40,7 +40,11 @@ from content.services.course_cohorts import (
     assign_cohort_enrollment,
     get_course_cohort_by_key,
 )
-from content.services.enrollment import ensure_enrollment, unenroll
+from content.services.enrollment import (
+    UNENROLL_CAUSE_STAFF,
+    ensure_enrollment,
+    unenroll,
+)
 
 _ENROLLMENT_EXAMPLE = {
     "user_email": "alice@example.com",
@@ -383,5 +387,5 @@ def course_enrollment_detail(request, slug, email):
 
     target = User.objects.filter(email__iexact=email).first()
     if target is not None:
-        unenroll(target, course)
+        unenroll(target, course, cause=UNENROLL_CAUSE_STAFF, actor=request.user)
     return JsonResponse({}, status=204)

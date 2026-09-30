@@ -27,6 +27,7 @@ class UserActivity(models.Model):
 
     EVENT_SIGNUP = 'signup'
     EVENT_COURSE_ENROLL = 'course_enroll'
+    EVENT_COURSE_UNENROLL = 'course_unenroll'
     EVENT_LESSON_OPEN = 'lesson_open'
     EVENT_EVENT_REGISTER = 'event_register'
     EVENT_EVENT_JOIN = 'event_join'
@@ -38,6 +39,9 @@ class UserActivity(models.Model):
     EVENT_TYPE_CHOICES = [
         (EVENT_SIGNUP, 'Signup'),
         (EVENT_COURSE_ENROLL, 'Enrolled'),
+        # A learner stopped being enrolled in a course or left one of its
+        # cohorts, by their own action, a staff action, or lost access.
+        (EVENT_COURSE_UNENROLL, 'Unenrolled'),
         (EVENT_LESSON_OPEN, 'Lesson'),
         (EVENT_EVENT_REGISTER, 'Registered'),
         (EVENT_EVENT_JOIN, 'Joined'),

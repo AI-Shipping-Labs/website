@@ -209,7 +209,10 @@ def resolve_activity_target_url(
     event_type = activity.event_type
     object_id = str(activity.object_id or '')
 
-    if event_type == UserActivity.EVENT_COURSE_ENROLL and object_id:
+    if event_type in {
+        UserActivity.EVENT_COURSE_ENROLL,
+        UserActivity.EVENT_COURSE_UNENROLL,
+    } and object_id:
         target = public_course_activity_url(courses_by_slug.get(object_id))
         if target:
             return target
@@ -252,7 +255,10 @@ def resolve_activity_target_urls(activities):
         object_id = str(activity.object_id or '')
         if not object_id:
             continue
-        if activity.event_type == UserActivity.EVENT_COURSE_ENROLL:
+        if activity.event_type in {
+            UserActivity.EVENT_COURSE_ENROLL,
+            UserActivity.EVENT_COURSE_UNENROLL,
+        }:
             course_slugs.add(object_id)
         elif activity.event_type == UserActivity.EVENT_LESSON_OPEN:
             try:
@@ -408,6 +414,34 @@ def record_course_enroll(user, course):
     )
 
 
+UNENROLL_CAUSE_LABELS = {
+    'self': 'left on their own',
+    'staff': 'removed by staff',
+    'access_lost': 'lost course access',
+}
+
+
+def record_course_unenroll(user, course, *, cohort=None, cause='self'):
+    """Record a `course_unenroll` activity row for the CRM timeline.
+
+    ``cohort`` names the cohort the learner left (or was in when they
+    unenrolled from the course); ``cause`` is one of the
+    ``content.services.enrollment.UNENROLL_CAUSE_*`` values.
+    """
+    where = course.title
+    if cohort is not None:
+        where = f'{course.title}, {cohort.name}'
+    reason = UNENROLL_CAUSE_LABELS.get(cause, cause)
+    return record_activity(
+        user,
+        UserActivity.EVENT_COURSE_UNENROLL,
+        label=f'Unenrolled from course: {where} ({reason})',
+        object_type='course',
+        object_id=course.slug,
+        target_url=public_course_activity_url(course),
+    )
+
+
 def record_event_join(user, event):
     """Record an `event_join` activity row for the CRM timeline."""
     return record_activity(
@@ -442,6 +476,7 @@ __all__ = [
     'record_resource_view',
     'record_event_register',
     'record_course_enroll',
+    'record_course_unenroll',
     'record_event_join',
     'resolve_activity_target_url',
     'resolve_activity_target_urls',

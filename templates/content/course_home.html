@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% load accounts_extras %}
 {% load layout_components %}
+{% load member_badges %}
 {% load member_empty_state %}
 
 {% block title %}{{ course.title }} · {{ section|title }} | AI Shipping Labs{% endblock %}
@@ -12,18 +13,21 @@
     <header class="mb-2 sm:mb-4">
       <h1 class="break-words text-xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
       {% if cohort %}
-      <div class="mt-1 flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
-        {% if preview_cohorts|length > 1 %}
-        <details class="relative" data-testid="course-home-cohort-switcher">
-          <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
-          <ul class="absolute left-0 z-20 mt-1 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg" aria-label="Cohort schedule">
-            {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="flex min-h-[44px] items-center px-3 {% if cohort.pk == option.pk %}bg-accent/10 font-medium text-accent{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
-          </ul>
-        </details>
-        {% else %}
-        <span>{{ cohort.name }}</span>
-        {% endif %}
-        {% if cohort.mode == 'self_paced' %}<span aria-hidden="true">&nbsp;·&nbsp;</span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true">&nbsp;·&nbsp;</span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div class="flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
+          {% if preview_cohorts|length > 1 %}
+          <details class="relative" data-testid="course-home-cohort-switcher">
+            <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
+            <ul class="absolute left-0 z-20 mt-1 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg" aria-label="Cohort schedule">
+              {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="flex min-h-[44px] items-center px-3 {% if cohort.pk == option.pk %}bg-accent/10 font-medium text-accent{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
+            </ul>
+          </details>
+          {% else %}
+          <span>{{ cohort.name }}</span>
+          {% endif %}
+          {% if cohort.mode == 'self_paced' %}<span aria-hidden="true">&nbsp;·&nbsp;</span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true">&nbsp;·&nbsp;</span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
+        </div>
+        {% if home_enrollment_count %}{% member_label_badge home_enrollment_count|stringformat:"d"|add:" enrolled" tone="neutral" size="sm" icon="users" testid="course-home-enrollment-count-badge" %}{% endif %}
       </div>
       {% endif %}
     </header>

@@ -17,7 +17,6 @@ from content.models import (
     Course,
     CourseAccess,
     CourseInstructor,
-    Enrollment,
     Instructor,
     Module,
     Unit,
@@ -28,6 +27,10 @@ from content.services.course_instructors import (
     remove_course_instructor,
     reorder_course_instructors,
 )
+from content.services.enrollment import (
+    active_enrollment_count as count_active_enrollments,
+)
+from content.services.enrollment import record_course_access_loss
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
@@ -124,9 +127,7 @@ def course_edit(request, course_id):
     total_unit_count = Unit.objects.filter(module__course=course).count()
 
     access_count = CourseAccess.objects.filter(course=course).count()
-    active_enrollment_count = Enrollment.objects.filter(
-        course=course, unenrolled_at__isnull=True,
-    ).count()
+    active_enrollment_count = count_active_enrollments(course)
     cohort_count = course.aisl_cohorts.count()
     course_instructor_rows = list(
         CourseInstructor.objects.filter(course=course)
@@ -607,6 +608,7 @@ def course_access_revoke(request, course_id, access_id):
 
     email = access.user.email
     access.delete()
+    record_course_access_loss(access.user, course, actor=request.user)
     messages.success(request, f'Access revoked for {email}.')
     return redirect('studio_course_access_list', course_id=course.pk)
 

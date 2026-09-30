@@ -551,6 +551,119 @@ def _build_removal_slack_text(ctx):
 
 
 # ---------------------------------------------------------------------
+# Course unenroll staff heads-up
+# ---------------------------------------------------------------------
+
+_UNENROLL_CAUSE_TEXT = {
+    "self": "left on their own",
+    "staff": "removed by staff",
+    "access_lost": "lost course access",
+}
+
+
+def notify_course_unenroll(
+    user_id, course_id, cohort_id=None, cause="self", actor_id=None,
+):
+    """Post a staff Slack heads-up that a learner left a course or cohort.
+
+    Background task queued by
+    ``content.services.enrollment.record_unenrollment`` for every
+    unenroll path (self, staff, lost access). Posts to the staff channel
+    ``STAFF_SIGNUP_NOTIFY_CHANNEL_ID`` when Slack is enabled; returns
+    whether a post was accepted. Never raises.
+    """
+    try:
+        channel_id = (get_config("STAFF_SIGNUP_NOTIFY_CHANNEL_ID", "") or "").strip()
+        if not channel_id:
+            logger.info(
+                "Skipping course unenroll Slack post: "
+                "STAFF_SIGNUP_NOTIFY_CHANNEL_ID is not set",
+            )
+            return False
+        text = _build_course_unenroll_text(
+            user_id, course_id, cohort_id, cause, actor_id,
+        )
+        if text is None:
+            return False
+        return _post_staff_slack_text(channel_id, text, "course unenroll")
+    except Exception:
+        logger.exception(
+            "notify_course_unenroll failed for user=%s course=%s",
+            user_id, course_id,
+        )
+        return False
+
+
+def _build_course_unenroll_text(user_id, course_id, cohort_id, cause, actor_id):
+    """Compose the mrkdwn body, or None when the user or course is gone."""
+    # Inline, matching this module's lazy model imports: it is imported at
+    # module load by community.tasks.slack_membership, and content services
+    # import community code.
+    from accounts.models import User
+    from content.models import Cohort, Course
+    from content.services.enrollment import active_enrollment_count
+
+    user = User.objects.filter(pk=user_id).first()
+    course = Course.objects.filter(pk=course_id).first()
+    if user is None or course is None:
+        return None
+    cohort = Cohort.objects.filter(pk=cohort_id).first() if cohort_id else None
+    actor = User.objects.filter(pk=actor_id).first() if actor_id else None
+
+    name = f"{user.first_name} {user.last_name}".strip() or user.email
+    where = f"`{course.title}`"
+    if cohort is not None:
+        where = f"`{course.title}` (cohort `{cohort.name}`)"
+    cause_text = _UNENROLL_CAUSE_TEXT.get(cause, cause)
+    if actor is not None and actor.pk != user.pk:
+        cause_text = f"{cause_text} ({actor.email})"
+    counts = f"*Active enrollments now:* {active_enrollment_count(course)}"
+    if cohort is not None:
+        counts += f" | *{cohort.name} members:* {cohort.enrollment_count}"
+    studio_url = f"{site_base_url().rstrip('/')}/studio/users/{user.pk}/"
+    return (
+        f"*Course unenroll:* {name} ({user.email}) left {where}.\n"
+        f"*Cause:* {cause_text}\n"
+        f"{counts}\n"
+        f"*Studio:* <{studio_url}|user page>"
+    )
+
+
+def _post_staff_slack_text(channel_id, text, what):
+    """Post ``text`` to the staff channel; True when Slack accepted it."""
+    if not is_enabled("SLACK_ENABLED"):
+        logger.debug("Skipping %s Slack post: SLACK_ENABLED is not true", what)
+        return False
+    bot_token = get_config("SLACK_BOT_TOKEN")
+    if not bot_token:
+        logger.info("Skipping %s Slack post: SLACK_BOT_TOKEN is not set", what)
+        return False
+    try:
+        response = requests.post(
+            _SLACK_POST_MESSAGE_URL,
+            json={"channel": channel_id, "text": text},
+            headers={
+                "Authorization": f"Bearer {bot_token}",
+                "Content-Type": "application/json; charset=utf-8",
+            },
+            timeout=10,
+        )
+        data = response.json()
+    except (requests.exceptions.RequestException, ValueError):
+        logger.exception("Failed to POST %s Slack post to channel=%s", what, channel_id)
+        return False
+    if not isinstance(data, dict) or not data.get("ok"):
+        logger.warning(
+            "%s Slack post rejected for channel=%s: %s",
+            what,
+            channel_id,
+            data.get("error", "unknown") if isinstance(data, dict) else "non-dict",
+        )
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------
 # Slack-join staff heads-up (issue #959)
 # ---------------------------------------------------------------------
 

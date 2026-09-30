@@ -21,6 +21,7 @@ import os
 
 import pytest
 from django.utils import timezone
+from playwright.sync_api import expect as pw_expect
 
 from playwright_tests.conftest import (
     auth_context as _auth_context,
@@ -207,6 +208,16 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
             tags=["mlops"],
         )
 
+        # Two learners enrolled in "Intro to ML" drive its count badge.
+        from content.models import Enrollment
+
+        for index in range(2):
+            Enrollment.objects.create(
+                user=_create_user(f"catalog-learner-{index}@test.com"),
+                course=intro_ml,
+            )
+        connection.close()
+
         # Create draft course (should not appear)
         _create_course(
             title="WIP Course",
@@ -262,6 +273,20 @@ class TestScenario1VisitorBrowsesCatalogAndSyllabus:
         assert advanced_card.locator(
             '[data-testid="course-access-badge"]'
         ).count() == 1
+
+        # Enrollment-count badge: "2 enrolled" on the course with
+        # learners, hidden on the course with none.
+        intro_card_article = page.locator(
+            'article:has(a[href="/courses/intro-to-ml"])'
+        )
+        count_badge = intro_card_article.locator(
+            '[data-testid="course-enrollment-count-badge"]'
+        )
+        pw_expect(count_badge).to_be_visible()
+        pw_expect(count_badge).to_have_text("2 enrolled")
+        assert advanced_card.locator(
+            '[data-testid="course-enrollment-count-badge"]'
+        ).count() == 0
 
         # "Advanced MLOps" card with "Main or above" tier badge.
         # Issue #481: replaced legacy "Main+" shorthand.

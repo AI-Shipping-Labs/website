@@ -13,8 +13,10 @@ Media: the cover band renders only when the course has a real
 ``cover_image_url``; coverless courses start with the signal row and
 reserve no placeholder band. Raw tag chips are not rendered on cards.
 
-Expected context: ``course``, ``enrolled_course_ids`` (set of course IDs
-the current user is enrolled in). Optional ``show_sold_separately``
+Expected context: ``course`` (with ``active_enrollment_count`` set by
+the catalog view; the "N enrolled" badge hides at 0),
+``enrolled_course_ids`` (set of course IDs the current user is enrolled
+in). Optional ``show_sold_separately``
 (boolean, default falsy) renders the extra badge.
 {% endcomment %}
 <article class="group h-full overflow-hidden rounded-lg border border-border bg-card transition-colors hover:border-accent/50">
@@ -33,6 +35,9 @@ the current user is enrolled in). Optional ``show_sold_separately``
         {% endif %}
         {% if course.pk in enrolled_course_ids %}
         {% member_status_badge "Enrolled" status="enrolled" icon="check-circle-2" testid="enrolled-badge" %}
+        {% endif %}
+        {% if course.active_enrollment_count %}
+        {% member_label_badge course.active_enrollment_count|stringformat:"d"|add:" enrolled" tone="neutral" size="sm" icon="users" testid="course-enrollment-count-badge" %}
         {% endif %}
       </div>
       <h2 class="line-clamp-3 break-words text-lg font-semibold leading-snug text-foreground transition-colors group-hover:text-accent">

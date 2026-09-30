@@ -21,6 +21,7 @@ from content.access import LEVEL_MAIN, get_user_level
 from content.models import CourseAccess
 from content.models.cohort import CohortEnrollment
 from content.services.course_cohorts import apply_cohort_enrollment_tags
+from content.services.enrollment import UNENROLL_CAUSE_ACCESS_LOST, record_unenrollment
 from email_app.package_mail import send_package_mail
 from events.services.event_audience import email_skip_status
 from integrations.config import get_config, validate_email_config_value
@@ -1179,6 +1180,12 @@ def _revoke_maven_grants(row, actions, outcome=None):
         if deleted:
             actions.append("Revoked cohort enrollment.")
             outcome.cohort_enrollment = f"Removed from cohort {cohort.external_key}."
+            # CRM timeline row only: the removal step already sends the
+            # Maven removal staff heads-up, so no second Slack post.
+            record_unenrollment(
+                row.user, course, cohort=cohort,
+                cause=UNENROLL_CAUSE_ACCESS_LOST, notify=False,
+            )
         series = _cohort_event_series(cohort)
         if series is not None:
             from events.models import SeriesRegistration

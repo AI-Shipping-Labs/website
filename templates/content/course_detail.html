@@ -23,7 +23,7 @@
       </a>
 
       <header class="mb-12">
-        <div class="mb-4 flex items-center gap-2">
+        <div class="mb-4 flex flex-wrap items-center gap-2">
           <span class="inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-sm text-accent">
             <i data-lucide="book-open" class="h-4 w-4"></i>
             Course
@@ -35,6 +35,9 @@
           {% endif %}
           {% if course.access_mode == "entitlement" %}
           {% member_status_badge "External course" status="sold_separately" tone="info" icon="external-link" testid="course-detail-entitlement-badge" %}
+          {% endif %}
+          {% if course_enrollment_count %}
+          {% member_label_badge course_enrollment_count|stringformat:"d"|add:" enrolled" tone="neutral" size="md" icon="users" testid="course-detail-enrollment-count-badge" %}
           {% endif %}
         </div>
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl" style="text-wrap: balance;">

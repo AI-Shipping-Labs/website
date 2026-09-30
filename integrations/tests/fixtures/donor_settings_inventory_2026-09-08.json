@@ -569,7 +569,7 @@
    {
     "key": "STAFF_SIGNUP_NOTIFY_CHANNEL_ID",
     "is_secret": false,
-    "description": "Slack channel ID where the bot posts an internal heads-up every time a paid signup completes (Basic and above). Leave blank to skip the Slack post; the staff email side still runs.",
+    "description": "Slack channel ID where the bot posts internal staff heads-ups: every completed paid signup (Basic and above) and every course unenroll or cohort leave. Leave blank to skip the Slack post; the staff email side still runs.",
     "optional": true,
     "docs_url": "_docs/integrations/slack.md#staff_signup_notify_channel_id"
    },

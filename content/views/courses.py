@@ -57,9 +57,13 @@ from content.services.course_schedule import (
 )
 from content.services.current_module import build_current_module, build_due_next, session_item
 from content.services.enrollment import (
+    UNENROLL_CAUSE_SELF,
+    active_enrollment_count,
+    active_enrollment_counts,
     ensure_enrollment,
     ensure_self_paced_cohort_enrollment,
     is_enrolled,
+    record_unenrollment,
 )
 from content.services.enrollment import (
     unenroll as unenroll_user,
@@ -152,6 +156,13 @@ def courses_list(request):
             .filter(user=request.user, unenrolled_at__isnull=True)
             .values_list('course_id', flat=True)
         )
+
+    # Enrollment-count badge on every card: one grouped query.
+    enrollment_counts = active_enrollment_counts(
+        [course.pk for course in [*courses, *entitlement_courses]],
+    )
+    for course in [*courses, *entitlement_courses]:
+        course.active_enrollment_count = enrollment_counts.get(course.pk, 0)
 
     context = {
         'courses': courses,
@@ -372,6 +383,7 @@ def course_detail(request, slug):
         'show_discussion': show_discussion,
         'user_is_enrolled': user_is_enrolled,
         'next_unit_for_user': next_unit_for_user,
+        'course_enrollment_count': active_enrollment_count(course),
     }
     # Issue #652: free-anon course detail surfaces render the inline
     # register card instead of the legacy "Sign Up Free" button. Pass
@@ -428,6 +440,12 @@ def course_home(request, slug, section='home'):
 
     context = build_course_home(course, request.user, cohort)
     context['section'] = section
+    # Header badge beside the cohort label: a dated cohort shows its own
+    # member count; a self-paced (or missing) cohort shows the course's.
+    if cohort is not None and cohort.mode == 'cohort':
+        context['home_enrollment_count'] = cohort.enrollment_count
+    else:
+        context['home_enrollment_count'] = active_enrollment_count(course)
     context['self_paced_view'] = self_paced_view
     context['is_cohort_preview'] = bool(requested and is_preview)
     if request.user.is_staff:
@@ -1581,6 +1599,7 @@ def api_cohort_unenroll(request, slug, cohort_id):
         )
 
     enrollment.delete()
+    record_unenrollment(user, course, cohort=cohort, cause=UNENROLL_CAUSE_SELF)
     return JsonResponse({'enrolled': False, 'cohort_id': cohort.pk})
 
 

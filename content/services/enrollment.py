@@ -7,12 +7,30 @@ same way.
 
 from __future__ import annotations
 
+import logging
+
+from django.db.models import Count
+from django.utils import timezone
+
 from accounts.utils.user_checks import is_authenticated_user
 from content.models.cohort import CohortEnrollment
 from content.models.enrollment import (
     SOURCE_AUTO_PROGRESS,
     SOURCE_MANUAL,
     Enrollment,
+)
+
+logger = logging.getLogger(__name__)
+
+# Why a learner stopped being enrolled; carried into the CRM activity row
+# and the staff heads-up.
+UNENROLL_CAUSE_SELF = 'self'
+UNENROLL_CAUSE_STAFF = 'staff'
+UNENROLL_CAUSE_ACCESS_LOST = 'access_lost'
+UNENROLL_CAUSES = (
+    UNENROLL_CAUSE_SELF,
+    UNENROLL_CAUSE_STAFF,
+    UNENROLL_CAUSE_ACCESS_LOST,
 )
 
 
@@ -118,13 +136,129 @@ def ensure_self_paced_cohort_enrollment(user, course):
     return enrollment
 
 
-def unenroll(user, course) -> bool:
-    """Soft-delete the active enrollment. Returns True if anything changed."""
-    from django.utils import timezone
+def active_enrollment_counts(course_ids) -> dict[int, int]:
+    """Return ``{course_id: active enrollment count}`` in one query.
 
+    The single owner of "how many people are enrolled in this course":
+    an active ``Enrollment`` row (``unenrolled_at IS NULL``) per learner.
+    Courses with no active enrollments are absent from the mapping, so
+    callers read ``counts.get(course_id, 0)``. Cohort-level counts stay
+    on ``Cohort.enrollment_count``.
+    """
+    course_ids = [course_id for course_id in course_ids if course_id is not None]
+    if not course_ids:
+        return {}
+    rows = (
+        Enrollment.objects
+        .filter(course_id__in=course_ids, unenrolled_at__isnull=True)
+        .values('course_id')
+        .annotate(total=Count('id'))
+    )
+    return {row['course_id']: row['total'] for row in rows}
+
+
+def active_enrollment_count(course) -> int:
+    """Return the number of active enrollments in ``course``."""
+    return active_enrollment_counts([course.pk]).get(course.pk, 0)
+
+
+def unenroll(user, course, *, cause=None, actor=None) -> bool:
+    """Soft-delete the active enrollment. Returns True if anything changed.
+
+    Every real change records the ``course_unenroll`` CRM activity and
+    queues the staff heads-up (``record_unenrollment``). ``cause`` is one
+    of ``UNENROLL_CAUSE_*``; it defaults to the learner acting on their
+    own enrollment.
+    """
     enrollment = get_active_enrollment(user, course)
     if enrollment is None:
         return False
     enrollment.unenrolled_at = timezone.now()
     enrollment.save(update_fields=['unenrolled_at'])
+    record_unenrollment(
+        user, course,
+        cohort=_dated_cohort_for(user, course),
+        cause=cause or UNENROLL_CAUSE_SELF,
+        actor=actor,
+    )
     return True
+
+
+# --- Unenroll notifications ---
+
+def _dated_cohort_for(user, course):
+    """Return the user's dated cohort in ``course``, or None."""
+    membership = (
+        CohortEnrollment.objects
+        .filter(user=user, cohort__course=course, cohort__mode='cohort')
+        .select_related('cohort')
+        .order_by('-cohort__start_date')
+        .first()
+    )
+    return membership.cohort if membership else None
+
+
+def record_course_access_loss(user, course, *, actor=None) -> bool:
+    """Record an enrolled learner losing access to ``course``.
+
+    Call after a course grant is removed. When the learner still holds an
+    active enrollment but can no longer open the course, record the
+    ``access_lost`` unenroll (activity row plus staff heads-up) and return
+    True. The enrollment row itself is kept, so restoring access restores
+    the course. Returns False when nothing was lost.
+    """
+    # Inline, as in ``ensure_self_paced_cohort_enrollment``.
+    from content.access import can_access
+
+    if not is_enrolled(user, course) or can_access(user, course):
+        return False
+    record_unenrollment(
+        user, course,
+        cohort=_dated_cohort_for(user, course),
+        cause=UNENROLL_CAUSE_ACCESS_LOST,
+        actor=actor,
+    )
+    return True
+
+
+def record_unenrollment(user, course, *, cohort=None, cause, actor=None, notify=True):
+    """Record that ``user`` left ``course`` (or one of its cohorts).
+
+    The single owner for every unenroll path: writes the
+    ``course_unenroll`` CRM activity row and, unless ``notify`` is False,
+    queues the staff Slack heads-up in the background so a slow Slack
+    never delays the learner's or operator's request. Never raises.
+    """
+    # Inline like ``ensure_enrollment``'s ``record_course_enroll``:
+    # ``analytics.activity`` imports content and events models, and this
+    # module is imported while those apps load.
+    from analytics.activity import record_course_unenroll
+
+    record_course_unenroll(user, course, cohort=cohort, cause=cause)
+    if not notify:
+        return
+    try:
+        # Inline for the same app-loading reason; ``jobs.tasks`` pulls in
+        # django-q models.
+        from jobs.tasks import async_task, build_task_name
+
+        async_task(
+            'community.services.staff_notifications.notify_course_unenroll',
+            user_id=user.pk,
+            course_id=course.pk,
+            cohort_id=getattr(cohort, 'pk', None),
+            cause=cause,
+            actor_id=getattr(actor, 'pk', None),
+            task_name=build_task_name(
+                'Notify staff of course unenroll',
+                f'user #{user.pk}',
+                course.slug,
+            ),
+        )
+    except Exception:
+        # Intentional broad catch: the unenroll itself already happened;
+        # a queue failure must not turn it into an error page.
+        logger.exception(
+            'Failed to queue course unenroll notification user=%s course=%s',
+            user.pk, course.pk,
+        )

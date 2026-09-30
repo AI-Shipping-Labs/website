@@ -5,6 +5,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from analytics.models import UserActivity
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess
 from events.models import EventSeries, SeriesRegistration
 from integrations.models import MavenEnrollmentEvent
@@ -386,6 +387,21 @@ class MavenRemovalRevocationTest(_MavenFixtureMixin, TestCase):
         retry_occurrence_step(occurrence, "removal")
         self.assertFalse(
             CohortEnrollment.objects.filter(cohort=self.cohort, user=self.user).exists()
+        )
+
+    def test_removal_records_access_lost_activity_without_a_second_heads_up(self):
+        occurrence = self._removed_occurrence("removal-activity")
+        self._grant(occurrence)
+        with patch("jobs.tasks.async_task") as enqueue:
+            retry_occurrence_step(occurrence, "removal")
+        activity = UserActivity.objects.get(
+            user=self.user, event_type=UserActivity.EVENT_COURSE_UNENROLL,
+        )
+        self.assertEqual(activity.object_id, self.course.slug)
+        self.assertIn("lost course access", activity.label)
+        queued = [call.args[0] for call in enqueue.call_args_list]
+        self.assertNotIn(
+            "community.services.staff_notifications.notify_course_unenroll", queued,
         )
 
     def test_removal_deletes_course_access_when_no_other_active_occurrence(self):

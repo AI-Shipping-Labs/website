@@ -1,6 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
+  // Only apply hover: variants on devices with a real hover pointer, so a
+  // tapped link on a phone does not keep a sticky hover:underline state.
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   content: {
     relative: true,
     files: [

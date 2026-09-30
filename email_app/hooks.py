@@ -394,6 +394,7 @@ _STAFF_NOTIFICATION_PURPOSES = frozenset({
     "maven_enrollment_notification",
     "maven_cohort_removal_notification",
     "slack_join_notification",
+    "course_unenroll_notification",
 })
 
 # Stripe object ids always carry their resource prefix; the stored

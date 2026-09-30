@@ -15,6 +15,7 @@ from content.models.cohort import (
 from content.models.course import UNIT_KIND_EVENT
 from events.models import Event, EventSeries
 from events.models.event import PUBLIC_EVENT_STATUSES
+from events.services.registration import delete_series_registration
 
 
 def ensure_course_self_paced_cohort(course):
@@ -143,6 +144,64 @@ def retract_cohort_tag(user, cohort):
     current.remove(cohort_tag)
     set_tags(user, current)
     return cohort_tag
+
+
+def retract_course_and_cohort_tags(user, course_tag, cohort_tag):
+    """Remove ``cohort_tag`` and, if nothing else keeps it, ``course_tag``.
+
+    The course-level tag survives while the user still carries another
+    ``<course_tag>-...`` cohort tag (a returning student in a second
+    cohort keeps it). Mirrors the Maven removal's retraction so the two
+    stay in step; tags already absent are no-ops. Returns the tags removed.
+    """
+    course_tag = normalize_tag(course_tag)
+    cohort_tag = normalize_tag(cohort_tag)
+    if not course_tag:
+        return []
+    current = list(user.tags or [])
+    retracted = []
+    if cohort_tag and cohort_tag != course_tag and cohort_tag in current:
+        current.remove(cohort_tag)
+        retracted.append(cohort_tag)
+    if course_tag in current and not any(
+        tag.startswith(f'{course_tag}-') for tag in current
+    ):
+        current.remove(course_tag)
+        retracted.append(course_tag)
+    if retracted:
+        set_tags(user, current)
+    return retracted
+
+
+def remove_dated_cohort_memberships(user, course):
+    """Take ``user`` out of every dated cohort of ``course``.
+
+    Called when the learner leaves the course, so the cohort roster,
+    count and cohort emails agree with the course enrollment. For each
+    removed cohort the ``<course>-<cohort>`` tag is retracted (and the
+    course tag when nothing else keeps it) and the standing registration
+    for the cohort's event series is deleted. Self-paced membership is
+    derived from course access and re-created on the next visit, so it
+    is left alone. Never records activity or notifies anyone: the caller
+    owns the single unenroll notification. Returns the removed cohorts.
+    """
+    memberships = CohortEnrollment.objects.filter(
+        user=user, cohort__course=course, cohort__mode=COHORT_MODE_COHORT,
+    ).select_related('cohort__course', 'cohort__event_series')
+    cohorts = [row.cohort for row in memberships]
+    if not cohorts:
+        return []
+    with transaction.atomic():
+        memberships.delete()
+        for cohort in cohorts:
+            tags = cohort_contact_tags(cohort)
+            if tags:
+                retract_course_and_cohort_tags(
+                    user, tags[0], tags[1] if len(tags) > 1 else '',
+                )
+            if cohort.event_series_id:
+                delete_series_registration(cohort.event_series, user)
+    return cohorts
 
 
 def assign_cohort_enrollment(user, cohort, *, replace_dated=False):

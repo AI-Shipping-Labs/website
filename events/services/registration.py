@@ -69,3 +69,15 @@ def get_or_create_series_registration(series, user):
         except SeriesRegistration.DoesNotExist:
             raise
     return registration, True
+
+
+def delete_series_registration(series, user):
+    """Delete ``user``'s standing ``SeriesRegistration`` for ``series``.
+
+    Returns True when a row was removed. Existing per-occurrence
+    ``EventRegistration`` rows are left alone, as the Maven removal does.
+    """
+    deleted, _counts = SeriesRegistration.objects.filter(
+        series=series, user=user,
+    ).delete()
+    return bool(deleted)

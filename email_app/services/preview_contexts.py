@@ -118,6 +118,16 @@ PREVIEW_CONTEXTS = {
             '?token=preview-token'
         ),
     },
+    'course_unenroll_notification': {
+        'user_id': '42',
+        'name': 'Ada Lovelace',
+        'email': 'ada@example.com',
+        'course': 'AI Engineering Buildcamp',
+        'cohort': 'Cohort 5',
+        'cause_sentence': 'They did it themselves.',
+        'enrolled_count': 56,
+        'studio_user_url': 'https://aishippinglabs.com/studio/users/42/',
+    },
     'maven_cohort_removal_notification': {
         'user_known': True,
         'removed_user_name': 'Ada Lovelace',

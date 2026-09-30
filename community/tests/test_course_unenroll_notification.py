@@ -1,29 +1,38 @@
-"""Staff Slack heads-up posted when a learner unenrolls from a course."""
+"""Staff email sent when a learner unenrolls from a course."""
 
 import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import requests
+from community_base.mail.jobs import deliver as deliver_job
+from community_base.mail.models import EmailDelivery
 from django.test import TestCase, tag
 from django.utils import timezone
 
 from accounts.models import User
 from community.services.staff_notifications import notify_course_unenroll
 from content.models import Cohort, CohortEnrollment, Course, Enrollment
+from email_app.testing import StubSESClient
+from integrations.config import clear_config_cache
+from integrations.models import IntegrationSetting
 
-CHANNEL = 'C0STAFFOPS'
+PURPOSE = 'course_unenroll_notification'
 
 
-def _cfg(channel=CHANNEL):
-    values = {
-        'STAFF_SIGNUP_NOTIFY_CHANNEL_ID': channel,
-        'SLACK_BOT_TOKEN': 'xoxb-test-token',
-    }
-
-    def _get(key, default=''):
-        return values.get(key, default)
-
-    return _get
+def _drain(delivery):
+    """Deliver one delivery through the real worker; return (to, subject, html)."""
+    stub = StubSESClient()
+    with patch(
+        'community_base.mail.backends.ses_local.configured_client',
+        return_value=stub,
+    ):
+        deliver_job(None, {'delivery_id': str(delivery.id)})
+    call = stub.calls[0]
+    simple = call['Content']['Simple']
+    return (
+        call['Destination']['ToAddresses'],
+        simple['Subject']['Data'],
+        simple['Body']['Html']['Data'],
+    )
 
 
 @tag('core')
@@ -50,65 +59,51 @@ class NotifyCourseUnenrollTest(TestCase):
         Enrollment.objects.create(user=stayer, course=cls.course)
         CohortEnrollment.objects.create(cohort=cls.cohort, user=stayer)
 
-    def _notify(self, *, channel=CHANNEL, slack_enabled=True, **kwargs):
-        response = MagicMock()
-        response.json.return_value = {'ok': True}
-        with patch(
-            'community.services.staff_notifications.get_config',
-            side_effect=_cfg(channel),
-        ), patch(
-            'community.services.staff_notifications.is_enabled',
-            return_value=slack_enabled,
-        ), patch(
-            'community.services.staff_notifications.site_base_url',
-            return_value='https://example.test',
-        ), patch(
-            'community.services.staff_notifications.requests.post',
-            return_value=response,
-        ) as post:
-            delivered = notify_course_unenroll(
-                self.learner.pk, self.course.pk, **kwargs,
-            )
-        return delivered, post
-
-    def test_posts_learner_course_cohort_cause_and_counts_to_staff_channel(self):
-        delivered, post = self._notify(
-            cohort_id=self.cohort.pk, cause='staff', actor_id=self.staff.pk,
+    def setUp(self):
+        IntegrationSetting.objects.update_or_create(
+            key='STAFF_SIGNUP_NOTIFY_EMAIL',
+            defaults={'value': 'staff@example.com'},
         )
-        self.assertTrue(delivered)
-        payload = post.call_args.kwargs['json']
-        self.assertEqual(payload['channel'], CHANNEL)
-        self.assertEqual(payload['text'], (
-            '*Course unenroll:* Lee Ver (leaver@example.com) left '
-            '`AI Engineering Buildcamp` (cohort `Cohort 4`).\n'
-            '*Cause:* removed by staff (ops@example.com)\n'
-            '*Active enrollments now:* 1 | *Cohort 4 members:* 1\n'
-            f'*Studio:* <https://example.test/studio/users/{self.learner.pk}/|user page>'
+        clear_config_cache()
+        self.addCleanup(clear_config_cache)
+
+    def test_emails_staff_learner_course_cohort_cause_and_count(self):
+        self.assertTrue(notify_course_unenroll(
+            self.learner.pk, self.course.pk,
+            cohort_id=self.cohort.pk, cause='staff', actor_id=self.staff.pk,
         ))
 
+        to, subject, html = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
+        self.assertEqual(to, ['staff@example.com'])
+        self.assertEqual(subject, 'Lee Ver left AI Engineering Buildcamp')
+        self.assertIn(
+            'Lee Ver (leaver@example.com) unenrolled from AI Engineering '
+            'Buildcamp, cohort Cohort 4. Removed by ops@example.com. '
+            'Now 1 enrolled.',
+            html,
+        )
+        self.assertIn(f'/studio/users/{self.learner.pk}/', html)
+
     def test_self_unenroll_without_cohort_names_only_the_course(self):
-        _delivered, post = self._notify(cause='self')
-        text = post.call_args.kwargs['json']['text']
-        self.assertIn('left `AI Engineering Buildcamp`.\n', text)
-        self.assertIn('*Cause:* left on their own\n', text)
+        notify_course_unenroll(self.learner.pk, self.course.pk, cause='self')
 
-    def test_skips_when_channel_blank_or_slack_disabled(self):
-        for kwargs in ({'channel': ''}, {'slack_enabled': False}):
-            with self.subTest(**kwargs):
-                delivered, post = self._notify(cause='self', **kwargs)
-                self.assertFalse(delivered)
-                post.assert_not_called()
+        _to, _subject, html = _drain(EmailDelivery.objects.get(purpose=PURPOSE))
+        self.assertIn(
+            'unenrolled from AI Engineering Buildcamp. They did it themselves.',
+            html,
+        )
 
-    def test_slack_failure_never_raises(self):
+    def test_skips_when_staff_mailbox_blank(self):
+        IntegrationSetting.objects.filter(key='STAFF_SIGNUP_NOTIFY_EMAIL').delete()
+        clear_config_cache()
+
+        self.assertFalse(notify_course_unenroll(self.learner.pk, self.course.pk))
+        self.assertFalse(EmailDelivery.objects.filter(purpose=PURPOSE).exists())
+
+    def test_send_failure_never_raises(self):
         with patch(
-            'community.services.staff_notifications.get_config',
-            side_effect=_cfg(),
-        ), patch(
-            'community.services.staff_notifications.is_enabled',
-            return_value=True,
-        ), patch(
-            'community.services.staff_notifications.requests.post',
-            side_effect=requests.exceptions.ConnectionError('boom'),
+            'community.services.staff_notifications.send_package_mail',
+            side_effect=RuntimeError('boom'),
         ):
             self.assertFalse(
                 notify_course_unenroll(self.learner.pk, self.course.pk),

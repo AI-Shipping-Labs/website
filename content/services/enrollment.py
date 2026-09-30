@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 
+from django.db import transaction
 from django.db.models import Count
 from django.utils import timezone
 
@@ -169,15 +170,30 @@ def unenroll(user, course, *, cause=None, actor=None) -> bool:
     queues the staff heads-up (``record_unenrollment``). ``cause`` is one
     of ``UNENROLL_CAUSE_*``; it defaults to the learner acting on their
     own enrollment.
+
+    Leaving the course also leaves its dated cohorts (membership, cohort
+    tags, cohort series registration) so cohort rosters, counts and cohort
+    emails agree with the course. Re-enrolling does not restore them; the
+    learner picks a cohort again. The one notification names the cohort
+    they left.
     """
     enrollment = get_active_enrollment(user, course)
     if enrollment is None:
         return False
-    enrollment.unenrolled_at = timezone.now()
-    enrollment.save(update_fields=['unenrolled_at'])
+    # Inline, as in ``ensure_self_paced_cohort_enrollment``:
+    # ``course_cohorts`` imports events models, and this module is imported
+    # while those apps load.
+    from content.services.course_cohorts import remove_dated_cohort_memberships
+
+    # Read before the memberships are removed, for the notification.
+    cohort = _dated_cohort_for(user, course)
+    with transaction.atomic():
+        enrollment.unenrolled_at = timezone.now()
+        enrollment.save(update_fields=['unenrolled_at'])
+        remove_dated_cohort_memberships(user, course)
     record_unenrollment(
         user, course,
-        cohort=_dated_cohort_for(user, course),
+        cohort=cohort,
         cause=cause or UNENROLL_CAUSE_SELF,
         actor=actor,
     )

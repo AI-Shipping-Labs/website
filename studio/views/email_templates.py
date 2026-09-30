@@ -110,6 +110,7 @@ TEMPLATE_SENT_WHEN = {
     'bookclub_chapter_summary': 'Sent to book-access members when an organizer publishes a chapter summary.',
     'cancellation': 'Sent when a paid membership is scheduled to cancel.',
     'cofounder_welcome': 'Sent when a cofounder membership signup is completed.',
+    'course_unenroll_notification': 'Sent to staff when a learner unenrolls from a course, leaves a cohort, or loses course access.',
     'community_invite': 'Sent when an eligible member is invited to the private community.',
     'checkout_payment_failed': 'Sent when a delayed Checkout payment fails before membership or course access is granted.',
     'download_delivery': 'Sent when a visitor requests delivery of a downloadable resource.',

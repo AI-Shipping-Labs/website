@@ -291,6 +291,13 @@ Distinct from `PAYMENT_NOTIFICATION_EMAIL` — the latter is the
 short operator audit ping; this one drives the founder-led
 high-touch onboarding loop.
 
+The same mailbox receives the course unenroll note
+(`course_unenroll_notification`, sent by
+`community/services/staff_notifications.py::notify_course_unenroll`): one
+short email whenever a learner unenrolls from a course, leaves a cohort, or
+loses course access. Maven cohort removals send their own removal summary
+instead. Blank skips the note.
+
 Without it (blank): The co-founder welcome still goes to the new
 user without any staff CC/BCC, and the structured staff heads-up
 email is skipped. The Slack post still fires if

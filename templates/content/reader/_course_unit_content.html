@@ -72,7 +72,9 @@
     </div>
     {% else %}
 
-      {% if not homework_is_accepting %}
+      {% if homework_locked_after_submit %}
+      <p class="mb-6 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted. Your results are shown with each answer.</p>
+      {% elif not homework_is_accepting %}
       <div class="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-foreground" data-testid="homework-deadline-passed-banner">
         {% if homework_is_self_paced %}
         This homework is closed. Your submission is shown below and can no longer be edited.
@@ -117,6 +119,7 @@
                     {% if not homework_is_accepting %}disabled{% endif %}
                     class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ item.text_answer }}</textarea>
           {% endif %}
+          {% if item.result %}{% include "homework_steps/_question_result.html" with result=item.result %}{% endif %}
         </fieldset>
         {% endfor %}
 

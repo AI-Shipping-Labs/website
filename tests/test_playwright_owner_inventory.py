@@ -1238,6 +1238,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_public_links_are_configurable_saved_and_submitted",
     })
 
+    issue_1696_owners = frozenset({
+        "playwright_tests/test_homework_steps_1778.py::"
+        "test_self_paced_learner_sees_results_after_submit_and_cannot_resubmit",
+    })
+
     issue_1781_owners = frozenset({
         "playwright_tests/test_course_reader_scoped_sidebar.py::"
         "test_scoped_sidebar_opens_current_topic_and_scrolls_independently",
@@ -1623,8 +1628,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2706)
-        self.assertEqual(len(inventory.owners), 2502)
+        self.assertEqual(inventory.item_count, 2707)
+        self.assertEqual(len(inventory.owners), 2503)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1677,6 +1682,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1737_owners
             | self.issue_1745_owners
             | self.issue_1770_owners
+            | self.issue_1696_owners
             | self.issue_1778_owners
             | self.issue_1781_owners
             | self.issue_1782_owners
@@ -1735,6 +1741,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1737_owners
             | self.issue_1745_owners
             | self.issue_1770_owners
+            | self.issue_1696_owners
             | self.issue_1778_owners
             | self.issue_1781_owners
             | self.issue_1782_owners

@@ -1,0 +1,13 @@
+{% load member_badges %}
+{% comment %}
+AISL override of the package result partial (issue #1696). One revealed
+result beside an accepted answer, on a question step or a Review row. The
+package renders it only when the reader supplied `Assignment.question_results`
+(after submit for self-paced homework, after scoring for a dated cohort).
+Context: result, a `QuestionResult`.
+{% endcomment %}
+<div class="homework-question-result mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm" data-testid="homework-question-result" data-correct="{{ result.correct|yesno:'true,false' }}">
+  {% if result.correct %}{% member_badge 'Correct' tone='success' icon='check' %}{% else %}{% member_badge 'Incorrect' tone='danger' icon='x' %}{% endif %}
+  {% if result.correct_answer %}<p class="min-w-0 text-muted-foreground" data-testid="homework-correct-answer">Correct answer: <span class="text-foreground">{{ result.correct_answer }}</span></p>{% endif %}
+  {% if result.explanation %}<p class="w-full text-muted-foreground">{{ result.explanation|linebreaksbr }}</p>{% endif %}
+</div>

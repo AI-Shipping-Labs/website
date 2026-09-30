@@ -21,6 +21,7 @@ from django.utils.safestring import mark_safe
 from content.models.homework import HomeworkState, QuestionType, Submission
 from content.services import completion as completion_service
 from content.services import course_units
+from content.services.homework_reveal import locked_after_submit, question_results
 from content.services.homework_step_sections import (
     split_out_named_section,
     validate_question_bindings,
@@ -78,7 +79,12 @@ def _render_safe(markdown):
 
 
 def build_assignment(homework, unit, user, *, context=None):
-    """Construct the package descriptor without exposing answer keys/scores."""
+    """Construct the package descriptor.
+
+    Answer keys and correctness reach the descriptor only through
+    ``question_results``, and only once ``homework_reveal`` reveals them:
+    after submit for self-paced homework, after scoring for a dated cohort.
+    """
     questions = list(homework.questions.all())
     keys = [question_key(question) for question in questions]
     introduction, rich_prompts, closing = validate_question_bindings(
@@ -164,9 +170,17 @@ def build_assignment(homework, unit, user, *, context=None):
             else str(submission.time_spent_homework)
         )
     availability = (
-        'scored' if homework.state == HomeworkState.SCORED else
+        'scored' if homework.state == HomeworkState.SCORED
+        or locked_after_submit(homework, submission) else
         'closed' if not homework.is_accepting_submissions else
         'open'
+    )
+    results_by_id = question_results(homework, submission)
+    revealed_results = (
+        None if results_by_id is None else {
+            question_key(question): results_by_id[question.pk]
+            for question in questions
+        }
     )
     return Assignment(
         key=f'aisl:homework:{homework.pk}',
@@ -192,6 +206,7 @@ def build_assignment(homework, unit, user, *, context=None):
             )
             if submission else None
         ),
+        question_results=revealed_results,
     )
 
 
@@ -219,6 +234,14 @@ class AISLHomeworkAdapter:
             self.unit, request.user, cohort=self.cohort,
         ) != self.homework:
             return Eligibility(False, False, False, 'This homework belongs to another cohort.')
+        submission = Submission.objects.filter(
+            homework=self.homework, student=request.user,
+        ).first()
+        if locked_after_submit(self.homework, submission):
+            return Eligibility(
+                True, False, False,
+                'You have submitted this homework. Your results are shown with each answer.',
+            )
         if not self.homework.is_accepting_submissions:
             reason = (
                 'This homework is closed. Your saved answers are still available.'

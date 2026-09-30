@@ -33,6 +33,7 @@ from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus_units
 from content.models.homework import Homework, QuestionType, Submission
 from content.services.course_navigation import course_entry_url
+from content.services.homework_reveal import locked_after_submit, question_results
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
 from events.models import Event, EventRegistration
@@ -888,6 +889,8 @@ def build_homework_submission_context(user, unit, *, cohort=None):
                 for answer in submission.answers.all()
             }
 
+    results = question_results(homework, submission) or {}
+    locked = locked_after_submit(homework, submission)
     question_views = []
     for question in homework.questions.all():
         raw_answer = answers_by_question_id.get(question.pk, '')
@@ -905,6 +908,7 @@ def build_homework_submission_context(user, unit, *, cohort=None):
             'text_answer': raw_answer if question.question_type in (
                 QuestionType.FREE_FORM, QuestionType.FREE_FORM_LONG,
             ) else '',
+            'result': results.get(question.pk),
         })
 
     display_timezone = resolve_event_display_timezone(user)
@@ -920,7 +924,10 @@ def build_homework_submission_context(user, unit, *, cohort=None):
         'homework_questions': question_views,
         'homework_submission': submission,
         'homework_link_value': submission.homework_link if submission else '',
-        'homework_is_accepting': homework.is_accepting_submissions,
+        # The form accepts input only while submissions are open and a
+        # self-paced learner has not yet submitted (and seen the answers).
+        'homework_is_accepting': homework.is_accepting_submissions and not locked,
+        'homework_locked_after_submit': locked,
         'homework_is_self_paced': homework.is_self_paced,
         'homework_due_date_display': homework_due_date_display,
         'homework_display_timezone': display_timezone,

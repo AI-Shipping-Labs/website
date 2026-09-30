@@ -26,7 +26,7 @@
   {% if stepper.has_pending_changes %}
   <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="status" data-testid="homework-pending-draft-status">Your previous submission is still accepted. These saved changes are a draft and have not been submitted.</p>
   {% elif stepper.submitted %}
-  <p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted.{% if stepper.can_submit %} You can update it while submissions are open.{% else %} The submission window is closed.{% endif %}</p>
+  <p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted.{% if stepper.can_submit %} You can update it while submissions are open.{% elif not homework_is_self_paced %} The submission window is closed.{% endif %}</p>
   {% elif stepper.draft_status == 'Saved' %}
   <div class="relative mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" data-testid="homework-pending-draft-status">
     <span class="min-w-0" role="status">Your answers are saved as a draft. You have not submitted this homework yet.</span>
@@ -65,6 +65,7 @@
           {% endif %}
         {% endif %}
       </fieldset>
+      {% if stepper.question_result %}{% include "homework_steps/_question_result.html" with result=stepper.question_result %}{% endif %}
       <p class="mt-3 text-sm text-muted-foreground" data-save-status role="status" aria-live="polite">{{ stepper.draft_status }}</p>
       {% if stepper.can_write %}
       <div class="mt-4 flex flex-col-reverse gap-3 sm:flex-row" data-testid="homework-action-row">

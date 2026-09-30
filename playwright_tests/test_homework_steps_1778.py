@@ -271,3 +271,110 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.locator('#sidebar-nav')).to_be_visible()
     page.screenshot(path='.tmp/homework-state-review-mobile.png', full_page=True)
     context.close()
+
+
+def _create_self_paced_assignment(email):
+    from django.db import connection
+
+    from content.models import Course, Module, Unit
+    from content.models.cohort import Cohort
+    from content.models.homework import AnswerType, Homework, Question, QuestionType
+
+    create_user(email)
+    course = Course.objects.create(
+        title='Self-paced reveal test', slug='homework-reveal-1696',
+        status='published', required_level=0,
+    )
+    module = Module.objects.create(course=course, title='Module 1', slug='module-1')
+    cohort = Cohort.objects.create(course=course, name='Self-paced', mode='self_paced')
+    content_id = uuid.uuid4()
+    unit = Unit.objects.create(
+        module=module, title='Homework', slug='homework', kind='homework',
+        content_id=content_id,
+        homework=(
+            'Answer three questions.\n\n## Question 1. Lines\nHow many lines?\n'
+            '## Question 2. Stores\nWhich are vector stores?\n'
+            '## Question 3. Key\nName the primary key.'
+        ),
+    )
+    homework = Homework.objects.create(
+        cohort=cohort, slug='homework', title='Homework', content_id=content_id,
+        stepper_enabled=True, homework_url_field=False,
+    )
+    Question.objects.create(
+        homework=homework, source_question_id='q1-lines', text='Lines',
+        question_type=QuestionType.MULTIPLE_CHOICE, possible_answers='12\n14\n16',
+        correct_answer='2',
+    )
+    Question.objects.create(
+        homework=homework, source_question_id='q2-stores', text='Stores',
+        question_type=QuestionType.CHECKBOXES, possible_answers='Qdrant\nPandas\nLanceDB',
+        correct_answer='1,3',
+    )
+    Question.objects.create(
+        homework=homework, source_question_id='q3-key', text='Key',
+        question_type=QuestionType.FREE_FORM, answer_type=AnswerType.EXACT_STRING,
+        correct_answer='user_id',
+    )
+    connection.close()
+    return unit, homework
+
+
+@pytest.mark.core
+@browser_journey
+def test_self_paced_learner_sees_results_after_submit_and_cannot_resubmit(
+    django_server, browser,
+):
+    from content.models.homework import Submission
+
+    shots = os.environ.get('HOMEWORK_REVEAL_SCREENSHOT_DIR', '.tmp')
+    email = 'homework-self-paced-reveal@test.com'
+    unit, homework = _create_self_paced_assignment(email)
+    context = _learner_context(browser, email)
+    page = context.new_page()
+    unit_url = f'{django_server}{unit.get_absolute_url()}'
+    page.goto(f'{unit_url}/q1-lines', wait_until='domcontentloaded')
+    expect(page.get_by_test_id('homework-question-result')).to_have_count(0)
+    page.get_by_role('radio', name='14').check()
+    page.get_by_role('button', name='Save & continue').click()
+    expect(page).to_have_url(f'{unit_url}/q2-stores')
+    page.get_by_role('checkbox', name='Qdrant').check()
+    page.get_by_role('checkbox', name='Pandas').check()
+    page.get_by_role('button', name='Save & continue').click()
+    expect(page).to_have_url(f'{unit_url}/q3-key')
+    page.get_by_label('Your answer').fill('user_id')
+    page.get_by_role('button', name='Save & review').click()
+    expect(page).to_have_url(f'{unit_url}/review')
+    expect(page.get_by_test_id('homework-question-result')).to_have_count(0)
+    page.get_by_role('button', name='Submit homework').click()
+
+    expect(page).to_have_url(re.compile(re.escape(unit_url) + r'/review\?receipt=.+'))
+    results = page.get_by_test_id('homework-review-summary').get_by_test_id(
+        'homework-question-result',
+    )
+    expect(results).to_have_count(3)
+    expect(results.nth(0)).to_have_attribute('data-correct', 'true')
+    expect(results.nth(0)).to_contain_text('Correct answer: 14')
+    expect(results.nth(1)).to_have_attribute('data-correct', 'false')
+    expect(results.nth(1)).to_contain_text('Incorrect')
+    expect(results.nth(1)).to_contain_text('Correct answer: Qdrant, LanceDB')
+    expect(results.nth(2)).to_have_attribute('data-correct', 'true')
+    expect(page.get_by_test_id('homework-submit-button')).to_have_count(0)
+    expect(page.get_by_test_id('homework-page-state').locator(
+        '[data-homework-state="scored"]',
+    )).to_be_visible()
+    page.screenshot(path=f'{shots}/self-paced-review-1280.png', full_page=True)
+    page.set_viewport_size({'width': 390, 'height': 844})
+    page.screenshot(path=f'{shots}/self-paced-review-390.png', full_page=True)
+
+    page.goto(f'{unit_url}/q2-stores', wait_until='domcontentloaded')
+    result = page.get_by_test_id('homework-question-result')
+    expect(result).to_have_attribute('data-correct', 'false')
+    expect(result).to_contain_text('Correct answer: Qdrant, LanceDB')
+    expect(page.get_by_role('checkbox', name='Pandas')).to_be_disabled()
+    expect(page.get_by_role('button', name='Save & continue')).to_have_count(0)
+    page.screenshot(path=f'{shots}/self-paced-question-390.png', full_page=True)
+    page.set_viewport_size({'width': 1280, 'height': 720})
+    page.screenshot(path=f'{shots}/self-paced-question-1280.png', full_page=True)
+    assert Submission.objects.filter(homework=homework).count() == 1
+    context.close()

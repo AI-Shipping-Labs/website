@@ -63,6 +63,7 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
+from content.services.homework_reveal import locked_after_submit
 from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
     AISLHomeworkAdapter,
@@ -1321,6 +1322,16 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
     if homework is None:
         return redirect(unit_url)
 
+    if locked_after_submit(
+        homework,
+        Submission.objects.filter(homework=homework, student=request.user).first(),
+    ):
+        messages.error(
+            request,
+            'You have already submitted this homework; this answer was not saved.',
+        )
+        return redirect(unit_url)
+
     if not homework.is_accepting_submissions:
         if homework.is_self_paced or homework.due_date is None:
             messages.error(
@@ -1347,6 +1358,8 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
         clear_draft(request.user, f'aisl:homework:{homework.pk}')
     messages.success(
         request,
+        'Your homework was submitted.'
+        if homework.is_self_paced else
         'Your homework was submitted. You can update it anytime before the deadline.',
     )
     return redirect(unit_url)

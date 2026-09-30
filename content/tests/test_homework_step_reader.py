@@ -1,6 +1,7 @@
 """AISL homework reader integration on an explicitly activated assignment."""
 
 import datetime
+import re
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
 
@@ -170,6 +171,62 @@ class HomeworkStepBindingsTest(SimpleTestCase):
         self.assertIn('not a new section', guidance)
 
 
+def sidebar_row_parts(response, href):
+    """Return ``(anchor attributes, inner HTML)`` of the sidebar row for ``href``."""
+    html = response.content.decode()
+    sidebar = html.split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
+    match = re.search(
+        r'<a href="' + re.escape(href) + r'"([^>]*)>(.*?)</a>', sidebar, re.DOTALL,
+    )
+    return match.group(1), ' '.join(match.group(2).split())
+
+
+class HomeworkSidebarRowConsistencyTest(HomeworkUnitSetupMixin, TestCase):
+    """A homework sidebar row renders the same meta whether current or not."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.homework.stepper_enabled = True
+        cls.homework.save(update_fields=['stepper_enabled'])
+        cls.lesson = Unit.objects.create(
+            module=cls.module, title='Module 1 Lesson', slug='lesson-1',
+            sort_order=0, kind='lesson',
+        )
+
+    def assert_row_matches_when_current(self):
+        for scope in ('course', 'module'):
+            with self.subTest(scope=scope):
+                self.course.reader_navigation_scope = scope
+                self.course.save(update_fields=['reader_navigation_scope'])
+                current_attrs, current = sidebar_row_parts(
+                    self.client.get(self.unit_url), self.unit_url,
+                )
+                other_attrs, other = sidebar_row_parts(
+                    self.client.get(self.lesson.get_absolute_url()), self.unit_url,
+                )
+                self.assertIn('aria-current="page"', current_attrs)
+                self.assertNotIn('aria-current', other_attrs)
+                self.assertEqual(current, other)
+                self.assertNotIn('data-homework-state', current)
+        return current
+
+    def test_not_submitted_row_keeps_type_icon_and_no_status_text(self):
+        self.client.force_login(self.student)
+        row = self.assert_row_matches_when_current()
+        self.assertIn('data-lucide="clipboard-list"', row)
+
+    def test_submitted_row_shows_done_tick_in_both_states(self):
+        save_submission(
+            self.homework, self.student, homework_link='',
+            answers_by_question_id={self.mc_question.pk: '2'},
+        )
+        completion_service.mark_completed(self.student, self.unit)
+        self.client.force_login(self.student)
+        row = self.assert_row_matches_when_current()
+        self.assertIn('data-lucide="check-circle-2"', row)
+
+
 class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
     def setUp(self):
         super().setUp()
@@ -203,7 +260,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(intro, 'Download the books first.')
         self.assertContains(intro, 'data-testid="homework-due-date"')
         self.assertEqual(intro.context['homework_state'].value, 'not_submitted')
-        self.assertContains(intro, 'data-homework-state="not_submitted"', count=2)
+        self.assertContains(intro, 'data-homework-state="not_submitted"', count=1)
         self.assertNotContains(intro, 'What was difficult?')
         self.assertNotContains(intro, 'homework-submission-form')
         question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
@@ -218,7 +275,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             response = self.client.get(f'{self.unit_url}?homework_step=review')
             self.assertEqual(response.context['homework_state'].value, expected)
             self.assertEqual(response.context['stepper']['homework_state'].value, expected)
-            self.assertContains(response, f'data-homework-state="{expected}"', count=2)
+            self.assertContains(response, f'data-homework-state="{expected}"', count=1)
 
         self.client.get(self.unit_url)
         assert_state('not_submitted')

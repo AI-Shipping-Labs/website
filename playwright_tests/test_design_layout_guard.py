@@ -435,7 +435,61 @@ def test_course_reader_pages_keep_actions_below_their_headings(django_server, br
         f"{session.get_absolute_url()}?cohort=layout",
         f"{homework_url}?cohort=layout",
     ])
+    _assert_sidebar_rows_keep_height_when_current(page, django_server, module)
     context.close()
+
+
+def _activate_scoped_homework_stepper(module):
+    """Scoped nav, a stepper homework, and a title long enough to wrap.
+
+    Scoped rows wrap their titles, so any extra meta on the current row
+    (the old "Not submitted" pill) shows up as a taller row.
+    """
+    from content.models import Homework, Question, QuestionType, Unit
+
+    course = module.course
+    course.reader_navigation_scope = "module"
+    course.save(update_fields=["reader_navigation_scope"])
+    homework_unit = Unit.objects.get(module=module, slug="retrieval-homework")
+    homework_unit.title = "Homework: Building a Wikipedia agent"
+    homework_unit.save(update_fields=["title"])
+    homework = Homework.objects.get(content_id=homework_unit.content_id)
+    homework.stepper_enabled = True
+    homework.save(update_fields=["stepper_enabled"])
+    Question.objects.create(
+        homework=homework, source_question_id="q1-pick", text="Pick one",
+        question_type=QuestionType.MULTIPLE_CHOICE,
+        possible_answers="Alpha\nBeta", correct_answer="1",
+    )
+    connection.close()
+
+
+def _assert_sidebar_rows_keep_height_when_current(page, base_url, module):
+    """At 1280px a sidebar row is as tall when current as when it is not.
+
+    Only the highlight may change; row meta must not, or long titles are
+    squeezed onto extra lines when the row becomes current.
+    """
+    _activate_scoped_homework_stepper(module)
+    page.set_viewport_size(VIEWPORTS[0])
+    inactive_page = f"{base_url}{module.get_absolute_url()}?cohort=layout"
+    slugs = ("retrieval-basics", "session", "retrieval-homework")
+    urls = {slug: f"{module.get_absolute_url()}/{slug}" for slug in slugs}
+
+    def row_height(path, slug):
+        page.goto(path, wait_until="load")
+        row = page.locator(f'#sidebar-nav a.reader-list-row[href^="{urls[slug]}"]').first
+        expect(row).to_be_visible()
+        return row.bounding_box()["height"], row.get_attribute("aria-current")
+
+    problems = []
+    for slug in slugs:
+        inactive, inactive_current = row_height(inactive_page, slug)
+        active, active_current = row_height(f"{base_url}{urls[slug]}?cohort=layout", slug)
+        assert inactive_current is None and active_current == "page", slug
+        if abs(active - inactive) > 0.5:
+            problems.append(f"{slug}: {inactive:.1f}px inactive, {active:.1f}px current")
+    assert problems == [], "Sidebar rows change height when current:\n" + "\n".join(problems)
 
 
 def _assert_titles_align_with_sidebar(page, base_url, paths):

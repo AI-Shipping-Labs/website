@@ -29,9 +29,9 @@ Marker variants — the caller fills the leading `<span>` slot via the
   Renders the `check-circle-2` glyph (`text-green-700 dark:text-green-400`).
 - Plain (drawer, anonymous or incomplete): `marker_kind="circle"`.
   Renders the `circle` glyph in `text-muted-foreground`.
-- State and optional pills: the homework state span uses the canonical
-  neutral member-badge shape (it wraps an included label, so it cannot go
-  through `{% member_badge %}`); the Optional pill is `{% member_badge %}`.
+- Optional pill: `{% member_badge %}`. Rows carry no status text; a row
+  renders the same meta whether it is current or not, so only the
+  highlight changes. Done state is the leading `check` marker.
 - Custom: `marker_kind="custom"` and pass `marker_html` (rendered with
   `|safe`) to inject any other glyph.
 
@@ -82,11 +82,6 @@ Notes
     {% endif %}
   </span>
   <span class="min-w-0 flex-1 truncate">{{ title }}</span>
-  {% if assignment_state %}
-    <span class="inline-flex max-w-full shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="homework-nav-state">
-      {% include "homework_steps/_state_label.html" with homework_state=assignment_state %}
-    </span>
-  {% endif %}
   {% if not root_optional and wrapper_optional or optional_badge and not root_optional and not ancestor_optional %}
     {% if '(Optional)' not in title %}
     {% member_badge 'Optional' tone='muted' %}

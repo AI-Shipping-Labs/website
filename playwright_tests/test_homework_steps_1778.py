@@ -191,9 +191,9 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.get_by_test_id('homework-page-state').locator(
         '[data-homework-state="not_submitted"]',
     )).to_be_visible()
-    expect(page.locator('#sidebar-nav [data-testid="homework-nav-state"]').locator(
-        '[data-homework-state="not_submitted"]',
-    )).to_be_visible()
+    current_row = page.locator('#sidebar-nav a[aria-current="page"]')
+    expect(current_row.locator('[data-homework-state]')).to_have_count(0)
+    expect(current_row.locator('svg.lucide-clipboard-list')).to_have_count(1)
     page.screenshot(path='.tmp/astra-homework-intro-desktop.png', full_page=True)
     page.get_by_role('link', name='Start questions').click()
     expect(page).to_have_url(f'{unit_url}/q1-first')
@@ -260,9 +260,8 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.get_by_test_id('homework-page-state').locator(
         '[data-homework-state="submitted"]',
     )).to_be_visible()
-    expect(page.locator('#sidebar-nav [data-testid="homework-nav-state"]').locator(
-        '[data-homework-state="submitted"]',
-    )).to_be_visible()
+    expect(current_row.locator('[data-homework-state]')).to_have_count(0)
+    expect(current_row.locator('svg.lucide-check-circle-2')).to_have_count(1)
     expect(page.get_by_test_id('homework-review-form')).to_have_count(0)
     expect(page.get_by_test_id('homework-submit-button')).to_have_count(0)
     page.screenshot(path='.tmp/homework-state-review-desktop.png', full_page=True)

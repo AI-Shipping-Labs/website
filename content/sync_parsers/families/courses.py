@@ -928,8 +928,7 @@ def _parse_module_yaml_for_lookup(module_yaml_path, course_dir, entry_name, stat
                 'error': str(exc),
             })
     module_slug = module_data.get('slug') or derive_slug(entry_name)
-    raw_module_ignore = module_data.get('ignore', []) or []
-    module_ignore_patterns = [str(p) for p in raw_module_ignore]
+    module_ignore_patterns = _course_ignore_patterns(module_data)
     return module_slug, module_ignore_patterns
 
 
@@ -1586,8 +1585,7 @@ def _sync_module_dir(
     # get swept by the end-of-sync cleanup.
     seen_module_paths.add(rel_path)
 
-    raw_module_ignore = module_data.get('ignore', []) or []
-    module_ignore_patterns = [str(p) for p in raw_module_ignore]
+    module_ignore_patterns = _course_ignore_patterns(module_data)
 
     submodule_entries = _find_module_dir_entries(
         entry.path, course_ignore_patterns, course_dir,
@@ -1730,9 +1728,7 @@ def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patte
             module_data = _parse_yaml_file(module_yaml_path) or {}
         except ValueError:
             module_data = {}
-        module_ignore_patterns = [
-            str(p) for p in (module_data.get('ignore', []) or [])
-        ]
+        module_ignore_patterns = _course_ignore_patterns(module_data)
 
         _collect_dir(entry.path, module_ignore_patterns)
 
@@ -1744,9 +1740,7 @@ def _precompute_course_unit_identities(course_dir, repo_dir, course_ignore_patte
                 sub_data = _parse_yaml_file(sub_yaml_path) or {}
             except ValueError:
                 sub_data = {}
-            sub_ignore_patterns = [
-                str(p) for p in (sub_data.get('ignore', []) or [])
-            ]
+            sub_ignore_patterns = _course_ignore_patterns(sub_data)
             _collect_dir(sub_entry.path, sub_ignore_patterns)
 
     return seen_paths, seen_content_ids

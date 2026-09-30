@@ -7,7 +7,7 @@ Auto-onboards Maven cohort enrollees into the AI Shipping Labs community
 Slack workspace join link (issue #1665: enrollees are never invited to Slack
 directly). A cohort removal automatically ends the course and membership
 access Maven granted, emails the removed student, and then sends staff a
-summary of what was changed.
+short summary of what changed.
 
 The whole feature is off by default (`MAVEN_ENROLLMENT_ENABLED`). It is
 payment-independent (instructors free-enroll people), idempotent under Maven
@@ -74,10 +74,11 @@ rather than leaving enrollees untagged.
 ### MAVEN_REMOVAL_REVOKES_OVERRIDE
 
 Boolean, default `true`. When on, the `removal` step revokes the tier
-override the Maven flow granted (`source` starting with `maven:`) once the
-member has no other `lifecycle=active` Maven occurrence. Overrides staff
-granted by hand and paid Stripe tiers are never touched. When off, the
-override is kept and the staff summary says so.
+override the Maven flow granted (`source` starting with `maven:`) unless the
+member is active in a different Maven course or enrolled in another dated
+cohort (see `user_cohort.removed` below). Overrides staff granted by hand and
+paid Stripe tiers are never touched. When off, the override is kept and the
+staff summary says so.
 
 ### MAVEN_REMOVAL_STUDENT_EMAIL
 
@@ -353,27 +354,34 @@ given row and a person needs a manual nudge.
 
 `user_cohort.removed`:
 
-- Makes every automatic change first, then sends staff a summary built from
-  the real outcomes (same recipients as the paid-signup notification): course
-  access, cohort enrollment, event-series registration, tags, tier override,
-  student email, and Slack. The summary names the user, user ID, a Studio
-  link, and the cohort and course.
+- Makes every automatic change first, then sends staff a short summary
+  (same recipients as the paid-signup notification): one line naming the
+  member, cohort and course, a bullet per thing that actually changed or was
+  deliberately kept with a short reason (for example `Revoked the main
+  membership override.` or `Kept main access: also in cohort 2 of AI
+  Engineering Buildcamp.`), and the Studio link. Areas with nothing to do are
+  left out; when nothing changed at all it says `Nothing needed changing:
+  they had no access left.` An unknown email gets one sentence saying no
+  account uses it. The Slack post carries the same lines.
 - Revokes the Maven-granted tier override (`MAVEN_REMOVAL_REVOKES_OVERRIDE`,
-  default on) when the member has no other `lifecycle=active` Maven
-  occurrence. Only overrides whose `source` starts with `maven:` are revoked,
+  default on) unless the member has an active Maven occurrence for a
+  different course, or a `CohortEnrollment` in another dated cohort of any
+  course (a returning alumnus, for example cohort 2 then cohort 4). Another
+  active cohort of the same course alone does not keep it. Only overrides
+  whose `source` starts with `maven:` are revoked,
   through `payments.services.tier_override_revoke`, the same service as the
   Studio revoke button and `POST /api/tier-overrides/revoke`; each revoked row
   gets a `tier_override_revoked` audit row with `actor=maven_removal`. A
   staff-granted override is kept and named as "manual override". A
   sourceless override with no granter is kept and flagged for manual review,
-  because it cannot be told apart from an old manual grant. A member still in
-  another active cohort keeps the override. Paid Stripe tiers are never
-  touched. Re-enrolling in the same course and cohort reactivates the grant.
+  because it cannot be told apart from an old manual grant. Paid Stripe tiers
+  are never touched. Re-enrolling in the same course and cohort reactivates the grant.
 - Emails the removed student (`maven_removal`,
   `MAVEN_REMOVAL_STUDENT_EMAIL`, default on) after the automatic changes:
-  their course and membership access ended, the account still exists, and
-  how to have it deleted (Account, Privacy and data, Request account
-  deletion, or email the `PRIVACY_REQUEST_EMAIL` address). One email per
+  their course access ended (and membership, unless they still have main
+  access), the account is still there, and how to have it deleted (Request
+  account deletion under Privacy and data on the account page, or email the
+  `PRIVACY_REQUEST_EMAIL` address). One email per
   occurrence at most (idempotency key `maven_removal:<occurrence_id>`). Not
   sent while the student is still active in another cohort of the same
   course, or to complained, permanently bounced, or invalid addresses. The
@@ -385,10 +393,11 @@ given row and a person needs a manual nudge.
   "unknown user" note, no error).
 - Revokes the course grant and cohort membership (issue #1659): deletes the
   matching `CohortEnrollment` unconditionally, and deletes
-  `CourseAccess(access_type="granted")` for the resolved course only when the
-  user holds no other `lifecycle=active` occurrence still granting that
-  course (a member enrolled in a second, still-active cohort under the same
-  course keeps access). `access_type="purchased"` `CourseAccess` is never
+  `CourseAccess(access_type="granted")` for the resolved course unless the
+  user is active in a different cohort of the same course (a transfer). Both
+  sides resolve through `integrations/services/maven_matching.py`, so an
+  earlier active row for the same cohort under Maven's old keys (`4/11` vs
+  `4`) never keeps access. `access_type="purchased"` `CourseAccess` is never
   touched. When the cohort has a linked office-hours `EventSeries`, also
   deletes the standing `SeriesRegistration`. Resolution mirrors the
   `enrollment` step, but an occurrence whose course/cohort key never resolved

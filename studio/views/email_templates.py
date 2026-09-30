@@ -127,7 +127,7 @@ TEMPLATE_SENT_WHEN = {
     'event_workshop_ready': 'Sent to registered attendees when the related workshop is ready.',
     'free_welcome': 'Sent when a new Free member account is created.',
     'lead_magnet_delivery': 'Sent when a visitor requests a free lead-magnet resource.',
-    'maven_cohort_removal_notification': 'Sent to staff after a Maven cohort removal, listing what was changed automatically.',
+    'maven_cohort_removal_notification': 'Sent to staff after a Maven cohort removal, listing what changed.',
     'maven_enrollment_notification': 'Sent to staff when a new Maven enrollment occurrence is admitted.',
     'maven_removal': 'Sent to a student after a Maven cohort removal ends their course and membership access.',
     'maven_welcome': 'Sent when a Maven enrollee receives course access.',

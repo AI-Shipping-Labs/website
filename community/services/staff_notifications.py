@@ -226,9 +226,9 @@ def notify_maven_cohort_removal(user, cohort, course="", *, email=None, outcome=
     Mirrors ``notify_paid_signup``'s staff paths (recipient =
     ``STAFF_SIGNUP_NOTIFY_EMAIL`` plus the optional Slack staff channel).
     Called by the Maven ``removal`` step AFTER it has made every automatic
-    change; ``outcome`` is ``RemovalOutcome.as_context()`` — one human line
-    per area (course access, cohort enrollment, series registration, tags,
-    tier override, student email, Slack) describing what actually happened.
+    change; ``outcome`` is ``RemovalOutcome.as_context()`` — its
+    ``summary_lines`` are short sentences naming only what changed or was
+    deliberately kept.
 
     Best-effort: both sends are wrapped so a mail/Slack failure never raises
     out of this function (the webhook must not 500 on a notification failure).
@@ -438,8 +438,8 @@ def _build_removal_context(user, cohort, course, email):
             "removed_user_name": _or_dash(display_name),
             "removed_user_id": str(user.pk),
             "studio_user_url": f"{site_base_url().rstrip('/')}/studio/users/{user.pk}/",
-            "cohort": _or_dash(cohort),
-            "course": _or_dash(course),
+            "cohort": cohort or "",
+            "course": course or "",
         }
     return {
         "user_known": False,
@@ -447,8 +447,8 @@ def _build_removal_context(user, cohort, course, email):
         "removed_user_name": _DASH,
         "removed_user_id": _DASH,
         "studio_user_url": "",
-        "cohort": _or_dash(cohort),
-        "course": _or_dash(course),
+        "cohort": cohort or "",
+        "course": course or "",
     }
 
 
@@ -514,40 +514,30 @@ def _post_slack_removal_notification(channel_id, ctx):
     return True
 
 
-_REMOVAL_RESULT_LINES = (
-    ("Course access", "course_access_result"),
-    ("Cohort enrollment", "cohort_enrollment_result"),
-    ("Event series", "series_registration_result"),
-    ("Tags", "tags_result"),
-    ("Tier override", "override_result"),
-    ("Student email", "student_email_result"),
-    ("Slack", "slack_result"),
-)
+def _removal_where(ctx):
+    """``cohort 4 of AI Engineering Buildcamp``, dropping whatever is missing."""
+    where = f"cohort {ctx['cohort']}" if ctx.get("cohort") else "a cohort"
+    if ctx.get("course"):
+        where = f"{where} of {ctx['course']}"
+    return where
 
 
 def _build_removal_slack_text(ctx):
     """Compose the plain mrkdwn body for the removal staff heads-up."""
-    cohort_line = ctx["cohort"]
-    if ctx["course"] and ctx["course"] != _DASH:
-        cohort_line = f"{ctx['cohort']} ({ctx['course']})"
-    if ctx["user_known"]:
+    where = _removal_where(ctx)
+    if not ctx["user_known"]:
         return (
-            f"*Maven cohort removal:* {ctx['removed_user_name']} "
-            f"({ctx['removed_user_email']}) was removed from cohort "
-            f"`{cohort_line}`.\n"
-            f"*User ID:* {ctx['removed_user_id']} | "
-            f"*Studio:* <{ctx['studio_user_url']}|user page>\n"
-            + "\n".join(
-                f"*{label}:* {ctx[key]}"
-                for label, key in _REMOVAL_RESULT_LINES
-                if ctx.get(key)
-            )
+            f"*Maven removal:* {ctx['removed_user_email']} was removed from "
+            f"{where} on Maven. No account uses this email, so there was "
+            "nothing to do."
         )
-    return (
-        f"*Maven cohort removal:* unknown user `{ctx['removed_user_email']}` "
-        f"was removed from cohort `{cohort_line}` — no matching account. "
-        "No action taken."
-    )
+    who = ctx["removed_user_name"]
+    if who != ctx["removed_user_email"]:
+        who = f"{who} ({ctx['removed_user_email']})"
+    lines = [f"*Maven removal:* {who} was removed from {where} on Maven."]
+    lines.extend(f"• {line}" for line in ctx.get("summary_lines") or ())
+    lines.append(f"<{ctx['studio_user_url']}|Open in Studio>")
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------

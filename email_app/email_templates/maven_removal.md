@@ -1,13 +1,9 @@
 ---
-subject: "{% if course_name %}Your {{ course_name }} access has ended{% else %}Your course access has ended{% endif %}"
+subject: "{% if course_name %}Your access to {{ course_name }} has ended{% else %}Your course access has ended{% endif %}"
 ---
 
 Hi {{ user_name }},
 
-{% if course_name %}You have been removed from {{ course_name }} on Maven.{% else %}You have been removed from your Maven course cohort.{% endif %} Your course access and your membership access on AI Shipping Labs have ended.
+You're no longer enrolled in {% if course_name %}{{ course_name }}{% else %}your Maven course{% endif %}, so your access to the course{% if membership_ended != False %} and to AI Shipping Labs membership{% endif %} has ended.
 
-Your AI Shipping Labs account still exists, so you can still sign in.
-
-If you want your account and profile deleted completely, sign in, open your account page, scroll to Privacy and data, and click Request account deletion. The direct link is {{ account_deletion_url }}
-
-The team deletes the account and tells you when it is done, within one month at most. If you cannot sign in, email {{ privacy_email }} from this address and ask for your account to be deleted.
+Your account is still here. If you'd like it deleted, open {{ account_deletion_url }} and click "Request account deletion" under Privacy and data. We'll delete it within a month. If you can't sign in, email {{ privacy_email }}.

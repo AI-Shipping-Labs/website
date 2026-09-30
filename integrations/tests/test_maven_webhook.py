@@ -442,8 +442,8 @@ class MavenRemovedTest(TestCase):
         )
         self.assertEqual(response.json(), {"status": "removal_notified"})
         self.assertIn(
-            f"Kept: override #{override.pk}",
-            notify.call_args.kwargs["outcome"]["override_result"],
+            "Kept main access: the override has no recorded source, so check it in Studio.",
+            notify.call_args.kwargs["outcome"]["summary_lines"],
         )
 
         override.refresh_from_db()

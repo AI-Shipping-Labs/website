@@ -170,41 +170,6 @@ def _validate_workshop_core_tools(raw, yaml_rel_path):
     return cleaned
 
 
-def _dispatch_workshops(source, repo_dir, workshop_dirs, commit_sha, stats,
-                        known_images=None, cross_workshop_lookup=None,
-                        workshops_repo_name=None):
-    """Walker dispatch handler: process workshop directories.
-
-    ``workshop_dirs`` is the list of absolute paths to dirs containing
-    ``workshop.yaml`` (collected by ``_classify_repo_files``).
-
-    Stale workshops (folder deleted between syncs) are set to
-    ``status='draft'``. The linked Event is NOT unpublished — it's
-    standalone and may have been edited independently in Studio.
-
-    ``cross_workshop_lookup`` (issue #526) is the sync-wide
-    ``{folder_name: workshop-meta}`` map built by
-    ``_build_cross_workshop_lookup``. It is threaded down so each page's
-    body can resolve cross-workshop ``..``-style and absolute-GitHub URL
-    links to native ``/workshops/<slug>`` URLs. ``workshops_repo_name``
-    pairs with it so the GitHub-URL detector matches the right host.
-    """
-    seen_slugs = set()
-    failed_slugs = set()
-
-    for workshop_path in workshop_dirs:
-        _sync_single_workshop(
-            workshop_path, repo_dir, source, commit_sha, stats,
-            seen_slugs, failed_slugs, known_images=known_images,
-            cross_workshop_lookup=cross_workshop_lookup,
-            workshops_repo_name=workshops_repo_name,
-        )
-
-    _cleanup_stale_workshops_for_source(
-        source, seen_slugs, failed_slugs, stats,
-    )
-
-
 class WorkshopsParser(FamilyParser):
     content_type = 'workshops'
     state_name = 'workshops'

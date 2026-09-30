@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load accounts_extras layout_components member_empty_state %}
 
 {% block title %}Onboarding complete | {{ site_name }}{% endblock %}
 
@@ -10,68 +11,71 @@
     <div class="absolute inset-0 hero-gradient"></div>
     <div class="relative mx-auto max-w-3xl px-4 py-16 sm:px-6 lg:px-8">
 
-      <header class="mb-8">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
-        <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-complete-title">
+      <header>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Onboarding</p>
+        <h1 class="mt-1 text-3xl font-semibold tracking-tight" data-testid="onboarding-complete-title">
           You've completed onboarding
         </h1>
-        <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-complete-subtitle">
-          Thanks — Alexey will use your answers to prepare your
-          sprint plan. This usually takes 1-2 business days, and you will get
-          a bell notification and email when it is ready.
+        <p class="mt-2 text-sm text-muted-foreground" data-testid="onboarding-complete-subtitle">
+          Thanks — Alexey will use your answers to prepare your sprint plan.
+          This usually takes 1-2 business days, and you will get a bell
+          notification and email when it is ready.
         </p>
-        <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-complete-review-copy">
-          Your submitted answers are below for review.
-        </p>
-
-        {% if valeria_booking_url or alexey_booking_url %}
-        <div class="mt-6 rounded-2xl border border-accent/40 bg-accent/10 p-5" data-testid="onboarding-complete-book-block">
-          <p class="text-base font-medium text-foreground">We'd love to meet you.</p>
-          <p class="text-sm text-muted-foreground mt-1">
-            Book a quick 1:1 with one of the founders to kick things off.
-          </p>
-          <div class="mt-4 flex flex-wrap gap-3">
-            {% if valeria_booking_url %}
-            <a href="{{ valeria_booking_url }}" target="_blank" rel="noopener noreferrer"
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-               data-testid="onboarding-complete-book-valeria">
-              Book a call with Valeria
-            </a>
-            {% endif %}
-            {% if alexey_booking_url %}
-            <a href="{{ alexey_booking_url }}" target="_blank" rel="noopener noreferrer"
-               class="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-               data-testid="onboarding-complete-book-alexey">
-              Book a call with Alexey
-            </a>
-            {% endif %}
-          </div>
-        </div>
-        {% endif %}
-
-        <div class="mt-4 flex flex-wrap gap-3">
-          <a href="{% url 'home' %}"
-             class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
-             data-testid="onboarding-complete-plan-link">
-            Go to your dashboard
-          </a>
-        </div>
       </header>
 
-      <div class="space-y-4">
-        {% for row in rows %}
-        <div class="rounded-2xl border border-border bg-card p-5" data-testid="onboarding-complete-row">
-          <h2 class="text-sm font-medium text-foreground" data-testid="onboarding-complete-prompt">{{ row.question.prompt }}</h2>
-          <div class="mt-2 text-sm">
-            {% if row.is_answered %}
-            <p class="text-foreground whitespace-pre-line" data-testid="onboarding-complete-answer">{{ row.answer.display_value }}</p>
-            {% else %}
-            <p class="text-muted-foreground italic" data-testid="onboarding-complete-blank">(No answer)</p>
-            {% endif %}
-          </div>
+      {% if valeria_booking_url or alexey_booking_url %}
+      <div class="mt-6 rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="onboarding-complete-book-block">
+        <p class="text-lg font-semibold text-foreground">We'd love to meet you</p>
+        <p class="mt-1 text-sm text-muted-foreground">
+          Book a quick 1:1 with one of the founders to kick things off.
+        </p>
+        <div class="mt-4 flex flex-wrap gap-3">
+          {% if alexey_booking_url %}
+          <a href="{{ alexey_booking_url }}" target="_blank" rel="noopener noreferrer"
+             class="{% button_classes 'primary' %}"
+             data-testid="onboarding-complete-book-alexey">
+            Book a call with Alexey
+          </a>
+          {% endif %}
+          {% if valeria_booking_url %}
+          <a href="{{ valeria_booking_url }}" target="_blank" rel="noopener noreferrer"
+             class="{% if alexey_booking_url %}{% button_classes 'secondary' %}{% else %}{% button_classes 'primary' %}{% endif %}"
+             data-testid="onboarding-complete-book-valeria">
+            Book a call with Valeria
+          </a>
+          {% endif %}
         </div>
-        {% endfor %}
       </div>
+      {% endif %}
+
+      <a href="{% url 'home' %}"
+         class="mt-4 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         data-testid="onboarding-complete-plan-link">
+        Go to your dashboard
+        <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
+      </a>
+
+      <section class="mt-10" aria-labelledby="onboarding-answers-heading" data-testid="onboarding-complete-answers">
+        {% url 'onboarding_questions' as edit_answers_url %}
+        {% if answered_rows %}
+        {% section_header "Your answers" heading_id="onboarding-answers-heading" see_all_url=edit_answers_url see_all_label="Edit answers" see_all_testid="onboarding-complete-edit-link" extra="mb-3" %}
+        <dl class="divide-y divide-border border-y border-border">
+          {% for row in answered_rows %}
+          <div class="py-3" data-testid="onboarding-complete-row">
+            <dt class="text-sm text-muted-foreground" data-testid="onboarding-complete-prompt">{{ row.prompt }}</dt>
+            <dd class="mt-1 whitespace-pre-line break-words text-sm text-foreground" data-testid="onboarding-complete-answer">{{ row.display }}</dd>
+          </div>
+          {% endfor %}
+        </dl>
+        {% if unanswered_rows %}
+        {% include "includes/_accordion.html" with summary=unanswered_summary testid="onboarding-complete-unanswered" body_template="accounts/_onboarding_unanswered_list.html" details_extra_class="mt-4" %}
+        {% endif %}
+        {% else %}
+        {% section_header "Your answers" heading_id="onboarding-answers-heading" extra="mb-3" %}
+        {% button_classes 'secondary' as add_answers_class %}
+        {% member_empty_state title="No answers yet" body="Your onboarding was submitted without answers. Add them so Alexey can prepare the right plan for you." icon="clipboard-list" primary_cta_label="Add your answers" primary_cta_url=edit_answers_url primary_cta_class=add_answers_class testid="onboarding-complete-empty" %}
+        {% endif %}
+      </section>
 
     </div>
   </section>

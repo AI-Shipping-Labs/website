@@ -6,6 +6,8 @@ materialize a response's question set from the questionnaire's base
 question set. It is pure-Python and ORM-only -- no HTTP, no AI.
 """
 
+import re
+
 from questionnaires.models import (
     Answer,
     AnswerOptionText,
@@ -95,6 +97,11 @@ def build_response_questions(response):
             )
         created.append(rq)
     return created
+
+
+# Matches an answer field (``question_<pk>``) or a choice free-text field
+# (``question_<pk>_option_<pk>_text``) and captures the question pk.
+_QUESTION_FIELD_RE = re.compile(r'^question_(\d+)(?:_option_\d+_text)?$')
 
 
 def _field_name(response_question):
@@ -347,3 +354,35 @@ def find_unanswered_required(response):
             if not answer.selected_options.exists():
                 missing.append(rq)
     return missing
+
+
+def posted_stale_question_fields(response, post_data):
+    """True when ``post_data`` answers questions ``response`` no longer has.
+
+    Answer fields are keyed by ``ResponseQuestion`` pk. When a response's
+    question set is rebuilt after the form was rendered (for example the
+    onboarding persona switch re-materializes it), an old form posts field
+    names for deleted questions. :func:`save_response_answers` would ignore
+    those and write blanks for every current question, silently losing the
+    member's answers, so callers reject such a post instead.
+    """
+    current = set(
+        response.response_questions.values_list('pk', flat=True),
+    )
+    for key in post_data:
+        match = _QUESTION_FIELD_RE.match(key)
+        if match and int(match.group(1)) not in current:
+            return True
+    return False
+
+
+def has_any_answer(response):
+    """True when at least one question on ``response`` has a non-empty answer."""
+    for answer in response.answers.prefetch_related('selected_options'):
+        if (answer.text_value or '').strip():
+            return True
+        if answer.number_value is not None:
+            return True
+        if answer.selected_options.all():
+            return True
+    return False

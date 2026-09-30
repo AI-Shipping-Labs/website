@@ -280,7 +280,10 @@ class TestSwitchToForm:
                 '[data-testid="onboarding-switch-to-chat"]'
             ).is_visible()
             _shot(page, "switched_to_form")
-            # They can submit the form (generic questions are optional).
+            # They can answer and submit the form.
+            page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+                "Ship a demo",
+            )
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")
 
@@ -321,6 +324,10 @@ class TestFailureFallback:
                 state="visible",
             )
             _shot(page, "failure_fallback")
+            # An empty onboarding cannot be submitted; answer one question.
+            page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+                "Ship a demo",
+            )
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")
 

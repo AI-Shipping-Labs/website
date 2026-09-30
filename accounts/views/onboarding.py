@@ -23,6 +23,7 @@ from questionnaires.models import OnboardingConversation, Response
 from questionnaires.onboarding import (
     ai_onboarding_available,
     can_access_onboarding,
+    flatten_response_answers,
     get_generic_onboarding_questionnaire,
     get_onboarding_response,
     reroute_onboarding_response,
@@ -34,8 +35,16 @@ from questionnaires.services import (
     build_response_form_rows,
     build_response_questions,
     find_unanswered_required,
+    has_any_answer,
+    posted_stale_question_fields,
     resolve_persona_for_questionnaire,
     save_response_answers,
+)
+
+EMPTY_SUBMIT_ERROR = 'Answer at least one question before submitting.'
+STALE_FORM_ERROR = (
+    'Your questions changed after this page loaded, so these answers '
+    'were not saved. Please answer again and submit.'
 )
 
 
@@ -187,25 +196,6 @@ def _get_member_onboarding_response_or_404(request, response_id):
     )
 
 
-def _read_only_rows(response):
-    """Build read-only Q&A rows for a submitted onboarding response."""
-    answers_by_question = {
-        a.question_id: a
-        for a in response.answers.prefetch_related(
-            'selected_options', 'option_texts',
-        ).all()
-    }
-    rows = []
-    for rq in response.response_questions.all():
-        answer = answers_by_question.get(rq.pk)
-        rows.append({
-            'question': rq,
-            'answer': answer,
-            'is_answered': answer is not None and answer.display_value != '',
-        })
-    return rows
-
-
 def _founder_booking_urls():
     """Founder booking URLs for the completion screen CTAs (#951).
 
@@ -232,15 +222,81 @@ def _render_onboarding_complete(request, response):
     """Render the end-of-onboarding completion screen for a submitted response.
 
     Shared by the self-ID resume path and both finish flows (form submit +
-    AI chat). Surfaces the read-only answers plus the founder booking-call
-    CTAs (#951).
+    AI chat). Surfaces the answers as a compact list -- answered questions
+    first-class, unanswered ones collapsed -- plus the founder booking-call
+    CTAs (#951) and the member's "Edit answers" entry point.
     """
+    rows = flatten_response_answers(response)
+    unanswered_rows = [row for row in rows if not row['answered']]
+    unanswered_count = len(unanswered_rows)
     context = {
         'response': response,
-        'rows': _read_only_rows(response),
+        'answered_rows': [row for row in rows if row['answered']],
+        'unanswered_rows': unanswered_rows,
+        'unanswered_summary': (
+            f'{unanswered_count} '
+            f'{"question" if unanswered_count == 1 else "questions"} '
+            'not answered'
+        ),
     }
     context.update(_founder_booking_urls())
     return render(request, 'accounts/onboarding_complete.html', context)
+
+
+def _fill_context(response, form_rows, *, error=''):
+    """Template context for the fill page, in draft or edit mode.
+
+    A SUBMITTED response renders the same form in edit mode: prefilled,
+    with a single "Save answers" action and without the draft-only
+    persona switch and chat links.
+    """
+    editing = response.status == 'submitted'
+    return {
+        'response': response,
+        'form_rows': form_rows,
+        'error': error,
+        'editing': editing,
+        'chat_available': not editing and ai_onboarding_available(),
+    }
+
+
+def _render_fill_error(request, response, *, error, status, post_data=None,
+                       field_errors=None):
+    form_rows = build_response_form_rows(
+        response, post_data=post_data, field_errors=field_errors,
+    )
+    return render(
+        request, 'accounts/onboarding_fill.html',
+        _fill_context(response, form_rows, error=error),
+        status=status,
+    )
+
+
+def _save_posted_answers(request, response, *, require_choice_free_text):
+    """Validate and save posted answers; return an error response or ``None``.
+
+    Rejects a stale form -- one whose fields name questions this response no
+    longer has (its question set was rebuilt after the page loaded) -- instead
+    of silently saving blanks over every current question.
+    """
+    if posted_stale_question_fields(response, request.POST):
+        return _render_fill_error(
+            request, response, error=STALE_FORM_ERROR, status=409,
+        )
+    try:
+        save_response_answers(
+            response, request.POST,
+            require_choice_free_text=require_choice_free_text,
+        )
+    except AnswerSaveError as exc:
+        return _render_fill_error(
+            request, response,
+            error='Please fix the highlighted answers.',
+            status=400,
+            post_data=request.POST,
+            field_errors=exc.field_errors,
+        )
+    return None
 
 
 def _render_onboarding_fill(request, response):
@@ -249,43 +305,28 @@ def _render_onboarding_fill(request, response):
     Shared by the id-free member-facing route (:func:`onboarding_fill_current`)
     and the numeric back-compat route (:func:`onboarding_fill`). GET
     pre-fills existing answers; POST upserts answers (save draft). A
-    submitted response is read-only — editing after submit is not offered
-    to members. The save-draft success redirect lands on the id-free
-    member-facing URL so the member never sees the DB id.
+    submitted response renders in edit mode and its POST goes through the
+    same save-and-resubmit path as :func:`onboarding_submit`, so answers
+    posted after submission are never discarded. The save-draft success
+    redirect lands on the id-free member-facing URL so the member never
+    sees the DB id.
     """
     if request.method == 'POST':
         if response.status == 'submitted':
-            messages.info(
-                request,
-                'Your onboarding was already submitted. Contact the team if '
-                'you need to change an answer.',
-            )
-            return redirect('onboarding_start')
-        try:
-            save_response_answers(response, request.POST)
-        except AnswerSaveError as exc:
-            form_rows = build_response_form_rows(
-                response, post_data=request.POST, field_errors=exc.field_errors,
-            )
-            return render(request, 'accounts/onboarding_fill.html', {
-                'response': response,
-                'form_rows': form_rows,
-                'error': 'Please fix the highlighted answers.',
-                'chat_available': ai_onboarding_available(),
-            }, status=400)
+            return _submit_onboarding_answers(request, response)
+        error_response = _save_posted_answers(
+            request, response, require_choice_free_text=False,
+        )
+        if error_response is not None:
+            return error_response
         messages.success(request, 'Saved. You can come back to finish.')
         return redirect('onboarding_questions')
 
-    if response.status == 'submitted':
-        return redirect('onboarding_start')
-
     form_rows = build_response_form_rows(response)
-    return render(request, 'accounts/onboarding_fill.html', {
-        'response': response,
-        'form_rows': form_rows,
-        'error': '',
-        'chat_available': ai_onboarding_available(),
-    })
+    return render(
+        request, 'accounts/onboarding_fill.html',
+        _fill_context(response, form_rows),
+    )
 
 
 @login_required
@@ -330,50 +371,77 @@ def onboarding_fill(request, response_id):
 @login_required
 @require_POST
 def onboarding_submit(request, response_id):
-    """Validate required answers, mark submitted, redirect with thanks."""
+    """Validate answers, mark submitted, and land on the completion screen.
+
+    Also the save action of the post-submit edit form: a SUBMITTED response
+    has its answers updated and is re-submitted (back into the staff review
+    queue) rather than rejected.
+    """
     gate = _onboarding_gate_redirect(request)
     if gate is not None:
         return gate
 
     response = _get_member_onboarding_response_or_404(request, response_id)
+    return _submit_onboarding_answers(request, response)
 
-    if response.status == 'submitted':
-        messages.info(request, 'Your onboarding was already submitted.')
-        return redirect('onboarding_start')
 
-    try:
-        save_response_answers(
-            response, request.POST, require_choice_free_text=True,
-        )
-    except AnswerSaveError as exc:
-        form_rows = build_response_form_rows(
-            response, post_data=request.POST, field_errors=exc.field_errors,
-        )
-        return render(request, 'accounts/onboarding_fill.html', {
-            'response': response,
-            'form_rows': form_rows,
-            'error': 'Please fix the highlighted answers.',
-        }, status=400)
+def _answer_values(response):
+    """Comparable snapshot of every answer on ``response`` (edit detection)."""
+    return [
+        (row['prompt'], row['display'])
+        for row in flatten_response_answers(response)
+    ]
+
+
+def _submit_onboarding_answers(request, response):
+    """Save posted answers and (re-)submit ``response``.
+
+    First submission and later edits share one path: validate and save the
+    answers, require every required question plus at least one answer (an
+    empty onboarding tells the team nothing), then ``mark_submitted()``
+    (which returns an edited response to the review queue) and notify
+    staff. Edits say "updated" in the notification and the flash message;
+    an edit that changes nothing (a double-click) re-queues and notifies
+    nothing.
+    """
+    is_update = response.status == 'submitted'
+    answers_before = _answer_values(response) if is_update else None
+
+    error_response = _save_posted_answers(
+        request, response, require_choice_free_text=True,
+    )
+    if error_response is not None:
+        return error_response
 
     missing = find_unanswered_required(response)
     if missing:
         prompts = ', '.join(rq.prompt for rq in missing)
-        form_rows = build_response_form_rows(
-            response,
+        return _render_fill_error(
+            request, response,
+            error=f'Please answer the required question(s): {prompts}',
+            status=400,
             field_errors={rq.pk: 'This question is required.' for rq in missing},
         )
-        return render(request, 'accounts/onboarding_fill.html', {
-            'response': response,
-            'form_rows': form_rows,
-            'error': f'Please answer the required question(s): {prompts}',
-        }, status=400)
+
+    if not has_any_answer(response):
+        return _render_fill_error(
+            request, response, error=EMPTY_SUBMIT_ERROR, status=400,
+        )
+
+    if is_update and _answer_values(response) == answers_before:
+        # A double-click or an unchanged edit: nothing new for staff.
+        messages.info(request, 'No changes to save.')
+        return redirect('onboarding_start')
 
     response.mark_submitted()
-    notify_staff_onboarding_submitted(request.user)
-    messages.success(
-        request,
-        "Thanks — we'll use this to prepare your plan.",
-    )
+    notify_staff_onboarding_submitted(request.user, updated=is_update)
+    if is_update:
+        messages.success(request, 'Your answers were updated.')
+    else:
+        messages.success(
+            request,
+            "Thanks — we'll use this to prepare your plan.",
+        )
     # Land on the end-of-onboarding completion screen (#951) so the new
     # member sees the founder booking CTAs. ``onboarding_start`` renders the
     # completion screen for a submitted response.

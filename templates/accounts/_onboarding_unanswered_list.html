@@ -1,0 +1,5 @@
+<ul class="space-y-1 text-sm text-muted-foreground" data-testid="onboarding-complete-unanswered-list">
+  {% for row in unanswered_rows %}
+  <li data-testid="onboarding-complete-unanswered-prompt">{{ row.prompt }}</li>
+  {% endfor %}
+</ul>

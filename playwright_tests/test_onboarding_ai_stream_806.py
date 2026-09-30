@@ -449,6 +449,10 @@ class TestStreamFailureToForm:
                 )
                 assert "switch to a quick form instead" in recovery_notice.inner_text()
             _shot(page, "stream_failure_form")
+            # An empty onboarding cannot be submitted; answer one question.
+            page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+                "Ship a demo",
+            )
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")
 
@@ -733,6 +737,10 @@ class TestPreferForm:
                 page.locator('[data-testid="onboarding-identify-form"]')
             ).to_have_count(0)
             _shot(page, "stream_switch_to_form")
+            # An empty onboarding cannot be submitted; answer one question.
+            page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+                "Ship a demo",
+            )
             page.locator('[data-testid="questionnaire-submit-button"]').click()
             page.wait_for_load_state("domcontentloaded")
 

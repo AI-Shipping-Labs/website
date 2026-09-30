@@ -15,14 +15,20 @@
       {% include "_partials/messages.html" %}
 
       <header class="mb-8">
-        <p class="text-sm uppercase tracking-wide text-muted-foreground">Onboarding</p>
+        <p class="text-sm font-medium uppercase tracking-widest text-accent">Onboarding</p>
         <h1 class="text-3xl font-semibold tracking-tight mt-1" data-testid="onboarding-fill-title">
-          Tell us a bit about you
+          {% if editing %}Edit your answers{% else %}Tell us a bit about you{% endif %}
         </h1>
         <p class="text-sm text-muted-foreground mt-2" data-testid="onboarding-fill-subtitle">
+          {% if editing %}
+          Change anything that is new or missing. Saving sends your updated
+          answers to the team.
+          {% else %}
           Your answers help us prepare the right plan for the next 6 to 8 weeks.
           You can save and come back any time before submitting.
+          {% endif %}
         </p>
+        {% if not editing %}
         <p class="text-sm mt-3">
           <a href="{% url 'onboarding_start' %}?change=1"
              class="text-accent hover:underline"
@@ -30,6 +36,7 @@
             Not the right fit? Change your answer / pick a different description
           </a>
         </p>
+        {% endif %}
         {% if chat_available %}
         <p class="mt-2 text-xs text-muted-foreground">
           Prefer a chat?
@@ -49,7 +56,12 @@
 
       {% url 'onboarding_fill' response_id=response.pk as save_action %}
       {% url 'onboarding_submit' response_id=response.pk as submit_action %}
+      {% if editing %}
+      {% url 'onboarding_start' as cancel_url %}
+      {% include "questionnaires/_response_form.html" with form_rows=form_rows save_action=submit_action submit_action=submit_action submit_label="Save answers" hide_save_draft=True cancel_url=cancel_url cancel_label="Cancel" %}
+      {% else %}
       {% include "questionnaires/_response_form.html" with form_rows=form_rows save_action=save_action submit_action=submit_action submit_label="Submit" %}
+      {% endif %}
 
     </div>
   </section>

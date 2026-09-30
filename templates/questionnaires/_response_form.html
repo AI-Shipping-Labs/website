@@ -10,6 +10,10 @@ Callers provide:
   - ``submit_label`` (optional): label for the submit button. Defaults to
     "Submit feedback" so the sprint-feedback caller is unchanged; the
     onboarding caller (#802) passes its own label.
+  - ``hide_save_draft`` (optional): omit the "Save draft" button, for a
+    single-action edit form (the onboarding post-submit edit).
+  - ``cancel_url`` / ``cancel_label`` (optional): a secondary link back
+    out of the form, rendered after the buttons.
 
 The fragment renders ONE <form> that contains every input. Both the
 "Save draft" and "Submit" buttons live inside it; ``Save`` uses the
@@ -17,6 +21,7 @@ default action while ``Submit`` overrides via ``formaction`` so both
 buttons carry the same answer fields. Keep this fragment generic -- no
 sprint-specific copy lives here.
 {% endcomment %}
+{% load accounts_extras %}
 <form method="post" action="{{ save_action }}" data-testid="questionnaire-response-form">
   {% csrf_token %}
   <div class="space-y-6">
@@ -123,15 +128,24 @@ sprint-specific copy lives here.
   </div>
 
   <div class="mt-6 flex flex-wrap items-center gap-3">
+    {% if not hide_save_draft %}
     <button type="submit"
-            class="rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors"
+            class="{% button_classes 'secondary' %}"
             data-testid="questionnaire-save-button">
       Save draft
     </button>
+    {% endif %}
     <button type="submit" formaction="{{ submit_action }}"
-            class="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground hover:opacity-90 transition-opacity"
+            class="{% button_classes 'primary' %}"
             data-testid="questionnaire-submit-button">
       {{ submit_label|default:"Submit feedback" }}
     </button>
+    {% if cancel_url %}
+    <a href="{{ cancel_url }}"
+       class="{% button_classes 'secondary' %}"
+       data-testid="questionnaire-cancel-link">
+      {{ cancel_label|default:"Cancel" }}
+    </a>
+    {% endif %}
   </div>
 </form>

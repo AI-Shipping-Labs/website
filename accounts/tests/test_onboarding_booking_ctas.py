@@ -37,11 +37,15 @@ def _submit_onboarding(client):
 
     Returns the submitted ``Response``. The member is already logged in on
     ``client``. Uses the ``none`` self-ID (generic questionnaire) and answers
-    any required questions so ``onboarding_submit`` marks it submitted.
+    any required questions plus one text question (an empty onboarding
+    cannot be submitted) so ``onboarding_submit`` marks it submitted.
     """
     client.post(reverse('onboarding_identify'), {'self_id': 'none'})
     response = Response.objects.get()
-    post = {}
+    first_text = response.response_questions.filter(
+        question_type__in=('text', 'long_text'),
+    ).first()
+    post = {f'question_{first_text.pk}': 'my goal'}
     for rq in response.response_questions.filter(is_required=True):
         field = f'question_{rq.pk}'
         if rq.question_type in ('text', 'long_text'):

@@ -10,6 +10,8 @@ The four personas and their onboarding questionnaires (plus the generic
 ``questionnaires.0003`` and are available in the test DB.
 """
 
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -27,6 +29,7 @@ from questionnaires.models import (
     ResponseQuestion,
 )
 from questionnaires.onboarding import GENERIC_ONBOARDING_SLUG
+from questionnaires.services import build_response_questions
 from tests.fixtures import set_membership
 
 User = get_user_model()
@@ -199,7 +202,10 @@ class OnboardingCompletionGatingTest(TestCase):
         self.assertNotContains(resp, 'data-testid="onboarding-prompt"')
 
     def _answer_required_and_submit(self, response):
-        post = {}
+        first_text = response.response_questions.filter(
+            question_type__in=('text', 'long_text'),
+        ).first()
+        post = {f'question_{first_text.pk}': 'answer'}
         for rq in response.response_questions.filter(is_required=True):
             field = f'question_{rq.pk}'
             if rq.question_type in ('text', 'long_text'):
@@ -383,12 +389,6 @@ class OnboardingCompletedConfirmationTest(TestCase):
         # Not re-asking the self-ID question.
         self.assertNotContains(resp, 'data-testid="onboarding-identify-form"')
 
-    def test_get_fill_after_submit_redirects_to_completion(self):
-        resp = self.client.get(
-            reverse('onboarding_fill', kwargs={'response_id': self.response.pk}),
-        )
-        self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp['Location'], reverse('onboarding_start'))
 
 
 @override_settings(ONBOARDING_AI_ENABLED='false')
@@ -639,10 +639,199 @@ class OnboardingQuestionsIdFreeUrlTest(TestCase):
         follow = self.client.get(reverse('onboarding_questions'))
         self.assertContains(follow, 'my saved answer')
 
-    def test_questions_url_after_submit_redirects_to_completion(self):
-        response = self._start_draft()
-        response.status = 'submitted'
-        response.save(update_fields=['status'])
+
+
+def _first_text_question(response):
+    return response.response_questions.filter(
+        question_type__in=('text', 'long_text'),
+    ).order_by('order', 'id').first()
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingSkipRestartSubmitRegressionTest(TestCase):
+    """Member report: skip, restart, answer everything, finish -> answers kept."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(email='skip-restart@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
+
+    def setUp(self):
+        self.client.force_login(self.member)
+
+    def test_skip_then_restart_then_answer_then_complete_keeps_answers(self):
+        # Dashboard checklist "Skip".
+        self.client.post(
+            '/account/api/dismiss-card',
+            data='{"card": "getting_started_skip_onboarding"}',
+            content_type='application/json',
+        )
+        self.member.refresh_from_db()
+        self.assertIn(
+            'getting_started_skip_onboarding', self.member.dashboard_dismissals,
+        )
+        # The skipped row still links to /onboarding/: the restart.
+        restart = self.client.get('/onboarding/')
+        self.assertTemplateUsed(restart, 'accounts/onboarding_start.html')
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        response = Response.objects.get(respondent=self.member)
+        text_rq = _first_text_question(response)
+        number_rq = response.response_questions.get(question_type='number')
+
+        submitted = self.client.post(
+            reverse('onboarding_submit', kwargs={'response_id': response.pk}),
+            {
+                f'question_{text_rq.pk}': 'Ship a RAG demo',
+                f'question_{number_rq.pk}': '6',
+            },
+        )
+        self.assertEqual(submitted.status_code, 302)
+
+        response.refresh_from_db()
+        self.assertEqual(response.status, 'submitted')
+        page = self.client.get('/onboarding/')
+        answers = [row['display'] for row in page.context['answered_rows']]
+        self.assertEqual(answers[:1], ['Ship a RAG demo'])
+        self.assertIn('6', answers)
+
+    def test_form_posted_after_submit_updates_answers_instead_of_dropping(self):
+        # First pass submits almost nothing; a second pass through the same
+        # (back-navigated) form must not be discarded.
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        response = Response.objects.get(respondent=self.member)
+        text_rq = _first_text_question(response)
+        submit_url = reverse('onboarding_submit', kwargs={'response_id': response.pk})
+        self.client.post(submit_url, {f'question_{text_rq.pk}': 'first'})
+
+        self.client.post(submit_url, {f'question_{text_rq.pk}': 'second pass'})
+
+        answer = Answer.objects.get(response=response, question=text_rq)
+        self.assertEqual(answer.text_value, 'second pass')
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingSubmitGuardsTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(email='guards@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
+
+    def setUp(self):
+        self.client.force_login(self.member)
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        self.response = Response.objects.get(respondent=self.member)
+        self.submit_url = reverse(
+            'onboarding_submit', kwargs={'response_id': self.response.pk},
+        )
+
+    def test_empty_submit_is_rejected_and_stays_draft(self):
+        resp = self.client.post(self.submit_url, {})
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(
+            resp.context['error'], 'Answer at least one question before submitting.',
+        )
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.status, 'draft')
+
+    def test_stale_question_ids_are_rejected_without_blanking_answers(self):
+        text_rq = _first_text_question(self.response)
+        Answer.objects.create(
+            response=self.response, question=text_rq, text_value='kept',
+        )
+        resp = self.client.post(self.submit_url, {'question_999999': 'lost'})
+        self.assertEqual(resp.status_code, 409)
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.status, 'draft')
+        self.assertEqual(
+            Answer.objects.get(response=self.response, question=text_rq).text_value,
+            'kept',
+        )
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingEditAnswersTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(email='edit@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
+
+    def setUp(self):
+        self.client.force_login(self.member)
+        self.client.post(reverse('onboarding_identify'), {'self_id': 'none'})
+        self.response = Response.objects.get(respondent=self.member)
+        self.text_rq = _first_text_question(self.response)
+        self.client.post(
+            reverse('onboarding_submit', kwargs={'response_id': self.response.pk}),
+            {f'question_{self.text_rq.pk}': 'original goal'},
+        )
+        self.response.refresh_from_db()
+
+    def test_questions_page_after_submit_is_prefilled_edit_form(self):
         resp = self.client.get(reverse('onboarding_questions'))
-        self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp['Location'], reverse('onboarding_start'))
+        self.assertTrue(resp.context['editing'])
+        row = next(
+            r for r in resp.context['form_rows'] if r['question'].pk == self.text_rq.pk
+        )
+        self.assertEqual(row['text_value'], 'original goal')
+        self.assertNotContains(resp, 'data-testid="questionnaire-save-button"')
+        self.assertNotContains(resp, 'data-testid="onboarding-change-description"')
+
+    def test_saving_edit_updates_answer_requeues_and_notifies_update(self):
+        self.response.reviewed_at = self.response.submitted_at
+        self.response.save(update_fields=['reviewed_at'])
+        with patch(
+            'accounts.views.onboarding.notify_staff_onboarding_submitted',
+        ) as notify:
+            resp = self.client.post(
+                reverse('onboarding_submit', kwargs={'response_id': self.response.pk}),
+                {f'question_{self.text_rq.pk}': 'updated goal'},
+                follow=True,
+            )
+        notify.assert_called_once_with(self.member, updated=True)
+        self.response.refresh_from_db()
+        self.assertEqual(self.response.review_state, 'awaiting')
+        self.assertEqual(
+            Answer.objects.get(response=self.response, question=self.text_rq).text_value,
+            'updated goal',
+        )
+        messages = [m.message for m in resp.context['messages']]
+        self.assertIn('Your answers were updated.', messages)
+
+
+@override_settings(ONBOARDING_AI_ENABLED='false')
+class OnboardingCompletionAnswerListTest(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.member = User.objects.create_user(email='list@test.com', password='pw')
+        set_membership(cls.member, tier=_basic_tier())
+        generic = Questionnaire.objects.get(slug=GENERIC_ONBOARDING_SLUG)
+        cls.response = Response.objects.create(
+            questionnaire=generic, respondent=cls.member, status='submitted',
+        )
+        build_response_questions(cls.response)
+        cls.total = cls.response.response_questions.count()
+
+    def setUp(self):
+        self.client.force_login(self.member)
+
+    def test_empty_submission_shows_add_answers_empty_state(self):
+        resp = self.client.get('/onboarding/')
+        self.assertContains(resp, 'data-testid="onboarding-complete-empty"')
+        self.assertContains(resp, 'Add your answers')
+        self.assertNotContains(resp, 'data-testid="onboarding-complete-row"')
+
+    def test_answered_rows_listed_and_unanswered_collapsed(self):
+        text_rq = _first_text_question(self.response)
+        Answer.objects.create(
+            response=self.response, question=text_rq, text_value='my goal',
+        )
+        resp = self.client.get('/onboarding/')
+        self.assertEqual(
+            [row['display'] for row in resp.context['answered_rows']], ['my goal'],
+        )
+        self.assertEqual(
+            resp.context['unanswered_summary'],
+            f'{self.total - 1} questions not answered',
+        )
+        self.assertContains(resp, 'data-testid="onboarding-complete-edit-link"')
+        self.assertNotContains(resp, '(No answer)')

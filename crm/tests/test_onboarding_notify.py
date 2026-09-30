@@ -185,10 +185,10 @@ class OnboardingFormNotifiesStaffTest(TestCase):
         ).count()
         self.assertEqual(baseline, 2)
         mail.outbox.clear()
-        # Re-POST the already-submitted response.
+        # Re-POST the already-submitted response with the same answers.
         resp = self._submit(follow=True)
         msgs = [m.message for m in resp.context['messages']]
-        self.assertTrue(any('already' in m.lower() for m in msgs))
+        self.assertIn('No changes to save.', msgs)
         # No second round of notifications and no second email.
         self.assertEqual(
             Notification.objects.filter(
@@ -199,6 +199,23 @@ class OnboardingFormNotifiesStaffTest(TestCase):
         self.assertEqual(len(mail.outbox), 0)
         self.assertEqual(CRMRecord.objects.filter(user=self.member).count(), 1)
         self.assertEqual(CRMRecord.objects.get(user=self.member).pk, record.pk)
+
+    def test_edited_answers_notify_staff_as_update(self):
+        self._submit()
+        self.client.post(
+            reverse('onboarding_submit', kwargs={'response_id': self.response.pk}),
+            {f'question_{self.required.pk}': 'a changed answer'},
+        )
+        titles = list(
+            Notification.objects.filter(
+                notification_type='onboarding_submitted',
+            ).values_list('title', flat=True),
+        )
+        self.assertEqual(
+            sorted(titles),
+            ['Onboarding answers updated by Alice'] * 2
+            + ['Onboarding completed by Alice'] * 2,
+        )
 
 
 @override_settings(

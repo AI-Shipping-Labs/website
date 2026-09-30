@@ -33,6 +33,7 @@ from playwright_tests.conftest import (
 from playwright_tests.conftest import (
     ensure_tiers as _ensure_tiers,
 )
+from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "true")
 from django.db import connection  # noqa: E402
@@ -240,7 +241,11 @@ class TestCompleteAndResume:
             state="visible",
         )
 
-        # The seeded generic questions are optional; submit immediately.
+        # The seeded questions are optional, but an empty onboarding cannot
+        # be submitted, so answer one.
+        page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+            "Ship a demo",
+        )
         page.locator('[data-testid="questionnaire-submit-button"]').click()
         # Redirected to the dashboard with a thank-you referencing the plan.
         page.wait_for_load_state("domcontentloaded")
@@ -363,6 +368,48 @@ class TestCompleteAndResume:
         assert page.locator('[data-testid="onboarding-identify-form"]').count() == 0
         _shot(page, "completed_confirmation")
 
+    @pytest.mark.core
+    @browser_journey
+    def test_member_edits_answers_after_submitting_empty(
+        self, django_server, browser,
+    ):
+        _ensure_tiers()
+        _reset_responses()
+        _create_user("editanswers@test.com", tier_slug="main", email_verified=True)
+        from accounts.models import User
+        from questionnaires.models import Questionnaire, Response
+        from questionnaires.services import build_response_questions
+
+        user = User.objects.get(email="editanswers@test.com")
+        generic = Questionnaire.objects.get(slug="onboarding-general")
+        response = Response.objects.create(
+            questionnaire=generic, respondent=user, status="submitted",
+        )
+        build_response_questions(response)
+        connection.close()
+
+        context = _auth_context(browser, "editanswers@test.com")
+        page = context.new_page()
+        page.goto(f"{django_server}/onboarding/", wait_until="domcontentloaded")
+        page.get_by_role("link", name="Add your answers", exact=True).click()
+        page.locator('[data-testid="onboarding-fill-title"]').wait_for(
+            state="visible",
+        )
+        page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+            "Ship a support assistant",
+        )
+        page.get_by_role("button", name="Save answers", exact=True).click()
+
+        page.locator('[data-testid="onboarding-complete-title"]').wait_for(
+            state="visible",
+        )
+        answers = page.locator('[data-testid="onboarding-complete-answer"]')
+        assert answers.all_inner_texts() == ["Ship a support assistant"]
+        assert page.locator(
+            '[data-testid="onboarding-complete-edit-link"]'
+        ).is_visible()
+        _shot(page, "edited_answers")
+
 
 def _set_call_host_booking_urls(valeria_url, alexey_url):
     """Set (or blank) the founder booking URLs in the CallHost store (#951)."""
@@ -420,8 +467,11 @@ class TestEndOfOnboardingBookingCtas:
         page.locator('[data-testid="questionnaire-response-form"]').wait_for(
             state="visible",
         )
-        # The seeded generic questions are optional; submit immediately. The
-        # finish path now lands on the completion screen with the CTAs (#951).
+        # Answer one question (an empty onboarding cannot be submitted). The
+        # finish path lands on the completion screen with the CTAs (#951).
+        page.locator('[data-testid="questionnaire-input-long-text"]').first.fill(
+            "Ship a demo",
+        )
         page.locator('[data-testid="questionnaire-submit-button"]').click()
         page.locator('[data-testid="onboarding-complete-title"]').wait_for(
             state="visible",

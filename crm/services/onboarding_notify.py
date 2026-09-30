@@ -102,7 +102,14 @@ def _member_tier_name(member):
     return LEVEL_TO_TIER_NAME.get(level, '')
 
 
-def _post_onboarding_to_slack(*, member, target_url):
+def _event_phrase(updated):
+    """The staff-facing verb phrase: first completion vs a later edit."""
+    if updated:
+        return 'updated their onboarding answers'
+    return 'just completed onboarding'
+
+
+def _post_onboarding_to_slack(*, member, target_url, updated=False):
     """Best-effort Block Kit post to the team-requests channel.
 
     Returns ``True`` when posted, ``False`` (so the caller emails instead)
@@ -123,7 +130,8 @@ def _post_onboarding_to_slack(*, member, target_url):
     import requests  # noqa: PLC0415 -- network dep, kept off module top.
 
     member_name = _member_display_name(member)
-    text_fallback = f'{member_name} just completed onboarding'
+    phrase = _event_phrase(updated)
+    text_fallback = f'{member_name} {phrase}'
     blocks = [
         {
             'type': 'section',
@@ -131,7 +139,7 @@ def _post_onboarding_to_slack(*, member, target_url):
                 'type': 'mrkdwn',
                 'text': (
                     f'<{target_url}|{member_name}> (`{member.email}`) '
-                    f'just completed onboarding.'
+                    f'{phrase}.'
                 ),
             },
         },
@@ -178,15 +186,19 @@ def _post_onboarding_to_slack(*, member, target_url):
         return False
 
 
-def _email_staff_about_onboarding(*, member, target_url):
+def _email_staff_about_onboarding(*, member, target_url, updated=False):
     """Email every active staff user that a member completed onboarding."""
     recipients = list(_staff_users().values_list('email', flat=True))
     if not recipients:
         return 0
     member_name = _member_display_name(member)
-    subject = f'Onboarding completed: {member.email}'
+    subject = (
+        f'Onboarding answers updated: {member.email}'
+        if updated
+        else f'Onboarding completed: {member.email}'
+    )
     body = (
-        f'{member_name} ({member.email}) just completed onboarding.\n\n'
+        f'{member_name} ({member.email}) {_event_phrase(updated)}.\n\n'
         f'Open onboarding in CRM: {target_url}\n'
     )
     from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
@@ -200,10 +212,14 @@ def _email_staff_about_onboarding(*, member, target_url):
     return len(recipients)
 
 
-def _create_staff_onboarding_notifications(*, member, target_url):
+def _create_staff_onboarding_notifications(*, member, target_url, updated=False):
     """Create one ``onboarding_submitted`` Notification per active staff user."""
     member_name = _member_display_name(member)
-    title = f'Onboarding completed by {member_name}'
+    title = (
+        f'Onboarding answers updated by {member_name}'
+        if updated
+        else f'Onboarding completed by {member_name}'
+    )
     tier_name = _member_tier_name(member)
     body = f'Tier: {tier_name}' if tier_name else ''
     notifications = [
@@ -221,8 +237,12 @@ def _create_staff_onboarding_notifications(*, member, target_url):
     return len(notifications)
 
 
-def notify_staff_onboarding_submitted(member):
+def notify_staff_onboarding_submitted(member, *, updated=False):
     """Notify active staff that ``member`` just completed onboarding.
+
+    ``updated=True`` is a member editing an already-submitted onboarding;
+    the same channels fire with "updated their onboarding answers" copy so
+    staff know the answers behind a plan changed.
 
     The single notification site for both onboarding submission paths
     (#802 form and #804 AI chat). Mirrors the plan-request fan-out: a
@@ -235,14 +255,14 @@ def notify_staff_onboarding_submitted(member):
     try:
         target_url = _member_target_url(member)
         posted_to_slack = _post_onboarding_to_slack(
-            member=member, target_url=target_url,
+            member=member, target_url=target_url, updated=updated,
         )
         if not posted_to_slack:
             _email_staff_about_onboarding(
-                member=member, target_url=target_url,
+                member=member, target_url=target_url, updated=updated,
             )
         _create_staff_onboarding_notifications(
-            member=member, target_url=target_url,
+            member=member, target_url=target_url, updated=updated,
         )
     except Exception:
         # The member's submission is the source of truth; never surface a

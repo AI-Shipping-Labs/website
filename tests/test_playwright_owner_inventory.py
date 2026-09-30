@@ -1646,8 +1646,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2710)
-        self.assertEqual(len(inventory.owners), 2506)
+        self.assertEqual(inventory.item_count, 2711)
+        self.assertEqual(len(inventory.owners), 2507)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

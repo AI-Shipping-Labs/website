@@ -103,12 +103,22 @@ class StudioMixedContentRejectionTest(StaffUserMixin, TestCase):
             course=self.course, title='Child', slug='child', sort_order=1,
             parent=parent,
         )
+        before_ids = set(Unit.objects.values_list('pk', flat=True))
         response = self.client.post(
             f'/studio/modules/{parent.pk}/units/add',
             {'title': 'Stray unit'},
         )
         self.assertEqual(response.status_code, 302)
+        self.assertEqual(set(Unit.objects.values_list('pk', flat=True)), before_ids)
         self.assertFalse(Unit.objects.filter(title='Stray unit').exists())
+        follow = self.client.get(response.url)
+        self.assertContains(follow, 'data-testid="messages-region"')
+        self.assertContains(follow, 'data-message-tag="error"')
+        self.assertContains(
+            follow,
+            "Module 'Parent' has child modules; it cannot also have direct units.",
+            html=True,
+        )
 
 
 class StudioModuleReparentTest(StaffUserMixin, TestCase):

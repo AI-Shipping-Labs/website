@@ -1,0 +1,3 @@
+<h4 class="min-w-0 pt-1 text-sm font-semibold text-foreground">{{ item.title }}{% if item.skipped %} <span class="ml-1 text-xs font-medium text-muted-foreground">Skipped</span>{% endif %}</h4>
+{# Done or skipped steps drop their explainer on phones to keep the rows short. #}
+<p class="mt-0.5 min-w-0 text-sm text-muted-foreground{% if item.completed or item.skipped %} hidden sm:block{% endif %}">{{ item.description }}</p>

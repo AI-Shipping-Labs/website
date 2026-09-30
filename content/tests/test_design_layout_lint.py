@@ -250,28 +250,55 @@ def _has_meta(element: Element) -> bool:
     return not _real_actions(element) and bool(element.text().strip() or element.children)
 
 
+def _is_pinning_container(element: Element) -> bool:
+    return _is_justify_between(element) and any(_has_meta(child) for child in element.children)
+
+
+def _row_pinned_total(element: Element) -> int:
+    """Actions pinned beside meta anywhere inside one row, summed across
+    every ``justify-between`` container that pins some (``{% if %}`` arms
+    count once, like ``_action_count``).  Nested rows count on their own."""
+    if _is_pinning_container(element):
+        return _pinned_action_count(element)
+    if any(token.startswith("divide-y") for token in element.classes):
+        return 0
+    arms: dict[int, int] = {}
+    for child in element.children:
+        if child.tag == "li":
+            continue
+        arms[child.branch] = arms.get(child.branch, 0) + _row_pinned_total(child)
+    return max(arms.values(), default=0)
+
+
 def row_actions_beside_meta(root: Element) -> list[Element]:
-    """A list row that pins a group of two or more actions beside its meta.
+    """A list row that pins two or more actions beside its meta.
 
     Two or more row actions always sit in an action row below the meta, so a
-    ``justify-between`` container (at any breakpoint) inside a list row
-    (``li``, or a child of a ``divide-y`` list) whose direct children are a
-    meta block and 2+ rendered actions is the pattern that squeezed course
-    Home's session rows.  Banners, cards, and toolbars outside list rows are
-    out of scope; a single pinned action is left to the rendered guard.
+    list row (``li``, or a child of a ``divide-y`` list) must not pin 2+
+    rendered actions beside its meta with ``justify-between`` (at any
+    breakpoint).  That covers one container pinning a group of actions (the
+    pattern that squeezed course Home's session rows) and several containers
+    that each pin one action, which stacks the actions in a detached column
+    at the row's edge (the Getting started checklist's CTA on the title line
+    and Skip on the description line).  Banners, cards, and toolbars outside
+    list rows are out of scope; a single pinned action is left to the
+    rendered guard.
     """
     matches = []
 
-    def visit(element: Element, in_row: bool):
-        in_row = in_row or element.tag == "li"
-        if in_row and _is_justify_between(element) and any(_has_meta(child) for child in element.children):
-            if _pinned_action_count(element) >= 2:
-                matches.append(element)
+    def visit(element: Element, in_row: bool, row_root: bool):
+        in_row = in_row or row_root or element.tag == "li"
+        before = len(matches)
+        if in_row and _is_pinning_container(element) and _pinned_action_count(element) >= 2:
+            matches.append(element)
         row_list = any(token.startswith("divide-y") for token in element.classes)
         for child in element.children:
-            visit(child, in_row or row_list)
+            visit(child, in_row, row_list)
+        is_row = row_root or element.tag == "li"
+        if is_row and len(matches) == before and _row_pinned_total(element) >= 2:
+            matches.append(element)
 
-    visit(root, False)
+    visit(root, False, False)
     return matches
 
 
@@ -453,6 +480,44 @@ SESSION_ROW_ACTIONS_BELOW_META = (
     "</li>"
 )
 
+# The Getting started checklist row before it stacked its actions: the CTA was
+# pinned on the title line and Skip on the description line by two separate
+# ``justify-between`` containers, so each held one action and the row showed a
+# detached column of two actions at its right edge.
+CHECKLIST_ROW_SPLIT_PINNED = (
+    '<ol class="divide-y">{% for item in items %}<li class="flex items-start gap-3">\n'
+    '  <span>{{ forloop.counter }}</span>\n'
+    '  <div class="flex min-w-0 flex-1 flex-col sm:block">\n'
+    '    <div class="contents sm:flex sm:items-start sm:justify-between sm:gap-3">\n'
+    '      <h4>{{ item.title }}</h4>\n'
+    "      {% if item.completed %}<a href=\"{{ item.url }}\">Review</a>"
+    '{% else %}<a href="{{ item.url }}">{{ item.cta_label }}</a>{% endif %}\n'
+    "    </div>\n"
+    '    <div class="mt-0.5 flex items-start justify-between gap-3">\n'
+    "      <p>{{ item.description }}</p>\n"
+    '      {% if not item.completed %}<button type="button" aria-label="Skip {{ item.title }}">Skip</button>{% endif %}\n'
+    "    </div>\n"
+    "  </div>\n"
+    "</li>{% endfor %}</ol>"
+)
+CHECKLIST_ROW_ACTION_ROW = (
+    '<ol class="divide-y">{% for item in items %}<li class="flex items-start gap-3">\n'
+    '  <span>{{ forloop.counter }}</span>\n'
+    "  {% if item.skippable %}\n"
+    '  <div class="min-w-0 flex-1"><h4>{{ item.title }}</h4><p>{{ item.description }}</p>\n'
+    '    <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">'
+    '<a href="{{ item.url }}">{{ item.cta_label }}</a>'
+    '<button type="button" aria-label="Skip {{ item.title }}">Skip</button></div>\n'
+    "  </div>\n"
+    "  {% else %}\n"
+    '  <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">\n'
+    '    <div class="min-w-0"><h4>{{ item.title }}</h4><p>{{ item.description }}</p></div>\n'
+    '    <a href="{{ item.url }}">Review</a>\n'
+    "  </div>\n"
+    "  {% endif %}\n"
+    "</li>{% endfor %}</ol>"
+)
+
 
 @tag("core")
 class RowActionsBesideMetaRuleTest(SimpleTestCase):
@@ -477,6 +542,26 @@ class RowActionsBesideMetaRuleTest(SimpleTestCase):
         for name, source in cases.items():
             with self.subTest(name):
                 self.assertEqual(self._count(source), 1)
+
+    def test_actions_pinned_by_separate_containers_in_one_row_are_flagged(self):
+        self.assertEqual(self._count(CHECKLIST_ROW_SPLIT_PINNED), 1)
+        self.assertEqual(self._count(CHECKLIST_ROW_ACTION_ROW), 0)
+
+    def test_split_pinning_counts_if_arms_once_and_nested_rows_separately(self):
+        cases = {
+            "each if arm pins one action": (
+                '<li>{% if a %}<div class="flex justify-between"><h4>Step</h4><a href="/a">Start</a></div>'
+                '{% else %}<div class="flex justify-between"><h4>Step</h4><a href="/b">Review</a></div>'
+                "{% endif %}</li>"
+            ),
+            "nested rows pin one action each": (
+                '<li><div class="flex justify-between"><h4>Module</h4><a href="/m">Open</a></div>'
+                '<ul><li class="flex justify-between"><p>Lesson</p><a href="/l">Start</a></li></ul></li>'
+            ),
+        }
+        for name, source in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self._count(source), 0)
 
     def test_one_action_or_non_row_layouts_are_not_flagged(self):
         cases = {

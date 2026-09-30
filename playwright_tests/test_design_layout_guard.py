@@ -13,11 +13,13 @@ documented exceptions.  Every page must also fit the viewport without
 horizontal scrolling.  Each surface is checked at 1280px and 390px.
 
 List rows follow the row-actions rule: for every ``<li>`` inside ``<main>``
-with a heading, at 390px each row action must start below the row's meta
-block (the row child holding the heading) or, for an action inside that block,
-below the heading itself.  At every width, the actions that share one action
-group must share the same text decoration and colour.  Close, dismiss, and
-skip controls are exempt.
+with a heading, each row action must start below the row's meta block (the
+row child holding the heading) or, for an action inside that block, below the
+heading itself: at 390px always, and at every width when the row has two or
+more actions (a Skip control counts).  At every width, the actions that share
+one action group must share the same text decoration and colour.  Close and
+dismiss controls are exempt from both checks; Skip is exempt from the style
+check only.
 """
 
 import datetime
@@ -82,9 +84,13 @@ ROW_ACTION_PROBLEMS_JS = """
     const style = getComputedStyle(el);
     return style.visibility !== 'hidden' && style.display !== 'none';
   };
-  // Close, dismiss, and skip controls retire the row rather than act on it.
+  // Close, dismiss, and skip controls retire the row rather than act on it,
+  // so they never have to match the action style.  Close and dismiss are
+  // exempt from placement too; a Skip beside another action makes two
+  // actions, which always share an action row below the meta.
   const dismissal = (el) => /^(close|dismiss|skip)/i.test(el.getAttribute('aria-label') || '')
     || [...el.attributes].some((attr) => attr.name.includes('dismiss'));
+  const skip = (el) => /^skip/i.test(el.getAttribute('aria-label') || '');
   const text = (el) => ((el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ')).slice(0, 60);
   const own = (row, el) => el.closest('li') === row;
   const problems = [];
@@ -95,9 +101,12 @@ ROW_ACTION_PROBLEMS_JS = """
     const meta = [...row.children].find((child) => child.contains(title));
     const actions = [...row.querySelectorAll('a[href], button')].filter(
       (el) => own(row, el) && shown(el) && !title.contains(el) && !dismissal(el));
-    if (checkPlacement) {
+    const skips = [...row.querySelectorAll('button')].filter(
+      (el) => own(row, el) && shown(el) && skip(el));
+    const placed = actions.concat(skips);
+    if (checkPlacement || placed.length >= 2) {
       const titleBottom = title.getBoundingClientRect().bottom;
-      for (const action of actions) {
+      for (const action of placed) {
         const floor = meta && !meta.contains(action) ? meta.getBoundingClientRect().bottom : titleBottom;
         const top = action.getBoundingClientRect().top;
         if (top < floor - 2) {

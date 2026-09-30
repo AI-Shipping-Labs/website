@@ -243,8 +243,11 @@ actions. Where the actions go depends on how many there are:
   plus the canonical focus-visible ring and a trailing `h-4 w-4` `arrow-right`
   icon. No action is underlined at rest, and siblings never mix colours or
   decorations. A destructive text action keeps `text-destructive`.
-- Close, dismiss, and skip controls retire the row rather than act on it and
-  are exempt from both rules.
+- Close and dismiss controls retire the row rather than act on it and are
+  exempt from both rules. A Skip control also retires the row, so it keeps its
+  quiet text style, but it still counts as an action: a CTA plus Skip is two
+  actions and they share the action row below the meta, CTA first (the Getting
+  started checklist in `templates/content/_activation_checklist.html`).
 - Course session rows (Home module card, Next live session, module page, Live
   sessions tab) carry exactly one action, to the session's syllabus unit with
   `?cohort=`: `Open session`, or `Join session` while live. The unit page holds
@@ -269,18 +272,20 @@ Enforcement:
   instead of `{% section_header %}`. List and table rows, close/dismiss
   controls, headings wrapped in a callout or card title block, and Studio are
   exempt by construction. Its `row_actions_beside_meta` rule fails a list row
-  (an `li`, or a child of a `divide-y` list) whose `justify-between`
-  container, at any breakpoint, pins a group of two or more actions beside the
-  meta; mutually exclusive `{% if %}` arms count once and a `{% for %}` loop
-  of actions counts as many. Any other exception needs an entry with a reason in
+  (an `li`, or a child of a `divide-y` list) that, at any breakpoint, pins two
+  or more actions beside the meta with `justify-between`, whether one
+  container pins a group or several containers (title line, description line)
+  each pin one; mutually exclusive `{% if %}` arms count once and a
+  `{% for %}` loop of actions counts as many. Any other exception needs an entry with a reason in
   `content/tests/design_layout_allowlist.py`, which can only shrink.
 - `playwright_tests/test_design_layout_guard.py` (core) loads course Home (all
   five tabs), a module page, a lesson, a session unit, a workshop, and the
   dashboard at 1280px and 390px. Every visible action after an `h1`-`h3` must
   start below the heading, and no page may scroll horizontally. In every
-  `main li` with a heading, at 390px each row action must start below the
-  row's meta block, and at both widths the actions sharing one group must share
-  the same computed text decoration and colour.
+  `main li` with a heading, each row action must start below the row's meta
+  block at 390px, and at both widths when the row has two or more actions
+  (Skip counts); at both widths the actions sharing one group must share the
+  same computed text decoration and colour (Skip is exempt from this one).
 - A brief, worklist, or orchestrator instruction never overrides this
   document. If a brief contradicts a rule here, follow this document and flag
   the conflict in the issue.

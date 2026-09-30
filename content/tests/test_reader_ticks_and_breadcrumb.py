@@ -176,7 +176,8 @@ class ReaderBreadcrumbCourseCrumbTest(TestCase):
         self._enroll()
         crumb = _breadcrumb(self.client.get(self.unit.get_absolute_url() + '?cohort=4'))
         self.assertIn('href="/courses/crumb-course/home?cohort=4"', crumb)
-        self.assertIn('>Crumb course</a>', crumb)
+        self.assertIn('>Course home</a>', crumb)
+        self.assertNotIn('Crumb course', crumb)
         self.assertNotIn('href="/courses"', crumb)
 
     def test_enrolled_module_crumb_links_to_home_with_cohort(self):

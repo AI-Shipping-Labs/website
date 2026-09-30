@@ -321,7 +321,30 @@ def test_course_reader_pages_keep_actions_below_their_headings(django_server, br
         f"{lesson.get_absolute_url()}?cohort=layout": [lesson.title],
         f"{session.get_absolute_url()}?cohort=layout": [],
     })
+    homework_url = lesson.get_absolute_url().replace("retrieval-basics", "retrieval-homework")
+    _assert_titles_align_with_sidebar(page, django_server, [
+        f"{module.get_absolute_url()}?cohort=layout",
+        f"{lesson.get_absolute_url()}?cohort=layout",
+        f"{session.get_absolute_url()}?cohort=layout",
+        f"{homework_url}?cohort=layout",
+    ])
     context.close()
+
+
+def _assert_titles_align_with_sidebar(page, base_url, paths):
+    """From ``lg`` the page h1 starts level with the sidebar navigation card."""
+    problems = []
+    for width in (1280, 2048):
+        page.set_viewport_size({"width": width, "height": 900})
+        for path in paths:
+            page.goto(f"{base_url}{path}", wait_until="load")
+            title = page.locator("#content-sidebar-main h1").first.bounding_box()
+            card = page.locator("#sidebar-nav").bounding_box()
+            assert title is not None and card is not None, path
+            offset = title["y"] - card["y"]
+            if abs(offset) > 4:
+                problems.append(f"{width}px {path}: h1 top is {offset:+.1f}px from the sidebar card top")
+    assert problems == [], "Reader titles out of line with the sidebar:\n" + "\n".join(problems)
 
 
 @pytest.mark.core

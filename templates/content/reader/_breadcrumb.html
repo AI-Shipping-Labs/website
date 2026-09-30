@@ -1,8 +1,8 @@
 {% load course_links %}
-<div class="mb-2 flex min-h-[44px] items-center gap-2 overflow-hidden text-sm text-muted-foreground lg:mb-6 lg:min-h-0" data-reader-breadcrumb{% if breadcrumb_testid %} data-testid="{{ breadcrumb_testid }}"{% endif %}{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
+<div class="mb-2 flex min-h-[44px] items-center gap-2 overflow-hidden text-sm text-muted-foreground lg:mb-4 lg:h-7 lg:min-h-0" data-reader-breadcrumb{% if breadcrumb_testid %} data-testid="{{ breadcrumb_testid }}"{% endif %}{% if homework_stepper %} data-homework-autosave-nav{% endif %}>
   {% if breadcrumb_kind == "course_unit" %}
   {% course_entry_url course cohort=reader_cohort_param as course_crumb_url %}
-  <a href="{{ course_crumb_url }}" class="min-w-0 truncate py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="reader-course-home">{{ course.title }}</a>
+  <a href="{{ course_crumb_url }}" class="flex-shrink-0 py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="reader-course-home">Course home</a>
   {% if unit.module.parent_id %}
   <i data-lucide="chevron-right" class="hidden h-3 w-3 flex-shrink-0 sm:block" aria-hidden="true"></i>
   <a href="{{ unit.module.parent.get_absolute_url }}{% if reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="breadcrumb-parent-module">{{ unit.module.parent.title }}</a>
@@ -13,7 +13,7 @@
   <a href="{{ workshop.get_absolute_url }}" class="min-w-0 truncate py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="breadcrumb-workshop">{{ workshop.title }}</a>
   {% elif breadcrumb_kind == "module" %}
   {% course_entry_url course cohort=reader_cohort_param as course_crumb_url %}
-  <a href="{{ course_crumb_url }}" class="min-w-0 truncate py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="reader-course-home">{{ course.title }}</a>
+  <a href="{{ course_crumb_url }}" class="flex-shrink-0 py-3 transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:py-0" data-testid="reader-course-home">Course home</a>
   {% if module.parent %}
   <i data-lucide="chevron-right" class="hidden h-3 w-3 flex-shrink-0 sm:block" aria-hidden="true"></i>
   <a href="{{ module.parent.get_absolute_url }}{{ cohort_query }}" class="hidden truncate transition-colors hover:text-foreground sm:inline" data-testid="module-breadcrumb-parent">{{ module.parent.title }}</a>

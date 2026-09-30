@@ -7,7 +7,7 @@
 
 {% include "content/reader/_breadcrumb.html" with breadcrumb_kind="course_unit" %}
 
-<div class="mb-4 flex flex-wrap items-center gap-3 lg:mb-8">
+<div class="{% if unit.kind == "event" and unit_session_entry %}mb-2{% else %}mb-4 lg:mb-8{% endif %} flex flex-wrap items-center gap-3">
   <h1 class="min-w-0 break-words text-xl font-semibold tracking-tight sm:text-3xl" data-testid="unit-title">{{ unit.title }}</h1>
   {% if unit.is_bonus %}
   {% member_label_badge "Optional" tone="accent" size="sm" testid="unit-detail-bonus-badge" %}

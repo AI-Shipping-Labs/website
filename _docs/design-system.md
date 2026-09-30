@@ -57,6 +57,15 @@ Reader sidebar lesson rows use a neutral selected surface (`--foreground` at
 `content/reader/_styles.html` and applies to
 `.reader-list-row[aria-current="page"]` inside `#sidebar-nav` in both themes.
 
+From `lg`, the reader top row is one `h-7` band: the sidebar back link and
+collapse control on the left, the breadcrumb on the right. Both columns then
+step down `mt-4`/`mb-4`, so every reader `h1` starts level with the sidebar
+card (`playwright_tests/test_design_layout_guard.py` measures it within 4px).
+The course breadcrumb leads with `Course home`; the course title lives only in
+the sidebar back link. A session unit's date, `Event details`, and timezone
+note share one meta row under the title (title block `mb-2`); `.reader-prose` bodies drop the
+first child's top margin so the block above sets the gap.
+
 Compact semantic status and categorical badges on public/member surfaces use
 `bg-<color>-500/15 text-<color>-800 dark:text-<color>-400`. Their normal-size
 text must reach at least 4.5:1 against the browser-computed, alpha-composited

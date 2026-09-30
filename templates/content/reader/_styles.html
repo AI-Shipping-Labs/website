@@ -485,6 +485,9 @@
   }
   /* Markdown tables keep their intrinsic width and sit in the middle of the
      reader column. Oversized tables still use the global horizontal scroll. */
+  /* The block above a reader prose body (title, meta line, video) already
+     sets the gap, so the first paragraph or heading adds no top margin. */
+  .reader-prose > :first-child { margin-top: 0; }
   .reader-prose table {
     width: fit-content;
     max-width: 100%;

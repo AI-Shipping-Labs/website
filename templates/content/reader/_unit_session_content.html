@@ -1,20 +1,26 @@
 {% load accounts_extras %}
 {% if unit_session_entry %}
   {% with entry=unit_session_entry %}
-  <div class="mb-8" data-testid="unit-session-content">
-    <div class="flex flex-wrap items-center gap-x-4 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
+  {% comment %}
+    Session units read as title, one tight meta line, then the standard
+    reader rhythm: actions `mt-4`, description / recording / recap `mt-6`.
+    The meta line keeps 44px tap targets on touch widths and drops them to
+    the text height from `lg`, where the row is a compact desktop meta row.
+  {% endcomment %}
+  <div data-testid="unit-session-content">
+    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground" data-testid="unit-session-event-metadata">
       {% include "events/_event_time_display.html" with event_time_display=entry.time_display event_time_hide_zone=True %}
       <a href="{{ entry.event.get_absolute_url }}"
-         class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+         class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background lg:min-h-0"
          data-testid="unit-session-event-details">
         Event details
         <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i>
       </a>
+      {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=entry.time_display.fallback_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-0" timezone_notice_link_class="lg:min-h-0" only %}
     </div>
-    {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=entry.time_display.fallback_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-6 mt-0" only %}
 
     {% if not entry.is_past %}
-    <div class="mb-8 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
+    <div class="mt-4 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
       {% if entry.session_join_url %}
       <a href="{{ entry.session_join_url }}" class="{% button_classes 'primary' extra='w-full sm:w-auto' %}" data-testid="unit-session-join">
         Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
@@ -29,32 +35,32 @@
     {% endif %}
 
     {% if entry.description_html %}
-    <div class="prose reader-prose mb-8 max-w-full overflow-x-auto" data-testid="unit-session-description">
+    <div class="prose reader-prose mt-6 max-w-full overflow-x-auto" data-testid="unit-session-description">
       {{ entry.description_html|safe }}
     </div>
     {% endif %}
 
     {% if entry.is_past %}
       {% if entry.show_recording and entry.can_watch_recording %}
-      <div class="mb-8" data-testid="unit-session-recording">
+      <div class="mt-6" data-testid="unit-session-recording">
         {% include "events/_recording_embed.html" with event=entry.event recording_playback_url=entry.recording_playback_url %}
       </div>
       {% elif entry.show_recording %}
-      <p class="mb-8 text-sm text-muted-foreground" data-testid="unit-session-recording-locked">
+      <p class="mt-6 text-sm text-muted-foreground" data-testid="unit-session-recording-locked">
         The recording is available to members with access to this session.
       </p>
       {% else %}
-      <p class="mb-8 text-sm text-muted-foreground" data-testid="unit-session-recording-missing">
+      <p class="mt-6 text-sm text-muted-foreground" data-testid="unit-session-recording-missing">
         No recording is available for this session.
       </p>
       {% endif %}
 
       {% if entry.show_recap %}
-      <div class="mb-12" data-testid="unit-session-recap-content">
+      <div class="mt-6" data-testid="unit-session-recap-content">
         {% include "events/_event_recap_body.html" with event=entry.event %}
       </div>
       {% else %}
-      <p class="mb-12 text-sm text-muted-foreground" data-testid="unit-session-recap-missing">
+      <p class="mt-6 text-sm text-muted-foreground" data-testid="unit-session-recap-missing">
         No recap has been published for this session yet.
       </p>
       {% endif %}

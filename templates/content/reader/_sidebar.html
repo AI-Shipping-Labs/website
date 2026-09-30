@@ -5,10 +5,10 @@
     aside renders after the reading column, so a back link here would dangle
     below Q&A; the breadcrumb and the drawer own that navigation instead.
   {% endcomment %}
-  <div class="hidden items-center justify-between gap-2 lg:flex">
+  <div class="hidden h-7 items-center justify-between gap-2 lg:flex">
     <a href="{{ reader_back_url }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
        title="{{ reader_back_title }}"
-       class="mb-4 hidden items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground min-w-0 lg:inline-flex"
+       class="hidden min-w-0 items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground lg:inline-flex"
        {% if reader_back_testid %}data-testid="{{ reader_back_testid }}"{% endif %}>
       <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0"></i>
       <span class="truncate">{{ reader_back_title }}</span>
@@ -19,7 +19,7 @@
       aria-label="Collapse {{ reader_sidebar_label }}"
       aria-expanded="true"
       aria-controls="content-sidebar-aside"
-      class="mb-4 -mt-0.5 h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+      class="h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
       data-testid="content-sidebar-collapse-btn"
     >
       <i data-lucide="panel-left-close" class="h-4 w-4"></i>

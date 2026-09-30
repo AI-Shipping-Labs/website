@@ -22,12 +22,11 @@ flow uses.
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.db.models.functions import Lower
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from accounts.auth import token_required
-from accounts.models import EmailAlias
+from accounts.services.email_resolution import resolve_users_by_emails
 from api.openapi import openapi_spec
 from api.safety import error_response
 from api.serializers.enrollments import serialize_course_enrollment
@@ -69,28 +68,6 @@ def _normalize_emails(raw):
         seen.add(cleaned)
         out.append(cleaned)
     return out
-
-
-def _users_by_email(emails):
-    """Map normalized emails to users: primary login first, then aliases.
-
-    An address recorded as an ``EmailAlias`` resolves to its canonical
-    account (same precedence as ``resolve_user_by_email``), so enrolling a
-    member by a secondary address never reports them as unknown.
-    """
-    users_by_email = {
-        u.email.lower(): u
-        for u in User.objects.annotate(
-            _email_lower=Lower('email'),
-        ).filter(_email_lower__in=emails)
-    }
-    unmatched = [email for email in emails if email not in users_by_email]
-    if unmatched:
-        for alias in EmailAlias.objects.select_related('user').filter(
-            email__in=unmatched,
-        ):
-            users_by_email[alias.email] = alias.user
-    return users_by_email
 
 
 def _get_published_course(slug):
@@ -300,7 +277,7 @@ def course_enrollments_collection(request, slug):
     cohort_enrollments = []
 
     with transaction.atomic():
-        users_by_email = _users_by_email(emails)
+        users_by_email = resolve_users_by_emails(emails)
 
         for email in emails:
             user = users_by_email.get(email)

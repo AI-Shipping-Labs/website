@@ -14,6 +14,7 @@ alias, never both" at lookup time.
 """
 
 from django.contrib.auth import get_user_model
+from django.db.models.functions import Lower
 
 from accounts.models import EmailAlias
 
@@ -65,3 +66,25 @@ def resolve_user_by_email(email):
         return alias.user
 
     return None
+
+
+def resolve_users_by_emails(emails):
+    """Bulk form of the lookup: map normalized emails to users.
+
+    ``emails`` must already be normalized (stripped, lowercased). Primary
+    login wins, then ``EmailAlias``; unmatched emails are absent from the
+    returned dict. Two queries at most, whatever the batch size.
+    """
+    users_by_email = {
+        u.email.lower(): u
+        for u in User.objects.annotate(
+            _email_lower=Lower("email"),
+        ).filter(_email_lower__in=emails)
+    }
+    unmatched = [email for email in emails if email not in users_by_email]
+    if unmatched:
+        for alias in EmailAlias.objects.select_related("user").filter(
+            email__in=unmatched,
+        ):
+            users_by_email[alias.email] = alias.user
+    return users_by_email

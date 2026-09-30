@@ -128,6 +128,38 @@ def sprints_course_enroll(slug, emails, cohort, fmt):
     emit(get_client().post(f"{API}/courses/{slug}/enrollments", json_body=body), fmt)
 
 
+@sprints.command("course-access-grant")
+@click.argument("slug")
+@click.argument("emails", nargs=-1)
+@click.option(
+    "--cohort",
+    default=None,
+    help="Cohort external key (e.g. 1): grant every current member of that cohort instead of EMAILS.",
+)
+@click.option("--dry-run", is_flag=True, help="Report what would be granted; write nothing.")
+@format_option
+def sprints_course_access_grant(slug, emails, cohort, dry_run, fmt):
+    """Grant individual (granted-type) course access (staff-only, sends no email).
+
+    Pass EMAILS or --cohort, not both. Users who already have granted or
+    purchased access are reported as already_has_access.
+    """
+    if bool(emails) == bool(cohort):
+        raise click.UsageError("Pass EMAILS or --cohort (exactly one).")
+    body = {"cohort": cohort} if cohort else {"emails": list(emails)}
+    body["dry_run"] = dry_run
+    emit(get_client().post(f"{API}/courses/{slug}/access", json_body=body), fmt)
+
+
+@sprints.command("course-access-revoke")
+@click.argument("slug")
+@click.argument("email")
+@format_option
+def sprints_course_access_revoke(slug, email, fmt):
+    """Revoke a user's granted course access; purchased access is never revoked (staff-only)."""
+    emit(get_client().delete(f"{API}/courses/{slug}/access/{email}"), fmt)
+
+
 @sprints.command("course-cohorts")
 @click.argument("slug")
 @format_option

@@ -3534,6 +3534,170 @@
         ]
       }
     },
+    "/api/courses/{slug}/access": {
+      "post": {
+        "description": "Creates ``CourseAccess(access_type=\"granted\")`` for each user, recording the API token's owner as ``granted_by`` (the same service as the Studio grant). Pass either ``emails`` (primary email first, then alias) or ``cohort`` (a dated cohort's external key, e.g. ``1``) to grant every current member of that cohort. Idempotent: a user who already has granted or purchased access is reported as ``already_has_access``. Per-row ``status``: ``granted``, ``already_has_access``, ``user_not_found``, or ``malformed``; ``dry_run: true`` reports ``would_grant`` instead of ``granted`` and writes nothing. Sends no email. Batch cap 1000 emails.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "dry_run": true,
+                "emails": [
+                  "alice@example.com",
+                  "bob@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "cohort": {
+                    "description": "Cohort external key under this course (case-insensitive). Mutually exclusive with ``emails``.",
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "emails": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "already_has_access": 1,
+                  "cohort": null,
+                  "course": "ai-buildcamp",
+                  "dry_run": false,
+                  "granted": 1,
+                  "malformed": 0,
+                  "results": [
+                    {
+                      "access_type": "granted",
+                      "email": "alice@example.com",
+                      "status": "granted"
+                    },
+                    {
+                      "access_type": "purchased",
+                      "email": "bob@example.com",
+                      "status": "already_has_access"
+                    },
+                    {
+                      "email": "ghost@example.com",
+                      "status": "user_not_found"
+                    }
+                  ],
+                  "user_not_found": 1
+                }
+              }
+            },
+            "description": "Per-row grant results plus counts."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_cohort",
+                  "error": "Unknown cohort '9' for course 'ai-buildcamp'"
+                }
+              }
+            },
+            "description": "Unknown cohort or over-cap batch. Codes: ``unknown_cohort``, ``batch_too_large``."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found."
+          },
+          "422": {
+            "description": "Body is not an object, both or neither of ``emails`` / ``cohort`` given, or a bad type."
+          }
+        },
+        "summary": "Grant granted-type course access",
+        "tags": [
+          "Course Access"
+        ]
+      }
+    },
+    "/api/courses/{slug}/access/{email}": {
+      "delete": {
+        "description": "Deletes the user's ``CourseAccess`` row only when its type is ``granted`` (the same service as the Studio revoke). Purchased access is never revoked: the call returns ``409 purchased_access``. The email resolves by primary email, then alias. Idempotent: no access row returns ``200`` with ``status: no_access``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "email": "alice@example.com",
+                  "status": "revoked"
+                }
+              }
+            },
+            "description": "Revoked, or there was nothing to revoke."
+          },
+          "404": {
+            "description": "Course or user not found. Codes: ``unknown_course``, ``user_not_found``."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "purchased_access",
+                  "error": "Purchased access cannot be revoked"
+                }
+              }
+            },
+            "description": "The user's access is purchased."
+          }
+        },
+        "summary": "Revoke a user's granted course access",
+        "tags": [
+          "Course Access"
+        ]
+      }
+    },
     "/api/courses/{slug}/certificates": {
       "get": {
         "description": "Staff-only. Lists certificates for a published course, ordered by ``-issued_at``.",

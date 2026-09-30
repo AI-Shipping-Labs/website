@@ -57,6 +57,10 @@ from api.views.contacts import (
     contacts_set_tags,
 )
 from api.views.content_lookup import content_lookup_detail
+from api.views.course_access import (
+    course_access_collection,
+    course_access_detail,
+)
 from api.views.course_certificates import (
     course_certificate_detail,
     course_certificates_collection,
@@ -804,6 +808,17 @@ urlpatterns = [
         "courses/<slug:slug>/enrollments/<path:email>",
         course_enrollment_detail,
         name="api_course_enrollment_detail",
+    ),
+    # ---- Course access grants (granted-type CourseAccess) --------------
+    path(
+        "courses/<slug:slug>/access",
+        course_access_collection,
+        name="api_course_access_collection",
+    ),
+    path(
+        "courses/<slug:slug>/access/<path:email>",
+        course_access_detail,
+        name="api_course_access_detail",
     ),
     # ---- Course cohorts (event-series link diagnostics) ----------------
     path(

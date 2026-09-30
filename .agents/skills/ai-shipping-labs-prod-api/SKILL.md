@@ -11,6 +11,8 @@ The production site exposes a token-authenticated JSON API at `https://aishippin
 
 Specialized skills: `ai-shipping-labs-events`, `ai-shipping-labs-users`.
 
+Course access grants (`POST /api/courses/<slug>/access`, `DELETE /api/courses/<slug>/access/<email>`, `asl sprints course-access-grant` / `course-access-revoke`) are documented in `ai-shipping-labs-users`.
+
 ## Authentication
 
 - Header: `Authorization: Token <key>` (literal scheme `Token`).

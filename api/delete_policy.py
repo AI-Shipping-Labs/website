@@ -53,6 +53,9 @@ LEGITIMATE_DELETE_HANDLERS = {
     "sprints.sprint_accountability_partners": (
         "relationship/assignment removal: reciprocal SprintAccountabilityPartner edges"
     ),
+    "course_access.course_access_detail": (
+        "relationship/attribute removal: granted CourseAccess row (never purchased)"
+    ),
     # 3. Soft-delete
     "course_enrollments.course_enrollment_detail": "soft-delete: sets unenrolled_at",
     # 4. Member-owned plan structure edits

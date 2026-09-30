@@ -21,6 +21,11 @@ from content.models import (
     Module,
     Unit,
 )
+from content.services.course_access import (
+    GRANT_ALREADY_HAS_ACCESS,
+    grant_course_access,
+    revoke_granted_course_access,
+)
 from content.services.course_instructors import (
     CourseInstructorError,
     add_course_instructor,
@@ -30,7 +35,6 @@ from content.services.course_instructors import (
 from content.services.enrollment import (
     active_enrollment_count as count_active_enrollments,
 )
-from content.services.enrollment import record_course_access_loss
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
 from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
@@ -572,21 +576,15 @@ def course_access_grant(request, course_id):
         messages.error(request, 'Please provide an email address.')
         return redirect('studio_course_access_list', course_id=course.pk)
 
-    # Check if the user already has access
-    existing = CourseAccess.objects.filter(user=user, course=course).first()
-    if existing:
+    outcome = grant_course_access(course, [user], actor=request.user)
+    status, access_type = outcome[user.pk]
+    if status == GRANT_ALREADY_HAS_ACCESS:
         messages.info(
             request,
-            f'{user.email} already has {existing.access_type} access to this course.',
+            f'{user.email} already has {access_type} access to this course.',
         )
         return redirect('studio_course_access_list', course_id=course.pk)
 
-    CourseAccess.objects.create(
-        user=user,
-        course=course,
-        access_type='granted',
-        granted_by=request.user,
-    )
     messages.success(request, f'Access granted to {user.email}.')
     return redirect('studio_course_access_list', course_id=course.pk)
 
@@ -607,8 +605,7 @@ def course_access_revoke(request, course_id, access_id):
         return redirect('studio_course_access_list', course_id=course.pk)
 
     email = access.user.email
-    access.delete()
-    record_course_access_loss(access.user, course, actor=request.user)
+    revoke_granted_course_access(course, access.user, actor=request.user)
     messages.success(request, f'Access revoked for {email}.')
     return redirect('studio_course_access_list', course_id=course.pk)
 

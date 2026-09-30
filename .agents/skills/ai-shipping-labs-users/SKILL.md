@@ -1,6 +1,6 @@
 ---
 name: ai-shipping-labs-users
-description: Use when asked to look up a user, inspect a user's tier/subscription/bounce state, add or remove a CRM note or tag, merge duplicate accounts, add an email alias, mark a user bounced, import/export contacts, or record people in the AI Shipping Labs CRM. The user + CRM read/write surface of the production API.
+description: Use when asked to look up a user, inspect a user's tier/subscription/bounce state, grant or revoke individual course access, add or remove a CRM note or tag, merge duplicate accounts, add an email alias, mark a user bounced, import/export contacts, or record people in the AI Shipping Labs CRM. The user + CRM read/write surface of the production API.
 metadata:
   short-description: Users + CRM — look up users, tags, notes, aliases, merges, contacts
 ---
@@ -42,6 +42,20 @@ Cohort convention: `llm-zoomcamp-2026` for committed members, `llm-zoomcamp-2026
 - `asl tier-overrides revoke <email>... [--dry-run]` — revoke every active override for each email, including Maven-sourced ones. Per-email status: `revoked`, `no_active_override`, `user_not_found`, or `malformed`.
 
 Always `--dry-run` a revoke first. Revoke never touches a paid Stripe tier; it only deactivates `TierOverride` rows (kept as history) and writes a `tier_override_revoked` audit row per override. Re-running is safe.
+
+## Course access
+
+Individual course access (`CourseAccess`) lets a member open a course above their tier. Commands live next to `course-enroll`:
+
+- `asl sprints course-access-grant <slug> <email>... [--dry-run]` — grant `granted`-type access to each email (primary email, then alias).
+- `asl sprints course-access-grant <slug> --cohort <key> [--dry-run]` — grant every current member of that cohort (the cohort's external key, e.g. `1`).
+- `asl sprints course-access-revoke <slug> <email>` — delete the user's `granted` row.
+
+Grant per-row status: `granted` (`would_grant` on `--dry-run`), `already_has_access` (with the existing `access_type`, `granted` or `purchased`), `user_not_found`, or `malformed`. Re-running is safe. Granting sends no email, does not enroll anyone, and records the token owner as `granted_by`, like the Studio grant.
+
+Revoke never removes purchased access: it returns `409 purchased_access`. No access row returns `status: no_access`. Revoking from an enrolled member who then loses access records the `access_lost` unenroll, like the Studio revoke.
+
+Always `--dry-run` a cohort grant first. Enrolling (`course-enroll`) and granting access are separate steps: an enrolled under-tier member still needs access to open the course.
 
 ## Aliases and merge
 

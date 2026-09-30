@@ -51,6 +51,7 @@ content survives. Idempotent and audited where applicable.
 | `api/views/aliases.py` (`user_aliases_remove`) | one `EmailAlias` mapping; account untouched |
 | `api/views/users.py` (`user_tags_remove`) | one tag from the `user.tags` JSON list |
 | `api/views/sprints.py` (`sprint_accountability_partners`) | reciprocal `SprintAccountabilityPartner` assignment edges between two enrolled sprint members; sprint and users untouched |
+| `api/views/course_access.py` (`course_access_detail`) | one `granted` `CourseAccess` row; purchased access is refused with `409`, the user, course and enrollment are untouched |
 
 ### 3. Soft-delete (legitimate — keep)
 

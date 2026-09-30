@@ -195,13 +195,7 @@
       </ul>
 
       {% if show_zoom_link %}
-      <div class="mt-6 border-t border-border pt-4" data-testid="event-join-now">
-        <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">Join the event</p>
-        <a href="{% url 'event_join' event.id event.slug %}" target="_blank" rel="noopener noreferrer"
-           class="mt-2 inline-flex text-lg font-medium text-foreground underline underline-offset-4">
-          Click here to join
-        </a>
-      </div>
+      {% include "events/_event_join_now.html" with event=event only %}
       {% endif %}
 
       {% comment %}

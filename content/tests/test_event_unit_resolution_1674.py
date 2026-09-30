@@ -292,7 +292,7 @@ class SessionUnitPresentationTest(TestCase):
         self.assertContains(response, 'data-testid="unit-session-recording"')
         self.assertContains(response, 'data-video-id="p64Pik3OeIA"')
 
-    def test_upcoming_session_shows_actions_without_maven_registration_note(self):
+    def test_upcoming_session_shows_join_note_without_maven_registration_note(self):
         self.event.start_datetime = (
             datetime.datetime.now(tz=datetime.timezone.utc)
             + datetime.timedelta(days=3)
@@ -302,10 +302,7 @@ class SessionUnitPresentationTest(TestCase):
 
         response = self.client.get(self.unit.get_absolute_url())
 
-        self.assertContains(response, 'data-testid="unit-session-actions"')
-        self.assertContains(
-            response, 'Joining details will appear here when available.',
-        )
+        self.assertContains(response, 'data-testid="unit-session-join-note"')
         self.assertNotContains(
             response,
             'Maven handles registration automatically; no separate registration is needed.',

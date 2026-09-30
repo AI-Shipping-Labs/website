@@ -1,0 +1,13 @@
+{% comment %}
+  The join-now block: shown once the join window opens for a viewer who may
+  join. Shared by the event page's registration card and the course session
+  unit. ``event_join_class`` sets the wrapper spacing (default: the event
+  page's divider above the block).
+{% endcomment %}
+<div class="{{ event_join_class|default:'mt-6 border-t border-border pt-4' }}" data-testid="event-join-now">
+  <p class="text-xs font-medium uppercase tracking-widest text-muted-foreground">Join the event</p>
+  <a href="{% url 'event_join' event.id event.slug %}" target="_blank" rel="noopener noreferrer"
+     class="mt-2 inline-flex text-lg font-medium text-foreground underline underline-offset-4">
+    Click here to join
+  </a>
+</div>

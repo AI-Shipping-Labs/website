@@ -401,6 +401,9 @@ go to the members of every dated cohort whose `event_series` is the event's
 series, not only to the registrants. Cohort members' links point at their
 course session unit (`?cohort=<key>`). Works for hidden-series and
 unpublished events. A registrant who is also in the cohort gets one email.
+The course session unit's "You'll get an email reminder" sentence follows
+the same rule, so a cohort member who is not registered only sees it while
+this is on.
 
 Default: `true` (on).
 

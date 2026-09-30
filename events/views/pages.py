@@ -40,7 +40,11 @@ from events.models import (
     SeriesOccurrenceOptOut,
     SeriesRegistration,
 )
-from events.models.event import HIDDEN_FROM_PUBLIC_STATUSES, PUBLIC_EVENT_STATUSES
+from events.models.event import (
+    EVENT_JOIN_WINDOW_MINUTES,
+    HIDDEN_FROM_PUBLIC_STATUSES,
+    PUBLIC_EVENT_STATUSES,
+)
 from events.services.anon_registration_confirmation import (
     canonical_event_url_without_confirmation_params,
     confirmation_query_params_present,
@@ -60,6 +64,7 @@ from events.services.display_time import (
     build_event_time_display,
     should_display_event_location,
 )
+from events.services.event_join import user_can_join_event
 from events.services.freestyle_evidence import build_freestyle_evidence
 from events.services.series_entitlement import is_entitled_for_series
 from events.services.series_registration import _eligible_occurrences
@@ -470,11 +475,9 @@ def event_join_redirect(request, slug, event_id=None):
     if event.status == 'draft' and not request.user.is_staff:
         raise Http404
 
-    # User must be registered for the event
-    is_registered = EventRegistration.objects.filter(
-        event=event, user=request.user,
-    ).exists()
-    if not is_registered:
+    # Registrants and members of dated cohorts linked to the event's series
+    # (the reminder audience) may join; everyone else goes to the event page.
+    if not user_can_join_event(request.user, event):
         # Issue #673: ``event_detail`` is keyed on ``event_id`` + ``slug``
         # now. ``Event.get_absolute_url`` is the single source of truth
         # for the canonical URL shape.
@@ -532,13 +535,14 @@ def event_join_redirect(request, slug, event_id=None):
             ),
         })
 
-    if delta > timedelta(minutes=5):
+    if delta > timedelta(minutes=EVENT_JOIN_WINDOW_MINUTES):
         # Server-rendered initial seconds counts down to ``start - 5 min``.
         # The inline JS ticks the visible timer every 1s; the meta refresh
         # re-evaluates this branch every 30s so the next request 302s
         # once the join window opens.
+        join_window = timedelta(minutes=EVENT_JOIN_WINDOW_MINUTES)
         seconds_until_open = max(
-            int((delta - timedelta(minutes=5)).total_seconds()),
+            int((delta - join_window).total_seconds()),
             0,
         )
         return render(request, 'events/join_countdown.html', {
@@ -564,8 +568,8 @@ def event_join_redirect(request, slug, event_id=None):
     # live-window click. A guarded ``filter(joined_at__isnull=True)``
     # update is a single race-safe statement (first-join-wins): a second
     # click during the window matches zero rows and never overwrites the
-    # original timestamp. The registration row is guaranteed to exist
-    # here — the unregistered branch above already returned.
+    # original timestamp. A cohort member joining without a registration
+    # row matches zero rows; their click is still in ``EventJoinClick``.
     # #853's per-user activity timeline reads the canonical
     # ``EventJoinClick`` log, not this field, so the two do not
     # double-instrument the same click.

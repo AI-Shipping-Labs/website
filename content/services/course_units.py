@@ -34,9 +34,10 @@ from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus
 from content.models.homework import Homework, QuestionType, Submission
 from content.services.course_navigation import course_entry_url
 from content.services.homework_reveal import locked_after_submit, question_results
+from content.services.session_join import build_session_join_context
 from content.templatetags.video_utils import get_video_thumbnail_url
 from content.utils.teaser import first_sentence, truncate_to_words
-from events.models import Event, EventRegistration
+from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
 from events.services.display_time import (
     build_event_time_display,
@@ -731,27 +732,7 @@ def build_unit_session_card_context(unit: Unit, user, *, request=None, cohort=No
             )
         )
 
-    maven_enrolled = False
-    if (
-        not is_past
-        and getattr(user, 'is_authenticated', False)
-        and event.event_series_id
-    ):
-        maven_enrolled = CohortEnrollment.objects.filter(
-            user=user,
-            cohort__course=unit.module.course,
-            cohort__mode=COHORT_MODE_COHORT,
-            cohort__event_series_id=event.event_series_id,
-        ).exists()
-
-    session_join_url = ''
-    if not is_past and getattr(user, 'is_authenticated', False):
-        if event.is_external and maven_enrolled and event.zoom_join_url:
-            session_join_url = event.zoom_join_url
-        elif EventRegistration.objects.filter(event=event, user=user).exists():
-            session_join_url = event.get_join_url()
-
-    return {
+    entry = {
         'event': event,
         'description_html': strip_internal_description_notes(
             event.description_html or '',
@@ -762,12 +743,10 @@ def build_unit_session_card_context(unit: Unit, user, *, request=None, cohort=No
         'show_recording': bool(is_past and event.has_recording),
         'can_watch_recording': can_watch_recording,
         'recording_playback_url': recording_playback_url,
-        'maven_enrolled': maven_enrolled,
-        'can_join_now': not is_past and event.can_show_zoom_link(),
-        'join_url': event.get_join_url(),
-        'session_join_url': session_join_url,
         'recap_url': event.get_recap_url() if is_past and event.recap_is_published else '',
     }
+    entry.update(build_session_join_context(event, user))
+    return entry
 
 
 # --- Homework units resolve by cohort at render time (issue #1683) ---

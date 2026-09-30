@@ -35,7 +35,7 @@ from content.models.cohort import COHORT_MODE_COHORT
 from email_app.models import EmailLog, SesEvent
 from events.models import EventRegistration
 from events.services.calendar_lifecycle import user_has_permanent_bounce
-from integrations.config import site_base_url
+from integrations.config import event_reminders_include_cohort_enabled, site_base_url
 
 User = get_user_model()
 
@@ -94,6 +94,13 @@ def _series_cohort_enrollments(event):
         cohort__event_series_id=event.event_series_id,
         cohort__mode=COHORT_MODE_COHORT,
     )
+
+
+def is_series_cohort_member(event, user_id):
+    """Whether ``user_id`` is in a dated cohort linked to the event's series."""
+    if event.event_series_id is None:
+        return False
+    return _series_cohort_enrollments(event).filter(user_id=user_id).exists()
 
 
 def cohort_member_reasons(event) -> Iterator[tuple[int, AudienceReason]]:
@@ -228,3 +235,25 @@ def email_skip_status(user, signed_up):
     if not signed_up and user.unsubscribed:
         return "skipped_unsubscribed"
     return ""
+
+
+def viewer_receives_event_reminders(event, user):
+    """Whether the 24h/20m reminder emails will reach ``user`` for ``event``.
+
+    Mirrors ``notifications.services.event_reminders``: non-draft,
+    non-cancelled events; registrants always, dated cohort members while
+    ``EVENT_REMINDERS_INCLUDE_COHORT`` is on; and the same email suppression
+    (both reasons are explicit sign-ups).
+    """
+    if event.status in ("draft", "cancelled"):
+        return False
+    if not getattr(user, "is_authenticated", False) or not user.is_active:
+        return False
+    in_audience = EventRegistration.objects.filter(
+        event_id=event.pk, user_id=user.pk,
+    ).exists()
+    if not in_audience and event_reminders_include_cohort_enabled():
+        in_audience = is_series_cohort_member(event, user.pk)
+    if not in_audience:
+        return False
+    return email_skip_status(user, signed_up=True) == ""

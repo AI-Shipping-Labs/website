@@ -58,6 +58,11 @@ EVENT_ORIGIN_CHOICES = [
 # whole words rather than a half-clipped one.
 EVENT_SLUG_MAX_LENGTH = 70
 
+# The join link opens this many minutes before ``start_datetime``. Shared by
+# ``Event.can_show_zoom_link``, the ``event_join_redirect`` gate and the
+# course session unit's "the join link appears here" note.
+EVENT_JOIN_WINDOW_MINUTES = 5
+
 
 def _truncate_event_slug(slug):
     """Return ``slug`` truncated to ``EVENT_SLUG_MAX_LENGTH``.
@@ -867,13 +872,15 @@ class Event(
         return self.join_clicks.count()
 
     def can_show_zoom_link(self):
-        """Return True during the 5-minute pre-start/live join window."""
+        """Return True during the pre-start/live join window."""
         if not self.zoom_join_url or self.status in ('draft', 'cancelled'):
             return False
         if not self.start_datetime or not self.effective_end_datetime:
             return False
         now = timezone.now()
-        join_window_opens = self.start_datetime - timedelta(minutes=5)
+        join_window_opens = self.start_datetime - timedelta(
+            minutes=EVENT_JOIN_WINDOW_MINUTES,
+        )
         return join_window_opens <= now <= self.effective_end_datetime
 
     def formatted_start(self):

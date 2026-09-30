@@ -1238,6 +1238,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_public_links_are_configurable_saved_and_submitted",
     })
 
+    session_join_window_owners = frozenset({
+        "playwright_tests/test_session_unit_join_window.py::"
+        "test_cohort_member_joins_live_session_from_the_unit",
+    })
+
     onboarding_edit_answers_owners = frozenset({
         "playwright_tests/test_onboarding_802.py::TestCompleteAndResume::"
         "test_member_edits_answers_after_submitting_empty",
@@ -1703,6 +1708,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1782_owners
             | self.issue_1802_owners
             | self.issue_1833_owners
+            | self.session_join_window_owners
             | self.template_comment_guard_owners,
         )
         self.assertNotIn(
@@ -1762,6 +1768,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1781_owners
             | self.issue_1782_owners
             | self.issue_1802_owners
+            | self.session_join_window_owners
             | self.template_comment_guard_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

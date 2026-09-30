@@ -20,18 +20,29 @@
     </div>
 
     {% if not entry.is_past %}
-    <div class="mt-4 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
-      {% if entry.session_join_url %}
-      <a href="{{ entry.session_join_url }}" class="{% button_classes 'primary' extra='w-full sm:w-auto' %}" data-testid="unit-session-join">
-        Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
-      </a>
-      {% if not entry.can_join_now and not entry.event.is_external %}<span class="text-sm text-muted-foreground">Opens 5 minutes before the session.</span>{% endif %}
-      {% elif entry.event.zoom_join_url %}
-      <a href="{{ entry.event.get_absolute_url }}" class="text-sm font-medium text-accent hover:underline">See how to join</a>
+      {% comment %}
+        Join states come from content/services/session_join.py. Inside the
+        join window the unit renders the event page's own join partial.
+      {% endcomment %}
+      {% if entry.join_state == "open" %}
+      {% include "events/_event_join_now.html" with event=entry.event event_join_class="mt-4" only %}
+      {% elif entry.join_state == "waiting" %}
+      <p class="mt-4 text-sm text-muted-foreground" data-testid="unit-session-join-note">
+        {% if entry.shows_reminder_note %}<span data-testid="unit-session-reminder-note">You'll get an email reminder before the session.</span> {% endif %}The join link appears here {{ entry.join_window_minutes }} minutes before it starts.
+      </p>
       {% else %}
-      <span class="text-sm text-muted-foreground">Joining details will appear here when available.</span>
+      <div class="mt-4 flex flex-wrap items-center gap-3" data-testid="unit-session-actions">
+        {% if entry.join_state == "external" %}
+        <a href="{{ entry.event.zoom_join_url }}" class="{% button_classes 'primary' extra='w-full sm:w-auto' %}" data-testid="unit-session-join">
+          Join session <i data-lucide="arrow-up-right" class="h-4 w-4" aria-hidden="true"></i>
+        </a>
+        {% elif entry.event.zoom_join_url %}
+        <a href="{{ entry.event.get_absolute_url }}" class="text-sm font-medium text-accent hover:underline">See how to join</a>
+        {% else %}
+        <span class="text-sm text-muted-foreground">Joining details will appear here when available.</span>
+        {% endif %}
+      </div>
       {% endif %}
-    </div>
     {% endif %}
 
     {% if entry.description_html %}

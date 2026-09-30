@@ -29,11 +29,14 @@
       <ol class="divide-y divide-border">
         {% for item in checklist_items %}
         {% comment %}
-          Row actions follow _docs/design-system.md (Row actions). A step that
-          can still be skipped has two actions, so the CTA and Skip share one
-          left-aligned action row below the title and description at every
-          width. A done, skipped, or unskippable step has one action: it sits
-          below the meta on phones and may be pinned right from sm up.
+          Row actions follow _docs/design-system.md (Row actions). Every row in
+          this list shares one placement. Each row has one action group: its
+          button, plus a quiet Skip while the step is still open. Below sm the
+          group sits under the title and description, left-aligned, button
+          first. From sm up the group is pinned right, with Skip inline just
+          before the button, so every button shares the same right edge. Skip comes
+          first in the source so keyboard order matches the pinned group; below
+          sm it moves after the button.
         {% endcomment %}
         <li class="flex items-start gap-3 px-4 py-2.5 sm:px-5 sm:py-3"
             data-testid="{% if checklist_testid == 'free-activation-checklist' and item.key == 'onboarding' and not item.completed %}onboarding-prompt{% elif checklist_testid == 'free-activation-checklist' and item.key == 'slack' and not item.completed %}dashboard-slack-callout{% elif checklist_testid == 'free-activation-checklist' %}free-activation-item-{{ item.key }}{% else %}{{ checklist_testid }}-item-{{ item.key }}{% endif %}"
@@ -42,26 +45,21 @@
           <span class="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border {% if item.skipped %}border-border bg-secondary text-muted-foreground{% elif item.completed %}border-emerald-500/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300{% else %}border-border bg-secondary text-muted-foreground{% endif %}">
             {% if item.skipped %}<i data-lucide="forward" class="h-3.5 w-3.5" aria-hidden="true"></i>{% elif item.completed %}<i data-lucide="check" class="h-3.5 w-3.5" aria-hidden="true"></i>{% else %}<span class="text-xs font-semibold">{{ forloop.counter }}</span>{% endif %}
           </span>
-          {% if checklist_allow_skip and not item.completed and not item.skipped %}
-          <div class="min-w-0 flex-1">
-            {% include "content/_activation_checklist_item_meta.html" %}
-            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-              {% include "content/_activation_checklist_item_action.html" with action_extra="" %}
-              <button type="button"
-                      class="-mx-2 -my-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                      aria-label="Skip {{ item.title }}"
-                      data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-skip-{{ item.key }}{% else %}{{ checklist_testid }}-skip-{{ item.key }}{% endif %}"
-                      data-skip-activation="{{ item.dismissal_key }}">Skip</button>
-            </div>
-          </div>
-          {% else %}
           <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3">
             <div class="min-w-0">
               {% include "content/_activation_checklist_item_meta.html" %}
             </div>
-            {% include "content/_activation_checklist_item_action.html" with action_extra="shrink-0 self-start sm:self-auto" %}
+            <div class="flex shrink-0 items-center gap-x-4 self-start sm:self-auto" data-row-actions>
+              {% if checklist_allow_skip and not item.completed and not item.skipped %}
+              <button type="button"
+                      class="-mx-2 -my-2 inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md px-2 text-xs font-medium text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background order-last sm:order-none"
+                      aria-label="Skip {{ item.title }}"
+                      data-testid="{% if checklist_testid == 'free-activation-checklist' %}free-activation-skip-{{ item.key }}{% else %}{{ checklist_testid }}-skip-{{ item.key }}{% endif %}"
+                      data-skip-activation="{{ item.dismissal_key }}">Skip</button>
+              {% endif %}
+              {% include "content/_activation_checklist_item_action.html" with action_extra="" %}
+            </div>
           </div>
-          {% endif %}
         </li>
         {% endfor %}
       </ol>

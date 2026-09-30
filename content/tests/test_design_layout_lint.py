@@ -7,7 +7,7 @@ reading order.  The shared owners are ``{% section_header %}`` and
 ``{% progress_block %}`` from ``content.templatetags.layout_components``.
 
 This guard parses every non-Studio template under ``templates/`` into a
-tolerant element tree and flags four hand-rolled patterns:
+tolerant element tree and flags five hand-rolled patterns:
 
 ``heading_action_opposite``
     A ``justify-between`` container whose direct children include an
@@ -19,6 +19,12 @@ tolerant element tree and flags four hand-rolled patterns:
     Inside a list row, a ``justify-between`` container that pins a group of
     two or more actions (``{% if %}`` arms count once, a ``{% for %}`` loop
     counts as many) beside the row's meta block.
+``mixed_row_action_placement``
+    A list (``ul``/``ol`` or a ``divide-y`` container) whose rows, across
+    rows or ``{% if %}`` arms, put some actions pinned beside the meta with
+    ``justify-between`` and others in an action row below the meta.  An
+    ``{% include %}`` of a template whose name contains ``action`` counts as
+    an action at the include site.
 ``handrolled_see_all_link``
     An ``h1``-``h3`` immediately followed by a "See all" / "View all" link,
     which is what ``{% section_header %}`` renders.
@@ -60,6 +66,8 @@ TEMPLATE_COMMENT_RE = re.compile(
 )
 TEMPLATE_FLOW_RE = re.compile(r"\{%\s*(for|endfor|else|elif|empty)\b")
 SEE_ALL_RE = re.compile(r"^\s*(see|view) all\b", re.IGNORECASE)
+ACTION_INCLUDE_RE = re.compile(r"\{%\s*include\s+['\"][^'\"]*action[^'\"]*['\"]")
+SKIP_LABEL_RE = re.compile(r"^\s*skip\b", re.IGNORECASE)
 DISMISS_LABEL_RE = re.compile(r"^\s*(close|dismiss)\b", re.IGNORECASE)
 
 
@@ -211,21 +219,49 @@ def _is_justify_between(element: Element) -> bool:
     return any(token.split(":")[-1] == "justify-between" for token in element.classes)
 
 
+def _is_skip(element: Element) -> bool:
+    return element.tag == "button" and SKIP_LABEL_RE.match(element.attrs.get("aria-label", "")) is not None
+
+
+def _is_inline_group(element: Element) -> bool:
+    """A group that lays its children out on one line at every width."""
+    classes = element.classes
+    if not {"flex", "inline-flex"} & set(classes):
+        return False
+    return not any(token.split(":")[-1] == "flex-col" for token in classes)
+
+
 def _action_count(element: Element) -> int:
     """How many real actions ``element`` renders at most.
 
     Mutually exclusive ``{% if %}``/``{% else %}`` arms count once, and an
-    action repeated by a ``{% for %}`` loop counts as two.
+    action repeated by a ``{% for %}`` loop counts as two.  An ``{% include %}``
+    of an action partial counts as one action.  A quiet Skip inline beside
+    exactly one other action in a one-line group is part of that action's
+    group (``_docs/design-system.md``, Row actions), so it does not count; a
+    Skip stacked in a ``flex-col`` group, or alone in its own container,
+    still does.
     """
     if _is_action(element):
         return 0 if _is_dismissal(element) else 1
     arms: dict[int, int] = {}
+    skips: dict[int, int] = {}
     for child in element.children:
         count = _action_count(child)
         if child.looped and count:
             count = max(count, 2)
         arms[child.branch] = arms.get(child.branch, 0) + count
-    return max(arms.values(), default=0)
+        if _is_skip(child) and not child.looped:
+            skips[child.branch] = skips.get(child.branch, 0) + 1
+    included = len(ACTION_INCLUDE_RE.findall("".join(element.own_text)))
+    totals = []
+    for arm in arms.keys() | {0}:
+        total = arms.get(arm, 0) + included
+        skip = skips.get(arm, 0)
+        if _is_inline_group(element) and skip == 1 and total - skip == 1:
+            total -= 1
+        totals.append(total)
+    return max(totals)
 
 
 def _pinned_action_count(container: Element) -> int:
@@ -243,11 +279,20 @@ def _pinned_action_count(container: Element) -> int:
             direct[child.branch] = direct.get(child.branch, 0) + count
         else:
             groups.append(count)
+    included = len(ACTION_INCLUDE_RE.findall("".join(container.own_text)))
+    if included:
+        direct[0] = direct.get(0, 0) + included
     return max(max(groups), max(direct.values(), default=0))
 
 
+def _includes_action(element: Element) -> bool:
+    return any(ACTION_INCLUDE_RE.search("".join(node.own_text)) for node in element.walk())
+
+
 def _has_meta(element: Element) -> bool:
-    return not _real_actions(element) and bool(element.text().strip() or element.children)
+    if _real_actions(element) or _includes_action(element):
+        return False
+    return bool(element.text().strip() or element.children)
 
 
 def _is_pinning_container(element: Element) -> bool:
@@ -302,6 +347,63 @@ def row_actions_beside_meta(root: Element) -> list[Element]:
     return matches
 
 
+LIST_TAGS = frozenset({"ul", "ol"})
+INLINE_TEXT_TAGS = frozenset({"p", "span", "h1", "h2", "h3", "h4", "h5", "h6", "label", "summary"})
+
+
+def _is_list(element: Element) -> bool:
+    return element.tag in LIST_TAGS or any(token.startswith("divide-y") for token in element.classes)
+
+
+def _placements(element: Element, pinned: bool, found: set[str]) -> None:
+    """Record where the row actions under ``element`` sit.
+
+    ``pinned`` means a non-meta child of a ``justify-between`` container that
+    holds the row's meta; ``below`` is any other block-level action.  Links in
+    running text (inside a ``p``, heading, or ``span``) are not row actions,
+    and nested lists are judged on their own.
+    """
+    if _is_list(element):
+        return
+    if _is_action(element):
+        if not _is_dismissal(element):
+            found.add("pinned" if pinned else "below")
+        return
+    if element.tag in INLINE_TEXT_TAGS:
+        return
+    pinning = _is_pinning_container(element)
+    # An ``{% include %}`` of an action partial renders the action in place,
+    # as a direct child of this element.
+    if ACTION_INCLUDE_RE.search("".join(element.own_text)):
+        found.add("pinned" if pinned or pinning else "below")
+    for child in element.children:
+        _placements(child, pinned or (pinning and not _has_meta(child)), found)
+
+
+def mixed_row_action_placement(root: Element) -> list[Element]:
+    """A list whose rows mix right-pinned and below-meta actions.
+
+    Rows in one list share one action placement: a list template must not
+    render some rows (or some ``{% if %}`` arms of its row) with the action
+    pinned beside the meta by ``justify-between`` and others with the action
+    in a row below the meta.  This is the Getting started checklist as it
+    shipped after its two-action rows stacked: skippable steps put CTA and
+    Skip below the description while done and skipped steps kept one action
+    pinned right, so the actions jumped between the right edge and the text
+    column within one list.
+    """
+    matches = []
+    for element in root.walk():
+        if not _is_list(element):
+            continue
+        found: set[str] = set()
+        for child in element.children:
+            _placements(child, False, found)
+        if found == {"pinned", "below"}:
+            matches.append(element)
+    return matches
+
+
 def progress_cta_row(root: Element) -> list[Element]:
     matches = []
     for container in root.walk():
@@ -348,6 +450,7 @@ RULES = (
     Rule("heading_action_opposite", heading_action_opposite),
     Rule("progress_cta_row", progress_cta_row),
     Rule("row_actions_beside_meta", row_actions_beside_meta),
+    Rule("mixed_row_action_placement", mixed_row_action_placement),
 )
 RULE_BY_ID = {rule.rule_id: rule for rule in RULES}
 
@@ -586,6 +689,111 @@ class RowActionsBesideMetaRuleTest(SimpleTestCase):
                 '<div><a href="/a">Open</a><button aria-label="Dismiss tip">x</button></div></li>'
             ),
             "studio": SESSION_ROW_ACTIONS_BESIDE_META,
+        }
+        for name, source in cases.items():
+            path = "templates/studio/page.html" if name == "studio" else "templates/content/sample.html"
+            with self.subTest(name):
+                self.assertEqual(self._count(source, path), 0)
+
+
+# The Getting started checklist as shipped after only its two-action rows
+# stacked: a skippable step puts the CTA (an action partial include) and Skip
+# below the description, while a done or skipped step pins its one action
+# right, so actions jump between the right edge and the text column.
+CHECKLIST_MIXED_PLACEMENT = (
+    '<ol class="divide-y">{% for item in items %}<li class="flex items-start gap-3">\n'
+    "  {% if item.skippable %}\n"
+    '  <div class="min-w-0 flex-1">{% include "content/_item_meta.html" %}\n'
+    '    <div class="mt-2 flex flex-wrap gap-x-4">{% include "content/_item_action.html" %}'
+    '<button type="button" aria-label="Skip {{ item.title }}">Skip</button></div>\n'
+    "  </div>\n"
+    "  {% else %}\n"
+    '  <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">\n'
+    '    <div class="min-w-0">{% include "content/_item_meta.html" %}</div>\n'
+    '    {% include "content/_item_action.html" %}\n'
+    "  </div>\n"
+    "  {% endif %}\n"
+    "</li>{% endfor %}</ol>"
+)
+CHECKLIST_SHARED_PLACEMENT = (
+    '<ol class="divide-y">{% for item in items %}<li class="flex items-start gap-3">\n'
+    '  <div class="min-w-0 flex-1">{% include "content/_item_meta.html" %}\n'
+    '    <div class="mt-2 flex flex-wrap gap-x-4">{% include "content/_item_action.html" %}'
+    '{% if item.skippable %}<button type="button" aria-label="Skip {{ item.title }}">Skip</button>{% endif %}'
+    "</div>\n"
+    "  </div>\n"
+    "</li>{% endfor %}</ol>"
+)
+
+# The shipped checklist row: every row pins one action group right from sm
+# up, and an open step's quiet Skip sits inline just before its button.
+CHECKLIST_PINNED_WITH_INLINE_SKIP = (
+    '<ol class="divide-y">{% for item in items %}<li class="flex items-start gap-3">\n'
+    '  <div class="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">\n'
+    '    <div class="min-w-0">{% include "content/_item_meta.html" %}</div>\n'
+    '    <div class="flex shrink-0 items-center gap-x-4">\n'
+    '      {% if item.skippable %}<button type="button" aria-label="Skip {{ item.title }}" '
+    'class="order-last sm:order-none">Skip</button>{% endif %}\n'
+    '      {% include "content/_item_action.html" %}\n'
+    "    </div>\n"
+    "  </div>\n"
+    "</li>{% endfor %}</ol>"
+)
+
+
+@tag("core")
+class InlineSkipGroupTest(SimpleTestCase):
+    def _count(self, rule_id, source):
+        return len(find_matches(RULE_BY_ID[rule_id], "templates/content/sample.html", source))
+
+    def test_skip_inline_before_one_button_is_one_pinned_group(self):
+        for rule_id in ("row_actions_beside_meta", "mixed_row_action_placement"):
+            with self.subTest(rule_id):
+                self.assertEqual(self._count(rule_id, CHECKLIST_PINNED_WITH_INLINE_SKIP), 0)
+
+    def test_skip_stacked_under_its_button_or_beside_two_buttons_is_flagged(self):
+        cases = {
+            "stacked in a flex-col group": CHECKLIST_PINNED_WITH_INLINE_SKIP.replace(
+                "flex shrink-0 items-center gap-x-4", "flex shrink-0 flex-col items-end"),
+            "beside two real buttons": CHECKLIST_PINNED_WITH_INLINE_SKIP.replace(
+                '{% include "content/_item_action.html" %}',
+                '{% include "content/_item_action.html" %}<a href="/more">More</a>'),
+        }
+        for name, source in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self._count("row_actions_beside_meta", source), 1)
+
+
+@tag("core")
+class MixedRowActionPlacementRuleTest(SimpleTestCase):
+    def _count(self, source, path="templates/content/sample.html"):
+        return len(find_matches(RULE_BY_ID["mixed_row_action_placement"], path, source))
+
+    def test_list_mixing_pinned_and_below_meta_actions_is_flagged(self):
+        self.assertEqual(self._count(CHECKLIST_MIXED_PLACEMENT), 1)
+        self.assertEqual(self._count(CHECKLIST_ROW_ACTION_ROW), 1)
+        self.assertEqual(self._count(CHECKLIST_SHARED_PLACEMENT), 0)
+        self.assertEqual(self._count(CHECKLIST_PINNED_WITH_INLINE_SKIP), 0)
+
+    def test_consistent_or_non_row_placements_are_not_flagged(self):
+        cases = {
+            "every row pins one action": (
+                '<ul>{% for s in sessions %}<li class="flex flex-col sm:flex-row sm:justify-between">'
+                '<div><h4>{{ s.title }}</h4></div><a href="{{ s.url }}">Open session</a></li>{% endfor %}</ul>'
+            ),
+            "inline link in the description of a pinned row": (
+                '<ul><li class="flex sm:justify-between"><div><h4>Slack</h4>'
+                '<p>Read the <a href="/g">guide</a> first.</p></div><a href="/j">Join</a></li></ul>'
+            ),
+            "nested list judged on its own": (
+                '<ul><li><h4>Module</h4><a href="/m">Open module</a>'
+                '<ul><li class="flex justify-between"><p>Lesson</p><a href="/l">Start</a></li></ul></li></ul>'
+            ),
+            "pinned dismiss beside a below-meta action": (
+                '<ul><li class="flex justify-between"><div><h4>Tip</h4><a class="mt-2" href="/t">Open</a></div>'
+                '<button aria-label="Dismiss tip">x</button></li></ul>'
+            ),
+            "studio": CHECKLIST_MIXED_PLACEMENT,
         }
         for name, source in cases.items():
             path = "templates/studio/page.html" if name == "studio" else "templates/content/sample.html"

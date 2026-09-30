@@ -19,7 +19,14 @@ heading itself: at 390px always, and at every width when the row has two or
 more actions (a Skip control counts).  At every width, the actions that share
 one action group must share the same text decoration and colour.  Close and
 dismiss controls are exempt from both checks; Skip is exempt from the style
-check only.
+check only.  A Skip on its button's line, just to its left, is part of that
+button's group, so the group may stay pinned from ``sm`` up.
+
+Rows in one list share one action placement: in every ``ul``/``ol`` inside
+``<main>`` with two or more heading rows that have actions, every action group
+starts at the row's text column at 390px, and from ``sm`` up the groups are
+either all below the meta or all pinned with every button on one right edge.
+A Skip sits on its button's line: before it from ``sm`` up, after it on phones.
 """
 
 import datetime
@@ -104,7 +111,16 @@ ROW_ACTION_PROBLEMS_JS = """
     const skips = [...row.querySelectorAll('button')].filter(
       (el) => own(row, el) && shown(el) && skip(el));
     const placed = actions.concat(skips);
-    if (checkPlacement || placed.length >= 2) {
+    // A quiet Skip on its button's line, just left of it, is part of that
+    // one action group, so the group may stay pinned right from sm up.
+    const inlineSkip = actions.length === 1 && skips.length === 1
+      && skips[0].parentElement === actions[0].parentElement && (() => {
+        const skipBox = skips[0].getBoundingClientRect();
+        const actionBox = actions[0].getBoundingClientRect();
+        const centre = (box) => box.top + box.height / 2;
+        return Math.abs(centre(skipBox) - centre(actionBox)) <= 4 && skipBox.right <= actionBox.left + 1;
+      })();
+    if (checkPlacement || (placed.length >= 2 && !inlineSkip)) {
       const titleBottom = title.getBoundingClientRect().bottom;
       for (const action of placed) {
         const floor = meta && !meta.contains(action) ? meta.getBoundingClientRect().bottom : titleBottom;
@@ -141,6 +157,87 @@ def _row_action_problems(page, viewport):
     return page.evaluate(ROW_ACTION_PROBLEMS_JS, viewport["width"] < 640)
 
 
+# Rows in one list share one action placement (design-system Row actions).
+# For every list in <main> with two or more rows that each have a heading and
+# an action group: below sm every group starts at its row's text column; from
+# sm up every group is either below the meta at the text column or pinned
+# right with every row's button on one right edge, never a mix.  A Skip must
+# share its button's line: to its left from sm up, after it below sm.
+LIST_PLACEMENT_JS = """
+(phone) => {
+  const shown = (el) => {
+    const box = el.getBoundingClientRect();
+    if (box.width <= 1 || box.height <= 1) return false;
+    const style = getComputedStyle(el);
+    return style.visibility !== 'hidden' && style.display !== 'none';
+  };
+  const retire = (el) => /^(close|dismiss|skip)/i.test(el.getAttribute('aria-label') || '')
+    || [...el.attributes].some((attr) => attr.name.includes('dismiss'));
+  const skip = (el) => /^skip/i.test(el.getAttribute('aria-label') || '');
+  const text = (el) => ((el.innerText || el.getAttribute('aria-label') || '').trim().replace(/\\s+/g, ' ')).slice(0, 60);
+  const centre = (box) => box.top + box.height / 2;
+  const near = (a, b) => Math.abs(a - b) <= 4;
+  const problems = [];
+  const checked = [];
+  for (const list of document.querySelectorAll('main ul, main ol')) {
+    if (!shown(list) || list.closest('dialog, [role="dialog"]')) continue;
+    const rows = [];
+    for (const row of list.children) {
+      if (row.tagName !== 'LI' || !shown(row)) continue;
+      const own = (el) => el.closest('li') === row;
+      const title = [...row.querySelectorAll('h1, h2, h3, h4, h5, h6')].find((el) => own(el) && shown(el));
+      if (!title) continue;
+      const inText = (el) => el.closest('p, h1, h2, h3, h4, h5, h6') !== null;
+      const actions = [...row.querySelectorAll('a[href], button')].filter(
+        (el) => own(el) && shown(el) && !inText(el) && !retire(el));
+      if (actions.length === 0) continue;
+      const skips = [...row.querySelectorAll('button')].filter((el) => own(el) && shown(el) && skip(el));
+      rows.push({title, actions, skips});
+    }
+    if (rows.length < 2) continue;
+    const name = (list.closest('[data-testid]') || list).getAttribute('data-testid') || list.tagName;
+    checked.push({name, rows: rows.length});
+    const placements = rows.map(({title, actions, skips}) => {
+      // Layout places each control by its margin box; a Skip's negative
+      // margin widens its hit area without moving where the group starts.
+      const left = Math.min(...actions.concat(skips).map(
+        (el) => el.getBoundingClientRect().left - parseFloat(getComputedStyle(el).marginLeft)));
+      const textLeft = title.getBoundingClientRect().left;
+      const buttonRight = Math.max(...actions.map((el) => el.getBoundingClientRect().right));
+      for (const skipButton of skips) {
+        const skipBox = skipButton.getBoundingClientRect();
+        const buttonBox = actions[0].getBoundingClientRect();
+        const sameLine = near(centre(skipBox), centre(buttonBox));
+        const ordered = phone ? skipBox.left >= buttonBox.right - 1 : skipBox.right <= buttonBox.left + 1;
+        if (!sameLine || !ordered) {
+          problems.push(`${name} row "${text(title)}": Skip is not on its button's line `
+            + `${phone ? 'after' : 'before'} "${text(actions[0])}"`);
+        }
+      }
+      return {title, below: near(left, textLeft), buttonRight};
+    });
+    if (phone || placements.some((row) => row.below)) {
+      for (const row of placements.filter((row) => !row.below)) {
+        problems.push(`${name} row "${text(row.title)}" pins its actions while `
+          + (phone ? 'phone rows put them below the text' : 'other rows put them below the text'));
+      }
+    } else {
+      const edge = Math.max(...placements.map((row) => row.buttonRight));
+      for (const row of placements.filter((row) => !near(row.buttonRight, edge))) {
+        problems.push(`${name} row "${text(row.title)}" button ends at ${Math.round(row.buttonRight)}, `
+          + `off the list's right edge ${Math.round(edge)}`);
+      }
+    }
+  }
+  return {problems, checked};
+}
+"""
+
+
+def _list_placement(page, viewport):
+    return page.evaluate(LIST_PLACEMENT_JS, viewport["width"] < 640)
+
+
 def _assert_layout(page, base_url, paths):
     """``paths`` maps each path to headings that must render there.
 
@@ -160,7 +257,8 @@ def _assert_layout(page, base_url, paths):
                 ).to_be_visible()
             found = page.evaluate(LAYOUT_PROBLEMS_JS)
             found_rows = _row_action_problems(page, viewport)
-            for problem in found["pinned"] + found["overflow"] + found_rows:
+            found_lists = _list_placement(page, viewport)["problems"]
+            for problem in found["pinned"] + found["overflow"] + found_rows + found_lists:
                 problems.append(f"{viewport['width']}px {path}: {problem}")
     assert problems == [], "Design-system layout violations:\n" + "\n".join(problems)
 
@@ -386,3 +484,96 @@ def test_workshop_and_dashboard_keep_actions_below_their_headings(django_server,
         "/": ["For you"],
     })
     context.close()
+
+
+def _mixed_checklist_user(email):
+    """A Main member whose dashboard and course Home checklists mix skipped,
+    done, and open (skippable) steps, the owner's screenshot state."""
+    from content.models import Course, Enrollment, Module, Unit, UserCourseProgress
+
+    user = create_user(email, tier_slug="main", first_name="Mixed")
+    course = Course.objects.create(
+        title="Checklist guard course", slug="checklist-guard-course",
+        status="published", required_level=0,
+    )
+    welcome = Module.objects.create(
+        course=course, title="Welcome and orientation", slug="welcome", sort_order=1,
+    )
+    build = Module.objects.create(course=course, title="Build", slug="build", sort_order=2)
+    Unit.objects.create(module=welcome, title="How this course works", slug="how", sort_order=1)
+    lesson = Unit.objects.create(module=build, title="First lesson", slug="first", sort_order=1)
+    Unit.objects.create(
+        module=build, title="First homework", slug="first-homework", kind="homework",
+        sort_order=2, content_id=uuid.uuid4(),
+    )
+    Enrollment.objects.create(user=user, course=course)
+    UserCourseProgress.objects.create(user=user, unit=lesson, completed_at=timezone.now())
+    user.dashboard_dismissals = [
+        "getting_started_skip_onboarding",
+        "getting_started_skip_slack",
+        "getting_started_skip_ai_hero",
+        "free_activation_sprint_guide_seen",
+        f"course_checklist_skip:{course.slug}:orientation",
+    ]
+    user.save(update_fields=["dashboard_dismissals"])
+    connection.close()
+    return user, course
+
+
+CHECKLISTS = (
+    ("/", "free-activation-checklist", "Set up your account", "Browse events"),
+    ("/courses/checklist-guard-course/home", "course-checklist", "Get set up for this course", "Open homework"),
+)
+
+
+@pytest.mark.core
+@browser_journey
+def test_activation_checklists_share_one_action_placement(django_server, browser):
+    user, _course = _mixed_checklist_user("layout-guard-checklist@test.com")
+    context = _consented_context(browser, user.email)
+    page = context.new_page()
+    _assert_layout(page, django_server, {path: [title] for path, _testid, title, _cta in CHECKLISTS})
+    for viewport in VIEWPORTS:
+        page.set_viewport_size(viewport)
+        for path, testid, _title, cta in CHECKLISTS:
+            page.goto(f"{django_server}{path}", wait_until="load")
+            checklist = page.get_by_test_id(testid)
+            expect(checklist.get_by_text("Skipped").first).to_be_visible()
+            expect(checklist.get_by_role("button", name="Skip", exact=False).first).to_be_visible()
+            expect(checklist.get_by_role("link", name=cta)).to_be_visible()
+            checked = _list_placement(page, viewport)["checked"]
+            assert any(entry["name"] == testid and entry["rows"] >= 3 for entry in checked), checked
+    _assert_list_guard_rejects_old_checklists(page, django_server)
+    context.close()
+
+
+# The checklist as shipped before rows shared one placement: an open step's
+# CTA and Skip moved below the description while done and skipped steps kept
+# their button pinned right.
+MOVE_OPEN_ROW_BELOW_JS = """
+(skip) => {
+  const row = skip.closest('li');
+  row.querySelector('[data-row-actions]').parentElement.className = 'flex min-w-0 flex-1 flex-col gap-2';
+}
+"""
+# The first skippable checklist: Skip stacked under the pinned button.
+STACK_SKIP_UNDER_BUTTON_JS = """
+(skip) => {
+  const group = skip.closest('[data-row-actions]');
+  group.className = 'flex shrink-0 flex-col items-end';
+  group.appendChild(skip);
+}
+"""
+
+
+def _assert_list_guard_rejects_old_checklists(page, base_url):
+    desktop = VIEWPORTS[0]
+    page.set_viewport_size(desktop)
+    path, testid, _title, _cta = CHECKLISTS[0]
+    for script, expected in ((MOVE_OPEN_ROW_BELOW_JS, "other rows put them below the text"),
+                             (STACK_SKIP_UNDER_BUTTON_JS, "Skip is not on its button's line")):
+        page.goto(f"{base_url}{path}", wait_until="load")
+        assert _list_placement(page, desktop)["problems"] == []
+        page.get_by_test_id(testid).locator("[data-skip-activation]").first.evaluate(script)
+        problems = _list_placement(page, desktop)["problems"]
+        assert any(expected in problem for problem in problems), problems

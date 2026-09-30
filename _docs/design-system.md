@@ -230,7 +230,7 @@ actions. Where the actions go depends on how many there are:
 | Actions in the row | Below `sm` (under 640px) | `sm` and up |
 |---|---|---|
 | Two or more | Action row below the meta | Action row below the meta |
-| One | Below the meta | May be pinned right (`sm:flex-row sm:items-center sm:justify-between`) |
+| One (with an optional inline Skip) | Below the meta | May be pinned right (`sm:flex-row sm:items-center sm:justify-between`) |
 
 - The action row is `mt-2 flex flex-wrap gap-x-4 gap-y-1`, directly after the
   meta block. Never put two or more actions in a group pinned opposite the
@@ -245,9 +245,22 @@ actions. Where the actions go depends on how many there are:
   decorations. A destructive text action keeps `text-destructive`.
 - Close and dismiss controls retire the row rather than act on it and are
   exempt from both rules. A Skip control also retires the row, so it keeps its
-  quiet text style, but it still counts as an action: a CTA plus Skip is two
-  actions and they share the action row below the meta, CTA first (the Getting
-  started checklist in `templates/content/_activation_checklist.html`).
+  quiet text style (`text-xs font-medium text-muted-foreground`, no border).
+- A quiet Skip or dismiss text control placed inline immediately before a
+  row's single button is part of that one action group, not a second action.
+  From `sm` up the group may be pinned right: Skip sits on the button's line,
+  vertically centred, a small gap to its left (`flex items-center gap-x-4`).
+  Below `sm` the group moves under the meta, left-aligned, button first
+  (`order-last sm:order-none` on Skip). Skip is never stacked under the
+  button, and a group with two real buttons still goes below the meta.
+- Rows in the same list share one action placement. Never mix right-pinned
+  action groups and below-meta action rows in one list: if any row needs its
+  actions below the meta, every row in that list puts them below the meta.
+  When the groups are pinned, every row's button shares the same right edge.
+  The Getting started checklist
+  (`templates/content/_activation_checklist.html`, on the dashboard and
+  course Home) is the reference: done and skipped steps pin their button,
+  and open steps pin `Skip` plus their button, all on one right edge.
 - Course session rows (Home module card, Next live session, module page, Live
   sessions tab) carry exactly one action, to the session's syllabus unit with
   `?cohort=`: `Open session`, or `Join session` while live. The unit page holds
@@ -276,7 +289,12 @@ Enforcement:
   or more actions beside the meta with `justify-between`, whether one
   container pins a group or several containers (title line, description line)
   each pin one; mutually exclusive `{% if %}` arms count once and a
-  `{% for %}` loop of actions counts as many. Any other exception needs an entry with a reason in
+  `{% for %}` loop of actions counts as many. A quiet Skip inline beside one
+  button in a one-line group counts as part of that button; stacked in a
+  `flex-col` group it still counts. Its `mixed_row_action_placement` rule
+  fails a list (`ul`, `ol`, or `divide-y`) whose rows or `{% if %}` arms pin
+  some actions beside the meta and put others below it; an `{% include %}`
+  of a template named `*action*` counts as an action. Any other exception needs an entry with a reason in
   `content/tests/design_layout_allowlist.py`, which can only shrink.
 - `playwright_tests/test_design_layout_guard.py` (core) loads course Home (all
   five tabs), a module page, a lesson, a session unit, a workshop, and the
@@ -285,7 +303,16 @@ Enforcement:
   `main li` with a heading, each row action must start below the row's meta
   block at 390px, and at both widths when the row has two or more actions
   (Skip counts); at both widths the actions sharing one group must share the
-  same computed text decoration and colour (Skip is exempt from this one).
+  same computed text decoration and colour (Skip is exempt from this one). A
+  Skip on its button's line, just to its left, makes one group with that
+  button, so the group may stay pinned from `sm` up. For every `main` list
+  with two or more rows that have a heading and an action, the rows must
+  share one placement: at 390px every action group starts at the row's text
+  column; from `sm` up the groups either all start at the text column or are
+  all pinned with every button on one right edge. A Skip must sit on its
+  button's line, before it from `sm` up and after it below `sm`. The
+  Getting started checklist is checked on the dashboard and course Home with
+  skipped, done, and open steps mixed.
 - A brief, worklist, or orchestrator instruction never overrides this
   document. If a brief contradicts a rule here, follow this document and flag
   the conflict in the issue.

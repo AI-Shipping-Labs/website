@@ -1480,6 +1480,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_course_reader_pages_keep_actions_below_their_headings",
         "playwright_tests/test_design_layout_guard.py::"
         "test_workshop_and_dashboard_keep_actions_below_their_headings",
+        "playwright_tests/test_design_layout_guard.py::"
+        "test_activation_checklists_share_one_action_placement",
     })
 
     workshop_search_owners = frozenset({
@@ -1639,8 +1641,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2709)
-        self.assertEqual(len(inventory.owners), 2505)
+        self.assertEqual(inventory.item_count, 2710)
+        self.assertEqual(len(inventory.owners), 2506)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}

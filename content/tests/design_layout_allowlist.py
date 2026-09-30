@@ -17,6 +17,7 @@ Rules for editing this file:
 
 DESIGN_LAYOUT_ALLOWLIST: dict[str, dict[str, tuple[int, str]]] = {
     "handrolled_see_all_link": {},
+    "mixed_row_action_placement": {},
     "heading_action_opposite": {
         "templates/plans/_plan_body.html": (
             1,

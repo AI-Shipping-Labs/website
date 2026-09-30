@@ -222,6 +222,18 @@ SCHEDULE_DEFINITIONS = (
         "cb-jobs-sweep", "jobs.tasks.community_base_jobs.sweep_jobs", "*/5 * * * *", description="five-minute cadence"
     ),
     ScheduleDefinition(
+        "coursework-form-pooled-batches",
+        "jobs.tasks.community_base_jobs.form_pooled_batches",
+        "*/15 * * * *",
+        description="every 15 min",
+    ),
+    ScheduleDefinition(
+        "coursework-expire-pooled-reviews",
+        "jobs.tasks.community_base_jobs.expire_pooled_reviews",
+        "*/15 * * * *",
+        description="every 15 min",
+    ),
+    ScheduleDefinition(
         "reconcile-schedules",
         "jobs.tasks.schedule_reconciliation.reconcile_schedules",
         "*/15 * * * *",

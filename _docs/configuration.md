@@ -207,6 +207,8 @@ Send paths (A1.2 migration in progress): transactional sends are moving from `em
 
 Site behavior hooks live in `email_app/hooks.py`, wired in `website/settings.py` under `COMMUNITY_BASE`: `MAIL_PREFERENCE_RESOLVER` (promotional-only opt-out), `MAIL_UNSUBSCRIBE_URL_BUILDER` and `MAIL_VERIFY_EMAIL_URL_BUILDER` (one-click unsubscribe and the verify-email footer), `MAIL_TEMPLATE_OVERRIDE_LOADER` (Studio `EmailTemplateOverride` precedence over `email_app/email_templates/`), `MAIL_SEND_RECORDER` (the `EmailLog` audit row), and `MAIL_CONTEXT_RESOLVER` (`resolve_auth_mail_context`, which mints every rendered URL at delivery time from the delivery's relations and non-secret inputs and injects `site_url` for rendering only, so the stored delivery context never contains a link).
 
+Coursework peer-review mail (issue #1696) is sent by `community_base.coursework` itself, not through `send_package_mail`: `coursework.pool_ready`, `coursework.review_assigned`, `coursework.review_received` and `coursework.review_window_expired`. The file templates live in `email_app/email_templates/`, the purposes are transactional, and `COMMUNITY_BASE["COURSEWORK_REVIEW_URL_BUILDER"]` (`content.services.coursework_bridge.review_path`) returns site-relative AISL review paths. `MAIL_CONTEXT_RESOLVER` makes those paths absolute, adds the Projects tab link and formats the due date in the recipient's timezone, so the stored context holds no link. The package sends these without a per-purpose sender or SES configuration set, so `ses_local` uses `SES_FROM_EMAIL`.
+
 Keys to set in Studio:
 
 | Key | Source | Notes |

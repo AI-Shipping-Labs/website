@@ -1,5 +1,5 @@
 from community_base.config import views as package_settings_views
-from django.urls import include, path
+from django.urls import include, path, register_converter
 
 from studio.views.announcement import announcement_banner_edit
 from studio.views.api_keys import (
@@ -395,6 +395,26 @@ from studio.views.workshops import (
     workshop_regenerate_preview_token,
     workshop_resync,
 )
+
+
+class EmailTemplateKeyConverter:
+    """Email template keys: slugs plus dots (``coursework.pool_ready``).
+
+    Mirrors ``community_base.mail.template_keys.TEMPLATE_KEY_PATTERN`` so
+    every on-disk ``email_app/email_templates/*.md`` key has a Studio route.
+    """
+
+    regex = r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}'
+
+    def to_python(self, value):
+        return value
+
+    def to_url(self, value):
+        return value
+
+
+register_converter(EmailTemplateKeyConverter, 'email_template_key')
+
 
 urlpatterns = [
     # Dashboard
@@ -1451,22 +1471,22 @@ urlpatterns = [
         name='studio_email_template_list',
     ),
     path(
-        'email-templates/<slug:template_name>/edit/',
+        'email-templates/<email_template_key:template_name>/edit/',
         email_template_edit,
         name='studio_email_template_edit',
     ),
     path(
-        'email-templates/<slug:template_name>/reset/',
+        'email-templates/<email_template_key:template_name>/reset/',
         email_template_reset,
         name='studio_email_template_reset',
     ),
     path(
-        'email-templates/<slug:template_name>/preview/',
+        'email-templates/<email_template_key:template_name>/preview/',
         email_template_preview,
         name='studio_email_template_preview',
     ),
     path(
-        'email-templates/<slug:template_name>/send-test/',
+        'email-templates/<email_template_key:template_name>/send-test/',
         email_template_send_test,
         name='studio_email_template_send_test',
     ),

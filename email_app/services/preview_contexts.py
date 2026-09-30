@@ -118,6 +118,48 @@ PREVIEW_CONTEXTS = {
             '?token=preview-token'
         ),
     },
+    # Issue #1696: coursework peer-review mail. The worker hook renders the
+    # links and the recipient-local due date; these are the rendered values.
+    'coursework.pool_ready': {
+        'project_title': 'Attempt 1',
+        'review_count': 3,
+        'reviews': [
+            {
+                'number': number,
+                'url': (
+                    'https://aishippinglabs.com/courses/ai-buildcamp'
+                    f'/projects/attempt-1/reviews/{number}'
+                ),
+            }
+            for number in (1, 2, 3)
+        ],
+        'review_list_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp'
+            '/projects/attempt-1/reviews'
+        ),
+        'due_date_display': 'November 23, 2026, 23:59 Europe/Berlin',
+    },
+    'coursework.review_assigned': {
+        'project_title': 'Attempt 1',
+        'review_count': 3,
+        'review_list_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp'
+            '/projects/attempt-1/reviews'
+        ),
+        'due_date_display': 'November 23, 2026, 23:59 Europe/Berlin',
+    },
+    'coursework.review_received': {
+        'project_title': 'Attempt 1',
+        'projects_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp/home/projects'
+        ),
+    },
+    'coursework.review_window_expired': {
+        'project_title': 'Attempt 1',
+        'projects_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp/home/projects'
+        ),
+    },
     'course_unenroll_notification': {
         'user_id': '42',
         'name': 'Ada Lovelace',

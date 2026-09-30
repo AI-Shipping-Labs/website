@@ -10,6 +10,7 @@ footer. Every hook receives package objects, never request state.
 from __future__ import annotations
 
 import logging
+from datetime import datetime
 
 from community_base.jobs.runner import PermanentJobError
 from community_base.mail.service import MailError
@@ -942,6 +943,67 @@ def _resolve_welcome_imported_context(delivery, context):
     context["sign_in_url"] = f"{base_url}/login/"
 
 
+# Issue #1696: community_base.coursework sends these itself (package
+# ``coursework.notifications``), not through ``send_package_mail``.
+_COURSEWORK_PURPOSES = frozenset({
+    "coursework.pool_ready",
+    "coursework.review_assigned",
+    "coursework.review_received",
+    "coursework.review_window_expired",
+})
+
+
+def _resolve_coursework_context(delivery, context):
+    """Render the coursework peer-review mail links and due date.
+
+    The package stores the course, cohort and project slugs, the review
+    ids and, through ``COURSEWORK_REVIEW_URL_BUILDER``
+    (``content.services.coursework_bridge.review_path``), site-relative
+    review paths. Relative paths are not links under #1613, so the worker
+    makes them absolute here. The ISO ``due_date`` becomes
+    ``due_date_display`` in the recipient's timezone.
+    """
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    from accounts.services.timezones import format_user_datetime  # noqa: PLC0415
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    user = delivery.recipient_user
+    if user is None or not getattr(user, "pk", None):
+        raise PermanentJobError("coursework_recipient_missing")
+    _member_greeting(delivery, context)
+    base_url = site_base_url().rstrip("/")
+
+    def absolute(path):
+        if isinstance(path, str) and path.startswith("/"):
+            return f"{base_url}{path}"
+        return path
+
+    for review in context.get("reviews") or []:
+        if isinstance(review, dict):
+            review["url"] = absolute(review.get("url"))
+
+    course_slug = context.get("course_slug")
+    project_slug = context.get("project_slug")
+    if course_slug and project_slug:
+        review_list = context.get("review_list_url") or reverse(
+            "course_project_reviews",
+            kwargs={"slug": course_slug, "attempt_slug": project_slug},
+        )
+        context["review_list_url"] = absolute(review_list)
+    if course_slug:
+        context["projects_url"] = absolute(
+            reverse("course_projects", kwargs={"slug": course_slug}),
+        )
+
+    due_date = context.get("due_date")
+    if due_date:
+        context["due_date_display"] = format_user_datetime(
+            datetime.fromisoformat(due_date), user,
+        )
+
+
 def resolve_auth_mail_context(*, delivery, context):
     """Mint every rendered link in the worker, not in the stored context.
 
@@ -1009,6 +1071,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_lead_magnet_context(delivery, context)
     elif delivery.purpose == "welcome_imported":
         _resolve_welcome_imported_context(delivery, context)
+    elif delivery.purpose in _COURSEWORK_PURPOSES:
+        _resolve_coursework_context(delivery, context)
     elif delivery.purpose in (
         "email_verification_signup",
         "email_verification_subscribe",

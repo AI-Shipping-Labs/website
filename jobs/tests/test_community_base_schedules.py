@@ -3,6 +3,7 @@
 from io import StringIO
 from unittest import mock
 
+from community_base.jobs.models import JobIntent
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
@@ -30,6 +31,26 @@ class CommunityBaseScheduleRegistrationTest(TestCase):
         self.assertEqual(row.cron, "*/5 * * * *")
         self.assertEqual(row.schedule_type, Schedule.CRON)
 
+    def test_coursework_sweeps_registered_every_15_minutes(self):
+        """Issue #1696: the two package coursework schedules reconcile here."""
+        rows = {
+            row.name: (row.func, row.cron)
+            for row in Schedule.objects.filter(name__startswith="coursework-")
+        }
+        self.assertEqual(
+            rows,
+            {
+                "coursework-form-pooled-batches": (
+                    "jobs.tasks.community_base_jobs.form_pooled_batches",
+                    "*/15 * * * *",
+                ),
+                "coursework-expire-pooled-reviews": (
+                    "jobs.tasks.community_base_jobs.expire_pooled_reviews",
+                    "*/15 * * * *",
+                ),
+            },
+        )
+
     def test_setup_schedules_is_idempotent(self):
         call_command("setup_schedules", stdout=StringIO())
         self.assertEqual(Schedule.objects.filter(name="cb-jobs-run-due").count(), 1)
@@ -48,6 +69,19 @@ class CommunityBaseTaskWrapperTest(TestCase):
     def test_sweep_jobs_calls_package_command(self, call_command_mock):
         community_base_jobs.sweep_jobs()
         call_command_mock.assert_called_once_with("jobs_sweep")
+
+
+class CourseworkScheduleDispatchTest(TestCase):
+    """Issue #1696: the wrappers enqueue the package handlers as durable jobs."""
+
+    def test_wrappers_enqueue_the_registered_coursework_handlers(self):
+        community_base_jobs.form_pooled_batches()
+        community_base_jobs.expire_pooled_reviews()
+
+        self.assertEqual(
+            sorted(JobIntent.objects.values_list("handler", flat=True)),
+            ["coursework.expire_pooled_reviews", "coursework.form_pooled_batches"],
+        )
 
 
 class CommunityBaseStudioPageTest(TestCase):

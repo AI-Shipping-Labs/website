@@ -78,6 +78,8 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'onboarding-reminders',
             'cb-jobs-run-due',
             'cb-jobs-sweep',
+            'coursework-form-pooled-batches',
+            'coursework-expire-pooled-reviews',
             'reconcile-schedules',
         }
         self.assertEqual(names, expected)

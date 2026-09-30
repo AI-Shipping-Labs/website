@@ -272,6 +272,7 @@ def _reattach_course_fks(orphan_course, target_course):
         UserCourseProgress,
     )
     from content.models.cohort import Cohort
+    from content.services.coursework_bridge import ensure_curriculum_cohort
 
     Enrollment.objects.filter(course=orphan_course).update(
         course=target_course,
@@ -279,7 +280,15 @@ def _reattach_course_fks(orphan_course, target_course):
     CourseAccess.objects.filter(course=orphan_course).update(
         course=target_course,
     )
-    Cohort.objects.filter(course=orphan_course).update(course=target_course)
+    moved_cohort_ids = list(
+        Cohort.objects.filter(course=orphan_course).values_list('pk', flat=True),
+    )
+    Cohort.objects.filter(pk__in=moved_cohort_ids).update(course=target_course)
+    # Issue #1696: a queryset update skips post_save, so move each cohort's
+    # cb_curriculum mirror to the target course too. Otherwise deleting the
+    # orphan course would try to cascade into a mirror the cohort restricts.
+    for cohort in Cohort.objects.filter(pk__in=moved_cohort_ids):
+        ensure_curriculum_cohort(cohort)
 
     target_unit_by_content_id = {
         unit.content_id: unit

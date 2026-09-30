@@ -210,6 +210,12 @@ INSTALLED_APPS = [
     # Cohort-specific homework draft persistence; AISL keeps its own
     # assessment/submission tables and adapts them at the reader boundary.
     'community_base.homework_steps',
+    # Issue #1696 phase 4: coursework (projects, peer review) is installed for
+    # its models, services and jobs only. Its Studio section and member API
+    # stay off (COMMUNITY_BASE below); AISL keeps its own learner routes and
+    # Studio pages. content.Cohort bridges onto cb_curriculum.Cohort through
+    # Cohort.curriculum_cohort (content.services.coursework_bridge).
+    'community_base.coursework',
     # Issue #1688: member topic pages synced from AI-Shipping-Labs/wiki,
     # rendered Basic-and-above gated under /topics/.
     'topics',
@@ -850,6 +856,16 @@ COMMUNITY_BASE = {
     'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
     'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
+    # Issue #1696 phase 4: coursework without its Studio section (it needs
+    # community_base.accounts, which AISL does not install) or its member API
+    # routes. AISL project submissions ask for no certificate name.
+    'COURSEWORK_STUDIO_ENABLED': False,
+    'COURSEWORK_MEMBER_API_ENABLED': False,
+    'COURSEWORK_PROJECT_CERTIFICATE_NAME_FIELD': False,
+    # Review links in coursework mail point at AISL course routes. The hook
+    # returns site-relative paths; email_app.hooks.resolve_auth_mail_context
+    # makes them absolute in the worker, so no link is stored (#1613).
+    'COURSEWORK_REVIEW_URL_BUILDER': 'content.services.coursework_bridge.review_path',
     # A7.2a: append, never replace. Package list already has fenced_code,
     # tables, sane_lists and the mermaid/embed fences. codehilite plus the
     # three AISL extensions are what synced content still needs from this site.

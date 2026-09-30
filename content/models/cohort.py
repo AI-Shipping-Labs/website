@@ -73,6 +73,21 @@ class Cohort(models.Model):
         ),
     )
 
+    # Issue #1696 phase 4: the shared cb_curriculum.Cohort this cohort maps
+    # onto. community_base.coursework projects, submissions and enrollments
+    # hang off that row. content.services.coursework_bridge keeps it in step
+    # (post_save signal); the later A5.1 cutover makes the mirror canonical.
+    # RESTRICT, not PROTECT: the mirror cannot be deleted on its own while
+    # this cohort points at it, but deleting the course still cascades to
+    # both rows (PROTECT would block the course delete).
+    curriculum_cohort = models.OneToOneField(
+        'cb_curriculum.Cohort',
+        null=True, blank=True,
+        on_delete=models.RESTRICT,
+        related_name='aisl_cohort',
+        editable=False,
+    )
+
     class Meta:
         ordering = ['start_date']
         constraints = [

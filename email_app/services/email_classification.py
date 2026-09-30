@@ -111,6 +111,13 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # so an unsubscribed paid member still receives it. It is NOT a welcome
     # type, so it sends from the transactional sender, not welcome@.
     "onboarding_reminder",
+    # Issue #1696: community_base.coursework peer-review mail. Operational
+    # course mail for an enrolled learner about their own project and the
+    # reviews they owe, so an unsubscribed learner still receives it.
+    "coursework.pool_ready",
+    "coursework.review_assigned",
+    "coursework.review_received",
+    "coursework.review_window_expired",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

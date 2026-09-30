@@ -159,15 +159,24 @@ def test_staff_reviews_homework_submissions_from_the_course(django_server, brows
 @pytest.mark.django_db(transaction=True)
 @browser_journey
 def test_staff_opens_the_section_studio_destinations(django_server, browser):
-    from content.models import Module
+    from content.models import Cohort, CohortEnrollment, Module
 
-    _create_staff_user(email=STAFF_EMAIL)
+    staff = _create_staff_user(email=STAFF_EMAIL)
     from content.models import Course
 
     course = Course.objects.create(
         title="Sections", slug="open-studio-sections-1837",
         status="published", required_level=0,
     )
+    # Sessions exists only for a dated cohort; a self-paced viewer is
+    # redirected to Home, so the staff member joins a running cohort.
+    today = timezone.localdate()
+    cohort = Cohort.objects.create(
+        course=course, name="Current",
+        start_date=today - timedelta(days=3),
+        end_date=today + timedelta(days=20),
+    )
+    CohortEnrollment.objects.create(cohort=cohort, user=staff)
     module = Module.objects.create(
         course=course, title="Module", slug="module", sort_order=1,
     )

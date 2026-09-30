@@ -365,12 +365,15 @@ def _has_horizontal_overflow(page):
 # - login email of None means anonymous; otherwise the ``page`` is
 #   replaced with an authed context.
 # Genuine multi-column grids / marketing / dashboard keep the full Frame
-# (max-w-7xl): they visibly consume the width.
+# (max-w-7xl): they visibly consume the width. The course module page sits
+# in the sidebar-plus-content reader shell, which the design system also
+# assigns to the Frame.
 LISTINGS_WIDE = [
     ('/', 'max-w-7xl', None),
     ('/resources', 'max-w-7xl', None),
     ('/membership', 'max-w-7xl', None),
     ('/activities', 'max-w-7xl', None),
+    ('/courses/{course_slug}/{module_slug}', 'max-w-7xl', None),
 ]
 
 # Single-column row feeds and sparse 2-column hubs re-tiered 7xl -> 5xl by the
@@ -391,7 +394,6 @@ LISTINGS_NARROW = [
 ]
 
 DETAIL_MEDIUM = [
-    ('/courses/{course_slug}/{module_slug}', 'max-w-5xl'),
     ('/vote/{poll_uuid}', 'max-w-5xl'),
 ]
 
@@ -417,17 +419,19 @@ READER_NARROW = [
 
 @pytest.mark.django_db(transaction=True)
 class TestListingPagesUseMaxW7xl:
-    """Marketing / listing pages all share ``max-w-7xl`` so the page
-    frame doesn't visibly jump when the user clicks between them.
+    """Marketing / listing pages and sidebar-plus-content layouts share
+    ``max-w-7xl`` so the page frame doesn't visibly jump when the user
+    clicks between them.
     """
 
-    @pytest.mark.parametrize('path,expected_max_w,_email', LISTINGS_WIDE)
+    @pytest.mark.parametrize('path_tpl,expected_max_w,_email', LISTINGS_WIDE)
     def test_outer_wrapper_has_target_max_width(
-        self, django_server, browser, path, expected_max_w, _email,
+        self, django_server, browser, path_tpl, expected_max_w, _email,
     ):
         _ensure_tiers()
         _ensure_site_config_tiers()
-        _seed_listings()
+        slugs = _seed_listings()
+        path = path_tpl.format(**slugs)
 
         ctx = browser.new_context(viewport=DESKTOP_VIEWPORT)
         page = ctx.new_page()

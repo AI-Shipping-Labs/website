@@ -180,12 +180,16 @@ class TestAnalyticsConsent:
         page.evaluate(
             """() => {
                 document.querySelector('main').style.paddingBottom = '2000px';
-                window.scrollTo(0, document.documentElement.scrollHeight);
             }"""
         )
+        # The page is still loading after ``domcontentloaded``: the web font
+        # swap can grow it by a few pixels after a one-shot smooth scroll has
+        # picked its target, leaving it short of the bottom for good. Re-scroll
+        # instantly on every poll so the wait converges on the settled layout.
         page.wait_for_function(
             """() => {
                 const doc = document.documentElement;
+                window.scrollTo({top: doc.scrollHeight, behavior: 'instant'});
                 return window.scrollY + window.innerHeight
                     >= doc.scrollHeight - 1;
             }"""

@@ -165,7 +165,7 @@ class TestLoginReturnContext:
         # viewport (1280x720) shows the desktop button; the mobile button
         # is rendered but hidden via ``hidden`` class on the wrapper.
         page.click(
-            'header a.inline-flex:has-text("Sign in")'
+            '#site-header a.inline-flex:has-text("Sign in")'
         )
         page.wait_for_url(
             f"{django_server}/accounts/login/?next=%2Fblog%2F{article.slug}",
@@ -213,7 +213,7 @@ class TestLoginReturnContext:
             f"{django_server}/blog/{article.slug}", timeout=10000
         )
         # Now anonymous; header shows Sign-in button.
-        sign_in = page.locator('header a.inline-flex:has-text("Sign in")')
+        sign_in = page.locator('#site-header a.inline-flex:has-text("Sign in")')
         assert sign_in.count() == 1
         href = sign_in.first.get_attribute("href")
         assert href == f"/accounts/login/?next=%2Fblog%2F{article.slug}", (
@@ -289,7 +289,7 @@ class TestLoginReturnContext:
             )
 
         page.goto(f"{django_server}/", wait_until="domcontentloaded")
-        sign_in = page.locator('header a.inline-flex:has-text("Sign in")')
+        sign_in = page.locator('#site-header a.inline-flex:has-text("Sign in")')
         assert sign_in.count() == 1
         href = sign_in.first.get_attribute("href")
         # Bare login URL — no ``?next=`` for the homepage.
@@ -320,7 +320,7 @@ class TestLoginReturnContext:
         )
         # Find the header Sign-in button (excludes the login form).
         header_sign_in = page.locator(
-            'header a:has-text("Sign in")'
+            '#site-header a:has-text("Sign in")'
         )
         # The header Sign-in href must be the bare login URL, never one
         # carrying ``?next=/accounts/...`` which would create a loop.
@@ -364,7 +364,7 @@ class TestLoginReturnContext:
         )
         # User is now anonymous; header shows Sign-in button.
         assert page.locator(
-            'header a.inline-flex:has-text("Sign in")'
+            '#site-header a.inline-flex:has-text("Sign in")'
         ).count() == 1
         context.close()
 
@@ -441,7 +441,7 @@ class TestLoginReturnContext:
         # Both desktop and mobile Sign-in links live in the rendered
         # DOM regardless of viewport (CSS toggles visibility). Read the
         # href attribute from each rendered occurrence.
-        sign_in_links = page.locator('header a:has-text("Sign in")')
+        sign_in_links = page.locator('#site-header a:has-text("Sign in")')
         # Header renders Sign-in twice for anonymous users (desktop + mobile).
         assert sign_in_links.count() == 2, (
             f"Expected 2 Sign-in links in the header, got "

@@ -80,7 +80,11 @@ def test_mobile_visitor_opens_nested_topic_and_lesson_with_keyboard(browser, dja
         lesson_link = topic_details.locator(f'[data-syllabus-unit-row][href="{lesson.get_absolute_url()}"]')
         expect(lesson_link).to_be_visible()
         assert lesson_link.bounding_box()['height'] >= 44
-        expect(topic_details.get_by_text('Homework', exact=True)).to_be_visible()
+        homework_row = topic_details.locator('[data-syllabus-unit-row]').filter(
+            has_text='Build the retrieval pipeline',
+        )
+        expect(homework_row).to_be_visible()
+        expect(homework_row.locator('[data-testid="syllabus-homework-icon"]')).to_be_visible()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
         assert not weeks.nth(1).evaluate('(el) => el.open')
 

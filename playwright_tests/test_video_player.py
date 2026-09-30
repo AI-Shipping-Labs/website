@@ -21,6 +21,7 @@ Usage:
 import datetime
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from django.utils import timezone
@@ -49,12 +50,8 @@ ISSUE_1545_SCREENSHOT_DIR = Path(__file__).parent.parent / ".tmp" / "issue-1545"
 YOUTUBE_IFRAME_API_STUB = """
 window.YT = {
   Player: function(hostId, config) {
-    var host = document.getElementById(hostId);
-    var iframe = document.createElement('iframe');
-    iframe.src = 'about:blank';
-    iframe.style.width = '100%';
-    iframe.style.height = '100%';
-    host.replaceWith(iframe);
+    // Like the real API, attach to an existing <iframe> host as-is.
+    var iframe = document.getElementById(hostId);
     var player = {
       getIframe: function() { return iframe; },
       seekCalls: [],
@@ -72,6 +69,29 @@ if (window.onYouTubeIframeAPIReady) {
   window.onYouTubeIframeAPIReady();
 }
 """
+
+
+def _stub_youtube(page, embed_referers=None):
+    """Serve the IFrame API stub and a blank embed document locally.
+
+    When ``embed_referers`` is a list, the Referer header of every embed
+    request is appended to it.
+    """
+    page.route(
+        "https://www.youtube.com/iframe_api",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/javascript",
+            body=YOUTUBE_IFRAME_API_STUB,
+        ),
+    )
+
+    def fulfill_embed(route):
+        if embed_referers is not None:
+            embed_referers.append(route.request.all_headers().get("referer"))
+        route.fulfill(status=200, content_type="text/html", body="")
+
+    page.route("https://www.youtube.com/embed/**", fulfill_embed)
 
 
 def _clear_recordings():
@@ -339,14 +359,7 @@ class TestScenario1YouTubeRecordingTimestamps:
             ],
             required_level=0,
         )
-        page.route(
-            "https://www.youtube.com/iframe_api",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="application/javascript",
-                body=YOUTUBE_IFRAME_API_STUB,
-            ),
-        )
+        _stub_youtube(page)
 
         from content.models import Workshop
         workshop = Workshop.objects.get(slug="ai-workshop")
@@ -372,8 +385,7 @@ class TestScenario1YouTubeRecordingTimestamps:
         page.wait_for_load_state("domcontentloaded")
         assert f"{workshop_path}/video" in page.url
 
-        # The API stub creates an unnamed iframe. The shared player must name
-        # that exact injected frame from its onReady callback.
+        # The shared player renders one named iframe that the API attaches to.
         body = page.content()
         assert 'data-source="youtube"' in body
         assert "video-player" in body
@@ -600,6 +612,51 @@ class TestScenario3SelfHostedCourseUnit:
         # element would seek. We just verify no errors occurred.
 
         context.close()
+@pytest.mark.django_db(transaction=True)
+class TestYouTubeCourseUnitSendsReferrer:
+    """Member opens a YouTube course unit; the embed request carries a Referer.
+
+    YouTube answers embed requests without a Referer with "Error 153 Video
+    player configuration error". No real YouTube traffic: the IFrame API and
+    the embed document are both fulfilled locally.
+    """
+
+    @browser_journey
+    def test_youtube_embed_request_sends_page_origin(self, django_server, browser):
+        _clear_courses()
+        _create_user("yt-referrer@test.com", tier_slug="basic")
+        _create_course_with_unit(
+            course_title="Referrer Course",
+            course_slug="referrer-course",
+            module_title="Session 1",
+            unit_title="Watch the session",
+            unit_video_url="https://www.youtube.com/watch?v=refpol0001",
+            required_level=10,
+        )
+
+        context = _auth_context(browser, "yt-referrer@test.com")
+        page = context.new_page()
+        embed_referers = []
+        _stub_youtube(page, embed_referers=embed_referers)
+
+        page.goto(
+            f"{django_server}/courses/referrer-course/session-1/watch-the-session",
+            wait_until="load",
+        )
+
+        iframe = page.get_by_title("YouTube video player", exact=True)
+        expect(iframe).to_have_attribute(
+            "referrerpolicy", "strict-origin-when-cross-origin",
+        )
+        src = iframe.get_attribute("src")
+        assert src.startswith("https://www.youtube.com/embed/refpol0001?")
+        page_origin = page.evaluate("window.location.origin")
+        assert f"origin={quote(page_origin, safe='')}" in src
+        assert embed_referers == [f"{page_origin}/"]
+
+        context.close()
+
+
 # ---------------------------------------------------------------
 # Scenario 4: Auto-embedded YouTube video in article markdown
 # ---------------------------------------------------------------
@@ -968,14 +1025,7 @@ class TestChaptersDisclosureExpandSeekCollapse:
 
         errors = []
         page.on("pageerror", lambda exc: errors.append(str(exc)))
-        page.route(
-            "https://www.youtube.com/iframe_api",
-            lambda route: route.fulfill(
-                status=200,
-                content_type="application/javascript",
-                body=YOUTUBE_IFRAME_API_STUB,
-            ),
-        )
+        _stub_youtube(page)
 
         # Workshop video page is the canonical recording surface (issue #426).
         # Issue #915: bare-slug URLs no longer redirect — use url_key.
@@ -987,7 +1037,6 @@ class TestChaptersDisclosureExpandSeekCollapse:
         )
 
         # Exercise the application's initialization callback before seeking.
-        # The API replaces the host element with its accessible iframe.
         page.wait_for_function(
             "() => Boolean(window._ytPlayers && window._ytPlayers.chapdemo01)"
         )

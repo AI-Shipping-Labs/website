@@ -4,8 +4,8 @@ Covers the round-trip user flow:
 
 - Tutorial page with `video_start` shows a "Watch this section" bar.
 - Clicking the bar lands on `/workshops/<slug>/video?t=MM:SS` with the
-  YouTube embed initialised at the offset (verified by the rendered
-  ``playerVars.start`` literal).
+  YouTube embed initialised at the offset (verified by the ``start``
+  parameter of the embed iframe src).
 - The video page lists timestamps; rows whose seconds match a page's
   ``video_start`` show a tutorial sub-link, and clicking that sub-link
   lands on the matching tutorial page (where the bar reappears).
@@ -149,10 +149,10 @@ class TestWatchBarRoundTrip:
         page.wait_for_load_state('domcontentloaded')
         assert page.url.endswith(f'/workshops/{url_key}/video?t=16:00')
 
-        body = page.content()
-        # YouTube playerVars.start is rendered with the parsed seconds.
-        assert 'start: 960' in body, (
-            'Expected start: 960 in playerVars when ?t=16:00'
+        # The YouTube embed src carries the parsed seconds.
+        embed_src = page.locator('[id^="yt-player-"]').get_attribute('src')
+        assert '&start=960' in embed_src, (
+            'Expected start=960 in the embed src when ?t=16:00'
         )
 
         # Step 3: The timestamps panel renders inverse links for matched rows.
@@ -242,8 +242,9 @@ class TestVideoDeepLink:
             wait_until='domcontentloaded',
         )
         body = page.content()
-        # YouTube playerVars.start carries the parsed seconds.
-        assert 'start: 960' in body
+        # The YouTube embed src carries the parsed seconds.
+        embed_src = page.locator('[id^="yt-player-"]').get_attribute('src')
+        assert '&start=960' in embed_src
         # The timestamps panel still renders (?t= doesn't suppress it).
         assert 'data-testid="video-chapters"' in body
 

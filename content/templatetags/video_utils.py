@@ -57,9 +57,22 @@ def detect_video_source(url):
     return None, None
 
 
-def get_youtube_embed_url(video_id):
-    """Generate YouTube embed URL with API enabled."""
-    return f'https://www.youtube.com/embed/{video_id}?enablejsapi=1'
+# YouTube rejects embeds whose request carries no Referer with "Error 153
+# Video player configuration error". Every YouTube iframe we emit sets this
+# policy explicitly so a stricter document policy, browser default, or
+# extension cannot strip the origin from the embed request.
+YOUTUBE_EMBED_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+
+def get_youtube_embed_url(video_id, start_seconds=None):
+    """Generate YouTube embed URL with API enabled.
+
+    ``start_seconds`` cues the player at that offset without autoplaying.
+    """
+    url = f'https://www.youtube.com/embed/{video_id}?enablejsapi=1&rel=0'
+    if start_seconds:
+        url += f'&start={int(start_seconds)}'
+    return url
 
 
 def get_loom_embed_url(video_id, time_seconds=None):
@@ -277,8 +290,8 @@ def prepare_video_context(video_url, timestamps=None, start_seconds=None):
         timestamps: Optional list of dicts with 'time_seconds'/'label'
             (canonical) or 'time'/'title' (workshop YAML) keys.
         start_seconds: Optional integer seconds to seek to on initial
-            load. Propagated to the YouTube ``playerVars.start`` and the
-            Loom ``?t=`` URL parameter.
+            load. Propagated to the YouTube ``start`` and the Loom ``?t=``
+            embed URL parameters.
 
     Returns:
         Dict with all data needed to render the video player template.
@@ -293,10 +306,14 @@ def prepare_video_context(video_url, timestamps=None, start_seconds=None):
         'timestamps': [],
         'has_timestamps': False,
         'start_seconds': start_seconds,
+        'youtube_referrer_policy': YOUTUBE_EMBED_REFERRER_POLICY,
     }
 
     if source_type == 'youtube' and video_id:
-        context['embed_url'] = get_youtube_embed_url(video_id)
+        context['embed_url'] = get_youtube_embed_url(
+            video_id,
+            start_seconds=start_seconds,
+        )
     elif source_type == 'loom' and video_id:
         context['embed_url'] = get_loom_embed_url(
             video_id,
@@ -345,6 +362,7 @@ def replace_video_urls_in_html(html_content):
                 f'<div class="aspect-video rounded-lg overflow-hidden border border-border">'
                 f'<iframe src="{embed_url}" class="w-full h-full" '
                 f'title="YouTube video player" '
+                f'referrerpolicy="{YOUTUBE_EMBED_REFERRER_POLICY}" '
                 f'allowfullscreen allow="accelerometer; autoplay; clipboard-write; '
                 f'encrypted-media; gyroscope; picture-in-picture"></iframe>'
                 f'</div></div>'

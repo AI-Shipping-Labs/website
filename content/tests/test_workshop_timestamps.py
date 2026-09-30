@@ -388,12 +388,11 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         self.assertContains(response, 'No matching page')
 
     def test_query_t_propagates_to_youtube_player_vars(self):
-        # ?t=16:00 -> 960 seconds -> rendered into playerVars.start.
+        # ?t=16:00 -> 960 seconds -> rendered into the embed src start param.
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/vl/video?t=16:00')
         self.assertEqual(response.status_code, 200)
-        # Look for the start: 960 line inside the playerVars object.
-        self.assertContains(response, 'start: 960')
+        self.assertContains(response, '&amp;start=960')
 
     def test_youtube_player_does_not_autoplay_on_load(self):
         # Issue #899: the YT player is created with start=960 (cued) but
@@ -402,9 +401,11 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/vl/video?t=16:00')
         html = response.content.decode()
-        self.assertIn('start: 960', html)
-        # No autoplay playerVar and no programmatic play on load.
-        self.assertNotIn('autoplay', html)
+        self.assertIn('&amp;start=960', html)
+        # No autoplay embed parameter and no programmatic play on load.
+        # (The iframe `allow` attribute delegates the autoplay permission
+        # so chapter seeks can play; it does not start playback.)
+        self.assertNotIn('autoplay=', html)
         self.assertNotIn('playVideo()', html)
 
     def test_malformed_t_does_not_break_page(self):
@@ -412,12 +413,12 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
         response = self.client.get('/workshops/vl/video?t=not-a-time')
         self.assertEqual(response.status_code, 200)
         # No start parameter rendered when ?t= was unparseable.
-        self.assertNotContains(response, 'start:')
+        self.assertNotContains(response, 'start=')
 
     def test_no_t_param_omits_start(self):
         self.client.force_login(self.user_main)
         response = self.client.get('/workshops/vl/video')
-        self.assertNotContains(response, 'start:')
+        self.assertNotContains(response, 'start=')
 
     def test_paywalled_user_does_not_get_inverse_links(self):
         # Below the recording gate the paywall renders and the inverse
@@ -433,7 +434,7 @@ class WorkshopVideoTimestampLinksTest(TierSetupMixin, TestCase):
             response, 'data-testid="video-chapters"', status_code=403,
         )
         self.assertNotContains(
-            response, 'start: 960', status_code=403,
+            response, 'start=960', status_code=403,
         )
 
 

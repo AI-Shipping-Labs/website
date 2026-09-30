@@ -13,7 +13,7 @@ What each layer asserts:
   matching for playback state, per _docs/testing-guidelines.md.
 - YouTube / Loom (cross-origin iframes): we cannot read their internal
   playing state from Playwright, so we assert the rendered cue contract
-  (``start: 960`` playerVar / ``t=960`` in the Loom src) AND the absence
+  (``start=960`` in the YouTube src / ``t=960`` in the Loom src) AND the absence
   of any autoplay request. The full "is it actually playing" check is
   the [HUMAN] acceptance criterion on the issue.
 
@@ -335,7 +335,7 @@ class TestSelfHostedChapterClickStillPlays:
 
 @pytest.mark.django_db(transaction=True)
 class TestYouTubeCuedNotAutoplaying:
-    """YouTube: rendered config requests start=960 and never autoplay."""
+    """YouTube: rendered embed src requests start=960 and never autoplay."""
 
     def test_youtube_deep_link_cues_without_autoplay(
         self, browser, django_server,
@@ -355,18 +355,18 @@ class TestYouTubeCuedNotAutoplaying:
         )
         # The YT player container renders.
         assert page.locator('#yt-player-dQw4w9WgXcQ').count() == 1
-        # Inspect the YT IFrame API init script: it must request the
-        # offset via playerVars.start and must NOT request autoplay or
-        # call playVideo() on load. (We scope to the init script, not the
-        # whole page — the page's video iframes carry an allow="autoplay"
-        # permission attribute, which permits but does not force playback.)
+        # The embed src cues the offset via start= and must NOT request
+        # autoplay; the init script must not call playVideo() on load.
+        # (The iframe `allow` attribute delegates the autoplay permission,
+        # which permits but does not force playback.)
+        src = page.locator('#yt-player-dQw4w9WgXcQ').get_attribute('data-src')
+        assert '&start=960' in src
+        assert 'autoplay' not in src
         init_script = page.evaluate(
             "() => Array.from(document.scripts)"
             ".map(s => s.textContent)"
             ".find(t => t && t.includes('YT.Player')) || ''"
         )
-        assert 'start: 960' in init_script
-        assert 'autoplay' not in init_script
         assert 'playVideo()' not in init_script
 
         ctx.close()
@@ -434,7 +434,7 @@ class TestGatedReaderCannotDeepLinkPastPaywall:
         assert page.locator('[data-testid="video-paywall"]').count() == 1
         assert page.locator('#video-player-self-hosted').count() == 0
         body = page.content()
-        assert 'start: 960' not in body
+        assert 'start=960' not in body
         assert 'var startSeconds' not in body
 
         ctx.close()

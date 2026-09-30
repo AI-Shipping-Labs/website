@@ -1,4 +1,4 @@
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
 from website import settings as website_settings
 
@@ -24,3 +24,15 @@ class SecuritySettingsConfigTest(SimpleTestCase):
             getattr(website_settings, "SECURE_HSTS_INCLUDE_SUBDOMAINS", False)
         )
         self.assertFalse(getattr(website_settings, "SECURE_HSTS_PRELOAD", False))
+
+
+class ReferrerPolicyHeaderTest(TestCase):
+    def test_pages_send_origin_to_cross_origin_embeds(self):
+        # YouTube rejects embeds without a Referer (Error 153); Django's
+        # default `same-origin` would strip it for every cross-origin iframe.
+        response = self.client.get("/")
+
+        self.assertEqual(
+            response.headers["Referrer-Policy"],
+            "strict-origin-when-cross-origin",
+        )

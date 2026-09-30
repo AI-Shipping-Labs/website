@@ -3,7 +3,21 @@
   <!-- Video Embed -->
   {% if source_type == "youtube" %}
   <div class="aspect-video rounded-lg overflow-hidden border border-border">
-    <div id="yt-player-{{ video_id }}" class="w-full h-full"></div>
+    {% comment %}
+      The iframe is rendered here (not created by the IFrame API) so its
+      referrerpolicy is in place before the first request: YouTube answers
+      embed requests without a Referer with "Error 153". The script below
+      sets src with the page origin, then attaches YT.Player to it.
+    {% endcomment %}
+    <iframe
+      id="yt-player-{{ video_id }}"
+      data-src="{{ embed_url }}"
+      class="w-full h-full"
+      title="YouTube video player"
+      referrerpolicy="{{ youtube_referrer_policy }}"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowfullscreen
+    ></iframe>
   </div>
   {% elif source_type == "loom" %}
   <div class="aspect-video rounded-lg overflow-hidden border border-border">
@@ -58,24 +72,18 @@
   // Store player references globally
   window._ytPlayers = window._ytPlayers || {};
 
+  // The embed must know the page origin for the JS API handshake. When
+  // YT.Player attaches to an existing iframe, player parameters come from
+  // the iframe src, so origin is appended there rather than in playerVars.
+  (function() {
+    var iframe = document.getElementById('yt-player-{{ video_id }}');
+    if (iframe && !iframe.getAttribute('src')) {
+      iframe.src = iframe.dataset.src + '&origin=' + encodeURIComponent(window.location.origin);
+    }
+  })();
+
   function initYTPlayer_{{ video_id|cut:"-" }}() {
-    window._ytPlayers['{{ video_id }}'] = new YT.Player('yt-player-{{ video_id }}', {
-      videoId: '{{ video_id }}',
-      playerVars: {
-        enablejsapi: 1,
-        modestbranding: 1,
-        rel: 0{% if start_seconds %},
-        start: {{ start_seconds|stringformat:"d" }}{% endif %}
-      },
-      events: {
-        onReady: function(event) {
-          var iframe = event.target.getIframe();
-          if (iframe) {
-            iframe.setAttribute('title', 'YouTube video player');
-          }
-        }
-      }
-    });
+    window._ytPlayers['{{ video_id }}'] = new YT.Player('yt-player-{{ video_id }}', {});
   }
 
   if (window.YT && window.YT.Player) {

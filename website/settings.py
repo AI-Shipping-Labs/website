@@ -142,6 +142,12 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 globals().update(_security_setting_values(debug=DEBUG))
 
+# Django defaults to `same-origin`, which strips the Referer from every
+# cross-origin request. YouTube rejects embeds without a Referer ("Error 153
+# Video player configuration error"), so use the browser default: full URL
+# same-origin, origin only cross-origin, nothing on HTTPS -> HTTP.
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
 ALLOWED_HOSTS = _csv_env('ALLOWED_HOSTS', 'localhost,127.0.0.1')
 
 CSRF_TRUSTED_ORIGINS = _csv_env('CSRF_TRUSTED_ORIGINS', '', allow_empty=True)

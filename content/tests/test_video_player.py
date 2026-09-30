@@ -13,6 +13,7 @@ Tests cover:
 """
 
 import json
+from html.parser import HTMLParser
 
 from django.template import Context, Template
 from django.test import Client, TestCase
@@ -30,6 +31,20 @@ from content.templatetags.video_utils import (
     replace_video_urls_in_html,
 )
 from events.models import Event
+
+
+def _iframe_attrs(html, iframe_id):
+    """Return the attributes of the ``<iframe id=iframe_id>`` in ``html``."""
+    found = {}
+
+    class _Parser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            attrs = dict(attrs)
+            if tag == 'iframe' and attrs.get('id') == iframe_id:
+                found.update(attrs)
+
+    _Parser().feed(html)
+    return found
 
 # --- Video Source Detection Tests ---
 
@@ -113,7 +128,13 @@ class EmbedURLTest(TestCase):
 
     def test_youtube_embed_url(self):
         url = get_youtube_embed_url('dQw4w9WgXcQ')
-        self.assertEqual(url, 'https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1')
+        self.assertEqual(
+            url, 'https://www.youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1&rel=0',
+        )
+
+    def test_youtube_embed_url_cues_start_offset(self):
+        url = get_youtube_embed_url('dQw4w9WgXcQ', start_seconds=960)
+        self.assertTrue(url.endswith('&start=960'))
 
     def test_loom_embed_url(self):
         url = get_loom_embed_url('abc123')
@@ -226,7 +247,9 @@ class PrepareVideoContextTest(TestCase):
         ctx = prepare_video_context('https://youtube.com/watch?v=abc123')
         self.assertEqual(ctx['source_type'], 'youtube')
         self.assertEqual(ctx['video_id'], 'abc123')
-        self.assertEqual(ctx['embed_url'], 'https://www.youtube.com/embed/abc123?enablejsapi=1')
+        self.assertEqual(
+            ctx['embed_url'], 'https://www.youtube.com/embed/abc123?enablejsapi=1&rel=0',
+        )
         self.assertFalse(ctx['has_timestamps'])
         self.assertEqual(ctx['timestamps'], [])
 
@@ -282,6 +305,7 @@ class ReplaceVideoURLsInHTMLTest(TestCase):
         self.assertIn('data-video-id="dQw4w9WgXcQ"', result)
         self.assertIn('youtube.com/embed/dQw4w9WgXcQ?enablejsapi=1', result)
         self.assertIn('title="YouTube video player"', result)
+        self.assertIn('referrerpolicy="strict-origin-when-cross-origin"', result)
         self.assertNotIn('<p>https://www.youtube.com/watch?v=dQw4w9WgXcQ</p>', result)
 
     def test_youtu_be_url_replaced(self):
@@ -346,11 +370,25 @@ class VideoPlayerTemplateTagTest(TestCase):
         )
         self.assertIn('data-source="youtube"', html)
         self.assertIn('data-video-id="test123"', html)
-        self.assertIn('yt-player-test123', html)
-        self.assertIn("event.target.getIframe()", html)
+        iframe = _iframe_attrs(html, 'yt-player-test123')
+        self.assertEqual(iframe['title'], 'YouTube video player')
+        self.assertEqual(
+            iframe['data-src'],
+            'https://www.youtube.com/embed/test123?enablejsapi=1&rel=0',
+        )
+
+    def test_youtube_iframe_sends_origin_referrer(self):
+        # Issue: YouTube Error 153 when the embed request has no Referer.
+        html = self._render(
+            '{% load video_tags %}{% video_player video_url="https://youtube.com/watch?v=test123" %}'
+        )
+        iframe = _iframe_attrs(html, 'yt-player-test123')
+        self.assertEqual(
+            iframe['referrerpolicy'], 'strict-origin-when-cross-origin',
+        )
+        # The page origin is appended to the embed src for the JS API.
         self.assertIn(
-            "iframe.setAttribute('title', 'YouTube video player')",
-            html,
+            "'&origin=' + encodeURIComponent(window.location.origin)", html,
         )
 
     def test_loom_video_renders(self):

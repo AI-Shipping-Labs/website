@@ -18,9 +18,9 @@ from django.db import models
 from django.db.models import Prefetch
 
 from content.access import get_required_tier_name
+from content.curriculum_unit_validation import validate_unit
 from content.models.course import (
     ACCESS_MODE_TIER,
-    UNIT_KIND_EVENT,
     CourseExtension,
     UserCourseProgress,
     non_bonus_units,
@@ -305,19 +305,10 @@ def _wrap_inits_and_saves() -> None:
 
     _unit_clean = Unit.clean
 
-    def unit_clean_event_kind(self):
-        from django.core.exceptions import ValidationError
+    def unit_clean(self):
+        validate_unit(self, _unit_clean)
 
-        _unit_clean(self)
-        if self.kind == UNIT_KIND_EVENT:
-            if self.session_position is None or self.session_position < 1:
-                raise ValidationError({
-                    'session_position': (
-                        'kind="event" requires a positive session_position.'
-                    ),
-                })
-
-    Unit.clean = unit_clean_event_kind
+    Unit.clean = unit_clean
 
     def module_clean(self):
         from django.core.exceptions import ValidationError

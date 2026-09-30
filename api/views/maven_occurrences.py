@@ -466,7 +466,11 @@ def maven_occurrence_step_retry(request, occurrence_id, step):
                 "override); the staff summary is sent again. The student "
                 "``maven_removal`` email is sent only when "
                 "``send_student_email`` is true, and at most once per "
-                "occurrence."
+                "occurrence. First, any earlier ``active`` occurrence of the "
+                "same person, course, and cohort that the removal failed to "
+                "close (a split pair, see ``split-pairs``) is closed with a "
+                "``maven_occurrence_split_repaired`` audit row, so it no "
+                "longer keeps course access."
             ),
             "request_body": {
                 "properties": {

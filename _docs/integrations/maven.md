@@ -414,6 +414,19 @@ database constraint. Removal closes the occurrence and revokes the course
 grant, cohort membership, and Maven tier override it created, but never Slack
 membership; a later enrollment creates a genuine new occurrence.
 
+Removal matching: a removal first looks up the active occurrence with its own
+`identity_hash`. Maven has changed its identifiers between enrollment and
+removal (cohort 4 enrolled as `ai engineering buildcamp: from rag to agents` /
+`4/11` and was removed as `from-rag-to-agents` / `4`), so when no hash
+matches, the removal falls back to the same person (resolved account or
+normalized email) plus the same course and cohort. Courses compare by raw
+key, label, slug form, or the linked `Course` (matched by `maven_course_key`
+or title). Cohorts compare by raw key, label, the part before `/` (`4/11`
+counts as `4`), or the linked `Cohort.external_key`. The matched occurrence
+is closed in place, not duplicated. It takes the removal's `identity_hash`,
+and its keys when the removal's `course_key` resolves, and gets a
+`maven_removal_matched_by_resolution` audit row.
+
 The CRM tagging, entitlement, course-access enrollment, staff heads-up
 notification, welcome, slack, and removal steps each persist their own status,
 attempted/completed timestamps, bounded attempt count (three automatic
@@ -464,6 +477,7 @@ The three slashless routes are:
 | `GET` | `/api/integrations/maven/occurrences/<occurrence_id>` | One occurrence and every current step |
 | `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/steps/<step>/retry` | One forced safe retry and the refreshed occurrence |
 | `POST` | `/api/integrations/maven/occurrences/<occurrence_id>/removal/reapply` | Re-run the removal step on a removed occurrence |
+| `GET` | `/api/integrations/maven/occurrences/split-pairs` | Active occurrences left open by a later removal of the same cohort |
 
 List filters combine with AND. `email` is a case-insensitive exact lookup that
 matches the short-lived occurrence email and, when the canonical primary/alias
@@ -553,6 +567,34 @@ uv run asl raw POST /api/integrations/maven/occurrences/37/removal/reapply --dat
 
 An occurrence that is not removed returns `409 maven_occurrence_not_removed`.
 Each call writes a `maven_step_retry` audit row.
+
+### Repairing split enrollment/removal pairs
+
+Before the resolution fallback above, a removal whose raw keys differed from
+the enrollment was recorded as its own `removed` row while the enrollment
+stayed `active`. The student kept the cohort, and course access survived a
+later reapply because the stale occurrence counted as "still active in this
+course". List every such pair:
+
+```bash
+uv run asl raw GET /api/integrations/maven/occurrences/split-pairs
+```
+
+A pair is an `active` occurrence and a `removed` occurrence of the same person
+and the same course and cohort (same matching as above), where the active one
+was created before the removal. Repair a pair by re-applying the removal on its
+`removed` occurrence:
+
+```bash
+uv run asl raw POST /api/integrations/maven/occurrences/17/removal/reapply --data '{}'
+```
+
+Reapply first closes each such earlier active sibling: `lifecycle=removed`,
+the removal's `removed_at`, `removal_status=skipped` (the removal work runs on
+the removed occurrence), and one `maven_occurrence_split_repaired` audit row
+each. Then it re-runs the removal step, so course access is revoked. A later
+re-enrollment, created after the removal, is never closed. Reapplying again
+closes nothing and writes no second audit row.
 
 ## Data minimization and retention
 

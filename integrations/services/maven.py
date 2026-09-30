@@ -18,8 +18,8 @@ from accounts.services.email_resolution import normalize_email, resolve_user_by_
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
-from content.models import Course, CourseAccess
-from content.models.cohort import Cohort, CohortEnrollment
+from content.models import CourseAccess
+from content.models.cohort import CohortEnrollment
 from content.services.course_cohorts import apply_cohort_enrollment_tags
 from email_app.package_mail import send_package_mail
 from events.services.event_audience import email_skip_status
@@ -32,6 +32,14 @@ from integrations.maven_config import (
     maven_removal_student_email_enabled,
 )
 from integrations.models import MavenEnrollmentEvent
+from integrations.services.maven_matching import (
+    MavenUnknownCohortError,
+    MavenUnknownCourseError,
+    claim_resolution_match,
+    close_split_siblings,
+    resolve_maven_cohort,
+    resolve_maven_course,
+)
 from payments.models import Tier, TierOverride
 from payments.services.tier_override_revoke import (
     active_overrides_for,
@@ -57,14 +65,6 @@ _SQLITE_DELIVERY_LOCK = threading.Lock()
 
 class MavenTransientError(Exception):
     """The durable core entitlement step failed and the sender should retry."""
-
-
-class MavenUnknownCourseError(Exception):
-    """No ``Course.maven_course_key`` matches the occurrence's ``course_key``."""
-
-
-class MavenUnknownCohortError(Exception):
-    """No ``Cohort.external_key`` under the resolved course matches ``cohort_key``."""
 
 
 @dataclass
@@ -382,19 +382,9 @@ def _handle_removed(payload, email, course, cohort, course_key, cohort_key, iden
     now = timezone.now()
     was_already_removed = False
     with transaction.atomic():
-        occurrence = (
-            MavenEnrollmentEvent.objects.select_for_update()
-            .filter(identity_hash=identity_hash, lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE)
-            .first()
-        )
+        occurrence = _active_occurrence_for_removal(email, course, cohort, course_key, cohort_key, identity_hash, now)
         if occurrence:
-            occurrence.lifecycle = MavenEnrollmentEvent.LIFECYCLE_REMOVED
-            occurrence.removed_at = now
-            occurrence.event_type = EVENT_REMOVED
-            occurrence.removal_status = MavenEnrollmentEvent.STEP_PENDING
-            occurrence.outcome = MavenEnrollmentEvent.OUTCOME_REMOVAL_NOTIFIED
-            occurrence.payload = _safe_payload(payload)
-            occurrence.save(update_fields=["lifecycle", "removed_at", "event_type", "removal_status", "outcome", "payload", "updated_at"])
+            _close_occurrence(occurrence, payload, now)
         else:
             occurrence = (
                 MavenEnrollmentEvent.objects.filter(identity_hash=identity_hash, lifecycle=MavenEnrollmentEvent.LIFECYCLE_REMOVED)
@@ -402,19 +392,7 @@ def _handle_removed(payload, email, course, cohort, course_key, cohort_key, iden
             )
             was_already_removed = occurrence is not None
             if occurrence is None:
-                user = resolve_user_by_email(email)
-                occurrence = MavenEnrollmentEvent.objects.create(
-                    dedupe_key=_new_delivery_key(identity_hash), identity_hash=identity_hash,
-                    user=user, email=normalize_email(email), course=course, cohort=cohort,
-                    course_key=course_key, cohort_key=cohort_key, event_type=EVENT_REMOVED,
-                    lifecycle=MavenEnrollmentEvent.LIFECYCLE_REMOVED, removed_at=now,
-                    outcome=MavenEnrollmentEvent.OUTCOME_REMOVAL_NOTIFIED,
-                    override_status=MavenEnrollmentEvent.STEP_SKIPPED,
-                    slack_status=MavenEnrollmentEvent.STEP_SKIPPED,
-                    welcome_status=MavenEnrollmentEvent.STEP_SKIPPED,
-                    removal_status=MavenEnrollmentEvent.STEP_PENDING,
-                    payload=_safe_payload(payload),
-                )
+                occurrence = _create_removed_occurrence(payload, email, course, cohort, course_key, cohort_key, identity_hash, now)
     actions = run_occurrence_steps(occurrence, step="removal")
     occurrence.refresh_from_db()
     exhausted_steps = incomplete_steps_at_attempt_ceiling(occurrence)
@@ -431,6 +409,50 @@ def _handle_removed(payload, email, course, cohort, course_key, cohort_key, iden
     return MavenResult(
         "already_processed" if was_already_removed else "removal_notified",
         occurrence.outcome, actions, occurrence.user_id, False, occurrence.pk,
+    )
+
+
+def _active_occurrence_for_removal(email, course, cohort, course_key, cohort_key, identity_hash, now):
+    """The active enrollment this removal closes: exact hash, else resolution match."""
+    occurrence = (
+        MavenEnrollmentEvent.objects.select_for_update()
+        .filter(identity_hash=identity_hash, lifecycle=MavenEnrollmentEvent.LIFECYCLE_ACTIVE)
+        .first()
+    )
+    if occurrence is not None:
+        return occurrence
+    user_id = None
+    user = resolve_user_by_email(email)
+    if user is not None:
+        user_id = user.pk
+    return claim_resolution_match(
+        user_id, email,
+        (course_key, cohort_key, course, cohort), identity_hash, now=now,
+    )
+
+
+def _close_occurrence(occurrence, payload, now):
+    occurrence.lifecycle = MavenEnrollmentEvent.LIFECYCLE_REMOVED
+    occurrence.removed_at = now
+    occurrence.event_type = EVENT_REMOVED
+    occurrence.removal_status = MavenEnrollmentEvent.STEP_PENDING
+    occurrence.outcome = MavenEnrollmentEvent.OUTCOME_REMOVAL_NOTIFIED
+    occurrence.payload = _safe_payload(payload)
+    occurrence.save(update_fields=["lifecycle", "removed_at", "event_type", "removal_status", "outcome", "payload", "updated_at"])
+
+
+def _create_removed_occurrence(payload, email, course, cohort, course_key, cohort_key, identity_hash, now):
+    return MavenEnrollmentEvent.objects.create(
+        dedupe_key=_new_delivery_key(identity_hash), identity_hash=identity_hash,
+        user=resolve_user_by_email(email), email=normalize_email(email), course=course, cohort=cohort,
+        course_key=course_key, cohort_key=cohort_key, event_type=EVENT_REMOVED,
+        lifecycle=MavenEnrollmentEvent.LIFECYCLE_REMOVED, removed_at=now,
+        outcome=MavenEnrollmentEvent.OUTCOME_REMOVAL_NOTIFIED,
+        override_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        slack_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        welcome_status=MavenEnrollmentEvent.STEP_SKIPPED,
+        removal_status=MavenEnrollmentEvent.STEP_PENDING,
+        payload=_safe_payload(payload),
     )
 
 
@@ -1072,45 +1094,6 @@ def _enrollment_notification_entitlement(occurrence):
     return tier, max(expiry_candidates)
 
 
-def resolve_maven_course(course_key):
-    """Resolve ``Course.maven_course_key`` case-insensitively, or raise.
-
-    A blank ``course_key`` is always unresolvable — matching it against
-    blank ``maven_course_key`` rows (the common unconfigured default) would
-    silently grant the wrong course, so it is excluded explicitly rather
-    than relying on an empty-string match to fail to find anything.
-    """
-    if not course_key:
-        raise MavenUnknownCourseError("course_key is blank")
-    course = (
-        Course.objects.exclude(aisl_extension__maven_course_key="")
-        .filter(aisl_extension__maven_course_key__iexact=course_key)
-        .first()
-    )
-    if course is None:
-        raise MavenUnknownCourseError(
-            f"no Course.maven_course_key matches {course_key!r}"
-        )
-    return course
-
-
-def resolve_maven_cohort(course, cohort_key):
-    """Resolve ``Cohort.external_key`` under ``course`` case-insensitively, or raise."""
-    if not cohort_key:
-        raise MavenUnknownCohortError("cohort_key is blank")
-    cohort = (
-        Cohort.objects.filter(course=course)
-        .exclude(external_key="")
-        .filter(external_key__iexact=cohort_key)
-        .first()
-    )
-    if cohort is None:
-        raise MavenUnknownCohortError(
-            f"no Cohort.external_key under course={course.pk} matches {cohort_key!r}"
-        )
-    return cohort
-
-
 def _cohort_event_series(cohort):
     """Return the cohort's linked ``EventSeries``, or ``None``.
 
@@ -1411,11 +1394,14 @@ def reapply_removal(occurrence, *, send_student_email=False):
     """
     if occurrence.lifecycle != MavenEnrollmentEvent.LIFECYCLE_REMOVED:
         raise ValueError("occurrence is not removed")
+    actions = []
+    # Repair a split pair first: an earlier active occurrence of the same
+    # enrollment would otherwise count as "still active" and keep access.
+    close_split_siblings(occurrence, actions)
     MavenEnrollmentEvent.objects.filter(pk=occurrence.pk).update(
         removal_status=MavenEnrollmentEvent.STEP_PENDING,
         updated_at=timezone.now(),
     )
-    actions = []
     result = _run_step(
         occurrence.pk, "removal", actions,
         force=True, send_student_email=send_student_email,

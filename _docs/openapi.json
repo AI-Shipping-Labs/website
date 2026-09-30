@@ -8670,6 +8670,318 @@
         ]
       }
     },
+    "/api/integrations/maven/occurrences/split-pairs": {
+      "get": {
+        "description": "Return every pair where a person has an ``active`` occurrence and a later ``removed`` occurrence of the same course and cohort, matched by account or normalized email plus resolved course/cohort keys (raw keys and hashes may differ). Such a removal was recorded as its own row and left the enrollment active. Repair a pair with ``POST .../occurrences/<removed id>/removal/reapply``. Read-only.",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "count": {
+                      "type": "integer"
+                    },
+                    "pairs": {
+                      "items": {
+                        "properties": {
+                          "active": {
+                            "properties": {
+                              "cohort": {
+                                "type": "string"
+                              },
+                              "cohort_key": {
+                                "type": "string"
+                              },
+                              "course": {
+                                "type": "string"
+                              },
+                              "course_key": {
+                                "type": "string"
+                              },
+                              "created_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "event_type": {
+                                "type": "string"
+                              },
+                              "failed_steps": {
+                                "items": {
+                                  "enum": [
+                                    "tagging",
+                                    "override",
+                                    "enrollment",
+                                    "notification",
+                                    "welcome",
+                                    "slack",
+                                    "removal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "id": {
+                                "type": "integer"
+                              },
+                              "lifecycle": {
+                                "enum": [
+                                  "active",
+                                  "removed",
+                                  "legacy"
+                                ],
+                                "type": "string"
+                              },
+                              "needs_attention_steps": {
+                                "items": {
+                                  "enum": [
+                                    "tagging",
+                                    "override",
+                                    "enrollment",
+                                    "notification",
+                                    "welcome",
+                                    "slack",
+                                    "removal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "occurrence_email": {
+                                "format": "email",
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "type": "string"
+                              },
+                              "payload_redacted_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "updated_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "user": {
+                                "properties": {
+                                  "email": {
+                                    "format": "email",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "user",
+                              "occurrence_email",
+                              "course",
+                              "cohort",
+                              "course_key",
+                              "cohort_key",
+                              "event_type",
+                              "lifecycle",
+                              "outcome",
+                              "failed_steps",
+                              "needs_attention_steps",
+                              "payload_redacted_at",
+                              "created_at",
+                              "updated_at"
+                            ],
+                            "type": "object"
+                          },
+                          "removed": {
+                            "properties": {
+                              "cohort": {
+                                "type": "string"
+                              },
+                              "cohort_key": {
+                                "type": "string"
+                              },
+                              "course": {
+                                "type": "string"
+                              },
+                              "course_key": {
+                                "type": "string"
+                              },
+                              "created_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "event_type": {
+                                "type": "string"
+                              },
+                              "failed_steps": {
+                                "items": {
+                                  "enum": [
+                                    "tagging",
+                                    "override",
+                                    "enrollment",
+                                    "notification",
+                                    "welcome",
+                                    "slack",
+                                    "removal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "id": {
+                                "type": "integer"
+                              },
+                              "lifecycle": {
+                                "enum": [
+                                  "active",
+                                  "removed",
+                                  "legacy"
+                                ],
+                                "type": "string"
+                              },
+                              "needs_attention_steps": {
+                                "items": {
+                                  "enum": [
+                                    "tagging",
+                                    "override",
+                                    "enrollment",
+                                    "notification",
+                                    "welcome",
+                                    "slack",
+                                    "removal"
+                                  ],
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "occurrence_email": {
+                                "format": "email",
+                                "type": "string"
+                              },
+                              "outcome": {
+                                "type": "string"
+                              },
+                              "payload_redacted_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "updated_at": {
+                                "format": "date-time",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "user": {
+                                "properties": {
+                                  "email": {
+                                    "format": "email",
+                                    "type": "string"
+                                  },
+                                  "id": {
+                                    "type": "integer"
+                                  }
+                                },
+                                "type": [
+                                  "object",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "user",
+                              "occurrence_email",
+                              "course",
+                              "cohort",
+                              "course_key",
+                              "cohort_key",
+                              "event_type",
+                              "lifecycle",
+                              "outcome",
+                              "failed_steps",
+                              "needs_attention_steps",
+                              "payload_redacted_at",
+                              "created_at",
+                              "updated_at"
+                            ],
+                            "type": "object"
+                          }
+                        },
+                        "required": [
+                          "active",
+                          "removed"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "pairs",
+                    "count"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Split pairs, oldest removal first."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_token",
+                  "error": "Missing or invalid staff-owned operator token."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "method_not_allowed",
+                  "error": "Method not allowed."
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Method not allowed."
+          }
+        },
+        "summary": "List split Maven enrollment/removal pairs",
+        "tags": [
+          "Maven Integrations"
+        ]
+      }
+    },
     "/api/integrations/maven/occurrences/{occurrence_id}": {
       "get": {
         "description": "Return the current persisted occurrence and every ledger step. This operation is read-only and makes no provider calls.",
@@ -9008,7 +9320,7 @@
     },
     "/api/integrations/maven/occurrences/{occurrence_id}/removal/reapply": {
       "post": {
-        "description": "Re-runs the ``removal`` step for an occurrence already in ``lifecycle=removed``, even when the step previously succeeded. Use it for removals processed before the step revoked the Maven tier override and sent the real-outcome staff summary. Every change is idempotent (course access, cohort enrollment, series registration, tags, Maven override); the staff summary is sent again. The student ``maven_removal`` email is sent only when ``send_student_email`` is true, and at most once per occurrence.",
+        "description": "Re-runs the ``removal`` step for an occurrence already in ``lifecycle=removed``, even when the step previously succeeded. Use it for removals processed before the step revoked the Maven tier override and sent the real-outcome staff summary. Every change is idempotent (course access, cohort enrollment, series registration, tags, Maven override); the staff summary is sent again. The student ``maven_removal`` email is sent only when ``send_student_email`` is true, and at most once per occurrence. First, any earlier ``active`` occurrence of the same person, course, and cohort that the removal failed to close (a split pair, see ``split-pairs``) is closed with a ``maven_occurrence_split_repaired`` audit row, so it no longer keeps course access.",
         "parameters": [
           {
             "in": "path",

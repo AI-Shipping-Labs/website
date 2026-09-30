@@ -130,6 +130,7 @@ from api.views.maven_occurrences import (
     maven_occurrence_step_retry,
     maven_occurrences_collection,
 )
+from api.views.maven_split_pairs import maven_occurrence_split_pairs
 from api.views.onboarding import (
     onboarding_personas,
     onboarding_questionnaires,
@@ -564,6 +565,11 @@ urlpatterns = [
         "integrations/maven/occurrences",
         maven_occurrences_collection,
         name="api_maven_occurrences_collection",
+    ),
+    path(
+        "integrations/maven/occurrences/split-pairs",
+        maven_occurrence_split_pairs,
+        name="api_maven_occurrence_split_pairs",
     ),
     path(
         "integrations/maven/occurrences/<int:occurrence_id>/keys",

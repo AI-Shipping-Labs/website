@@ -340,16 +340,7 @@ class CourseCommitmentsTests(TestCase):
         self.assertEqual(work['url'], step.get_absolute_url())
         self.assertIsNone(work['available_date'])
 
-    def test_live_future_past_and_cancelled_sessions_have_truthful_actions(self):
-        self._event(
-            'past-without-replay', self.series_one,
-            start=self.now - datetime.timedelta(days=2), status='completed',
-        )
-        recap = self._event(
-            'past-with-recap', self.series_one,
-            start=self.now - datetime.timedelta(days=1), status='completed',
-            recap_html='<p>Recap</p>',
-        )
+    def test_live_future_and_cancelled_sessions_have_truthful_actions(self):
         live = self._event(
             'live-session', self.series_one,
             start=self.now - datetime.timedelta(minutes=1),
@@ -374,9 +365,35 @@ class CourseCommitmentsTests(TestCase):
         self.assertEqual(future_row['action'], 'View session')
         self.assertEqual(future_row['url'], future.get_absolute_url())
         self.assertIn(model['commitment_timezone'], future_row['when_label'])
-        self.assertEqual([row['title'] for row in model['past_events']], [recap.title])
-        self.assertEqual(model['past_events'][0]['url'], recap.get_recap_url())
         self.assertNotIn('Cancelled Session', [row['title'] for row in model['schedule_rows']])
+
+    def test_past_sessions_link_nowhere_and_feature_the_latest_with_contents(self):
+        # A past session row never links out to the event's recap or
+        # recording (its syllabus unit holds them); with nothing upcoming,
+        # the most recent past session that has a recap or recording is
+        # the featured one.
+        self._event(
+            'older-with-recap', self.series_one,
+            start=self.now - datetime.timedelta(days=3), status='completed',
+            recap_html='<p>Recap</p>',
+        )
+        recap = self._event(
+            'newer-with-recap', self.series_one,
+            start=self.now - datetime.timedelta(days=2), status='completed',
+            recap_html='<p>Recap</p>',
+        )
+        self._event(
+            'newest-without-replay', self.series_one,
+            start=self.now - datetime.timedelta(days=1), status='completed',
+        )
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+        past = [row for row in model['live_session_schedule'] if row['status'] == 'Past']
+        self.assertEqual(len(past), 3)
+        self.assertEqual({(row['url'], row['action']) for row in past}, {('', '')})
+        featured = [row['title'] for row in model['live_session_schedule'] if row['featured']]
+        self.assertEqual(featured, [recap.title])
 
     def test_self_paced_homework_has_no_fake_deadline_or_overdue_state(self):
         cohort = Cohort.objects.create(

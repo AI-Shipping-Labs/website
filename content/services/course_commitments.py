@@ -127,13 +127,10 @@ def _without_date(row):
 def _event_row(event, timezone_name, now):
     """Build one truthful schedule row from a persisted occurrence."""
     if event.is_past:
-        if event.recap_is_published:
-            url, action = event.get_recap_url(), 'Read recap'
-        elif event.has_recording:
-            url, action = event.get_recording_url(), 'Watch recording'
-        else:
-            url, action = '', ''
-        status = 'Past'
+        # Course surfaces open a past session's syllabus unit, which holds
+        # the recording and recap (``current_module.session_item``), so the
+        # row carries no link of its own to the event's recap or recording.
+        url, action, status = '', '', 'Past'
     elif event.can_show_zoom_link():
         url, action, status = event.get_join_url(), 'Join now', 'Live now'
     elif event.start_datetime <= now:
@@ -150,6 +147,7 @@ def _event_row(event, timezone_name, now):
     row['event'] = event
     row['card_variant'] = 'past' if event.is_past else 'upcoming'
     row['recap_url'] = event.get_recap_url() if event.recap_is_published else ''
+    row['has_contents'] = event.is_past and (event.recap_is_published or event.has_recording)
     return row
 
 
@@ -513,7 +511,7 @@ def _next_linked_session(course, events):
     upcoming = [row for row in linked if row['status'] in ('Live now', 'In progress', 'Upcoming')]
     if upcoming:
         return min(upcoming, key=lambda row: row['when'])
-    recoverable = [row for row in linked if row['action'] and row['when']]
+    recoverable = [row for row in linked if row.get('has_contents')]
     return max(recoverable, key=lambda row: row['when']) if recoverable else None
 
 
@@ -599,7 +597,7 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
     featured_live_session = next_event or next_live_session
     if featured_live_session is None:
         featured_live_session = next(
-            (row for row in reversed(events) if row['action'] and row['when']), None,
+            (row for row in reversed(events) if row.get('has_contents')), None,
         )
     upcoming_sessions = [row for row in events if not row['complete'] and row['when']]
     past_sessions = [row for row in events if row['complete']]
@@ -651,7 +649,6 @@ def build_course_commitments(course, user, cohort, *, now=None, focus_module=Non
         'coming_up': upcoming,
         'schedule_rows': schedule,
         'live_session_schedule': live_session_schedule,
-        'past_events': [row for row in events if row['complete'] and row['action']],
         'open_assignments': open_assignments,
         'completed_assignments': completed_assignments,
         'commitment_timezone': timezone_name,

@@ -275,6 +275,12 @@ given row and a person needs a manual nudge.
   step is never re-run. The step sends no email, writes no
   `CommunityAuditLog` row (the ledger step is the audit trail), and never
   removes a tag. An occurrence with no linked account is `skipped`.
+  Separately, every dated `CohortEnrollment` creation path (this webhook's
+  `enrollment` step, the staff enroll API `--cohort`, Studio add/change
+  cohort, learner self-pick, homework auto-enroll, Django admin) calls
+  `content.services.course_cohorts.apply_cohort_enrollment_tags`, which adds
+  `<course-slug>` and `<course-slug>-<cohort external_key>` (for example
+  `ai-buildcamp`, `ai-buildcamp-4`). Only `maven` is Maven-specific.
 - Grants or extends a source-specific `main` entitlement. It never lowers,
   replaces, or shortens a stronger base/staff/billing grant; Maven access keeps
   its own expiry and becomes effective if a temporary stronger grant expires.

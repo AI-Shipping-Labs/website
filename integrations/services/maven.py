@@ -20,6 +20,7 @@ from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
 from content.models import Course, CourseAccess
 from content.models.cohort import Cohort, CohortEnrollment
+from content.services.course_cohorts import apply_cohort_enrollment_tags
 from email_app.package_mail import send_package_mail
 from integrations.config import get_config, validate_email_config_value
 from integrations.maven_config import (
@@ -1134,6 +1135,9 @@ def _run_enrollment_step(row, actions):
 
     CohortEnrollment.objects.get_or_create(cohort=cohort, user=row.user)
     actions.append(f"Enrolled in cohort {cohort.external_key}.")
+    added_tags = apply_cohort_enrollment_tags(row.user, cohort)
+    if added_tags:
+        actions.append(f"Applied cohort contact tags: {', '.join(added_tags)}.")
 
     series = _cohort_event_series(cohort)
     if series is not None:

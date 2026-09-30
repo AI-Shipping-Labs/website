@@ -33,6 +33,7 @@ from content.models.homework import Submission
 from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_cohorts import apply_cohort_enrollment_tags
 from content.services.course_commitments import build_course_commitments, is_self_paced_view
 from content.services.course_home import build_course_home
 from content.services.course_inline import (
@@ -1532,6 +1533,7 @@ def api_cohort_enroll(request, slug, cohort_id):
         )
 
     CohortEnrollment.objects.create(cohort=cohort, user=user)
+    apply_cohort_enrollment_tags(user, cohort)
 
     # Record a `course_enroll` activity row for the CRM timeline
     # (issue #853). Defensive — never raises into the enroll path.

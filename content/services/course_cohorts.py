@@ -4,6 +4,7 @@ from django.db import transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
+from accounts.utils.tags import normalize_tag, set_tags
 from content.models import Unit
 from content.models.cohort import (
     COHORT_MODE_COHORT,
@@ -81,6 +82,69 @@ def ordered_course_cohorts(course, today=None):
     return live + past + rest
 
 
+def cohort_contact_tags(cohort):
+    """Return the CRM contact tags a member of ``cohort`` carries.
+
+    Only dated cohorts (``mode='cohort'``) are tagged; a self-paced cohort
+    returns ``[]``. The rule is generic and content-derived, so no course is
+    hardcoded: the course tag is the course slug (from the content repo) and
+    the cohort tag is ``<course-slug>-<cohort external_key>`` (the key from
+    ``course.yaml``'s ``cohorts:`` list). A cohort without an external key
+    gets the course tag only. For ai-buildcamp Cohort 4 that is
+    ``["ai-buildcamp", "ai-buildcamp-4"]`` -- the same names the Maven
+    webhook's ``MAVEN_COURSE_TAG_PREFIXES`` default produces.
+    """
+    if cohort is None or cohort.mode != COHORT_MODE_COHORT:
+        return []
+    course_tag = normalize_tag(cohort.course.slug)
+    if not course_tag:
+        return []
+    tags = [course_tag]
+    cohort_tag = normalize_tag(f'{course_tag}-{cohort.external_key or ""}')
+    if cohort_tag and cohort_tag != course_tag:
+        tags.append(cohort_tag)
+    return tags
+
+
+def apply_cohort_enrollment_tags(user, cohort):
+    """Add ``cohort``'s contact tags to ``user``; return the tags added.
+
+    The single tagging hook every ``CohortEnrollment`` creation path calls
+    (Maven webhook, staff API ``--cohort``, Studio add/move, learner
+    self-pick, homework auto-enroll, Django admin). Idempotent and additive:
+    tags already present are left alone, nothing is removed, and the user
+    row is only saved when a tag is actually missing. Never sends email.
+    """
+    wanted = cohort_contact_tags(cohort)
+    if not wanted or user is None:
+        return []
+    current = list(user.tags or [])
+    added = [tag for tag in wanted if tag not in current]
+    if added:
+        set_tags(user, current + added)
+    return added
+
+
+def retract_cohort_tag(user, cohort):
+    """Remove ``cohort``'s own cohort tag from ``user`` (course tag kept).
+
+    Used when a staff "change cohort" move deletes the old dated
+    enrollment: the member is no longer in that cohort, so a campaign
+    targeting its tag must not reach them. The course-level tag stays
+    because the member is still in a cohort of the same course.
+    """
+    tags = cohort_contact_tags(cohort)
+    if len(tags) < 2:
+        return ''
+    cohort_tag = tags[1]
+    current = list(user.tags or [])
+    if cohort_tag not in current:
+        return ''
+    current.remove(cohort_tag)
+    set_tags(user, current)
+    return cohort_tag
+
+
 def assign_cohort_enrollment(user, cohort, *, replace_dated=False):
     """Idempotently put ``user`` into ``cohort``; return ``(row, created)``.
 
@@ -89,18 +153,24 @@ def assign_cohort_enrollment(user, cohort, *, replace_dated=False):
     ``ensure_self_paced_cohort_enrollment`` is a no-op once one exists.
     With ``replace_dated=True`` (a staff "change cohort" move) the user's
     other dated cohorts in the same course are removed, so ``cohort`` is
-    the only dated cohort left.
+    the only dated cohort left, and their cohort tags are retracted.
+    The course and cohort contact tags are applied either way.
     """
     with transaction.atomic():
         enrollment, created = CohortEnrollment.objects.get_or_create(
             cohort=cohort, user=user,
         )
         if replace_dated:
-            CohortEnrollment.objects.filter(
+            replaced = CohortEnrollment.objects.filter(
                 user=user,
                 cohort__course_id=cohort.course_id,
                 cohort__mode=COHORT_MODE_COHORT,
-            ).exclude(cohort=cohort).delete()
+            ).exclude(cohort=cohort).select_related('cohort__course')
+            replaced_cohorts = [row.cohort for row in replaced]
+            replaced.delete()
+            for old_cohort in replaced_cohorts:
+                retract_cohort_tag(user, old_cohort)
+        apply_cohort_enrollment_tags(user, cohort)
     return enrollment, created
 
 

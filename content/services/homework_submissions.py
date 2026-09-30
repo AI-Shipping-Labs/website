@@ -12,6 +12,7 @@ from django.utils import timezone
 
 from content.models.cohort import CohortEnrollment
 from content.models.homework import Answer, QuestionType, Submission
+from content.services.course_cohorts import apply_cohort_enrollment_tags
 from content.services.homework_scoring import is_answer_correct
 
 
@@ -54,9 +55,11 @@ def save_submission(
     ``homework.is_accepting_submissions`` before calling this -- it does not
     re-check the deadline itself.
     """
-    enrollment, _ = CohortEnrollment.objects.get_or_create(
+    enrollment, enrollment_created = CohortEnrollment.objects.get_or_create(
         user=user, cohort=homework.cohort,
     )
+    if enrollment_created:
+        apply_cohort_enrollment_tags(user, homework.cohort)
 
     submission, _created = Submission.objects.get_or_create(
         homework=homework, student=user,

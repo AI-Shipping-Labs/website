@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from content.models import Cohort, CohortEnrollment
+from content.services.course_cohorts import apply_cohort_enrollment_tags
 
 
 class CohortEnrollmentInline(admin.TabularInline):
@@ -25,6 +26,13 @@ class CohortAdmin(admin.ModelAdmin):
     ordering = ['-start_date']
     inlines = [CohortEnrollmentInline]
 
+    def save_formset(self, request, form, formset, change):
+        """Tag members added through the enrollment inline."""
+        instances = formset.save()
+        for instance in instances:
+            if isinstance(instance, CohortEnrollment):
+                apply_cohort_enrollment_tags(instance.user, instance.cohort)
+
     def enrollment_count(self, obj):
         return obj.enrollment_count
     enrollment_count.short_description = 'Enrolled'
@@ -39,3 +47,8 @@ class CohortEnrollmentAdmin(admin.ModelAdmin):
     search_fields = ['user__email', 'cohort__name']
     raw_id_fields = ['user', 'cohort']
     readonly_fields = ['enrolled_at']
+
+    def save_model(self, request, obj, form, change):
+        """Tag the member whenever an enrollment is saved in admin."""
+        super().save_model(request, obj, form, change)
+        apply_cohort_enrollment_tags(obj.user, obj.cohort)

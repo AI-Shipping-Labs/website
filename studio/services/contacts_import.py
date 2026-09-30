@@ -26,6 +26,7 @@ from django.db import transaction
 from django.db.models.functions import Lower
 from django.utils import timezone
 
+from accounts.models import EmailAlias
 from accounts.utils.tags import normalize_tag, set_tags
 from payments.models import Membership, Tier, TierOverride
 from payments.services.backfill_tiers import backfill_user_from_stripe
@@ -229,6 +230,44 @@ def _normalized_email(value):
     return User.objects.normalize_email(value).lower()
 
 
+def _existing_users_by_email(emails, *, lookup_batch_size=500):
+    """Map normalized emails to their existing ``User`` in bounded batches.
+
+    Precedence mirrors ``accounts.services.email_resolution``: an active
+    primary login wins, then the owner of a matching ``EmailAlias`` (so a
+    known secondary address never spawns a duplicate account), and only
+    then a deactivated primary row (a merged-away account whose address
+    must not be reused by a new row either).
+    """
+    active = {}
+    inactive = {}
+    for start in range(0, len(emails), lookup_batch_size):
+        batch = emails[start:start + lookup_batch_size]
+        users = (
+            User.objects.annotate(_import_email=Lower("email"))
+            .filter(_import_email__in=batch)
+        )
+        for user in users:
+            target = active if user.is_active else inactive
+            target[_normalized_email(user.email)] = user
+
+    unmatched = [email for email in emails if email not in active]
+    by_alias = {}
+    for start in range(0, len(unmatched), lookup_batch_size):
+        batch = unmatched[start:start + lookup_batch_size]
+        for alias in EmailAlias.objects.select_related("user").filter(
+            email__in=batch,
+        ):
+            by_alias[alias.email] = alias.user
+
+    existing = dict(active)
+    for email in unmatched:
+        user = by_alias.get(email) or inactive.get(email)
+        if user is not None:
+            existing[email] = user
+    return existing
+
+
 def plan_contact_rows(rows, *, lookup_batch_size=500):
     """Classify contact rows without writes or provider calls.
 
@@ -266,16 +305,9 @@ def plan_contact_rows(rows, *, lookup_batch_size=500):
         seen_emails.add(normalized_email)
         unique_rows.append((row_number, row, normalized_email))
 
-    existing_by_email = {}
-    unique_emails = list(seen_emails)
-    for start in range(0, len(unique_emails), lookup_batch_size):
-        batch = unique_emails[start:start + lookup_batch_size]
-        users = (
-            User.objects.annotate(_import_email=Lower("email"))
-            .filter(_import_email__in=batch)
-        )
-        for user in users:
-            existing_by_email[_normalized_email(user.email)] = user
+    existing_by_email = _existing_users_by_email(
+        list(seen_emails), lookup_batch_size=lookup_batch_size,
+    )
 
     contacts = []
     created = 0

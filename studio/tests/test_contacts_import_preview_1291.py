@@ -62,7 +62,9 @@ class ContactImportPlanTest(TestCase):
 
     def test_existing_lookup_is_batched_not_one_query_per_row(self):
         rows = [{'email': f'user-{index}@example.com'} for index in range(1001)]
-        with self.assertNumQueries(3):
+        # Three batched primary-email lookups plus three batched EmailAlias
+        # lookups for the rows no primary login matched -- never per row.
+        with self.assertNumQueries(6):
             plan = plan_contact_rows(rows, lookup_batch_size=500)
         self.assertEqual(plan.created, 1001)
 

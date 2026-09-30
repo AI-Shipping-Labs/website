@@ -92,8 +92,32 @@ def complete_finished_events():
 
     if pre_flip_pks:
         _maybe_enqueue_post_event_followups(pre_flip_pks)
+        _maybe_enqueue_recap_auto_notify(pre_flip_pks)
 
     return total
+
+
+def _maybe_enqueue_recap_auto_notify(event_pks):
+    """Announce recaps that were written before their event ended.
+
+    A recap saved while the event was still running only becomes ready once
+    the event is over, with no save to trigger the notice. The just-ended
+    events are exactly that transition; the helper's guards (toggle,
+    readiness, already announced) still apply.
+    """
+    from events.models import Event
+    from events.services.event_recap_notification import (
+        maybe_enqueue_recap_auto_notify,
+    )
+
+    for event in Event.objects.filter(pk__in=event_pks):
+        try:
+            maybe_enqueue_recap_auto_notify(event, was_ready=False)
+        except Exception:
+            logger.exception(
+                'Failed to enqueue automatic recap notice for event %s',
+                event.pk,
+            )
 
 
 def _maybe_enqueue_post_event_followups(event_pks):

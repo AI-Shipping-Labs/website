@@ -387,6 +387,43 @@ Rotation: Safe to change; the next sweep uses the new window.
 
 Test vs live: Configure independently in each deployment.
 
+## EVENT_REMINDERS_INCLUDE_COHORT
+
+Purpose: When on, the automatic 24-hour and 20-minute event reminders also
+go to the members of every dated cohort whose `event_series` is the event's
+series, not only to the registrants. Cohort members' links point at their
+course session unit (`?cohort=<key>`). Works for hidden-series and
+unpublished events. A registrant who is also in the cohort gets one email.
+
+Default: `true` (on).
+
+Without it: Defaults on; switchable without a redeploy.
+
+Where to find it: Studio integration settings (Site group). Boolean toggle.
+
+Rotation: Safe to change; the next reminder tick uses the new value.
+
+Test vs live: Configure independently in each deployment.
+
+## RECAP_AUTO_NOTIFY
+
+Purpose: When on, the recap-ready email and bell go out automatically once,
+when an event's recap becomes ready (saved in Studio, through the API, or by
+the recap draft), to registrants, linked cohort members and linked book-club
+readers. A later edit of the recap never resends. The manual
+`notify_recap_ready` command, `asl events notify-recap` and the Studio
+button keep working as a fallback.
+
+Default: `true` (on).
+
+Without it: Defaults on; switchable without a redeploy.
+
+Where to find it: Studio integration settings (Site group). Boolean toggle.
+
+Rotation: Safe to change; applies to the next recap that becomes ready.
+
+Test vs live: Configure independently in each deployment.
+
 ## SPRINT_BADGE_WINDOW_DAYS
 
 Purpose: Window in days around a sprint start / end that flips the

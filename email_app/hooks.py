@@ -231,9 +231,11 @@ def _resolve_privacy_studio_url(delivery, context):
 def _resolve_recap_context(delivery, context):
     """Mint recap links from the saved Event at delivery time."""
 
+    from events.services.event_audience import (  # noqa: PLC0415
+        cohort_session_url,
+    )
     from events.services.event_recap_notification import (  # noqa: PLC0415
         absolute_recap_url,
-        cohort_session_url,
     )
     from integrations.config import site_base_url  # noqa: PLC0415
 
@@ -311,6 +313,9 @@ def _resolve_event_reminder_context(delivery, context):
         build_timezone_email_line,
         format_user_datetime,
     )
+    from events.services.event_audience import (  # noqa: PLC0415
+        cohort_session_url,
+    )
     from integrations.config import site_base_url  # noqa: PLC0415
 
     event = _related_event(delivery)
@@ -324,7 +329,12 @@ def _resolve_event_reminder_context(delivery, context):
     context["event_datetime"] = format_user_datetime(
         event.start_datetime, user,
     )
-    context["event_url"] = f"{base_url}{event.get_join_url()}"
+    # A cohort member joins from the course session unit, which holds the
+    # join button, recording and recap; everyone else gets the join link.
+    context["event_url"] = (
+        cohort_session_url(event, user.pk)
+        or f"{base_url}{event.get_join_url()}"
+    )
     context["timezone_help"] = build_timezone_email_line(
         user, build_timezone_account_url(base_url),
     )

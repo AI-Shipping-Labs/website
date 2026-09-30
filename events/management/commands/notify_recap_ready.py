@@ -2,7 +2,7 @@
 
 The audience is the union of the event's registrants/attendees, members of
 cohorts linked to the event's series, and readers of a linked book club
-(``events.services.event_recap_notification.AUDIENCE_RESOLVERS``). Sends are
+(``events.services.event_audience.resolve_event_audience``). Sends are
 idempotent per event and user, so re-running never double-emails.
 
 Usage::

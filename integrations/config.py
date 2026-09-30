@@ -484,6 +484,34 @@ def recording_recap_auto_draft_enabled():
     return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
+def event_reminders_include_cohort_enabled():
+    """True when the 24h/20m event reminders also mail linked cohort members.
+
+    Default-on: members of a dated cohort whose ``event_series`` is the
+    event's series get the same pre-event reminders as the registrants,
+    linked to their course session unit. Reads via
+    ``get_config('EVENT_REMINDERS_INCLUDE_COHORT', 'true')``.
+    """
+    raw = get_config('EVENT_REMINDERS_INCLUDE_COHORT', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def recap_auto_notify_enabled():
+    """True when a recap that becomes ready is announced automatically.
+
+    Default-on: the recap-ready notice (registrants, linked cohort members,
+    linked book-club readers) is queued once when an event's recap becomes
+    ready, instead of waiting for the manual command, API call or Studio
+    button. Reads via ``get_config('RECAP_AUTO_NOTIFY', 'true')``.
+    """
+    raw = get_config('RECAP_AUTO_NOTIFY', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
 def is_enabled(key):
     """Check if a config flag is enabled (handles both bool and string values).
 

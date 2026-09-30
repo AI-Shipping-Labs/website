@@ -29,6 +29,7 @@ EVENT_FUNCS = {
     "events.tasks.notify_series_invite.send_series_cancellation",
     "events.tasks.send_post_event_followup.send_post_event_followup_fanout",
     "events.tasks.send_post_event_followup.send_post_event_followup_one",
+    "events.tasks.notify_recap_auto.send_recap_auto_notify",
 }
 CAMPAIGN_FUNCS = {
     "email_app.tasks.send_campaign.send_campaign",

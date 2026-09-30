@@ -637,7 +637,9 @@ class NotificationService:
         return {"notified": len(notifications)}
 
     @staticmethod
-    def create_event_reminder(event, user, interval, title, body):
+    def create_event_reminder(
+        event, user, interval, title, body, *, url=None, send_email=True,
+    ):
         """Create an event reminder notification + email if not already sent.
 
         Issue #706: in addition to the in-app bell, fan out an
@@ -664,6 +666,11 @@ class NotificationService:
             interval: '24h' or '20m' (issue #706 — formerly '1h').
             title: Notification title.
             body: Notification body.
+            url: Bell link; defaults to the event page. Cohort members get
+                their course session unit.
+            send_email: False records the reminder and the bell but skips
+                the email (a complaint, a permanent bounce or an invalid
+                address, see ``events.services.event_audience``).
 
         Returns:
             Notification if created, None if already sent.
@@ -683,9 +690,11 @@ class NotificationService:
             user=user,
             title=title,
             body=body,
-            url=event.get_absolute_url(),
+            url=url or event.get_absolute_url(),
             notification_type='event_reminder',
         )
+        if not send_email:
+            return notification
 
         # Best-effort email send. Failures must NOT raise out of this
         # function — the dedup row is already persisted, so the next

@@ -1,7 +1,17 @@
 """
 Event reminder job: checks for events starting in ~24h and ~20 min,
-creates reminder notifications for registered users (deduplicated)
+creates reminder notifications for the event audience (deduplicated)
 and queues the templated email through the package mail app.
+
+The audience is the shared event audience
+(``events.services.event_audience.resolve_event_audience``): the
+registrants plus, while ``EVENT_REMINDERS_INCLUDE_COHORT`` is on, the
+members of every dated cohort linked to the event's series. Hidden-series
+and unpublished events are reminded like any other non-draft,
+non-cancelled event. A cohort member's bell and email link to their course
+session unit. Complaints, permanent bounces and invalid addresses suppress
+the email (the bell stays); a newsletter unsubscribe does not, because a
+registration or cohort enrollment is an explicit sign-up.
 
 Called as a background job every 15 minutes via Django-Q2.
 """
@@ -16,6 +26,109 @@ from accounts.services.timezones import format_user_datetime
 logger = logging.getLogger(__name__)
 
 
+def _remind_audience(event, interval, title, body_for):
+    """Remind every audience member once for ``interval``; return the count.
+
+    ``EventReminderLog`` (event, user, interval) stays the single dedup
+    gate, and the audience is deduplicated per user, so a registrant who is
+    also in the cohort gets one bell and one email.
+    """
+    from events.services.event_audience import (
+        cohort_session_path,
+        email_skip_status,
+        resolve_event_audience,
+    )
+    from integrations.config import event_reminders_include_cohort_enabled
+    from notifications.models import EventReminderLog
+    from notifications.services.notification_service import NotificationService
+
+    audience = resolve_event_audience(
+        event,
+        include_cohort=event_reminders_include_cohort_enabled(),
+        include_book_club=False,
+    )
+    already = set(
+        EventReminderLog.objects.filter(
+            event=event, interval=interval, user__isnull=False,
+        ).values_list('user_id', flat=True),
+    )
+    count = 0
+    for member in audience:
+        user = member.user
+        if user.pk in already:
+            continue
+        skip = email_skip_status(user, member.signed_up)
+        if skip:
+            logger.info(
+                'Event reminder email suppressed event_id=%s user_id=%s '
+                'interval=%s reason=%s',
+                event.pk, user.pk, interval, skip,
+            )
+        event_datetime = format_user_datetime(event.start_datetime, user)
+        result = NotificationService.create_event_reminder(
+            event=event,
+            user=user,
+            interval=interval,
+            title=title,
+            body=body_for(event_datetime),
+            url=cohort_session_path(event, user.pk) or None,
+            send_email=not skip,
+        )
+        if result:
+            count += 1
+    return count
+
+
+def preview_reminder_audience(event):
+    """Dry run of the 24h/20m reminder audience for one event.
+
+    Sends and writes nothing. Lists every recipient with the reasons they
+    are included, the link their bell and email open, whether the email
+    would be suppressed, and which reminder intervals they already got.
+    """
+    from events.services.event_audience import (
+        cohort_session_url,
+        email_skip_status,
+        resolve_event_audience,
+    )
+    from integrations.config import (
+        event_reminders_include_cohort_enabled,
+        site_base_url,
+    )
+    from notifications.models import EventReminderLog
+
+    include_cohort = event_reminders_include_cohort_enabled()
+    audience = resolve_event_audience(
+        event, include_cohort=include_cohort, include_book_club=False,
+    )
+    sent = {}
+    for user_id, interval in EventReminderLog.objects.filter(
+        event=event, interval__in=('24h', '20m'), user__isnull=False,
+    ).values_list('user_id', 'interval'):
+        sent.setdefault(user_id, []).append(interval)
+    join_url = f"{site_base_url().rstrip('/')}{event.get_join_url()}"
+    results = []
+    for member in audience:
+        user = member.user
+        results.append({
+            'user_id': user.pk,
+            'email': user.email,
+            'reasons': [reason.as_dict() for reason in member.reasons],
+            'link': cohort_session_url(event, user.pk) or join_url,
+            'email_status': email_skip_status(user, member.signed_up) or 'would_send',
+            'already_reminded': sorted(sent.get(user.pk, [])),
+        })
+    return {
+        'event': {'id': event.pk, 'slug': event.slug, 'title': event.title},
+        'start_datetime': event.start_datetime.isoformat(),
+        'status': event.status,
+        'include_cohort': include_cohort,
+        'eligible': len(results),
+        'would_email': sum(item['email_status'] == 'would_send' for item in results),
+        'results': results,
+    }
+
+
 def check_event_reminders():
     """Check for upcoming events and create reminder notifications.
 
@@ -27,14 +140,14 @@ def check_event_reminders():
       (== the */15 tick interval) so every start-minute is covered by
       exactly one tick (issue #1001).
 
-    Creates deduplicated notifications (and emails) for registered users
-    via :func:`NotificationService.create_event_reminder`. Posts a Slack
+    Creates deduplicated notifications (and emails) for the event audience
+    (registrants plus linked cohort members, see the module docstring) via
+    :func:`NotificationService.create_event_reminder`. Posts a Slack
     reminder for the 24h window only (issue #706: 20-min reminders are
     bell + email only to keep #announcements quiet).
     """
-    from events.models import Event, EventRegistration
+    from events.models import Event
     from notifications.models import EventReminderLog
-    from notifications.services.notification_service import NotificationService
     from notifications.services.slack_announcements import post_slack_announcement
 
     now = timezone.now()
@@ -67,25 +180,15 @@ def check_event_reminders():
     ).exclude(status__in=['draft', 'cancelled']).select_related('event_series')
 
     for event in events_24h:
-        registrations = EventRegistration.objects.filter(
-            event=event,
-        ).select_related('user')
-
-        count = 0
-        for reg in registrations:
-            event_datetime = format_user_datetime(
-                event.start_datetime, reg.user,
-            )
-            result = NotificationService.create_event_reminder(
-                event=event,
-                user=reg.user,
-                interval='24h',
-                title=f'Reminder: {event.title} starts in 24 hours',
-                body=f'{event.title} is starting on {event_datetime}. '
-                     f'Don\'t forget to join!',
-            )
-            if result:
-                count += 1
+        count = _remind_audience(
+            event,
+            '24h',
+            f'Reminder: {event.title} starts in 24 hours',
+            lambda event_datetime, event=event: (
+                f'{event.title} is starting on {event_datetime}. '
+                f'Don\'t forget to join!'
+            ),
+        )
 
         if count > 0:
             logger.info(
@@ -129,25 +232,15 @@ def check_event_reminders():
     ).exclude(status__in=['draft', 'cancelled'])
 
     for event in events_20m:
-        registrations = EventRegistration.objects.filter(
-            event=event,
-        ).select_related('user')
-
-        count = 0
-        for reg in registrations:
-            event_datetime = format_user_datetime(
-                event.start_datetime, reg.user,
-            )
-            result = NotificationService.create_event_reminder(
-                event=event,
-                user=reg.user,
-                interval='20m',
-                title=f'Starting soon: {event.title} starts in 20 minutes',
-                body=f'{event.title} is starting soon! '
-                     f'Get ready to join at {event_datetime}.',
-            )
-            if result:
-                count += 1
+        count = _remind_audience(
+            event,
+            '20m',
+            f'Starting soon: {event.title} starts in 20 minutes',
+            lambda event_datetime, event=event: (
+                f'{event.title} is starting soon! '
+                f'Get ready to join at {event_datetime}.'
+            ),
+        )
 
         if count > 0:
             logger.info(

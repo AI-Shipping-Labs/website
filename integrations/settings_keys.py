@@ -171,6 +171,8 @@ _KEY_ORDER = {
         "STAFF_SIGNUP_NOTIFY_EMAIL",
         "ONBOARDING_REMINDER_ENABLED",
         "ONBOARDING_REMINDER_DELAY_DAYS",
+        "EVENT_REMINDERS_INCLUDE_COHORT",
+        "RECAP_AUTO_NOTIFY",
         "SPRINT_BADGE_WINDOW_DAYS",
         "SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED",
         "CRM_EXPORT_MAX_LIMIT",
@@ -1468,6 +1470,26 @@ ONBOARDING_REMINDER_ENABLED = declare(
     default="true",
     secret=False,
     docs_url="_docs/integrations/site.md#onboarding_reminder_enabled",
+)
+EVENT_REMINDERS_INCLUDE_COHORT = declare(
+    key="EVENT_REMINDERS_INCLUDE_COHORT",
+    group="site",
+    label="Event Reminders Include Cohort",
+    description="When on, the automatic 24-hour and 20-minute event reminders also go to members of every dated cohort linked to the event's series (not only to registrants), with links to their course session unit. Works for hidden-series and unpublished events. Defaults on; switchable without a redeploy.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/site.md#event_reminders_include_cohort",
+)
+RECAP_AUTO_NOTIFY = declare(
+    key="RECAP_AUTO_NOTIFY",
+    group="site",
+    label="Recap Auto Notify",
+    description="When on, the recap-ready email and bell go out automatically once, when an event's recap becomes ready (Studio, API, or recap draft), to registrants, linked cohort members, and linked book-club readers. A later recap edit never resends. The manual notify-recap command and Studio button still work when this is off. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/site.md#recap_auto_notify",
 )
 ONBOARDING_REMINDER_DELAY_DAYS = declare(
     key="ONBOARDING_REMINDER_DELAY_DAYS",

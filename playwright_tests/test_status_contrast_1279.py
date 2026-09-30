@@ -245,7 +245,13 @@ def test_member_understands_free_and_enrolled_course_state(django_server, browse
         )
         _set_theme(page, theme)
         free = page.locator('[data-component="member-badge"]', has_text='Free').first
-        enrolled = page.locator('[data-component="member-badge"]', has_text='Enrolled').first
+        # Scope to the learner's own status: the header also carries a
+        # neutral "N enrolled" count badge, which a case-insensitive
+        # has_text='Enrolled' would match first.
+        enrolled = page.get_by_test_id('enrollment-cta').locator(
+            '[data-component="member-badge"]', has_text='Enrolled',
+        )
+        expect(enrolled).to_have_count(1)
         _assert_contrast(free, 4.5, f'{theme} Free')
         _assert_contrast(enrolled, 4.5, f'{theme} Enrolled')
         expect(enrolled.locator('[data-lucide="check-circle-2"]')).to_be_attached()

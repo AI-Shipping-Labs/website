@@ -1181,7 +1181,7 @@
     "is_secret": false,
     "is_boolean": true,
     "default": "true",
-    "description": "When on, a Maven user_cohort.removed webhook also revokes the Maven-granted tier override (source maven:*) unless the member is active in a different Maven course or enrolled in another dated cohort. Overrides staff granted by hand and paid Stripe tiers are never touched. The staff removal heads-up reports what was revoked or kept. Defaults on.",
+    "description": "When on, a Maven user_cohort.removed webhook also revokes the Maven-granted tier override (source maven:*) unless the member is active in a different Maven course or was in an earlier cohort. Overrides staff granted by hand and paid Stripe tiers are never touched. The staff removal heads-up reports what was revoked or kept. Defaults on.",
     "docs_url": "_docs/integrations/maven.md#maven_removal_revokes_override"
    },
    {

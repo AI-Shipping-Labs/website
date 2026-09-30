@@ -75,8 +75,8 @@ rather than leaving enrollees untagged.
 
 Boolean, default `true`. When on, the `removal` step revokes the tier
 override the Maven flow granted (`source` starting with `maven:`) unless the
-member is active in a different Maven course or enrolled in another dated
-cohort (see `user_cohort.removed` below). Overrides staff granted by hand and
+member is active in a different Maven course or was in an earlier cohort
+(see `user_cohort.removed` below). Overrides staff granted by hand and
 paid Stripe tiers are never touched. When off, the override is kept and the
 staff summary says so.
 
@@ -358,16 +358,18 @@ given row and a person needs a manual nudge.
   (same recipients as the paid-signup notification): one line naming the
   member, cohort and course, a bullet per thing that actually changed or was
   deliberately kept with a short reason (for example `Revoked the main
-  membership override.` or `Kept main access: also in cohort 2 of AI
+  membership override.` or `Kept main access: was in cohort 2 of AI
   Engineering Buildcamp.`), and the Studio link. Areas with nothing to do are
   left out; when nothing changed at all it says `Nothing needed changing:
   they had no access left.` An unknown email gets one sentence saying no
   account uses it. The Slack post carries the same lines.
 - Revokes the Maven-granted tier override (`MAVEN_REMOVAL_REVOKES_OVERRIDE`,
   default on) unless the member has an active Maven occurrence for a
-  different course, or a `CohortEnrollment` in another dated cohort of any
-  course (a returning alumnus, for example cohort 2 then cohort 4). Another
-  active cohort of the same course alone does not keep it. Only overrides
+  different course, or a `CohortEnrollment` in a cohort of any course whose
+  `start_date` is before the removed cohort's (a returning alumnus, for
+  example cohort 2 then cohort 4). A later or parallel cohort of the same
+  course does not keep it: a real transfer gets its own override from the
+  new cohort's `enrollment` step. Only overrides
   whose `source` starts with `maven:` are revoked,
   through `payments.services.tier_override_revoke`, the same service as the
   Studio revoke button and `POST /api/tier-overrides/revoke`; each revoked row

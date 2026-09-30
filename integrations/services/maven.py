@@ -1289,21 +1289,31 @@ def _other_active_enrollments(row):
     return same_course, other_course
 
 
-def _removed_cohort_id(row):
+def _removed_cohort(row):
     try:
         course = resolve_maven_course(row.course_key)
-        return resolve_maven_cohort(course, row.cohort_key).pk
+        return resolve_maven_cohort(course, row.cohort_key)
     except (MavenUnknownCourseError, MavenUnknownCohortError):
         return None
 
 
-def _other_dated_cohort_enrollment(row):
-    """A ``CohortEnrollment`` in another dated cohort (a returning alumnus)."""
+def _previous_cohort_enrollment(row):
+    """A ``CohortEnrollment`` in a cohort that started before the removed one.
+
+    A returning alumnus (cohort 2, then cohort 4) keeps main access. Only an
+    earlier ``start_date`` counts, in the same or another course; a later or
+    parallel cohort (a transfer) gets its own override from its enrollment
+    step instead. Without a dated removed cohort there is nothing to compare
+    against, so nothing counts.
+    """
+    removed = _removed_cohort(row)
+    if removed is None or removed.start_date is None:
+        return None
     return (
         CohortEnrollment.objects.filter(
-            user_id=row.user_id, cohort__start_date__isnull=False,
+            user_id=row.user_id, cohort__start_date__lt=removed.start_date,
         )
-        .exclude(cohort_id=_removed_cohort_id(row))
+        .exclude(cohort_id=removed.pk)
         .select_related("cohort__course")
         .order_by("-cohort__start_date", "-pk")
         .first()
@@ -1331,9 +1341,9 @@ def _revoke_maven_override(row, actions, *, other_course=()):
     Studio and the API). No active override means no line at all.
 
     The override is kept when the member is active in a different Maven
-    course (``other_course``) or enrolled in another dated cohort of any
-    course (a returning alumnus). Another cohort of the same course alone
-    does not keep it.
+    course (``other_course``) or was enrolled in a cohort of any course that
+    started before the removed one (a returning alumnus). A later or
+    parallel cohort of the same course does not keep it.
     """
     if row.user_id is None:
         return []
@@ -1351,10 +1361,10 @@ def _revoke_maven_override(row, actions, *, other_course=()):
             f"Kept {_tier_names(overrides)} access: still enrolled in "
             f"{other.course or other.course_key} on Maven."
         ]
-    alumnus = _other_dated_cohort_enrollment(row)
+    alumnus = _previous_cohort_enrollment(row)
     if alumnus is not None:
         return [
-            f"Kept {_tier_names(overrides)} access: also in "
+            f"Kept {_tier_names(overrides)} access: was in "
             f"{_cohort_phrase(alumnus.cohort)}."
         ]
     maven = [o for o in overrides if (o.source or "").startswith("maven:")]

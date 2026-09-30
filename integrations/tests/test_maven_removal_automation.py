@@ -230,9 +230,23 @@ class MavenRemovalAutomationTest(TestCase):
         summary = self._summary(notify)
         self.assertIn("Removed tag ai-buildcamp-cohort-5.", summary)
         self.assertIn(
-            "Kept main access: also in cohort 2 of AI Engineering Buildcamp.",
+            "Kept main access: was in cohort 2 of AI Engineering Buildcamp.",
             summary,
         )
+
+    @patch(NOTIFY)
+    def test_later_cohort_of_the_same_course_does_not_keep_override(self, notify):
+        cohort_6 = Cohort.objects.create(
+            course=self.course, external_key="cohort-6", name="Cohort 6",
+            start_date="2027-01-11", end_date="2027-03-14",
+        )
+        CohortEnrollment.objects.create(cohort=cohort_6, user=self.user)
+
+        retry_occurrence_step(self._removed(), "removal")
+
+        self.maven_override.refresh_from_db()
+        self.assertFalse(self.maven_override.is_active)
+        self.assertIn("Revoked the main membership override.", self._summary(notify))
 
     @patch(NOTIFY)
     def test_staff_granted_override_is_kept_and_named(self, notify):

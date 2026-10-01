@@ -56,6 +56,7 @@ def zoom_webhook(request):
     Returns:
         200 on success
         400 on invalid signature or malformed payload
+        500 on processing error (Zoom will retry)
     """
     # Validate webhook signature
     if not validate_webhook_signature(request):
@@ -100,9 +101,11 @@ def zoom_webhook(request):
             _handle_recording_completed(payload, webhook_log)
         except Exception as e:
             logger.exception('Error processing recording.completed webhook')
+            webhook_log.error_message = str(e)[:500]
+            webhook_log.save(update_fields=['error_message'])
             return JsonResponse(
                 {'status': 'error', 'message': str(e)},
-                status=200,  # Return 200 to avoid Zoom retries
+                status=500,  # Return 500 so Zoom retries transient failures
             )
     elif event_type == 'recording.transcript.completed':
         # Issue #1597: Zoom can deliver the transcript after the video
@@ -113,9 +116,11 @@ def zoom_webhook(request):
             logger.exception(
                 'Error processing recording.transcript.completed webhook',
             )
+            webhook_log.error_message = str(e)[:500]
+            webhook_log.save(update_fields=['error_message'])
             return JsonResponse(
                 {'status': 'error', 'message': str(e)},
-                status=200,  # Return 200 to avoid Zoom retries
+                status=500,  # Return 500 so Zoom retries transient failures
             )
 
     return JsonResponse({'status': 'ok'})

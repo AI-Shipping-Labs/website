@@ -2,9 +2,9 @@
 
 ``POST /api/webhooks/maven`` — shared-secret authenticated, CSRF-exempt,
 POST-only. Maven exposes no signing secret, so authentication is a shared
-secret supplied either as ``?secret=<token>`` (so an unguessable URL can be
-pasted directly into Maven/Zapier) or an ``X-Maven-Secret`` header (preferred
-when Zapier is the intermediary). Compared in constant time.
+secret supplied via the ``X-Maven-Secret`` header (required). The deprecated
+``?secret=<token>`` query parameter is still accepted with a warning log
+but will be removed in a future release.
 
 The endpoint is a thin shell: parse + authenticate + dispatch to
 ``integrations.services.maven.handle_maven_event``, which is shared with the
@@ -31,16 +31,31 @@ logger = logging.getLogger(__name__)
 
 
 def _authenticated(request):
-    """Constant-time check of the shared secret from query or header.
+    """Constant-time check of the shared secret from header only.
 
-    Returns False when the configured secret is unset (the endpoint then
-    refuses every request, even with the feature enabled) or does not match.
+    Query parameter authentication (?secret=...) is deprecated due to
+    exposure in web server logs, browser history, and referer headers.
+    Only the X-Maven-Secret header is accepted.
     """
     configured = maven_shared_secret()
     if not configured:
         return False
-    presented = request.headers.get("X-Maven-Secret") or request.GET.get("secret") or ""
-    return hmac.compare_digest(str(presented), str(configured))
+
+    # Check header first (preferred)
+    presented = request.headers.get("X-Maven-Secret")
+    if presented is not None:
+        return hmac.compare_digest(str(presented), str(configured))
+
+    # Deprecated: query parameter - log warning for migration tracking
+    query_secret = request.GET.get("secret")
+    if query_secret:
+        logger.warning(
+            "Maven webhook authentication via query parameter (?secret=) is "
+            "deprecated and will be removed. Use X-Maven-Secret header instead."
+        )
+        return hmac.compare_digest(str(query_secret), str(configured))
+
+    return False
 
 
 @csrf_exempt

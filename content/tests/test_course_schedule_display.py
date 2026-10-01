@@ -3,12 +3,11 @@
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
-from freezegun import freeze_time
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone as django_timezone
+from freezegun import freeze_time
 
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess, Homework, Module, Unit
 from content.models.peer_review import CourseProject

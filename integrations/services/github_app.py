@@ -5,6 +5,7 @@ A2.3 moved synchronization into ``community_base.content_sync``; the Studio
 installation token minting, so those helpers live here now.
 """
 
+import os
 import time
 
 import jwt
@@ -73,16 +74,23 @@ def _resolve_github_app_private_key():
 
     Lookup order:
       1. ``IntegrationSetting`` DB row (via ``get_config``), which also
-         falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``,
-         which is itself resolved from a PEM file or env var at
-         settings-import time).
-      2. AWS Secrets Manager (production fallback). The secret id/path
+         falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``) and
+         environment variables.
+      2. PEM file path from ``GITHUB_APP_PRIVATE_KEY_FILE`` env var.
+      3. AWS Secrets Manager (production fallback). The secret id/path
          and region can be configured in Studio, with legacy defaults
          preserved for existing deployments.
     """
     private_key = get_config('GITHUB_APP_PRIVATE_KEY')
     if private_key:
         return private_key
+
+    # Check for PEM file path (not handled by get_config)
+    key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
+    if key_path and os.path.isfile(key_path):
+        with open(key_path) as f:
+            return f.read()
+
     secret_id = get_config(
         'GITHUB_APP_PRIVATE_KEY_SECRET_ID',
         _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID,

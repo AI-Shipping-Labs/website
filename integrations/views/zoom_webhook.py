@@ -87,6 +87,10 @@ def zoom_webhook(request):
                 'encryptedToken': encrypted_token,
             })
 
+    # Only log webhooks for event types we actually process
+    if event_type not in ('recording.completed', 'recording.transcript.completed'):
+        return JsonResponse({'status': 'ok'})
+
     # Log the webhook
     webhook_log = WebhookLog.objects.create(
         service='zoom',

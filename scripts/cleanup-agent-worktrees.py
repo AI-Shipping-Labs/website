@@ -22,10 +22,33 @@ import subprocess
 import sys
 from collections import Counter
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+try:
+    from cleanup_agent_worktree_models import (
+        CleanupError,
+        CommandResult,
+        LeaseLookup,
+        Plan,
+        ProcessScan,
+        ProcessUse,
+        Worktree,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "cleanup_agent_worktree_models":
+        raise
+    from scripts.cleanup_agent_worktree_models import (
+        CleanupError,
+        CommandResult,
+        LeaseLookup,
+        Plan,
+        ProcessScan,
+        ProcessUse,
+        Worktree,
+    )
 
 PROTECTED_SHARED_MAIN = "PROTECTED_SHARED_MAIN"
 RETAIN_ACTIVE_LIFECYCLE = "RETAIN_ACTIVE_LIFECYCLE"
@@ -77,17 +100,6 @@ def rename_noreplace(
         raise OSError(error, os.strerror(error), source_name, destination_name)
 
 
-class CleanupError(RuntimeError):
-    """A fail-closed classification or lifecycle error."""
-
-
-@dataclass(frozen=True)
-class CommandResult:
-    stdout: bytes
-    stderr: bytes
-    returncode: int
-
-
 class CommandRunner:
     """Small injectable subprocess boundary."""
 
@@ -100,133 +112,6 @@ class CommandRunner:
             stderr=subprocess.PIPE,
         )
         return CommandResult(completed.stdout, completed.stderr, completed.returncode)
-
-
-@dataclass(frozen=True)
-class Worktree:
-    path: Path
-    head: str = ""
-    branch_ref: str = ""
-    detached: bool = False
-    locked: bool = False
-    prunable: bool = False
-
-    @property
-    def branch(self) -> str | None:
-        prefix = "refs/heads/"
-        return self.branch_ref[len(prefix) :] if self.branch_ref.startswith(prefix) else None
-
-
-@dataclass(frozen=True)
-class ProcessUse:
-    pid: int
-    reasons: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class ProcessScan:
-    complete: bool
-    uses: tuple[ProcessUse, ...] = ()
-    errors: tuple[str, ...] = ()
-
-
-@dataclass(frozen=True)
-class LeaseLookup:
-    lease: dict[str, Any] | None
-    errors: tuple[str, ...]
-    source: str
-    source_file: Path | None
-    source_key: str | None
-    stored_path: str | None
-    canonical_path: Path
-    canonical_key: str
-    content_digest: str | None
-    evidence_sources: tuple[tuple[str, str], ...] = ()
-
-    def evidence_description(self) -> str:
-        return ",".join(f"path={source_file};key={source_key}" for source_file, source_key in self.evidence_sources)
-
-    def facts(self) -> dict[str, Any]:
-        return {
-            "lookup_source": self.source,
-            "source_file": str(self.source_file) if self.source_file else None,
-            "source_key": self.source_key,
-            "stored_path": self.stored_path,
-            "canonical_path": str(self.canonical_path),
-            "canonical_key": self.canonical_key,
-            "content_digest": self.content_digest,
-            "evidence_sources": [
-                {"source_file": source_file, "source_key": source_key}
-                for source_file, source_key in self.evidence_sources
-            ],
-            "errors": list(self.errors),
-        }
-
-
-@dataclass
-class Plan:
-    timestamp: str
-    actor: str
-    mode: str
-    repository: str
-    common_dir: str
-    path: str
-    issue: int | None
-    branch: str | None
-    detached: bool
-    head: str
-    origin_main: str
-    lease_state: str
-    terminal_run_id: str | None
-    terminal_run_head: str | None
-    terminal_result: str | None
-    process_ids: list[int]
-    process_reasons: list[str]
-    classification: str
-    reasons: list[str]
-    requested_actions: list[str] = field(default_factory=list)
-    completed_actions: list[str] = field(default_factory=list)
-    errors: list[str] = field(default_factory=list)
-    exit_status: int = 0
-    plan_digest: str = ""
-    facts: dict[str, Any] = field(default_factory=dict, repr=False)
-    boundary: str | None = None
-    lease_lookup_source: str | None = None
-    lease_source_file: str | None = None
-    lease_stored_path: str | None = None
-    lease_source_key: str | None = None
-    lease_canonical_path: str | None = None
-    lease_canonical_key: str | None = None
-    lease_content_digest: str | None = None
-    lease_evidence_sources: list[dict[str, str]] = field(default_factory=list)
-    registration_snapshot: list[dict[str, Any]] = field(default_factory=list)
-    migration_entries: dict[str, dict[str, Any]] = field(default_factory=dict)
-    lease_json_manifest: dict[str, dict[str, Any]] = field(default_factory=dict)
-    migration_process_snapshot: dict[str, Any] = field(default_factory=dict)
-    lease_directory_snapshot: dict[str, Any] = field(default_factory=dict)
-    registered: bool | None = None
-    path_exists: bool | None = None
-    roles_ended_asserted: bool | None = None
-    terminal_evidence_present: bool | None = None
-    terminal_issue_disposition: str | None = None
-    terminal_issue_number: int | None = None
-    terminal_issue_state: str | None = None
-    terminal_issue_labels: list[str] | None = None
-    lease_actor: str | None = None
-    lease_role: str | None = None
-    lease_created_at: str | None = None
-    lease_updated_at: str | None = None
-
-    def seal(self) -> Plan:
-        payload = json.dumps(self.facts, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        self.plan_digest = hashlib.sha256(payload.encode()).hexdigest()
-        return self
-
-    def public_dict(self) -> dict[str, Any]:
-        result = asdict(self)
-        result.pop("facts", None)
-        return result
-
 
 def utc_now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
@@ -2357,35 +2242,47 @@ class CleanupService:
 
     def classify_path(self, path: Path) -> Plan:
         path = canonical(path)
-        matches = [plan for plan in self.classify() if canonical(plan.path) == path]
-        if len(matches) != 1:
-            main = self.shared_main()
-            origin_main = _decode(self._git("rev-parse", "origin/main").stdout)
-            facts = {"mode": "remove", "path": str(path), "classification": RETAIN_MISSING_OR_UNCLASSIFIED}
-            return Plan(
-                timestamp=self.now(),
-                actor=self.actor,
-                mode="remove",
-                repository=str(main.path),
-                common_dir=str(self.common_dir),
-                path=str(path),
-                issue=None,
-                branch=None,
-                detached=False,
-                head="",
-                origin_main=origin_main,
-                lease_state="missing-or-invalid",
-                terminal_run_id=None,
-                terminal_run_head=None,
-                terminal_result=None,
-                process_ids=[],
-                process_reasons=[],
-                classification=RETAIN_MISSING_OR_UNCLASSIFIED,
-                reasons=[RETAIN_MISSING_OR_UNCLASSIFIED],
-                errors=["candidate is absent, outside the boundary, or ambiguously registered"],
-                facts=facts,
-            ).seal()
-        return matches[0]
+        registered = self._registered_path_plan(path)
+        if registered is not None:
+            return registered
+        return self._fallback_path_plan(path)
+
+    def _fallback_path_plan(self, path: Path) -> Plan:
+        matches = []
+        for plan in self.classify():
+            if canonical(plan.path) == path:
+                matches.append(plan)
+        if len(matches) == 1:
+            return matches[0]
+        return self._missing_path_plan(path)
+
+    def _missing_path_plan(self, path: Path) -> Plan:
+        main = self.shared_main()
+        origin_main = _decode(self._git("rev-parse", "origin/main").stdout)
+        facts = {"mode": "remove", "path": str(path), "classification": RETAIN_MISSING_OR_UNCLASSIFIED}
+        return Plan(
+            timestamp=self.now(),
+            actor=self.actor,
+            mode="remove",
+            repository=str(main.path),
+            common_dir=str(self.common_dir),
+            path=str(path),
+            issue=None,
+            branch=None,
+            detached=False,
+            head="",
+            origin_main=origin_main,
+            lease_state="missing-or-invalid",
+            terminal_run_id=None,
+            terminal_run_head=None,
+            terminal_result=None,
+            process_ids=[],
+            process_reasons=[],
+            classification=RETAIN_MISSING_OR_UNCLASSIFIED,
+            reasons=[RETAIN_MISSING_OR_UNCLASSIFIED],
+            errors=["candidate is absent, outside the boundary, or ambiguously registered"],
+            facts=facts,
+        ).seal()
 
     def _registered_path_plan(self, path: Path) -> Plan | None:
         """Recompute one registered candidate without unrelated GitHub lookups."""

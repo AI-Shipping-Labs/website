@@ -251,13 +251,13 @@ class SyntheticRepo:
         lease_path.write_text(json.dumps(lease, sort_keys=True, indent=2) + "\n")
         return lease_path, lease
 
-    def terminal(self, service, path, *, issue=1442, human_pending=False):
+    def terminal(self, service, path, *, issue=1442, run_id="12345", human_pending=False):
         service.create_lease(path=path, issue=issue, role="software-engineer")
         service.close_lease(
             path=path,
             issue=issue,
             merge_sha=self.head,
-            run_id="12345",
+            run_id=run_id,
             run_head_sha=self.head,
             human_pending=human_pending,
         )
@@ -2785,6 +2785,103 @@ class LegacyAliasReconciliationContractTest(SyntheticRepoTestCase):
 
 @tag("core")
 class ClassificationContractTest(SyntheticRepoTestCase):
+    def test_registered_single_path_only_builds_target_plan_and_github_evidence(self):
+        target = self.synthetic.add_worktree("target")
+        unrelated = self.synthetic.add_worktree("unrelated")
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, target, issue=1855, run_id="1855001")
+        self.synthetic.terminal(service, unrelated, issue=9999, run_id="9999001")
+
+        github_calls = []
+
+        def record_github(args):
+            github_calls.append(tuple(args))
+            return self.synthetic.gh(args)
+
+        service.gh_runner = record_github
+        with (
+            mock.patch.object(service, "_candidate_plan", wraps=service._candidate_plan) as candidate_plan,
+            mock.patch.object(
+                service,
+                "classify",
+                side_effect=AssertionError("registered path called bulk classify"),
+            ),
+        ):
+            plan = service.classify_path(target)
+
+        self.assertEqual(plan.path, str(target))
+        self.assertEqual((candidate_plan.call_count, candidate_plan.call_args.args[0].path), (1, target))
+        self.assertEqual(
+            [(call[0], call[1], call[2]) for call in github_calls],
+            [("run", "view", "1855001"), ("issue", "view", "1855")],
+        )
+
+    def test_registered_single_path_matches_frozen_bulk_plan(self):
+        target = self.synthetic.add_worktree("target")
+        unrelated = self.synthetic.add_worktree("unrelated")
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, target)
+        service.create_lease(path=unrelated, issue=9999, role="tester")
+
+        direct = service.classify_path(target)
+        bulk = next(plan for plan in service.classify() if plan.path == str(target))
+
+        self.assertEqual(direct.public_dict(), bulk.public_dict())
+        self.assertEqual(direct.facts, bulk.facts)
+
+    def test_registered_single_path_recomputes_combined_safety_drift(self):
+        target = self.synthetic.add_worktree("drift")
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, target)
+        reviewed = service.classify_path(target)
+
+        lease, errors = service.read_lease(target)
+        self.assertEqual(errors, [])
+        lease["state"] = "active"
+        lease.pop("terminal")
+        service._write_lease(target, lease)
+        target.joinpath("late.txt").write_text("valuable\n")
+        service.process_scanner = StaticScanner(
+            cleanup.ProcessScan(False, (cleanup.ProcessUse(1855, ("cwd",)),), ("cwd:PermissionError",))
+        )
+
+        current = service.classify_path(target)
+        self.assertEqual(
+            current.reasons,
+            [
+                cleanup.RETAIN_ACTIVE_LIFECYCLE,
+                cleanup.RETAIN_ACTIVE_PROCESS,
+                cleanup.RETAIN_MISSING_OR_UNCLASSIFIED,
+                cleanup.RETAIN_DIRTY,
+            ],
+        )
+        self.assertEqual(current.errors, ["cwd:PermissionError"])
+        self.assertEqual(current.process_ids, [1855])
+        self.assertNotEqual(current.plan_digest, reviewed.plan_digest)
+        self.assertTrue(target.exists())
+
+    def test_bulk_classification_inventory_and_order_are_unchanged(self):
+        terminal = self.synthetic.add_worktree("terminal")
+        active = self.synthetic.add_worktree("active")
+        unregistered = self.synthetic.root / ".claude" / "worktrees" / "unregistered"
+        unregistered.mkdir()
+        service = self.synthetic.service()
+        self.synthetic.terminal(service, terminal)
+        service.create_lease(path=active, issue=9999, role="tester")
+
+        plans = service.classify()
+
+        self.assertEqual([plan.path for plan in plans], sorted(plan.path for plan in plans))
+        self.assertEqual(
+            {plan.path: plan.classification for plan in plans},
+            {
+                str(self.synthetic.root): cleanup.PROTECTED_SHARED_MAIN,
+                str(terminal): cleanup.ELIGIBLE_REMOVE,
+                str(active): cleanup.RETAIN_ACTIVE_LIFECYCLE,
+                str(unregistered): cleanup.RETAIN_MISSING_OR_UNCLASSIFIED,
+            },
+        )
+
     def test_symlinked_boundary_uses_same_semantics_for_every_cleanup_mode(self):
         boundary = self.synthetic.root / ".claude" / "worktrees"
         boundary.parent.mkdir(parents=True, exist_ok=True)

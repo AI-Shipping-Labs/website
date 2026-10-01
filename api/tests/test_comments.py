@@ -20,6 +20,7 @@ from api.views.comments import COMMENTS_LIST_SCHEMA
 from bookclub.models import Book, Chapter, Note
 from comments.models import ApiReplyOperation, Comment
 from content.models import Course, Module, Unit, Workshop, WorkshopPage
+from integrations.middleware import clear_redirect_cache, get_active_redirects
 from plans.models import Plan, Sprint
 
 User = get_user_model()
@@ -158,12 +159,27 @@ class OperatorCommentsApiTest(TestCase):
         self.assertEqual(course_top['reply_count'], 1)
 
     def test_list_query_bound_does_not_grow_with_page_rows(self):
+        self.addCleanup(clear_redirect_cache)
+        clear_redirect_cache()
+        get_active_redirects()
+
         with CaptureQueriesContext(connection) as first_queries:
             first = self.client.get('/api/comments?limit=1', **self.auth())
         with CaptureQueriesContext(connection) as many_queries:
             many = self.client.get('/api/comments?limit=50', **self.auth())
-        self.assertEqual(first.json()['limit'], 1)
-        self.assertEqual(many.json()['limit'], 50)
+
+        first_payload = first.json()
+        many_payload = many.json()
+        self.assertEqual(first_payload['count'], 6)
+        self.assertEqual(many_payload['count'], 6)
+        self.assertEqual(first_payload['limit'], 1)
+        self.assertEqual(many_payload['limit'], 50)
+        self.assertEqual(len(first_payload['comments']), 1)
+        self.assertEqual(len(many_payload['comments']), 6)
+        self.assertEqual(
+            {row['id'] for row in many_payload['comments']},
+            {comment.pk for comment in (*self.top_comments, self.reply)},
+        )
         self.assertEqual(len(first_queries), len(many_queries))
 
     def test_tied_timestamps_keep_offset_pages_deterministic(self):

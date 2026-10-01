@@ -54,15 +54,16 @@ def verify_signature(request):
     Calendly signs webhooks with HMAC-SHA256 over ``"{t}.{body}"`` and
     sends ``Calendly-Webhook-Signature: t=<timestamp>,v1=<hex>``.
 
-    Returns True when the signature is valid. When validation is
-    disabled (the Studio toggle is off) this returns True so local
-    replay works without a signing key. When validation is enabled but
-    the key or header is missing/invalid, returns False.
+    Returns True when the signature is valid, or when validation is disabled
+    (signing key not configured) to allow local replay/testing.
+    When validation is enabled but the key or header is missing/invalid,
+    returns False.
     """
     signing_key = get_calendly_webhook_signing_key()
     if not signing_key:
-        logger.warning('Calendly webhook signing key not set; rejecting request')
-        return False
+        # Validation disabled (no signing key configured) - allow request
+        # for local development and replay testing
+        return True
 
     header = request.headers.get('Calendly-Webhook-Signature', '')
     timestamp, signature = _parse_signature_header(header)

@@ -2,6 +2,7 @@
 
 from datetime import timedelta
 from importlib import import_module
+from unittest import TestResult
 
 from django.db import IntegrityError, connection, transaction
 from django.db.migrations.executor import MigrationExecutor
@@ -9,20 +10,25 @@ from django.test import TransactionTestCase
 from django.utils import timezone
 
 
-class WebhookAttemptNumberMigrationTest(TransactionTestCase):
-    migrate_from = [("payments", "0015_webhookevent_stripe_customer_id_and_more")]
-    migrate_to = [("payments", "0016_unique_webhook_attempt_number")]
-    latest_target = [("payments", "0018_backfill_memberships_from_users")]
-
+class _FullGraphMigrationTestCase(TransactionTestCase):
     def setUp(self):
         super().setUp()
         self.executor = MigrationExecutor(connection)
+        self.latest_targets = self.executor.loader.graph.leaf_nodes()
+        self.addCleanup(self._restore_latest_targets)
+
+    def _restore_latest_targets(self):
+        MigrationExecutor(connection).migrate(self.latest_targets)
+
+
+class WebhookAttemptNumberMigrationTest(_FullGraphMigrationTestCase):
+    migrate_from = [("payments", "0015_webhookevent_stripe_customer_id_and_more")]
+    migrate_to = [("payments", "0016_unique_webhook_attempt_number")]
+
+    def setUp(self):
+        super().setUp()
         self.executor.migrate(self.migrate_from)
         self.old_apps = self.executor.loader.project_state(self.migrate_from).apps
-
-    def tearDown(self):
-        MigrationExecutor(connection).migrate(self.latest_target)
-        super().tearDown()
 
     def test_duplicate_rows_become_dense_before_unique_constraint(self):
         OldAttempt = self.old_apps.get_model(
@@ -92,7 +98,7 @@ class WebhookAttemptNumberMigrationTest(TransactionTestCase):
                 )
 
 
-class MembershipBackfillMigrationTest(TransactionTestCase):
+class MembershipBackfillMigrationTest(_FullGraphMigrationTestCase):
     accounts_target = ("accounts", "0029_privacycompletiondelivery_and_more")
     migrate_from = [
         ("payments", "0016_unique_webhook_attempt_number"),
@@ -106,13 +112,8 @@ class MembershipBackfillMigrationTest(TransactionTestCase):
 
     def setUp(self):
         super().setUp()
-        self.executor = MigrationExecutor(connection)
         self.executor.migrate(self.migrate_from)
         self.old_apps = self.executor.loader.project_state(self.migrate_from).apps
-
-    def tearDown(self):
-        MigrationExecutor(connection).migrate(self.migrate_to)
-        super().tearDown()
 
     def test_backfill_copies_every_user_and_reapplies_after_reverse(self):
         OldTier = self.old_apps.get_model("payments", "Tier")
@@ -177,3 +178,58 @@ class MembershipBackfillMigrationTest(TransactionTestCase):
             reapplied_apps.get_model("payments", "Membership").objects.count(),
             OldUser.objects.count(),
         )
+
+
+class MigrationCleanupIsolationTest(TransactionTestCase):
+    def _run_expected_error(self, case, message):
+        result = TestResult()
+        case(result)
+
+        self.assertEqual(result.testsRun, 1)
+        self.assertEqual(result.failures, [])
+        self.assertEqual(len(result.errors), 1)
+        self.assertIn(message, result.errors[0][1])
+
+    def _assert_current_schema(self, latest_targets):
+        executor = MigrationExecutor(connection)
+        self.assertCountEqual(
+            executor.loader.graph.leaf_nodes(),
+            latest_targets,
+        )
+        self.assertEqual(executor.migration_plan(latest_targets), [])
+        self.assertTrue(
+            {
+                ("accounts_ext", "0001_initial"),
+                ("accounts_ext", "0002_backfill_member_extra"),
+            }.issubset(executor.recorder.applied_migrations())
+        )
+        tables = set(connection.introspection.table_names())
+        self.assertIn("accounts_ext_memberextra", tables)
+        self.assertIn("accounts_ext_memberextra_contact_tags", tables)
+
+        MigrationExecutor(connection).migrate(latest_targets)
+        self.assertEqual(
+            MigrationExecutor(connection).migration_plan(latest_targets),
+            [],
+        )
+
+    def test_cleanup_restores_full_graph_after_setup_and_body_errors(self):
+        class SetupErrorCase(WebhookAttemptNumberMigrationTest):
+            def setUp(self):
+                super().setUp()
+                raise RuntimeError("controlled setup error")
+
+            def runTest(self):
+                self.fail("test body must not run")
+
+        class BodyErrorCase(MembershipBackfillMigrationTest):
+            def runTest(self):
+                raise RuntimeError("controlled body error")
+
+        setup_case = SetupErrorCase()
+        self._run_expected_error(setup_case, "controlled setup error")
+        self._assert_current_schema(setup_case.latest_targets)
+
+        body_case = BodyErrorCase()
+        self._run_expected_error(body_case, "controlled body error")
+        self._assert_current_schema(body_case.latest_targets)

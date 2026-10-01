@@ -128,7 +128,7 @@ def make_watcher(runner, **kwargs):
 
 @tag("core")
 class WatcherExitCodeTest(SimpleTestCase):
-    def test_green_after_all_ten_required_jobs_succeed(self):
+    def test_green_after_all_twelve_required_jobs_succeed(self):
         gh = FakeGh(
             views=[
                 run_payload(
@@ -187,6 +187,7 @@ class WatcherExitCodeTest(SimpleTestCase):
         self.assertEqual(verdict.result, watch_ci.NO_VERDICT)
         self.assertEqual(verdict.exit_code, 5)
         self.assertIn(missing_name, verdict.reason)
+        self.assertEqual(verdict.failing_jobs, [missing_name])
 
     def test_cancelled_playwright_matrix_job_is_never_green(self):
         jobs = all_required_success()
@@ -266,7 +267,7 @@ class WatcherExitCodeTest(SimpleTestCase):
             conclusion="cancelled",
             run_id="100",
             created_at="2026-07-25T10:00:00Z",
-            jobs=[job(REQUIRED[0]), job(REQUIRED[1], status="completed", conclusion="cancelled")],
+            jobs=all_required_success(),
         )
         newer_list = [
             {"databaseId": "200", "createdAt": "2026-07-25T11:00:00Z", "status": "in_progress"},
@@ -279,13 +280,14 @@ class WatcherExitCodeTest(SimpleTestCase):
         self.assertEqual(verdict.exit_code, 4)
         self.assertEqual(verdict.newer_run_id, "200")
         self.assertIn("200", verdict.reason)
+        self.assertNotEqual(verdict.result, watch_ci.GREEN)
 
     def test_cancelled_run_without_newer_run_is_no_verdict(self):
         cancelled = run_payload(
             status="completed",
             conclusion="cancelled",
             run_id="100",
-            jobs=[job(REQUIRED[0], status="completed", conclusion="cancelled")],
+            jobs=all_required_success(),
         )
         # Only the current run exists — nothing newer.
         gh = FakeGh(
@@ -298,6 +300,7 @@ class WatcherExitCodeTest(SimpleTestCase):
         self.assertEqual(verdict.exit_code, 5)
         self.assertIsNone(verdict.signature)  # no fabricated failure evidence
         self.assertIn("no verdict", verdict.reason.lower())
+        self.assertNotEqual(verdict.result, watch_ci.GREEN)
 
     def test_rerun_reset_counts_as_progress_and_reaches_green(self):
         running = run_payload(
@@ -336,31 +339,6 @@ class WatcherExitCodeTest(SimpleTestCase):
         self.assertEqual(verdict.result, watch_ci.FAILED)
         self.assertEqual(verdict.failing_jobs, ["Unit & Integration Tests (shard 1/4)"])
         self.assertIsNone(verdict.newer_run_id)
-
-
-@tag("core")
-class SkippedGatingTest(SimpleTestCase):
-    def test_skipped_required_job_is_green_when_nothing_failed(self):
-        jobs = [job(name) for name in REQUIRED[:-1]]
-        jobs.append(job(REQUIRED[-1], status="completed", conclusion="skipped"))
-        gh = FakeGh(views=[run_payload(status="completed", conclusion="success", jobs=jobs)])
-        verdict = make_watcher(gh).watch(run_id="100")
-
-        self.assertEqual(verdict.result, watch_ci.GREEN)
-
-    def test_skipped_required_job_gated_by_a_failure_reports_failure(self):
-        jobs = [job(name) for name in REQUIRED[:-1]]
-        # Non-required PostgreSQL job fails and gates the required deploy to skip.
-        jobs.append(job("PostgreSQL 16 Verification", status="completed", conclusion="failure"))
-        jobs.append(job(REQUIRED[-1], status="completed", conclusion="skipped"))
-        gh = FakeGh(
-            views=[run_payload(status="completed", conclusion="failure", jobs=jobs)],
-            log_failed="",
-        )
-        verdict = make_watcher(gh).watch(run_id="100")
-
-        self.assertEqual(verdict.result, watch_ci.FAILED)
-        self.assertIn("PostgreSQL 16 Verification", verdict.failing_jobs)
 
 
 @tag("core")
@@ -456,6 +434,7 @@ class RequiredCheckDefaultsTest(SimpleTestCase):
                 "Unit & Integration Tests (shard 3/4)",
                 "Unit & Integration Tests (shard 4/4)",
                 "Combined coverage (fail-under 85)",
+                "PostgreSQL 16 Verification",
                 "Playwright Core E2E (shard 1/4)",
                 "Playwright Core E2E (shard 2/4)",
                 "Playwright Core E2E (shard 3/4)",

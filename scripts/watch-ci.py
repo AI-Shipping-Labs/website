@@ -8,7 +8,7 @@ the caller once with a compact verdict, so on-call never has to sleep, call
 
 Outcome / exit-code contract (identical to PocketShell):
 
-    0  green        every required job present and successful/appropriately skipped
+    0  green        every required job present with a policy-allowed conclusion
     1  failed       a genuine required-job/run failure (wins over later cancel)
     2  hang         no job-state progress deadline or max wall-clock deadline hit
     3  unresolved   input/run resolution failed or gh CLI failures exceed budget
@@ -30,46 +30,27 @@ import subprocess
 import sys
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+# Direct path execution exposes `scripts/` on `sys.path`; Django tests load
+# this hyphenated module from the repository root. Support both import modes.
+try:
+    from scripts import watch_ci_policy as _policy
+except ModuleNotFoundError:
+    import watch_ci_policy as _policy
 
 # --------------------------------------------------------------------------- #
 # Outcome contract
 # --------------------------------------------------------------------------- #
 
-GREEN = "green"
-FAILED = "failed"
-HANG = "hang"
-UNRESOLVED = "unresolved"
-SUPERSEDED = "superseded"
-NO_VERDICT = "no_verdict"
-
-RESULT_EXIT_CODES: dict[str, int] = {
-    GREEN: 0,
-    FAILED: 1,
-    HANG: 2,
-    UNRESOLVED: 3,
-    SUPERSEDED: 4,
-    NO_VERDICT: 5,
-}
-
-# A job conclusion that is a genuine failure (as opposed to `cancelled`, which
-# is handled honestly as superseded / no-verdict, or `skipped`, which is
-# acceptable only when nothing failed).
-GENUINE_FAILURE_CONCLUSIONS = frozenset(
-    {"failure", "timed_out", "startup_failure", "action_required"}
-)
-# Terminal conclusions that let a required job count toward `green`.
-ACCEPTABLE_CONCLUSIONS = frozenset({"success", "skipped"})
-
-DEFAULT_WORKFLOW = "Deploy Dev"
-
-# The exact required job names of `.github/workflows/deploy-dev.yml` for a
-# post-push `Deploy Dev` run on `main`. All of them must resolve to success (or
-# an appropriate skip) before the watcher reports `green`. A missing required
-# job is never green. Scheduled Playwright and manual production deployment are
-# separate operational workflows and are intentionally NOT in this set.
+GREEN = _policy.GREEN
+FAILED = _policy.FAILED
+HANG = _policy.HANG
+UNRESOLVED = _policy.UNRESOLVED
+SUPERSEDED = _policy.SUPERSEDED
+NO_VERDICT = _policy.NO_VERDICT
+DEFAULT_WORKFLOW = _policy.DEFAULT_WORKFLOW
 DEPLOY_DEV_REQUIRED_CHECKS: tuple[str, ...] = (
     "Deploy Gates (migrations / OpenAPI / system check / static)",
     "Unit & Integration Tests (shard 1/4)",
@@ -77,12 +58,17 @@ DEPLOY_DEV_REQUIRED_CHECKS: tuple[str, ...] = (
     "Unit & Integration Tests (shard 3/4)",
     "Unit & Integration Tests (shard 4/4)",
     "Combined coverage (fail-under 85)",
+    "PostgreSQL 16 Verification",
     "Playwright Core E2E (shard 1/4)",
     "Playwright Core E2E (shard 2/4)",
     "Playwright Core E2E (shard 3/4)",
     "Playwright Core E2E (shard 4/4)",
     "Deploy to Dev",
 )
+Job = _policy.Job
+Run = _policy.Run
+Verdict = _policy.Verdict
+classify = _policy.classify
 
 # Maintained, website-relevant infrastructure signatures. A captured failure
 # signature is marked `likely_infra` only when it matches one of these. Ordinary
@@ -151,89 +137,6 @@ _EVIDENCE_HINT_RE = re.compile(
 
 ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
 TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s+")
-
-
-# --------------------------------------------------------------------------- #
-# Data model
-# --------------------------------------------------------------------------- #
-
-
-@dataclass(frozen=True)
-class Job:
-    name: str
-    status: str = ""
-    conclusion: str = ""
-    url: str = ""
-
-    @property
-    def is_genuine_failure(self) -> bool:
-        return (self.conclusion or "").lower() in GENUINE_FAILURE_CONCLUSIONS
-
-    @property
-    def is_skipped(self) -> bool:
-        return (self.conclusion or "").lower() == "skipped"
-
-
-@dataclass(frozen=True)
-class Run:
-    run_id: str
-    status: str = ""
-    conclusion: str = ""
-    workflow: str = ""
-    branch: str = ""
-    created_at: str = ""
-    head_sha: str = ""
-    jobs: tuple[Job, ...] = ()
-
-    @property
-    def is_completed(self) -> bool:
-        return (self.status or "").lower() == "completed"
-
-    @property
-    def is_cancelled(self) -> bool:
-        return (self.conclusion or "").lower() == "cancelled"
-
-    def job_map(self) -> dict[str, Job]:
-        return {job.name: job for job in self.jobs}
-
-
-@dataclass
-class Verdict:
-    result: str
-    reason: str = ""
-    run_id: str = ""
-    workflow: str = ""
-    branch: str = ""
-    head_sha: str = ""
-    required: list[str] = field(default_factory=list)
-    failing_jobs: list[str] = field(default_factory=list)
-    signature: str | None = None
-    likely_infra: bool = False
-    newer_run_id: str | None = None
-    polls: int = 0
-    elapsed_s: float = 0.0
-
-    @property
-    def exit_code(self) -> int:
-        return RESULT_EXIT_CODES[self.result]
-
-    def to_json_dict(self) -> dict[str, Any]:
-        return {
-            "result": self.result,
-            "exit_code": self.exit_code,
-            "run_id": self.run_id,
-            "workflow": self.workflow,
-            "branch": self.branch,
-            "head_sha": self.head_sha,
-            "required": self.required,
-            "failing_jobs": self.failing_jobs,
-            "signature": self.signature,
-            "likely_infra": self.likely_infra,
-            "reason": self.reason,
-            "newer_run_id": self.newer_run_id,
-            "polls": self.polls,
-            "elapsed_s": round(self.elapsed_s, 3),
-        }
 
 
 # --------------------------------------------------------------------------- #
@@ -393,101 +296,6 @@ def extract_signature(log_text: str) -> tuple[str | None, bool]:
 
 
 # --------------------------------------------------------------------------- #
-# Verdict classification
-# --------------------------------------------------------------------------- #
-
-
-def classify(run: Run, required: Sequence[str]) -> Verdict | None:
-    """Classify a polled run. Returns None to keep watching.
-
-    Precedence rules:
-    - A genuine required-job failure wins even over a later cancellation.
-    - `green` requires every required job present, terminal, and
-      success/appropriately-skipped; a missing required job is never green.
-    - A skipped required job is acceptable only when nothing failed; if it was
-      gated behind any failed job the run reports failure and names the job.
-    - Cancellation is honest: superseded only when a newer matching run exists
-      (resolved by the caller), otherwise no_verdict. Neither is green/failed.
-    """
-
-    required = list(required)
-    by_name = run.job_map()
-    failed_all = [job for job in run.jobs if job.is_genuine_failure]
-    failed_required = [job for job in failed_all if job.name in required]
-
-    base = Verdict(
-        result="",
-        run_id=run.run_id,
-        workflow=run.workflow,
-        branch=run.branch,
-        required=required,
-    )
-
-    # 1. Genuine required-job failure — decide immediately, before completion or
-    #    any later cancellation can mask it.
-    if failed_required:
-        base.result = FAILED
-        base.failing_jobs = [job.name for job in failed_required]
-        base.reason = "required job failed: " + ", ".join(base.failing_jobs)
-        return base
-
-    # Do not commit to green/failed/cancel classification until GitHub reports
-    # the run terminal. Required jobs may still be running.
-    if not run.is_completed:
-        return None
-
-    present = [name for name in required if name in by_name]
-    missing = [name for name in required if name not in by_name]
-    required_jobs = [by_name[name] for name in present]
-    skipped_required = [job for job in required_jobs if job.is_skipped]
-
-    all_required_acceptable = (
-        not missing
-        and all((job.status or "").lower() == "completed" for job in required_jobs)
-        and all((job.conclusion or "").lower() in ACCEPTABLE_CONCLUSIONS for job in required_jobs)
-    )
-
-    # 2. Green — but a skipped required job is acceptable only when nothing
-    #    failed. If something failed and gated a skip, that is a failure.
-    if all_required_acceptable:
-        if failed_all and skipped_required:
-            base.result = FAILED
-            base.failing_jobs = [job.name for job in failed_all]
-            base.reason = (
-                "required job skipped behind failed job(s): "
-                + ", ".join(base.failing_jobs)
-            )
-            return base
-        base.result = GREEN
-        base.reason = "all required jobs succeeded or were appropriately skipped"
-        return base
-
-    # 3. A non-required failure that gated a required job (skipped or missing).
-    if failed_all and (skipped_required or missing):
-        base.result = FAILED
-        base.failing_jobs = [job.name for job in failed_all]
-        base.reason = "required job gated behind failed job(s): " + ", ".join(base.failing_jobs)
-        return base
-
-    # 4. Cancellation without a genuine failure — honest superseded/no_verdict
-    #    is resolved by the caller (needs a newer-run probe).
-    if run.is_cancelled:
-        base.result = SUPERSEDED  # provisional; caller downgrades to no_verdict
-        base.reason = "run cancelled"
-        return base
-
-    # 5. Completed, not cancelled, no failure, but not green (e.g. a required
-    #    job is missing from an otherwise-complete run). Not a pass, not a
-    #    failure — no trustworthy verdict.
-    base.result = NO_VERDICT
-    if missing:
-        base.reason = "completed run missing required job(s): " + ", ".join(missing)
-    else:
-        base.reason = "completed run did not reach a green required-job state"
-    return base
-
-
-# --------------------------------------------------------------------------- #
 # Watcher
 # --------------------------------------------------------------------------- #
 
@@ -499,6 +307,7 @@ class CIWatcher:
         runner: GhRunner,
         clock: RealClock | VirtualClock | None = None,
         required_checks: Sequence[str] | None = None,
+        allowed_skips: Sequence[str] | None = None,
         workflow: str = DEFAULT_WORKFLOW,
         branch: str | None = None,
         repo: str | None = None,
@@ -509,11 +318,9 @@ class CIWatcher:
         quiet: bool = False,
         log_file: Path | None = None,
     ) -> None:
-        self.runner = runner
-        self.clock = clock or RealClock()
+        self.runner, self.clock = runner, clock or RealClock()
         self.workflow = workflow
-        self.branch = branch
-        self.repo = repo
+        self.branch, self.repo = branch, repo
         self.interval = interval
         self.no_progress_timeout = no_progress_timeout
         self.max_wall_clock = max_wall_clock
@@ -521,13 +328,9 @@ class CIWatcher:
         self.quiet = quiet
         self.log_file = log_file
         self.last_run: Run | None = None
-
-        if required_checks:
-            self.required = list(required_checks)
-        elif workflow and workflow.strip().lower() == DEFAULT_WORKFLOW.lower():
-            self.required = list(DEPLOY_DEV_REQUIRED_CHECKS)
-        else:
-            self.required = []
+        self.required, self.allowed_skips = _policy.resolve_required_policy(
+            workflow, required_checks, allowed_skips, DEPLOY_DEV_REQUIRED_CHECKS
+        )
 
     # -- gh helpers -------------------------------------------------------- #
 
@@ -714,7 +517,7 @@ class CIWatcher:
                 last_progress = self.clock.now()
                 self._emit_state_change(polls, run)
 
-            verdict = classify(run, self.required)
+            verdict = classify(run, self.required, self.allowed_skips)
             if verdict is not None:
                 verdict = self._resolve_terminal(verdict, run)
                 return self._finalize(verdict, polls=polls, start=start)
@@ -756,14 +559,18 @@ class CIWatcher:
             verdict.signature = signature
             verdict.likely_infra = likely_infra
         elif verdict.result == SUPERSEDED:
+            blocker_reason = ""
+            if verdict.failing_jobs:
+                blocker_reason = "; " + verdict.reason
             newer = self._probe_newer_run(run)
             if newer:
                 verdict.newer_run_id = newer
-                verdict.reason = f"run cancelled and superseded by newer run {newer}"
+                verdict.reason = f"run cancelled and superseded by newer run {newer}{blocker_reason}"
             else:
                 verdict.result = NO_VERDICT
                 verdict.reason = (
                     "run cancelled with no demonstrably newer matching run; no verdict"
+                    + blocker_reason
                 )
         return verdict
 
@@ -800,7 +607,7 @@ def render_summary(verdict: Verdict, run: Run | None) -> list[str]:
             state = "missing" if job is None else (job.conclusion or job.status or "pending")
             lines.append(f"  - {name}: {state}")
     if verdict.failing_jobs:
-        lines.append("Failing jobs: " + ", ".join(verdict.failing_jobs))
+        lines.append("Blocking/failing jobs: " + ", ".join(verdict.failing_jobs))
     if verdict.signature:
         lines.append(f"Signature: {verdict.signature} (likely_infra={str(verdict.likely_infra).lower()})")
     if verdict.newer_run_id:

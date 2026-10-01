@@ -22,25 +22,34 @@ from content.sync_parsers.common import (
 from integrations.config import get_config, running_in_worker_process
 
 # Cached AWS Secrets Manager lookup (kept from the retired client): web
-# processes cache successful lookups per secret id/region, workers fetch
-# fresh so long-running queue jobs never hold stale credentials.
+# processes cache successful lookups per secret id/region with TTL,
+# workers fetch fresh so long-running queue jobs never hold stale credentials.
 _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID = (
     'ai-shipping-labs/github-app-private-key'
 )
 _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_REGION = 'eu-west-1'
+_SECRETS_MANAGER_CACHE_TTL = 3600  # 1 hour
 _secrets_manager_pem_cache = {}
 
 
 def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
-    """Fetch the GitHub App PEM from AWS Secrets Manager (cached).
+    """Fetch the GitHub App PEM from AWS Secrets Manager (cached with TTL).
 
     Returns an empty string if boto3 is unavailable, the secret is
     missing, or the call fails for any reason -- never raises. Callers
     treat an empty string as "no key configured".
     """
-    cache_key = (secret_id, region)
+    cache_key = f"github_app_pem:{secret_id}:{region}"
+    
+    # Try Django cache first (works across processes, supports TTL)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    # Fallback to in-memory cache for web processes (workers bypass)
     if not running_in_worker_process() and cache_key in _secrets_manager_pem_cache:
         return _secrets_manager_pem_cache[cache_key]
+    
     try:
         import boto3  # noqa: PLC0415
         from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415
@@ -64,8 +73,12 @@ def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
             secret_id, e,
         )
         return ''
-    if value and not running_in_worker_process():
-        _secrets_manager_pem_cache[cache_key] = value
+    if value:
+        # Store in Django cache with TTL (works across processes)
+        cache.set(cache_key, value, _SECRETS_MANAGER_CACHE_TTL)
+        # Also store in in-memory cache for web processes
+        if not running_in_worker_process():
+            _secrets_manager_pem_cache[cache_key] = value
     return value or ''
 
 

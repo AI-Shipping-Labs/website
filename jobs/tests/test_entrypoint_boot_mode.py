@@ -10,7 +10,8 @@ to untangle web-vs-worker role dispatch from migrate-on-boot:
 * ``worker`` -> ``django.setup`` -> schedules -> qcluster (SKIPS migrate + check).
 * absent -> exactly the legacy ``RUN_MIGRATIONS`` behavior (backward-compat).
 
-Phase 2C: gunicorn ``--workers`` is read from ``os.environ['GUNICORN_WORKERS']``.
+Phase 2C: gunicorn ``--workers`` is read from ``os.environ['GUNICORN_WORKERS']``
+Parsing and the gunicorn argv are covered in ``test_entrypoint_gunicorn.py``.
 
 We drive ``main()`` with the blocking handoffs (``_start_gunicorn`` /
 ``_start_qcluster``), ``django.setup``, ``_register_schedules`` and
@@ -20,7 +21,6 @@ check helpers) is patched so we can assert what was and was NOT invoked.
 """
 
 import os
-import sys
 from unittest import mock
 
 from django.test import SimpleTestCase
@@ -370,33 +370,6 @@ class CombinedTaskSchemaBarrierTest(SimpleTestCase):
             entry._wait_for_serving_schema_ready()
 
 
-class GunicornWorkerCountTest(SimpleTestCase):
-    def test_defaults_to_three_when_unset(self):
-        with mock.patch.dict(os.environ, {}, clear=True):
-            self.assertEqual(entry._gunicorn_worker_count(), 3)
-
-    def test_reads_positive_integer(self):
-        with mock.patch.dict(os.environ, {"GUNICORN_WORKERS": "2"}, clear=True):
-            self.assertEqual(entry._gunicorn_worker_count(), 2)
-
-    def test_non_integer_falls_back_to_three_with_warning(self):
-        with mock.patch.dict(os.environ, {"GUNICORN_WORKERS": "abc"}, clear=True):
-            with self.assertLogs("scripts.entrypoint_init", level="WARNING") as cm:
-                self.assertEqual(entry._gunicorn_worker_count(), 3)
-        self.assertTrue(any("GUNICORN_WORKERS" in m for m in cm.output))
-
-    def test_zero_or_negative_falls_back_to_three_with_warning(self):
-        for bad in ("0", "-4"):
-            with self.subTest(value=bad):
-                with mock.patch.dict(
-                    os.environ, {"GUNICORN_WORKERS": bad}, clear=True
-                ):
-                    with self.assertLogs(
-                        "scripts.entrypoint_init", level="WARNING"
-                    ):
-                        self.assertEqual(entry._gunicorn_worker_count(), 3)
-
-
 class ServingBootSmokeCheckTest(SimpleTestCase):
     def test_truthy_env_defaults_when_missing(self):
         with mock.patch.dict(os.environ, {}, clear=True):
@@ -441,24 +414,3 @@ class ServingBootSmokeCheckTest(SimpleTestCase):
 
         print_.assert_called_once()
         self.assertIn("Skipping serving boot smoke check", print_.call_args.args[0])
-
-
-class StartGunicornArgvTest(SimpleTestCase):
-    """``_start_gunicorn`` builds the gunicorn argv with the given worker count."""
-
-    def test_argv_contains_worker_count(self):
-        saved_argv = sys.argv
-        try:
-            with mock.patch("gunicorn.app.wsgiapp.run") as run:
-                entry._start_gunicorn(2)
-                run.assert_called_once()
-                built = sys.argv
-        finally:
-            sys.argv = saved_argv
-
-        self.assertEqual(built[0], "gunicorn")
-        self.assertIn("website.wsgi:application", built)
-        # --workers is followed by the count as a string.
-        self.assertIn("--workers", built)
-        self.assertEqual(built[built.index("--workers") + 1], "2")
-        self.assertIn("--preload", built)

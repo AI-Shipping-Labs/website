@@ -57,5 +57,13 @@ def eligible_campaign_recipients(
 
 
 def campaign_recipient_count(**audience):
-    """Count recipients without exposing identities to preview callers."""
-    return eligible_campaign_recipients(**audience).count()
+    """Count recipients without exposing identities to preview callers.
+
+    Issue #1854: the eligibility queryset is ``DISTINCT`` over every user
+    column (the tier-override and tag joins can duplicate rows), and counting
+    it directly made Postgres de-duplicate whole wide rows, JSON included,
+    for the entire user table. Counting distinct ids gives the same number
+    from one narrow aggregate query.
+    """
+    eligible = eligible_campaign_recipients(**audience)
+    return eligible.order_by().values("pk").distinct().count()

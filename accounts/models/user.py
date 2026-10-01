@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models, transaction
+from django.db.models.functions import Upper
 
 IMPORT_SOURCE_MANUAL = "manual"
 IMPORT_SOURCE_SLACK = "slack"
@@ -350,6 +351,14 @@ class User(AbstractUser):
 
     class Meta:
         ordering = ["-date_joined"]
+        indexes = [
+            # Django requires model index declarations on this nested Meta owner.
+            # Issue #1854: ``email__iexact`` compiles to ``UPPER(email) =
+            # UPPER(%s)`` on Postgres, which the unique ``email`` index
+            # cannot serve. Without this expression index every user lookup
+            # by email (``asl users get``, login, webhooks) scans the table.
+            models.Index(Upper("email"), name="accounts_user_email_upper"),
+        ]
 
     def __str__(self):
         return self.email

@@ -7,12 +7,50 @@ structured error raising. All command modules go through this client.
 from __future__ import annotations
 
 import json
+import random
+import sys
+import time
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
 
 from asl_cli.config import resolve_base_url, resolve_staff_token
+
+# Issue #1854: the server sheds per-token load with a 429 carrying one of
+# these codes and a ``Retry-After`` header. Those rejections happen before
+# the endpoint runs, so every method is safe to retry. Other 429s (e.g.
+# ``too_many_users`` from tier reconcile) are real answers and never retried.
+THROTTLE_CODES = frozenset({"rate_limited", "too_many_concurrent_requests"})
+MAX_THROTTLE_RETRIES = 5
+MAX_BACKOFF_SECONDS = 30.0
+
+
+def _throttle_code(response: httpx.Response) -> str | None:
+    if response.status_code != 429:
+        return None
+    try:
+        body = response.json()
+    except ValueError:
+        return None
+    if not isinstance(body, dict) or body.get("code") not in THROTTLE_CODES:
+        return None
+    return body["code"]
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    try:
+        return max(0.0, float(response.headers.get("Retry-After", "0")))
+    except ValueError:
+        return 0.0
+
+
+def throttle_backoff_seconds(response: httpx.Response, attempt: int) -> float:
+    """Wait for ``Retry-After`` or exponential backoff, plus jitter, capped."""
+    exponential = 2.0 ** attempt
+    delay = min(MAX_BACKOFF_SECONDS, max(_retry_after_seconds(response), exponential))
+    jittered = delay + random.uniform(0, delay / 4)
+    return min(MAX_BACKOFF_SECONDS, jittered)
 
 
 @dataclass
@@ -42,6 +80,7 @@ class Client:
             timeout=30.0,
             follow_redirects=True,
         )
+        self._sleep = time.sleep
 
     def request(
         self,
@@ -66,7 +105,7 @@ class Client:
             request_headers["Authorization"] = f"Bearer {self._token}"
         if headers:
             request_headers.update(headers)
-        response = self._http.request(
+        response = self._send_with_backoff(
             method, path, params=params, json=json_body, headers=request_headers,
         )
 
@@ -85,6 +124,22 @@ class Client:
             return response.json()
         except json.JSONDecodeError:
             return response.text
+
+    def _send_with_backoff(self, method: str, path: str, **kwargs) -> httpx.Response:
+        """Send once, retrying throttled 429s at most ``MAX_THROTTLE_RETRIES`` times."""
+        response = self._http.request(method, path, **kwargs)
+        for attempt in range(MAX_THROTTLE_RETRIES):
+            code = _throttle_code(response)
+            if code is None:
+                return response
+            delay = throttle_backoff_seconds(response, attempt)
+            print(
+                f"asl: throttled ({code}); retrying in {delay:.1f}s",
+                file=sys.stderr,
+            )
+            self._sleep(delay)
+            response = self._http.request(method, path, **kwargs)
+        return response
 
     def get(self, path: str, **kwargs) -> Any:
         return self.request("GET", path, **kwargs)

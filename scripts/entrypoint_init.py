@@ -82,6 +82,14 @@ import time
 
 import django
 
+from scripts.gunicorn_runtime import (
+    apply_web_statement_timeout,
+    gunicorn_argv,
+    gunicorn_thread_count,
+    web_statement_timeout_ms,
+)
+from scripts.gunicorn_runtime import gunicorn_worker_count as _gunicorn_worker_count
+
 logger = logging.getLogger(__name__)
 
 _TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -291,33 +299,6 @@ def _reconcile_r1_expand():
     call_command("reconcile_r1_expand", verbosity=0)
 
 
-def _gunicorn_worker_count():
-    """Return the gunicorn ``--workers`` count from ``os.environ`` (default 3).
-
-    Issue #1141 Phase 2C. This is read from ``GUNICORN_WORKERS`` and MUST NOT
-    go through the ``IntegrationSetting`` / ``get_config`` framework. It is a
-    deploy-time value consumed on the gunicorn master BEFORE the app serves a
-    single request and before the runtime is fully wired: the DB override
-    cannot be consulted pre-boot, and querying RDS here would re-introduce the
-    exact pre-bind DB round-trip Phase 2 is removing. A non-integer /
-    non-positive value falls back to the default 3 with a logged warning so a
-    bad env var can never crash boot.
-    """
-    raw = os.environ.get("GUNICORN_WORKERS")
-    if raw is None:
-        return 3
-    try:
-        count = int(raw)
-    except (TypeError, ValueError):
-        count = 0
-    if count <= 0:
-        logger.warning(
-            "Invalid GUNICORN_WORKERS=%r; falling back to 3 workers", raw,
-        )
-        return 3
-    return count
-
-
 def _serving_boot_smoke_check_enabled():
     return _truthy_env("SERVING_BOOT_SMOKE_CHECK_ENABLED", default=True)
 
@@ -360,13 +341,11 @@ def _start_gunicorn(workers):
     cold-start gain carries across all workers.
     """
     print("Starting server", flush=True)
-    sys.argv = [
-        "gunicorn",
-        "website.wsgi:application",
-        "--bind", "0.0.0.0:8000",
-        "--workers", str(workers),
-        "--preload",
-    ]
+    # Issue #1854: only this serving process caps SQL statements; migrate
+    # (already finished above on the legacy path), qcluster and management
+    # commands never reach this function.
+    apply_web_statement_timeout(web_statement_timeout_ms())
+    sys.argv = gunicorn_argv(workers, gunicorn_thread_count())
     from gunicorn.app.wsgiapp import run as gunicorn_run
     gunicorn_run()
 

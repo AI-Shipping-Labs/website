@@ -80,3 +80,14 @@ A task that catches its own error returns `success=True` with `result=None` — 
 
 - The API runs against PRODUCTION. Treat writes as prod changes.
 - New endpoints appear automatically in the OpenAPI spec. When unsure, fetch it.
+
+## Rate limits: never fan out
+
+Production is a single small task. On 2026-09-30, 56 parallel `asl users get` calls took the site down for 11 minutes (issue #1854).
+
+- Run API calls sequentially. Never launch parallel `asl` calls, background loops, or `xargs -P` against production.
+- Each staff token is throttled per worker process: a rate limit (`STAFF_API_RATE_LIMIT_PER_MINUTE`, default 120 per minute) and a concurrency cap (`STAFF_API_MAX_CONCURRENT_PER_TOKEN`, default 2 in flight).
+- A throttled call returns `429` with a `Retry-After` header and `code` `rate_limited` or `too_many_concurrent_requests`. It is rejected before the endpoint runs, so retrying is safe.
+- `asl` waits and retries these 429s up to 5 times with exponential backoff (capped at 30 seconds) and prints `asl: throttled (...)` to stderr. If it still fails, slow down; do not raise the limits to push a batch through.
+- Other 429s, such as `too_many_users` from tier reconcile, are real answers and are not retried.
+- For many users, prefer one list or export call (`asl users list`, `asl contacts export`) over one `asl users get` per user.

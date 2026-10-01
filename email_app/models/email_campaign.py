@@ -181,19 +181,28 @@ class EmailCampaign(models.Model):
         Empty tag lists mean "no filter on that side" — both empty
         reproduces the exact pre-#357 behavior.
         """
+        # Inline import: importing ``email_app.services`` runs its package
+        # ``__init__`` (the whole email service stack), which must not load
+        # while the app registry is still importing this models module.
         from email_app.services.campaign_audience import (
             eligible_campaign_recipients,
         )
 
-        return eligible_campaign_recipients(
-            target_min_level=self.target_min_level,
-            target_tags_any=self.target_tags_any,
-            target_tags_none=self.target_tags_none,
-            slack_filter=self.slack_filter,
-            audience_verification=self.audience_verification,
-            target_event_id=self.target_event_id,
-        )
+        return eligible_campaign_recipients(**self._audience_filters())
 
     def get_recipient_count(self):
         """Return the estimated number of eligible recipients."""
-        return self.get_eligible_recipients().count()
+        # Inline import for the same app-loading reason as above.
+        from email_app.services.campaign_audience import campaign_recipient_count
+
+        return campaign_recipient_count(**self._audience_filters())
+
+    def _audience_filters(self):
+        return {
+            "target_min_level": self.target_min_level,
+            "target_tags_any": self.target_tags_any,
+            "target_tags_none": self.target_tags_none,
+            "slack_filter": self.slack_filter,
+            "audience_verification": self.audience_verification,
+            "target_event_id": self.target_event_id,
+        }

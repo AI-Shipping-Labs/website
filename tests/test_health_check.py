@@ -1,3 +1,8 @@
+from contextlib import ExitStack
+from unittest import mock
+
+from django.conf import settings
+from django.core.cache import caches
 from django.test import RequestFactory, SimpleTestCase, override_settings
 
 from website.middleware import HealthCheckMiddleware
@@ -40,3 +45,32 @@ class HealthCheckMiddlewareTest(SimpleTestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content.decode(), 'N/A')
+
+
+class PingDependencyFreeTest(SimpleTestCase):
+    """Issue #1854: /ping must stay fast while the database is struggling.
+
+    The ALB health check shares gunicorn's request slots, so the full
+    middleware stack must answer it without any database or cache call.
+    ``SimpleTestCase`` forbids database queries; every cache read or write
+    method is patched to fail.
+    """
+
+    CACHE_METHODS = (
+        'get', 'get_many', 'get_or_set', 'has_key', 'set', 'set_many',
+        'add', 'incr', 'decr', 'touch', 'delete',
+    )
+
+    @override_settings(VERSION='20260930-120000-abc1234')
+    def test_ping_through_full_stack_touches_no_database_or_cache(self):
+        with ExitStack() as stack:
+            for alias in settings.CACHES:
+                for method in self.CACHE_METHODS:
+                    stack.enter_context(mock.patch.object(
+                        caches[alias],
+                        method,
+                        side_effect=AssertionError(f'/ping used cache {alias}'),
+                    ))
+            response = self.client.get('/ping', HTTP_HOST='10.0.1.189:8000')
+
+        self.assertEqual(response.content.decode(), '20260930-120000-abc1234')

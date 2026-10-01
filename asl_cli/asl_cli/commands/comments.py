@@ -142,8 +142,9 @@ def comments_reply(comment_id, body, body_file, idempotency_key, fmt):
         _fail("Reply body must not be empty")
     if len(body) > 10_000:
         _fail("Reply body must be at most 10000 Unicode code points")
-    # Client.request performs one httpx call. There is deliberately no retry
-    # around this POST: after an ambiguous failure, rerun with the same key.
+    # Client.request only retries throttled 429s, which the server rejects
+    # before the endpoint runs. There is deliberately no other retry around
+    # this POST: after an ambiguous failure, rerun with the same key.
     result = get_client().post(
         f"{API}/{comment_id}/replies",
         json_body={"body": body},

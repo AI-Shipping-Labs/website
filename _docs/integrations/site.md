@@ -354,6 +354,65 @@ the new value (no redeploy).
 Test vs live: n/a. Use per-environment values if a staging analyst
 job needs a different ceiling.
 
+## STAFF_API_RATE_LIMIT_PER_MINUTE
+
+Purpose: Per-token rate limit for staff API token calls (issue #1854).
+Every request authenticated by `accounts.auth.token_required` spends one
+token from a per-token bucket that refills at this many requests per
+minute and holds 10 seconds of burst (`120` gives a burst of 20). An
+empty bucket returns `429` with `Retry-After` and
+`{"code": "rate_limited"}` before token verification or the view runs,
+so a retry never repeats work. Admission uses a SHA-256 digest of the
+complete submitted credential; raw tokens are not retained in limiter
+state. Inactive full buckets expire and process-local bucket storage is
+bounded. Read by `accounts/services/staff_api_throttle.py`.
+
+Default: `120`. `0` disables the rate limit.
+
+Without it (blank): Falls back to `120`. A non-numeric or negative
+override is ignored and the default is used.
+
+Where to find it: Operator intent. The counters live in each gunicorn
+worker process (no database round trip per call), so with
+`GUNICORN_WORKERS=3` one token can reach up to about three times this
+number across the task. A human using `asl` or one sequential agent stays
+well below it. Studio and other session traffic is never limited.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time; the next API call reads the new
+value.
+
+Test vs live: Off under the Django test runner unless a test configures
+it.
+
+## STAFF_API_MAX_CONCURRENT_PER_TOKEN
+
+Purpose: Concurrency cap for staff API token calls (issue #1854). One
+token may have at most this many requests in flight at once in each
+gunicorn worker; extra concurrent calls get `429` with `Retry-After: 1`
+and `{"code": "too_many_concurrent_requests"}`. With the default 4
+threads per worker, a cap of 2 keeps at least two threads in every
+worker free for `/ping`, members, and Studio, even when a script fans out
+dozens of parallel calls (the 2026-09-30 outage was 56 parallel
+`asl users get` calls).
+
+Default: `2`. `0` disables the cap.
+
+Without it (blank): Falls back to `2`. A non-numeric or negative
+override is ignored and the default is used.
+
+Where to find it: Operator intent. Keep it below `GUNICORN_THREADS`.
+Sequential callers never hit it.
+
+Prereqs: None.
+
+Rotation: Safe to change at any time; the next API call reads the new
+value.
+
+Test vs live: Off under the Django test runner unless a test configures
+it.
+
 ## ONBOARDING_REMINDER_ENABLED
 
 Purpose: Master switch for the one-week onboarding reminder sweep (issue

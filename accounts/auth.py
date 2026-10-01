@@ -14,6 +14,7 @@ from django.http import HttpResponseForbidden, JsonResponse
 from django.utils import timezone
 
 from accounts.models import MemberAPIKey, Token
+from accounts.services.staff_api_throttle import staff_api_slot
 from accounts.utils.user_checks import is_authenticated_user, is_staff_user
 
 
@@ -22,6 +23,19 @@ def _json_auth_error(message, code, details=None):
     if details:
         body["details"] = details
     return JsonResponse(body, status=401)
+
+
+def _authenticate_request(request, token):
+    """Bump ``last_used_at`` and attach the staff token owner to ``request``."""
+    token.last_used_at = timezone.now()
+    Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
+
+    request.user = token.user
+    # Issue #764: stash the token on the request so audit-logging views
+    # (e.g. User Management API writes) can attribute the action to the
+    # bearer without re-parsing the ``Authorization`` header. Existing
+    # views ignore this attribute, so this is a non-breaking addition.
+    request.auth_token = token
 
 
 def token_required(view_func=None, *, structured_errors=False):
@@ -67,20 +81,17 @@ def token_required(view_func=None, *, structured_errors=False):
                 )
 
             key = parts[1].strip()
-            token = Token.authenticate(key)
-            if token is None or not is_staff_user(token.user):
-                return auth_error("Invalid token", "invalid_token")
-
-            token.last_used_at = timezone.now()
-            Token.objects.filter(pk=token.pk).update(last_used_at=token.last_used_at)
-
-            request.user = token.user
-            # Issue #764: stash the token on the request so audit-logging views
-            # (e.g. User Management API writes) can attribute the action to the
-            # bearer without re-parsing the ``Authorization`` header. Existing
-            # views ignore this attribute, so this is a non-breaking addition.
-            request.auth_token = token
-            return view_func(request, *args, **kwargs)
+            # Admission is keyed by a one-way digest of the complete submitted
+            # credential. This rejects repeated parallel work before the
+            # expensive password-hash verifier while retaining no raw secret.
+            with staff_api_slot(key) as rejection:
+                if rejection is not None:
+                    return rejection
+                token = Token.authenticate(key)
+                if token is None or not is_staff_user(token.user):
+                    return auth_error("Invalid token", "invalid_token")
+                _authenticate_request(request, token)
+                return view_func(request, *args, **kwargs)
 
         return wrapper
 

@@ -832,6 +832,22 @@
     "docs_url": "_docs/integrations/site.md#crm_export_max_limit"
    },
    {
+    "key": "STAFF_API_RATE_LIMIT_PER_MINUTE",
+    "is_secret": false,
+    "optional": true,
+    "default": "120",
+    "description": "Per-token rate limit for staff API token calls (issue #1854): requests per minute per gunicorn worker, with a 10-second burst. Over the limit the API returns 429 with Retry-After before the view runs; the asl CLI backs off and retries. Studio and other session traffic is never limited. Default 120. 0 disables. A blank, non-numeric, or negative override falls back to 120.",
+    "docs_url": "_docs/integrations/site.md#staff_api_rate_limit_per_minute"
+   },
+   {
+    "key": "STAFF_API_MAX_CONCURRENT_PER_TOKEN",
+    "is_secret": false,
+    "optional": true,
+    "default": "2",
+    "description": "Concurrency cap for staff API token calls (issue #1854): requests one token may have in flight at once per gunicorn worker. Extra concurrent calls get 429 with Retry-After: 1 so a parallel script cannot occupy every request thread and starve the /ping health check. Studio and session traffic is never limited. Default 2. 0 disables. A blank, non-numeric, or negative override falls back to 2.",
+    "docs_url": "_docs/integrations/site.md#staff_api_max_concurrent_per_token"
+   },
+   {
     "key": "SOCIAL_YOUTUBE_URL",
     "is_secret": false,
     "optional": true,

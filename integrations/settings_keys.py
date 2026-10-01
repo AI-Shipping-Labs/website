@@ -18,7 +18,8 @@ declare their type's zero value.
 
 Group display labels and donor group/key ordering have no slot in the
 package registry (which sorts alphabetically), so they are recorded
-here and feed the derived legacy view.
+here and feed the derived legacy view. This central declaration file remains
+one ordered owner so the donor-equivalence audit and derived view stay complete.
 """
 
 from community_base.config.registry import declare
@@ -178,6 +179,8 @@ _KEY_ORDER = {
         "SPRINT_BADGE_WINDOW_DAYS",
         "SPRINT_END_AUTO_DISTRIBUTE_FEEDBACK_ENABLED",
         "CRM_EXPORT_MAX_LIMIT",
+        "STAFF_API_RATE_LIMIT_PER_MINUTE",
+        "STAFF_API_MAX_CONCURRENT_PER_TOKEN",
         "SOCIAL_YOUTUBE_URL",
         "SOCIAL_LINKEDIN_URL",
         "SOCIAL_GITHUB_URL",
@@ -1536,6 +1539,28 @@ CRM_EXPORT_MAX_LIMIT = declare(
     secret=False,
     optional=True,
     docs_url="_docs/integrations/site.md#crm_export_max_limit",
+)
+STAFF_API_RATE_LIMIT_PER_MINUTE = declare(
+    key="STAFF_API_RATE_LIMIT_PER_MINUTE",
+    group="site",
+    label="Staff API Rate Limit Per Minute",
+    description="Per-token rate limit for staff API token calls (issue #1854): requests per minute per gunicorn worker, with a 10-second burst. Over the limit the API returns 429 with Retry-After before the view runs; the asl CLI backs off and retries. Studio and other session traffic is never limited. Default 120. 0 disables. A blank, non-numeric, or negative override falls back to 120.",
+    value_type="int",
+    default="120",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/site.md#staff_api_rate_limit_per_minute",
+)
+STAFF_API_MAX_CONCURRENT_PER_TOKEN = declare(
+    key="STAFF_API_MAX_CONCURRENT_PER_TOKEN",
+    group="site",
+    label="Staff API Max Concurrent Per Token",
+    description="Concurrency cap for staff API token calls (issue #1854): requests one token may have in flight at once per gunicorn worker. Extra concurrent calls get 429 with Retry-After: 1 so a parallel script cannot occupy every request thread and starve the /ping health check. Studio and session traffic is never limited. Default 2. 0 disables. A blank, non-numeric, or negative override falls back to 2.",
+    value_type="int",
+    default="2",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/site.md#staff_api_max_concurrent_per_token",
 )
 SOCIAL_YOUTUBE_URL = declare(
     key="SOCIAL_YOUTUBE_URL",

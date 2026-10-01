@@ -14,6 +14,10 @@ uv run asl --help
 The credential is resolved from `ASL_API_TOKEN` env var -> `API_SHIPPING_LABS_API_TOKEN` in `.env` -> prompt. Existing `/api` commands send the legacy `Token` header. The `integrations` commands use the package `/api/v1/settings` routes and send the same credential as a `Bearer` API key; create a `community_base` staff key with the required `settings.read` and `settings.write` scopes for those commands.
 Override base URL with `ASL_BASE_URL` (default `https://aishippinglabs.com`).
 
+## Rate limits
+
+The server throttles each staff token with a rate limit and a concurrency cap. A throttled call gets `429` with `Retry-After` and `code` `rate_limited` or `too_many_concurrent_requests` before the endpoint runs. The client waits and retries those up to 5 times with exponential backoff (capped at 30 seconds), printing `asl: throttled (...)` to stderr. Other 429s are returned as errors. Run commands sequentially; do not fan out parallel calls against production.
+
 ## Usage
 
 Commands are organized into groups, max 2 levels: `asl <group> <command>`. Use `--help` at any level:

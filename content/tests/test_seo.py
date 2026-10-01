@@ -13,6 +13,7 @@ from urllib.parse import urlsplit
 from django.template import Context, Template
 from django.test import RequestFactory, TestCase
 from django.utils import timezone
+from freezegun import freeze_time
 
 from content.access import (
     LEVEL_BASIC,
@@ -545,6 +546,7 @@ class StructuredDataEventTest(TestCase):
 
     # --- offers ---
 
+    @freeze_time('2026-10-01T17:00:00Z')
     def test_offers_present_for_open_community_upcoming_event(self):
         self.event.required_level = LEVEL_OPEN
         self.event.save()

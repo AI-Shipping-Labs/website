@@ -3,6 +3,8 @@
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
+from freezegun import freeze_time
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -94,6 +96,7 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertIsNone(invalid.context['schedule_cohort'])
         self.assertNotContains(invalid, 'Feb 1, 2027 18:00')
 
+    @freeze_time('2026-10-01T17:00:00Z')
     def test_enrolled_schedule_and_deadlines_reach_parent_summary(self):
         self.client.force_login(self.learner)
         response = self.client.get('/courses/ai-buildcamp')

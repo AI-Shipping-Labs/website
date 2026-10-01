@@ -14,6 +14,9 @@ for ``stripe`` and ``get_config`` so tests can patch them at
 
 from payments import services as _services
 from payments.models import WebhookEvent
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def verify_webhook_signature(payload, sig_header):
@@ -28,9 +31,12 @@ def verify_webhook_signature(payload, sig_header):
 
     Raises:
         stripe.SignatureVerificationError: If the signature is invalid.
-        ValueError: If the payload is invalid.
+        ValueError: If the payload is invalid or webhook secret not configured.
     """
     webhook_secret = _services.get_config("STRIPE_WEBHOOK_SECRET", "")
+    if not webhook_secret:
+        logger.error("STRIPE_WEBHOOK_SECRET not configured")
+        raise ValueError("Webhook secret not configured")
     event = _services.stripe.Webhook.construct_event(
         payload, sig_header, webhook_secret,
     )

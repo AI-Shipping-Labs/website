@@ -523,19 +523,12 @@ EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
 GITHUB_APP_ID = os.environ.get('GITHUB_APP_ID', '')
 GITHUB_APP_INSTALLATION_ID = os.environ.get('GITHUB_APP_INSTALLATION_ID', '')
 
-# Private key resolution order at IMPORT TIME: PEM file (env-pointed) >
-# env var. The AWS Secrets Manager fallback (production path) is NOT
-# performed here -- it is resolved lazily on first use inside
-# ``integrations.services.github_sync.client._resolve_github_app_private_key``
-# so that container start does not pay a Secrets Manager round-trip
-# (~1-2s) on every settings import. See issue / commit history on the
-# entrypoint single-process refactor.
-_github_key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
-if _github_key_path and os.path.isfile(_github_key_path):
-    with open(_github_key_path) as f:
-        GITHUB_APP_PRIVATE_KEY = f.read()
-else:
-    GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
+# GitHub App private key is resolved lazily via
+# ``integrations.services.github_app._resolve_github_app_private_key``
+# which checks (in order): DB/Studio, Django settings/env, PEM file path
+# from GITHUB_APP_PRIVATE_KEY_FILE, AWS Secrets Manager.
+# This avoids import-time I/O and Secrets Manager calls on every process start.
+GITHUB_APP_PRIVATE_KEY = os.environ.get('GITHUB_APP_PRIVATE_KEY', '')
 
 # CDN base URL for content images uploaded during sync
 CONTENT_CDN_BASE = os.environ.get('CONTENT_CDN_BASE', '/static/content-images')

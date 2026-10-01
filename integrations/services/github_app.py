@@ -5,6 +5,7 @@ A2.3 moved synchronization into ``community_base.content_sync``; the Studio
 installation token minting, so those helpers live here now.
 """
 
+import os
 import time
 
 import jwt
@@ -21,25 +22,34 @@ from content.sync_parsers.common import (
 from integrations.config import get_config, running_in_worker_process
 
 # Cached AWS Secrets Manager lookup (kept from the retired client): web
-# processes cache successful lookups per secret id/region, workers fetch
-# fresh so long-running queue jobs never hold stale credentials.
+# processes cache successful lookups per secret id/region with TTL,
+# workers fetch fresh so long-running queue jobs never hold stale credentials.
 _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID = (
     'ai-shipping-labs/github-app-private-key'
 )
 _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_REGION = 'eu-west-1'
+_SECRETS_MANAGER_CACHE_TTL = 3600  # 1 hour
 _secrets_manager_pem_cache = {}
 
 
 def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
-    """Fetch the GitHub App PEM from AWS Secrets Manager (cached).
+    """Fetch the GitHub App PEM from AWS Secrets Manager (cached with TTL).
 
     Returns an empty string if boto3 is unavailable, the secret is
     missing, or the call fails for any reason -- never raises. Callers
     treat an empty string as "no key configured".
     """
-    cache_key = (secret_id, region)
+    cache_key = f"github_app_pem:{secret_id}:{region}"
+    
+    # Try Django cache first (works across processes, supports TTL)
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+    
+    # Fallback to in-memory cache for web processes (workers bypass)
     if not running_in_worker_process() and cache_key in _secrets_manager_pem_cache:
         return _secrets_manager_pem_cache[cache_key]
+    
     try:
         import boto3  # noqa: PLC0415
         from botocore.exceptions import BotoCoreError, ClientError  # noqa: PLC0415
@@ -63,8 +73,12 @@ def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
             secret_id, e,
         )
         return ''
-    if value and not running_in_worker_process():
-        _secrets_manager_pem_cache[cache_key] = value
+    if value:
+        # Store in Django cache with TTL (works across processes)
+        cache.set(cache_key, value, _SECRETS_MANAGER_CACHE_TTL)
+        # Also store in in-memory cache for web processes
+        if not running_in_worker_process():
+            _secrets_manager_pem_cache[cache_key] = value
     return value or ''
 
 
@@ -73,16 +87,23 @@ def _resolve_github_app_private_key():
 
     Lookup order:
       1. ``IntegrationSetting`` DB row (via ``get_config``), which also
-         falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``,
-         which is itself resolved from a PEM file or env var at
-         settings-import time).
-      2. AWS Secrets Manager (production fallback). The secret id/path
+         falls through to Django settings (``GITHUB_APP_PRIVATE_KEY``) and
+         environment variables.
+      2. PEM file path from ``GITHUB_APP_PRIVATE_KEY_FILE`` env var.
+      3. AWS Secrets Manager (production fallback). The secret id/path
          and region can be configured in Studio, with legacy defaults
          preserved for existing deployments.
     """
     private_key = get_config('GITHUB_APP_PRIVATE_KEY')
     if private_key:
         return private_key
+
+    # Check for PEM file path (not handled by get_config)
+    key_path = os.environ.get('GITHUB_APP_PRIVATE_KEY_FILE', '')
+    if key_path and os.path.isfile(key_path):
+        with open(key_path) as f:
+            return f.read()
+
     secret_id = get_config(
         'GITHUB_APP_PRIVATE_KEY_SECRET_ID',
         _DEFAULT_GITHUB_APP_PRIVATE_KEY_SECRET_ID,

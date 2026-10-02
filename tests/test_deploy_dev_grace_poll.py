@@ -27,6 +27,7 @@ PROD_WORKER_SERVICE = "ai-shipping-labs-worker-prod"
 
 ISOLATED_HARNESS_ENV_PREFIXES = ("FAKE_", "DEPLOY_")
 ISOLATED_HARNESS_ENV_KEYS = {
+    "BASH_ENV",
     "PREDEPLOY_MIGRATE_CHECK_ENABLED",
     "READINESS_PYTHON_BIN",
 }
@@ -291,6 +292,72 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
     def _write_executable(self, path, script):
         path.write_text(script.replace("__PYTHON__", sys.executable))
         path.chmod(0o755)
+
+    def _assert_synthetic_bash_env_negative_control(
+        self,
+        hook_path,
+        marker_path,
+        shadow_aws_log,
+    ):
+        env = _isolated_harness_env()
+        env.update({
+            "BASH_ENV": str(hook_path),
+            "SYNTHETIC_BASH_ENV_MARKER": str(marker_path),
+            "SYNTHETIC_BASH_ENV_AWS_LOG": str(shadow_aws_log),
+        })
+        result = subprocess.run(
+            ["bash", "-c", "aws ecs update-service"],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        self.assertEqual(result.returncode, 97)
+        self.assertEqual(marker_path.read_text(), "sourced\n")
+        self.assertIn("ecs update-service", shadow_aws_log.read_text())
+        marker_path.unlink()
+        shadow_aws_log.unlink()
+
+    def _create_synthetic_bash_env_hook(self, tmpdir):
+        tmpdir_path = Path(tmpdir)
+        hook_path = tmpdir_path / "synthetic-bash-env.sh"
+        marker_path = tmpdir_path / "synthetic-hook-sourced"
+        shadow_aws_log = tmpdir_path / "shadow-aws.log"
+        hook_path.write_text(
+            'printf "sourced\\n" > "$SYNTHETIC_BASH_ENV_MARKER"\n'
+            "aws() {\n"
+            '    printf "%s\\n" "$*" >> "$SYNTHETIC_BASH_ENV_AWS_LOG"\n'
+            "    return 97\n"
+            "}\n"
+        )
+        return hook_path, marker_path, shadow_aws_log
+
+    def _run_wake_action_with_synthetic_bash_env(
+        self, tmpdir, hook_path, marker_path, shadow_aws_log
+    ):
+        parent_env = {
+            "BASH_ENV": "synthetic-parent-bash-env",
+            "SYNTHETIC_BASH_ENV_MARKER": "synthetic-parent-marker",
+            "SYNTHETIC_BASH_ENV_AWS_LOG": "synthetic-parent-aws-log",
+            "SYNTHETIC_INHERITED_ENV": "preserved",
+        }
+        test_env = {
+            "BASH_ENV": str(hook_path),
+            "SYNTHETIC_BASH_ENV_MARKER": str(marker_path),
+            "SYNTHETIC_BASH_ENV_AWS_LOG": str(shadow_aws_log),
+        }
+        with patch.dict(os.environ, parent_env):
+            with patch.dict(os.environ, test_env):
+                isolated_env = _isolated_harness_env()
+                self.assertNotIn("BASH_ENV", isolated_env)
+                self.assertEqual(isolated_env["SYNTHETIC_INHERITED_ENV"], "preserved")
+                self._assert_synthetic_bash_env_negative_control(
+                    hook_path, marker_path, shadow_aws_log
+                )
+                run = self._run_wake_action(tmpdir, responses=["release-tag"] * 3)
+            restored_env = {key: os.environ[key] for key in parent_env}
+            self.assertEqual(restored_env, parent_env)
+        return run
 
     def _copy_deploy_harness(self, tmpdir):
         """Run deploy_dev from a private directory for generated task files.
@@ -1189,6 +1256,18 @@ class DeployDevGracePollExecutionTest(SimpleTestCase):
         self.assertEqual(run["curl_attempts"], 6)
         self.assertIn("satisfied its response expectation stably", run["result"].stdout)
         self.assertIn("ecs update-service", run["aws_calls"])
+
+    def test_wake_action_ignores_inherited_bash_startup_hook(self):
+        SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(dir=SCRATCH_ROOT) as tmpdir:
+            paths = self._create_synthetic_bash_env_hook(tmpdir)
+            run = self._run_wake_action_with_synthetic_bash_env(tmpdir, *paths)
+
+            _, marker_path, shadow_aws_log = paths
+            self.assertEqual(run["result"].returncode, 0, run["result"].stdout)
+            self.assertFalse(marker_path.exists())
+            self.assertFalse(shadow_aws_log.exists())
+            self.assertIn("ecs update-service", run["aws_calls"])
 
     def test_wake_action_rejects_exact_response_completed_at_deadline(self):
         SCRATCH_ROOT.mkdir(parents=True, exist_ok=True)

@@ -4,6 +4,15 @@ from __future__ import annotations
 
 from accounts.utils.display import display_name
 from api.serializers.datetime import isoformat_or_none
+from api.serializers.plans import (
+    serialize_deliverable as serialize_member_deliverable,
+)
+from api.serializers.plans import (
+    serialize_next_step as serialize_member_next_step,
+)
+from api.serializers.plans import (
+    serialize_resource as serialize_member_resource,
+)
 
 
 def _annotated_progress(plan):
@@ -72,35 +81,6 @@ def serialize_member_week(week):
             serialize_member_checkpoint(checkpoint)
             for checkpoint in week.checkpoints.all()
         ],
-    }
-
-
-def serialize_member_resource(resource):
-    return {
-        "id": resource.id,
-        "title": resource.title,
-        "url": resource.url,
-        "note": resource.note,
-        "position": resource.position,
-    }
-
-
-def serialize_member_deliverable(deliverable):
-    return {
-        "id": deliverable.id,
-        "description": deliverable.description,
-        "position": deliverable.position,
-        "done_at": isoformat_or_none(deliverable.done_at),
-    }
-
-
-def serialize_member_next_step(next_step):
-    return {
-        "id": next_step.id,
-        "kind": next_step.kind,
-        "description": next_step.description,
-        "position": next_step.position,
-        "done_at": isoformat_or_none(next_step.done_at),
     }
 
 

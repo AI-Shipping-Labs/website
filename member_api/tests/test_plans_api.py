@@ -259,6 +259,32 @@ class MemberPlansApiReadTest(MemberPlansApiTestBase):
             ["First resource", "Second resource"],
         )
 
+    def test_detail_returns_complete_plan_item_dictionaries(self):
+        plan = self._create_plan(self.member)
+        completed_at = datetime.datetime(2026, 5, 20, 10, tzinfo=datetime.UTC)
+        next_step = plan.next_steps.get()
+        next_step.done_at = completed_at
+        next_step.save(update_fields=["done_at", "updated_at"])
+
+        response = self.client.get(f"/member-api/v1/plans/{plan.id}", **self._auth())
+        body = response.json()
+        resource = plan.resources.get()
+        deliverable = plan.deliverables.get()
+
+        self.assertEqual(body["resources"], [{
+            "id": resource.id, "title": "Docs", "url": "https://example.com/docs",
+            "note": "Read this", "position": 1,
+        }])
+        self.assertEqual(body["deliverables"], [{
+            "id": deliverable.id, "description": "Working client",
+            "position": 1, "done_at": None,
+        }])
+        self.assertEqual(body["next_steps"], [{
+            "id": next_step.id, "kind": "pre_sprint",
+            "description": "Send progress", "position": 1,
+            "done_at": completed_at.isoformat(),
+        }])
+
     def test_owner_reads_safe_plan_detail_without_internal_context(self):
         plan = self._create_plan(self.member)
         CRMRecord.objects.create(

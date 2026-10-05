@@ -43,17 +43,24 @@
              data-testid="homework-submission-link">{{ item.submission.homework_link }}</a>
         </div>
         {% endif %}
-        {% if item.answers %}
+        {% if item.review_rows %}
         <div class="space-y-3">
-          {% for answer in item.answers %}
-          <div data-testid="homework-submission-answer" data-question-id="{{ answer.question_id }}">
-            <p class="text-sm font-medium text-foreground">{{ answer.question.text }}</p>
+          {% for row in item.review_rows %}
+          <div data-testid="homework-submission-answer" data-question-id="{{ row.question.pk }}">
+            <p class="text-sm font-medium text-foreground" data-testid="homework-submission-answer-heading">{{ row.heading }}</p>
+            {% if row.supporting_text %}
+            <p class="mt-1 text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-prompt">{{ row.supporting_text }}</p>
+            {% endif %}
             <div class="mt-1 flex flex-wrap items-center gap-2">
-              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">{{ answer.answer_text }}</p>
-              {% if answer.is_correct %}
+              {% if row.unanswered %}
+              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">No answer</p>
+              {% else %}
+              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">{{ row.answer.answer_text }}</p>
+              {% if row.answer.is_correct %}
               <span data-testid="homework-submission-answer-correct">{% studio_status_badge 'published' 'Correct' %}</span>
               {% else %}
               <span data-testid="homework-submission-answer-incorrect">{% studio_status_badge 'reviewed' 'Incorrect' %}</span>
+              {% endif %}
               {% endif %}
             </div>
           </div>

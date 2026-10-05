@@ -465,6 +465,26 @@ class RuleChainTest(SimpleTestCase):
         )
         self.assertEqual(plan.unmapped, [])
 
+    def test_homework_review_helpers_do_not_select_the_whole_content_app(self):
+        plan = plan_for(
+            [
+                "content/services/homework_review.py",
+                "content/services/homework_step_sections.py",
+            ]
+        )
+        self.assertNotIn("content", plan.django_labels)
+        self.assertEqual(
+            plan.django_labels,
+            collapsed(
+                "content.tests.test_homework_review",
+                "content.tests.test_homework_step_reader",
+                "studio.tests.test_homework_studio",
+                *PYTHON_GUARD_LABELS,
+            ),
+        )
+        self.assertEqual(plan.unmapped, [])
+        self.assertEqual(plan.playwright, "core")
+
     def test_agent_branch_retirement_helper_targets_its_exact_synthetic_contract(self):
         plan = plan_for(
             [

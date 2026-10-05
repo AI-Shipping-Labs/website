@@ -186,9 +186,11 @@ ESCALATION_TRIGGERS: tuple[tuple[str, str], ...] = (
 #: Rule 5. Soft triggers: note only, no forced local full Playwright.
 DEPENDENCY_MANIFESTS: tuple[str, ...] = ("pyproject.toml", "uv.lock")
 
-#: Focused tooling/data contracts with exact top-level Django test owners.
-#: These entries are checked before the broader ``scripts/*`` contract rule so
-#: policy-only changes do not expand to every module under ``tests``.
+#: Focused tooling/data contracts and app-source owners with exact Django
+#: test labels. These entries are checked before the broader ``scripts/*``
+#: contract rule and before rule 9's owning-app mapping, so a policy-only
+#: change does not expand to every module under ``tests`` and a display-only
+#: homework-review helper does not select the entire ``content`` app.
 #: ``.claude/skills`` is a symlink to ``.agents/skills``, so a real diff only
 #: ever spells these paths ``.agents/...`` -- but ``.claude/agents/**`` is a
 #: real directory, and both spellings have to map identically (pinned by
@@ -239,6 +241,24 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "jobs.tests.test_entrypoint_compose_dispatch",
             "tests.test_tailwind_build",
+        ),
+    ),
+    # Studio review titles and public Question N heading remainders. Rule 9
+    # would otherwise select the entire ``content`` app (~7k tests) for a
+    # display-only helper and an additive heading parser.
+    (
+        "content/services/homework_review.py",
+        (
+            "content.tests.test_homework_review",
+            "studio.tests.test_homework_studio",
+        ),
+    ),
+    (
+        "content/services/homework_step_sections.py",
+        (
+            "content.tests.test_homework_review",
+            "content.tests.test_homework_step_reader",
+            "studio.tests.test_homework_studio",
         ),
     ),
 )

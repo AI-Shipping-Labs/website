@@ -7,6 +7,7 @@ SECTION_HEADING = re.compile(r'^##\s+')
 QUESTION_ID = re.compile(r'^q(\d+)(?:[-_].*)?$', re.IGNORECASE)
 STEP_KEY = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$')
 FENCE = re.compile(r'^\s*(`{3,}|~{3,})')
+POINTS_SUFFIX = re.compile(r'\(\s*\d+\s+points?\s*\)\s*$', re.IGNORECASE)
 
 
 def split_homework_sections(markdown):
@@ -42,6 +43,26 @@ def split_homework_sections(markdown):
         [(number, ''.join(lines).strip()) for number, lines in questions],
         ''.join(closing).strip(),
     )
+
+
+def question_heading_names(markdown):
+    """Map public Question N to the authored heading remainder.
+
+    ``## Question 1. Your Project Idea`` becomes ``{1: 'Your Project Idea'}``.
+    A heading that is only ``Question N`` maps to an empty string so callers
+    can fall back to stored question text. A trailing ``(N point)`` /
+    ``(N points)`` suffix is stripped so Studio can append points once.
+    """
+    names = {}
+    _introduction, sections, _closing = split_homework_sections(markdown or '')
+    for number, body in sections:
+        first_line = body.splitlines()[0] if body else ''
+        match = QUESTION_HEADING.match(first_line)
+        if match is None:
+            continue
+        remainder = first_line[match.end():].strip()
+        names[number] = POINTS_SUFFIX.sub('', remainder).strip()
+    return names
 
 
 def split_out_named_section(markdown, title):

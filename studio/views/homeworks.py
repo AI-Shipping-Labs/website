@@ -14,6 +14,7 @@ from django.utils import timezone
 
 from content.models import Course, Unit
 from content.models.homework import Homework, HomeworkState, Submission
+from content.services.homework_review import submission_review_items
 from studio.decorators import staff_required
 
 # (studio_status_badge key, friendly label) per HomeworkState. Green is
@@ -197,7 +198,9 @@ def homework_submissions(request, homework_id):
     re-score, or export controls.
     """
     homework = get_object_or_404(
-        Homework.objects.select_related('cohort', 'cohort__course'),
+        Homework.objects.select_related('cohort', 'cohort__course').prefetch_related(
+            'questions',
+        ),
         pk=homework_id,
     )
     submissions = (
@@ -207,12 +210,8 @@ def homework_submissions(request, homework_id):
         .prefetch_related('answers__question')
         .order_by('-submitted_at')
     )
-    submission_items = [
-        {'submission': submission, 'answers': list(submission.answers.all())}
-        for submission in submissions
-    ]
     return render(request, 'studio/courses/homework_submissions.html', {
         'homework': homework,
         'course': homework.cohort.course,
-        'submission_items': submission_items,
+        'submission_items': submission_review_items(homework, submissions),
     })

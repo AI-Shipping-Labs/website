@@ -196,6 +196,7 @@ class EventsListAndDetailTest(EventsApiTestBase):
                 "end_datetime",
                 "timezone",
                 "zoom_join_url",
+                "zoom_meeting_id",
                 "location",
                 "tags",
                 "required_level",
@@ -1340,6 +1341,118 @@ ZOOM_RESULT = {
 
 # create_meeting is imported into the view module, so patch it there.
 CREATE_MEETING_PATH = "api.views.events.create_meeting"
+
+
+class EventsZoomMeetingIdBindingTest(EventsApiTestBase):
+    """Operator-bound existing Zoom meeting id (manual-meeting binding).
+
+    A Zoom meeting provisioned outside the platform carries no
+    ``zoom_meeting_id`` on its event, which leaves the recording pipeline
+    (``recording.completed`` webhook, transcript sync, S3 upload) inert —
+    they all match or list by meeting id. A numeric ``zoom_meeting_id``
+    payload binds the existing meeting; empty clears it.
+    """
+
+    def _zoom_event(self):
+        return Event.objects.create(
+            title="Manual Zoom Event",
+            slug="manual-zoom-event",
+            description="Zoom meeting created outside the platform.",
+            start_datetime=self.start,
+            end_datetime=self.start + timedelta(hours=1),
+            platform="zoom",
+            status="upcoming",
+            origin="studio",
+            zoom_join_url="https://us06web.zoom.us/j/86949890295",
+        )
+
+    def test_patch_binds_numeric_meeting_id_and_reads_back(self):
+        event = self._zoom_event()
+        response = self._patch(
+            event.slug, {"zoom_meeting_id": "86949890295"}
+        )
+        self.assertEqual(
+            response.json()["zoom_meeting_id"], "86949890295"
+        )
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "86949890295")
+
+        detail = self.client.get(
+            f"/api/events/{event.slug}", **self._auth()
+        ).json()
+        self.assertEqual(detail["zoom_meeting_id"], "86949890295")
+
+    def test_create_accepts_zoom_meeting_id(self):
+        response = self._post(
+            {
+                "title": "Bound Zoom Event",
+                "platform": "zoom",
+                "start_datetime": "2026-05-05T17:00:00+02:00",
+                "zoom_meeting_id": "86949890295",
+            }
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(
+            response.json()["zoom_meeting_id"], "86949890295"
+        )
+        event = Event.objects.get(slug="bound-zoom-event")
+        self.assertEqual(event.zoom_meeting_id, "86949890295")
+
+    def test_patch_empty_string_clears_meeting_id(self):
+        event = self._zoom_event()
+        event.zoom_meeting_id = "86949890295"
+        event.save(update_fields=["zoom_meeting_id"])
+
+        response = self._patch(event.slug, {"zoom_meeting_id": ""})
+
+        self.assertEqual(response.json()["zoom_meeting_id"], "")
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "")
+
+    def test_patch_rejects_non_numeric_meeting_id(self):
+        event = self._zoom_event()
+
+        for value in ("abc123", "869 498 902 95", "86949890295x", "1" * 33):
+            with self.subTest(value=value):
+                response = self._patch(
+                    event.slug, {"zoom_meeting_id": value}
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertIn(
+                    "zoom_meeting_id", response.json()["details"]
+                )
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "")
+
+    def test_patch_rejects_meeting_id_on_non_zoom_platform(self):
+        event = self._zoom_event()
+        event.platform = "custom"
+        event.save(update_fields=["platform"])
+
+        response = self._patch(
+            event.slug, {"zoom_meeting_id": "86949890295"}
+        )
+
+        self.assertEqual(response.status_code, 422)
+        self.assertIn("zoom_meeting_id", response.json()["details"])
+        event.refresh_from_db()
+        self.assertEqual(event.zoom_meeting_id, "")
+
+    def test_patch_meeting_id_does_not_touch_zoom_join_url(self):
+        event = self._zoom_event()
+
+        response = self._patch(
+            event.slug, {"zoom_meeting_id": "86949890295"}
+        )
+
+        self.assertEqual(
+            response.json()["zoom_meeting_id"], "86949890295"
+        )
+        event.refresh_from_db()
+        self.assertEqual(
+            event.zoom_join_url, "https://us06web.zoom.us/j/86949890295"
+        )
 
 
 class EventsCreateZoomTest(EventsApiTestBase):

@@ -6309,7 +6309,8 @@
                       "transcript_text": "",
                       "transcript_url": "",
                       "updated_at": "2026-04-15T12:00:00+00:00",
-                      "zoom_join_url": "https://zoom.us/j/123"
+                      "zoom_join_url": "https://zoom.us/j/123",
+                      "zoom_meeting_id": "123"
                     }
                   ]
                 }
@@ -6495,6 +6496,10 @@
                   },
                   "zoom_join_url": {
                     "type": "string"
+                  },
+                  "zoom_meeting_id": {
+                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (recording.completed webhook, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -6582,7 +6587,8 @@
                   "transcript_text": "",
                   "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
-                  "zoom_join_url": "https://zoom.us/j/123"
+                  "zoom_join_url": "https://zoom.us/j/123",
+                  "zoom_meeting_id": "123"
                 }
               }
             },
@@ -7186,7 +7192,8 @@
                   "transcript_text": "",
                   "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
-                  "zoom_join_url": "https://zoom.us/j/123"
+                  "zoom_join_url": "https://zoom.us/j/123",
+                  "zoom_meeting_id": "123"
                 }
               }
             },
@@ -7357,6 +7364,10 @@
                   },
                   "title": {
                     "type": "string"
+                  },
+                  "zoom_meeting_id": {
+                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (recording.completed webhook, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
+                    "type": "string"
                   }
                 },
                 "type": "object"
@@ -7440,7 +7451,8 @@
                   "transcript_text": "",
                   "transcript_url": "",
                   "updated_at": "2026-04-15T12:00:00+00:00",
-                  "zoom_join_url": "https://zoom.us/j/123"
+                  "zoom_join_url": "https://zoom.us/j/123",
+                  "zoom_meeting_id": "123"
                 }
               }
             },

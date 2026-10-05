@@ -122,6 +122,11 @@ WRITABLE_FIELDS = {
     "end_datetime",
     "timezone",
     "zoom_join_url",
+    # Operator-bound existing Zoom meeting: a meeting provisioned outside the
+    # platform (no create_zoom) still needs its id on the event for the
+    # recording pipeline (recording.completed webhook, transcript sync, S3
+    # upload) to engage. Numeric id; empty string clears it.
+    "zoom_meeting_id",
     "location",
     "tags",
     "required_level",
@@ -278,6 +283,7 @@ _EVENT_EXAMPLE = {
     "end_datetime": "2026-05-05T18:00:00+02:00",
     "timezone": "Europe/Berlin",
     "zoom_join_url": "https://zoom.us/j/123",
+    "zoom_meeting_id": "123",
     "location": "",
     "tags": ["sprint:may-2026"],
     "required_level": 0,
@@ -385,6 +391,7 @@ def serialize_event(event):
         "end_datetime": isoformat_or_none(event.end_datetime),
         "timezone": event.timezone,
         "zoom_join_url": event.zoom_join_url,
+        "zoom_meeting_id": event.zoom_meeting_id or "",
         "location": event.location,
         "tags": event.tags or [],
         "required_level": event.required_level,
@@ -591,6 +598,32 @@ def _collect_event_values(data, *, existing=None, require_description=True):
             if value not in valid_values:
                 errors[field] = "Unknown choice."
             values[field] = value
+
+    # Operator-bound existing Zoom meeting (see WRITABLE_FIELDS). The numeric
+    # meeting id of a Zoom meeting created outside the platform; empty clears.
+    # Rejected for non-zoom platforms so a stray id can never silence the
+    # custom-platform recording flow.
+    if "zoom_meeting_id" in data:
+        zoom_meeting_id = coerce_optional_text(data["zoom_meeting_id"])
+        if zoom_meeting_id and (
+            not zoom_meeting_id.isascii()
+            or not zoom_meeting_id.isdigit()
+            or len(zoom_meeting_id) > 32
+        ):
+            errors["zoom_meeting_id"] = (
+                "Must be an empty string or a numeric Zoom meeting id."
+            )
+        else:
+            candidate_platform = values.get(
+                "platform",
+                existing.platform if existing is not None else "zoom",
+            )
+            if zoom_meeting_id and candidate_platform != "zoom":
+                errors["zoom_meeting_id"] = (
+                    "Only zoom-platform events can carry a Zoom meeting id."
+                )
+            else:
+                values["zoom_meeting_id"] = zoom_meeting_id
 
     if "required_level" in data:
         try:
@@ -961,6 +994,17 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "clears all hosts."
                         ),
                     },
+                    "zoom_meeting_id": {
+                        "type": "string",
+                        "description": (
+                            "Optional. Numeric id of a Zoom meeting created "
+                            "outside the platform (empty string clears it). "
+                            "Binding it engages the recording pipeline "
+                            "(recording.completed webhook, transcript sync, "
+                            "S3 upload) for meetings create_zoom did not "
+                            "provision. Rejected on non-zoom platforms."
+                        ),
+                    },
                     "create_zoom": {
                         "type": "boolean",
                         "writeOnly": True,
@@ -1223,6 +1267,17 @@ def events_collection(request):
                         "description": (
                             "Optional. Ordered event host ids. Empty array "
                             "clears all hosts."
+                        ),
+                    },
+                    "zoom_meeting_id": {
+                        "type": "string",
+                        "description": (
+                            "Optional. Numeric id of a Zoom meeting created "
+                            "outside the platform (empty string clears it). "
+                            "Binding it engages the recording pipeline "
+                            "(recording.completed webhook, transcript sync, "
+                            "S3 upload) for meetings create_zoom did not "
+                            "provision. Rejected on non-zoom platforms."
                         ),
                     },
                     "create_zoom": {

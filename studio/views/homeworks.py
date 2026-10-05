@@ -7,6 +7,7 @@ export" (the explicitly deferred operator surface -- not built here).
 """
 
 import datetime
+from urllib.parse import urlencode
 
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, render
@@ -127,7 +128,7 @@ def _units_by_content_id(course, content_ids):
     units = (
         Unit.objects
         .filter(module__course=course, source_content_id__in=content_ids)
-        .select_related('module', 'module__parent')
+        .select_related('module', 'module__parent', 'module__course')
     )
     best = {}
     for unit in units:
@@ -139,6 +140,22 @@ def _units_by_content_id(course, content_ids):
         if current is None or position < current[0]:
             best[content_id] = (position, unit)
     return {content_id: unit for content_id, (_position, unit) in best.items()}
+
+
+def _public_homework_url(course, homework, unit):
+    """Learner-facing unit URL, or '' when no public homework page exists.
+
+    Hidden when there is no same-course unit, or the course is unpublished
+    (the public unit route 404s even for staff). A cohort preview key is
+    appended so the opened page is the assignment being reviewed.
+    """
+    if unit is None or course.status != 'published':
+        return ''
+    url = unit.get_absolute_url()
+    preview_key = (homework.cohort.external_key or '').strip()
+    if preview_key:
+        return f'{url}?{urlencode({"cohort": preview_key})}'
+    return url
 
 
 @staff_required
@@ -167,6 +184,7 @@ def homework_list(request, course_id):
             'homework': homework,
             'module_label': _module_label(unit),
             'submission_count': homework.submission_count,
+            'public_url': _public_homework_url(course, homework, unit),
             'state_badge_key': badge_key,
             'state_label': state_label,
             '_sort': _homework_sort_key(homework, unit),
@@ -211,8 +229,15 @@ def homework_submissions(request, homework_id):
         {'submission': submission, 'answers': list(submission.answers.all())}
         for submission in submissions
     ]
+    course = homework.cohort.course
+    units = _units_by_content_id(
+        course,
+        [homework.content_id] if homework.content_id else [],
+    )
+    unit = units.get(homework.content_id) if homework.content_id else None
     return render(request, 'studio/courses/homework_submissions.html', {
         'homework': homework,
-        'course': homework.cohort.course,
+        'course': course,
         'submission_items': submission_items,
+        'public_url': _public_homework_url(course, homework, unit),
     })

@@ -677,3 +677,301 @@ class HomeworkListOrderAndCohortTest(HomeworkStudioSetupMixin, TestCase):
 
         self.assertEqual(titles, ['Newer homework'])
         self.assertEqual(response.context['selected_cohort'].pk, newer.pk)
+
+
+class HomeworkViewOnSiteStudioTest(TestCase):
+    """Studio View on site from homework submissions and list rows -- #1892."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='staff-view-1892@test.com', password='testpass', is_staff=True,
+        )
+        cls.today = timezone.localdate()
+
+    def setUp(self):
+        self.client = Client()
+        self.client.login(email='staff-view-1892@test.com', password='testpass')
+
+    def _course(self, slug, status='published'):
+        return Course.objects.create(title=slug, slug=slug, status=status)
+
+    def _cohort(self, course, name='Cohort 4', external_key=''):
+        return Cohort.objects.create(
+            course=course, name=name, external_key=external_key,
+            start_date=self.today - datetime.timedelta(days=3),
+            end_date=self.today + datetime.timedelta(days=30),
+        )
+
+    def _unit(self, module, title, sort_order, content_id=None, kind='homework', slug=None):
+        return Unit.objects.create(
+            module=module,
+            title=title,
+            slug=slug or title.lower().replace(' ', '-'),
+            sort_order=sort_order,
+            source_content_id=content_id or uuid.uuid4(),
+            kind=kind,
+        )
+
+    def _homework(self, cohort, title, content_id, slug=None):
+        return Homework.objects.create(
+            cohort=cohort,
+            slug=slug or title.lower().replace(' ', '-'),
+            title=title,
+            content_id=content_id,
+            due_date=timezone.now() + datetime.timedelta(days=7),
+        )
+
+    def _submissions(self, homework):
+        return self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+
+    def _list(self, course, query=''):
+        return self.client.get(f'/studio/courses/{course.pk}/homeworks{query}')
+
+    def _header(self, response, testid):
+        body = response.content.decode()
+        start = body.index(f'data-testid="{testid}"')
+        return body[start:body.index('</header>', start)]
+
+    def _row_html(self, response, title):
+        body = response.content.decode()
+        start = body.index(f'data-testid="homework-title">{title}')
+        return body[start:body.index('</tr>', start)]
+
+    def test_submissions_header_links_to_the_published_unit(self):
+        course = self._course('buildcamp-view-1892')
+        cohort = self._cohort(course)
+        module = Module.objects.create(
+            course=course, title='Week 1', slug='week-1', sort_order=1,
+        )
+        unit = self._unit(module, 'Hw one', 1, slug='hw-one')
+        homework = self._homework(
+            cohort, 'Module 1 Homework', unit.source_content_id,
+        )
+
+        response = self._submissions(homework)
+
+        expected = '/courses/buildcamp-view-1892/week-1/hw-one'
+        self.assertEqual(response.context['public_url'], expected)
+        self.assertContains(response, 'No submissions for this homework yet.')
+        self.assertContains(response, 'data-testid="homework-privacy-toggle"')
+        self.assertContains(response, 'Hide emails')
+        self.assertNotContains(response, 'Re-score')
+        self.assertNotContains(response, 'Export')
+        header = self._header(response, 'homework-submissions-title')
+        self.assertIn('data-testid="view-on-site"', header)
+        self.assertIn(f'href="{expected}"', header)
+        self.assertIn('target="_blank"', header)
+        self.assertIn('rel="noopener noreferrer"', header)
+        self.assertIn('data-lucide="external-link"', header)
+        self.assertIn('View on site', header)
+        self.assertIn('Back to homeworks', header)
+        self.assertIn(f'href="/studio/courses/{course.pk}/homeworks"', header)
+        self.assertNotIn(f'href="{expected}">Module 1 Homework', header)
+        self.assertNotIn('homework_step', header)
+
+    def test_submissions_view_on_site_includes_cohort_preview_key(self):
+        course = self._course('hw-view-cohort-1892')
+        cohort = self._cohort(course, external_key='cohort-4')
+        module = Module.objects.create(
+            course=course, title='Week 1', slug='week-1', sort_order=1,
+        )
+        unit = self._unit(module, 'Hw one', 1, slug='hw-one')
+        homework = self._homework(
+            cohort, 'Cohort homework', unit.source_content_id,
+        )
+
+        response = self._submissions(homework)
+
+        expected = '/courses/hw-view-cohort-1892/week-1/hw-one?cohort=cohort-4'
+        self.assertEqual(response.context['public_url'], expected)
+        header = self._header(response, 'homework-submissions-title')
+        self.assertIn(f'href="{expected}"', header)
+
+    def test_view_on_site_is_hidden_when_no_public_unit_resolves(self):
+        def assert_hidden(homework, course, *, module_label):
+            submissions = self._submissions(homework)
+            self.assertEqual(submissions.context['public_url'], '')
+            self.assertNotContains(submissions, 'data-testid="view-on-site"')
+            self.assertNotContains(submissions, 'View on site')
+            self.assertContains(submissions, 'Back to homeworks')
+            listing = self._list(course)
+            match = next(
+                row for row in listing.context['homework_rows']
+                if row['homework'].pk == homework.pk
+            )
+            self.assertEqual(match['public_url'], '')
+            self.assertEqual(match['module_label'], module_label)
+            row_html = self._row_html(listing, homework.title)
+            self.assertIn('View submissions', row_html)
+            self.assertNotIn('View on site', row_html)
+            header = self._header(listing, 'homework-list-title')
+            self.assertNotIn('View on site', header)
+
+        with self.subTest('empty_content_id'):
+            course = self._course('hw-view-empty-1892')
+            cohort = self._cohort(course)
+            module = Module.objects.create(
+                course=course, title='Week 1', slug='week-1', sort_order=1,
+            )
+            self._unit(module, 'Hw one', 1)
+            homework = self._homework(cohort, 'Unmatched homework', None)
+            assert_hidden(homework, course, module_label='')
+
+        with self.subTest('no_unit_on_this_course'):
+            course = self._course('hw-view-orphan-1892')
+            cohort = self._cohort(course)
+            homework = self._homework(cohort, 'Orphan homework', uuid.uuid4())
+            assert_hidden(homework, course, module_label='')
+
+        with self.subTest('only_match_on_another_course'):
+            course_a = self._course('hw-view-a-1892')
+            course_b = self._course('hw-view-b-1892')
+            content_id = uuid.uuid4()
+            cohort_a = self._cohort(course_a)
+            module_b = Module.objects.create(
+                course=course_b, title='Week 1', slug='week-1', sort_order=1,
+            )
+            self._unit(module_b, 'Other course unit', 1, content_id=content_id)
+            homework = self._homework(
+                cohort_a, 'Cross-course homework', content_id,
+            )
+            assert_hidden(homework, course_a, module_label='')
+
+        with self.subTest('unpublished_course'):
+            course = self._course('hw-view-draft-1892', status='draft')
+            cohort = self._cohort(course)
+            module = Module.objects.create(
+                course=course, title='Week 1', slug='week-1', sort_order=1,
+            )
+            unit = self._unit(module, 'Hw one', 1)
+            homework = self._homework(
+                cohort, 'Draft course homework', unit.source_content_id,
+            )
+            assert_hidden(homework, course, module_label='Week 1')
+
+    def test_list_row_adds_view_on_site_only_when_matched(self):
+        course = self._course('hw-view-list-1892')
+        cohort = self._cohort(course, external_key='cohort-4')
+        module = Module.objects.create(
+            course=course, title='Week 1', slug='week-1', sort_order=1,
+        )
+        unit = self._unit(module, 'Hw one', 1, slug='hw-one')
+        self._homework(cohort, 'Module 1 Homework', unit.source_content_id)
+        self._homework(cohort, 'Unmatched homework', None)
+
+        response = self._list(course, '?cohort=all')
+
+        rows = {
+            row['homework'].title: row
+            for row in response.context['homework_rows']
+        }
+        expected = '/courses/hw-view-list-1892/week-1/hw-one?cohort=cohort-4'
+        self.assertEqual(rows['Module 1 Homework']['public_url'], expected)
+        self.assertEqual(rows['Unmatched homework']['public_url'], '')
+
+        matched_html = self._row_html(response, 'Module 1 Homework')
+        self.assertIn('View submissions', matched_html)
+        self.assertIn('View on site', matched_html)
+        self.assertLess(
+            matched_html.index('View submissions'),
+            matched_html.index('View on site'),
+        )
+        self.assertIn(f'href="{expected}"', matched_html)
+        self.assertIn('target="_blank"', matched_html)
+        self.assertIn('rel="noopener noreferrer"', matched_html)
+        self.assertIn('data-testid="view-on-site"', matched_html)
+
+        unmatched_html = self._row_html(response, 'Unmatched homework')
+        self.assertIn('View submissions', unmatched_html)
+        self.assertNotIn('View on site', unmatched_html)
+        self.assertNotIn('view-on-site', unmatched_html)
+
+        header = self._header(response, 'homework-list-title')
+        self.assertNotIn('View on site', header)
+        self.assertNotIn('view-on-site', header)
+        self.assertContains(response, 'data-testid="view-on-site"', count=1)
+
+    def test_duplicate_content_id_uses_earliest_syllabus_unit(self):
+        course = self._course('hw-view-dup-1892')
+        cohort = self._cohort(course)
+        content_id = uuid.uuid4()
+        week1 = Module.objects.create(
+            course=course, title='Week 1', slug='week-1', sort_order=1,
+        )
+        week9 = Module.objects.create(
+            course=course, title='Week 9', slug='week-9', sort_order=9,
+        )
+        self._unit(week1, 'Hw early', 1, content_id=content_id, slug='hw-early')
+        self._unit(week9, 'Hw late', 1, content_id=content_id, slug='hw-late')
+        homework = self._homework(cohort, 'Shared homework', content_id)
+
+        expected = '/courses/hw-view-dup-1892/week-1/hw-early'
+        submissions = self._submissions(homework)
+        self.assertEqual(submissions.context['public_url'], expected)
+        header = self._header(submissions, 'homework-submissions-title')
+        self.assertIn(f'href="{expected}"', header)
+        self.assertNotIn('hw-late', submissions.context['public_url'])
+
+        listing = self._list(course)
+        self.assertEqual(
+            listing.context['homework_rows'][0]['public_url'], expected,
+        )
+        row_html = self._row_html(listing, 'Shared homework')
+        self.assertIn(f'href="{expected}"', row_html)
+        self.assertNotIn('hw-late', row_html)
+
+    def test_nested_and_inline_homework_use_canonical_learner_urls(self):
+        with self.subTest('nested_module'):
+            course = self._course('hw-view-nested-1892')
+            cohort = self._cohort(course)
+            parent = Module.objects.create(
+                course=course, title='Foundations', slug='foundations',
+                sort_order=1,
+            )
+            child = Module.objects.create(
+                course=course, title='Retrieval', slug='retrieval',
+                sort_order=1, parent=parent,
+            )
+            unit = self._unit(child, 'Nested hw', 1, slug='nested-hw')
+            homework = self._homework(
+                cohort, 'Nested homework', unit.source_content_id,
+            )
+            expected = (
+                '/courses/hw-view-nested-1892/foundations/retrieval/nested-hw'
+            )
+            self.assertEqual(unit.get_absolute_url(), expected)
+            submissions = self._submissions(homework)
+            self.assertEqual(submissions.context['public_url'], expected)
+            listing = self._list(course)
+            self.assertEqual(
+                listing.context['homework_rows'][0]['public_url'], expected,
+            )
+
+        with self.subTest('buildcamp_inline'):
+            course = self._course('ai-buildcamp')
+            cohort = self._cohort(course)
+            week = Module.objects.create(
+                course=course, title='Week 1', slug='week-1', sort_order=1,
+            )
+            wrapper = Module.objects.create(
+                course=course, title='Homework', slug='homework',
+                sort_order=2, parent=week,
+            )
+            unit = self._unit(
+                wrapper, 'Build the retrieval pipeline', 1,
+                slug='retrieval-homework', kind='homework',
+            )
+            homework = self._homework(
+                cohort, 'Inline homework', unit.source_content_id,
+            )
+            expected = '/courses/ai-buildcamp/week-1/homework'
+            inner = '/courses/ai-buildcamp/week-1/homework/retrieval-homework'
+            self.assertEqual(unit.get_absolute_url(), expected)
+            self.assertNotEqual(expected, inner)
+            submissions = self._submissions(homework)
+            self.assertEqual(submissions.context['public_url'], expected)
+            listing = self._list(course)
+            self.assertEqual(
+                listing.context['homework_rows'][0]['public_url'], expected,
+            )

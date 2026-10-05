@@ -6,7 +6,9 @@
 
 {% block studio_content %}
 {% url 'studio_homework_list' course_id=course.pk as homework_list_url %}
-{% studio_header_actions title="Submissions" subtitle=homework.title back_url=homework_list_url back_label='Back to homeworks' testid='homework-submissions-title' %}{% endstudio_header_actions %}
+{% studio_header_actions title="Submissions" subtitle=homework.title back_url=homework_list_url back_label='Back to homeworks' testid='homework-submissions-title' %}
+  {% if public_url %}<a href="{{ public_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>{% endif %}
+{% endstudio_header_actions %}
 
 <div class="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted-foreground" data-testid="homework-submissions-meta">
   <span>Cohort: <span class="text-foreground">{{ homework.cohort.name }}</span></span>

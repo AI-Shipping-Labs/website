@@ -49,6 +49,7 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_homework_submissions' homework_id=row.homework.pk as submissions_url %}
             {% studio_list_action submissions_url 'View submissions' 'secondary' %}
+            {% if row.public_url %}{% studio_list_action row.public_url 'View on site' 'secondary' True 'noopener noreferrer' %}{% endif %}
           </div>
         </td>
       </tr>

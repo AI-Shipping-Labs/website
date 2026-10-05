@@ -29,7 +29,9 @@ CONTENT_TYPES = (
 )
 KINDS = ('top_level', 'reply')
 OWNER_FILTERS = {
-    'course_unit': ('course_slug', 'module_slug', 'unit_slug'),
+    'course_unit': (
+        'course_slug', 'module_slug', 'unit_slug', 'homework_step',
+    ),
     'workshop_page': ('workshop_key', 'page_slug'),
     'book_club_note': ('book_slug', 'chapter_number'),
     'sprint_plan': ('plan_id',),
@@ -91,7 +93,28 @@ def _owner_subquery(content_type, params):
             qs = qs.filter(module__slug=params['module_slug'])
         if 'unit_slug' in params:
             qs = qs.filter(slug=params['unit_slug'])
-        return qs.values('content_id')
+        # Issue #1897: a homework step filter isolates exactly the thread
+        # the step page mounts (intro keeps the unit content_id); without
+        # it, a unit filter returns the unit thread AND every homework step
+        # thread of the unit.
+        if 'homework_step' in params:
+            unit = qs.first()
+            if unit is None or not unit.content_id:
+                return []
+            from content.services.homework_step_threads import (  # noqa: PLC0415
+                mounted_content_id,
+            )
+
+            return [mounted_content_id(unit.content_id, params['homework_step'])]
+        from content.models import HomeworkStepThread  # noqa: PLC0415
+
+        # order_by() strips the models' default ordering: SQLite refuses
+        # ORDER BY inside the subqueries of a UNION.
+        unit_ids = qs.order_by().values('content_id')
+        step_thread_ids = HomeworkStepThread.objects.filter(
+            unit_content_id__in=unit_ids,
+        ).order_by().values('content_id')
+        return unit_ids.union(step_thread_ids)
     if content_type == 'workshop_page':
         from content.models import WorkshopPage  # noqa: PLC0415
 
@@ -271,6 +294,13 @@ def _parse_list_filters(request, qs):
                 return None, None, None, _validation(
                     'unit_slug', 'unit_slug requires course_slug and module_slug',
                 )
+            if 'homework_step' in owner_values and not {
+                'course_slug', 'module_slug', 'unit_slug'
+            }.issubset(owner_values):
+                return None, None, None, _validation(
+                    'homework_step',
+                    'homework_step requires course_slug, module_slug, and unit_slug',
+                )
         elif inferred_type == 'workshop_page':
             if 'page_slug' in owner_values and 'workshop_key' not in owner_values:
                 return None, None, None, _validation(
@@ -310,10 +340,16 @@ def _parse_list_filters(request, qs):
         return None, None, None, _validation('filters', 'Invalid filter value')
 
 
-def _course_context(unit):
+def _course_context(unit, *, has_stepper_homework=False):
+    """Context for the unit's own thread.
+
+    On stepper homework that thread is mounted on the ``intro`` step only
+    (issue #1897), so its context names that step and deep-links to it
+    instead of the bare unit URL.
+    """
     module = unit.module
     course = module.course
-    return {
+    context = {
         'course_title': course.title,
         'course_slug': course.slug,
         'module_title': module.title,
@@ -322,6 +358,36 @@ def _course_context(unit):
         'unit_slug': unit.slug,
         'title': f'{course.title} — {module.title} — {unit.title}',
         'url': f'{unit.get_absolute_url()}#qa-section',
+    }
+    if has_stepper_homework:
+        from content.services.homework_step_threads import (  # noqa: PLC0415
+            INTRO_STEP,
+            step_page_url,
+        )
+
+        context['homework_step'] = INTRO_STEP
+        context['url'] = f'{step_page_url(unit, INTRO_STEP)}#qa-section'
+    return context
+
+
+def _course_step_context(unit, step_slug, sidebar_title):
+    """Context for one homework-step thread (issue #1897)."""
+    module = unit.module
+    course = module.course
+    from content.services.homework_step_threads import step_page_url
+
+    return {
+        'course_title': course.title,
+        'course_slug': course.slug,
+        'module_title': module.title,
+        'module_slug': module.slug,
+        'unit_title': unit.title,
+        'unit_slug': unit.slug,
+        'homework_step': step_slug,
+        'title': (
+            f'{course.title} — {module.title} — {unit.title} — {sidebar_title}'
+        ),
+        'url': f'{step_page_url(unit, step_slug)}#qa-section',
     }
 
 
@@ -366,18 +432,64 @@ def _book_context(note):
 
 
 def _resolve_threads(content_ids):
-    """Resolve one page of UUIDs in four fixed bulk queries."""
+    """Resolve one page of UUIDs in fixed bulk queries."""
     from bookclub.models import Note  # noqa: PLC0415
-    from content.models import Unit, WorkshopPage  # noqa: PLC0415
+    from content.models import (  # noqa: PLC0415
+        Homework,
+        HomeworkStepThread,
+        Unit,
+        WorkshopPage,
+    )
+    from content.services.homework_step_threads import (  # noqa: PLC0415
+        homework_step_sidebar_title,
+    )
     from plans.models import Plan  # noqa: PLC0415
 
     resolved = {}
-    for unit in Unit.objects.filter(source_content_id__in=content_ids).select_related(
-        'module__course'
-    ):
+    step_threads = {
+        thread.content_id: thread
+        for thread in HomeworkStepThread.objects.filter(content_id__in=content_ids)
+    }
+    step_unit_ids = {thread.unit_content_id for thread in step_threads.values()}
+    stepper_unit_ids = set(
+        Homework.objects.filter(
+            content_id__in={*content_ids, *step_unit_ids},
+            stepper_enabled=True,
+            questions__isnull=False,
+        ).values_list('content_id', flat=True)
+    )
+    units_by_content_id = {}
+    for unit in Unit.objects.filter(
+        source_content_id__in={*content_ids, *step_unit_ids},
+    ).select_related('module__course'):
+        units_by_content_id[unit.source_content_id] = unit
         resolved[unit.source_content_id] = ResolvedThread(
-            'course_unit', unit, _course_context(unit),
+            'course_unit', unit,
+            _course_context(
+                unit,
+                has_stepper_homework=unit.source_content_id in stepper_unit_ids,
+            ),
         )
+    unit_homeworks = {
+        homework.content_id: homework
+        for homework in Homework.objects.filter(
+            content_id__in=step_unit_ids,
+        ).prefetch_related('questions')
+    }
+    for thread in step_threads.values():
+        unit = units_by_content_id.get(thread.unit_content_id)
+        if unit is not None:
+            homework = unit_homeworks.get(thread.unit_content_id)
+            resolved[thread.content_id] = ResolvedThread(
+                'course_unit', unit,
+                _course_step_context(
+                    unit,
+                    thread.step_slug,
+                    homework_step_sidebar_title(
+                        unit, thread.step_slug, homework=homework,
+                    ),
+                ),
+            )
     for page in WorkshopPage.objects.filter(content_id__in=content_ids).select_related(
         'workshop'
     ):
@@ -436,6 +548,16 @@ COMMENTS_QUERY = {
     'course_slug': {'type': 'string', 'required': False},
     'module_slug': {'type': 'string', 'required': False},
     'unit_slug': {'type': 'string', 'required': False},
+    'homework_step': {
+        'type': 'string',
+        'required': False,
+        'description': (
+            'Public homework step slug (intro, an authored question id such '
+            'as q2-reflect, learning-in-public, or review). Requires '
+            'course_slug, module_slug, and unit_slug; isolates that step '
+            "page's comment thread."
+        ),
+    },
     'workshop_key': {'type': 'string', 'required': False},
     'page_slug': {'type': 'string', 'required': False},
     'book_slug': {'type': 'string', 'required': False},

@@ -75,6 +75,7 @@ from content.services.homework_step_reader import (
     build_assignment,
     question_key,
 )
+from content.services.homework_step_threads import ensure_homework_step_threads
 from content.services.homework_submissions import (
     parse_submission_post,
     save_submission,
@@ -1138,6 +1139,13 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
             )
             for question in homework.questions.all()
         }
+        # Issue #1897: the Q&A thread binds to the current stepper page, not
+        # to the unit as a whole. Persist one thread identity per step and
+        # hand every step's mounted UUID to the template, which mounts the
+        # one for the resolved step (intro keeps the unit content_id).
+        context['homework_step_qa_content_ids'] = ensure_homework_step_threads(
+            unit, homework,
+        )
         assignment = build_assignment(homework, unit, user, context=context)
         assignment = replace(
             assignment,

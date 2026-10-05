@@ -67,6 +67,7 @@ class ThreadOwnerRegistryTest(TestCase):
                 'plans.Plan': ('comment_content_id', True, 'member'),
                 'cb_curriculum.Unit': ('source_content_id', False, None),
                 'content.WorkshopPage': ('content_id', False, None),
+                'content.HomeworkStepThread': ('content_id', False, None),
             },
         )
 

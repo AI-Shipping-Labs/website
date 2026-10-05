@@ -26,6 +26,7 @@ uniqueness is scoped to ``(cohort, content_id)`` in ``Meta.constraints``
 instead.
 """
 
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -281,3 +282,56 @@ class Answer(models.Model):
 
     def __str__(self):
         return f'{self.submission} - Q{self.question_id}'
+
+
+class HomeworkStepThread(models.Model):
+    """Q&A thread identity for one homework stepper page (issue #1897).
+
+    On a stepper homework, every question step, the ``learning-in-public``
+    step (when present), and ``review`` own their own comment thread; the
+    ``intro`` step keeps mounting the unit's own ``content_id`` thread. The
+    pair (unit's stable content identity, public step slug) maps to one
+    deterministic ``content_id`` (``uuid5``, see
+    ``content.services.homework_step_threads``), so a content re-sync never
+    mints a new UUID, the same curriculum step shares one thread across
+    cohorts (``?cohort=`` never forks it), and changing a question's
+    ``source_question_id`` in source is simply a new, empty thread.
+
+    ``unit_content_id`` is a plain UUID mirror of ``Unit.source_content_id``
+    rather than a foreign key: content sync may rebuild ``Unit`` rows, and
+    these threads -- plus the comments on them -- must survive that
+    untouched, the same non-cascade rule as ``Unit`` and ``WorkshopPage``.
+    Removing a question from source unmounts its page, but its row (and
+    comments) stays stored and resolvable for operators.
+    """
+
+    unit_content_id = models.UUIDField(
+        db_index=True,
+        help_text="Stable content UUID of the curriculum unit that owns the homework.",
+    )
+    step_slug = models.CharField(
+        max_length=128,
+        help_text=(
+            "Public step slug in the canonical step URL: an authored question "
+            "source_question_id, 'learning-in-public', or 'review'."
+        ),
+    )
+    content_id = models.UUIDField(
+        unique=True,
+        help_text=(
+            "Deterministic thread UUID for the (unit identity, step slug) pair; "
+            "the value the browser comments API mounts for this step page."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['unit_content_id', 'step_slug'],
+                name='content_homework_step_thread_unit_slug_uq',
+            ),
+        ]
+        ordering = ['unit_content_id', 'step_slug']
+
+    def __str__(self):
+        return f'{self.unit_content_id} step {self.step_slug}'

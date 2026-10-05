@@ -35,6 +35,20 @@ class PlanSharedDelivery:
     email_error: str = ''
 
 
+@dataclass(frozen=True)
+class HomeworkStepCommentContext:
+    """A resolved homework-step comment thread (issue #1897).
+
+    Step threads key comments by a derived UUID, not the unit's own
+    ``content_id``, so recipients, titles, and deep links are derived from
+    the owning unit plus the public step slug.
+    """
+
+    unit: object
+    step_slug: str
+    title: str
+
+
 # Maps content_type to (model_import_path, title_template, body_field, url_method)
 CONTENT_TYPE_CONFIG = {
     'article': {
@@ -266,16 +280,20 @@ def _send_email_channel(email_template, content_type, content):
 def _resolve_commented_content(content_id):
     """Resolve a comment ``content_id`` to its content object and title.
 
-    The shared comment composer is embedded on four legitimate surfaces:
-    course unit lessons (``Unit.content_id``), workshop tutorial pages
-    (``WorkshopPage.content_id``), Book Club member notes
+    The shared comment composer is embedded on five legitimate surfaces:
+    course unit lessons (``Unit.content_id``), homework stepper pages
+    (``HomeworkStepThread.content_id``, issue #1897), workshop tutorial
+    pages (``WorkshopPage.content_id``), Book Club member notes
     (``bookclub.Note.comment_content_id``), and sprint plans
     (``Plan.comment_content_id``). Unknown UUIDs remain unresolved.
 
     Returns ``(content, content_title)`` or ``(None, None)`` when the
-    ``content_id`` matches none of the above.
+    ``content_id`` matches none of the above. A homework step resolves to a
+    :class:`HomeworkStepCommentContext` carrying the owning unit and the
+    public step slug.
     """
     from content.models import Unit, WorkshopPage
+    from content.models.homework import HomeworkStepThread
 
     unit = (
         Unit.objects
@@ -285,6 +303,35 @@ def _resolve_commented_content(content_id):
     )
     if unit is not None:
         return unit, unit.title
+
+    step_thread = (
+        HomeworkStepThread.objects
+        .filter(content_id=content_id)
+        .first()
+    )
+    if step_thread is not None:
+        owner_unit = (
+            Unit.objects
+            .filter(source_content_id=step_thread.unit_content_id)
+            .select_related('module__course')
+            .first()
+        )
+        if owner_unit is not None:
+            from content.services.homework_step_threads import (  # noqa: PLC0415
+                homework_step_sidebar_title,
+            )
+
+            sidebar_title = homework_step_sidebar_title(
+                owner_unit, step_thread.step_slug,
+            )
+            title = f'{owner_unit.title} — {sidebar_title}'
+            context = HomeworkStepCommentContext(
+                unit=owner_unit,
+                step_slug=step_thread.step_slug,
+                title=title,
+            )
+            return context, title
+        return None, None
 
     page = (
         WorkshopPage.objects
@@ -333,6 +380,14 @@ def _content_owner_users(content):
             for instructor in content.module.course.instructors.select_related('user')
             if instructor.user_id is not None
         ]
+    if isinstance(content, HomeworkStepCommentContext):
+        # Issue #1897: a homework-step comment notifies the same linked
+        # course instructors as a unit-thread comment.
+        return [
+            instructor.user
+            for instructor in content.unit.module.course.instructors.select_related('user')
+            if instructor.user_id is not None
+        ]
     if isinstance(content, WorkshopPage):
         return [
             instructor.user
@@ -369,8 +424,18 @@ def _direct_reply_user_can_read(content, user):
 def content_comment_urls(content):
     """Return every deep-link URL a content-comment notice can receive."""
     from bookclub.models import Note
+    from content.models import Unit
     from plans.models import Plan
 
+    if isinstance(content, HomeworkStepCommentContext):
+        # Issue #1897: a homework-step notice opens the step page that owns
+        # the thread, never the bare unit URL (it resumes to a step whose
+        # thread would be a different one).
+        from content.services.homework_step_threads import (  # noqa: PLC0415
+            step_page_url,
+        )
+
+        return (f'{step_page_url(content.unit, content.step_slug)}#qa-section',)
     if isinstance(content, Note):
         return (f'{content.get_absolute_url()}#qa-section-{content.pk}',)
     if isinstance(content, Plan):
@@ -396,6 +461,18 @@ def content_comment_urls(content):
                 kwargs={'plan_id': content.pk},
             ) + '#qa-section',
         )
+    if isinstance(content, Unit):
+        from content.services.homework_step_threads import (  # noqa: PLC0415
+            INTRO_STEP,
+            step_page_url,
+            unit_has_stepper_homework,
+        )
+
+        if unit_has_stepper_homework(content):
+            # Issue #1897: on stepper homework the unit thread is mounted on
+            # the intro step only, so its notices deep-link there instead of
+            # the bare unit URL.
+            return (f'{step_page_url(content, INTRO_STEP)}#qa-section',)
     if hasattr(content, 'get_absolute_url'):
         return (content.get_absolute_url() + '#qa-section',)
     return ()

@@ -77,6 +77,19 @@ stable `id`, `kind`, `content_type`, `author_email`, `created_at`,
 `reply_count`, `context`, and `body` columns and may truncate long display
 cells.
 
+A homework unit with the homework stepper enabled owns one comment thread per
+stepper page (issue #1897). A unit filter returns the unit thread and every
+homework step thread of that unit; each homework-step row's `context` names
+the `homework_step` slug and links to that step plus `#qa-section`. Isolate
+one step with `--homework-step` and a public step slug (`intro`, an authored
+question id such as `q2-reflect`, `learning-in-public`, or `review`); it
+requires `--course`, `--module`, and `--unit`:
+
+```bash
+uv run asl comments list --course ai-buildcamp --module foundation \
+  --unit homework --homework-step q2-reflect
+```
+
 Post one direct plain-text reply from an inline body or a UTF-8 file:
 
 ```bash

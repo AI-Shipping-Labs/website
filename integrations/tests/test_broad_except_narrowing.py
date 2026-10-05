@@ -15,8 +15,9 @@ that changes which errors get swallowed, these tests fail loudly.
 """
 
 import os
+import sys
 import tempfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.db import OperationalError
 from django.test import TestCase, tag
@@ -38,13 +39,17 @@ from integrations.services.github_app import (
 
 @tag('core')
 class SecretsManagerNarrowedCatchTest(TestCase):
-    """``_fetch_github_app_private_key_from_secrets_manager`` swallows boto3 errors only.
+    """``_fetch_github_app_private_key_from_secrets_manager`` swallows boto and host-credential errors.
 
-    Before #605 this helper caught ``Exception``. It now catches
+    Before #605 this helper caught ``Exception``. #605 narrowed it to
     ``(BotoCoreError, ClientError)`` (plus ``ImportError`` on the
-    ``import boto3`` line). The test verifies a representative
-    ``ClientError`` still results in an empty-string return and a
-    logged warning.
+    ``import boto3`` line). #1899 added ``RuntimeError``: botocore's
+    credential refresh machinery raises a bare ``RuntimeError``
+    ("Credentials were refreshed, but the refreshed credentials are
+    still expired") when the host carries stale SSO or
+    ``credential_process`` credentials, and that is an environmental
+    failure, not a programmer error -- the sync error path stringifies
+    this config value for scrubbing and must never crash on it.
     """
 
     def test_client_error_returns_empty_string_and_logs(self):
@@ -68,6 +73,33 @@ class SecretsManagerNarrowedCatchTest(TestCase):
             )
         self.assertEqual(result, '')
         mock_logger.warning.assert_called_once()
+
+    def test_stale_credential_refresh_error_returns_empty_string_and_logs(self):
+        # Issue #1899: a fresh agent worktree has no gitignored PEM and the
+        # host's AWS session credentials are expired, so the signing-time
+        # credential refresh raises bare RuntimeError (not BotoCoreError).
+        # The helper must fail soft to '' instead of crashing the caller.
+        secret_client = MagicMock()
+        refresh_failure = RuntimeError(
+            'Credentials were refreshed, but the refreshed credentials are '
+            'still expired.'
+        )
+        secret_client.get_secret_value.side_effect = refresh_failure
+        boto3_module = MagicMock()
+        boto3_module.client.return_value = secret_client
+        with (
+            patch.dict(sys.modules, {'boto3': boto3_module}),
+            patch('integrations.services.github_app.logger') as mock_logger,
+        ):
+            result = _fetch_github_app_private_key_from_secrets_manager(
+                'unit-test-secret-stale-creds', 'eu-west-1',
+            )
+        self.assertEqual(result, '')
+        self.assertEqual(secret_client.get_secret_value.call_count, 1)
+        mock_logger.warning.assert_called_once_with(
+            'Failed to fetch secret %s: %s',
+            'unit-test-secret-stale-creds', refresh_failure,
+        )
 
 
 @tag('core')

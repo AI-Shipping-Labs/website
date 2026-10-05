@@ -57,7 +57,14 @@ def _fetch_github_app_private_key_from_secrets_manager(secret_id, region):
         value = client.get_secret_value(
             SecretId=secret_id,
         )['SecretString']
-    except (BotoCoreError, ClientError) as e:
+    except (BotoCoreError, ClientError, RuntimeError) as e:
+        # botocore's credential refresh machinery raises a bare
+        # ``RuntimeError`` ("Credentials were refreshed, but the refreshed
+        # credentials are still expired") when the host carries stale SSO
+        # or ``credential_process`` credentials. That is an environmental
+        # failure like any boto error, not a programmer error, so it must
+        # fail soft here too -- the sync error path stringifies this
+        # config value for scrubbing and must never crash on it (#1899).
         logger.warning(
             'Failed to fetch secret %s: %s',
             secret_id, e,

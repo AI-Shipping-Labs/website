@@ -38,6 +38,12 @@ def _validate_list_filters(params):
         params["course_slug"] is None or params["module_slug"] is None
     ):
         _fail("--unit requires --course and --module")
+    if params["homework_step"] is not None and (
+        params["course_slug"] is None
+        or params["module_slug"] is None
+        or params["unit_slug"] is None
+    ):
+        _fail("--homework-step requires --course, --module, and --unit")
     if params["page_slug"] is not None and params["workshop_key"] is None:
         _fail("--page requires --workshop")
     if params["chapter_number"] is not None and params["book_slug"] is None:
@@ -45,7 +51,7 @@ def _validate_list_filters(params):
 
     groups = {
         "course_unit": any(params[name] is not None for name in (
-            "course_slug", "module_slug", "unit_slug",
+            "course_slug", "module_slug", "unit_slug", "homework_step",
         )),
         "workshop_page": any(params[name] is not None for name in (
             "workshop_key", "page_slug",
@@ -80,6 +86,11 @@ def _validate_list_filters(params):
 @click.option("--course", "course_slug")
 @click.option("--module", "module_slug")
 @click.option("--unit", "unit_slug")
+@click.option(
+    "--homework-step",
+    help="Public step slug (intro, q2-reflect, learning-in-public, review); "
+    "requires --course, --module, and --unit.",
+)
 @click.option("--workshop", "workshop_key")
 @click.option("--page", "page_slug")
 @click.option("--book", "book_slug")

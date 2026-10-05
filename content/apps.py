@@ -19,6 +19,7 @@ class ContentConfig(AppConfig):
         register_all()
         from comments.threads import register_thread_owner
         from content.models import Unit, WorkshopPage
+        from content.models.homework import HomeworkStepThread
 
         # These UUIDs come from content frontmatter and are reused when sync
         # deletes and rebuilds rows. Register them for orphan detection, but
@@ -31,5 +32,14 @@ class ContentConfig(AppConfig):
         register_thread_owner(
             WorkshopPage,
             content_id_field="content_id",
+            cascade_thread_delete=False,
+        )
+        # Issue #1897: per-step homework threads. Deterministic UUIDs derived
+        # from (unit content identity, step slug); never cascade, so a sync
+        # rebuild of Unit rows (and removing a question from source) leaves
+        # stored step comments resolvable for operators.
+        register_thread_owner(
+            HomeworkStepThread,
+            content_id_field='content_id',
             cascade_thread_delete=False,
         )

@@ -61,6 +61,34 @@ def test_list_maps_filters_and_preserves_json(monkeypatch):
     assert json.loads(result.output) == payload
 
 
+def test_homework_step_filter_passes_through_and_requires_nesting(monkeypatch):
+    client = RecordingClient()
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    result = CliRunner().invoke(cli, [
+        'comments', 'list',
+        '--course', 'ai-buildcamp', '--module', 'foundation',
+        '--unit', 'homework', '--homework-step', 'q2-reflect',
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [('GET', '/api/comments', {'params': {
+        'course_slug': 'ai-buildcamp',
+        'module_slug': 'foundation',
+        'unit_slug': 'homework',
+        'homework_step': 'q2-reflect',
+        'limit': 50,
+        'offset': 0,
+    }})]
+
+    client = RecordingClient()
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    result = CliRunner().invoke(cli, [
+        'comments', 'list', '--homework-step', 'q2-reflect',
+    ])
+    assert result.exit_code == 2, result.output
+    assert '--course, --module, and --unit' in result.output
+    assert client.calls == []
+
+
 def test_table_has_stable_columns_and_only_table_truncates(monkeypatch):
     payload = {
         'comments': [{

@@ -146,5 +146,12 @@
 {% if not homework_stepper %}{% include "content/reader/_bottom_nav.html" %}{% endif %}
 
 {% if unit_content_id %}
+{% load qa_threads %}
+{% if homework_stepper and stepper.step %}
+{% with mounted_qa_id=homework_step_qa_content_ids|qa_content_id:stepper.step %}
+{% include "comments/_qa_section.html" with content_id=mounted_qa_id|default:unit_content_id user_authenticated=user_authenticated %}
+{% endwith %}
+{% else %}
 {% include "comments/_qa_section.html" with content_id=unit_content_id user_authenticated=user_authenticated %}
+{% endif %}
 {% endif %}

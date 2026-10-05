@@ -1438,6 +1438,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_unresolvable_body_link_renders_as_plain_text",
     })
 
+    issue_1897_owners = frozenset({
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_all_questions_homework_keeps_one_page_thread",
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_instructor_notification_opens_the_step_page",
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_intro_discussion_stays_on_intro_with_unit_thread_leftovers",
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_learning_in_public_and_review_comments_stay_on_their_pages",
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_lesson_thread_does_not_mix_with_homework_steps",
+        "playwright_tests/test_homework_step_qa_1897.py::"
+        "test_question_comment_is_visible_only_on_its_step",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1646,8 +1661,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2711)
-        self.assertEqual(len(inventory.owners), 2507)
+        self.assertEqual(inventory.item_count, 2717)
+        self.assertEqual(len(inventory.owners), 2513)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1657,6 +1672,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1531_owners
             | self.issue_1815_owners
             | self.issue_1837_owners
+            | self.issue_1897_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

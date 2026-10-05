@@ -12,6 +12,7 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
+from django.utils import timezone
 
 from bookclub.models import Book, Chapter, Note
 from comments.models import Comment
@@ -643,3 +644,138 @@ class ContentCommentBestEffortTest(TestCase):
         # The comment row survives even though notify raised.
         self.assertTrue(Comment.objects.filter(pk=comment.pk).exists())
         self.assertIn(str(comment.pk), '\n'.join(logs.output))
+
+
+@tag('core')
+class HomeworkStepCommentNotifyTest(TestCase):
+    """Issue #1897: homework stepper step threads resolve like unit threads.
+
+    A comment on a step notifies the same linked course instructors as a
+    unit-thread comment, and every deep link opens the owning step page
+    plus ``#qa-section`` -- never the bare unit URL.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.commenter = User.objects.create_user(
+            email='step-member@test.com', password='pw',
+        )
+        cls.author = User.objects.create_user(
+            email='step-instructor@test.com', password='pw', first_name='Ada',
+        )
+        cls.course = Course.objects.create(
+            title='Buildcamp', slug='buildcamp-notify-1897',
+            status='published',
+        )
+        cls.module = Module.objects.create(
+            course=cls.course, title='Module 1', slug='module-1', sort_order=1,
+        )
+        cls.unit = Unit.objects.create(
+            module=cls.module, title='Homework One', slug='hw1',
+            sort_order=1, kind='homework', content_id=uuid.uuid4(),
+        )
+        cls.lesson = Unit.objects.create(
+            module=cls.module, title='Lesson One', slug='lesson-1',
+            sort_order=2, kind='lesson', content_id=uuid.uuid4(),
+        )
+        cls.instructor = Instructor.objects.create(
+            instructor_id='ada', name='Ada', status='published',
+            user=cls.author,
+        )
+        cls.course.instructors.add(cls.instructor)
+        cls._enable_stepper()
+
+    def _comment(self, content_id, user=None, parent=None, body='A question'):
+        return create_comment(
+            content_id=content_id,
+            user=user or self.commenter,
+            body=body,
+            parent=parent,
+        )
+
+    @staticmethod
+    def _enable_stepper():
+        from datetime import timedelta
+
+        from content.models.cohort import Cohort
+        from content.models.homework import Homework, Question, QuestionType
+
+        cohort = Cohort.objects.create(
+            course=HomeworkStepCommentNotifyTest.course,
+            name='Cohort 4',
+            start_date=timezone.now().date() - timedelta(days=1),
+        )
+        homework = Homework.objects.create(
+            cohort=cohort, slug='hw1', title='Homework One',
+            content_id=HomeworkStepCommentNotifyTest.unit.content_id,
+            stepper_enabled=True,
+        )
+        for source_question_id in ('q1-first', 'q2-reflect'):
+            Question.objects.create(
+                homework=homework, source_question_id=source_question_id,
+                text='Q', question_type=QuestionType.FREE_FORM,
+            )
+
+    def _create_step_thread(self, step_slug):
+        from content.models.homework import HomeworkStepThread
+        from content.services.homework_step_threads import (
+            step_thread_content_id,
+        )
+
+        return HomeworkStepThread.objects.create(
+            unit_content_id=self.unit.content_id,
+            step_slug=step_slug,
+            content_id=step_thread_content_id(self.unit.content_id, step_slug),
+        )
+
+    def test_comment_on_question_step_links_to_that_step(self):
+        thread = self._create_step_thread('q2-reflect')
+        self._comment(thread.content_id)
+
+        note = Notification.objects.get(notification_type='content_comment')
+        self.assertEqual(note.user, self.author)
+        self.assertEqual(
+            note.title, 'New comment on Homework One — Question 2',
+        )
+        self.assertEqual(
+            note.url,
+            f'{self.unit.get_absolute_url()}/q2-reflect#qa-section',
+        )
+        self.assertEqual(note.thread_content_id, thread.content_id)
+
+    def test_comment_on_review_step_links_to_review(self):
+        thread = self._create_step_thread('review')
+        self._comment(thread.content_id)
+
+        note = Notification.objects.get(notification_type='content_comment')
+        self.assertEqual(
+            note.url, f'{self.unit.get_absolute_url()}/review#qa-section',
+        )
+
+    def test_unit_thread_comment_on_a_stepper_unit_links_to_intro(self):
+        self._comment(self.unit.content_id)
+
+        note = Notification.objects.get(notification_type='content_comment')
+        self.assertEqual(
+            note.url, f'{self.unit.get_absolute_url()}/intro#qa-section',
+        )
+
+    def test_lesson_unit_comment_keeps_the_unit_url(self):
+        self._comment(self.lesson.content_id)
+
+        note = Notification.objects.get(notification_type='content_comment')
+        self.assertEqual(
+            note.url, f'{self.lesson.get_absolute_url()}#qa-section',
+        )
+
+    def test_unregistered_step_uuid_notifies_nobody(self):
+        from content.services.homework_step_threads import (
+            step_thread_content_id,
+        )
+
+        self._comment(step_thread_content_id(self.unit.content_id, 'q9-gone'))
+        self.assertFalse(
+            Notification.objects.filter(
+                notification_type='content_comment',
+            ).exists(),
+        )

@@ -2608,6 +2608,15 @@
           },
           {
             "in": "query",
+            "name": "homework_step",
+            "required": false,
+            "schema": {
+              "description": "Public homework step slug (intro, an authored question id such as q2-reflect, learning-in-public, or review). Requires course_slug, module_slug, and unit_slug; isolates that step page's comment thread.",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "workshop_key",
             "required": false,
             "schema": {

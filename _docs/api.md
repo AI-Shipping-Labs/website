@@ -37,6 +37,26 @@ Owner-specific filters for different thread types cannot be mixed. Timestamp
 filters require RFC 3339 offsets; invalid and contradictory filters return
 `422 validation_error` rather than an unfiltered result.
 
+A homework unit with the homework stepper enabled owns one comment thread per
+stepper page (issue #1897): the unit's own `content_id` thread mounted on
+`intro`, plus one derived thread per question step (`learning-in-public` and
+`review` included). A `course_slug`/`module_slug`/`unit_slug` filter returns
+the unit thread and every homework step thread of that unit, all as
+`content_type=course_unit`. Each homework-step row's `context` adds
+`homework_step` (the public step slug; the unit thread of a stepper unit
+reports `intro`, and a non-stepper unit thread omits the field) and a `url`
+that opens that step's canonical path plus `#qa-section`; `title` appends the
+step's sidebar label. Isolate one step with the `homework_step` query
+parameter, which requires the course/module/unit triple:
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/comments?course_slug=ai-buildcamp&module_slug=foundation&unit_slug=homework&homework_step=q2-reflect"
+```
+
+The browser comments API (`GET`/`POST /api/comments/<content_id>`) is
+unchanged: stepper pages simply mount the step's own thread UUID.
+
 Post one direct reply with a staff token and a caller-chosen idempotency key:
 
 ```bash

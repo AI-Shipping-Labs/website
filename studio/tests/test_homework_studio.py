@@ -4,10 +4,12 @@ Covers: staff-only access (403 for non-staff, redirect-to-login for
 anonymous), the homework list shows due date/state/submission count, the
 submissions list shows every student's answers and correctness with no
 scoring controls anywhere on the page. Syllabus order, the cohort filter,
-and the submissions privacy toggle are covered below.
+and the submissions privacy toggle are covered below. Issue #1893 adds
+authored Question N order and titles on the submissions page.
 """
 
 import datetime
+import re
 import uuid
 
 from django.contrib.auth import get_user_model
@@ -155,6 +157,229 @@ class HomeworkSubmissionsStudioTest(HomeworkStudioSetupMixin, TestCase):
         )
         self.assertIn("setAttribute('aria-hidden', 'true')", body)
         self.assertNotIn('homework-submission-student" aria-hidden', body)
+
+
+class HomeworkSubmissionQuestionOrderStudioTest(HomeworkStudioSetupMixin, TestCase):
+    """Issue #1893: authored public Question N order and titles."""
+
+    def setUp(self):
+        super().setUp()
+        self.client.login(email='staff@test.com', password='testpass')
+
+    def _headings(self, response):
+        return re.findall(
+            r'data-testid="homework-submission-answer-heading"[^>]*>(.*?)</p>',
+            response.content.decode(),
+        )
+
+    def _answer_blocks(self, response):
+        html = response.content.decode()
+        parts = html.split('data-testid="homework-submission-answer"')
+        return parts[1:]
+
+    def _capstone_homework(self):
+        module = Module.objects.create(
+            course=self.course, title='Foundation', slug='foundation-1893',
+        )
+        unit = Unit.objects.create(
+            module=module, title='Capstone', slug='homework-capstone-1893',
+            sort_order=1, source_content_id=uuid.uuid4(), kind='homework',
+            homework=(
+                'Intro\n\n'
+                '## Question 1. Your Project Idea\n'
+                'What project would you like to build?\n'
+                '## Question 2. Starter Project\n'
+                'Customize the starter project.\n'
+            ),
+        )
+        homework = Homework.objects.create(
+            cohort=self.cohort, slug='capstone-1893', title='Capstone homework',
+            content_id=unit.source_content_id,
+        )
+        question_two = Question.objects.create(
+            homework=homework, source_question_id='q2-starter',
+            text='Customize the starter project.',
+            question_type=QuestionType.FREE_FORM, answer_type=AnswerType.ANY,
+            scores_for_correct_answer=1,
+        )
+        question_one = Question.objects.create(
+            homework=homework, source_question_id='q1-project-idea',
+            text='What project would you like to build?',
+            question_type=QuestionType.FREE_FORM, answer_type=AnswerType.ANY,
+            scores_for_correct_answer=2,
+        )
+        return homework, question_one, question_two
+
+    def test_authored_order_and_heading_even_when_answers_saved_in_reverse(self):
+        homework, question_one, question_two = self._capstone_homework()
+        second_student = User.objects.create_user(
+            email='student-two-studio@test.com', password='testpass',
+        )
+        save_submission(
+            homework, self.student,
+            homework_link='https://github.com/student/capstone',
+            answers_by_question_id={
+                question_two.pk: 'starter later',
+                question_one.pk: 'idea first',
+            },
+        )
+        save_submission(
+            homework, second_student,
+            homework_link='',
+            answers_by_question_id={
+                question_one.pk: 'idea in order',
+                question_two.pk: 'starter in order',
+            },
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+
+        self.assertEqual(
+            self._headings(response),
+            [
+                'Question 1: Your Project Idea (2 points)',
+                'Question 2: Starter Project (1 point)',
+                'Question 1: Your Project Idea (2 points)',
+                'Question 2: Starter Project (1 point)',
+            ],
+        )
+        self.assertContains(response, 'What project would you like to build?')
+        self.assertContains(response, 'Customize the starter project.')
+        self.assertContains(response, 'https://github.com/student/capstone')
+        self.assertContains(response, 'idea first')
+        self.assertContains(response, 'starter later')
+        for item in response.context['submission_items']:
+            self.assertEqual(
+                [row['heading'] for row in item['review_rows']],
+                [
+                    'Question 1: Your Project Idea (2 points)',
+                    'Question 2: Starter Project (1 point)',
+                ],
+            )
+            self.assertEqual(
+                [row['question'].source_question_id for row in item['review_rows']],
+                ['q1-project-idea', 'q2-starter'],
+            )
+
+    def test_unanswered_question_stays_in_place_with_no_answer_and_no_badge(self):
+        homework, question_one, question_two = self._capstone_homework()
+        save_submission(
+            homework, self.student, homework_link='',
+            answers_by_question_id={question_two.pk: 'only the second'},
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+        rows = response.context['submission_items'][0]['review_rows']
+        first_block, second_block = self._answer_blocks(response)
+
+        self.assertEqual(
+            [row['heading'] for row in rows],
+            [
+                'Question 1: Your Project Idea (2 points)',
+                'Question 2: Starter Project (1 point)',
+            ],
+        )
+        self.assertTrue(rows[0]['unanswered'])
+        self.assertIsNone(rows[0]['answer'])
+        self.assertFalse(rows[1]['unanswered'])
+        self.assertIn('No answer', first_block)
+        self.assertNotIn('homework-submission-answer-correct', first_block)
+        self.assertNotIn('homework-submission-answer-incorrect', first_block)
+        self.assertIn('only the second', second_block)
+
+    def test_zero_answers_lists_every_question_not_empty_copy(self):
+        homework, _question_one, _question_two = self._capstone_homework()
+        save_submission(
+            homework, self.student, homework_link='', answers_by_question_id={},
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+        rows = response.context['submission_items'][0]['review_rows']
+
+        self.assertEqual(len(rows), 2)
+        self.assertTrue(all(row['unanswered'] for row in rows))
+        self.assertEqual(
+            self._headings(response),
+            [
+                'Question 1: Your Project Idea (2 points)',
+                'Question 2: Starter Project (1 point)',
+            ],
+        )
+        self.assertContains(response, 'No answer')
+        self.assertNotContains(response, 'No answers on record.')
+
+    def test_legacy_question_uses_stored_text_once(self):
+        homework = Homework.objects.create(
+            cohort=self.cohort, slug='legacy-1893', title='Legacy homework',
+        )
+        Question.objects.create(
+            homework=homework, source_question_id='q1-lines',
+            text='How many lines?', question_type=QuestionType.FREE_FORM,
+            answer_type=AnswerType.INTEGER, correct_answer='4',
+            scores_for_correct_answer=1,
+        )
+        save_submission(
+            homework, self.student, homework_link='',
+            answers_by_question_id={
+                homework.questions.get().pk: '4',
+            },
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+        rows = response.context['submission_items'][0]['review_rows']
+
+        self.assertEqual(rows[0]['heading'], 'Question 1: How many lines? (1 point)')
+        self.assertEqual(rows[0]['supporting_text'], '')
+        self.assertContains(response, 'Question 1: How many lines? (1 point)')
+        self.assertContains(response, 'How many lines?', count=1)
+        self.assertNotContains(response, 'data-testid="homework-submission-answer-prompt"')
+
+    def test_homework_with_no_questions_shows_no_answers_on_record(self):
+        homework = Homework.objects.create(
+            cohort=self.cohort, slug='no-questions-1893', title='Empty homework',
+        )
+        save_submission(
+            homework, self.student, homework_link='', answers_by_question_id={},
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+
+        self.assertEqual(response.context['submission_items'][0]['review_rows'], [])
+        self.assertContains(response, 'No answers on record.')
+        self.assertNotContains(response, 'homework-submission-answer-heading')
+
+    def test_homework_with_no_submissions_keeps_fresh_empty_state(self):
+        homework, _question_one, _question_two = self._capstone_homework()
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+
+        self.assertEqual(response.context['submission_items'], [])
+        self.assertContains(response, 'No submissions for this homework yet.')
+        self.assertNotContains(response, 'homework-submission-row')
+        self.assertNotContains(response, 'Question 1:')
+
+    def test_learning_in_public_is_not_a_numbered_question(self):
+        homework, question_one, _question_two = self._capstone_homework()
+        homework.learning_in_public_cap = 3
+        homework.time_spent_lectures_field = True
+        homework.save(update_fields=[
+            'learning_in_public_cap', 'time_spent_lectures_field',
+        ])
+        save_submission(
+            homework, self.student,
+            homework_link='https://github.com/student/lip',
+            answers_by_question_id={question_one.pk: 'idea'},
+            learning_in_public_links=['https://example.com/post'],
+            time_spent_lectures=2,
+        )
+
+        response = self.client.get(f'/studio/homeworks/{homework.pk}/submissions')
+        headings = self._headings(response)
+
+        self.assertEqual(headings[0], 'Question 1: Your Project Idea (2 points)')
+        self.assertNotIn('Learning in Public', ' '.join(headings))
+        self.assertContains(response, 'https://github.com/student/lip')
+        self.assertNotContains(response, 'Time spent')
 
 
 class HomeworkListOrderAndCohortTest(HomeworkStudioSetupMixin, TestCase):

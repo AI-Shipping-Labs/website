@@ -118,6 +118,13 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "coursework.review_assigned",
     "coursework.review_received",
     "coursework.review_window_expired",
+    # Issue #1895: linked course instructors and workshop authors get an
+    # operational author mail when a member comments or replies on their
+    # content. Transactional like the other author-facing operational
+    # mail -- the newsletter unsubscribe flag does not suppress it and it
+    # carries no unsubscribe footer; bounce/complaint suppression still
+    # applies.
+    "content_comment",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

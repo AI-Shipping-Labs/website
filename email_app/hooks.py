@@ -387,6 +387,43 @@ def _resolve_plan_shared_context(delivery, context):
     )
 
 
+def _resolve_content_comment_context(delivery, context):
+    """Mint the discussion link from the saved comment (issue #1895).
+
+    The producer stores scalar copy only (commenter name, 200-char
+    excerpt, content and parent course/workshop titles) -- never a link
+    (#1613). The worker re-resolves the comment's content at delivery
+    time and builds the same public ``#qa-section`` URL the owner bell
+    received, as an absolute site URL. A stale or deleted comment
+    relation fails closed instead of retrying forever.
+    """
+
+    from comments.models import Comment  # noqa: PLC0415
+    from integrations.config import site_base_url  # noqa: PLC0415
+    from notifications.services.notification_service import (  # noqa: PLC0415
+        _resolve_commented_content,
+        content_comment_urls,
+    )
+
+    _member_greeting(delivery, context)
+    if delivery.related_object_type != "comments.comment":
+        raise PermanentJobError("content_comment_relation_missing")
+    comment = Comment.objects.filter(
+        pk=delivery.related_object_id,
+    ).first()
+    if comment is None:
+        raise PermanentJobError("content_comment_comment_missing")
+    content, _title = _resolve_commented_content(comment.content_id)
+    if content is None:
+        raise PermanentJobError("content_comment_content_missing")
+    urls = content_comment_urls(content)
+    if not urls:
+        raise PermanentJobError("content_comment_url_missing")
+    context["discussion_url"] = (
+        f"{site_base_url().rstrip('/')}{urls[0]}"
+    )
+
+
 # A1.2 slice 1: the four internal staff heads-ups. Each stores scalar
 # inputs only (#1613) — the subject member's id under a per-purpose key,
 # and for the paid-signup note the raw Stripe object ids.
@@ -1047,6 +1084,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_workshop_announcement_context(delivery, context)
     elif delivery.purpose == "plan_shared":
         _resolve_plan_shared_context(delivery, context)
+    elif delivery.purpose == "content_comment":
+        _resolve_content_comment_context(delivery, context)
     elif delivery.purpose in _STAFF_NOTIFICATION_PURPOSES:
         _resolve_staff_notification_context(delivery, context)
     elif delivery.purpose in ("bookclub_book_summary", "bookclub_chapter_summary"):

@@ -255,6 +255,18 @@ PREVIEW_CONTEXTS = {
             '%2Fevents%2Fcommunity-lunch%2Fjoin'
         ),
     },
+    'content_comment': {
+        'user_name': 'Ada',
+        'verb': 'comment',
+        'commenter_name': 'Jordan',
+        'comment_excerpt': 'How should I count the tokens for the homework?',
+        'content_title': 'Intro to ML',
+        'parent_title': 'ML Zoomcamp',
+        'discussion_url': (
+            'https://aishippinglabs.com/courses/ml-zoomcamp/module-1/intro'
+            '#qa-section'
+        ),
+    },
     'event_reminder': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',

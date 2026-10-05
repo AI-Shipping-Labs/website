@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
+from django.db import transaction
 
 from accounts.tier_audience import effective_level_at_least_q
 from email_app.package_mail import send_package_mail
@@ -492,6 +493,85 @@ def _content_comment_url(content, recipient):
     return urls[0] if urls else ''
 
 
+def _comment_email_parent_title(content):
+    """Parent course/workshop title for the issue #1895 author email.
+
+    Returns ``None`` for surfaces whose owners must not be emailed (Book
+    Club notes and sprint plans are member-owned threads; their owners
+    keep the in-app bell only). Course units -- including homework-step
+    threads -- resolve to the course title, workshop pages to the
+    workshop title, so a homework comment is distinguishable from a
+    lesson one.
+    """
+    from content.models import Unit, WorkshopPage
+
+    if isinstance(content, HomeworkStepCommentContext):
+        return content.unit.module.course.title
+    if isinstance(content, Unit):
+        return content.module.course.title
+    if isinstance(content, WorkshopPage):
+        return content.workshop.title
+    return None
+
+
+def _email_content_comment_owners(
+    comment, content, owner_recipients, verb, commenter, excerpt,
+    content_title,
+):
+    """Queue the transactional author email for linked owners (issue #1895).
+
+    Mirrors the owner bell's recipient set -- linked course instructors
+    and workshop authors, deduped by user -- as a best-effort additional
+    channel: a refused or failed send must not roll back the comment or
+    the bell. Book Club note and sprint-plan owners are member-owned
+    threads and are never emailed. The durable ``EmailDelivery`` carries
+    scalar copy plus the comment relation only; the worker mints the
+    ``#qa-section`` discussion link at delivery time (#1613), and the
+    ``content_comment:{comment}:{recipient}`` idempotency key keeps
+    retries from duplicating a successful send.
+
+    Runs in its own atomic block: the comment API views are not wrapped
+    in a transaction (``ATOMIC_REQUESTS`` is off) and the package mail
+    send requires one. The comment row is already durable by the time
+    this runs, so queueing inside a fresh block is safe.
+    """
+
+    parent_title = _comment_email_parent_title(content)
+    if parent_title is None:
+        return
+    # Collapse internal whitespace: the excerpt renders inside a
+    # markdown blockquote, so embedded newlines must not leak out of it.
+    safe_excerpt = ' '.join(excerpt.split()) if excerpt else ''
+    with transaction.atomic():
+        for recipient_id, recipient in owner_recipients.items():
+            # ``owner_recipients`` predates the commenter removal from the
+            # bell recipient dict, so the self-email guard is explicit.
+            if recipient_id == comment.user_id:
+                continue
+            try:
+                send_package_mail(
+                    recipient,
+                    'content_comment',
+                    {
+                        'verb': verb,
+                        'commenter_name': commenter,
+                        'comment_excerpt': safe_excerpt,
+                        'content_title': content_title,
+                        'parent_title': parent_title,
+                    },
+                    idempotency_key=(
+                        f'content_comment:{comment.pk}:{recipient_id}'
+                    ),
+                    related=comment,
+                )
+            except Exception:
+                logger.exception(
+                    'Failed to queue content_comment email to user %s '
+                    'for comment %s',
+                    recipient_id, comment.pk,
+                )
+
+
 class NotificationService:
     """Service for creating notifications and dispatching to channels."""
 
@@ -710,6 +790,10 @@ class NotificationService:
         logger.info(
             'Created %d content_comment notifications for comment %s',
             len(notifications), comment.pk,
+        )
+        _email_content_comment_owners(
+            comment, content, owner_recipients, verb, commenter, excerpt,
+            content_title,
         )
         return {"notified": len(notifications)}
 

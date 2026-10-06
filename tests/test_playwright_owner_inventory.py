@@ -1453,6 +1453,23 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_question_comment_is_visible_only_on_its_step",
     })
 
+    issue_1894_owners = frozenset({
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_sees_edit_delete_on_every_card_and_member_does_not",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_edit_save_rewrites_body_and_shows_edited_marker",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_cancel_and_blank_save_leave_original_body",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_delete_confirm_hides_card_updates_count_and_member_reload",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_delete_cancel_keeps_comment_untouched",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_delete_reply_keeps_parent_visible",
+        "playwright_tests/test_comment_moderation_1894.py::"
+        "test_staff_moderates_lesson_thread_and_homework_thread_stays_intact",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1661,8 +1678,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2717)
-        self.assertEqual(len(inventory.owners), 2513)
+        self.assertEqual(inventory.item_count, 2724)
+        self.assertEqual(len(inventory.owners), 2520)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1673,6 +1690,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1815_owners
             | self.issue_1837_owners
             | self.issue_1897_owners
+            | self.issue_1894_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

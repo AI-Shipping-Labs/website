@@ -7,9 +7,18 @@
   // Book Club chapter page, issue #1365, renders one thread per member note).
   // Element lookups are scoped WITHIN each thread by class, so this script is
   // agnostic to the id suffixes `_qa_section.html` emits for multiple threads.
+  //
+  // Staff moderation (issue #1894): when the list payload says
+  // `can_moderate`, every top-level comment and reply also renders Edit and
+  // Delete (soft hide). The list payload is the source of truth -- the
+  // server enforces the same staff-only rule on the write endpoints.
   (function() {
     var sections = document.querySelectorAll('.qa-thread');
     if (!sections.length) return;
+
+    var FOCUS_RING = 'focus-visible:outline-none focus-visible:ring-2 ' +
+      'focus-visible:ring-accent focus-visible:ring-offset-2 ' +
+      'focus-visible:ring-offset-background';
 
     function getCsrfToken() {
       var cookies = document.cookie.split(';');
@@ -61,29 +70,62 @@
       return '<time class="shrink-0" data-testid="' + testId + '" datetime="' + escapeHtml(isoStr) + '"' + accessible + '>' + display.text + '</time>';
     }
 
-    function renderComment(comment) {
+    function renderEditedMarker() {
+      return '<span class="text-xs text-muted-foreground" data-testid="qa-edited">Edited</span>';
+    }
+
+    function renderModerationButtons(id) {
+      return '<button class="qa-edit-btn text-xs text-accent hover:underline ' + FOCUS_RING + '" data-comment-id="' + id + '" data-testid="qa-edit">Edit</button>' +
+        '<button class="qa-delete-btn text-xs text-red-700 dark:text-red-400 hover:underline ' + FOCUS_RING + '" data-comment-id="' + id + '" data-testid="qa-delete">Delete</button>';
+    }
+
+    function renderEditForm(id, body) {
+      return '<div class="qa-edit-form hidden mt-2" data-comment-id="' + id + '">' +
+        '<textarea rows="3" class="qa-edit-textarea w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent">' + escapeHtml(body) + '</textarea>' +
+        '<button class="{% button_classes 'primary' size='sm' extra='qa-save-edit mt-1' %}" data-comment-id="' + id + '" data-testid="qa-save-edit">Save</button>' +
+        '<button class="{% button_classes 'secondary' size='sm' extra='qa-cancel-edit mt-1 sm:ml-2' %}" data-comment-id="' + id + '" data-testid="qa-cancel-edit">Cancel</button>' +
+      '</div>';
+    }
+
+    function renderMetaLine(name, isoStr, timestampTestId, isEdited) {
+      return '<div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">' +
+        '<span class="min-w-0 break-words font-medium text-foreground">' + escapeHtml(name) + '</span>' +
+        renderTimestamp(isoStr, timestampTestId) +
+        (isEdited ? renderEditedMarker() : '') +
+      '</div>';
+    }
+
+    function renderComment(comment, canModerate) {
       var votedClass = comment.user_voted
         ? 'text-accent'
         : 'text-muted-foreground hover:text-foreground';
       var votedFill = comment.user_voted ? 'fill-current' : '';
+      var modButtons = canModerate ? renderModerationButtons(comment.id) : '';
+      var editForm = canModerate ? renderEditForm(comment.id, comment.body) : '';
 
       var repliesHtml = '';
       if (comment.replies && comment.replies.length > 0) {
         repliesHtml = '<div class="ml-4 sm:ml-8 mt-4 space-y-3">';
         for (var i = 0; i < comment.replies.length; i++) {
           var r = comment.replies[i];
-          repliesHtml += '<div class="rounded-lg border border-border bg-muted/30 p-3">' +
-            '<div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">' +
-              '<span class="min-w-0 break-words font-medium text-foreground">' + escapeHtml(r.user_name) + '</span>' +
-              renderTimestamp(r.created_at, 'reply-timestamp') +
-            '</div>' +
-            '<p class="break-words text-sm text-foreground">' + escapeHtml(r.body) + '</p>' +
+          var replyMod = canModerate ? renderModerationButtons(r.id) : '';
+          var replyEditForm = canModerate ? renderEditForm(r.id, r.body) : '';
+          var replyActions = replyMod
+            ? '<div class="flex flex-wrap items-center gap-x-4 gap-y-1">' + replyMod + '</div>'
+            : '';
+          repliesHtml += '<div class="qa-card rounded-lg border border-border bg-muted/30 p-3" data-comment-id="' + r.id + '">' +
+            renderMetaLine(r.user_name, r.created_at, 'reply-timestamp', r.is_edited) +
+            '<p class="qa-body break-words text-sm text-foreground">' + escapeHtml(r.body) + '</p>' +
+            replyActions +
+            replyEditForm +
           '</div>';
         }
         repliesHtml += '</div>';
       }
 
-      return '<div class="mb-4 rounded-lg border border-border bg-card p-4" data-comment-id="' + comment.id + '">' +
+      var hasReplies = comment.replies && comment.replies.length > 0;
+
+      return '<div class="qa-card mb-4 rounded-lg border border-border bg-card p-4" data-comment-id="' + comment.id + '" data-reply-count="' + (hasReplies ? comment.replies.length : 0) + '">' +
         '<div class="flex gap-3">' +
           '<div class="flex flex-col items-center gap-1">' +
             '<button class="qa-vote-btn transition-colors ' + votedClass + '" data-comment-id="' + comment.id + '" title="Upvote">' +
@@ -92,16 +134,17 @@
             '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>' +
           '</div>' +
           '<div class="flex-1 min-w-0">' +
-            '<div class="mb-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">' +
-              '<span class="min-w-0 break-words font-medium text-foreground">' + escapeHtml(comment.user_name) + '</span>' +
-              renderTimestamp(comment.created_at, 'comment-timestamp') +
+            renderMetaLine(comment.user_name, comment.created_at, 'comment-timestamp', comment.is_edited) +
+            '<p class="qa-body mb-2 break-words text-sm text-foreground">' + escapeHtml(comment.body) + '</p>' +
+            '<div class="flex flex-wrap items-center gap-x-4 gap-y-1">' +
+              '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
+              modButtons +
             '</div>' +
-            '<p class="mb-2 break-words text-sm text-foreground">' + escapeHtml(comment.body) + '</p>' +
-            '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
             '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
               '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
               '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
             '</div>' +
+            editForm +
             repliesHtml +
           '</div>' +
         '</div>' +
@@ -122,6 +165,7 @@
           .then(function(r) { return r.json(); })
           .then(function(data) {
             var comments = data.comments || [];
+            var canModerate = data.can_moderate === true;
             if (countEl) countEl.textContent = comments.length;
             // Hide the parenthesized count entirely when the thread is
             // empty so the heading reads "Comments" rather than
@@ -140,11 +184,22 @@
             }
             var html = '';
             for (var i = 0; i < comments.length; i++) {
-              html += renderComment(comments[i]);
+              html += renderComment(comments[i], canModerate);
             }
             listEl.innerHTML = html;
             bindEvents();
           });
+      }
+
+      function postModeration(cid, path, payload) {
+        return fetch('/api/comments/' + cid + '/' + path, {
+          method: 'POST',
+          headers: { 'X-CSRFToken': getCsrfToken(), 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          // Only the edit route carries a payload ({ body: ... }); hide is
+          // a bare POST (issue #1894).
+          body: payload ? JSON.stringify(payload) : null,
+        });
       }
 
       function bindEvents() {
@@ -209,6 +264,75 @@
               form.classList.add('hidden');
               loadComments();
             });
+          });
+        }
+
+        // Staff moderation (issue #1894). Edit opens an inline form
+        // prefilled with the current body; Delete asks for confirmation
+        // and soft-hides the comment.
+        var editBtns = listEl.querySelectorAll('.qa-edit-btn');
+        for (var i = 0; i < editBtns.length; i++) {
+          editBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var card = this.closest('.qa-card');
+            var bodyEl = card.querySelector('.qa-body');
+            var form = card.querySelector('.qa-edit-form[data-comment-id="' + cid + '"]');
+            form.classList.remove('hidden');
+            bodyEl.setAttribute('hidden', '');
+            form.querySelector('.qa-edit-textarea').focus();
+          });
+        }
+
+        var saveBtns = listEl.querySelectorAll('.qa-save-edit');
+        for (var i = 0; i < saveBtns.length; i++) {
+          saveBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var card = this.closest('.qa-card');
+            var form = card.querySelector('.qa-edit-form[data-comment-id="' + cid + '"]');
+            var ta = form.querySelector('.qa-edit-textarea');
+            var body = ta.value.trim();
+            // A blank or whitespace-only save never persists and never
+            // empties the card: stay in edit mode with the original body.
+            if (!body) return;
+            postModeration(cid, 'edit', { body: body })
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.error) return;
+                loadComments();
+              });
+          });
+        }
+
+        var cancelBtns = listEl.querySelectorAll('.qa-cancel-edit');
+        for (var i = 0; i < cancelBtns.length; i++) {
+          cancelBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var card = this.closest('.qa-card');
+            var form = card.querySelector('.qa-edit-form[data-comment-id="' + cid + '"]');
+            var bodyEl = card.querySelector('.qa-body');
+            form.classList.add('hidden');
+            bodyEl.removeAttribute('hidden');
+          });
+        }
+
+        var deleteBtns = listEl.querySelectorAll('.qa-delete-btn');
+        for (var i = 0; i < deleteBtns.length; i++) {
+          deleteBtns[i].addEventListener('click', function() {
+            var cid = this.dataset.commentId;
+            var card = this.closest('.qa-card');
+            var isTopLevel = card.dataset.replyCount !== undefined;
+            var replyCount = parseInt(card.dataset.replyCount || '0', 10);
+            var message = 'Remove this comment from the thread?';
+            if (isTopLevel && replyCount > 0) {
+              message += ' Replies will also leave the thread until the comment is restored.';
+            }
+            if (!window.confirm(message)) return;
+            postModeration(cid, 'hide')
+              .then(function(r) { return r.json(); })
+              .then(function(data) {
+                if (data.error) return;
+                loadComments();
+              });
           });
         }
       }

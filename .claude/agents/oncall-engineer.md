@@ -43,28 +43,60 @@ To watch a specific run instead of resolving the newest one on `main`, pass
 ### 2. Interpret the verdict by exit code
 
 The final stdout line is a JSON object with at least `result`, `exit_code`,
-`run_id`, `required`, `failing_jobs`, `signature`, `likely_infra`, `reason`,
-`polls`, and `elapsed_s`.
+`run_id`, `head_sha`, `required`, `failing_jobs`, `signature`, `likely_infra`,
+`reason`, `newer_run_id`, `polls`, and `elapsed_s`.
 
-For `Deploy Dev`, `required` contains these ten exact job names:
+For a watched `main` `Deploy Dev` run, the default contract requires these 12
+exact job instances. It is the same set as `DEPLOY_DEV_REQUIRED_CHECKS` in
+`scripts/watch-ci.py`, and the offline contract guard in
+`tests/test_oncall_deploy_dev_doc_contract.py` pins this role file to it:
 
-- `Deploy Gates (migrations / OpenAPI / system check / static)`
-- `Unit & Integration Tests (shard 1/4)` through `Unit & Integration Tests (shard 4/4)`
-- `Playwright Core E2E (shard 1/4)` through `Playwright Core E2E (shard 4/4)`
-- `Deploy to Dev`
+1. `Deploy Gates (migrations / OpenAPI / system check / static)`
+2. `Unit & Integration Tests (shard 1/4)`
+3. `Unit & Integration Tests (shard 2/4)`
+4. `Unit & Integration Tests (shard 3/4)`
+5. `Unit & Integration Tests (shard 4/4)`
+6. `Combined coverage (fail-under 85)`
+7. `PostgreSQL 16 Verification`
+8. `Playwright Core E2E (shard 1/4)`
+9. `Playwright Core E2E (shard 2/4)`
+10. `Playwright Core E2E (shard 3/4)`
+11. `Playwright Core E2E (shard 4/4)`
+12. `Deploy to Dev`
 
-PostgreSQL Verification remains a deploy dependency. It is outside the
-watcher's established required-name set, but any PostgreSQL failure that gates
-the required deploy job still produces a failed verdict.
+`green` (exit `0`) means all 12 required jobs are present, terminal, and
+concluded `success`. There is no acceptable required-job skip on a triggered
+default `Deploy Dev` run: the default policy allows no required-job skips at
+all. The boundary is fail closed:
+
+- A genuine required-job failure (conclusion `failure`, `timed_out`,
+  `startup_failure`, or `action_required`) is `failed` (exit `1`) and wins
+  over downstream cancellation or skip. A failed `PostgreSQL 16 Verification`
+  followed by a skipped `Deploy to Dev` is `failed`, naming PostgreSQL
+  verification as the failure.
+- Any other required job that is missing, `skipped`, `cancelled`, or otherwise
+  terminal without `success` is a blocker with no genuine failure behind it:
+  the run is `no_verdict` (exit `5`) and the verdict names each blocking job
+  and its observed conclusion. A skipped `Deploy to Dev` is never a verified
+  deployment; the reason states that no verified deployment was observed.
+- Whole-run cancellation stays fail closed: `superseded` (exit `4`) only when
+  a demonstrably newer matching run exists — follow the JSON `newer_run_id`
+  once within the same assignment — otherwise `no_verdict` (exit `5`).
+  Neither path is green.
+
+Explicit custom watcher contracts (a `--required-check` override, or a
+programmatically supplied `allowed_skips` list) may allow named skips for
+other workflows. That skip policy is never a property of the default
+`Deploy Dev` contract, which allows none.
 
 | Exit | result | Meaning | Action |
 |------|--------|---------|--------|
-| 0 | `green` | All ten required `Deploy Dev` jobs succeeded (or appropriately skipped): Deploy Gates, four Django shards, four Playwright Core shards, and Deploy to Dev | Report success and stop. Do NOT call anything else green. |
-| 1 | `failed` | A genuine required-job/run failure | Go to step 3 (fix). Use `failing_jobs` and `signature`. |
+| 0 | `green` | All 12 required `Deploy Dev` jobs (deploy gates, four Django shards, combined coverage, PostgreSQL 16 verification, four Playwright Core shards, Deploy to Dev) are present, terminal, and concluded `success`; the default contract allows no skips | Report success and stop. Do NOT call anything else green. |
+| 1 | `failed` | A genuine required-job/run failure (`failure`, `timed_out`, `startup_failure`, or `action_required`); wins over downstream cancellation or skip | Go to step 3 (fix). Use `failing_jobs` and `signature`. |
 | 2 | `hang` | No job-state progress deadline or max wall-clock deadline reached | Report the non-verdict and recommended recovery (re-run the watcher, or investigate a stuck runner). Do NOT call it green. |
 | 3 | `unresolved` | Inputs/run resolution failed, or `gh` failures exceeded the retry budget | Report unresolved and recommended recovery (check `gh auth`, confirm the run exists, retry). Do NOT call it green or failed. |
-| 4 | `superseded` | The cancelled run was demonstrably replaced by a newer run for the same workflow and branch | Invoke the watcher once more for the newer run: `scripts/watch-ci.py --run-id <newer_run_id> --repo AI-Shipping-Labs/website --quiet` (the id is in the JSON `newer_run_id`). This stays within the same on-call assignment. |
-| 5 | `no_verdict` | Cancellation with no demonstrably newer run, or a completed run missing a required job | Report the non-verdict and recommend a fresh run; a trustworthy result requires a new run. Do NOT call it green or failed. |
+| 4 | `superseded` | The run was cancelled and a demonstrably newer matching run exists for the same workflow and branch | Invoke the watcher once more for the newer run: `scripts/watch-ci.py --run-id <newer_run_id> --repo AI-Shipping-Labs/website --quiet` (the id is in the JSON `newer_run_id`). Follow the newer run once within the same on-call assignment. |
+| 5 | `no_verdict` | Cancellation with no demonstrably newer matching run, or a completed run where a required job is missing, `skipped`, `cancelled`, or otherwise terminal without `success` while no genuine required failure exists | Report the non-verdict with the blocking jobs named in `reason`/`failing_jobs` and recommend a fresh run; a trustworthy result requires a new run. Never claim deployment or readiness from it. Do NOT call it green or failed. |
 
 Never report a non-green outcome (`hang`, `unresolved`, `superseded`,
 `no_verdict`) as a pass. Only `green` (exit 0) is a pass.
@@ -167,15 +199,23 @@ anything), what you fixed, and whether the pipeline is now green. If the result
 was `hang`, `unresolved`, `superseded` (unrecovered), or `no_verdict`, report the
 non-verdict and the recommended recovery — never as a pass.
 
-For a terminal green handoff, also report the exact issue, accepted/merge SHA,
-successful `Deploy Dev` run ID and run head SHA, and every agent worktree path
-used during the lifecycle. Then return. Do **not** remove a worktree, close its
-lifecycle lease, prune Git metadata, or delete its branch from the live On-Call
-role. After On-Call and every other role have ended, the orchestrator verifies
-that state in its active-agent registry, closes the common-Git-dir lease, runs
-the fail-closed dry-run classifier from shared main, and applies at most one
-reviewed candidate at a time. See `_docs/PROCESS.md` ("Agent worktree
-lifecycle").
+A deployment or readiness claim is permitted only from a watcher `green`
+verdict. Never claim an image, tag, deployment, promotion candidate, or
+readiness from a validation-only success or any non-green result
+(`hang`, `unresolved`, `superseded`, `no_verdict`, `failed`).
+
+For a terminal green handoff, also report the exact issue, the accepted merge
+SHA, the watched `Deploy Dev` run ID and its exact head SHA (both are in the
+watcher JSON as `run_id` and `head_sha`), the result and exit code, and every
+agent worktree path used during the lifecycle. For a failure or non-verdict,
+report the blocking evidence from the watcher JSON (`failing_jobs`,
+`signature`, `likely_infra`, `reason`) instead of a green claim. Then return.
+Do not remove a worktree, close its lifecycle lease, prune Git metadata, or
+delete its branch from the live On-Call role. After On-Call and every other
+role have ended, the orchestrator verifies that state in its active-agent
+registry, closes the common-Git-dir lease, runs the fail-closed dry-run
+classifier from shared main, and applies at most one reviewed candidate at a
+time. See `_docs/PROCESS.md` ("Agent worktree lifecycle").
 
 ## Rules
 
@@ -184,7 +224,17 @@ lifecycle").
   view` in a loop.
 - Only `green` (exit 0) is a pass. Never report `hang`, `unresolved`,
   `superseded`, or `no_verdict` as green.
+- Under the default `Deploy Dev` contract, `green` requires all 12 required
+  jobs concluded `success`; there is no default required-job skip. A missing,
+  `skipped`, or `cancelled` required job is never green: with no genuine
+  required failure it is `no_verdict`, and a genuine failure (`failure`,
+  `timed_out`, `startup_failure`, `action_required`) is `failed`. Only an
+  explicitly configured custom watcher contract may allow named skips.
 - On `superseded`, follow the newer run once within the same assignment.
+- Never claim an image, tag, deployment, promotion candidate, or readiness
+  from a validation-only success or a non-green result; only a watcher
+  `green` verdict authorizes that language, attributed to the exact watched
+  run ID and head SHA.
 - Always trace failures back to a specific issue via commit messages, reopen the
   issue before fixing for a clear audit trail, and comment with the captured
   evidence.

@@ -4,16 +4,17 @@ Covers:
 - Course detail page: syllabus module rows have truncation classes
 - Course detail page: cohort enrollment uses flex-col on mobile
 - Course unit detail: breadcrumb has overflow-hidden and truncate classes
-- Course unit detail: top prev/next uses truncate and max-w-[40vw]
-- Course unit detail: bottom prev/next buttons use truncate
+- Course unit detail: footer prev/next carry full destination titles that
+  wrap instead of ellipsizing (issue #1793)
 - Course unit detail: sidebar has mobile toggle button
 - Course unit detail: Q&A reply indentation uses ml-4 sm:ml-8
 """
 
 import uuid
 
+import pytest
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase
+from django.test import Client, TestCase, tag
 from django.utils import timezone
 
 from content.access import LEVEL_MAIN
@@ -102,29 +103,36 @@ class CourseDetailMobileCohortTest(CourseMobileSetupMixin, TestCase):
 
 
 class CourseUnitBottomNavMobileTest(CourseMobileSetupMixin, TestCase):
-    """Bottom prev/next buttons use short labels on mobile.
+    """Footer prev/next labels carry the full destination title and wrap
+    in min-w-0 spans instead of ellipsizing (issue #1793).
 
     The sticky compact bar layout is owned by the browser test
     ``playwright_tests/test_reader_mobile_drawer_bar.py``.
     """
 
-    def test_bottom_prev_uses_short_label_not_long_title(self):
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_bottom_prev_shows_full_destination_title(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-2")
         content = response.content.decode()
         prev_start = content.index('data-testid="bottom-prev-btn"')
         prev_tag = content[prev_start:content.index("</a>", prev_start)]
-        self.assertIn("<span>Previous</span>", prev_tag)
-        self.assertNotIn("Particularly Long Title", prev_tag)
+        self.assertIn("<span class=\"min-w-0\">Previous:", prev_tag)
+        self.assertIn("Particularly Long Title", prev_tag)
+        self.assertNotIn("truncate", prev_tag)
 
-    def test_bottom_next_uses_short_label_not_long_title(self):
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_bottom_next_shows_full_destination_title(self):
         self._login_main_user()
         response = self.client.get("/courses/long-course/module-1/unit-1")
         content = response.content.decode()
         next_start = content.index('data-testid="bottom-next-btn"')
-        next_tag = content[next_start:content.index("</button>", next_start)]
-        self.assertIn("<span>Complete &amp; Next</span>", next_tag)
-        self.assertNotIn("Unit Two Also Long", next_tag)
+        next_tag = content[next_start:content.index("</a>", next_start)]
+        self.assertIn("<span class=\"min-w-0\">Next:", next_tag)
+        self.assertIn("Unit Two Also Long", next_tag)
+        self.assertNotIn("truncate", next_tag)
 
 
 class CourseUnitSidebarMobileTest(CourseMobileSetupMixin, TestCase):

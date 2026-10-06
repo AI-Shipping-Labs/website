@@ -393,16 +393,19 @@ class NextUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def test_next_unit_within_module(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
-        # Incomplete lesson: Complete & Next saves completion, then navigates.
+        # Issue #1793: the footer next action is a plain link labelled
+        # with the destination; completion is the separate toggle above.
         self.assertContains(
-            response, 'data-navigate-url="/courses/test-course/module-1/lesson-2"',
+            response, 'data-testid="bottom-next-btn"',
         )
+        self.assertContains(response, '<span class="min-w-0">Next: Lesson 2</span>')
+        self.assertNotContains(response, 'data-completion-and-navigate')
 
     def test_next_unit_across_module_boundary(self):
         response = self.client.get('/courses/test-course/module-1/preview-lesson')
         # After the last unit in module 1 (sort_order 3), next is module 2 unit 1
         self.assertContains(
-            response, 'data-navigate-url="/courses/test-course/module-2/advanced-lesson"',
+            response, '<span class="min-w-0">Next: Advanced Lesson</span>',
         )
 
     def test_no_next_unit_on_last_unit(self):
@@ -758,8 +761,10 @@ class PrevUnitButtonTest(CourseUnitSetupMixin, TestCase):
 
     def test_next_button_still_works(self):
         response = self.client.get('/courses/test-course/module-1/lesson-1')
+        # Issue #1793: Next is a plain anchor to the destination.
         self.assertContains(
-            response, f'data-navigate-url="{self.unit2.get_absolute_url()}"',
+            response,
+            f'<a href="{self.unit2.get_absolute_url()}"',
         )
 
     def test_single_unit_course_no_nav(self):

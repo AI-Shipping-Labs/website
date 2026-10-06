@@ -252,12 +252,16 @@ class TestScenario1PremiumMemberWorksThrough:
         assert "Task 1" in body
         assert "Build a simple agent" in body
 
-        # Step 3: Complete & Next saves this lesson and opens Unit 2.
+        # Step 3: Mark this lesson complete, then follow the footer Next
+        # link to Unit 2 (issue #1793: completion never navigates).
         from playwright.sync_api import expect
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        expect(complete_next).to_be_visible()
-        expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        expect(toggle).to_be_visible()
+        expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        expect(toggle).to_contain_text("Completed", timeout=5000)
+        next_link = page.locator('[data-testid="bottom-next-btn"]')
+        next_link.click()
         page.wait_for_url("**/courses/advanced-ai-patterns/module-1/unit-2-deep-dive")
 
         # Verify we are on Unit 2
@@ -668,21 +672,24 @@ class TestScenario7ProgressBar:
         progress = page.get_by_test_id("module-progress-count")
         pw_expect(progress).to_have_text("0 of 3 complete")
 
-        # Step 2: Complete Unit 1
+        # Step 2: Complete Unit 1, then follow the footer Next link.
         page.goto(
             f"{django_server}/courses/progress-course/module-1/p-unit-1",
             wait_until="domcontentloaded",
         )
 
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        pw_expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        pw_expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        pw_expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url("**/courses/progress-course/module-1/p-unit-2")
 
         # Step 3: Complete Unit 2 and advance to Unit 3.
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        pw_expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        toggle.click()
+        pw_expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url("**/courses/progress-course/module-1/p-unit-3")
 
         # Step 4: The module home shows the updated progress
@@ -733,15 +740,15 @@ class TestScenario8LastUnitNoNext:
         )
         body = page.content()
 
-        # "Next" button is visible pointing to the second unit
-        # "Complete & Next" leads to the second unit
-        next_btn = page.get_by_test_id("reader-bottom-nav").get_by_role(
-            "button", name="Complete & Next"
+        # "Next" link is visible pointing to the second unit
+        # (issue #1793: completion is the separate toggle above it).
+        next_link = page.get_by_test_id("reader-bottom-nav").get_by_role(
+            "link", name="Next: Last Unit"
         )
-        assert next_btn.count() == 1
+        assert next_link.count() == 1
 
-        # Step 2: Click it (saves completion, then navigates)
-        next_btn.click()
+        # Step 2: Click it (no completion side effect on this page)
+        next_link.click()
         page.wait_for_url("**/courses/last-unit-course/module-1/last-unit")
 
         # Verify URL is the second (last) unit

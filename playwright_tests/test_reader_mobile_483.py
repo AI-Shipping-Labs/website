@@ -4,9 +4,9 @@ Covers:
 - Course detail syllabus on mobile (390x844): module summary tap target
   is at least 44px, padding is tighter than the desktop pattern, and
   no "0 lessons" text appears anywhere on the page.
-- Course unit reader bottom navigation on mobile: the mark-complete
-  button renders as a stand-alone full-width row above the prev/next
-  pair (it is no longer stranded between them). Click flips the
+- Course unit reader bottom navigation on mobile: the completion
+  toggle renders as a stand-alone full-width row above the prev/next
+  pair (issue #1793: one control, no Complete & Next). Click flips the
   state to "Completed" and a reload preserves it.
 - Workshop tutorial reader bottom navigation on mobile: same layout
   as the course unit reader (parity).
@@ -228,8 +228,9 @@ class TestCourseSyllabusMobileSpacing:
 
 @pytest.mark.django_db(transaction=True)
 class TestCourseUnitReaderMobileCompletionPlacement:
-    """The mark-complete button on mobile sits in a stand-alone row
-    above prev/next, and clicking it flips the state to Completed."""
+    """The single completion toggle sits on its own row above the
+    prev/next pair, and clicking it flips the state to Completed
+    (issue #1793: one control, no Complete & Next)."""
 
     def _setup(self):
         _clear_courses()
@@ -257,47 +258,38 @@ class TestCourseUnitReaderMobileCompletionPlacement:
         ctx = _mobile_context(browser, "bn-483@test.com")
         page = ctx.new_page()
         try:
-            # The last unit has no Next, so the completion toggle renders
-            # instead of Complete & Next.
+            # Every authenticated lesson renders the toggle — including
+            # this last unit (previously the only one that did).
             page.goto(
                 f"{django_server}{unit2.get_absolute_url()}",
                 wait_until="domcontentloaded",
             )
 
-            # The stand-alone wrapper exists and is visible (lg:hidden
-            # is "show below 1024px"). Bottom of the page.
-            mobile_wrap = page.locator(
-                '[data-testid="reader-bottom-completion-mobile"]',
+            # Exactly one completion control exists and is visible.
+            toggles = page.locator("button[data-completion-toggle]")
+            assert toggles.count() == 1
+            completion_wrap = page.locator(
+                '[data-testid="reader-bottom-completion"]',
             )
-            mobile_wrap.wait_for(state="visible")
+            completion_wrap.wait_for(state="visible")
 
-            # The desktop wrapper is in the DOM but hidden by
-            # `hidden lg:block`.
-            desktop_wrap = page.locator(
-                '[data-testid="reader-bottom-completion-desktop"]',
-            )
-            assert desktop_wrap.count() == 1
-            # is_visible() respects display:none.
-            assert not desktop_wrap.is_visible()
-
-            # The mobile button must sit above the Previous / Next bar
+            # The completion row must sit above the Previous / Next bar
             # so the action is not stranded between prev/next.
             page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-            mob_box = mobile_wrap.bounding_box()
+            comp_box = completion_wrap.bounding_box()
             prev_link = page.locator(
                 '[data-testid="bottom-prev-btn"]',
             )
             prev_box = prev_link.bounding_box()
-            assert mob_box is not None
+            assert comp_box is not None
             assert prev_box is not None
-            assert mob_box["y"] < prev_box["y"], (
-                "Mobile mark-complete row must render above the "
-                "Previous link on a 390px viewport."
+            assert comp_box["y"] < prev_box["y"], (
+                "Completion row must render above the Previous link "
+                "on a 390px viewport."
             )
 
-            # Click the mobile button → state flips to Completed.
-            mob_btn = mobile_wrap.locator("button[data-completion-toggle]")
-            mob_btn.click()
+            # Click the toggle → state flips to Completed.
+            toggles.first.click()
             page.wait_for_function(
                 """
                 () => {
@@ -319,12 +311,12 @@ class TestCourseUnitReaderMobileCompletionPlacement:
 
             # Reload — the completion state must persist server-side.
             page.reload(wait_until="domcontentloaded")
-            mob_btn_after = page.locator(
-                '[data-testid="reader-bottom-completion-mobile"] '
+            btn_after = page.locator(
+                '[data-testid="reader-bottom-completion"] '
                 'button[data-completion-toggle]'
             )
-            mob_btn_after.wait_for(state="visible")
-            text = mob_btn_after.text_content() or ""
+            btn_after.wait_for(state="visible")
+            text = btn_after.text_content() or ""
             assert "Completed" in text, (
                 "Completion state did not persist across reload — got "
                 f"button text: {text!r}"
@@ -428,10 +420,10 @@ class TestWorkshopReaderMobileParity:
                 wait_until="domcontentloaded",
             )
 
-            mobile_wrap = page.locator(
-                '[data-testid="reader-bottom-completion-mobile"]',
+            completion_wrap = page.locator(
+                '[data-testid="reader-bottom-completion"]',
             )
-            mobile_wrap.wait_for(state="visible")
+            completion_wrap.wait_for(state="visible")
 
             # Workshop tutorial pages use a different testid for the
             # next link (``page-next-btn`` vs course unit's
@@ -442,12 +434,12 @@ class TestWorkshopReaderMobileParity:
             )
             next_link.wait_for(state="visible")
 
-            mob_box = mobile_wrap.bounding_box()
+            comp_box = completion_wrap.bounding_box()
             next_box = next_link.bounding_box()
-            assert mob_box is not None
+            assert comp_box is not None
             assert next_box is not None
-            assert mob_box["y"] < next_box["y"], (
-                "Workshop tutorial mark-complete row must render "
+            assert comp_box["y"] < next_box["y"], (
+                "Workshop tutorial completion row must render "
                 "above the Next link on mobile."
             )
 
@@ -466,9 +458,9 @@ class TestWorkshopReaderMobileParity:
 
 @pytest.mark.django_db(transaction=True)
 class TestDesktopBottomNavRegression:
-    """The desktop bottom-nav layout still renders the mark-complete
-    button inline (next to prev / next), preserving keyboard tab order
-    and the original visual grouping."""
+    """The desktop footer renders the completion toggle on its own
+    content-width row above the prev/next pair (issue #1793), keeping
+    keyboard tab order: completion → previous → next."""
 
     def _setup(self):
         _clear_courses()
@@ -479,8 +471,6 @@ class TestDesktopBottomNavRegression:
         )
         module = _create_module(course, "Module 1", sort_order=1)
         _create_unit(module, "Unit One", sort_order=1, body="A")
-        # The last unit renders the completion toggle; earlier units
-        # show Complete & Next instead.
         return _create_unit(module, "Unit Two", sort_order=2, body="B")
 
     def test_inline_completion_visible_on_desktop(
@@ -510,18 +500,22 @@ class TestDesktopBottomNavRegression:
                 wait_until="domcontentloaded",
             )
 
-            mobile_wrap = page.locator(
-                '[data-testid="reader-bottom-completion-mobile"]',
+            completion_wrap = page.locator(
+                '[data-testid="reader-bottom-completion"]',
             )
-            assert not mobile_wrap.is_visible(), (
-                "Mobile-only completion row must be display:none "
-                "on a 1280px viewport."
-            )
+            completion_wrap.wait_for(state="visible")
 
-            desktop_wrap = page.locator(
-                '[data-testid="reader-bottom-completion-desktop"]',
-            )
-            desktop_wrap.wait_for(state="visible")
+            toggles = page.locator("button[data-completion-toggle]")
+            assert toggles.count() == 1
+
+            # Completion sits above the pair; on desktop the pair is a
+            # two-track row (Next right of Previous).
+            next_link = page.locator('[data-testid="bottom-next-btn"]')
+            next_link.wait_for(state="visible")
+            comp_box = completion_wrap.bounding_box()
+            next_box = next_link.bounding_box()
+            assert comp_box is not None and next_box is not None
+            assert comp_box["y"] < next_box["y"]
 
             page.screenshot(
                 path=f"{SHOT_DIR}/04-desktop-bottom-nav.png",

@@ -358,11 +358,14 @@ class TestScenario4FreeMemberDay1ToDay2:
         # Homework section visible
         assert "Homework" in body or "homework" in body.lower()
 
-        # Step 3: Complete & Next saves Day 1 and opens Day 2.
+        # Step 3: Mark Day 1 complete, then follow the footer Next link
+        # to Day 2 (issue #1793: completion never navigates).
         from playwright.sync_api import expect
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url("**/courses/aihero/7-day-ai-agents/day-2")
 
         # Lands on Day 2

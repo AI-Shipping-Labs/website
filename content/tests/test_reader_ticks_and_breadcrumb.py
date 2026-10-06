@@ -5,9 +5,11 @@ wherever it is listed, including the currently selected row, in a leaf
 top-level module (the Buildcamp "Course Logistics" shape) and on module
 overview pages whose sidebar lists sibling submodules.
 
-Breadcrumb: no ``Courses`` catalog crumb; the course crumb leads enrolled
-learners to course Home (keeping ``?cohort=``) and everyone else to the
-public landing page.
+Breadcrumb: no ``Courses`` catalog crumb; the crumb starts at the
+personalized course destination labelled ``My learning`` (keeping
+``?cohort=``) for enrolled learners and at the public landing for
+everyone else, then names the parent module for nested units and marks
+the current lesson with ``aria-current="page"`` (issue #1793).
 """
 
 import datetime
@@ -51,7 +53,7 @@ def _row(html, href):
 
 def _breadcrumb(response):
     match = re.search(
-        r'<div\b[^>]*data-reader-breadcrumb[^>]*>.*?</div>',
+        r'<nav\b[^>]*data-reader-breadcrumb[^>]*>.*?</nav>',
         response.content.decode(), re.S,
     )
     assert match, 'Reader breadcrumb is missing'
@@ -176,7 +178,7 @@ class ReaderBreadcrumbCourseCrumbTest(TestCase):
         self._enroll()
         crumb = _breadcrumb(self.client.get(self.unit.get_absolute_url() + '?cohort=4'))
         self.assertIn('href="/courses/crumb-course/home?cohort=4"', crumb)
-        self.assertIn('>Course home</a>', crumb)
+        self.assertIn('>My learning</a>', crumb)
         self.assertNotIn('Crumb course', crumb)
         self.assertNotIn('href="/courses"', crumb)
 
@@ -192,3 +194,70 @@ class ReaderBreadcrumbCourseCrumbTest(TestCase):
         self.assertIn('href="/courses/crumb-course"', crumb)
         self.assertNotIn('/home', crumb)
         self.assertNotIn('href="/courses"', crumb)
+
+
+class ReaderBreadcrumbLandmarkTest(TestCase):
+    """The breadcrumb is a named nav landmark ending in the current
+    lesson/module crumb (issue #1793)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = get_user_model().objects.create_user(
+            email='landmark@example.com', password='pw', email_verified=True,
+        )
+        cls.course = Course.objects.create(
+            title='Landmark course', slug='landmark-course', status='published',
+            required_level=0, reader_navigation_scope='module',
+        )
+        # Leaf top-level module: the short "Course Logistics" shape —
+        # the breadcrumb must be `My learning > current lesson`.
+        cls.logistics = Module.objects.create(
+            course=cls.course, title='Logistics', slug='logistics', sort_order=0,
+        )
+        cls.logistics_unit = Unit.objects.create(
+            module=cls.logistics, title='Communication', slug='communication',
+            sort_order=1,
+        )
+        # Nested unit: a meaningful parent-module crumb sits between.
+        cls.week1 = Module.objects.create(
+            course=cls.course, title='Week 1', slug='week-1', sort_order=1,
+        )
+        cls.topic = Module.objects.create(
+            course=cls.course, parent=cls.week1, title='Foundations',
+            slug='foundations', sort_order=1,
+        )
+        cls.nested_unit = Unit.objects.create(
+            module=cls.topic, title='Capstone', slug='capstone', sort_order=1,
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
+    def test_breadcrumb_is_named_nav_landmark(self):
+        response = self.client.get(self.logistics_unit.get_absolute_url())
+        self.assertContains(response, '<nav class="mb-2')
+        self.assertContains(response, 'aria-label="Breadcrumb"')
+
+    def test_leaf_unit_shows_my_learning_then_current_lesson(self):
+        crumb = _breadcrumb(self.client.get(self.logistics_unit.get_absolute_url()))
+        self.assertIn('>My learning</a>', crumb)
+        self.assertNotIn('breadcrumb-parent-module', crumb)
+        self.assertIn('aria-current="page"', crumb)
+        self.assertIn('>Communication</span>', crumb)
+        # No catalog crumb and no course-title crumb.
+        self.assertNotIn('>Courses<', crumb)
+        self.assertNotIn('Landmark course', crumb)
+
+    def test_nested_unit_shows_parent_module_then_current_lesson(self):
+        crumb = _breadcrumb(self.client.get(self.nested_unit.get_absolute_url()))
+        self.assertIn('data-testid="breadcrumb-parent-module"', crumb)
+        self.assertIn('>Week 1</a>', crumb)
+        self.assertIn('aria-current="page"', crumb)
+        self.assertIn('>Capstone</span>', crumb)
+
+    def test_module_overview_marks_current_module(self):
+        crumb = _breadcrumb(self.client.get('/courses/landmark-course/week-1'))
+        self.assertIn('>My learning</a>', crumb)
+        self.assertIn('aria-current="page"', crumb)
+        self.assertIn('data-testid="breadcrumb-current-module"', crumb)
+        self.assertIn('>Week 1</span>', crumb)

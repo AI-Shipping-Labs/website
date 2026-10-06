@@ -77,8 +77,10 @@ def openapi_json(request):
 def docs_page(request):
     """Render the Swagger UI page at ``/api/docs``.
 
-    Pulls swagger-ui-dist from a pinned CDN URL; the page itself is a
-    small wrapper that points the SwaggerUIBundle at our ``/api/openapi.json``
-    endpoint above.
+    Serves the vendored swagger-ui-dist 5.17.14 assets from
+    ``static/vendor/swagger-ui-dist/`` (issue #1906, same remedy as
+    #1846 for the member docs); the page itself is a small wrapper that
+    points the SwaggerUIBundle at our ``/api/openapi.json`` endpoint
+    above.
     """
     return render(request, "api/docs.html")

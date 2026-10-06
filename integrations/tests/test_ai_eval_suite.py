@@ -32,12 +32,43 @@ from django.test import TestCase
 
 import integrations.services.ai_eval as _ai_eval
 from integrations.services.ai_eval import dataset, judge, metrics
-from integrations.services.ai_eval.mock_llm import patch_llm
+from integrations.services.ai_eval.mock_llm import mock_complete, patch_llm
+from integrations.services.ai_eval.trace import FileTraceSink
+from integrations.services.llm import LLMResult
 
 FIXTURES = Path(_ai_eval.__file__).resolve().parent / 'fixtures'
 LABELS = Path(_ai_eval.__file__).resolve().parent / 'labels'
 ONB_DATASET = FIXTURES / 'onboarding' / 'dataset'
 FB_DATASET = FIXTURES / 'feedback' / 'dataset'
+
+# Counters a live-shaped provider result would carry (issue #1841).
+LIVE_COUNTERS = {
+    'input_tokens': 11,
+    'output_tokens': 7,
+    'cache_read_tokens': 3,
+    'cache_write_tokens': 2,
+}
+
+
+class CountingLiveBackend:
+    """Live-shaped backend: schema-valid canned output + token counters.
+
+    Delegates the structured output to the #809 mock stub (so the
+    callables' and the judge's Pydantic validation pass) and layers the
+    provider's per-call token counters on top, exactly how a real
+    ``--live`` ``LLMResult`` looks.
+    """
+
+    name = 'anthropic'
+
+    def __init__(self, **counters):
+        self.counters = counters
+
+    def complete(self, messages, **kwargs):
+        result = mock_complete(messages, **kwargs)
+        for field, value in self.counters.items():
+            setattr(result, field, value)
+        return result
 
 
 def _tmp():
@@ -266,11 +297,63 @@ class RunAiEvalModeTest(TestCase):
             report['run_metadata']['judge_prompt_version'],
             judge.JUDGE_PROMPT_VERSION,
         )
-        # Cost is "usage unavailable" defensively (no usage on LLMResult).
+        # Cost totals are deliberately null in mock mode (the stub LLMResult
+        # carries no counters -- absence, not a zero, #1841).
         self.assertIsNone(report['cost']['callable_token_usage'])
         self.assertIsNone(report['cost']['judge_token_usage'])
-        # Printed table surfaces % good.
+        # With totals null the note explains the absence (mock mode).
+        self.assertIn('usage unavailable', report['cost']['note'])
+        # Printed table surfaces % good and keeps the usage-unavailable
+        # fallback only because usage is genuinely absent here.
         self.assertIn('% good', stdout.getvalue())
+        self.assertIn('usage unavailable', stdout.getvalue())
+
+    def test_eval_sums_counters_and_pins_judge_usage(self):
+        # Live-shaped backend carrying per-call counters: the report sums
+        # each key separately across scenarios for BOTH the callable and
+        # the judge, and per-scenario judge usage comes from the same
+        # shared extraction as the callable trace (#1841).
+        out = _tmp()
+        stdout = StringIO()
+        backend = CountingLiveBackend(**LIVE_COUNTERS)
+        with mock.patch(
+            'integrations.services.llm.is_enabled', return_value=True,
+        ), mock.patch(
+            'integrations.services.llm.service.get_backend',
+            return_value=backend,
+        ):
+            call_command(
+                'run_ai', 'feedback', '--eval', '--live',
+                '--suite', str(FB_DATASET), '--out', str(out),
+                stdout=stdout,
+            )
+        report = json.loads((out / 'eval_report.json').read_text())
+        n = report['scenario_count']
+        self.assertGreater(n, 0)
+        expected_totals = {key: value * n for key, value in LIVE_COUNTERS.items()}
+        self.assertEqual(report['cost']['callable_token_usage'], expected_totals)
+        self.assertEqual(report['cost']['judge_token_usage'], expected_totals)
+        self.assertNotIn('total_tokens', expected_totals)
+        # Totals exist, so no usage-unavailable note.
+        self.assertIsNone(report['cost']['note'])
+        # Every scenario's trace carries the per-call counters, and the
+        # judge usage is captured per scenario via the shared extraction.
+        for scenario in report['scenarios']:
+            self.assertEqual(scenario['callable_token_usage'], LIVE_COUNTERS)
+            self.assertEqual(scenario['judge_token_usage'], LIVE_COUNTERS)
+        # The per-fixture trace.json carries the same dict.
+        first = report['scenarios'][0]['id']
+        trace = json.loads((out / first / 'trace.json').read_text())
+        self.assertEqual(trace['token_usage'], LIVE_COUNTERS)
+        # The stdout Cost: line prints the summed totals (present side of
+        # #1841); the usage-unavailable fallback must NOT appear when
+        # usage exists.
+        totals = ' '.join(
+            f'{key}={value * n}' for key, value in LIVE_COUNTERS.items()
+        )
+        printed = stdout.getvalue()
+        self.assertIn(f'Cost: callable={totals}', printed)
+        self.assertNotIn('usage unavailable', printed)
 
     def test_eval_writes_per_fixture_artifacts(self):
         out = _tmp()
@@ -307,6 +390,48 @@ class RunAiEvalModeTest(TestCase):
                     '--suite', str(FB_DATASET), stdout=StringIO(),
                 )
         self.assertIn('LLM not configured', str(ctx.exception))
+
+
+class FileTraceSinkTokenUsageTest(TestCase):
+    """The shared extraction: per-key provider counters or deliberate None (#1841)."""
+
+    def test_all_four_counters_carry_all_four_keys(self):
+        result = LLMResult(
+            text='ok', input_tokens=11, output_tokens=7,
+            cache_read_tokens=3, cache_write_tokens=2,
+        )
+        self.assertEqual(
+            FileTraceSink._extract_token_usage(result),
+            {
+                'input_tokens': 11,
+                'output_tokens': 7,
+                'cache_read_tokens': 3,
+                'cache_write_tokens': 2,
+            },
+        )
+
+    def test_partial_counters_drop_none_keys_and_never_add_total(self):
+        # Cache counters unset (no cached traffic): only the present keys
+        # are recorded, and there is no computed total_tokens (input_tokens
+        # excludes cache tokens, so a sum would be misleading).
+        result = LLMResult(text='ok', input_tokens=11, output_tokens=7)
+        usage = FileTraceSink._extract_token_usage(result)
+        self.assertEqual(usage, {'input_tokens': 11, 'output_tokens': 7})
+        self.assertNotIn('total_tokens', usage)
+
+    def test_absent_counters_stay_none_without_raising(self):
+        # Mock-backend-shaped result: every counter at None.
+        self.assertIsNone(FileTraceSink._extract_token_usage(LLMResult(text='ok')))
+        # An object without the attributes at all must not crash either.
+        self.assertIsNone(FileTraceSink._extract_token_usage(object()))
+
+    def test_zero_is_a_value_not_an_absence(self):
+        # A provider may legitimately report 0 for a key; 0 is kept.
+        result = LLMResult(text='ok', input_tokens=0, output_tokens=5)
+        self.assertEqual(
+            FileTraceSink._extract_token_usage(result),
+            {'input_tokens': 0, 'output_tokens': 5},
+        )
 
 
 class RunAiAlignModeTest(TestCase):

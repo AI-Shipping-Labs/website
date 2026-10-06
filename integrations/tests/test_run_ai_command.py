@@ -21,12 +21,42 @@ from django.core.management.base import CommandError
 from django.test import TestCase
 
 import integrations.services.ai_eval as _ai_eval
+from integrations.services.ai_eval.mock_llm import mock_complete
 
 FIXTURES_DIR = Path(_ai_eval.__file__).resolve().parent / 'fixtures'
 FEEDBACK_FIXTURE = FIXTURES_DIR / 'feedback' / 'sprint_basic.json'
 ONBOARDING_FIXTURE = FIXTURES_DIR / 'onboarding' / 'mid_conversation.yaml'
 
 _SECRET_KEY = 'sk-test-SECRET-KEY-DO-NOT-LEAK-12345'
+
+# Counters a live-shaped provider result would carry (issue #1841).
+LIVE_COUNTERS = {
+    'input_tokens': 11,
+    'output_tokens': 7,
+    'cache_read_tokens': 3,
+    'cache_write_tokens': 2,
+}
+
+
+class CountingLiveBackend:
+    """Live-shaped backend: schema-valid canned output + token counters.
+
+    Delegates the structured output to the #809 mock stub (so the
+    callables' Pydantic validation passes) and layers the provider's
+    per-call token counters on top, exactly how a real ``--live``
+    ``LLMResult`` looks.
+    """
+
+    name = 'anthropic'
+
+    def __init__(self, **counters):
+        self.counters = counters
+
+    def complete(self, messages, **kwargs):
+        result = mock_complete(messages, **kwargs)
+        for field, value in self.counters.items():
+            setattr(result, field, value)
+        return result
 
 
 def _load_trace(out_dir):
@@ -74,14 +104,18 @@ class RunAiMockRunTest(TestCase):
         self.assertIsNotNone(trace['parsed_output'])
 
     def test_token_usage_is_null_when_result_lacks_usage(self):
-        # The #799 LLMResult exposes no usage; the sink records null, not
-        # an error.
+        # The mock backend sets no token counters on its LLMResult; the
+        # shared extraction records a deliberate null (absence), not a
+        # crash and not a misleading zero (#1841).
         out = Path(self._out())
         call_command(
             'run_ai', 'feedback', '--input', str(FEEDBACK_FIXTURE),
             '--out', str(out), stdout=StringIO(),
         )
-        self.assertIsNone(_load_trace(out)['token_usage'])
+        trace = _load_trace(out)
+        self.assertIsNone(trace['token_usage'])
+        # The trace still serializes fully despite the absent usage.
+        self.assertIsNotNone(trace['parsed_output'])
 
     def _out(self):
         import tempfile
@@ -135,6 +169,30 @@ class RunAiLiveGatingTest(TestCase):
                 '--mock', '--live', stdout=StringIO(),
             )
         self.assertIn('mutually exclusive', str(ctx.exception))
+
+
+class RunAiLiveTokenUsageTest(TestCase):
+    """--live against a counter-carrying result records per-key usage (#1841)."""
+
+    def test_live_result_counters_land_in_trace(self):
+        # A --live run against a live-shaped result carrying the provider's
+        # per-call counters writes a trace.json whose token_usage holds the
+        # four-counter dict.
+        import tempfile
+
+        out = Path(tempfile.mkdtemp(prefix='ai_eval_test_'))
+        backend = CountingLiveBackend(**LIVE_COUNTERS)
+        with mock.patch(
+            'integrations.services.llm.is_enabled', return_value=True,
+        ), mock.patch(
+            'integrations.services.llm.service.get_backend',
+            return_value=backend,
+        ):
+            call_command(
+                'run_ai', 'feedback', '--input', str(FEEDBACK_FIXTURE),
+                '--live', '--out', str(out), stdout=StringIO(),
+            )
+        self.assertEqual(_load_trace(out)['token_usage'], LIVE_COUNTERS)
 
 
 class RunAiErrorPathTest(TestCase):

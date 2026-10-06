@@ -7,11 +7,13 @@ callables' trace contracts -- ``synthesize_feedback`` (#805) and
 sink with no callable-specific branching captures either run.
 
 The sink accumulates the hook calls and serializes one ``trace.json`` per
-run via :meth:`to_dict` / :meth:`write`. The #799 ``LLMResult`` exposes
-``.text`` / ``.tool_input`` / ``.tool_name`` only -- token usage and the
-raw vendor response are not on it today, so the sink reads usage
-defensively (``getattr``) and records ``null`` when absent rather than
-crashing.
+run via :meth:`to_dict` / :meth:`write`. The #799 ``LLMResult`` carries
+the provider's per-call token counters (``input_tokens``,
+``output_tokens``, ``cache_read_tokens``, ``cache_write_tokens``) when
+the provider reports usage; :meth:`_extract_token_usage` records them as
+a per-key dict and keeps ``token_usage`` ``null`` when the result has no
+counters at all (mock mode, counter-less gateway) rather than crashing
+or inventing zeros.
 
 The API key never appears in any captured field: the sink only stores the
 rendered request (system/messages/tool), the parsed result, latency, and a
@@ -19,6 +21,18 @@ type + safe message for errors -- none of which carry credentials.
 """
 
 import json
+
+# The #799 ``LLMResult`` per-call token counter fields. Raw provider
+# values: already measured per completion, never summed across calls, and
+# NOT inclusive of each other (Anthropic ``input_tokens`` excludes cache
+# read/write tokens), so they are recorded per key with no computed
+# ``total_tokens`` -- a naive sum would double-count cache tokens.
+_TOKEN_FIELDS = (
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'cache_write_tokens',
+)
 
 
 class FileTraceSink:
@@ -74,27 +88,23 @@ class FileTraceSink:
 
     @staticmethod
     def _extract_token_usage(result):
-        """Read token usage off the result if present, else ``None``.
+        """Collect the result's per-call token counters, ``None`` if none.
 
-        The #799 ``LLMResult`` does not carry usage today; this stays
-        ``None`` rather than raising so the sink never crashes on its
-        absence. If a future ``LLMResult`` grows a ``usage`` attribute it
-        is captured automatically.
+        Reads the #799 ``LLMResult`` counter fields directly (defensively,
+        so a counter-less stub without the attributes stays ``None``).
+        Returns a dict holding ONLY the keys whose value is not ``None``;
+        when no counter is present (the mock backend, a counter-less
+        Anthropic-compatible gateway) the usage stays ``None`` --
+        deliberate absence, not a crash, not a misleading zero. This is
+        the ONE shared extraction: the judge path
+        (:func:`eval_runner._extract_usage`) delegates here too.
         """
-        usage = getattr(result, 'usage', None)
-        if usage is None:
-            return None
-        # Normalise common shapes to a plain dict where possible.
-        if isinstance(usage, dict):
-            return usage
-        for attr in ('model_dump', 'to_dict', '_asdict'):
-            fn = getattr(usage, attr, None)
-            if callable(fn):
-                try:
-                    return fn()
-                except Exception:
-                    return None
-        return None
+        usage = {
+            field: value
+            for field in _TOKEN_FIELDS
+            if (value := getattr(result, field, None)) is not None
+        }
+        return usage or None
 
     def to_dict(self):
         """Return the full captured trace as a JSON-serializable dict."""

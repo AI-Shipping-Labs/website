@@ -555,11 +555,14 @@ class TestScenario3FreeUserFreeCourseProgress:
         # Unit page loads with lesson text
         assert "Variables" in body
 
-        # A lesson with a successor completes and advances together.
+        # A lesson with a successor: mark it complete, then follow the
+        # footer Next link (issue #1793: completion never navigates).
         from playwright.sync_api import expect
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url("**/courses/python-basics/fundamentals/functions")
 
         # Step 4: Navigate back to course detail
@@ -685,11 +688,14 @@ class TestScenario4MainMemberPaidCourseProgress:
         assert "Docker Basics" in sidebar_text
         assert "Kubernetes Setup" in sidebar_text
 
-        # Step 3: Complete & Next saves Docker Basics and opens Kubernetes.
+        # Step 3: Mark Docker Basics complete, then follow the footer
+        # Next link to Kubernetes (issue #1793).
         from playwright.sync_api import expect as pw_expect
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        pw_expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        pw_expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        pw_expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url("**/courses/advanced-mlops/deployment/kubernetes-setup")
 
         body = page.content()

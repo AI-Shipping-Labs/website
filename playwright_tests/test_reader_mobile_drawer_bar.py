@@ -1,9 +1,11 @@
 """Browser coverage for the phone reader drawer and sticky bottom bar.
 
 Mobile polish, Group B. The drawer is a modal overlay on every reader,
-including workshop tutorials. The Previous / primary bar sticks to the
-bottom of the viewport while the reader is mid-lesson. Both behaviours
-depend on layout, scrolling, and JavaScript, so they are tested in a browser.
+including workshop tutorials. The previous/next pair sticks to the
+bottom of the viewport while the reader is mid-lesson (issue #1793:
+stacked vertically on phones, with the completion toggle in the flow
+above the bar). Both behaviours depend on layout, scrolling, and
+JavaScript, so they are tested in a browser.
 """
 
 import os
@@ -115,14 +117,15 @@ def test_sticky_bottom_nav_visible_mid_lesson(django_server, browser):
     )
 
     bar = page.get_by_test_id("reader-bottom-nav-bar")
-    previous = bar.get_by_role("link", name="Previous")
-    primary = bar.get_by_role("button", name="Complete & Next")
+    previous = bar.get_by_test_id("bottom-prev-btn")
+    next_link = bar.get_by_test_id("bottom-next-btn")
     expect(previous).to_be_in_viewport()
-    expect(primary).to_be_in_viewport()
+    expect(next_link).to_be_in_viewport()
     bar_box = bar.bounding_box()
     assert abs(bar_box["y"] + bar_box["height"] - PHONE["height"]) <= 1
-    # The primary action sits on the thumb side, right of Previous.
-    assert primary.bounding_box()["x"] > previous.bounding_box()["x"]
+    # The pair stacks vertically on phones (issue #1793): Next sits
+    # below Previous, each spanning the article width.
+    assert next_link.bounding_box()["y"] > previous.bounding_box()["y"]
 
     page.evaluate("window.scrollTo(0, document.documentElement.scrollHeight)")
     # At the end of the lesson the bar settles above Q&A instead of covering it.
@@ -160,7 +163,7 @@ def test_first_visit_consent_panel_keeps_sticky_bar_reachable(
     panel = page.get_by_test_id("analytics-consent-panel")
     bar = page.get_by_test_id("reader-bottom-nav-bar")
     expect(panel).to_be_visible()
-    expect(bar.get_by_role("link", name="Previous")).to_be_in_viewport()
+    expect(bar.get_by_test_id("bottom-prev-btn")).to_be_in_viewport()
     # First visit: the bar sticks above the consent panel, not under it.
     bar_box = bar.bounding_box()
     assert bar_box["y"] + bar_box["height"] <= panel.bounding_box()["y"]
@@ -171,7 +174,7 @@ def test_first_visit_consent_panel_keeps_sticky_bar_reachable(
     _scroll_mid_lesson(page)
 
     # With a saved choice the bar returns to the viewport edge.
-    expect(bar.get_by_role("link", name="Previous")).to_be_in_viewport()
+    expect(bar.get_by_test_id("bottom-prev-btn")).to_be_in_viewport()
     bar_box = bar.bounding_box()
     assert abs(bar_box["y"] + bar_box["height"] - PHONE["height"]) <= 1
     context.close()

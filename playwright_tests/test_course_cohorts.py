@@ -739,11 +739,14 @@ class TestScenario8NonCohortMemberAccessesDripUnit:
         assert "Homework" in body
         assert "Do it now" in body
 
-        # Then: Complete & Next saves this lesson and opens the next one.
+        # Then: Mark this lesson complete, then follow the footer Next
+        # link to the second unit (issue #1793: completion never navigates).
         from playwright.sync_api import expect as pw_expect
-        complete_next = page.locator('[data-testid="bottom-next-btn"]')
-        pw_expect(complete_next).to_contain_text("Complete & Next")
-        complete_next.click()
+        toggle = page.locator('[data-completion-toggle]')
+        pw_expect(toggle).to_contain_text("Mark as completed")
+        toggle.click()
+        pw_expect(toggle).to_contain_text("Completed", timeout=5000)
+        page.locator('[data-testid="bottom-next-btn"]').click()
         page.wait_for_url(
             "**/courses/drip-no-cohort-course/module-1/second-unit",
         )

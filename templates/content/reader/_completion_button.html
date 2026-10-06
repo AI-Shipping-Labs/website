@@ -1,25 +1,24 @@
+{% load accounts_extras %}
 {% comment %}
-  Mark-complete / Completed toggle button (issue #483).
+  Mark-complete / Completed toggle button (issues #483, #1793).
 
-  Two visual variants share the same JS handler ([data-completion-toggle]):
-  - default — inline, used in the `lg+` bottom nav row.
-  - full-width (completion_button_full_width=True) — used as a stand-alone
-    `<lg` row above the sticky prev/next bar so the mark-complete action is
-    easy to find at the bottom of the reading flow.
+  One instance renders per reader footer, on the completion row above
+  the previous/next pair. It is a two-state toggle, not a CTA: the
+  chrome comes from `{% button_classes 'secondary' size='md' %}` (md
+  geometry, secondary surface, full focus ring) plus `w-full lg:w-auto`
+  so it fills the article width on phones and sits content-width and
+  left-aligned on desktop. The completed state appends the documented
+  `!`-prefixed green success overrides (the same mechanism the amber
+  verification banner uses); `_scripts.html` toggles exactly that class
+  cluster so the server-rendered and JS-swapped states agree.
 
-  It is a two-state toggle, not a CTA, so it keeps its own class string:
-  the `{% button_classes %}` md geometry (`rounded-md px-4 py-2 text-sm
-  min-h-[44px]`) with the secondary surface when open and the green success
-  tone when completed. `_scripts.html` swaps the same two clusters.
-
-  The optional completion_button_id_suffix lets the same button render
-  twice in the DOM (one mobile-visible, one desktop-visible) without
-  duplicating the static `id` attribute.
+  Green is reserved for the completed state; the incomplete toggle is
+  never primary.
 {% endcomment %}
 {% if user_authenticated %}
 <button
   type="button"
-  id="{{ completion_button_id }}{{ completion_button_id_suffix|default:'' }}"
+  id="{{ completion_button_id }}"
   data-completion-toggle
   data-completion-url="{{ completion_url }}"
   {% if completion_kind == "course" %}
@@ -29,8 +28,8 @@
   data-page-slug="{{ page.slug }}"
   data-workshop-slug="{{ workshop.slug }}"
   {% endif %}
-  {% if completion_button_testid %}data-testid="{{ completion_button_testid }}{{ completion_button_id_suffix|default:'' }}"{% endif %}
-  class="{% if completion_button_full_width %}flex w-full{% else %}inline-flex{% endif %} items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors flex-shrink-0 min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_completed %}border-green-500/30 bg-green-500/10 text-green-800 dark:text-green-400 hover:bg-green-500/20{% else %}border-border bg-transparent text-foreground hover:bg-secondary{% endif %}"
+  {% if completion_button_testid %}data-testid="{{ completion_button_testid }}"{% endif %}
+  class="{% button_classes 'secondary' size='md' extra='w-full lg:w-auto' %}{% if is_completed %} !border-green-500/30 !bg-green-500/10 !text-green-800 dark:!text-green-400 hover:!bg-green-500/20{% endif %}"
 >
   {% if is_completed %}
   <i data-lucide="check-circle-2" class="h-4 w-4"></i>

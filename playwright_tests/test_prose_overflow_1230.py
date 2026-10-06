@@ -278,11 +278,11 @@ def test_mobile_course_table_scrolls_then_reader_continues(django_server, browse
         _assert_ordinary_prose_wraps(prose)
         _assert_document_fits(page)
 
-        # A lesson with a successor uses Complete & Next, which saves
-        # completion and then opens that lesson.
+        # A lesson with a successor: the footer Next link opens that
+        # lesson (issue #1793: the completion toggle never navigates).
         next_link = page.get_by_test_id("bottom-next-btn")
         expect(next_link).to_be_visible()
-        expect(next_link).to_contain_text("Complete & Next")
+        expect(next_link).to_contain_text("Next:")
         next_link.click()
         expect(page.get_by_role("heading", name="Continue Building")).to_be_visible()
         assert page.url.endswith(second.get_absolute_url())

@@ -1,21 +1,30 @@
 {% load accounts_extras %}
 {% comment %}
-  Reader bottom navigation (issues #483, mobile polish Group B).
+  Reader bottom navigation (issues #483, #1793).
 
-  Below `lg` the Previous / primary pair is a compact bar that sticks to the
-  bottom of the viewport while the reader is anywhere in the body, so moving
-  on never needs a scroll to the end. The wrapper uses `max-lg:contents` so
-  the bar's sticky containing block is the whole reading column
-  (`#content-sidebar-main`), not this short wrapper. The bar settles into
-  its natural slot above Q&A, so it never covers the last paragraph or the
-  discussion. Safe-area padding lives in `content/reader/_styles.html`.
-  While the first-visit analytics consent panel is open, the bar sticks
-  above it via `--analytics-consent-clearance` (published by
+  The footer reads as two rows: a single secondary completion toggle,
+  then a balanced previous/next pair. One completion control renders in
+  the DOM; the two-state toggle markup lives in
+  `_completion_button.html` and its JS state renderer in `_scripts.html`.
+
+  Below `lg` the previous/next pair is a compact bar that sticks to the
+  bottom of the viewport while the reader is anywhere in the body, so
+  moving on never needs a scroll to the end. The wrapper uses
+  `max-lg:contents` so the bar's sticky containing block is the whole
+  reading column (`#content-sidebar-main`), not this short wrapper. The
+  bar settles into its natural slot above Q&A, so it never covers the
+  last paragraph or the discussion. Safe-area padding lives in
+  `content/reader/_styles.html`. While the first-visit analytics consent
+  panel is open, the bar sticks above it via
+  `--analytics-consent-clearance` (published by
   `includes/analytics_consent.html`, 0px once a choice is saved).
 
-  The stand-alone mark-complete row (workshop pages and the last course
-  unit) stays in the flow above the bar on `<lg`; `lg+` keeps the
-  historical single row: Previous, mark-complete inline, next pushed right.
+  The pair is a grid: one `minmax(0, 1fr)` track per side with a 16px
+  gap, stacking to a single column on phones. Explicit `sm:col-start`
+  placement keeps Next on the right when Previous is missing and
+  Previous on the left when Next is missing, and a missing destination
+  renders no control at all (nothing focusable). Destination titles
+  wrap in `min-w-0` spans instead of ellipsizing.
 {% endcomment %}
 {% if prev_item_url or next_item_url or user_authenticated %}
 <div class="max-lg:contents" data-testid="reader-bottom-nav">
@@ -23,54 +32,30 @@
     {% if homework_stepper %}
     <p class="mb-4 text-sm text-muted-foreground">This marks the course unit complete. Submit answers from Review &amp; submit.</p>
     {% endif %}
-    {% if user_authenticated and completion_kind != "course" or user_authenticated and not next_item_url %}
-    {% comment %}
-      Stand-alone mark-complete row below `lg`. The DOM contains both this
-      and the inline `lg+` placement; the completion-toggle JS attaches to
-      every [data-completion-toggle] so both stay in sync.
-    {% endcomment %}
-    <div class="mb-4 lg:hidden" data-testid="reader-bottom-completion-mobile">
-      {% include "content/reader/_completion_button.html" with completion_button_id_suffix="-mobile" completion_button_full_width=True %}
+    {% if user_authenticated %}
+    <div class="mb-4" data-testid="reader-bottom-completion">
+      {% include "content/reader/_completion_button.html" %}
     </div>
     {% endif %}
   </div>
 
-  <div class="reader-bottom-bar sticky bottom-[var(--analytics-consent-clearance,0px)] z-30 -mx-4 flex items-center gap-3 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur-md sm:-mx-6 sm:px-6 lg:static lg:mx-0 lg:gap-4 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none{% if not prev_item_url and not next_item_url %} max-lg:hidden{% endif %}" data-testid="reader-bottom-nav-bar">
+  <div class="reader-bottom-bar sticky bottom-[var(--analytics-consent-clearance,0px)] z-30 -mx-4 grid gap-4 border-t border-border bg-background/95 px-4 pt-3 backdrop-blur-md sm:-mx-6 sm:grid-cols-2 sm:px-6 lg:static lg:mx-0 lg:border-0 lg:bg-transparent lg:backdrop-blur-none lg:p-0{% if not prev_item_url and not next_item_url %} hidden{% endif %}" data-testid="reader-bottom-nav-bar">
     {% if prev_item_url %}
     <a href="{{ prev_item_url }}"
-       class="{% button_classes 'secondary' extra='min-w-0 flex-none' %}"
+       class="{% button_classes 'secondary' size='md' extra='min-w-0 sm:col-start-1' %}"
        data-testid="{{ bottom_prev_testid }}">
       <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-      <span>Previous</span>
+      <span class="min-w-0">Previous: {{ prev_item_title }}</span>
     </a>
-    {% endif %}
-
-    {# lg+ inline placement of the mark-complete button. #}
-    {% if user_authenticated and completion_kind != "course" or user_authenticated and not next_item_url %}
-    <div class="hidden lg:block" data-testid="reader-bottom-completion-desktop">
-      {% include "content/reader/_completion_button.html" %}
-    </div>
     {% endif %}
 
     {% if next_item_url %}
-    {% if user_authenticated and completion_kind == "course" and not is_completed %}
-    <button type="button"
-       class="{% button_classes 'primary' extra='min-w-0 flex-1 lg:ml-auto lg:flex-none' %}"
-       data-completion-and-navigate
-       data-completion-url="{{ completion_url }}"
-       data-navigate-url="{{ next_item_url }}"
-       data-testid="{{ bottom_next_testid }}">
-      <span>Complete &amp; Next</span>
-      <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
-    </button>
-    {% else %}
     <a href="{{ next_item_url }}"
-       class="{% button_classes 'primary' extra='min-w-0 flex-1 lg:ml-auto lg:flex-none' %}"
+       class="{% button_classes 'primary' size='md' extra='min-w-0 sm:col-start-2' %}"
        data-testid="{{ bottom_next_testid }}">
-      <span>Next</span>
+      <span class="min-w-0">Next: {{ next_item_title }}</span>
       <i data-lucide="arrow-right" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
     </a>
-    {% endif %}
     {% endif %}
   </div>
 </div>

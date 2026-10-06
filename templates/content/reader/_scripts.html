@@ -247,8 +247,7 @@
 
   (function() {
     var buttons = document.querySelectorAll('[data-completion-toggle]');
-    var navigateButtons = document.querySelectorAll('[data-completion-and-navigate]');
-    if (!buttons.length && !navigateButtons.length) return;
+    if (!buttons.length) return;
 
     function getCsrfToken() {
       var cookies = document.cookie.split(';');
@@ -262,23 +261,28 @@
     }
 
     function renderButton(btn, completed) {
+      /* The incomplete surface is the button_classes 'secondary' md
+         output (always on the element). The completed state appends the
+         same bang-prefixed green cluster the template renders
+         server-side, so the initial and toggled states agree (#1793). */
+      var COMPLETED_CLASSES = [
+        '!border-green-500/30', '!bg-green-500/10', '!text-green-800',
+        'dark:!text-green-400', 'hover:!bg-green-500/20',
+      ];
       if (completed) {
-        btn.classList.remove('border-border', 'bg-transparent', 'text-foreground', 'hover:bg-secondary');
-        btn.classList.add('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
+        btn.classList.add.apply(btn.classList, COMPLETED_CLASSES);
         btn.innerHTML = '<i data-lucide="check-circle-2" class="h-4 w-4"></i> Completed';
       } else {
-        btn.classList.remove('border-green-500/30', 'bg-green-500/10', 'text-green-800', 'dark:text-green-400', 'hover:bg-green-500/20');
-        btn.classList.add('border-border', 'bg-transparent', 'text-foreground', 'hover:bg-secondary');
+        btn.classList.remove.apply(btn.classList, COMPLETED_CLASSES);
         btn.innerHTML = '<i data-lucide="circle" class="h-4 w-4"></i> Mark as completed';
       }
       if (typeof lucide !== 'undefined') lucide.createIcons();
     }
 
-    // Issue #483: there are now two completion buttons in the DOM —
-    // the mobile-only stand-alone button and the desktop-inline button.
-    // Both share the same data-completion-url, so a click on either
-    // should re-render every matching button so the mobile and desktop
-    // copies stay visually in sync after a toggle.
+    // Issue #1793: one completion toggle renders per reader footer (the
+    // former mobile/desktop pair is gone, along with Complete & Next —
+    // toggling never navigates). The re-render loop stays so every
+    // matching toggle on the page updates together after a click.
     buttons.forEach(function(btn) {
       btn.addEventListener('click', function() {
         fetch(btn.dataset.completionUrl, {
@@ -297,35 +301,6 @@
             '[data-completion-toggle][data-completion-url="' + url + '"]'
           );
           siblings.forEach(function(sib) { renderButton(sib, completed); });
-        });
-      });
-    });
-
-    navigateButtons.forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        if (btn.disabled) return;
-        btn.disabled = true;
-        var label = btn.querySelector('span');
-        if (label) label.textContent = 'Completing…';
-        fetch(btn.dataset.completionUrl, {
-          method: 'POST',
-          headers: {
-            'X-CSRFToken': getCsrfToken(),
-            'Content-Type': 'application/json',
-          },
-          credentials: 'same-origin',
-        })
-        .then(function(response) {
-          if (!response.ok) throw new Error('Completion request failed');
-          return response.json();
-        })
-        .then(function(data) {
-          if (!data.completed) throw new Error('Unit was not completed');
-          window.location.assign(btn.dataset.navigateUrl);
-        })
-        .catch(function() {
-          btn.disabled = false;
-          if (label) label.textContent = 'Complete & Next';
         });
       });
     });

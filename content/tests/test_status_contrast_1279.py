@@ -3,8 +3,9 @@
 import re
 from pathlib import Path
 
+import pytest
 from django.template import Context, Template
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, tag
 
 from content.models import Project
 from content.templatetags.member_badges import STATUS_TONES, TONE_CLASSES
@@ -234,6 +235,8 @@ class StatusPaletteContractTest(SimpleTestCase):
             self.assertNotIn('extra_class=', source)
             self.assertNotIn('sprint_badge_current.css_class', source)
 
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
     def test_plan_markers_and_reader_runtime_are_accessible_and_synchronized(self):
         marker_recipe = 'bg-green-500/15 text-xs text-green-800 dark:text-green-400'
         checkpoint = _source('templates/plans/_checkpoint_card.html')
@@ -245,15 +248,19 @@ class StatusPaletteContractTest(SimpleTestCase):
 
         button = _source('templates/content/reader/_completion_button.html')
         scripts = _source('templates/content/reader/_scripts.html')
+        # Issue #1793 migrated the toggle to `{% button_classes %}`; the
+        # completed state keeps the same semantic success recipe as
+        # bang-prefixed overrides, synchronized with the JS renderer.
         runtime_classes = (
-            'border-green-500/30', 'bg-green-500/10', 'text-green-800',
-            'dark:text-green-400', 'hover:bg-green-500/20',
+            '!border-green-500/30', '!bg-green-500/10', '!text-green-800',
+            'dark:!text-green-400', 'hover:!bg-green-500/20',
         )
         for class_name in runtime_classes:
             self.assertIn(class_name, button)
-            self.assertEqual(scripts.count(f"'{class_name}'"), 2)
-        self.assertIn('focus-visible:ring-2', button)
-        self.assertIn('focus-visible:ring-offset-background', button)
+            self.assertEqual(scripts.count(f"'{class_name}'"), 1)
+        self.assertIn("button_classes 'secondary' size='md'", button)
+        # The canonical md geometry carries the full focus ring.
+        self.assertNotIn('py-2.5', button)
 
 
 class ExhaustiveStatusSweepTest(SimpleTestCase):

@@ -328,16 +328,15 @@ class TestDrawerReflectsCompletionAfterReload:
                 wait_until="domcontentloaded",
             )
             # Tap mark-complete (button copy: "Mark as completed").
-            # Issue #483 introduced two completion buttons in the DOM:
-            # the mobile-only `*-mobile` variant (visible at <sm) and
-            # the desktop-inline variant (visible at sm+). On Pixel 7
-            # (393px) we click the mobile one.
+            # Issue #1793 collapsed the former mobile/desktop button pair
+            # into one toggle per reader footer, so there is nothing to
+            # disambiguate at 393px any more.
             page.locator(
-                '[data-testid="mark-page-complete-btn-mobile"]',
+                '[data-testid="mark-page-complete-btn"]',
             ).click()
             page.wait_for_function(
                 "document.querySelector("
-                "'[data-testid=\"mark-page-complete-btn-mobile\"]')"
+                "'[data-testid=\"mark-page-complete-btn\"]')"
                 ".textContent.includes('Completed')",
             )
 

@@ -246,11 +246,13 @@ class EligibleUserNoRegressionTest(CourseUnitTeaserSetupMixin, TestCase):
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'FINAL_PARAGRAPH_MARKER')
 
-    def test_renders_complete_and_next_action(self):
-        # A lesson with a next lesson offers Complete & Next, which saves
-        # completion before navigating.
+    def test_renders_footer_next_link_and_completion_toggle(self):
+        # Issue #1793: a lesson with a next lesson renders the plain
+        # Next link plus the separate completion toggle — the combined
+        # Complete & Next control is gone.
         response = self.client.get(self.unit_url)
-        self.assertContains(response, 'data-completion-and-navigate')
+        self.assertContains(response, 'data-testid="bottom-next-btn"')
+        self.assertNotContains(response, 'data-completion-and-navigate')
 
     def test_does_not_render_teaser_markers(self):
         response = self.client.get(self.unit_url)

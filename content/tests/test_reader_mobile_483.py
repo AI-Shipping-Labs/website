@@ -7,15 +7,14 @@ Covers (Django HTML-rendering layer):
   rows; tap-target floor remains 44px (min-h-[44px] survives).
 - Course detail syllabus: zero-count "0 lessons" string is suppressed
   for empty modules and remains correct for non-empty modules.
-- Reader bottom navigation has a stand-alone mobile completion row
-  rendered above the prev/next pair (lg:hidden) AND the desktop
-  inline placement (hidden lg:block) — both wired to the same
-  data-completion-toggle attribute so JS keeps them in sync.
+- Reader bottom navigation renders one completion toggle on the
+  completion row above the prev/next pair — a single DOM control
+  wired to the data-completion-toggle attribute (issue #1793).
 - Course unit and workshop tutorial reader sidebars use the same
   per-row spacing and the same circle/check completion glyph for
   the workshop side (parity with course units).
-- Mark-complete button has min-h-[44px] in both default and
-  full-width variants and uses the same toggle URL contract.
+- Mark-complete button has min-h-[44px] via the button_classes md
+  size and uses the same toggle URL contract.
 
 Behavioural / Playwright-layer assertions (live click, viewport
 sizes, scrolling, sidebar open/close behaviour) are exercised
@@ -157,13 +156,14 @@ class CourseSyllabusZeroCountSuppressionTest(TestCase):
 
 
 class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
-    """Mark-complete is rendered as a stand-alone mobile row above the
-    prev/next pair, plus an inline desktop placement.
+    """One secondary completion toggle renders on the completion row,
+    above the previous/next pair (issue #1793).
 
-    Course lessons with a next lesson use Complete & Next instead, so these
-    placement checks use the last lesson (u2), which has no next lesson.
-    Which placement is visible at which width is owned by the browser tests
-    in ``playwright_tests/test_reader_mobile_483.py``."""
+    Every authenticated course lesson gets the toggle — including
+    lessons with a next lesson, which no longer use the removed
+    Complete & Next combined button. Which placement is visible at
+    which width is owned by the browser tests in
+    ``playwright_tests/test_reader_mobile_483.py``."""
 
     @classmethod
     def setUpTestData(cls):
@@ -195,11 +195,11 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         user.save()
         self.client.login(email="bn@test.com", password="x")
 
-    def test_mobile_and_desktop_buttons_share_completion_url(self):
-        """Both rendered buttons point at the same toggle endpoint so
-        the JS handler keeps them in sync after a click."""
+    def test_single_completion_toggle_renders_above_next_link(self):
+        """Exactly one completion toggle renders, even on a lesson with
+        a next lesson, and it appears before the footer pair."""
         response = self.client.get(
-            "/courses/bottom-nav-course/m1/u2",
+            "/courses/bottom-nav-course/m1/u1",
         )
         body = response.content.decode()
         # Count *button-attribute* occurrences only (the literal
@@ -208,18 +208,34 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         # attribute name don't inflate the count.
         toggles = body.count('data-completion-toggle\n')
         self.assertEqual(
-            toggles, 2,
-            "Expected 2 completion-toggle button attributes "
-            f"(mobile + desktop) but found {toggles}",
+            toggles, 1,
+            "Expected exactly 1 completion-toggle button attribute "
+            f"but found {toggles}",
         )
+        self.assertLess(
+            body.find('data-testid="reader-bottom-completion"'),
+            body.find('data-testid="bottom-next-btn"'),
+            "Completion row must render above the prev/next pair",
+        )
+
+    def test_lesson_with_next_has_no_complete_and_navigate_button(self):
+        """Toggling completion never navigates: the combined
+        Complete & Next control is gone (issue #1793)."""
+        response = self.client.get(
+            "/courses/bottom-nav-course/m1/u1",
+        )
+        body = response.content.decode()
+        self.assertNotIn("data-completion-and-navigate", body)
+        self.assertNotIn("Complete &amp; Next", body)
+        self.assertIn('data-testid="bottom-next-btn"', body)
 
     def test_completion_button_min_height_44(self):
         response = self.client.get(
             "/courses/bottom-nav-course/m1/u2",
         )
         body = response.content.decode()
-        # Both buttons inherit min-h-[44px] from the include template.
-        # Locate one of them and assert the class fragment is present.
+        # The toggle inherits min-h-[44px] from button_classes md.
+        # Locate the button and assert the class fragment is present.
         idx = body.find('data-completion-toggle')
         self.assertNotEqual(idx, -1)
         window = body[max(0, idx - 100):idx + 800]
@@ -236,28 +252,62 @@ class ReaderBottomNavMobileLayoutTest(TierSetupMixin, TestCase):
         window = body[max(0, idx - 600):idx + 50]
         self.assertIn('min-h-[44px]', window)
 
-    def test_anonymous_user_does_not_render_mobile_completion_row(self):
-        """No completion button → no mobile/desktop wrapper renders.
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_first_lesson_keeps_next_on_the_right_track(self):
+        response = self.client.get(
+            "/courses/bottom-nav-course/m1/u1",
+        )
+        body = response.content.decode()
+        self.assertNotIn('data-testid="bottom-prev-btn"', body)
+        next_idx = body.find('data-testid="bottom-next-btn"')
+        window = body[max(0, next_idx - 600):next_idx]
+        self.assertIn('sm:col-start-2', window)
+
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_last_lesson_keeps_prev_on_the_left_track(self):
+        response = self.client.get(
+            "/courses/bottom-nav-course/m1/u2",
+        )
+        body = response.content.decode()
+        self.assertNotIn('data-testid="bottom-next-btn"', body)
+        prev_idx = body.find('data-testid="bottom-prev-btn"')
+        window = body[max(0, prev_idx - 600):prev_idx]
+        self.assertIn('sm:col-start-1', window)
+
+    @pytest.mark.visual_regression
+    @tag('visual_regression')
+    def test_footer_destination_labels_include_titles(self):
+        """Footer labels carry the destination title and wrap in
+        min-w-0 spans instead of ellipsizing (issue #1793)."""
+        response = self.client.get(
+            "/courses/bottom-nav-course/m1/u1",
+        )
+        body = response.content.decode()
+        next_idx = body.find('data-testid="bottom-next-btn"')
+        next_tag = body[next_idx:body.index("</a>", next_idx)]
+        self.assertIn("<span class=\"min-w-0\">Next: U2</span>", next_tag)
+        self.assertNotIn("truncate", next_tag)
+
+    def test_anonymous_user_does_not_render_completion_row(self):
+        """No completion button → no completion wrapper renders.
 
         The Main-tier course teaser layout for unauthenticated visitors
-        does not include the reader chrome at all, so neither the
-        mobile-only nor the desktop-only completion wrapper appears.
-        Some auth surfaces redirect (302); we just need to assert that
-        the testids never reach the response body.
+        does not include the reader chrome at all, so the completion
+        wrapper never appears. Some auth surfaces redirect (302); we
+        just need to assert that the testid never reaches the body.
         """
         self.client.logout()
         response = self.client.get(
             "/courses/bottom-nav-course/m1/u1",
         )
         # 200 (teaser), 302 (redirect to login), or 403 (forbidden) —
-        # any of these is fine; we only care that the wrappers don't
-        # show up in the body when they do.
+        # any of these is fine; we only care that the wrapper doesn't
+        # show up in the body when it does.
         body = response.content.decode() if response.content else ""
         self.assertNotIn(
-            'data-testid="reader-bottom-completion-mobile"', body,
-        )
-        self.assertNotIn(
-            'data-testid="reader-bottom-completion-desktop"', body,
+            'data-testid="reader-bottom-completion"', body,
         )
 
 
@@ -340,21 +390,26 @@ class WorkshopReaderParityTest(TierSetupMixin, TestCase):
         nav_window = body[nav_idx:nav_idx + 4000]
         self.assertIn('data-lucide="circle"', nav_window)
 
-    def test_workshop_tutorial_renders_mobile_and_desktop_completion(
+    def test_workshop_tutorial_renders_single_completion_toggle(
         self,
     ):
         """Workshop tutorial pages share the bottom-nav include and
-        therefore get the same mobile + desktop completion split."""
+        therefore get the same one completion row above the pair.
+        Page One is the first page: next only, no previous anchor."""
         response = self.client.get(
             "/workshops/parity-ws/p1",
         )
         self.assertContains(
             response,
-            'data-testid="reader-bottom-completion-mobile"',
+            'data-testid="reader-bottom-completion"',
+        )
+        self.assertNotContains(
+            response,
+            'data-testid="page-prev-btn"',
         )
         self.assertContains(
             response,
-            'data-testid="reader-bottom-completion-desktop"',
+            'data-testid="page-next-btn"',
         )
 
 

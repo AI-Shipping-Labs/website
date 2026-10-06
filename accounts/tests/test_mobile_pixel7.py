@@ -10,6 +10,8 @@ Verifies that:
 
 import re
 
+from django.template.loader import get_template
+from django.template.loader_tags import IncludeNode
 from django.test import TestCase, tag
 
 
@@ -132,19 +134,44 @@ class CourseUnitTouchTargetTest(TestCase):
     """Course unit rows have min-h-[44px] for touch targets."""
 
     def test_unit_row_has_min_height(self):
-        """The full-row lesson link uses min-h-[44px].
+        """Every unit row link keeps min-h-[44px].
 
         Issue #1674 extracted the unit row markup out of course_detail.html
         into content/_syllabus_unit_row.html so the three-level accordion can
         reuse it at every module-nesting depth. Issue #1794 moved the row
-        anchor itself into content/_syllabus_unit_row_anchor.html so the
-        ordinary row and the expandable homework group render from one owner.
+        link itself into included partials (`_syllabus_unit_row_anchor.html`
+        renders the row anchor and `_syllabus_homework_steps.html` the step
+        links), so the 44px touch-target contract is asserted on every
+        template in the row's include closure that renders a link — not on
+        the dispatcher alone.
         """
-        from django.template.loader import get_template
+        for name, source in self._row_template_sources(
+            "content/_syllabus_unit_row.html"
+        ):
+            if "<a " not in source:
+                continue
+            self.assertIn(
+                "min-h-[44px]",
+                source,
+                f"{name} renders a unit row link without a 44px touch target",
+            )
 
-        anchor = get_template("content/_syllabus_unit_row_anchor.html")
-        # The unit row link has min-h-[44px]
-        self.assertIn("min-h-[44px]", anchor.template.source)
-        row = get_template("content/_syllabus_unit_row.html")
-        # Both the ordinary row and the homework group render the anchor.
-        self.assertIn("_syllabus_unit_row_anchor.html", row.template.source)
+    @staticmethod
+    def _row_template_sources(name, _seen=frozenset()):
+        """`(name, source)` for a template plus every template it includes.
+
+        The row template owns the row markup only through its includes, so
+        the touch-target contract must cover the whole include closure.
+        """
+        if name in _seen:
+            return []
+        template = get_template(name).template
+        sources = [(name, template.source)]
+        for node in template.nodelist.get_nodes_by_type(IncludeNode):
+            if isinstance(node.template.var, str):
+                sources.extend(
+                    CourseUnitTouchTargetTest._row_template_sources(
+                        node.template.var, _seen | {name},
+                    )
+                )
+        return sources

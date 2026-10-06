@@ -49,7 +49,13 @@ from api.views.checkpoints import (
     week_checkpoints_create,
 )
 from api.views.cleanup_gates import cleanup_gates_diagnostics
-from api.views.comments import comment_reply, comments_collection
+from api.views.comments import (
+    comment_edit,
+    comment_hide,
+    comment_reply,
+    comment_restore,
+    comments_collection,
+)
 from api.views.contact_tags import contact_tag_rename, contact_tags_collection
 from api.views.contacts import (
     contacts_export,
@@ -296,6 +302,25 @@ urlpatterns = [
         "comments/<int:comment_id>/replies",
         comment_reply,
         name="api_comment_reply",
+    ),
+    # ---- Staff comment moderation (issue #1894) ----------------------
+    # edit/hide serve both a staff browser session (CSRF-checked) and a
+    # staff operator token; restore is operator-token only because the
+    # public thread has no restore control.
+    path(
+        "comments/<int:comment_id>/edit",
+        comment_edit,
+        name="api_comment_edit",
+    ),
+    path(
+        "comments/<int:comment_id>/hide",
+        comment_hide,
+        name="api_comment_hide",
+    ),
+    path(
+        "comments/<int:comment_id>/restore",
+        comment_restore,
+        name="api_comment_restore",
     ),
     # ---- Contact-tag namespace (issue #1524) -------------------------
     # Global deletion remains a Studio-only destructive operation.

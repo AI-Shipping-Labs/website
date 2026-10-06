@@ -268,7 +268,9 @@ class TestChapterNoteFlow:
                 f"{django_server}/api/comments/{content_id}",
             )
             assert erased.status == 200
-            assert erased.json() == {'comments': []}
+            # Issue #1894 added the thread-level `can_moderate` flag;
+            # these viewers are not staff.
+            assert erased.json() == {'comments': [], 'can_moderate': False}
 
             page.goto(
                 f"{django_server}/notifications", wait_until="domcontentloaded",
@@ -286,7 +288,9 @@ class TestChapterNoteFlow:
                 f"{django_server}/api/comments/{content_id}",
             )
             assert erased.status == 200
-            assert erased.json() == {'comments': []}
+            # Issue #1894 added the thread-level `can_moderate` flag;
+            # these viewers are not staff.
+            assert erased.json() == {'comments': [], 'can_moderate': False}
         finally:
             anonymous_ctx.close()
 

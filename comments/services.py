@@ -2,10 +2,17 @@
 
 import logging
 
+from django.utils import timezone
+
 from accounts.utils.activation import mark_activated
 from comments.models import Comment
 
 logger = logging.getLogger(__name__)
+
+#: Public values for ``Comment.moderation_state`` (issue #1894).
+MODERATION_VISIBLE = 'visible'
+MODERATION_HIDDEN = 'hidden'
+MODERATION_STATES = (MODERATION_VISIBLE, MODERATION_HIDDEN)
 
 
 def create_comment(*, content_id, user, body, parent=None):
@@ -47,3 +54,49 @@ def _notify_comment_recipients(comment):
             'content_comment notification failed for comment %s',
             comment.pk,
         )
+
+
+def edit_comment_body(comment, *, body):
+    """Rewrite a comment body in place and stamp ``edited_at`` (issue #1894).
+
+    Staff-only moderation write: no new row, no notification, and votes,
+    authorship, and parentage are untouched. Body validation (trimmed,
+    non-empty, at most 10000 code points) stays at the HTTP boundary,
+    matching ``create_comment``.
+    """
+    comment.body = body
+    comment.edited_at = timezone.now()
+    comment.save(update_fields=['body', 'edited_at', 'updated_at'])
+    logger.info(
+        'comment %s edited by staff; edited_at=%s',
+        comment.pk,
+        comment.edited_at.isoformat(),
+    )
+    return comment
+
+
+def hide_comment(comment):
+    """Hide a comment from every public listing; idempotent (issue #1894).
+
+    Soft delete: the row, its votes, and its replies remain untouched so
+    ``restore_comment`` can bring them back. Sending no notification is a
+    deliberate property of moderation, not an omission.
+    """
+    if comment.hidden_at is None:
+        comment.hidden_at = timezone.now()
+        comment.save(update_fields=['hidden_at', 'updated_at'])
+        logger.info('comment %s hidden by staff', comment.pk)
+    return comment
+
+
+def restore_comment(comment):
+    """Make a hidden comment visible again; idempotent (issue #1894).
+
+    Restoring the parent brings back replies that were not independently
+    hidden. Does not clear ``edited_at`` and does not notify anyone.
+    """
+    if comment.hidden_at is not None:
+        comment.hidden_at = None
+        comment.save(update_fields=['hidden_at', 'updated_at'])
+        logger.info('comment %s restored by staff', comment.pk)
+    return comment

@@ -197,7 +197,9 @@ class ChapterNoteWriteTest(ChapterDetailFixture):
         self.client.logout()
         listed = self.client.get(f'/api/comments/{content_id}')
         self.assertEqual(listed.status_code, 200)
-        self.assertEqual(listed.json(), {'comments': []})
+        # Issue #1894 added the thread-level `can_moderate` flag to the
+        # public list payload; this anonymous viewer is not staff.
+        self.assertEqual(listed.json(), {'comments': [], 'can_moderate': False})
 
         self.client.force_login(self.free_user)
         replied = self.client.post(

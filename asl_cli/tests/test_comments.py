@@ -126,6 +126,57 @@ def test_reply_sends_one_post_with_body_file_and_key(monkeypatch, tmp_path):
     assert json.loads(result.output)['id'] == 7
 
 
+def test_edit_maps_to_the_moderation_route_without_idempotency_key(monkeypatch, tmp_path):
+    """Issue #1894: `asl comments edit` posts {"body": ...} to /edit."""
+    client = RecordingClient({'id': 412, 'body': 'Safe question', 'moderation_state': 'visible'})
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    body_file = tmp_path / 'rewrite.txt'
+    body_file.write_text('  Safe question\n', encoding='utf-8')
+    result = CliRunner().invoke(cli, [
+        'comments', 'edit', '412', '--body-file', str(body_file), '--format', 'json',
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [('POST', '/api/comments/412/edit', {
+        'json_body': {'body': 'Safe question'},
+    })]
+    assert json.loads(result.output)['moderation_state'] == 'visible'
+
+
+def test_hide_and_restore_post_bare_idempotent_moderation_routes(monkeypatch):
+    """Issue #1894: hide/restore are bare POSTs with no Idempotency-Key."""
+    client = RecordingClient({'id': 412, 'moderation_state': 'hidden'})
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    result = CliRunner().invoke(cli, ['comments', 'hide', '412', '--format', 'json'])
+    assert result.exit_code == 0, result.output
+    result = CliRunner().invoke(cli, ['comments', 'restore', '412', '--format', 'json'])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [
+        ('POST', '/api/comments/412/hide', {}),
+        ('POST', '/api/comments/412/restore', {}),
+    ]
+
+
+def test_moderation_state_filter_passes_through_to_list(monkeypatch):
+    """Issue #1894: `--moderation-state` narrows the operator listing."""
+    client = RecordingClient()
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    result = CliRunner().invoke(cli, [
+        'comments', 'list', '--moderation-state', 'hidden', '--limit', '100',
+    ])
+    assert result.exit_code == 0, result.output
+    assert client.calls == [('GET', '/api/comments', {'params': {
+        'moderation_state': 'hidden',
+        'limit': 100,
+        'offset': 0,
+    }})]
+
+    client = RecordingClient()
+    monkeypatch.setattr(comments_module, 'get_client', lambda: client)
+    result = CliRunner().invoke(cli, ['comments', 'list', '--moderation-state', 'archived'])
+    assert result.exit_code == 2, result.output
+    assert client.calls == []
+
+
 @pytest.mark.parametrize('arguments', [
     ['comments', 'reply', '1', '--idempotency-key', 'key'],
     ['comments', 'reply', '1', '--body', 'x', '--body-file', 'answer.txt', '--idempotency-key', 'key'],

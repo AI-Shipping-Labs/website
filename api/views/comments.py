@@ -16,9 +16,18 @@ from accounts.auth import token_required
 from accounts.utils.display import display_name
 from api.openapi import openapi_spec
 from api.safety import error_response
-from api.utils import parse_json_body, require_methods, validation_response
+from api.utils import (
+    parse_json_body,
+    require_methods,
+    staff_token_or_session_required,
+    validation_response,
+)
 from comments import services as comment_services
 from comments.models import ApiReplyOperation, Comment
+from comments.services import (
+    MODERATION_STATES,
+    MODERATION_VISIBLE,
+)
 
 CONTENT_TYPES = (
     'course_unit',
@@ -192,6 +201,22 @@ def _parse_list_filters(request, qs):
                 qs = qs.filter(parent__isnull=True)
             else:
                 qs = qs.filter(parent__isnull=False)
+
+        if 'moderation_state' in params:
+            moderation_state = params.get('moderation_state')
+            if moderation_state not in MODERATION_STATES:
+                if moderation_state == '':
+                    qs = _empty_filter(qs)
+                else:
+                    return None, None, None, _validation(
+                        'moderation_state',
+                        'Invalid moderation_state',
+                        allowed=list(MODERATION_STATES),
+                    )
+            elif moderation_state == MODERATION_VISIBLE:
+                qs = qs.filter(hidden_at__isnull=True)
+            else:
+                qs = qs.filter(hidden_at__isnull=False)
 
         if 'content_id' in params:
             from uuid import UUID  # noqa: PLC0415
@@ -521,6 +546,7 @@ def _serialize_comment(comment, resolved, *, idempotent_replay=None):
         'parent_id': comment.parent_id,
         'thread_root_id': comment.parent_id or comment.pk,
         'body': comment.body,
+        'moderation_state': comment.moderation_state,
         'author': {
             'id': comment.user_id,
             'email': comment.user.email,
@@ -540,6 +566,12 @@ COMMENTS_QUERY = {
     'content_type': {'type': 'string', 'enum': list(CONTENT_TYPES), 'required': False},
     'content_id': {'type': 'string', 'format': 'uuid', 'required': False},
     'kind': {'type': 'string', 'enum': list(KINDS), 'required': False},
+    'moderation_state': {
+        'type': 'string',
+        'enum': ['visible', 'hidden'],
+        'required': False,
+        'description': 'Filter by moderation state; default returns both.',
+    },
     'parent_id': {'type': 'integer', 'required': False},
     'author_email': {'type': 'string', 'format': 'email', 'required': False},
     'since': {'type': 'string', 'format': 'date-time', 'required': False},
@@ -571,8 +603,8 @@ COMMENT_ROW_SCHEMA = {
     'type': 'object',
     'required': [
         'id', 'content_id', 'content_type', 'kind', 'parent_id',
-        'thread_root_id', 'body', 'author', 'created_at', 'updated_at',
-        'reply_count', 'context',
+        'thread_root_id', 'body', 'moderation_state', 'author',
+        'created_at', 'updated_at', 'reply_count', 'context',
     ],
     'properties': {
         'id': {'type': 'integer'},
@@ -582,6 +614,14 @@ COMMENT_ROW_SCHEMA = {
         'parent_id': {'type': ['integer', 'null']},
         'thread_root_id': {'type': 'integer'},
         'body': {'type': 'string', 'description': 'Verbatim, unrendered plain text.'},
+        'moderation_state': {
+            'type': 'string',
+            'enum': ['visible', 'hidden'],
+            'description': (
+                'Hidden rows left the public thread but keep their votes and '
+                'replies and can be restored.'
+            ),
+        },
         'author': {
             'type': 'object',
             'required': ['id', 'email', 'display_name'],
@@ -893,3 +933,201 @@ def comment_reply(request, comment_id):
         _serialize_comment(reply, {reply.content_id: thread}, idempotent_replay=False),
         status=201,
     )
+
+
+# ---- Staff moderation (issue #1894) ----------------------------------------
+#
+# ``edit`` and ``hide`` share one route with the browser Q&A surface: a
+# staff browser session (CSRF-checked by ``staff_token_or_session_required``)
+# and a staff operator token reach the same view. ``restore`` is deliberately
+# operator-token only -- the public thread has no restore control, and the
+# issue rules out a public restore route.
+
+
+def _normalize_edit_request(request):
+    """Parse ``{"body": "..."}`` with no unknown fields (issue #1894)."""
+    data, parse_error = parse_json_body(request)
+    if parse_error:
+        return None, parse_error
+    if not isinstance(data, dict):
+        return None, _validation('body', 'Body must be a JSON object')
+    unknown = sorted(set(data) - {'body'})
+    if unknown:
+        return None, _validation(unknown[0], f'Unknown field: {unknown[0]}')
+    body = data.get('body')
+    if not isinstance(body, str):
+        return None, _validation('body', 'body must be a string')
+    body = body.strip()
+    if not body:
+        return None, _validation('body', 'body must not be blank')
+    if len(body) > 10_000:
+        return None, _validation(
+            'body', 'body must be at most 10000 Unicode code points',
+        )
+    return body, None
+
+
+def _visible_or_hidden_comment(comment_id, *, token_call):
+    """Fetch one comment for moderation, 404-ing hidden rows on public routes.
+
+    Browser (session) callers may only address visible comments: hidden rows
+    must not leak their existence through the public hide/edit routes, for
+    staff included -- operators address hidden rows through the token API.
+    """
+    comment = Comment.objects.select_related('user', 'parent').filter(
+        pk=comment_id,
+    ).first()
+    if comment is None:
+        return None, error_response(
+            'Comment not found', 'comment_not_found', status=404,
+        )
+    if comment.hidden_at is not None and not token_call:
+        return None, error_response(
+            'Comment not found', 'comment_not_found', status=404,
+        )
+    return comment, None
+
+
+def _serialized_moderation_result(comment):
+    comment = Comment.objects.select_related('user', 'parent').annotate(
+        reply_count=Count('replies', distinct=True),
+    ).get(pk=comment.pk)
+    return JsonResponse(
+        _serialize_comment(comment, _resolve_threads({comment.content_id})),
+    )
+
+
+EDIT_REQUEST_SCHEMA = {
+    'required': ['body'],
+    'properties': {
+        'body': {
+            'type': 'string', 'minLength': 1, 'maxLength': 10000,
+            'description': 'Replacement plain text; HTML and Markdown are '
+                           'not rendered.',
+        },
+    },
+    'example': {'body': 'Please discuss the approach without the numbers.'},
+}
+
+
+@staff_token_or_session_required
+@require_methods('POST')
+@openapi_spec(
+    tag='Comments',
+    summary='Edit a shared comment body in place (staff)',
+    methods={'POST': {
+        'description': (
+            'Replaces the body of one comment or reply without creating a '
+            'row, notification, or vote change. Reachable with a staff '
+            'operator token or a staff browser session (CSRF-checked). '
+            'Hidden comments are editable only through the operator token, '
+            'for example to strip a spoiler before restoring; on a browser '
+            'session they return 404 so their existence does not leak '
+            'through the public route. No Idempotency-Key: the edit is '
+            'in place.'
+        ),
+        'request_body': EDIT_REQUEST_SCHEMA,
+        'responses': {
+            200: {
+                'description': 'Body rewritten; the row keeps its id.',
+                'schema': COMMENT_ROW_SCHEMA,
+            },
+            401: {
+                'description': (
+                    'Anonymous session, or missing/invalid/non-staff token.'
+                ),
+            },
+            403: {'description': 'Authenticated session without staff access.'},
+            404: {'description': 'Unknown comment, or hidden row on a session call.'},
+            422: {'description': 'Invalid JSON fields or body length.'},
+        },
+    }},
+)
+def comment_edit(request, comment_id):
+    body, error = _normalize_edit_request(request)
+    if error:
+        return error
+    comment, error = _visible_or_hidden_comment(
+        comment_id,
+        token_call=getattr(request, 'auth_token', None) is not None,
+    )
+    if error:
+        return error
+    comment_services.edit_comment_body(comment, body=body)
+    return _serialized_moderation_result(comment)
+
+
+@staff_token_or_session_required
+@require_methods('POST')
+@openapi_spec(
+    tag='Comments',
+    summary='Hide a shared comment from the public thread (staff)',
+    methods={'POST': {
+        'description': (
+            'Soft-moderation hide: the comment and, when it is a top-level '
+            'comment, its nested replies leave every public listing while '
+            'the rows, votes, and API-reply audit records stay intact. '
+            'Idempotent with a staff operator token (hiding an already '
+            'hidden row succeeds and stays hidden); browser sessions get '
+            '404 for already hidden rows so their existence does not leak. '
+            'No notification is sent.'
+        ),
+        'responses': {
+            200: {
+                'description': 'Comment is hidden.',
+                'schema': COMMENT_ROW_SCHEMA,
+            },
+            401: {
+                'description': (
+                    'Anonymous session, or missing/invalid/non-staff token.'
+                ),
+            },
+            403: {'description': 'Authenticated session without staff access.'},
+            404: {'description': 'Unknown comment, or hidden row on a session call.'},
+        },
+    }},
+)
+def comment_hide(request, comment_id):
+    comment, error = _visible_or_hidden_comment(
+        comment_id,
+        token_call=getattr(request, 'auth_token', None) is not None,
+    )
+    if error:
+        return error
+    comment_services.hide_comment(comment)
+    return _serialized_moderation_result(comment)
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods('POST')
+@openapi_spec(
+    tag='Comments',
+    summary='Restore a hidden shared comment (staff)',
+    methods={'POST': {
+        'description': (
+            'Operator-only undo of a hide. The comment becomes visible on '
+            'the public thread again; replies that were not independently '
+            'hidden come back with it. Idempotent: restoring an already '
+            'visible row succeeds and stays visible. There is no public '
+            'restore route -- browser sessions cannot restore. No '
+            'notification is sent and no Edited marker is added.'
+        ),
+        'responses': {
+            200: {
+                'description': 'Comment is visible.',
+                'schema': COMMENT_ROW_SCHEMA,
+            },
+            401: {'description': 'Missing or invalid staff-owned operator token.'},
+            404: {'description': 'Unknown comment.'},
+        },
+    }},
+)
+def comment_restore(request, comment_id):
+    comment = Comment.objects.filter(pk=comment_id).first()
+    if comment is None:
+        return error_response(
+            'Comment not found', 'comment_not_found', status=404,
+        )
+    comment_services.restore_comment(comment)
+    return _serialized_moderation_result(comment)

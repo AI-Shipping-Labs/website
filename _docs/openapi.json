@@ -2541,6 +2541,19 @@
           },
           {
             "in": "query",
+            "name": "moderation_state",
+            "required": false,
+            "schema": {
+              "description": "Filter by moderation state; default returns both.",
+              "enum": [
+                "visible",
+                "hidden"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "parent_id",
             "required": false,
             "schema": {
@@ -2750,6 +2763,14 @@
                             ],
                             "type": "string"
                           },
+                          "moderation_state": {
+                            "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                            "enum": [
+                              "visible",
+                              "hidden"
+                            ],
+                            "type": "string"
+                          },
                           "parent_id": {
                             "type": [
                               "integer",
@@ -2775,6 +2796,7 @@
                           "parent_id",
                           "thread_root_id",
                           "body",
+                          "moderation_state",
                           "author",
                           "created_at",
                           "updated_at",
@@ -2815,6 +2837,315 @@
           }
         },
         "summary": "List shared first-party comments",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/comments/{comment_id}/edit": {
+      "post": {
+        "description": "Replaces the body of one comment or reply without creating a row, notification, or vote change. Reachable with a staff operator token or a staff browser session (CSRF-checked). Hidden comments are editable only through the operator token, for example to strip a spoiler before restoring; on a browser session they return 404 so their existence does not leak through the public route. No Idempotency-Key: the edit is in place.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Please discuss the approach without the numbers."
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "description": "Replacement plain text; HTML and Markdown are not rendered.",
+                    "maxLength": 10000,
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "body"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "author": {
+                      "properties": {
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "display_name"
+                      ],
+                      "type": "object"
+                    },
+                    "body": {
+                      "description": "Verbatim, unrendered plain text.",
+                      "type": "string"
+                    },
+                    "content_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "enum": [
+                        "course_unit",
+                        "workshop_page",
+                        "sprint_plan",
+                        "book_club_note",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": true,
+                      "description": "Owner-specific safe context; null for unknown UUIDs.",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "enum": [
+                        "top_level",
+                        "reply"
+                      ],
+                      "type": "string"
+                    },
+                    "moderation_state": {
+                      "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                      "enum": [
+                        "visible",
+                        "hidden"
+                      ],
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reply_count": {
+                      "type": "integer"
+                    },
+                    "thread_root_id": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content_id",
+                    "content_type",
+                    "kind",
+                    "parent_id",
+                    "thread_root_id",
+                    "body",
+                    "moderation_state",
+                    "author",
+                    "created_at",
+                    "updated_at",
+                    "reply_count",
+                    "context"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Body rewritten; the row keeps its id."
+          },
+          "401": {
+            "description": "Anonymous session, or missing/invalid/non-staff token."
+          },
+          "403": {
+            "description": "Authenticated session without staff access."
+          },
+          "404": {
+            "description": "Unknown comment, or hidden row on a session call."
+          },
+          "422": {
+            "description": "Invalid JSON fields or body length."
+          }
+        },
+        "summary": "Edit a shared comment body in place (staff)",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/comments/{comment_id}/hide": {
+      "post": {
+        "description": "Soft-moderation hide: the comment and, when it is a top-level comment, its nested replies leave every public listing while the rows, votes, and API-reply audit records stay intact. Idempotent with a staff operator token (hiding an already hidden row succeeds and stays hidden); browser sessions get 404 for already hidden rows so their existence does not leak. No notification is sent.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "author": {
+                      "properties": {
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "display_name"
+                      ],
+                      "type": "object"
+                    },
+                    "body": {
+                      "description": "Verbatim, unrendered plain text.",
+                      "type": "string"
+                    },
+                    "content_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "enum": [
+                        "course_unit",
+                        "workshop_page",
+                        "sprint_plan",
+                        "book_club_note",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": true,
+                      "description": "Owner-specific safe context; null for unknown UUIDs.",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "enum": [
+                        "top_level",
+                        "reply"
+                      ],
+                      "type": "string"
+                    },
+                    "moderation_state": {
+                      "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                      "enum": [
+                        "visible",
+                        "hidden"
+                      ],
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reply_count": {
+                      "type": "integer"
+                    },
+                    "thread_root_id": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content_id",
+                    "content_type",
+                    "kind",
+                    "parent_id",
+                    "thread_root_id",
+                    "body",
+                    "moderation_state",
+                    "author",
+                    "created_at",
+                    "updated_at",
+                    "reply_count",
+                    "context"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Comment is hidden."
+          },
+          "401": {
+            "description": "Anonymous session, or missing/invalid/non-staff token."
+          },
+          "403": {
+            "description": "Authenticated session without staff access."
+          },
+          "404": {
+            "description": "Unknown comment, or hidden row on a session call."
+          }
+        },
+        "summary": "Hide a shared comment from the public thread (staff)",
         "tags": [
           "Comments"
         ]
@@ -2938,6 +3269,14 @@
                       ],
                       "type": "string"
                     },
+                    "moderation_state": {
+                      "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                      "enum": [
+                        "visible",
+                        "hidden"
+                      ],
+                      "type": "string"
+                    },
                     "parent_id": {
                       "type": [
                         "integer",
@@ -2963,6 +3302,7 @@
                     "parent_id",
                     "thread_root_id",
                     "body",
+                    "moderation_state",
                     "author",
                     "created_at",
                     "updated_at",
@@ -3045,6 +3385,14 @@
                       ],
                       "type": "string"
                     },
+                    "moderation_state": {
+                      "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                      "enum": [
+                        "visible",
+                        "hidden"
+                      ],
+                      "type": "string"
+                    },
                     "parent_id": {
                       "type": [
                         "integer",
@@ -3070,6 +3418,7 @@
                     "parent_id",
                     "thread_root_id",
                     "body",
+                    "moderation_state",
                     "author",
                     "created_at",
                     "updated_at",
@@ -3100,6 +3449,144 @@
           }
         },
         "summary": "Reply to a shared first-party comment",
+        "tags": [
+          "Comments"
+        ]
+      }
+    },
+    "/api/comments/{comment_id}/restore": {
+      "post": {
+        "description": "Operator-only undo of a hide. The comment becomes visible on the public thread again; replies that were not independently hidden come back with it. Idempotent: restoring an already visible row succeeds and stays visible. There is no public restore route -- browser sessions cannot restore. No notification is sent and no Edited marker is added.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "comment_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "author": {
+                      "properties": {
+                        "display_name": {
+                          "type": "string"
+                        },
+                        "email": {
+                          "format": "email",
+                          "type": "string"
+                        },
+                        "id": {
+                          "type": "integer"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "email",
+                        "display_name"
+                      ],
+                      "type": "object"
+                    },
+                    "body": {
+                      "description": "Verbatim, unrendered plain text.",
+                      "type": "string"
+                    },
+                    "content_id": {
+                      "format": "uuid",
+                      "type": "string"
+                    },
+                    "content_type": {
+                      "enum": [
+                        "course_unit",
+                        "workshop_page",
+                        "sprint_plan",
+                        "book_club_note",
+                        "unknown"
+                      ],
+                      "type": "string"
+                    },
+                    "context": {
+                      "additionalProperties": true,
+                      "description": "Owner-specific safe context; null for unknown UUIDs.",
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "created_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "integer"
+                    },
+                    "kind": {
+                      "enum": [
+                        "top_level",
+                        "reply"
+                      ],
+                      "type": "string"
+                    },
+                    "moderation_state": {
+                      "description": "Hidden rows left the public thread but keep their votes and replies and can be restored.",
+                      "enum": [
+                        "visible",
+                        "hidden"
+                      ],
+                      "type": "string"
+                    },
+                    "parent_id": {
+                      "type": [
+                        "integer",
+                        "null"
+                      ]
+                    },
+                    "reply_count": {
+                      "type": "integer"
+                    },
+                    "thread_root_id": {
+                      "type": "integer"
+                    },
+                    "updated_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "content_id",
+                    "content_type",
+                    "kind",
+                    "parent_id",
+                    "thread_root_id",
+                    "body",
+                    "moderation_state",
+                    "author",
+                    "created_at",
+                    "updated_at",
+                    "reply_count",
+                    "context"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Comment is visible."
+          },
+          "401": {
+            "description": "Missing or invalid staff-owned operator token."
+          },
+          "404": {
+            "description": "Unknown comment."
+          }
+        },
+        "summary": "Restore a hidden shared comment (staff)",
         "tags": [
           "Comments"
         ]

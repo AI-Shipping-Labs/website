@@ -45,6 +45,10 @@ Parameters:
   card passes "text-base" so the thread heading does not dominate the card.
   Both default to the exact prior values so course / workshop / plan pages
   render byte-identically.
+
+Staff moderation (issue #1894) needs no extra parameters: the script in
+``comments/_qa_script.html`` renders Edit/Delete on every card only when
+the list payload reports ``can_moderate`` for the signed-in staff viewer.
 {% endcomment %}
 {% load accounts_extras %}
 <div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}">

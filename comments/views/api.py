@@ -88,6 +88,13 @@ def list_comments(request, content_id):
     Returns top-level comments sorted by vote count desc, then created_at desc.
     Each comment includes its replies sorted by created_at asc.
 
+    Issue #1894: comments hidden by staff moderation are omitted for every
+    viewer (staff included -- the public thread has no hidden-comment view
+    and no restore control; operators use the staff API). The response adds
+    a thread-level ``can_moderate`` boolean (true only for an authenticated
+    staff viewer who can read the thread) and an ``is_edited`` flag per
+    comment and reply so the UI can show the muted Edited marker.
+
     For gated threads (a UUID matching ``Plan.comment_content_id`` or
     ``bookclub.Note.comment_content_id``) the viewer must satisfy the
     thread's read predicate -- otherwise the request is rejected with
@@ -98,9 +105,13 @@ def list_comments(request, content_id):
     if gate is not None and not gate.can_read(request.user):
         return JsonResponse({'error': 'Not found'}, status=404)
 
+    # The read gate has passed, so the viewer can read the thread; only
+    # staff may moderate it.
+    can_moderate = request.user.is_authenticated and request.user.is_staff
+
     top_level = (
         Comment.objects
-        .filter(content_id=content_id, parent__isnull=True)
+        .filter(content_id=content_id, parent__isnull=True, hidden_at__isnull=True)
         .select_related('user')
         .annotate(vote_count=Count('votes'))
         .order_by('-vote_count', '-created_at')
@@ -119,6 +130,7 @@ def list_comments(request, content_id):
     for comment in top_level:
         replies = (
             comment.replies
+            .filter(hidden_at__isnull=True)
             .select_related('user')
             .order_by('created_at')
         )
@@ -129,6 +141,7 @@ def list_comments(request, content_id):
                 'body': reply.body,
                 'user_name': display_name(reply.user),
                 'created_at': reply.created_at.isoformat(),
+                'is_edited': reply.edited_at is not None,
             })
 
         comments_data.append({
@@ -138,10 +151,14 @@ def list_comments(request, content_id):
             'created_at': comment.created_at.isoformat(),
             'vote_count': comment.vote_count,
             'user_voted': comment.id in user_voted_ids,
+            'is_edited': comment.edited_at is not None,
             'replies': replies_data,
         })
 
-    return JsonResponse({'comments': comments_data})
+    return JsonResponse({
+        'comments': comments_data,
+        'can_moderate': can_moderate,
+    })
 
 
 @require_POST

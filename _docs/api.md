@@ -24,11 +24,17 @@ Staff operators can discover shared first-party discussions across course
 units, workshop tutorial pages, sprint plans, and Book Club notes. The list is
 flat, newest first, and includes replies as separate rows. Unknown owner UUIDs
 remain visible with `content_type=unknown` and `context=null` for audit, but
-cannot receive API replies.
+cannot receive API replies. Every row carries `moderation_state` (`visible` or
+`hidden`, issue #1894): hidden rows left the public thread but keep their
+votes and replies, and `?moderation_state=visible|hidden` filters one state
+(default remains both, so operators can find what to restore).
 
 ```bash
 curl -sL -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/comments?course_slug=aihero&module_slug=day-1&unit_slug=frontmatter&unanswered=true&limit=100"
+
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/comments?moderation_state=hidden&limit=100"
 ```
 
 Generic filters include `content_type`, `content_id`, `kind`, `parent_id`,
@@ -75,6 +81,51 @@ the same parent and normalized body with the same token and key returns the
 original reply with `200` and `idempotent_replay=true`. Reusing the key for a
 different request returns `409 idempotency_key_reused`. After an uncertain
 network result, retry explicitly with the same key.
+
+### Staff moderation: edit, hide, restore (issue #1894)
+
+Three staff-token routes moderate one comment or reply in place. None of them
+uses `Idempotency-Key` and none sends a notification or creates a row.
+
+`POST /api/comments/{id}/edit` replaces the body (`{"body": "..."}` only):
+trimmed, non-empty, at most 10,000 code points, stored verbatim and still
+escaped as plain text on the public thread. The row keeps its id, votes,
+author, and parent; the public thread shows a muted `Edited` marker after the
+timestamp. Hidden comments are editable through the token (for example to
+strip a spoiler before restoring).
+
+`POST /api/comments/{id}/hide` soft-hides the comment from every public
+listing for every viewer. The row, its votes, and its API-reply audit records
+stay intact; hiding a top-level comment also removes its nested replies from
+the public thread unless they were independently hidden. Idempotent: hiding an
+already hidden row succeeds and stays hidden.
+
+`POST /api/comments/{id}/restore` makes a hidden comment visible again;
+replies that were not independently hidden come back with it. Idempotent.
+There is no restore capability on the public thread or through a browser
+session -- this route is operator-token only.
+
+```bash
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Please discuss the approach without posting the numbers."}' \
+  https://aishippinglabs.com/api/comments/412/edit
+
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/comments/412/hide
+
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
+  https://aishippinglabs.com/api/comments/412/restore
+```
+
+Errors: unknown ids return `404 comment_not_found`; blank, oversized, or
+extra fields return `422 validation_error`; missing or non-staff tokens
+return `401`. The same `/edit` and `/hide` paths also accept a staff browser
+session with CSRF (that is how the public Q&A thread's Edit and Delete
+buttons work, issue #1894); a member session gets `403`, and hidden comments
+return `404` on session calls so their existence does not leak through the
+public routes. `restore` rejects browser sessions with `401`. CLI
+equivalents: `uv run asl comments edit|hide|restore`.
 
 ### Read: single-user state
 

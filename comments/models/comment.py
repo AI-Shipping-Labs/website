@@ -23,11 +23,39 @@ class Comment(models.Model):
         related_name='replies',
     )
     body = models.TextField()
+    # Issue #1894: soft moderation. A set ``hidden_at`` hides the comment
+    # from every public listing without hard-deleting the row, its votes,
+    # or its replies; clearing it restores the comment. ``edited_at`` is
+    # stamped only by body rewrites so hide/restore never add an Edited
+    # marker (``updated_at`` moves on every save and cannot serve that).
+    hidden_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='Set when staff hid the comment; null while visible.',
+    )
+    edited_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Set when a staff edit rewrote the body; never cleared.',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ['-created_at']
+
+    @property
+    def is_hidden(self):
+        return self.hidden_at is not None
+
+    @property
+    def is_edited(self):
+        return self.edited_at is not None
+
+    @property
+    def moderation_state(self):
+        return 'hidden' if self.hidden_at else 'visible'
 
     def __str__(self):
         if self.parent:

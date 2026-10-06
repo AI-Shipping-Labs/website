@@ -1,4 +1,4 @@
-"""``asl comments`` -- list shared comments and post idempotent replies."""
+"""``asl comments`` -- list comments, post replies, and moderate threads."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ TABLE_COLUMNS = [
 
 @click.group()
 def comments():
-    """Fetch comments and post staff replies."""
+    """Fetch comments, post staff replies, and moderate threads."""
 
 
 def _fail(message):
@@ -78,6 +78,11 @@ def _validate_list_filters(params):
 @click.option("--content-type", type=click.Choice(CONTENT_TYPES))
 @click.option("--content-id")
 @click.option("--kind", type=click.Choice(["top_level", "reply"]))
+@click.option(
+    "--moderation-state",
+    type=click.Choice(["visible", "hidden"]),
+    help="Filter by moderation state; default returns both.",
+)
 @click.option("--parent-id", type=int)
 @click.option("--author-email")
 @click.option("--since")
@@ -133,6 +138,23 @@ def _validate_key(_ctx, _param, value):
     return value
 
 
+def _read_body(body, body_file, *, label):
+    """Resolve exactly one of --body / --body-file into trimmed text."""
+    if (body is None) == (body_file is None):
+        _fail(f"Provide exactly one of --body or --body-file for {label}")
+    if body_file is not None:
+        try:
+            body = body_file.read_text(encoding="utf-8")
+        except OSError as exc:
+            _fail(f"Could not read --body-file: {exc}")
+    body = body.strip()
+    if not body:
+        _fail(f"{label} body must not be empty")
+    if len(body) > 10_000:
+        _fail(f"{label} body must be at most 10000 Unicode code points")
+    return body
+
+
 @comments.command("reply")
 @click.argument("comment_id", type=click.IntRange(min=1))
 @click.option("--body")
@@ -141,18 +163,7 @@ def _validate_key(_ctx, _param, value):
 @format_option
 def comments_reply(comment_id, body, body_file, idempotency_key, fmt):
     """Post one direct reply; explicitly reuse the key after uncertain delivery."""
-    if (body is None) == (body_file is None):
-        _fail("Provide exactly one of --body or --body-file")
-    if body_file is not None:
-        try:
-            body = body_file.read_text(encoding="utf-8")
-        except OSError as exc:
-            _fail(f"Could not read --body-file: {exc}")
-    body = body.strip()
-    if not body:
-        _fail("Reply body must not be empty")
-    if len(body) > 10_000:
-        _fail("Reply body must be at most 10000 Unicode code points")
+    body = _read_body(body, body_file, label="Reply")
     # Client.request only retries throttled 429s, which the server rejects
     # before the endpoint runs. There is deliberately no other retry around
     # this POST: after an ambiguous failure, rerun with the same key.
@@ -161,6 +172,36 @@ def comments_reply(comment_id, body, body_file, idempotency_key, fmt):
         json_body={"body": body},
         headers={"Idempotency-Key": idempotency_key},
     )
+    emit(result, fmt)
+
+
+@comments.command("edit")
+@click.argument("comment_id", type=click.IntRange(min=1))
+@click.option("--body")
+@click.option("--body-file", type=click.Path(path_type=Path, dir_okay=False))
+@format_option
+def comments_edit(comment_id, body, body_file, fmt):
+    """Rewrite one comment body in place (hidden rows included)."""
+    body = _read_body(body, body_file, label="Edited")
+    result = get_client().post(f"{API}/{comment_id}/edit", json_body={"body": body})
+    emit(result, fmt)
+
+
+@comments.command("hide")
+@click.argument("comment_id", type=click.IntRange(min=1))
+@format_option
+def comments_hide(comment_id, fmt):
+    """Hide one comment from every public thread (idempotent)."""
+    result = get_client().post(f"{API}/{comment_id}/hide")
+    emit(result, fmt)
+
+
+@comments.command("restore")
+@click.argument("comment_id", type=click.IntRange(min=1))
+@format_option
+def comments_restore(comment_id, fmt):
+    """Make a hidden comment visible again (idempotent)."""
+    result = get_client().post(f"{API}/{comment_id}/restore")
     emit(result, fmt)
 
 

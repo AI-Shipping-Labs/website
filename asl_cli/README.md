@@ -77,6 +77,15 @@ stable `id`, `kind`, `content_type`, `author_email`, `created_at`,
 `reply_count`, `context`, and `body` columns and may truncate long display
 cells.
 
+Every row carries `moderation_state` (`visible` or `hidden`, issue #1894).
+Hidden rows left the public thread but keep their votes and replies. Filter
+one state with `--moderation-state`; the default returns both so operators can
+find what to restore:
+
+```bash
+uv run asl comments list --moderation-state hidden --limit 100
+```
+
 A homework unit with the homework stepper enabled owns one comment thread per
 stepper page (issue #1897). A unit filter returns the unit thread and every
 homework step thread of that unit; each homework-step row's `context` names
@@ -106,6 +115,23 @@ ambiguous network failure. Rerun explicitly with the same key to recover: the
 server returns the original reply without repeating notifications. The command
 uses the standard `ASL_API_TOKEN` / `.env` / hidden-prompt credential resolution
 and `ASL_BASE_URL`; it has no token or actor override flag.
+
+Moderate a thread with in-place edit, soft hide, and restore (issue #1894).
+`edit` replaces one comment body from `--body` or `--body-file` — no new row,
+no notification, and hidden rows are editable (for example to strip a spoiler
+before restoring). `hide` removes the comment from every public listing
+without deleting the row, its votes, or its replies; hiding a top-level
+comment also removes its replies from the public thread until the parent is
+restored. `restore` makes a hidden comment visible again; replies that were
+not independently hidden come back with it. `hide` and `restore` are
+idempotent. None of the three uses `Idempotency-Key`:
+
+```bash
+uv run asl comments edit 412 \
+  --body "Please discuss the approach without posting the numbers."
+uv run asl comments hide 412
+uv run asl comments restore 412
+```
 
 Invite one ordinary attendee to one event by numeric ID. The command performs
 the required event read, invitation write, and invitation read-back itself:

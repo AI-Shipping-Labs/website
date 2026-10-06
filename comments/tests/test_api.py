@@ -78,30 +78,51 @@ class ListCommentsAPITest(TestCase):
         response = self.client.get(f'/api/comments/{self.content_id}')
 
         data = response.json()['comments'][0]
+        # Issue #1894 extended the payload with `is_edited` (and the
+        # thread-level `can_moderate`); every pre-existing field keeps its
+        # name and meaning for members.
         self.assertEqual(
             set(data),
             {
                 'id', 'body', 'user_name', 'created_at', 'vote_count',
-                'user_voted', 'replies',
+                'user_voted', 'is_edited', 'replies',
             },
         )
         self.assertEqual(data['body'], 'Question body')
         self.assertEqual(data['user_name'], 'u1')
         self.assertEqual(data['vote_count'], 1)
         self.assertFalse(data['user_voted'])
+        self.assertFalse(data['is_edited'])
         self.assertEqual(datetime.fromisoformat(data['created_at']), top_created_at)
 
         reply_data = data['replies'][0]
         self.assertEqual(
             set(reply_data),
-            {'id', 'body', 'user_name', 'created_at'},
+            {'id', 'body', 'user_name', 'created_at', 'is_edited'},
         )
         self.assertEqual(reply_data['body'], 'Reply body')
         self.assertEqual(reply_data['user_name'], 'u2')
+        self.assertFalse(reply_data['is_edited'])
         self.assertEqual(
             datetime.fromisoformat(reply_data['created_at']),
             reply_created_at,
         )
+
+    def test_list_reports_can_moderate_only_for_staff(self):
+        """Issue #1894: thread-level can_moderate is staff-only."""
+        response = self.client.get(f'/api/comments/{self.content_id}')
+        self.assertFalse(response.json()['can_moderate'])
+
+        self.client.login(email='u1@test.com', password='pass')
+        response = self.client.get(f'/api/comments/{self.content_id}')
+        self.assertFalse(response.json()['can_moderate'])
+
+        staff = User.objects.create_user(
+            email='mod-staff@test.com', password='pass', is_staff=True,
+        )
+        self.client.force_login(staff)
+        response = self.client.get(f'/api/comments/{self.content_id}')
+        self.assertTrue(response.json()['can_moderate'])
 
     def test_list_uses_canonical_display_name_for_comments_and_replies(self):
         named = User.objects.create_user(

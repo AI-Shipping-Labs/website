@@ -337,12 +337,14 @@ def aggregate_report(*, callable_name, scenarios, run_metadata):
 
 
 def _sum_usage(scenarios, key):
-    """Sum a token-usage field across scenarios, defensively.
+    """Sum a token-usage field across scenarios, per token key.
 
-    Usage is recorded only when the #799 ``LLMResult`` exposes it; today it
-    is ``None`` everywhere, so this returns ``None`` (surfaced as "usage
-    unavailable") rather than a misleading zero when no scenario reported
-    usage. Mirrors :class:`FileTraceSink`'s defensive behavior.
+    Each scenario's usage dict carries only the counter keys the provider
+    reported (see :meth:`FileTraceSink._extract_token_usage`); this totals
+    each key separately -- never across keys, since ``input_tokens``
+    excludes cache tokens. Returns ``None`` when no scenario reported
+    usage (surfaced as "usage unavailable") rather than a misleading
+    zero.
     """
     available = [s.get(key) for s in scenarios if s.get(key) is not None]
     if not available:
@@ -360,13 +362,19 @@ def _sum_usage(scenarios, key):
 def _cost_summary(scenarios):
     callable_usage = _sum_usage(scenarios, 'callable_token_usage')
     judge_usage = _sum_usage(scenarios, 'judge_token_usage')
+    # The note is only meaningful when usage is genuinely absent (mock
+    # mode, or a counter-less provider); when totals exist the numbers
+    # speak for themselves and the note is ``None``.
+    note = None
+    if callable_usage is None and judge_usage is None:
+        note = (
+            'usage unavailable: no scenario reported token usage '
+            '(expected in mock mode; a counter-less provider omits it too).'
+        )
     return {
         'callable_token_usage': callable_usage,
         'judge_token_usage': judge_usage,
-        'note': (
-            'usage unavailable: the LLMResult exposes no token usage today; '
-            'totals are null until it does.'
-        ),
+        'note': note,
     }
 
 

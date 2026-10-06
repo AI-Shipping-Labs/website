@@ -17,9 +17,10 @@ of any Logfire import (#813):
   measure agreement against the gold labels (dev vs held-out test,
   reported separately, plus per-scenario disagreement rows).
 
-The judge's usage/cost is read defensively off the ``LLMResult`` exactly
-like :class:`FileTraceSink` does (today usage is ``None``; recorded as such
-rather than crashing).
+The judge's usage/cost is read off the judge's ``LLMResult`` through the
+same shared extraction as :class:`FileTraceSink`
+(:func:`FileTraceSink._extract_token_usage`): a per-key counter dict when
+the provider reported usage, ``None`` when it did not.
 """
 
 from datetime import datetime, timezone
@@ -38,11 +39,12 @@ def _utc_now():
 
 
 def _extract_usage(result):
-    """Read token usage off an ``LLMResult`` defensively (None if absent).
+    """Read token usage off an ``LLMResult`` (``None`` when no counters).
 
-    Mirrors :meth:`FileTraceSink._extract_token_usage` so the judge cost is
-    captured the moment the #799 ``LLMResult`` grows a ``usage`` attribute,
-    and stays ``None`` (never raising) until then.
+    Delegates to :meth:`FileTraceSink._extract_token_usage` -- the ONE
+    shared extraction -- so the judge cost and the callable trace record
+    the same per-key counter dict (or a deliberate ``None`` when the
+    provider reported no usage, e.g. mock mode).
     """
     return FileTraceSink._extract_token_usage(result)
 

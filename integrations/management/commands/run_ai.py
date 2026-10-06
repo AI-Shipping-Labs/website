@@ -399,8 +399,8 @@ class Command(BaseCommand):
         )
         cost = report['cost']
         self.stdout.write(
-            f'Cost: callable={cost["callable_token_usage"] or "usage unavailable"} '
-            f'judge={cost["judge_token_usage"] or "usage unavailable"}'
+            f'Cost: callable={self._fmt_usage(cost["callable_token_usage"])} '
+            f'judge={self._fmt_usage(cost["judge_token_usage"])}'
         )
 
     # --- alignment mode (issue #812) ---
@@ -466,6 +466,18 @@ class Command(BaseCommand):
     @staticmethod
     def _fmt_num(value):
         return f'{value:.3f}' if value is not None else 'n/a'
+
+    @staticmethod
+    def _fmt_usage(usage):
+        """Render a per-key token-usage dict for the ``Cost:`` line.
+
+        Prints each counter as ``key=value``; the ``usage unavailable``
+        fallback appears only when usage is genuinely absent (mock mode,
+        counter-less provider) -- never as a stand-in for real totals.
+        """
+        if not usage:
+            return 'usage unavailable'
+        return ' '.join(f'{key}={value}' for key, value in usage.items())
 
     # --- helpers ---
 

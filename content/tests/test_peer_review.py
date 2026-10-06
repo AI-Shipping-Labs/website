@@ -410,6 +410,32 @@ class ReviewDashboardViewTest(TestCase):
         self.assertContains(response, 'Great work!')
         self.assertContains(response, '4/5')
 
+    def test_dashboard_shows_shared_form_fields(self):
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course,
+            project_url='https://github.com/test/project',
+            commit_id='abc1234def5678901234',
+            learning_in_public_links=['https://dev.to/test/post'],
+            time_spent=6.5,
+        )
+        response = self.client.get('/courses/test-course/reviews')
+        self.assertContains(response, 'data-testid="peer-submission-commit-id"')
+        self.assertContains(response, 'abc1234def5678901234')
+        self.assertContains(response, 'data-testid="peer-submission-learning-in-public"')
+        self.assertContains(response, 'href="https://dev.to/test/post"')
+        self.assertContains(response, 'data-testid="peer-submission-time-spent"')
+        self.assertContains(response, '6.5 hours')
+
+    def test_dashboard_flags_missing_shared_form_fields(self):
+        ProjectSubmission.objects.create(
+            user=self.user, course=self.course,
+            project_url='https://github.com/test/project',
+        )
+        response = self.client.get('/courses/test-course/reviews')
+        self.assertContains(response, 'data-testid="peer-submission-commit-missing"')
+        self.assertContains(response, 'data-testid="peer-submission-time-spent-missing"')
+        self.assertNotContains(response, 'data-testid="peer-submission-learning-in-public"')
+
     def test_certificate_action_is_canonical_and_conditional(self):
         submission = ProjectSubmission.objects.create(
             user=self.user, course=self.course,

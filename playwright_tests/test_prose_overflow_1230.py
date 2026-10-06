@@ -330,8 +330,10 @@ def test_workshop_diagram_is_reachable_in_guarded_reader(django_server, browser)
             expect(page.get_by_role("heading", name="Questions & Answers")).to_be_visible()
             next_link = page.get_by_test_id("page-next-btn")
             expect(next_link).to_be_visible()
-            expect(next_link).to_contain_text("Next")
-            expect(next_link).not_to_contain_text("Next Steps")
+            # Issue #1793: the shared footer pair labels destinations by
+            # title, so the next control on this page reads
+            # "Next: Next Steps" in both reader families.
+            expect(next_link).to_contain_text("Next: Next Steps")
             _assert_document_fits(page)
     finally:
         context.close()

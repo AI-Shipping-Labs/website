@@ -260,8 +260,15 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     expect(page.get_by_test_id('homework-page-state').locator(
         '[data-homework-state="submitted"]',
     )).to_be_visible()
-    expect(current_row.locator('[data-homework-state]')).to_have_count(0)
-    expect(current_row.locator('svg.lucide-check-circle-2')).to_have_count(1)
+    # Issue #1794: on step routes the sidebar renders the homework outline
+    # group, so `aria-current` sits on the current step child while the
+    # unit's completion marker (check-circle-2, no state pill) stays on the
+    # group's heading row.
+    homework_heading = page.locator(
+        '#sidebar-nav [data-testid="reader-homework-group"] summary a'
+    ).first
+    expect(homework_heading.locator('[data-homework-state]')).to_have_count(0)
+    expect(homework_heading.locator('svg.lucide-check-circle-2')).to_have_count(1)
     expect(page.get_by_test_id('homework-review-form')).to_have_count(0)
     expect(page.get_by_test_id('homework-submit-button')).to_have_count(0)
     page.screenshot(path='.tmp/homework-state-review-desktop.png', full_page=True)

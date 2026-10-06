@@ -804,6 +804,130 @@ def test_event_description_section_link(django_server, page):
     _capture(page, "event-description-section")
 
 
+def _lazy_image_article(slug, image_name, alt):
+    """An article whose tall lazy image sits right above #phase-4-modeling."""
+    return _article(
+        slug,
+        "x",
+        content_html=(
+            '<h2 id="intro">Intro</h2>'
+            + "".join(f"<p>Intro paragraph {n}. " + "Words keep going. " * 30 + "</p>"
+                      for n in range(10))
+            + '<h2 id="phase-3">Phase 3</h2>'
+            + "".join(f"<p>Phase paragraph {n}. " + "Words keep going. " * 30 + "</p>"
+                      for n in range(6))
+            + f'<p><img src="/static/{image_name}" alt="{alt}" loading="lazy"></p>'
+            + '<h2 id="phase-4-modeling">Phase 4: Modeling</h2>'
+            + "".join(f"<p>Model paragraph {n}. " + "Words keep going. " * 30 + "</p>"
+                      for n in range(10))
+        ),
+    )
+
+
+def _wait_held_image(page, held):
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(100)
+    assert held, "the lazy image above the target was never requested"
+
+
+def _settle_script_scroll(page):
+    """Let fonts and pending layout work finish, then wait out the anchor
+    script's own scroll window, so the next scroll is unambiguously foreign."""
+    page.wait_for_function("document.fonts.status === 'loaded'")
+    page.wait_for_timeout(400)
+
+
+def _drop_fragment(page):
+    """Remove `#section` from the URL without scrolling.
+
+    Chromium re-scrolls a loading page back to its fragment target after
+    layout changes and only a user input cancels that, which would mask the
+    pin behavior under test. The pin keeps the element reference, so the
+    fragment itself is no longer needed.
+    """
+    page.evaluate(
+        "history.replaceState(null, '', "
+        "window.location.pathname + window.location.search)"
+    )
+
+
+@browser_journey
+def test_foreign_script_scroll_releases_pin_during_image_load(
+    django_server, page,
+):
+    held = []
+    url = _lazy_image_article(
+        "foreign-scroll-article", "anchors-foreign-1833.png", "Foreign diagram",
+    )
+    page.set_viewport_size(DESKTOP)
+    page.route("**/anchors-foreign-1833.png", lambda route: held.append(route))
+
+    page.goto(f"{django_server}{url}#phase-4-modeling", wait_until="domcontentloaded")
+    _wait_heading_below_header(page, "phase-4-modeling")
+    _wait_held_image(page, held)
+    # Chrome scroll anchoring would compensate for the image insertion with
+    # its own scroll; disable it so the only mover under test is the pin.
+    page.add_style_tag(content="html { overflow-anchor: none; }")
+    _settle_script_scroll(page)
+    _drop_fragment(page)
+
+    # A scroll with no wheel, touch, key or mouse input: another script's
+    # scrollBy, exactly what a scrollbar drag produces as well. The pin must
+    # release here, or the image load below pulls the reader back. The site
+    # CSS sets `scroll-behavior: smooth`, so the scroll passes an explicit
+    # `instant` behavior — a foreign script would not want the site's glide
+    # either — and the scroll lands synchronously.
+    page.evaluate("window.scrollBy({top: 600, behavior: 'instant'})")
+    foreign_scroll_y = page.evaluate("window.scrollY")
+    assert foreign_scroll_y > 0
+
+    held[0].fulfill(status=200, content_type="image/png", body=_tall_png())
+    page.wait_for_function(
+        "() => document.querySelector('img[alt=\"Foreign diagram\"]').naturalHeight > 0"
+    )
+    page.wait_for_timeout(500)
+
+    assert page.evaluate("window.scrollY") == foreign_scroll_y
+    rect = _heading_rect(page, "phase-4-modeling")
+    assert abs(rect["top"] - rect["headerBottom"]) > 100, rect
+    _capture(page, "foreign-scroll-pin-released")
+
+
+@browser_journey
+def test_wheel_releases_pin_while_lazy_image_loads(django_server, page):
+    held = []
+    url = _lazy_image_article(
+        "wheel-release-article", "anchors-wheel-1833.png", "Wheel diagram",
+    )
+    page.set_viewport_size(DESKTOP)
+    page.route("**/anchors-wheel-1833.png", lambda route: held.append(route))
+
+    page.goto(f"{django_server}{url}#phase-4-modeling", wait_until="domcontentloaded")
+    _wait_heading_below_header(page, "phase-4-modeling")
+    _wait_held_image(page, held)
+    page.add_style_tag(content="html { overflow-anchor: none; }")
+    _settle_script_scroll(page)
+    _drop_fragment(page)
+
+    page.mouse.wheel(0, 600)
+    page.wait_for_timeout(300)
+    wheel_scroll_y = page.evaluate("window.scrollY")
+    assert wheel_scroll_y > 0
+
+    held[0].fulfill(status=200, content_type="image/png", body=_tall_png())
+    page.wait_for_function(
+        "() => document.querySelector('img[alt=\"Wheel diagram\"]').naturalHeight > 0"
+    )
+    page.wait_for_timeout(500)
+
+    assert page.evaluate("window.scrollY") == wheel_scroll_y
+    rect = _heading_rect(page, "phase-4-modeling")
+    assert abs(rect["top"] - rect["headerBottom"]) > 100, rect
+    _capture(page, "wheel-pin-released")
+
+
 @browser_journey
 def test_section_link_stays_on_target_while_lazy_image_above_loads(
     django_server, page,

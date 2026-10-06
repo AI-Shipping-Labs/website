@@ -175,6 +175,15 @@ ESCALATION_TRIGGERS: tuple[tuple[str, str], ...] = (
     ("templates/includes/*", "shared template fragments"),
     ("templates/_partials/*", "shared template fragments"),
     ("templates/base.html", "shared template fragments"),
+    # Studio-wide shared surfaces: the shell every Studio page extends plus
+    # the Studio-wide fragment directories (#1825). Escalation triggers only,
+    # never SHARED_TEMPLATE_GLOBS -- rule 2 flags full Playwright and lets the
+    # path fall through, so rule 10 keeps the owning `studio` app; adding them
+    # to SHARED_TEMPLATE_GLOBS would re-route the Django target to `content`
+    # and silently drop the studio tests.
+    ("templates/studio/base.html", "shared template fragments"),
+    ("templates/studio/includes/*", "shared template fragments"),
+    ("templates/studio/_partials/*", "shared template fragments"),
     ("website/*", "every-request/every-page surface"),
     ("accounts/context_processors.py", "every-request/every-page surface"),
     # The session store backs SESSION_ENGINE, so it runs on every request.

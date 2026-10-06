@@ -1019,7 +1019,7 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 | 7 | Python under `tests/**`, any app's `tests/**`, `asl_cli/tests/**`, or `playwright_tests/**` | all four repository-wide lexical ratchets that scan these trees. A Playwright-tree change also selects the Playwright owner-inventory and browser-journey policy modules. These labels supplement the next rule. |
 | 8 | test files | the exact dotted test module (`studio/tests/test_events.py` -> `studio.tests.test_events`), not the whole app. `playwright_tests/test_X.py` also runs that file directly; `asl_cli/**` runs `uv run pytest asl_cli/tests` |
 | 9 | app source under one of the 20 project apps | that app, plus a one-hop reverse-import expansion (below) |
-| 10 | `templates/<app>/**` | that app (+ core Playwright), *plus every repo-wide template guard by explicit label* (rule 14). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. A template dir with no owning app -> `make test-core` as the unknown-owner fallback, and the `NOTE template-fallback:` line names the guard labels it added |
+| 10 | `templates/<app>/**` | that app (+ core Playwright), *plus every repo-wide template guard by explicit label* (rule 14). `templates/includes/**`, `templates/_partials/**`, `templates/base.html` -> `content` + `make test-core` + full Playwright. The Studio shell and Studio-wide fragments (`templates/studio/base.html`, `templates/studio/includes/**`, `templates/studio/_partials/**`) stay mapped to `studio` (+ core-Playwright default overridden by rule 2's full-Playwright flag) -- they are escalation triggers, not `SHARED_TEMPLATE_GLOBS`, so the `studio` Django target survives. A template dir with no owning app -> `make test-core` as the unknown-owner fallback, and the `NOTE template-fallback:` line names the guard labels it added |
 | 11 | `static/**` | core Playwright. `static/js/**/*.js` also selects the first-party JavaScript guards (rule 14); `tailwind.config.js` escalates to full Playwright (purge config can strip classes on any page) |
 | 12 | `<app>/migrations/**` | that app only. Migrations touching 2+ apps in one diff also add `make test-core` |
 | 13 | anything unmatched | fails closed to `make test-core`, printed as `WARN unmapped: <path>` -- never silently dropped |
@@ -1247,7 +1247,7 @@ encoded as `ESCALATION_TRIGGERS` in `scripts/affected_tests.py` and pinned by
 | `tests/fixtures.py` | shared fixtures |
 | `content/access.py`, `content/tier_config.py`, `accounts/gating.py`, `playwright_tests/test_access_control.py` | access-control matrix |
 | `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` (webhook handlers live under `payments/services/`) | payments wiring |
-| `templates/includes/**`, `templates/_partials/**`, `templates/base.html` | shared template fragments |
+| `templates/includes/**`, `templates/_partials/**`, `templates/base.html`, `templates/studio/base.html`, `templates/studio/includes/**`, `templates/studio/_partials/**` | shared template fragments |
 | `website/**` (settings, urls, middleware, context processors), `accounts/context_processors.py`, `accounts_ext/session_backend.py` (backs `SESSION_ENGINE`) | every-request/every-page surface |
 | `tailwind.config.js` | content-purge config, can strip classes on any page |
 | `integrations/middleware.py` | every request |
@@ -1255,6 +1255,18 @@ encoded as `ESCALATION_TRIGGERS` in `scripts/affected_tests.py` and pinned by
 
 Note that `payments/tests/**` deliberately does not escalate: editing a
 payments test is not the same as editing payments wiring.
+
+The Studio-wide surfaces (`templates/studio/base.html` -- the shell every
+Studio page extends -- plus `templates/studio/includes/**` and
+`templates/studio/_partials/**`) are escalation triggers only and are
+deliberately kept out of `SHARED_TEMPLATE_GLOBS`: rule 2 flags full Playwright
+and lets the path fall through, so rule 10 keeps mapping them to the owning
+`studio` app. Listing them in `SHARED_TEMPLATE_GLOBS` instead would re-route
+the Django target to `content` (the shared-fragment branch runs before the
+owning-app branch inside rule 10) and silently drop the studio tests.
+Ordinary per-page Studio templates (`templates/studio/courses/**`,
+`templates/studio/crm/**`, ...) keep the core-Playwright default -- their
+blast radius is one page, not the shell.
 
 ### Curated hub-module map
 

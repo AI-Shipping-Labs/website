@@ -199,16 +199,33 @@ class HomeworkSidebarRowConsistencyTest(HomeworkUnitSetupMixin, TestCase):
             with self.subTest(scope=scope):
                 self.course.reader_navigation_scope = scope
                 self.course.save(update_fields=['reader_navigation_scope'])
+                current_page = self.client.get(self.unit_url)
+                other_page = self.client.get(self.lesson.get_absolute_url())
                 current_attrs, current = sidebar_row_parts(
-                    self.client.get(self.unit_url), self.unit_url,
+                    current_page, self.unit_url,
                 )
                 other_attrs, other = sidebar_row_parts(
-                    self.client.get(self.lesson.get_absolute_url()), self.unit_url,
+                    other_page, self.unit_url,
                 )
-                self.assertIn('aria-current="page"', current_attrs)
-                self.assertNotIn('aria-current', other_attrs)
                 self.assertEqual(current, other)
                 self.assertNotIn('data-homework-state', current)
+                if 'data-testid="reader-homework-group"' in current_page.content.decode():
+                    # Issue #1794: an activated homework's heading is a
+                    # plain link; its outline's current STEP row carries
+                    # the current state, and only on its own step pages.
+                    self.assertNotIn('aria-current', current_attrs)
+                    self.assertNotIn('aria-current', other_attrs)
+                    step_attrs, _ = sidebar_row_parts(
+                        current_page, f'{self.unit_url}/intro',
+                    )
+                    self.assertIn('aria-current="page"', step_attrs)
+                    other_step_attrs, _ = sidebar_row_parts(
+                        other_page, f'{self.unit_url}/intro',
+                    )
+                    self.assertNotIn('aria-current', other_step_attrs)
+                else:
+                    self.assertIn('aria-current="page"', current_attrs)
+                    self.assertNotIn('aria-current', other_attrs)
         return current
 
     def test_not_submitted_row_keeps_type_icon_and_no_status_text(self):

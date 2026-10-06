@@ -1,0 +1,19 @@
+{% comment %}
+  Virtual homework step links under an activated homework's syllabus row
+  (issue #1794). Display-only: the steps deep-link the existing reader
+  stepper pages built by `content.services.homework_outline` from the
+  viewer's own cohort Homework/Question rows — no Unit, Module or Question
+  rows stand behind them. Step icons reuse the reader sidebar's
+  `homework_step_nav_marker_html` so both outlines read the same.
+{% endcomment %}
+{% load curriculum_tags %}
+<ul class="mb-1 ml-6 space-y-0.5 border-l border-border pl-2" data-testid="syllabus-homework-steps">
+  {% for step_title, step_href in steps %}
+  <li>
+    <a href="{{ step_href }}" data-testid="syllabus-homework-step" class="flex min-h-[44px] items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      <span class="flex h-4 w-4 flex-shrink-0 items-center justify-center">{{ step_title|homework_step_nav_marker_html }}</span>
+      <span class="min-w-0 break-words">{{ step_title }}</span>
+    </a>
+  </li>
+  {% endfor %}
+</ul>

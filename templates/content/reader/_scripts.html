@@ -229,6 +229,11 @@
     document.addEventListener('click', function(event) {
       var summary = event.target.closest('details.sidebar-module > summary');
       if (!summary) return;
+      // Issue #1794: the homework outline's heading keeps the unit's
+      // canonical link inside the summary (same anchor-in-summary
+      // pattern as the syllabus group). A click on that link must
+      // navigate, not toggle; the rest of the row toggles.
+      if (event.target.closest('a')) return;
       event.preventDefault();
       var details = summary.parentElement;
       if (details.open) {

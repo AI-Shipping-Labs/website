@@ -230,7 +230,8 @@ class ProjectSubmitViewTest(TestCase):
 
     def test_submit_project(self):
         response = self.client.post('/courses/test-course/submit', {
-            'project_url': 'https://github.com/test/project',
+            'github_link': 'https://github.com/test/project',
+            'commit_id': 'a1b2c3d',
             'description': 'My project',
         })
         self.assertEqual(response.status_code, 200)
@@ -238,6 +239,7 @@ class ProjectSubmitViewTest(TestCase):
         sub = ProjectSubmission.objects.get(user=self.user, course=self.course)
         self.assertEqual(sub.project_url, 'https://github.com/test/project')
         self.assertEqual(sub.description, 'My project')
+        self.assertEqual(sub.commit_id, 'a1b2c3d')
 
     def test_self_paced_enrollment_enters_review_pool(self):
         cohort = Cohort.objects.create(
@@ -245,7 +247,8 @@ class ProjectSubmitViewTest(TestCase):
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.user)
         self.client.post('/courses/test-course/submit', {
-            'project_url': 'https://github.com/test/project',
+            'github_link': 'https://github.com/test/project',
+            'commit_id': 'a1b2c3d',
         })
         submission = ProjectSubmission.objects.get(user=self.user, course=self.course)
         self.assertIsNone(submission.cohort_id)
@@ -256,12 +259,14 @@ class ProjectSubmitViewTest(TestCase):
             project_url='https://github.com/test/old',
         )
         response = self.client.post('/courses/test-course/submit', {
-            'project_url': 'https://github.com/test/new',
+            'github_link': 'https://github.com/test/new',
+            'commit_id': 'a1b2c3d',
             'description': 'Updated',
         })
         self.assertEqual(response.status_code, 200)
         sub = ProjectSubmission.objects.get(user=self.user, course=self.course)
         self.assertEqual(sub.project_url, 'https://github.com/test/new')
+        self.assertEqual(sub.commit_id, 'a1b2c3d')
 
     def test_cannot_update_after_review_started(self):
         sub = ProjectSubmission.objects.create(
@@ -270,7 +275,8 @@ class ProjectSubmitViewTest(TestCase):
             status='in_review',
         )
         response = self.client.post('/courses/test-course/submit', {
-            'project_url': 'https://github.com/test/new',
+            'github_link': 'https://github.com/test/new',
+            'commit_id': 'a1b2c3d',
         })
         self.assertEqual(response.status_code, 200)
         # Should show read-only view, not update
@@ -290,21 +296,20 @@ class ProjectSubmitViewTest(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn('/accounts/login/', response.url)
 
-    def test_submit_requires_project_url(self):
+    def test_submit_requires_github_link(self):
         response = self.client.post('/courses/test-course/submit', {
-            'project_url': '',
+            'github_link': '',
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'Project URL is required')
+        self.assertContains(response, 'This field is required.')
         self.assertFalse(
             ProjectSubmission.objects.filter(user=self.user).exists()
         )
 
-    def test_submit_rejects_non_web_project_url(self):
+    def test_submit_rejects_non_web_github_link(self):
         response = self.client.post('/courses/test-course/submit', {
-            'project_url': 'javascript:alert(1)',
+            'github_link': 'javascript:alert(1)',
         })
-        self.assertContains(response, 'Enter a valid http or https project URL')
+        self.assertContains(response, 'Enter a valid http or https link.')
         self.assertFalse(ProjectSubmission.objects.filter(user=self.user).exists())
 
     def test_course_page_links_to_project_and_reviews(self):

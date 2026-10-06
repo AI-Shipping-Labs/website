@@ -97,6 +97,29 @@ class ProjectSubmission(models.Model):
     )
     project_url = models.URLField(max_length=500)
     description = models.TextField(blank=True, default='')
+    # Shared project submission form fields (issue #1777). ``project_url``
+    # stores the shared form's ``github_link`` value; ``description`` stays
+    # for legacy records and reviewer context.
+    commit_id = models.CharField(
+        max_length=40,
+        blank=True,
+        # db_default keeps rolling-deploy inserts valid while old images
+        # without the column still write (scripts/check_migration_safety.py).
+        db_default='',
+        default='',
+        help_text='Short commit hash (7-40 hex characters) of the reviewed version.',
+    )
+    learning_in_public_links = models.JSONField(
+        default=list,
+        blank=True,
+        db_default=[],
+        help_text='Public progress post links, capped by the shared form contract.',
+    )
+    time_spent = models.FloatField(
+        null=True,
+        blank=True,
+        help_text='Hours the learner spent on the project.',
+    )
     status = models.CharField(
         max_length=20,
         choices=SUBMISSION_STATUS_CHOICES,

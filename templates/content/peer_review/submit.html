@@ -35,11 +35,11 @@
   <p class="mb-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert">{{ error }}</p>
   {% endif %}
 
-  {% if submission and readonly %}
-  <dl class="divide-y divide-border border-y border-border text-sm">
-    <div class="py-3">
-      <dt class="text-muted-foreground">Project URL</dt>
-      <dd class="mt-1"><a href="{{ submission.project_url }}" target="_blank" rel="noopener" class="break-all text-accent hover:underline">{{ submission.project_url }}</a></dd>
+  {% if submission %}
+  <dl class="mb-6 divide-y divide-border border-y border-border text-sm" data-testid="peer-submission-summary">
+    <div class="flex items-center justify-between gap-3 py-3">
+      <dt class="text-muted-foreground">Status</dt>
+      <dd>{% member_status_badge submission.get_status_display status=submission.status testid="peer-submission-status" %}</dd>
     </div>
     {% if submission.description %}
     <div class="py-3">
@@ -47,39 +47,57 @@
       <dd class="mt-1 whitespace-pre-line text-foreground">{{ submission.description }}</dd>
     </div>
     {% endif %}
-    <div class="flex items-center justify-between gap-3 py-3">
-      <dt class="text-muted-foreground">Status</dt>
-      <dd>{% member_status_badge submission.get_status_display status=submission.status testid="peer-submission-status" %}</dd>
-    </div>
   </dl>
+  {% endif %}
+
+  {# The shared community-base form (issue #1777): one field contract with DataTalksClub, AISL page chrome and shell styling stay local. #}
+  {% include "coursework/_project_submission_form.html" with project_form=project_form %}
+
+  {% if submission and not submission.commit_id %}
+  <p class="mt-3 text-sm text-muted-foreground" data-testid="peer-submission-commit-missing">No commit ID was collected for this submission.</p>
+  {% endif %}
+
+  {% if submission and readonly %}
   <div class="mt-6">
     {% if course_project %}<a href="{% url 'course_project_reviews' slug=course.slug attempt_slug=course_project.slug %}" class="{% button_classes 'secondary' extra='w-full sm:w-auto' %}">See peer reviews</a>{% else %}<a href="{% url 'peer_review_dashboard' slug=course.slug %}" class="{% button_classes 'secondary' extra='w-full sm:w-auto' %}">Go to review dashboard</a>{% endif %}
   </div>
-
-  {% elif submission or not deadline_passed %}
-  <form method="post" class="space-y-5">
-    {% csrf_token %}
-    <div>
-      <label for="peer-project-url" class="mb-2 block text-sm font-medium text-foreground">Project URL</label>
-      <input id="peer-project-url" type="url" name="project_url" value="{{ submission.project_url|default:'' }}" required
-             class="min-h-[44px] w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm"
-             placeholder="https://github.com/you/project">
-    </div>
-    <div>
-      <label for="peer-project-description" class="mb-2 block text-sm font-medium text-foreground">Description <span class="font-normal text-muted-foreground">(optional)</span></label>
-      <textarea id="peer-project-description" name="description" rows="4"
-                class="w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm"
-                placeholder="Tell reviewers about your project...">{{ submission.description|default:'' }}</textarea>
-    </div>
-    <button type="submit" class="{% button_classes 'primary' size='md' extra='w-full sm:w-auto' %}">
-      {% if submission %}Update submission{% else %}Submit project{% endif %}
-    </button>
-  </form>
   {% endif %}
   </div>
 
     </div>
   </section>
+
+  <style>
+  /* AISL shell for the shared community-base form partial (issue #1777).
+     The cb- classes are owned by the package partial; this block maps them
+     onto the site design tokens (see _docs/design-system.md, Buttons and
+     Form Controls, for the referenced values). AISL does not offer
+     submission removal (#1777), so the partial's Remove button stays hidden
+     and the views reject action=delete POSTs. */
+  .cb-project-submission .cb-section-title { font-size: 1.125rem; line-height: 1.75rem; font-weight: 600; letter-spacing: -0.025em; color: hsl(var(--foreground)); }
+  .cb-project-submission .cb-card-meta { font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+  .cb-project-submission .cb-field { margin-top: 1.25rem; }
+  .cb-project-submission .cb-label { display: block; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); margin-bottom: 0.5rem; }
+  .cb-project-submission .cb-input { min-height: 44px; width: 100%; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--background)); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: hsl(var(--foreground)); }
+  .cb-project-submission .cb-input:focus-visible { outline: none; box-shadow: 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--accent)); }
+  .cb-project-submission textarea.cb-input { min-height: 0; }
+  .cb-project-submission .cb-form-help { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; }
+  .cb-project-submission .cb-form-help summary { cursor: pointer; display: inline-flex; height: 1.5rem; width: 1.5rem; align-items: center; justify-content: center; border-radius: 9999px; border: 1px solid hsl(var(--border)); }
+  .cb-project-submission .cb-disclosure { font-size: 0.875rem; color: hsl(var(--muted-foreground)); margin-bottom: 0.5rem; }
+  .cb-project-submission .cb-disclosure summary { cursor: pointer; color: hsl(var(--accent)); }
+  .cb-project-submission .cb-form-error { margin-top: 0.375rem; font-size: 0.875rem; color: hsl(var(--destructive)); }
+  .cb-project-submission .cb-alert { margin-bottom: 1.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: hsl(var(--secondary)); padding: 0.5rem 0.75rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+  .cb-project-submission .cb-list { font-size: 0.875rem; color: hsl(var(--foreground)); }
+  .cb-project-submission .cb-empty { color: hsl(var(--muted-foreground)); }
+  .cb-project-submission .cb-form-status { margin-top: 1.5rem; border-top: 1px solid hsl(var(--border)); padding-top: 1rem; font-size: 0.875rem; color: hsl(var(--muted-foreground)); }
+  .cb-project-submission .cb-form-actions { margin-top: 1.5rem; display: flex; flex-direction: column; gap: 0.75rem; }
+  @media (min-width: 640px) { .cb-project-submission .cb-form-actions { flex-direction: row; } }
+  .cb-project-submission .cb-button { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 0.5rem; border-radius: 0.375rem; border: 1px solid hsl(var(--border)); background-color: transparent; padding: 0.5rem 1rem; font-size: 0.875rem; font-weight: 500; color: hsl(var(--foreground)); transition-property: color, background-color, border-color; }
+  .cb-project-submission .cb-button:hover { background-color: hsl(var(--secondary)); }
+  .cb-project-submission .cb-button-primary { border-color: transparent; background-color: hsl(var(--accent)); color: hsl(var(--accent-foreground)); }
+  .cb-project-submission .cb-button-primary:hover { background-color: hsl(var(--accent) / 0.9); }
+  .cb-project-submission [data-project-remove] { display: none; }
+  </style>
 
   {% include "includes/footer.html" %}
 </main>

@@ -43,6 +43,15 @@
         <dt class="text-muted-foreground">Project URL</dt>
         <dd class="mt-1"><a href="{{ submission.project_url }}" target="_blank" rel="noopener" class="break-all text-accent hover:underline">{{ submission.project_url }}</a></dd>
       </div>
+
+      <div class="flex items-center justify-between gap-3 py-3">
+        <dt class="text-muted-foreground">Commit ID</dt>
+        {% if submission.commit_id %}
+        <dd class="font-mono text-sm text-foreground" data-testid="peer-submission-commit-id">{{ submission.commit_id }}</dd>
+        {% else %}
+        <dd class="text-sm text-muted-foreground" data-testid="peer-submission-commit-missing">Not collected</dd>
+        {% endif %}
+      </div>
       {% if submission.description %}
       <div class="py-3">
         <dt class="text-muted-foreground">Description</dt>

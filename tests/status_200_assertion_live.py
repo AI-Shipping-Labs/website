@@ -1036,7 +1036,6 @@ DIRECT_STATUS_200_ASSERTION_LIVE_IDS: tuple[str, ...] = (
     "content/tests/test_peer_review.py::ProjectSubmitViewTest.test_readonly_shows_status_and_no_form::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "content/tests/test_peer_review.py::ProjectSubmitViewTest.test_submit_page_loads::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "content/tests/test_peer_review.py::ProjectSubmitViewTest.test_submit_project::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
-    "content/tests/test_peer_review.py::ProjectSubmitViewTest.test_submit_requires_project_url::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "content/tests/test_peer_review.py::ProjectSubmitViewTest.test_update_submission_while_submitted::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "content/tests/test_peer_review.py::ReviewDashboardViewTest.test_dashboard_no_submission::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "content/tests/test_peer_review.py::ReviewDashboardViewTest.test_dashboard_shows_assigned_reviews::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",

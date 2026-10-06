@@ -8,7 +8,14 @@ from content.models import Course, CourseCertificate, PeerReview, ProjectSubmiss
 from content.models.cohort import CohortEnrollment
 from content.models.peer_review import CourseProject
 from content.services.peer_review_service import PeerReviewService
-from content.views.peer_review import _require_course_access, _valid_project_url
+from content.services.project_form_adapter import (
+    REMOVAL_UNAVAILABLE_MESSAGE,
+    build_submission_form,
+    certificate_cohort,
+    lookup_curriculum_enrollment,
+    submission_cohort,
+)
+from content.views.peer_review import _require_course_access
 
 
 def _attempt(request, slug, attempt_slug):
@@ -37,37 +44,37 @@ def attempt_submit(request, slug, attempt_slug):
     ).first()
     deadline_passed = timezone.now() >= project.submission_due_at
     readonly = bool(deadline_passed or (submission and submission.status != 'submitted'))
+    cert_cohort = certificate_cohort(request.user, course, project.cohort)
+    enrollment = lookup_curriculum_enrollment(request.user, cert_cohort)
     context = {
         'course': course, 'course_project': project,
         'submission': submission, 'readonly': readonly,
         'deadline_passed': deadline_passed,
+        'project_form': build_submission_form(
+            project=project, submission=submission,
+            enrollment=enrollment, user=request.user,
+            certificate_cohort=cert_cohort,
+        ),
     }
     if request.method == 'POST':
         if readonly:
             context['error'] = 'The submission deadline has passed.' if deadline_passed else 'Reviews have started; this submission can no longer be edited.'
             return render(request, 'content/peer_review/submit.html', context, status=403)
-        project_url = request.POST.get('project_url', '').strip()
-        description = request.POST.get('description', '').strip()
-        if not _valid_project_url(project_url):
-            context['error'] = 'Project URL is required.' if not project_url else 'Enter a valid http or https project URL.'
-            return render(request, 'content/peer_review/submit.html', context, status=400)
-        if submission:
-            submission.project_url = project_url
-            submission.description = description
-            submission.save(update_fields=['project_url', 'description'])
+        if request.POST.get('action') == 'delete':
+            context['error'] = REMOVAL_UNAVAILABLE_MESSAGE
+            return render(request, 'content/peer_review/submit.html', context, status=403)
+        form = build_submission_form(
+            data=request.POST, project=project, submission=submission,
+            enrollment=enrollment, user=request.user,
+            cohort=submission_cohort(request.user, course, project.cohort),
+            certificate_cohort=cert_cohort,
+        )
+        if form.is_valid():
+            submission, _created = form.save()
+            context.update(submission=submission, just_submitted=True, project_form=form)
         else:
-            cohort = project.cohort
-            if cohort is None:
-                enrollment = CohortEnrollment.objects.filter(
-                    user=request.user, cohort__course=course,
-                    cohort__mode='cohort', cohort__is_active=True,
-                ).select_related('cohort').first()
-                cohort = enrollment.cohort if enrollment else None
-            submission = ProjectSubmission.objects.create(
-                user=request.user, course=course, course_project=project,
-                cohort=cohort, project_url=project_url, description=description,
-            )
-        context.update(submission=submission, just_submitted=True)
+            context['project_form'] = form
+            return render(request, 'content/peer_review/submit.html', context, status=400)
     return render(request, 'content/peer_review/submit.html', context)
 
 

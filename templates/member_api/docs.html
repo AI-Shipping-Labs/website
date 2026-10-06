@@ -1,12 +1,21 @@
 <!DOCTYPE html>
+{% load static %}
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI Shipping Labs Member API</title>
+  <!--
+    Issue #1846: swagger-ui-dist 5.17.14 is vendored under
+    static/vendor/swagger-ui-dist/5.17.14/ instead of a third-party CDN.
+    The CDN scripts were parser-blocking, so DOMContentLoaded — and with
+    it every wait_until="domcontentloaded" navigation — depended on a
+    third-party host responding. Same pinned library and version, now
+    served from the repo like static/vendor/mermaid/.
+  -->
   <link
     rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css"
+    href="{% static 'vendor/swagger-ui-dist/5.17.14/swagger-ui.css' %}"
   >
   <style>
     body { margin: 0; }
@@ -37,12 +46,10 @@
   </div>
   <div id="swagger-ui" data-testid="member-api-docs"></div>
   <script
-    src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"
-    crossorigin
+    src="{% static 'vendor/swagger-ui-dist/5.17.14/swagger-ui-bundle.js' %}"
   ></script>
   <script
-    src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-standalone-preset.js"
-    crossorigin
+    src="{% static 'vendor/swagger-ui-dist/5.17.14/swagger-ui-standalone-preset.js' %}"
   ></script>
   <script>
     window.addEventListener('load', function() {

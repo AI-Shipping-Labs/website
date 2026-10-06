@@ -20,6 +20,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
+from django.urls import reverse
 from django.utils import timezone
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
@@ -31,6 +32,7 @@ from events.models import (
     EventRegistration,
 )
 from events.services.anon_registration_confirmation import SESSION_KEY
+from events.views.pages import _build_event_post_resources
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
@@ -684,7 +686,7 @@ class EventDetailPageTest(TestCase):
         self.assertNotContains(response, 'Create free account')
 
 
-class EventDetailRecordingRemovedTest(TestCase):
+class EventDetailRecordingRemovedTest(TierSetupMixin, TestCase):
     """Issues #426/#1037: event detail renders links, not playback UI.
 
     Standalone completed events can render structured external recording
@@ -940,6 +942,154 @@ class EventDetailRecordingRemovedTest(TestCase):
         )
         response = self.client.get(event.get_absolute_url())
         self.assertNotContains(response, 'data-testid="event-recording-block"')
+
+    # --- Issue #1911: S3-only recordings link the internal endpoint ------
+
+    def _s3_url(self, name):
+        return (
+            'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+            f'recordings/2026/{name}.mp4'
+        )
+
+    def _playback_path(self, event):
+        return reverse(
+            'event_recording_stream',
+            kwargs={'event_id': event.pk, 'slug': event.slug},
+        )
+
+    def test_s3_only_recording_links_internal_playback_endpoint(self):
+        """Issue #1911: an S3-only past event gets the in-app playback link."""
+        s3_url = self._s3_url('s3-only-event')
+        event = self._create_completed_event(
+            slug='s3-only-event',
+            recording_url='',
+            recording_s3_url=s3_url,
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-post-resources"')
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'Watch recording')
+        self.assertContains(response, f'href="{self._playback_path(event)}"')
+        self.assertContains(response, 'Streaming')
+        # The private S3 asset and any presigned URL never reach the HTML.
+        self.assertNotContains(response, s3_url)
+        self.assertNotContains(response, 'amazonaws.com')
+        self.assertNotContains(response, 'X-Amz-Signature')
+        # The S3 upload counts as a recording, so the "no recording"
+        # closure must stay hidden now that the card exists.
+        self.assertNotContains(
+            response, 'data-testid="event-no-recording-closure"',
+        )
+        self.assertNotContains(
+            response, 'This event has ended. No recording is available.',
+        )
+
+    def test_external_recording_url_preferred_over_s3_recording(self):
+        """Issue #1911: the curated external URL wins over the S3 upload."""
+        s3_url = self._s3_url('both-urls-event')
+        event = self._create_completed_event(
+            slug='both-urls-event',
+            recording_url='https://youtube.com/watch?v=both',
+            recording_s3_url=s3_url,
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertContains(response, 'data-testid="event-recording-resource"')
+        self.assertContains(response, 'href="https://youtube.com/watch?v=both"')
+        self.assertContains(response, 'youtube.com')
+        self.assertNotContains(response, self._playback_path(event))
+        self.assertNotContains(response, 'Streaming')
+        self.assertNotContains(response, s3_url)
+
+    def test_upcoming_event_suppresses_prepopulated_s3_recording(self):
+        """Issue #1911 regression: a pre-populated S3 upload stays hidden."""
+        event = Event.objects.create(
+            title='Upcoming S3 Event',
+            slug='upcoming-s3-event',
+            start_datetime=timezone.now() + timedelta(days=7),
+            end_datetime=timezone.now() + timedelta(days=7, hours=1),
+            status='upcoming',
+            recording_s3_url=self._s3_url('upcoming-s3-event'),
+        )
+        response = self.client.get(event.get_absolute_url())
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'Watch recording')
+        self.assertNotContains(response, self._playback_path(event))
+
+    def test_under_tier_member_gets_no_s3_recording_card(self):
+        """Issue #1911: the existing access gate also covers the new link."""
+        s3_url = self._s3_url('gated-s3-event')
+        event = self._create_completed_event(
+            slug='gated-s3-event',
+            required_level=LEVEL_MAIN,
+            recording_s3_url=s3_url,
+        )
+        member = User.objects.create_user(
+            email='free-s3@test.com',
+            password='pass',
+            email_verified=True,
+        )
+        set_membership(member, tier=self.free_tier)
+        self.client.login(email='free-s3@test.com', password='pass')
+        response = self.client.get(event.get_absolute_url())
+        self.assertFalse(response.context['has_access'])
+        self.assertNotContains(response, 'data-testid="event-post-resources"')
+        self.assertNotContains(response, 'Watch recording')
+        self.assertNotContains(response, self._playback_path(event))
+        self.assertNotContains(response, s3_url)
+
+
+class BuildEventPostResourcesS3RecordingTest(TestCase):
+    """Issue #1911: recording-link precedence in the builder dict.
+
+    Rendering is covered by ``EventDetailRecordingRemovedTest``; these pin
+    the dict contract, including the invalid-external-URL fallback that a
+    rendered page cannot distinguish from an absent one.
+    """
+
+    def _past_event(self, **overrides):
+        defaults = {
+            'title': 'S3 Recording Event',
+            'slug': 's3-recording-event',
+            'start_datetime': timezone.now() - timedelta(days=7),
+            'end_datetime': timezone.now() - timedelta(days=7, hours=-1),
+            'status': 'completed',
+        }
+        defaults.update(overrides)
+        return Event.objects.create(**defaults)
+
+    def _playback_path(self, event):
+        return reverse(
+            'event_recording_stream',
+            kwargs={'event_id': event.pk, 'slug': event.slug},
+        )
+
+    def test_s3_only_recording_resolves_internal_streaming_link(self):
+        event = self._past_event(
+            slug='s3-only-builder-event',
+            recording_s3_url=(
+                'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/s3-only-builder.mp4'
+            ),
+        )
+        resources = _build_event_post_resources(event, has_access=True)
+        self.assertEqual(resources['recording_url'], self._playback_path(event))
+        self.assertEqual(resources['recording_host'], 'Streaming')
+        self.assertTrue(resources['has_resources'])
+        self.assertEqual(resources['materials'], [])
+
+    def test_invalid_external_url_falls_back_to_s3_internal_link(self):
+        event = self._past_event(
+            slug='invalid-external-s3-event',
+            recording_url='not-a-valid-url',
+            recording_s3_url=(
+                'https://recordings-bucket.s3.eu-central-1.amazonaws.com/'
+                'recordings/2026/fallback.mp4'
+            ),
+        )
+        resources = _build_event_post_resources(event, has_access=True)
+        self.assertNotEqual(resources['recording_url'], 'not-a-valid-url')
+        self.assertEqual(resources['recording_url'], self._playback_path(event))
+        self.assertEqual(resources['recording_host'], 'Streaming')
 
 
 # --- Access Control Tests ---

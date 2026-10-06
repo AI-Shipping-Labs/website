@@ -11,6 +11,7 @@ from django.core.validators import URLValidator
 from django.db.models import Avg, Count, Prefetch
 from django.http import Http404, HttpResponse, HttpResponseForbidden
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -245,6 +246,19 @@ def _build_event_post_resources(event, *, has_access):
             recording_url = ''
         else:
             recording_host = urlparse(recording_url).netloc
+
+    # Issue #1911: Zoom auto-uploads land on private S3 with no external
+    # recording_url. Link the internal access-checked playback endpoint, never
+    # the raw recording_s3_url or a presigned URL: the endpoint re-checks
+    # access on every request and 302s authorized viewers to a short-lived
+    # presigned GetObject URL. The reversed path is relative, so it skips
+    # _validate_resource_url (which only accepts http/https).
+    if not recording_url and event.recording_s3_url:
+        recording_url = reverse(
+            'event_recording_stream',
+            kwargs={'event_id': event.pk, 'slug': event.slug},
+        )
+        recording_host = 'Streaming'
 
     materials = _clean_event_materials(event.materials)
     return {

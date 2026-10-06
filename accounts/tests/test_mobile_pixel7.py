@@ -136,11 +136,15 @@ class CourseUnitTouchTargetTest(TestCase):
 
         Issue #1674 extracted the unit row markup out of course_detail.html
         into content/_syllabus_unit_row.html so the three-level accordion can
-        reuse it at every module-nesting depth.
+        reuse it at every module-nesting depth. Issue #1794 moved the row
+        anchor itself into content/_syllabus_unit_row_anchor.html so the
+        ordinary row and the expandable homework group render from one owner.
         """
         from django.template.loader import get_template
 
-        template = get_template("content/_syllabus_unit_row.html")
-        source = template.template.source
+        anchor = get_template("content/_syllabus_unit_row_anchor.html")
         # The unit row link has min-h-[44px]
-        self.assertIn("min-h-[44px]", source)
+        self.assertIn("min-h-[44px]", anchor.template.source)
+        row = get_template("content/_syllabus_unit_row.html")
+        # Both the ordinary row and the homework group render the anchor.
+        self.assertIn("_syllabus_unit_row_anchor.html", row.template.source)

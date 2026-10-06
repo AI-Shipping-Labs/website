@@ -118,11 +118,26 @@
   // target is "pinned": whenever the layout changes (an image loads, the
   // body resizes, the window finishes loading) and the heading is not at its
   // intended offset below the header, we scroll it back. The pin ends as
-  // soon as the reader scrolls or interacts, or after PIN_MS.
+  // soon as the reader or another script scrolls the page, on the first
+  // wheel/touch/key/mouse interaction, or after PIN_MS.
   var PIN_MS = 15000;
   var pinned = null;
   var pinnedUntil = 0;
   var realignQueued = false;
+  // The script starts scrolls of its own: the instant correction in
+  // realign() and the smooth glide in onHashChange() before scrollend.
+  // Both dispatch `scroll` events that must not release the pin, so each
+  // marks the window in which its own scroll events are expected. The
+  // window is short and is cleared when the glide settles, so it never
+  // suppresses a later scroll the script did not start.
+  var SELF_SCROLL_MS = 250;
+  var GLIDE_MS = 1500;
+  var selfScrollUntil = 0;
+
+  function markSelfScroll(durationMs) {
+    var until = Date.now() + durationMs;
+    if (until > selfScrollUntil) selfScrollUntil = until;
+  }
 
   function isProseHeading(el) {
     return !!(el && /^H[1-6]$/.test(el.tagName) && el.closest('.prose'));
@@ -141,6 +156,7 @@
     }
     var delta = pinned.getBoundingClientRect().top - headingOffset(pinned);
     if (Math.abs(delta) > 2) {
+      markSelfScroll(SELF_SCROLL_MS);
       window.scrollTo({
         top: Math.max(0, window.scrollY + delta),
         behavior: 'instant',
@@ -165,6 +181,20 @@
     pinned = null;
   }
 
+  // Any scroll the script did not start releases the pin: a scrollbar drag,
+  // another script calling scrollBy/scrollTo, an accessibility scroll. The
+  // script's own scrolls are excluded through selfScrollUntil, and a scroll
+  // that leaves the heading at its intended offset is the browser's own
+  // fragment positioning or layout compensation, not the reader leaving.
+  function onScroll() {
+    if (!pinned) return;
+    if (Date.now() < selfScrollUntil) return;
+    if (Math.abs(pinned.getBoundingClientRect().top - headingOffset(pinned)) <= 2) {
+      return;
+    }
+    unpin();
+  }
+
   function watchLayout() {
     // `load` does not bubble, so listen in the capture phase for images
     // (lazy or not) that finish loading anywhere on the page.
@@ -177,6 +207,10 @@
     ['wheel', 'touchstart', 'keydown', 'mousedown'].forEach(function (name) {
       window.addEventListener(name, unpin, { capture: true, passive: true });
     });
+    // Without capture: page scrolls (scrollbar drag, another script's
+    // scroll) fire on `window`; scrolls of inner scroll containers such as
+    // the reader's `overflow-x-auto` prose must not release the pin.
+    window.addEventListener('scroll', onScroll, { passive: true });
   }
 
   function pinInitialFragment() {
@@ -190,6 +224,9 @@
     // In-page jumps keep the site's smooth scroll: glide to the intended
     // offset, then pin once the scroll has settled.
     pinned = null;
+    // The glide's own scroll events must not release the pin that settle()
+    // arms; settle() clears the window so any later scroll counts.
+    markSelfScroll(GLIDE_MS);
     window.scrollTo({
       top: Math.max(0, target.getBoundingClientRect().top + window.scrollY - headingOffset(target)),
       behavior: 'smooth',
@@ -199,6 +236,9 @@
       if (settled) return;
       settled = true;
       window.removeEventListener('scrollend', settle);
+      // The glide has ended (scrollend) or the fallback fired: every scroll
+      // from here on is external and releases the pin again.
+      selfScrollUntil = 0;
       pinHeading(target);
     }
     window.addEventListener('scrollend', settle);

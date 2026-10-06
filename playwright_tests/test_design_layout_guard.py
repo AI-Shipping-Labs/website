@@ -486,7 +486,16 @@ def _assert_sidebar_rows_keep_height_when_current(page, base_url, module):
     for slug in slugs:
         inactive, inactive_current = row_height(inactive_page, slug)
         active, active_current = row_height(f"{base_url}{urls[slug]}?cohort=layout", slug)
-        assert inactive_current is None and active_current == "page", slug
+        if slug == "retrieval-homework":
+            # Issue #1794: for the enrolled cohort viewer the homework row
+            # is the outline disclosure heading; `aria-current` moves to
+            # the current step link inside the group and the row itself
+            # never carries it.
+            assert inactive_current is None and active_current is None, slug
+            step = page.get_by_test_id("homework-step-current")
+            expect(step).to_have_attribute("aria-current", "page")
+        else:
+            assert inactive_current is None and active_current == "page", slug
         if abs(active - inactive) > 0.5:
             problems.append(f"{slug}: {inactive:.1f}px inactive, {active:.1f}px current")
     assert problems == [], "Sidebar rows change height when current:\n" + "\n".join(problems)

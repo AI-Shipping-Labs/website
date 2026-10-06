@@ -54,13 +54,12 @@ When staff creates a Zoom meeting for an event:
 
 After the event ends:
 
-1. Zoom sends a webhook `recording.completed` to `POST /api/webhooks/zoom`
-2. Webhook handler:
-   a. Matches the `meeting_id` to the event
-   b. Downloads the recording from Zoom, uploads it to the recordings bucket, or stores the provider playback URL
-   c. Stores the recording on the event recording fields
-   d. Sets `event.status = "completed"`
-   e. Admin is notified to add timestamps and materials to the event or linked workshop
+1. Zoom sends `recording.completed` to the dapier webhook; dapier owns post-recording intake (issue #1913) and starts its recording agent
+2. The agent drives the platform API:
+   a. `POST /api/events/{slug}/sync-transcript` re-lists the meeting recordings via the Zoom API, matches them to the event, stores `transcript_url` and `recording_zoom_download_url`, and enqueues the Zoom-to-S3 upload plus the transcript task
+   b. `POST /api/events/{slug}/retry-recording-upload` re-enqueues a missing upload
+   c. The upload task downloads the recording from Zoom and uploads it to the recordings bucket; the event becomes past automatically once `end_datetime` passes
+   d. Admin is notified to add timestamps and materials to the event or linked workshop
 
 ## Pages
 
@@ -99,7 +98,7 @@ After the event ends:
 
 - R-EVT-1: Create `events` and `event_registrations` tables with schemas above.
 - R-EVT-2: When staff explicitly creates a Zoom meeting for an event, call Zoom API to create a meeting. Store `zoom_meeting_id` and `zoom_join_url` on the event. Requires Zoom OAuth app credentials in environment config.
-- R-EVT-3: Implement `POST /api/webhooks/zoom` to handle `recording.completed`. Store recording playback data on the matched event, preserve workshop-linked handoff behavior, and set event status to completed.
+- R-EVT-3: Post-recording intake is owned by dapier (issue #1913): dapier receives Zoom `recording.completed` and drives `POST /api/events/{slug}/sync-transcript` / `retry-recording-upload`. Recording playback data is stored on the matched event and the upload/transcript/recap pipeline is unchanged; the platform exposes no Zoom webhook endpoint of its own.
 - R-EVT-4: `GET /api/events` returns all non-draft events. Accepts `?status=upcoming` or `?status=past` filter. Each event includes `is_locked`, `is_registered` (for authenticated users), `spots_remaining` (if `max_participants` set).
 - R-EVT-5: `POST /api/events/{slug}/register` registers the authenticated user if they have access and spots are available. Returns 403 if tier too low, 409 if already registered, 410 if event is full.
 - R-EVT-6: `DELETE /api/events/{slug}/register` unregisters the user.

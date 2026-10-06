@@ -9,7 +9,9 @@ The recordings bucket is the durable, private home for Zoom cloud
 recordings. Members watch them through the access-controlled in-app
 player, which redirects to a short-lived presigned S3 URL. The flow is:
 
-1. Zoom posts `recording.completed`.
+1. Zoom posts `recording.completed` to dapier, which owns post-recording
+   intake and drives `POST /api/events/<slug>/sync-transcript` on this
+   platform (issue #1913).
 2. `jobs/tasks/recording_upload.py` downloads the MP4 from Zoom.
 3. `jobs/tasks/recordings_s3.py` uploads it to this bucket and stores
    the S3 URL on the event.
@@ -79,8 +81,8 @@ bucket:
 3. Update this setting via Studio (Integration settings > S3
    Recordings > `AWS_S3_RECORDINGS_BUCKET`).
 4. Window of impact: zero if you copy first and switch second. New
-   recordings start landing in the new bucket on the next webhook
-   delivery.
+   recordings start landing in the new bucket on the next dapier-triggered
+   intake (`sync-transcript`) run.
 
 Test vs live: n/a. Use a different bucket per environment if you want
 to isolate dev recordings — naming convention

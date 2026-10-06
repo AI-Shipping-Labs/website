@@ -457,13 +457,13 @@ Keys to set in Studio:
 | `ZOOM_CLIENT_ID` | secret | Server-to-Server OAuth app client ID. |
 | `ZOOM_CLIENT_SECRET` | secret | Same app's client secret. |
 | `ZOOM_ACCOUNT_ID` | secret | Zoom account ID (visible on the app's app credentials page). |
-| `ZOOM_WEBHOOK_SECRET_TOKEN` | secret | Token for verifying inbound webhook signatures. |
 
-Under **Features/Access → Event Subscriptions**, configure
-`{SITE_BASE_URL}/api/webhooks/zoom` (no trailing slash) and subscribe only to
-`recording.completed`. The event subscription's Secret Token becomes
-`ZOOM_WEBHOOK_SECRET_TOKEN`; it verifies webhook HMAC signatures and is not an
-OAuth scope or access token.
+Under **Features/Access → Event Subscriptions**, point the Event Notification
+Endpoint at the dapier hook URL and subscribe only to `recording.completed`.
+Dapier owns post-recording intake (issue #1913) and drives this platform's
+`sync-transcript` / `retry-recording-upload` API; the subscription's Secret
+Token is imported into dapier, not stored in this application. See
+`_docs/integrations/zoom.md` for the full runbook.
 
 After adding scopes or reactivating the app, restart every web/gunicorn and
 Django-Q worker process so each process-local cache obtains a fresh token, or

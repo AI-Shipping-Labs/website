@@ -150,7 +150,6 @@ class TestStudioSettingsAllOptionalBadge:
             "ZOOM_CLIENT_ID",
             "ZOOM_CLIENT_SECRET",
             "ZOOM_ACCOUNT_ID",
-            "ZOOM_WEBHOOK_SECRET_TOKEN",
         ):
             service.set(key, "val", actor_ref="test", reason="playwright seed")
         connection.close()
@@ -166,9 +165,22 @@ class TestStudioSettingsAllOptionalBadge:
             "ZOOM_CLIENT_ID",
             "ZOOM_CLIENT_SECRET",
             "ZOOM_ACCOUNT_ID",
-            "ZOOM_WEBHOOK_SECRET_TOKEN",
         ):
             assert (
                 _field_badge(card, key).get_attribute("data-source-badge")
                 == "db"
             )
+        # Issue #1913: the webhook endpoint is gone, so the zoom card lists
+        # only the OAuth + recording-behavior keys and renders no field for
+        # either removed webhook key.
+        for key in (
+            "ZOOM_WAITING_ROOM",
+            "ZOOM_JOIN_BEFORE_HOST",
+            "ZOOM_AUTO_RECORDING",
+        ):
+            assert card.locator(f'[data-field-key="{key}"]').count() == 1
+        for key in (
+            "ZOOM_WEBHOOK_SECRET_TOKEN",
+            "ZOOM_WEBHOOK_TOLERANCE_SECONDS",
+        ):
+            assert card.locator(f'[data-field-key="{key}"]').count() == 0

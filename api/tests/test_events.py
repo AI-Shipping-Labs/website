@@ -1348,7 +1348,7 @@ class EventsZoomMeetingIdBindingTest(EventsApiTestBase):
 
     A Zoom meeting provisioned outside the platform carries no
     ``zoom_meeting_id`` on its event, which leaves the recording pipeline
-    (``recording.completed`` webhook, transcript sync, S3 upload) inert —
+    (transcript sync, S3 upload) inert —
     they all match or list by meeting id. A numeric ``zoom_meeting_id``
     payload binds the existing meeting; empty clears it.
     """

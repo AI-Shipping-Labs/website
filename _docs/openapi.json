@@ -6985,7 +6985,7 @@
                     "type": "string"
                   },
                   "zoom_meeting_id": {
-                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (recording.completed webhook, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
+                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (dapier-triggered sync-transcript intake, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
                     "type": "string"
                   }
                 },
@@ -7853,7 +7853,7 @@
                     "type": "string"
                   },
                   "zoom_meeting_id": {
-                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (recording.completed webhook, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
+                    "description": "Optional. Numeric id of a Zoom meeting created outside the platform (empty string clears it). Binding it engages the recording pipeline (dapier-triggered sync-transcript intake, transcript sync, S3 upload) for meetings create_zoom did not provision. Rejected on non-zoom platforms.",
                     "type": "string"
                   }
                 },

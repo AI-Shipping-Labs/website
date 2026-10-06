@@ -68,6 +68,7 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
+from content.services.homework_outline import annotate_homework_outlines
 from content.services.homework_reveal import locked_after_submit
 from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
@@ -209,6 +210,14 @@ def course_detail(request, slug):
     )
     unit_deadlines, module_deadline_summaries = build_deadline_context(
         course, viewer_cohort,
+    )
+    # Issue #1794: annotated in place so the syllabus can expand an
+    # activated stepped homework into its virtual outline. Only an owned
+    # selected cohort (never a public/staff preview) earns the outline;
+    # everyone else keeps the single ordinary homework row.
+    annotate_homework_outlines(
+        modules, user,
+        viewer_cohort if not schedule_is_preview else None,
     )
     module_week_ranges = {
         module_id: course_unit_service.format_week_range(*week_range)
@@ -652,6 +661,12 @@ def course_home(request, slug, section='home'):
     # Home renders the syllabus hidden as its search index, so every section
     # gets the syllabus module context.
     modules = course.get_syllabus()
+    # Issue #1794: same owned-cohort homework outline annotation as the
+    # public syllabus; a staff cohort preview keeps plain rows.
+    annotate_homework_outlines(
+        modules, request.user,
+        None if context['is_cohort_preview'] else cohort,
+    )
     progress_rows = UserCourseProgress.objects.filter(
         user=request.user, unit__module__course=course,
         completed_at__isnull=False,
@@ -1119,6 +1134,16 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     context = course_unit_service.build_course_unit_navigation_context(
         user, course, module, unit, request=request,
         session_cohort=selected_cohort,
+    )
+    # Issue #1794: annotated in place so the reader sidebar can expand an
+    # activated stepped homework into its virtual outline (scoped and full
+    # navigation share these module instances). Only an owned selected
+    # cohort earns the outline; a staff cohort preview keeps plain rows.
+    # The outline for the resolved gated/drip-locked contexts is never
+    # annotated, so anonymous and unentitled visitors keep single rows.
+    annotate_homework_outlines(
+        context['modules'], user, owned_cohort,
+        current_path=request.path,
     )
     context['reader_cohort_param'] = request.GET.get('cohort', '')
     if context['reader_cohort_param'] and context['scoped_module']:

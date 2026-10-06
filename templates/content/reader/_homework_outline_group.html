@@ -1,0 +1,39 @@
+{% comment %}
+  Reader sidebar disclosure for an activated stepped homework (issue
+  #1794). `content.services.homework_outline.annotate_homework_outlines`
+  sets `unit.homework_outline_steps` (and `homework_outline_current_href`
+  for the page being rendered) only for a learner whose own selected
+  cohort owns the activated homework, so everyone else keeps the single
+  `_list_row.html` row rendered by the caller.
+
+  The heading stays the homework Unit's canonical link (the syllabus
+  group in `_syllabus_unit_row.html` uses the same anchor-in-summary
+  pattern); the chevron toggles the disclosure. The virtual steps
+  deep-link the existing reader stepper — they are display rows, not
+  Units, so `_list_row.html` stays the shared row owner and the group
+  reuses the stepper nav's `homework-step-nav`/`homework-step-current`
+  hooks. A navigation step never carries `aria-current` here unless it
+  is the page being rendered.
+{% endcomment %}
+{% load curriculum_tags %}
+<li>
+  <details class="sidebar-module mt-0.5" data-testid="reader-homework-group"{% if unit.homework_outline_current_href %} open{% endif %}>
+    <summary class="flex cursor-pointer list-none items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset">
+      {% include "includes/_list_row.html" with href=unit.get_absolute_url title=unit.title is_current=False marker_kind=unit|unit_nav_marker_kind:completed_unit_ids marker_html=unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit min-w-0 flex-1" root_optional=root_optional ancestor_optional=ancestor_optional wrapper_optional=wrapper_optional optional_badge=unit.is_bonus %}
+      <i data-lucide="chevron-right" class="sidebar-chevron h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-150" aria-hidden="true"></i>
+    </summary>
+    <div role="group" aria-label="Homework steps" data-testid="homework-step-nav">
+    <ul class="reader-nav-list ml-4 mt-0.5">
+      {% for step_title, step_href in unit.homework_outline_steps %}
+      <li>
+        {% if step_href == unit.homework_outline_current_href %}
+        {% include "includes/_list_row.html" with href=step_href title=step_title is_current=True marker_kind="custom" marker_html=step_title|homework_step_nav_marker_html trailing_icon="" testid="homework-step-current" extra_attrs='aria-current="page" data-reader-current' scoped_module="" reader_cohort_param="" %}
+        {% else %}
+        {% include "includes/_list_row.html" with href=step_href title=step_title is_current=False marker_kind="custom" marker_html=step_title|homework_step_nav_marker_html trailing_icon="" scoped_module="" reader_cohort_param="" %}
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    </div>
+  </details>
+</li>

@@ -1533,6 +1533,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_picks_and_changes_a_users_cohort",
     })
 
+    issue_1794_owners = frozenset({
+        "playwright_tests/test_homework_outline_1794.py::"
+        "test_syllabus_outline_toggles_and_deep_links_the_stepper",
+    })
+
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
         manifest = load_live_manifest()
 
@@ -1661,8 +1666,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2717)
-        self.assertEqual(len(inventory.owners), 2513)
+        self.assertEqual(inventory.item_count, 2718)
+        self.assertEqual(len(inventory.owners), 2514)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1677,6 +1682,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
             | self.hotfix_cohort_owners
+            | self.issue_1794_owners
             | self.design_layout_guard_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners

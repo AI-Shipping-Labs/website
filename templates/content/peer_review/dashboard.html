@@ -52,6 +52,26 @@
         <dd class="text-sm text-muted-foreground" data-testid="peer-submission-commit-missing">Not collected</dd>
         {% endif %}
       </div>
+      {% if submission.learning_in_public_links %}
+      <div class="py-3">
+        <dt class="text-muted-foreground">Learning in public</dt>
+        <dd class="mt-1" data-testid="peer-submission-learning-in-public">
+          <ul class="space-y-1">
+            {% for link in submission.learning_in_public_links %}
+            <li><a href="{{ link }}" target="_blank" rel="noopener" class="break-all text-accent hover:underline">{{ link }}</a></li>
+            {% endfor %}
+          </ul>
+        </dd>
+      </div>
+      {% endif %}
+      <div class="flex items-center justify-between gap-3 py-3">
+        <dt class="text-muted-foreground">Time spent</dt>
+        {% if submission.time_spent is not None %}
+        <dd class="text-foreground" data-testid="peer-submission-time-spent">{{ submission.time_spent|floatformat }} hours</dd>
+        {% else %}
+        <dd class="text-sm text-muted-foreground" data-testid="peer-submission-time-spent-missing">Not collected</dd>
+        {% endif %}
+      </div>
       {% if submission.description %}
       <div class="py-3">
         <dt class="text-muted-foreground">Description</dt>

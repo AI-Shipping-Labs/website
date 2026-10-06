@@ -471,7 +471,12 @@ class TestDesktopBottomNavRegression:
         )
         module = _create_module(course, "Module 1", sort_order=1)
         _create_unit(module, "Unit One", sort_order=1, body="A")
-        return _create_unit(module, "Unit Two", sort_order=2, body="B")
+        # Visit a middle unit: under the #1793 no-destination-no-control
+        # contract the LAST unit renders no next control, so the unit
+        # under test needs both a previous and a next.
+        unit2 = _create_unit(module, "Unit Two", sort_order=2, body="B")
+        _create_unit(module, "Unit Three", sort_order=3, body="C")
+        return unit2
 
     def test_inline_completion_visible_on_desktop(
         self, browser, django_server,

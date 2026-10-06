@@ -4,21 +4,16 @@ Covers:
 - Background task: download from Zoom, upload to S3, store S3 URL
 - S3 key structure: recordings/{year}/{event-slug}.mp4
 - Error handling: missing recording, missing bucket config, download/upload failures
-- Webhook integration: recording.completed triggers background job
 - Recording model: s3_url field, video_url property priority
 """
 
-import hashlib
-import hmac
-import json
 import os
 import tempfile
-import time
 from datetime import timedelta
 from unittest.mock import MagicMock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from email_app.models import EmailLog
@@ -27,22 +22,9 @@ from events.models.registration import EventRegistration
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
-ZOOM_TEST_SECRET = 'test-zoom-webhook-secret'
 ZOOM_TEST_CLIENT_ID = 'test-client-id'
 ZOOM_TEST_CLIENT_SECRET = 'test-client-secret'
 ZOOM_TEST_ACCOUNT_ID = 'test-account-id'
-
-
-def make_zoom_signature(body, timestamp, secret=ZOOM_TEST_SECRET):
-    """Create a valid Zoom webhook signature for testing."""
-    message = f'v0:{timestamp}:{body}'
-    sig = hmac.new(
-        secret.encode('utf-8'),
-        message.encode('utf-8'),
-        hashlib.sha256,
-    ).hexdigest()
-    return f'v0={sig}'
-
 
 # --- Recording Model s3_url Field Tests ---
 
@@ -707,166 +689,6 @@ class UploadRecordingToS3Test(TestCase):
 
         self.recording.refresh_from_db()
         self.assertIn('studio-recordings-bucket.s3.us-west-2', self.recording.recording_s3_url)
-
-
-# --- Webhook Integration Tests ---
-
-
-@override_settings(ZOOM_WEBHOOK_SECRET_TOKEN=ZOOM_TEST_SECRET)
-class WebhookTriggersS3UploadJobTest(TestCase):
-    """Test that recording.completed webhook enqueues the S3 upload background job."""
-
-    def setUp(self):
-        self.client = Client()
-        self.event = Event.objects.create(
-            title='Upload Workshop',
-            slug='upload-workshop',
-            description='Learn about uploads.',
-            start_datetime=timezone.now() - timedelta(hours=3),
-            end_datetime=timezone.now() - timedelta(hours=1),
-            timezone='Europe/Berlin',
-            zoom_meeting_id='55555555555',
-            zoom_join_url='https://zoom.us/j/55555555555',
-            tags=['uploads'],
-            required_level=0,
-            status='upcoming',
-        )
-
-    def _post_webhook(self, payload_dict):
-        """Helper to post a webhook with valid signature."""
-        body = json.dumps(payload_dict)
-        timestamp = str(int(time.time()))
-        signature = make_zoom_signature(body, timestamp)
-        return self.client.post(
-            '/api/webhooks/zoom',
-            data=body,
-            content_type='application/json',
-            HTTP_X_ZM_REQUEST_TIMESTAMP=timestamp,
-            HTTP_X_ZM_SIGNATURE=signature,
-        )
-
-    @patch('integrations.views.zoom_webhook.async_task', create=True)
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_recording_completed_enqueues_upload_job(self, mock_q_async, mock_async):
-        """recording.completed webhook enqueues S3 upload background job."""
-        # We patch at the django-q2 level to capture enqueue calls
-        mock_q_async.return_value = 'task-id-123'
-
-        payload = {
-            'event': 'recording.completed',
-            'payload': {
-                'object': {
-                    'id': '55555555555',
-                    'topic': 'Upload Workshop',
-                    'share_url': 'https://zoom.us/rec/share/test',
-                    'recording_files': [
-                        {
-                            'recording_type': 'shared_screen_with_speaker_view',
-                            'play_url': 'https://zoom.us/rec/play/test',
-                            'download_url': 'https://zoom.us/rec/download/test',
-                        },
-                    ],
-                },
-            },
-        }
-        response = self._post_webhook(payload)
-        self.assertEqual(response.status_code, 200)
-
-        # Recording should be created
-        recording = Event.objects.filter(slug='upload-workshop').first()
-        self.assertIsNotNone(recording)
-
-        # Background job should have been enqueued
-        mock_q_async.assert_called_once()
-        call_args = mock_q_async.call_args
-        # First arg is the function path
-        self.assertEqual(
-            call_args[0][0],
-            'jobs.tasks.recording_upload.upload_recording_to_s3',
-        )
-        # Second arg is the recording ID
-        self.assertEqual(call_args[0][1], recording.id)
-        # Third arg is the download URL
-        self.assertEqual(
-            call_args[0][2],
-            'https://zoom.us/rec/download/test',
-        )
-        q_options = call_args[1]['q_options']
-        self.assertEqual(q_options['timeout'], 900)
-        self.assertEqual(q_options['retry'], 960)
-        self.assertGreater(q_options['retry'], q_options['timeout'])
-        self.assertEqual(q_options['max_attempts'], 4)
-        recording.refresh_from_db()
-        self.assertEqual(
-            recording.recording_zoom_download_url,
-            'https://zoom.us/rec/download/test',
-        )
-
-    def test_no_download_url_skips_upload_job(self):
-        """If no download URL, S3 upload job is not enqueued."""
-        payload = {
-            'event': 'recording.completed',
-            'payload': {
-                'object': {
-                    'id': '55555555555',
-                    'share_url': 'https://zoom.us/rec/share/test',
-                    'recording_files': [
-                        {
-                            'recording_type': 'chat_file',
-                            'play_url': 'https://zoom.us/rec/play/chat',
-                        },
-                    ],
-                },
-            },
-        }
-
-        with patch('jobs.tasks.helpers.q_async_task') as mock_q_async:
-            response = self._post_webhook(payload)
-
-        self.assertEqual(response.status_code, 200)
-
-        # Recording should still be created (with share_url as fallback)
-        recording = Event.objects.filter(slug='upload-workshop').first()
-        self.assertIsNotNone(recording)
-        self.assertEqual(recording.recording_url, 'https://zoom.us/rec/share/test')
-
-        # But no S3 upload job should be enqueued
-        mock_q_async.assert_not_called()
-
-    @patch('jobs.tasks.helpers.q_async_task')
-    def test_recording_completed_extracts_download_url(self, mock_q_async):
-        """Webhook extracts download_url from the preferred recording file."""
-        mock_q_async.return_value = 'task-id-456'
-
-        payload = {
-            'event': 'recording.completed',
-            'payload': {
-                'object': {
-                    'id': '55555555555',
-                    'recording_files': [
-                        {
-                            'recording_type': 'audio_only',
-                            'play_url': 'https://zoom.us/rec/play/audio',
-                            'download_url': 'https://zoom.us/rec/download/audio',
-                        },
-                        {
-                            'recording_type': 'shared_screen_with_speaker_view',
-                            'play_url': 'https://zoom.us/rec/play/video',
-                            'download_url': 'https://zoom.us/rec/download/video',
-                        },
-                    ],
-                },
-            },
-        }
-        response = self._post_webhook(payload)
-        self.assertEqual(response.status_code, 200)
-
-        # Should use the preferred recording type's download URL
-        call_args = mock_q_async.call_args
-        self.assertEqual(
-            call_args[0][2],
-            'https://zoom.us/rec/download/video',
-        )
 
 
 # --- Settings Tests ---

@@ -132,20 +132,6 @@
     "docs_url": "_docs/integrations/zoom.md#zoom_account_id"
    },
    {
-    "key": "ZOOM_WEBHOOK_SECRET_TOKEN",
-    "is_secret": true,
-    "description": "Verifies Zoom webhook callbacks (event start, recording ready). Set in the Zoom app event subscription.",
-    "docs_url": "_docs/integrations/zoom.md#zoom_webhook_secret_token"
-   },
-   {
-    "key": "ZOOM_WEBHOOK_TOLERANCE_SECONDS",
-    "is_secret": false,
-    "optional": true,
-    "default": "300",
-    "description": "Maximum accepted Zoom webhook age or future clock skew in seconds. Defaults to 300 seconds; invalid or non-positive overrides fall back to that safe default.",
-    "docs_url": "_docs/integrations/zoom.md#zoom_webhook_tolerance_seconds"
-   },
-   {
     "key": "ZOOM_WAITING_ROOM",
     "is_secret": false,
     "is_boolean": true,

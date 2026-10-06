@@ -233,8 +233,6 @@ _KEY_ORDER = {
         "ZOOM_CLIENT_ID",
         "ZOOM_CLIENT_SECRET",
         "ZOOM_ACCOUNT_ID",
-        "ZOOM_WEBHOOK_SECRET_TOKEN",
-        "ZOOM_WEBHOOK_TOLERANCE_SECONDS",
         "ZOOM_WAITING_ROOM",
         "ZOOM_JOIN_BEFORE_HOST",
         "ZOOM_AUTO_RECORDING",
@@ -329,7 +327,6 @@ _KEYS_WITHOUT_DONOR_DEFAULT = frozenset(
         "ZOOM_ACCOUNT_ID",
         "ZOOM_CLIENT_ID",
         "ZOOM_CLIENT_SECRET",
-        "ZOOM_WEBHOOK_SECRET_TOKEN",
     ]
 )
 
@@ -519,27 +516,6 @@ ZOOM_ACCOUNT_ID = declare(
     default="",
     secret=True,
     docs_url="_docs/integrations/zoom.md#zoom_account_id",
-)
-ZOOM_WEBHOOK_SECRET_TOKEN = declare(
-    key="ZOOM_WEBHOOK_SECRET_TOKEN",
-    group="zoom",
-    label="Zoom Webhook Secret Token",
-    description="Verifies Zoom webhook callbacks (event start, recording ready). Set in the Zoom app event subscription.",
-    value_type="str",
-    default="",
-    secret=True,
-    docs_url="_docs/integrations/zoom.md#zoom_webhook_secret_token",
-)
-ZOOM_WEBHOOK_TOLERANCE_SECONDS = declare(
-    key="ZOOM_WEBHOOK_TOLERANCE_SECONDS",
-    group="zoom",
-    label="Zoom Webhook Tolerance Seconds",
-    description="Maximum accepted Zoom webhook age or future clock skew in seconds. Defaults to 300 seconds; invalid or non-positive overrides fall back to that safe default.",
-    value_type="int",
-    default="300",
-    secret=False,
-    optional=True,
-    docs_url="_docs/integrations/zoom.md#zoom_webhook_tolerance_seconds",
 )
 ZOOM_WAITING_ROOM = declare(
     key="ZOOM_WAITING_ROOM",

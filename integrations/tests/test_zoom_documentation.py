@@ -48,7 +48,7 @@ class ZoomDocumentationContractTest(SimpleTestCase):
             'GET /v2/meetings/{meeting_id}',
             'PATCH /v2/meetings/{meeting_id}',
             'DELETE /v2/meetings/{meeting_id}',
-            '`recording.completed` event subscription',
+            '`GET /v2/meetings/{meeting_id}/recordings`',
             '`recording_files[].download_url`',
         ):
             self.assertIn(marker, scope_section)
@@ -90,7 +90,7 @@ class ZoomDocumentationContractTest(SimpleTestCase):
             'Scopes → Add Scopes',
             '**Activation**',
             'Features/Access → Event Subscriptions',
-            '`ZOOM_WEBHOOK_SECRET_TOKEN` is an HMAC verification secret',
+            'this repo stores no webhook secret',
             'roughly 55',
             'all gunicorn/web processes',
             'every Django-Q worker',
@@ -99,7 +99,7 @@ class ZoomDocumentationContractTest(SimpleTestCase):
             'Never use a real event',
             'Do not paste raw CLI responses',
             '`RECORDING_AUTO_PUBLISH_ON_S3_UPLOAD=false`',
-            '`recording.completed` row is processed',
+            'intake dapier drives',
         ):
             self.assertIn(marker, self.zoom_guide)
 

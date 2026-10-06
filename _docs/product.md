@@ -212,7 +212,6 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 |---------|-----|-------------|--------|-------|
 | GitHub content sync | `/api/webhooks/github` | Webhook receives push events; syncs markdown/YAML content from configured GitHub repos into articles, recordings, projects, etc. | System (webhook secret) | Shipped |
 | Studio sync dashboard | `/studio/sync/` | View configured content sources and worker status, trigger manual syncs, and open sync history at `/studio/sync/history/` | Staff only | Shipped |
-| Zoom webhook | `/api/webhooks/zoom` | Receives Zoom events (for live event integration) | System | Shipped |
 | SES webhook | `/api/ses-events` | Receives Amazon SES bounce/complaint notifications | System | Shipped |
 
 ### Other Pages

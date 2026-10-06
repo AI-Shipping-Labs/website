@@ -167,7 +167,7 @@ def refresh_transcript_from_zoom(event):
     """Re-list the meeting's recordings via the Zoom API (issue #1597).
 
     Picks up a transcript VTT — and the MP4 download URL — that the
-    ``recording.completed`` webhook missed, for events that completed with
+    automatic intake has not stored yet, for events that completed with
     an idle recording pipeline. Writes:
 
     - ``transcript_url``: the ``audio_transcript`` download URL, refreshed

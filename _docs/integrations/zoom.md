@@ -38,7 +38,7 @@ clickable links. Copy them into the browser.
 ### Exact least-privilege granular scopes
 
 Add these six granular **admin** scopes—no broad classic scopes and no scopes
-for unused Zoom APIs or ignored webhook event types:
+for unused Zoom APIs:
 
 | Granular scope | Current path it enables |
 | --- | --- |
@@ -46,8 +46,8 @@ for unused Zoom APIs or ignored webhook event types:
 | `meeting:read:meeting:admin` | `GET /v2/meetings/{meeting_id}` provider read-back in the operator smoke/verification step. The application runtime does not otherwise GET meetings. |
 | `meeting:update:meeting:admin` | `update_meeting` and `update_meeting_settings` call `PATCH /v2/meetings/{meeting_id}` for event reschedules, settings backfill, and `asl events sync-zoom` retry. |
 | `meeting:delete:meeting:admin` | `delete_meeting` calls `DELETE /v2/meetings/{meeting_id}` when a future Zoom-backed event is cancelled. |
-| `cloud_recording:read:recording:admin` | Authorizes the account-level `recording.completed` event subscription and delivery to the Zoom webhook. |
-| `cloud_recording:read:list_recording_files:admin` | Authorizes recording-file metadata/download access. The webhook supplies `recording_files[].download_url`; `jobs.tasks.recording_upload` obtains an S2S token, downloads the selected MP4, and uploads it to S3. |
+| `cloud_recording:read:recording:admin` | Authorizes the meeting recordings listing (`GET /v2/meetings/{meeting_id}/recordings`) that `refresh_transcript_from_zoom` reads when the dapier-triggered `sync-transcript` intake runs. |
+| `cloud_recording:read:list_recording_files:admin` | Authorizes recording-file metadata/download access. The recordings listing supplies `recording_files[].download_url`; `jobs.tasks.recording_upload` obtains an S2S token, downloads the selected MP4, and uploads it to S3. |
 
 These mappings follow the current code. In particular, there is no runtime
 meeting-list, participant, registrant, report, or `meeting.started` handler, so
@@ -67,25 +67,30 @@ those APIs/events do not justify extra scopes.
 New Server-to-Server OAuth apps use granular scopes. Do not substitute the
 older umbrella scopes merely because an older app still displays them.
 
-### Configure the recording webhook subscription
+### Configure the recording webhook delivery
 
-OAuth scopes authorize what the app may access; the event subscription tells
-Zoom what to deliver. Configure both:
+Post-recording intake is owned by the dapier agent runner, not this site
+(issue #1913). The Zoom Marketplace app's Event Notification Endpoint points
+at the dapier hook URL; this platform does not expose a Zoom webhook endpoint.
 
-1. In the same app, open **Features/Access → Event Subscriptions**, enable event
-   subscriptions, and add a webhook subscription for all users in this account.
-2. Set the endpoint to `{SITE_BASE_URL}/api/webhooks/zoom` with no trailing
-   slash. It must be a reachable HTTPS URL.
-3. Add only **Cloud Recording → All Recordings have completed**
-   (`recording.completed`), then save. The endpoint automatically answers
-   Zoom's one-time `endpoint.url_validation` challenge.
-4. Copy the app's **Secret Token** into `ZOOM_WEBHOOK_SECRET_TOKEN` in
-   **Studio → Settings → Zoom**, then validate the endpoint.
+1. In dapier, create the Zoom connection and import the Marketplace app's
+   Secret Token, then copy the dapier hook URL for that connection.
+2. In the same app, open **Features/Access → Event Subscriptions**, enable
+   event subscriptions, and add a webhook subscription for all users in this
+   account.
+3. Set the endpoint to the dapier hook URL with no trailing slash, add only
+   **Cloud Recording → All Recordings have completed** (`recording.completed`),
+   then save and click **Validate**. Dapier answers Zoom's one-time
+   `endpoint.url_validation` challenge.
+4. On each delivery dapier starts its recording agent, which drives this
+   platform's staff API: `POST /api/events/<slug>/sync-transcript` stores the
+   transcript VTT and the Zoom MP4 download URL and enqueues the S3 upload;
+   `POST /api/events/<slug>/retry-recording-upload` re-enqueues a missing
+   upload.
 
-`ZOOM_WEBHOOK_SECRET_TOKEN` is an HMAC verification secret, not an OAuth
-scope or OAuth access token. The current webhook view ignores every event type
-except `recording.completed`; do not subscribe to additional events
-speculatively.
+Zoom delivers webhooks to a single URL. Once the endpoint points at dapier,
+deliveries never reach this
+application, and this repo stores no webhook secret.
 
 ### Obtain a fresh token after changing scopes
 
@@ -239,92 +244,6 @@ will also be re-creating the S2S OAuth app and rotating all three
 Test vs live: n/a. Each Zoom workspace has its own account ID; pair it
 with the matching client ID/secret.
 
-## ZOOM_WEBHOOK_SECRET_TOKEN
-
-Purpose: Zoom-issued secret used to verify webhook delivery signatures.
-`integrations/services/zoom.py:validate_webhook_signature` computes
-`HMAC-SHA256(secret, "v0:{timestamp}:{request_body}")` and compares the
-result to the `x-zm-signature` header on every inbound webhook. The
-view at `integrations/views/zoom_webhook.py` rejects any request that
-does not verify, so without a correct value the platform cannot process
-`recording.completed`.
-
-Without it: `validate_webhook_signature` logs
-`ZOOM_WEBHOOK_SECRET_TOKEN not configured` and returns False, so the
-webhook endpoint returns 400 for every Zoom delivery. Side effects:
-- Recording-ready signals never reach the platform, so the
-  `jobs/tasks/recording_upload.py` chain (pull from Zoom cloud → push
-  to S3) does not run automatically. You can still run the pipeline
-  manually.
-
-Where to find it:
-
-- Direct link:
-
-  ```
-  https://marketplace.zoom.us/user/build
-  ```
-
-- Open your Server-to-Server OAuth app, then **Features/Access → Event
-  Subscriptions**.
-- Toggle "Event Subscriptions" on if not already enabled.
-- Each event subscription shows a "Secret Token" field with a "Copy"
-  button. Copy that value.
-
-Prereqs: You must add the platform's webhook endpoint to the
-subscription:
-
-- Endpoint URL: `https://<host>/api/webhooks/zoom`
-  (e.g. `https://aishippinglabs.com/api/webhooks/zoom` in production).
-- Subscribed event type: only `recording.completed`. Other event types are
-  ignored by the current handler—do not subscribe speculatively or add scopes
-  for them.
-- Validation step: Zoom requires you to respond to a one-time URL
-  validation challenge before the subscription activates. The webhook
-  view handles this automatically — submit the endpoint, click
-  "Validate", and Zoom should show a green check.
-
-Rotation: Safe to rotate.
-
-1. In the Marketplace app, click "Regenerate" next to the secret token.
-   Zoom shows the new value once. Copy it.
-2. Update this setting via Studio (Integration settings > Zoom >
-   `ZOOM_WEBHOOK_SECRET_TOKEN`) or via `PUT /api/v1/settings/<key>`.
-3. Window of impact: between the moment Zoom regenerates the secret
-   and you save it here, signature validation fails and webhooks return
-   400. Zoom retries failed deliveries automatically, so transient
-   misses self-heal once the new value is in place.
-
-Test vs live: n/a. Zoom does not separate test and live deliveries —
-each event subscription has one secret. Use a separate event
-subscription (or a separate S2S app on a development workspace) for
-non-prod traffic.
-
-## ZOOM_WEBHOOK_TOLERANCE_SECONDS
-
-Purpose: Maximum accepted age or future clock skew for a signed Zoom webhook,
-in Unix seconds. The default is `300` (five minutes). Signature verification
-accepts timestamps exactly at either boundary and rejects timestamps one
-second beyond it, even when the HMAC is otherwise correct. This limits replay
-of a captured delivery while allowing ordinary provider and server clock skew.
-
-Type: positive integer seconds. Default: `300`. Invalid, zero, or negative
-overrides fall back to `300`; they never disable freshness validation. Webhook
-timestamps must be canonical ASCII decimal Unix seconds in the non-negative
-signed 64-bit range; malformed, padded, or oversized headers are rejected
-before integer conversion. The setting is non-secret and can be changed in
-**Studio → Settings → Zoom** without a deploy.
-
-Where it applies: every request to `/api/webhooks/zoom`, including
-`endpoint.url_validation` and `recording.completed`. A request outside the
-window is rejected before JSON parsing, `WebhookLog` creation, event mutation,
-or recording-upload task enqueueing. The HMAC still covers the exact timestamp
-header and raw request body and is compared with a timing-safe comparison.
-
-Operational guidance: keep web-server clocks synchronized. Increase the
-window only to accommodate a measured clock-skew problem; a larger value also
-increases how long a captured signed delivery remains replayable.
-
 ## ZOOM_WAITING_ROOM
 
 Purpose: Boolean. Off by default. When true, every meeting created or
@@ -370,15 +289,15 @@ meetings and `apply_zoom_meeting_settings` for existing upcoming meetings.
 Purpose: Controls how event-created Zoom meetings auto-record. Set on every
 meeting's `settings.auto_recording` in `_meeting_settings()` so each event
 meeting starts recording automatically once the host joins, without anyone
-clicking Record. The recording-ready webhook then drives the
-`jobs/tasks/recording_upload.py` chain (pull from Zoom cloud → publish), so
-`cloud` is required for that pipeline to find an asset.
+clicking Record. The dapier-triggered `sync-transcript` intake then drives
+the `jobs/tasks/recording_upload.py` chain (pull from Zoom cloud → publish),
+so `cloud` is required for that pipeline to find an asset.
 
 Allowed values:
 
 | Value   | Effect                                                        |
 | ------- | ------------------------------------------------------------ |
-| `cloud` | Record to the Zoom cloud (default; needed for the recording webhook). |
+| `cloud` | Record to the Zoom cloud (default; needed for the recording pipeline). |
 | `local` | Record to the host's local machine (no cloud asset to fetch). |
 | `none`  | Do not auto-record.                                          |
 
@@ -421,10 +340,11 @@ account-wide so every host's recordings produce one:
    Account Management → Account Settings → Recording.
 2. Under Cloud recording, enable `Audio transcription` and click lock so
    per-user settings cannot silently disable it.
-3. Record to the cloud as usual. When the recording finishes, the
-   `recording.completed` webhook payload then contains a
-   `recording_files` entry with `recording_type: "audio_transcript"`, whose
-   `download_url` the platform stores on `Event.transcript_url`.
+3. Record to the cloud as usual. When the recording finishes, the meeting's
+   recordings listing then contains a `recording_files` entry with
+   `recording_type: "audio_transcript"`, whose `download_url` the platform
+   stores on `Event.transcript_url` when the dapier-triggered
+   `sync-transcript` intake runs.
 
 Without a VTT, the transcript task retries a few times and then marks the
 event `transcript_status: "unavailable"`. The manual
@@ -435,14 +355,14 @@ out of scope inside the platform (model size and CPU on ECS).
 ### `RECORDING_TRANSCRIPT_INGEST_ENABLED`
 
 Studio settings key (S3 Recordings group), default `true`. When on, the
-automatic transcript pipeline runs: the `recording.completed` and
-`recording.transcript.completed` webhooks and the post-S3-upload chain
-enqueue the transcript task, which downloads the VTT from Zoom, parses it
-to plain text, and stores it on `Event.transcript_text`. If Zoom has not
+automatic transcript pipeline runs: the dapier-triggered `sync-transcript`
+intake and the post-S3-upload chain enqueue the transcript task, which
+downloads the VTT from Zoom, parses it to plain text, and stores it on
+`Event.transcript_text`. If Zoom has not
 produced the VTT yet, the task retries with backoff (up to 4 attempts);
 when the retries are exhausted it marks the event unavailable and skips
-recap drafting. A late `recording.transcript.completed` webhook clears
-the unavailable marker and tries again.
+recap drafting. A later `sync-transcript` call clears the unavailable
+marker and tries again.
 
 This toggle never gates the explicit operator recovery path — see
 `POST /api/events/<slug>/sync-transcript` below — so a transcript can
@@ -460,7 +380,8 @@ source for Studio preview and recap drafting.
 Use `process_event_transcripts --slug SLUG` or `--all-missing` to preview
 historical incomplete rows. The command is a side-effect-free dry run unless
 `--commit` is supplied; commit mode uses the same Zoom refresh, recording
-upload lease, and transcript task as webhook and Studio recovery.
+upload lease, and transcript task as the dapier-driven intake and Studio
+recovery.
 
 The schema migration is additive, so older application versions ignore the
 new column. Reversing the migration removes only the stored locator: it does
@@ -490,8 +411,9 @@ the draft is skipped.
 
 Staff-token endpoint and the explicit recovery path for the whole chain.
 It re-lists the meeting's recordings via the Zoom API to pick up a
-transcript VTT (and the MP4 download URL) the webhook missed, then
-re-enqueues the transcript task. Optional body:
+transcript VTT (and the MP4 download URL) the automatic intake has not
+stored yet, then re-enqueues the transcript task. This is the endpoint the
+dapier recording agent drives on every `recording.completed` delivery. Optional body:
 
 ```json
 {"redraft": true}
@@ -725,7 +647,7 @@ preflight and cleanup.
    The event remains as an auditable cancelled, unpublished disposable record;
    delete it only under the environment's ordinary test-data retention policy.
 
-### Recording webhook and authenticated download
+### Recording intake and authenticated download
 
 This requires a second disposable event and meeting because the lifecycle
 meeting above was deliberately deleted. Before creating it:
@@ -750,11 +672,21 @@ Then:
    Keep all CLI output behind the same `jq` allowlist.
 2. Have a licensed host start the disposable meeting and record 10–30 seconds
    of a non-sensitive color slate with no people, screens, names, or private
-   audio. Stop recording and end the meeting so Zoom emits
-   `recording.completed`.
-3. In **Studio → Webhooks**, confirm the matching Zoom
-   `recording.completed` row is processed. Do not open, copy, or capture its raw
-   payload because it contains recording URLs.
+   audio. Stop recording and end the meeting so Zoom finalizes the cloud
+   recording. Zoom delivers `recording.completed` to dapier, whose agent
+   drives the intake endpoint used in the next step.
+3. Drive the same intake dapier drives — the staff-token transcript sync
+   endpoint — with the staff API token exported in the preflight:
+
+   ```bash
+   require_nonproduction_zoom_smoke_target &&
+     uv run asl raw POST "/api/events/$SMOKE_EVENT_SLUG/sync-transcript"
+   ```
+
+   Confirm the response reports a queued task and that a refreshed transcript
+   lookup ran. In **Studio → Worker**, confirm the transcript task for the
+   disposable event. Do not paste raw request or response bodies because they
+   contain recording URLs.
 4. In **Studio → Worker**, confirm the named **Upload Zoom recording** task
    succeeds. Inspect only status and the disposable event identity—not task
    arguments, which contain the download URL.

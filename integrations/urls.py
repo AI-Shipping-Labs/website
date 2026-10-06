@@ -4,10 +4,8 @@ from django.urls import include, path
 
 from integrations.views.calendly_webhook import calendly_webhook
 from integrations.views.maven_webhook import maven_webhook
-from integrations.views.zoom_webhook import zoom_webhook
 
 urlpatterns = [
-    path('api/webhooks/zoom', zoom_webhook, name='zoom_webhook'),
     path('api/webhooks/calendly', calendly_webhook, name='calendly_webhook'),
     # A2.3: one handler, two URLs. The package handler serves the
     # configured GitHub hook at the legacy URL (no external reconfig) and

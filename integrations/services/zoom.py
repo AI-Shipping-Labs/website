@@ -3,11 +3,8 @@
 Handles:
 - OAuth token management (server-to-server flow)
 - Creating Zoom meetings for live events
-- Validating Zoom webhook signatures
 """
 
-import hashlib
-import hmac
 import json
 import logging
 import re
@@ -30,11 +27,6 @@ _token_cache = {
 ZOOM_OAUTH_TOKEN_URL = 'https://zoom.us/oauth/token'
 ZOOM_API_BASE_URL = 'https://api.zoom.us/v2/'
 ZOOM_PROVIDER_MESSAGE_MAX_LENGTH = 300
-DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS = 300
-MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS = (1 << 63) - 1
-MAX_ZOOM_WEBHOOK_TIMESTAMP_DIGITS = len(
-    str(MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS),
-)
 
 _URL_RE = re.compile(r'https?://\S+', re.IGNORECASE)
 _BEARER_RE = re.compile(r'\bBearer\s+\S+', re.IGNORECASE)
@@ -431,9 +423,9 @@ def get_meeting_recordings(event):
     """Fetch a meeting's recordings listing from the Zoom API (issue #1597).
 
     Used by the transcript sync path to pick up a transcript VTT (and the
-    MP4 download URL) that the ``recording.completed`` webhook missed —
-    e.g. when the meeting finished before the webhook subscription was
-    active, or Zoom processed the transcript after the video event.
+    MP4 download URL) when the automatic dapier-triggered intake has not
+    stored them yet — e.g. historical events, or Zoom processed the
+    transcript after the video event.
 
     Args:
         event: Event model instance with a non-empty ``zoom_meeting_id``.
@@ -469,102 +461,3 @@ def get_meeting_recordings(event):
         )
 
     return response.json()
-
-
-def zoom_webhook_tolerance_seconds():
-    """Return the positive webhook timestamp tolerance configured by operators.
-
-    IntegrationSetting values are stored as text and may also come from
-    Django settings or the environment. An invalid or non-positive override
-    must never disable freshness validation, so those values fall back to the
-    safe five-minute default.
-    """
-    raw = get_config(
-        'ZOOM_WEBHOOK_TOLERANCE_SECONDS',
-        DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS,
-    )
-    try:
-        if isinstance(raw, bool):
-            raise ValueError
-        tolerance = int(str(raw).strip(), 10)
-    except (TypeError, ValueError):
-        return DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS
-    if tolerance <= 0:
-        return DEFAULT_ZOOM_WEBHOOK_TOLERANCE_SECONDS
-    return tolerance
-
-
-def validate_webhook_signature(request, *, now=None):
-    """Validate an incoming Zoom webhook request signature.
-
-    Zoom webhooks include these headers:
-    - x-zm-request-timestamp: Unix timestamp of the request
-    - x-zm-signature: v0=HMAC-SHA256 signature
-
-    The signature is computed as:
-        HMAC-SHA256(secret, "v0:{timestamp}:{request_body}")
-
-    Args:
-        request: Django HttpRequest object.
-        now: Optional Unix timestamp used for deterministic boundary tests.
-
-    Returns:
-        bool: True if the signature is valid, False otherwise.
-    """
-    secret_token = get_config('ZOOM_WEBHOOK_SECRET_TOKEN')
-    if not secret_token:
-        logger.warning('ZOOM_WEBHOOK_SECRET_TOKEN not configured')
-        return False
-
-    timestamp = request.headers.get('x-zm-request-timestamp', '')
-    signature = request.headers.get('x-zm-signature', '')
-
-    if not timestamp or not signature:
-        return False
-
-    if (
-        not isinstance(timestamp, str)
-        or not timestamp.isascii()
-        or not timestamp.isdigit()
-        or (len(timestamp) > 1 and timestamp.startswith('0'))
-        or len(timestamp) > MAX_ZOOM_WEBHOOK_TIMESTAMP_DIGITS
-    ):
-        return False
-    try:
-        request_timestamp = int(timestamp, 10)
-    except ValueError:
-        return False
-    if request_timestamp > MAX_ZOOM_WEBHOOK_TIMESTAMP_SECONDS:
-        return False
-
-    current_timestamp = int(time.time() if now is None else now)
-    if abs(current_timestamp - request_timestamp) > zoom_webhook_tolerance_seconds():
-        return False
-
-    # Construct the message: v0:{timestamp}:{body}
-    body = request.body.decode('utf-8')
-    message = f'v0:{timestamp}:{body}'
-
-    # Compute expected signature
-    expected_sig = hmac.new(
-        secret_token.encode('utf-8'),
-        message.encode('utf-8'),
-        hashlib.sha256,
-    ).hexdigest()
-    expected = f'v0={expected_sig}'
-
-    return hmac.compare_digest(expected, signature)
-
-
-def build_url_validation_encrypted_token(plain_token):
-    """Return Zoom's URL-validation HMAC using the resolved webhook secret."""
-    secret_token = get_config('ZOOM_WEBHOOK_SECRET_TOKEN')
-    if not secret_token:
-        logger.warning('ZOOM_WEBHOOK_SECRET_TOKEN not configured')
-        return ''
-
-    return hmac.new(
-        secret_token.encode('utf-8'),
-        plain_token.encode('utf-8'),
-        hashlib.sha256,
-    ).hexdigest()

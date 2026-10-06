@@ -124,8 +124,8 @@ WRITABLE_FIELDS = {
     "zoom_join_url",
     # Operator-bound existing Zoom meeting: a meeting provisioned outside the
     # platform (no create_zoom) still needs its id on the event for the
-    # recording pipeline (recording.completed webhook, transcript sync, S3
-    # upload) to engage. Numeric id; empty string clears it.
+    # recording pipeline (dapier-triggered sync-transcript intake,
+    # transcript sync, S3 upload) to engage. Numeric id; empty string clears it.
     "zoom_meeting_id",
     "location",
     "tags",
@@ -1000,9 +1000,10 @@ def _maybe_enqueue_banner(event, generate_banner):
                             "Optional. Numeric id of a Zoom meeting created "
                             "outside the platform (empty string clears it). "
                             "Binding it engages the recording pipeline "
-                            "(recording.completed webhook, transcript sync, "
-                            "S3 upload) for meetings create_zoom did not "
-                            "provision. Rejected on non-zoom platforms."
+                            "(dapier-triggered sync-transcript intake, "
+                            "transcript sync, S3 upload) for meetings "
+                            "create_zoom did not provision. Rejected on "
+                            "non-zoom platforms."
                         ),
                     },
                     "create_zoom": {
@@ -1275,9 +1276,10 @@ def events_collection(request):
                             "Optional. Numeric id of a Zoom meeting created "
                             "outside the platform (empty string clears it). "
                             "Binding it engages the recording pipeline "
-                            "(recording.completed webhook, transcript sync, "
-                            "S3 upload) for meetings create_zoom did not "
-                            "provision. Rejected on non-zoom platforms."
+                            "(dapier-triggered sync-transcript intake, "
+                            "transcript sync, S3 upload) for meetings "
+                            "create_zoom did not provision. Rejected on "
+                            "non-zoom platforms."
                         ),
                     },
                     "create_zoom": {

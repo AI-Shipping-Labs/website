@@ -474,7 +474,6 @@ STRIPE_WEBHOOK_SECRET = os.environ.get('STRIPE_WEBHOOK_SECRET', '')
 ZOOM_CLIENT_ID = os.environ.get('ZOOM_CLIENT_ID', '')
 ZOOM_CLIENT_SECRET = os.environ.get('ZOOM_CLIENT_SECRET', '')
 ZOOM_ACCOUNT_ID = os.environ.get('ZOOM_ACCOUNT_ID', '')
-ZOOM_WEBHOOK_SECRET_TOKEN = os.environ.get('ZOOM_WEBHOOK_SECRET_TOKEN', '')
 
 # Amazon SES configuration (set via environment variables in production)
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')

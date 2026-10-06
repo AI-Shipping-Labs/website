@@ -857,10 +857,12 @@ COMMUNITY_BASE = {
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
     # Issue #1696 phase 4: coursework without its Studio section (it needs
     # community_base.accounts, which AISL does not install) or its member API
-    # routes. AISL project submissions ask for no certificate name.
+    # routes. #1777: AISL project submissions collect the certificate name
+    # (AISL issues CourseCertificate); it persists to the learner's
+    # curriculum enrollment via content.services.coursework_bridge.
     'COURSEWORK_STUDIO_ENABLED': False,
     'COURSEWORK_MEMBER_API_ENABLED': False,
-    'COURSEWORK_PROJECT_CERTIFICATE_NAME_FIELD': False,
+    'COURSEWORK_PROJECT_CERTIFICATE_NAME_FIELD': True,
     # Review links in coursework mail point at AISL course routes. The hook
     # returns site-relative paths; email_app.hooks.resolve_auth_mail_context
     # makes them absolute in the worker, so no link is stored (#1613).

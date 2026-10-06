@@ -2,8 +2,6 @@
 
 import json
 
-from django.core.exceptions import ValidationError
-from django.core.validators import URLValidator
 from django.http import Http404, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -17,21 +15,15 @@ from content.models import (
     PeerReview,
     ProjectSubmission,
 )
-from content.models.cohort import CohortEnrollment
 from content.services.course_navigation import course_home_url
 from content.services.peer_review_service import PeerReviewService
-
-_project_url_validator = URLValidator(schemes=['http', 'https'])
-
-
-def _valid_project_url(value):
-    if not value or len(value) > 500:
-        return False
-    try:
-        _project_url_validator(value)
-    except ValidationError:
-        return False
-    return True
+from content.services.project_form_adapter import (
+    REMOVAL_UNAVAILABLE_MESSAGE,
+    build_submission_form,
+    certificate_cohort,
+    lookup_curriculum_enrollment,
+    submission_cohort,
+)
 
 
 def _require_auth(request):
@@ -68,68 +60,44 @@ def project_submit(request, slug):
     if submission is None and CourseProject.objects.filter(course=course).exists():
         return redirect(course_home_url(course, section='projects'))
 
-    if request.method == 'POST':
-        project_url = request.POST.get('project_url', '').strip()
-        description = request.POST.get('description', '').strip()
-
-        if not _valid_project_url(project_url):
-            context = {
-                'course': course,
-                'submission': submission,
-                'error': (
-                    'Project URL is required.' if not project_url
-                    else 'Enter a valid http or https project URL.'
-                ),
-            }
-            return render(request, 'content/peer_review/submit.html', context)
-
-        if submission:
-            # Can only update while status is 'submitted'
-            if submission.status != 'submitted':
-                context = {
-                    'course': course,
-                    'submission': submission,
-                    'readonly': True,
-                }
-                return render(request, 'content/peer_review/submit.html', context)
-
-            submission.project_url = project_url
-            submission.description = description
-            submission.save(update_fields=['project_url', 'description'])
-        else:
-            # Check if user is in a cohort for this course
-            cohort = None
-            enrollment = CohortEnrollment.objects.filter(
-                user=user,
-                cohort__course=course,
-                cohort__is_active=True,
-                cohort__mode='cohort',
-            ).select_related('cohort').first()
-            if enrollment:
-                cohort = enrollment.cohort
-
-            submission = ProjectSubmission.objects.create(
-                user=user,
-                course=course,
-                cohort=cohort,
-                project_url=project_url,
-                description=description,
-            )
-
-        context = {
-            'course': course,
-            'submission': submission,
-            'just_submitted': True,
-        }
-        return render(request, 'content/peer_review/submit.html', context)
-
-    # GET
-    readonly = submission and submission.status != 'submitted'
+    # The undated slot has no deadline; its lock is the review lifecycle.
+    readonly = bool(submission and submission.status != 'submitted')
+    cert_cohort = certificate_cohort(user, course)
+    enrollment = lookup_curriculum_enrollment(user, cert_cohort)
     context = {
         'course': course,
         'submission': submission,
         'readonly': readonly,
+        'project_form': build_submission_form(
+            submission=submission,
+            enrollment=enrollment, user=user,
+            certificate_cohort=cert_cohort,
+        ),
     }
+
+    if request.method == 'POST':
+        if readonly:
+            return render(request, 'content/peer_review/submit.html', context)
+
+        if request.POST.get('action') == 'delete':
+            context['error'] = REMOVAL_UNAVAILABLE_MESSAGE
+            return render(request, 'content/peer_review/submit.html', context)
+
+        form = build_submission_form(
+            data=request.POST,
+            submission=submission,
+            enrollment=enrollment, user=user,
+            course=course,
+            cohort=submission_cohort(user, course),
+            certificate_cohort=cert_cohort,
+        )
+        if form.is_valid():
+            submission, _created = form.save()
+            context.update(submission=submission, just_submitted=True, project_form=form)
+        else:
+            context['project_form'] = form
+            return render(request, 'content/peer_review/submit.html', context)
+
     return render(request, 'content/peer_review/submit.html', context)
 
 
@@ -283,50 +251,54 @@ def api_submit_project(request, slug):
     except (json.JSONDecodeError, ValueError):
         data = {}
 
-    project_url = data.get('project_url', '').strip()
-    description = data.get('description', '').strip()
-
-    if not _valid_project_url(project_url):
-        error = 'project_url is required' if not project_url else 'Enter a valid http or https project URL'
-        return JsonResponse({'error': error}, status=400)
-
     submission = ProjectSubmission.objects.filter(user=user, course=course, course_project__isnull=True).first()
     if submission is None and CourseProject.objects.filter(course=course).exists():
         return JsonResponse({'error': 'Choose a project attempt on the course page'}, status=409)
-
-    if submission:
-        if submission.status != 'submitted':
-            return JsonResponse(
-                {'error': 'Cannot update submission after review has started'},
-                status=400,
-            )
-        submission.project_url = project_url
-        submission.description = description
-        submission.save(update_fields=['project_url', 'description'])
-    else:
-        cohort = None
-        enrollment = CohortEnrollment.objects.filter(
-            user=user,
-            cohort__course=course,
-            cohort__is_active=True,
-            cohort__mode='cohort',
-        ).select_related('cohort').first()
-        if enrollment:
-            cohort = enrollment.cohort
-
-        submission = ProjectSubmission.objects.create(
-            user=user,
-            course=course,
-            cohort=cohort,
-            project_url=project_url,
-            description=description,
+    if submission and submission.status != 'submitted':
+        return JsonResponse(
+            {'error': 'Cannot update submission after review has started'},
+            status=400,
         )
 
+    # Legacy clients post project_url/description only; the newly collected
+    # fields arrive optional and validate through the shared form contract
+    # (issue #1777). ``github_link`` falls back to ``project_url``.
+    payload = dict(data) if isinstance(data, dict) else {}
+    payload['github_link'] = str(payload.get('github_link') or payload.get('project_url') or '')
+    payload.setdefault('description', '')
+    payload.setdefault('learning_in_public_links', [])
+    # A payload without a commit_id key is a legacy client: the commit field
+    # is not collected, so an update keeps the stored value. Payloads that do
+    # send one validate through the shared required/format rules.
+    legacy_client = 'commit_id' not in payload
+    cert_cohort = certificate_cohort(user, course)
+    form = build_submission_form(
+        data=payload,
+        submission=submission,
+        user=user,
+        course=course,
+        cohort=submission_cohort(user, course),
+        certificate_cohort=cert_cohort,
+        enrollment=lookup_curriculum_enrollment(user, cert_cohort),
+        commit_id_enabled=not legacy_client,
+    )
+    if not form.is_valid():
+        errors = {
+            field: [str(message) for message in message_list]
+            for field, message_list in form.errors.items()
+        }
+        return JsonResponse({'error': 'Invalid submission', 'errors': errors}, status=400)
+
+    submission, created = form.save()
     return JsonResponse({
         'id': submission.pk,
         'status': submission.status,
         'project_url': submission.project_url,
         'description': submission.description,
+        'commit_id': submission.commit_id,
+        'learning_in_public_links': submission.learning_in_public_links,
+        'time_spent': submission.time_spent,
+        'created': created,
     })
 
 

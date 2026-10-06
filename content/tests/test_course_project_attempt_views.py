@@ -131,7 +131,10 @@ class CourseProjectAttemptViewsTest(TestCase):
 
         self.client.post(
             '/courses/ai-buildcamp/projects/first/submit',
-            {'project_url': 'https://example.com/first'},
+            {
+                'github_link': 'https://github.com/you/first',
+                'commit_id': 'a1b2c3d',
+            },
         )
         response = self.client.get('/courses/ai-buildcamp')
         self.assertContains(response, '/courses/ai-buildcamp/projects/first/reviews')
@@ -152,20 +155,23 @@ class CourseProjectAttemptViewsTest(TestCase):
         for slug in ('first', 'second'):
             response = self.client.post(
                 f'/courses/ai-buildcamp/projects/{slug}/submit',
-                {'project_url': f'https://example.com/{slug}'},
+                {
+                    'github_link': f'https://github.com/you/{slug}',
+                    'commit_id': 'a1b2c3d',
+                },
             )
             self.assertContains(response, 'Your project has been submitted.')
         self.assertEqual(ProjectSubmission.objects.filter(user=self.user).count(), 2)
         response = self.client.get('/courses/ai-buildcamp/projects/second/reviews')
-        self.assertContains(response, 'https://example.com/second')
-        self.assertNotContains(response, 'https://example.com/first')
+        self.assertContains(response, 'https://github.com/you/second')
+        self.assertNotContains(response, 'https://github.com/you/first')
 
     def test_submission_deadline_blocks_late_post(self):
         self.first.submission_due_at = timezone.now() - timedelta(minutes=1)
         self.first.save(update_fields=['submission_due_at'])
         response = self.client.post(
             '/courses/ai-buildcamp/projects/first/submit',
-            {'project_url': 'https://example.com/late'},
+            {'github_link': 'https://github.com/you/late', 'commit_id': 'a1b2c3d'},
         )
         self.assertEqual(response.status_code, 403)
         self.assertFalse(ProjectSubmission.objects.filter(course_project=self.first).exists())

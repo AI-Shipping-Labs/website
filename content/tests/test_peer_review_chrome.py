@@ -143,7 +143,8 @@ class PeerReviewSubmitChromeTest(TestCase):
         """Posting a valid submission still renders header + footer."""
         url = f'/courses/{self.course.slug}/submit'
         response = self.client.post(url, {
-            'project_url': 'https://github.com/u/p',
+            'github_link': 'https://github.com/u/p',
+            'commit_id': 'a1b2c3d',
             'description': 'desc',
         })
         _assert_header_chrome(self, response, url)

@@ -673,6 +673,69 @@ recipient key):
 - `SLACK_BOT_TOKEN` must be set.
 - The bot must be a member of `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`.
 
+## STAFF_COMMENT_NOTIFY_ENABLED
+
+Purpose: Boolean kill switch for the staff comment alert (issue #1926).
+When on, every comment or reply a non-staff member posts on a course
+lesson, a homework step, or a workshop tutorial page produces one Slack
+post in the staff channel. Read by
+`notifications/services/staff_comment_alerts.py::notify_staff_of_comment`,
+called from `comments/services.py::create_comment`. Default ON. Turn it
+off in Studio settings to pause alerts without a redeploy.
+
+The post names the author (linked to their Studio user page) and their
+email, the course or workshop and page title, a quote of the comment
+(whitespace collapsed, cut to 300 characters), and an `Open discussion`
+button that opens the thread's Q&A section. Member text is escaped and
+every text block is sent with `verbatim: true` (plus `link_names: false`),
+so `<!channel>`, `@channel`, `@here`, and `@everyone` in a comment or a
+display name never ping the channel.
+
+Never alerts on:
+- Comments by staff users (your own comments, teammates answering, and
+  operator API replies made with a staff token).
+- Book Club note and sprint plan threads (member-owned threads).
+- Edits, hides, restores, and votes.
+
+Without it (off): No comment alert is posted. The personal owner bell
+and owner email for linked instructors are unaffected.
+
+Failure isolation: A Slack error, timeout (3.05 seconds to connect,
+5 seconds to read), or `ok: false` response is logged with the comment id. The comment is still saved and
+the member sees no error.
+
+Prereqs:
+- `SLACK_ENABLED` must be true.
+- `SLACK_BOT_TOKEN` must be set.
+- A channel must resolve through `STAFF_COMMENT_NOTIFY_CHANNEL_ID` or
+  `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`, and the bot must be a member of it.
+
+## STAFF_COMMENT_NOTIFY_CHANNEL_ID
+
+Purpose: Slack channel ID that receives the staff comment alerts
+described under `STAFF_COMMENT_NOTIFY_ENABLED`. Recipients are whoever
+is in the channel; there is no per-user recipient list.
+
+The channel must be private and staff-only. The quoted preview can
+contain text from gated paid content and the post shows the member's
+email.
+
+Without it (blank): Alerts go to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`. When
+both are blank, no alert is posted (logged at INFO) and comments work
+as normal.
+
+Where to find it: Right click the channel in Slack > "View channel
+details" > copy the ID at the bottom.
+
+Prereqs:
+- `SLACK_ENABLED` must be true.
+- `SLACK_BOT_TOKEN` must be set.
+- The bot must be a member of the channel. Invite it with
+  `/invite @<bot name>` in the channel.
+
+Test vs live: Single key, no dev/test channel splits, same as
+`STAFF_SIGNUP_NOTIFY_CHANNEL_ID`.
+
 ## Daily membership and channel reconciliation
 
 The `slack-membership-refresh` schedule runs

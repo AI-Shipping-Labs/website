@@ -568,6 +568,23 @@
     "docs_url": "_docs/integrations/slack.md#staff_slack_join_notify_enabled"
    },
    {
+    "key": "STAFF_COMMENT_NOTIFY_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "default": "true",
+    "optional": true,
+    "description": "When on, every comment or reply a non-staff member posts on a course lesson, homework step, or workshop page is posted to the staff Slack channel (STAFF_COMMENT_NOTIFY_CHANNEL_ID, falling back to STAFF_SIGNUP_NOTIFY_CHANNEL_ID). No-redeploy kill switch. Defaults on.",
+    "docs_url": "_docs/integrations/slack.md#staff_comment_notify_enabled"
+   },
+   {
+    "key": "STAFF_COMMENT_NOTIFY_CHANNEL_ID",
+    "is_secret": false,
+    "default": "",
+    "optional": true,
+    "description": "Private, staff-only Slack channel ID that receives member comment alerts from course lessons, homework steps, and workshop pages. Leave blank to use STAFF_SIGNUP_NOTIFY_CHANNEL_ID; when both are blank no alert is posted.",
+    "docs_url": "_docs/integrations/slack.md#staff_comment_notify_channel_id"
+   },
+   {
     "key": "SLACK_DEV_COMMUNITY_CHANNEL_IDS",
     "is_secret": false,
     "description": "Development-only community channel IDs. Used only when SLACK_ENVIRONMENT=development.",

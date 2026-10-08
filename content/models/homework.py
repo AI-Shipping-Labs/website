@@ -3,16 +3,19 @@
 Field names, choice values, and constraints mirror
 ``community_base.coursework`` (`DataTalksClub/community-base`) exactly,
 except where documented on the issue, so a later package adoption is a
-mapping rather than a rewrite. Two deliberate divergences worth remembering
-when reading this file:
+mapping rather than a rewrite. Worth remembering when reading this file:
 
 - ``Question.correct_answer`` is plaintext, not the donor's encrypted
   envelope (the content repo is already private; the actual leak surface is
   rendering, not storage -- enforced by never putting ``correct_answer`` /
   ``Answer.is_correct`` in a student-facing context, not by crypto).
-- ``Homework.is_accepting_submissions`` gates on ``due_date`` when one is
-  set, in addition to ``state``. A missing deadline leaves open homework
-  accepting submissions until an operator changes its state.
+
+Cmp parity (issue #1917): ``Homework.is_accepting_submissions`` gates on
+``state`` alone, exactly like the donor. A deadline is informational only
+(``is_past_due`` feeds the "Was due <date>" display); late submissions
+stay accepted until an operator flips ``state`` to ``CLOSED``/``SCORED``
+via Django admin. Sync never writes ``state``, so a manually closed form
+survives re-syncs.
 
 Tester-confirmed bug fix (issue #1683 follow-up): ``content_id`` does NOT
 use ``SyncedContentIdentityMixin`` here, unlike ``Unit``/``Course``. That
@@ -106,24 +109,18 @@ class Homework(SourceMetadataMixin, models.Model):
 
     @property
     def is_accepting_submissions(self):
-        """True while ``state == OPEN`` and any assigned deadline remains.
+        """True while ``state == OPEN``, matching cmp parity (issue #1917).
 
-        Deliberate divergence from the donor (issue #1683): the donor gates
-        acceptance on ``state`` alone (an operator manually flips
-        ``CLOSED``). Tranche 1 ships no Studio surface to do that, so
-        without this automatic ``due_date`` condition on top,
-        "deadline enforcement" -- on the owner's must-land list -- would
-        never actually trigger.
-
-        A missing ``due_date`` also means there is no deadline to enforce,
-        for either cohort or self-paced learners. In both cases, only an
-        operator changing ``state`` away from ``OPEN`` closes submissions.
+        The deadline is informational: a dated cohort may keep submitting
+        past ``due_date`` until an operator flips ``state`` to ``CLOSED``
+        or ``SCORED`` (``HomeworkAdmin`` exposes the flip; sync never
+        writes ``state``, so a manual close survives re-syncs). This
+        restores the donor's ``state``-only gate -- the ``due_date``
+        clause #1683 tranche 1 added as a stopgap (no operator surface
+        back then) is gone. ``is_past_due`` carries the display-only
+        "Was due" wording.
         """
-        if self.state != HomeworkState.OPEN:
-            return False
-        if self.cohort.mode == COHORT_MODE_SELF_PACED:
-            return True
-        return self.due_date is None or timezone.now() <= self.due_date
+        return self.state == HomeworkState.OPEN
 
     @property
     def is_past_due(self):
@@ -140,12 +137,12 @@ class Homework(SourceMetadataMixin, models.Model):
     def is_self_paced(self):
         """True for a ``mode='self_paced'`` cohort's homework.
 
-        Tester-confirmed copy bug (issue #1683 follow-up): a self-paced
-        homework closed via ``state`` was telling the student "the deadline
-        passed on <date>" -- false, since self-paced homework is never
-        deadline-gated (see ``is_accepting_submissions``). Callers building
-        the closed-state message must branch on this instead of assuming
-        every closed homework has a deadline reason.
+        Since issue #1917 closed homework says "closed" in every cohort
+        mode -- ``is_accepting_submissions`` False can only mean
+        ``CLOSED``/``SCORED``, so closed copy never claims a deadline
+        passed. This property still drives deadline display (self-paced
+        homework shows no deadline line) and the reveal policy (results
+        revealed on submit, locked after).
         """
         return self.cohort.mode == COHORT_MODE_SELF_PACED
 

@@ -16,7 +16,7 @@
   </nav>
   <div class="mb-4 flex items-start justify-between gap-3" data-testid="homework-deadline-status">
     {% if homework_due_date_display and not homework_is_self_paced %}
-    <span class="min-w-0 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }}</span>
+    <span class="min-w-0 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} {{ homework_due_date_display }}</span>
     {% endif %}
     <span class="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="homework-page-state">{% include "homework_steps/_state_label.html" with homework_state=stepper.homework_state %}</span>
   </div>
@@ -27,6 +27,8 @@
   <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="status" data-testid="homework-pending-draft-status">Your previous submission is still accepted. These saved changes are a draft and have not been submitted.</p>
   {% elif stepper.submitted %}
   <p class="mb-4 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted.{% if stepper.can_submit %} You can update it while submissions are open.{% elif not homework_is_self_paced %} The submission window is closed.{% endif %}</p>
+  {% elif stepper.closed_review %}
+  <div class="mb-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-foreground" role="status" data-testid="homework-closed-banner">This homework is closed. Sorry, it's too late to submit.</div>
   {% elif stepper.draft_status == 'Saved' %}
   <div class="relative mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" data-testid="homework-pending-draft-status">
     <span class="min-w-0" role="status">Your answers are saved as a draft. You have not submitted this homework yet.</span>

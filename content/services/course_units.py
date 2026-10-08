@@ -908,6 +908,9 @@ def build_homework_submission_context(user, unit, *, cohort=None):
         'homework_is_accepting': homework.is_accepting_submissions and not locked,
         'homework_locked_after_submit': locked,
         'homework_is_self_paced': homework.is_self_paced,
+        # Display only (issue #1917): flips the header to "Was due" without
+        # ever gating the form.
+        'homework_is_past_due': homework.is_past_due,
         'homework_due_date_display': homework_due_date_display,
         'homework_display_timezone': display_timezone,
     }

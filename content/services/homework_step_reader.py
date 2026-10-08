@@ -243,12 +243,12 @@ class AISLHomeworkAdapter:
                 'You have submitted this homework. Your results are shown with each answer.',
             )
         if not self.homework.is_accepting_submissions:
-            reason = (
-                'This homework is closed. Your saved answers are still available.'
-                if self.homework.is_self_paced or not self.homework.is_past_due else
-                'The deadline for this homework has passed. Your saved answers are still available.'
+            # is_accepting_submissions False now means CLOSED/SCORED only
+            # (issue #1917) -- never claim a deadline passed.
+            return Eligibility(
+                True, False, False,
+                'This homework is closed. Your saved answers are still available.',
             )
-            return Eligibility(True, False, False, reason)
         return Eligibility(True, True, True)
 
     def submit(self, request, assignment, answers, final_fields):

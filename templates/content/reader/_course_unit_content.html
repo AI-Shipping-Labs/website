@@ -57,7 +57,7 @@
   {% if homework and not homework_stepper %}
   <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission">
     {% if homework_due_date_display and not homework_is_self_paced %}
-    <p class="mb-1 text-sm text-muted-foreground" data-testid="homework-due-date">Due {{ homework_due_date_display }}</p>
+    <p class="mb-1 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} {{ homework_due_date_display }}</p>
     {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4 mt-0" only %}
     {% endif %}
 
@@ -75,11 +75,11 @@
       {% if homework_locked_after_submit %}
       <p class="mb-6 rounded-md border border-green-500/30 bg-green-500/10 px-3 py-2 text-sm text-green-800 dark:text-green-300" role="status" data-testid="homework-submitted-status">Your homework was submitted. Your results are shown with each answer.</p>
       {% elif not homework_is_accepting %}
-      <div class="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-foreground" data-testid="homework-deadline-passed-banner">
-        {% if homework_is_self_paced %}
+      <div class="mb-6 rounded-lg border border-yellow-500/30 bg-yellow-500/10 p-4 text-sm text-foreground" data-testid="homework-closed-banner">
+        {% if homework_submission %}
         This homework is closed. Your submission is shown below and can no longer be edited.
         {% else %}
-        The deadline for this homework passed on {{ homework_due_date_display }}. Your submission is shown below and can no longer be edited.
+        This homework is closed. Sorry, it's too late to submit.
         {% endif %}
       </div>
       {% endif %}

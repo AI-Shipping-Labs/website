@@ -1385,16 +1385,12 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
         return redirect(unit_url)
 
     if not homework.is_accepting_submissions:
-        if homework.is_self_paced or homework.due_date is None:
-            messages.error(
-                request,
-                'This homework is closed; this answer was not saved.',
-            )
-        else:
-            messages.error(
-                request,
-                'The deadline for this homework has passed; this answer was not saved.',
-            )
+        # State-gated only since issue #1917: a rejection never claims a
+        # deadline passed, even when due_date is in the past.
+        messages.error(
+            request,
+            'This homework is closed; this answer was not saved.',
+        )
         return redirect(unit_url)
 
     answers_by_question_id = parse_submission_post(request.POST, homework)
@@ -1412,7 +1408,7 @@ def _handle_homework_submission_post(request, unit, *, cohort=None):
         request,
         'Your homework was submitted.'
         if homework.is_self_paced else
-        'Your homework was submitted. You can update it anytime before the deadline.',
+        'Your homework was submitted. You can update it while submissions are open.',
     )
     return redirect(unit_url)
 

@@ -91,6 +91,7 @@ from content.services.module_home import (
 )
 from content.views.pages import _filter_by_tags, _get_selected_tags
 from events.services.timeline import group_timeline_days
+from pods.services.tab import pods_tab_context
 
 
 def _course_projects_for_cohort(projects, cohort):
@@ -449,6 +450,9 @@ def course_home(request, slug, section='home'):
 
     context = build_course_home(course, request.user, cohort)
     context['section'] = section
+    # Issue #1918: the Pods tab shows for dated-cohort viewers of a course
+    # listed in PODS_COURSE_SLUGS, with the owner's pending-request count.
+    context.update(pods_tab_context(course, request.user, cohort))
     # Header badge beside the cohort label: a dated cohort shows its own
     # member count; a self-paced (or missing) cohort shows the course's.
     if cohort is not None and cohort.mode == 'cohort':

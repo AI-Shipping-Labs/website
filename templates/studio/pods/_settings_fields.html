@@ -1,0 +1,26 @@
+<div class="mb-6">
+  <label for="pod-name" class="block text-sm font-medium text-foreground mb-1">Name</label>
+  <input id="pod-name" type="text" name="name" maxlength="80" required value="{{ form.name }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-name-input">
+</div>
+<div class="mb-6">
+  <label for="pod-purpose" class="block text-sm font-medium text-foreground mb-1">Purpose</label>
+  <textarea id="pod-purpose" name="purpose" rows="3" maxlength="500" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-purpose-input">{{ form.purpose }}</textarea>
+</div>
+<div class="mb-6 grid gap-4 sm:grid-cols-3">
+  <div>
+    <label for="pod-max-members" class="block text-sm font-medium text-foreground mb-1">Size limit</label>
+    <input id="pod-max-members" type="number" name="max_members" min="1" max="12" value="{{ form.max_members }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-max-members">
+  </div>
+  <div>
+    <label for="pod-meeting-count" class="block text-sm font-medium text-foreground mb-1">Meetings</label>
+    <input id="pod-meeting-count" type="number" name="meeting_count" min="1" max="20" value="{{ form.meeting_count }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+  </div>
+  <div>
+    <label for="pod-meeting-minutes" class="block text-sm font-medium text-foreground mb-1">Meeting length</label>
+    <select id="pod-meeting-minutes" name="meeting_minutes" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
+      {% for value, label in meeting_minute_choices %}
+      <option value="{{ value }}"{% if form.meeting_minutes|stringformat:"s" == value|stringformat:"s" %} selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>

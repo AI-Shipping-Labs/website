@@ -52,7 +52,7 @@ class AuthThrottleRegistryTest(SimpleTestCase):
         cls.entries = {entry["key"]: entry for entry in cls.auth_group["keys"]}
 
     def test_keys_are_integers_on_existing_auth_group(self):
-        self.assertEqual(len(INTEGRATION_GROUPS), 17)
+        self.assertEqual(len(INTEGRATION_GROUPS), 18)
         for key in AUTH_THROTTLE_KEYS:
             self.assertIn(key, self.entries)
             entry = self.entries[key]

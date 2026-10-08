@@ -351,6 +351,15 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_interview_note_edit',
         'studio_interview_note_delete',
     )),
+    ('planning', 'pods', (
+        'studio_pod_list',
+        'studio_pod_create',
+        'studio_pod_detail',
+        'studio_pod_member_add',
+        'studio_pod_member_remove',
+        'studio_pod_request_approve',
+        'studio_pod_request_decline',
+    )),
     ('planning', 'books', (
         'studio_book_list',
         'studio_book_detail',

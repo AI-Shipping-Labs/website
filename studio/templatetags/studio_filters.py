@@ -128,6 +128,15 @@ STATUS_BADGE_CLASSES = {
     # discovery surface — amber matches the canonical "needs a second
     # look, not an error" caution tone used for Override/Draft states.
     'hidden': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+    # Issue #1918: a pod accepting requests reads as live (green); a closed
+    # pod is grey-muted like ``archived``.
+    'open': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'closed': 'bg-secondary text-muted-foreground',
+    # Issue #1918: an unanswered pod request older than PODS_STALE_REQUEST_DAYS
+    # needs a second look (amber caution tone); Slack link Set / Not set.
+    'stale': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
+    'set': 'bg-green-500/20 text-green-700 dark:text-green-300',
+    'not_set': 'bg-secondary text-muted-foreground',
 }
 
 TIER_PILL_CLASSES = {
@@ -162,6 +171,12 @@ STATUS_OPTIONS = {
     'project': [
         ('pending_review', 'Pending Review'),
         ('published', 'Published'),
+    ],
+    # Issue #1918: pod lifecycle on /studio/pods/.
+    'pod': [
+        ('open', 'Open'),
+        ('closed', 'Closed'),
+        ('archived', 'Archived'),
     ],
 }
 
@@ -487,6 +502,7 @@ def studio_list_filter(
     placeholder='Search...',
     status_kind='publication',
     auto_submit=True,
+    extra_filters=None,
 ):
     """Render the shared Studio list search/status filter form.
 
@@ -494,6 +510,10 @@ def studio_list_filter(
     mode — the status dropdown is omitted entirely. This lets list pages
     that don't have a status concept (recordings, downloads) reuse the
     canonical search shell without rolling their own ``<form>``.
+
+    ``extra_filters`` (issue #1918) is an optional list of extra selects,
+    each a dict with ``name``, ``label``, ``all_label``, ``value`` and
+    ``options`` (``(value, label)`` pairs), rendered after the status select.
     """
     if status_kind:
         status_options = STATUS_OPTIONS.get(status_kind)
@@ -505,6 +525,7 @@ def studio_list_filter(
         'placeholder': placeholder,
         'status_options': status_options,
         'auto_submit': auto_submit,
+        'extra_filters': extra_filters or [],
     }
 
 

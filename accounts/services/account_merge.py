@@ -374,6 +374,16 @@ def _strategy_reader_profile(plan, related_model, field_name, canonical, seconda
     plan.record_move(related_model._meta.label, field_name, moved=0, dropped=1)
 
 
+def _strategy_availability_profile(plan, related_model, field_name, canonical, secondary):
+    """pods.AvailabilityProfile: O2O ``user`` holding the weekly windows (#1918).
+
+    Same precedence as the reader profile: canonical's availability wins;
+    with none, secondary's profile (and its windows) moves over; on
+    collision secondary's profile is dropped and its windows cascade.
+    """
+    _strategy_reader_profile(plan, related_model, field_name, canonical, secondary)
+
+
 def _strategy_member_api_key(
     plan, related_model, field_name, canonical, secondary
 ):
@@ -508,6 +518,7 @@ _SPECIAL_STRATEGIES = {
     ("account.EmailAddress", "user"): _strategy_email_address,
     ("email_app.EmailLog", "user"): _strategy_email_log,
     ("bookclub.ReaderProfile", "user"): _strategy_reader_profile,
+    ("pods.AvailabilityProfile", "user"): _strategy_availability_profile,
 }
 
 

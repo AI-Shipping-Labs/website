@@ -33,6 +33,7 @@ GROUP_LABELS = {
     "llm": "LLM Provider",
     "maven": "Maven",
     "observability": "Observability",
+    "pods": "Pods",
     "s3_content": "S3 Content Images",
     "s3_downloads": "S3 Downloads",
     "s3_recordings": "S3 Recordings",
@@ -62,6 +63,7 @@ _GROUP_ORDER = (
     "observability",
     "maven",
     "triggers",
+    "pods",
 )
 
 _KEY_ORDER = {
@@ -231,6 +233,17 @@ _KEY_ORDER = {
         "PAYMENT_FAILURE_TEAM_EMAIL",
     ),
     "triggers": ("TRIGGERS_ENABLED",),
+    "pods": (
+        "PODS_COURSE_SLUGS",
+        "PODS_DEFAULT_MAX_MEMBERS",
+        "PODS_DEFAULT_MEETING_COUNT",
+        "PODS_DEFAULT_MEETING_MINUTES",
+        "PODS_MAX_OPEN_REQUESTS_PER_MEMBER",
+        "PODS_MAX_CREATED_PER_MEMBER",
+        "PODS_SUGGESTION_HORIZON_DAYS",
+        "PODS_SUGGESTION_COUNT",
+        "PODS_STALE_REQUEST_DAYS",
+    ),
     "zoom": (
         "ZOOM_CLIENT_ID",
         "ZOOM_CLIENT_SECRET",
@@ -2047,4 +2060,97 @@ TRIGGERS_ENABLED = declare(
     default="false",
     secret=False,
     docs_url="_docs/integrations/triggers.md#triggers_enabled",
+)
+
+# --- Pods (pods) ---
+PODS_COURSE_SLUGS = declare(
+    key="PODS_COURSE_SLUGS",
+    group="pods",
+    label="Pods Course Slugs",
+    description="Comma-separated course slugs whose dated-cohort members see the Pods tab on course Home (issue #1918). Empty hides every member pod page; Studio and the staff API work regardless so pods can be prepared before launch.",
+    value_type="str",
+    default="",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/pods.md#pods_course_slugs",
+)
+PODS_DEFAULT_MAX_MEMBERS = declare(
+    key="PODS_DEFAULT_MAX_MEMBERS",
+    group="pods",
+    label="Pods Default Max Members",
+    description="Default size limit for a new pod (1-12). Defaults to 4.",
+    value_type="int",
+    default="4",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_default_max_members",
+)
+PODS_DEFAULT_MEETING_COUNT = declare(
+    key="PODS_DEFAULT_MEETING_COUNT",
+    group="pods",
+    label="Pods Default Meeting Count",
+    description="Default number of meetings for a new pod (1-20). Defaults to 1.",
+    value_type="int",
+    default="1",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_default_meeting_count",
+)
+PODS_DEFAULT_MEETING_MINUTES = declare(
+    key="PODS_DEFAULT_MEETING_MINUTES",
+    group="pods",
+    label="Pods Default Meeting Minutes",
+    description="Default meeting length in minutes for a new pod: 30, 45, 60 or 90. Used to size suggested meeting times. Defaults to 60.",
+    value_type="int",
+    default="60",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_default_meeting_minutes",
+)
+PODS_MAX_OPEN_REQUESTS_PER_MEMBER = declare(
+    key="PODS_MAX_OPEN_REQUESTS_PER_MEMBER",
+    group="pods",
+    label="Pods Max Open Requests Per Member",
+    description="How many pending or waitlisted join requests one member may hold across the pods of one cohort. Defaults to 3.",
+    value_type="int",
+    default="3",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_max_open_requests_per_member",
+)
+PODS_MAX_CREATED_PER_MEMBER = declare(
+    key="PODS_MAX_CREATED_PER_MEMBER",
+    group="pods",
+    label="Pods Max Created Per Member",
+    description="How many non-archived pods one member may start in one cohort. Defaults to 2.",
+    value_type="int",
+    default="2",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_max_created_per_member",
+)
+PODS_SUGGESTION_HORIZON_DAYS = declare(
+    key="PODS_SUGGESTION_HORIZON_DAYS",
+    group="pods",
+    label="Pods Suggestion Horizon Days",
+    description="How many days ahead suggested meeting times look. Defaults to 14.",
+    value_type="int",
+    default="14",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_suggestion_horizon_days",
+)
+PODS_SUGGESTION_COUNT = declare(
+    key="PODS_SUGGESTION_COUNT",
+    group="pods",
+    label="Pods Suggestion Count",
+    description="Maximum number of suggested meeting times shown for a pod. Defaults to 5.",
+    value_type="int",
+    default="5",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_suggestion_count",
+)
+PODS_STALE_REQUEST_DAYS = declare(
+    key="PODS_STALE_REQUEST_DAYS",
+    group="pods",
+    label="Pods Stale Request Days",
+    description="Studio highlights a pod whose oldest unanswered join request is older than this many days, so staff can step in. Defaults to 5.",
+    value_type="int",
+    default="5",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_stale_request_days",
 )

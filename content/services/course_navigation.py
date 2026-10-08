@@ -26,6 +26,7 @@ HOME_SECTION_URL_NAMES = {
     'sessions': 'course_office_hours',
     'homework': 'course_homework',
     'projects': 'course_projects',
+    'pods': 'course_pods',
 }
 
 # Per-user memo so one page asking about the same course several times

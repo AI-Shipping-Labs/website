@@ -55,6 +55,9 @@ urlpatterns = [
     path('robots.txt', robots_txt, name='robots_txt'),
     path('sitemap.xml', sitemap, {'sitemaps': sitemaps}, name='sitemap'),
     path('', include('payments.urls')),
+    # Issue #1918: pod pages live under course Home; included before
+    # content.urls so they win over the course unit catch-alls.
+    path('', include('pods.urls')),
     path('', include('content.urls')),
     path('', include('events.urls')),
     path('', include('voting.urls')),

@@ -548,6 +548,9 @@ class StudioListRowActionPillStyleTest(TestCase):
                 "studio_action_class 'primary'",
                 "templates/studio/events/form.html:"
                 "studio_action_class 'primary'",
+                # Pod request "Approve" (POST staff override) — #1918.
+                "templates/studio/pods/detail.html:"
+                "studio_action_class 'primary'",
                 "templates/studio/questionnaires/response_queue.html:"
                 "studio_action_class 'primary'",
             ],

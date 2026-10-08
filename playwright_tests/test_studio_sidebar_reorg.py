@@ -240,7 +240,7 @@ class TestStaffLandsInStudio:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 51)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 52)
         focus_page.close()
 
 
@@ -458,7 +458,7 @@ class TestNonSuperuserGating:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 0
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 48)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 49)
         focus_page.close()
 
 
@@ -714,6 +714,7 @@ class TestPlanningSection:
         assert [label.strip() for label in planning_labels if label.strip()] == [
             "Sprints",
             "Plans",
+            "Pods",
             "Book club",
         ]
 

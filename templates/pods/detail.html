@@ -1,0 +1,175 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components member_badges member_empty_state %}
+
+{% block pods_title %}{{ pod.name }}{% endblock %}
+
+{% block pods_content %}
+<article data-testid="pod-detail" data-pod-id="{{ pod.pk }}">
+  <a href="{{ pods_list_url }}" class="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-back"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i>All pods</a>
+
+  <header class="mt-2" data-testid="pod-header">
+    <h2 class="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl" data-testid="pod-name">{{ pod.name }}</h2>
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      {% member_status_badge state.badge tone=state.tone testid="pod-status-badge" %}
+      {% if pod.status == 'archived' %}{% member_status_badge 'Archived' tone='muted' testid="pod-archived-badge" %}{% endif %}
+    </div>
+    <p class="mt-3 whitespace-pre-line break-words text-base leading-relaxed text-muted-foreground" data-testid="pod-purpose">{{ pod.purpose }}</p>
+    <p class="mt-2 text-sm text-muted-foreground" data-testid="pod-meta">{{ meta }}{% if owner_name %} · Started by {{ owner_name }}{% endif %}</p>
+
+    {% if can_request %}
+    <form method="post" action="{% url 'pod_request' slug=course.slug pod_id=pod.pk %}" id="request" class="mt-6 max-w-2xl" data-testid="pod-request-form">
+      {% csrf_token %}
+      <label for="pod-request-message" class="block text-sm font-medium text-foreground">Why this pod? What are you working on?</label>
+      <p id="pod-request-message-help" class="mt-0.5 text-xs text-muted-foreground">Optional. The pod owner sees this with your request.</p>
+      <textarea id="pod-request-message" name="message" rows="3" maxlength="300" aria-describedby="pod-request-message-help" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-request-message"></textarea>
+      <button type="submit" class="{% button_classes 'primary' extra='mt-3' %}" data-testid="pod-request-submit">{{ request_label }}</button>
+    </form>
+    {% endif %}
+
+    {% if state.request or can_manage or is_member %}
+    <div class="mt-4 flex flex-wrap items-start gap-x-4 gap-y-2" data-testid="pod-header-actions">
+      {% if state.request %}
+      <form method="post" action="{% url 'pod_withdraw' slug=course.slug pod_id=pod.pk %}">
+        {% csrf_token %}
+        <button type="submit" class="{% button_classes 'secondary' %}" data-testid="pod-withdraw">Withdraw request</button>
+      </form>
+      {% endif %}
+      {% if can_manage %}
+      <a href="{% url 'pod_edit' slug=course.slug pod_id=pod.pk %}" class="inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-edit-link">Edit pod <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+      {% endif %}
+      {% if is_member %}
+      <details class="w-full sm:w-auto" data-testid="pod-leave">
+        <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden" data-testid="pod-leave-toggle">Leave pod</summary>
+        <div class="mt-2 rounded-lg border border-border bg-card p-4">
+          <p class="text-sm text-foreground">Leave {{ pod.name }}? Your seat goes to the next person on the waiting list.</p>
+          <form method="post" action="{% url 'pod_leave' slug=course.slug pod_id=pod.pk %}" class="mt-3">
+            {% csrf_token %}
+            <button type="submit" class="{% button_classes 'destructive' %}" data-testid="pod-leave-confirm">Yes, leave pod</button>
+          </form>
+        </div>
+      </details>
+      {% endif %}
+    </div>
+    {% endif %}
+  </header>
+
+  {% if suggestions %}
+  <section class="mt-10" aria-labelledby="pod-times-heading" data-testid="pod-suggested-times">
+    {% with times_subtitle="Shown in your timezone: "|add:viewer_zone %}
+    {% section_header "Suggested times" heading_id="pod-times-heading" subtitle=times_subtitle extra="mb-3" %}
+    {% endwith %}
+    {% if suggestions.needs_more %}
+    <p class="text-sm text-muted-foreground" data-testid="pod-times-needs-more">Suggested times appear when at least two members have added availability.</p>
+    {% elif suggestions.slots %}
+    <ol class="divide-y divide-border border-y border-border" data-testid="pod-slots">
+      {% for row in suggestions.slots %}
+      <li class="py-3" data-testid="pod-slot">
+        <p class="text-sm font-semibold text-foreground"><time datetime="{{ row.start_iso }}" data-testid="pod-slot-time">{{ row.start_label }}</time> <span class="font-normal text-muted-foreground">· {{ pod.meeting_minutes }} min</span></p>
+        <div class="mt-1">{% member_status_badge row.fit_label tone=row.fit_tone testid="pod-slot-fit" %}</div>
+        <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-slot-strip">
+          {% for local in row.strip %}<span data-testid="pod-slot-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endfor %}
+        </p>
+      </li>
+      {% endfor %}
+    </ol>
+    {% if suggestions.based_on_line %}<p class="mt-3 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
+    {% else %}
+    <p class="text-sm text-foreground" data-testid="pod-times-no-fit">{{ suggestions.no_fit_line }}</p>
+    {% if suggestions.based_on_line %}<p class="mt-2 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
+    <a href="{{ availability_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-edit-availability">Edit my availability <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if slack %}
+  {% include "pods/_slack.html" %}
+  {% endif %}
+
+  <section class="mt-10" aria-labelledby="pod-members-heading" data-testid="pod-members">
+    {% section_header "Members" heading_id="pod-members-heading" subtitle=zones extra="mb-3" %}
+    {% if fit_line %}<p class="mb-3 text-sm font-medium text-foreground" data-testid="pod-fit-line">{{ fit_line }}</p>{% endif %}
+    {% if member_rows %}
+    <ul class="divide-y divide-border border-y border-border" data-testid="pod-member-rows">
+      {% for member in member_rows %}
+      <li class="flex min-w-0 flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3" data-testid="pod-member">
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <h3 class="break-words text-sm font-semibold text-foreground" data-testid="pod-member-name">{{ member.name }}{% if member.is_viewer %} <span class="font-normal text-muted-foreground">(you)</span>{% endif %}</h3>
+            {% if member.is_owner %}{% member_label_badge 'Owner' tone='neutral' testid='pod-member-owner' %}{% endif %}
+          </div>
+          <p class="mt-0.5 text-xs text-muted-foreground" data-testid="pod-member-meta">{{ member.timezone_label|default:"Timezone not set" }}{% if show_private and not member.has_availability %} · No availability yet{% endif %}</p>
+        </div>
+        {% if member.slack_url %}
+        <a href="{{ member.slack_url }}" target="_blank" rel="noopener" class="inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:self-auto" data-testid="pod-member-slack">Message on Slack <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    {% member_empty_state title='No members yet' body='Staff can add members, or approve a request to join.' icon='users' kind='fresh' testid='pod-members-empty' %}
+    {% endif %}
+  </section>
+
+  {% if can_manage %}
+  <section class="mt-10" id="requests" aria-labelledby="pod-requests-heading" data-testid="pod-requests">
+    {% section_header "Requests" heading_id="pod-requests-heading" subtitle="Pending requests first, then the waiting list in order." extra="mb-3" %}
+    {% if request_rows %}
+    {% if pod_full %}<p id="pod-full-line" class="mb-3 text-sm text-foreground" data-testid="pod-full-line">Pod is full. Raise the size limit to approve.</p>{% endif %}
+    <ul class="divide-y divide-border border-y border-border" data-testid="pod-request-rows">
+      {% for row in request_rows %}
+      <li class="py-3" data-testid="pod-request">
+        <div class="flex flex-wrap items-center gap-2">
+          <h3 class="break-words text-sm font-semibold text-foreground" data-testid="pod-request-name">{{ row.name }}</h3>
+          {% member_status_badge row.status_label tone='info' testid='pod-request-status' %}
+        </div>
+        <p class="mt-0.5 text-xs text-muted-foreground" data-testid="pod-request-meta">{% if row.timezone_label %}{{ row.timezone_label }} · {% endif %}{{ row.age }} · <span data-testid="pod-request-fit">{{ row.fit }}</span></p>
+        {% if row.message %}<p class="mt-1 whitespace-pre-line break-words text-sm text-foreground" data-testid="pod-request-message-text">{{ row.message }}</p>{% endif %}
+        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1" data-testid="pod-request-actions">
+          <form method="post" action="{% url 'pod_request_approve' slug=course.slug pod_id=pod.pk request_id=row.request.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="{% button_classes 'secondary' size='sm' %}"{% if not row.can_approve %} disabled aria-describedby="pod-full-line"{% endif %} data-testid="pod-request-approve">Approve</button>
+          </form>
+          <form method="post" action="{% url 'pod_request_decline' slug=course.slug pod_id=pod.pk request_id=row.request.pk %}">
+            {% csrf_token %}
+            <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-request-decline">Decline</button>
+          </form>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    {% member_empty_state title='No open requests' body='New requests to join this pod appear here.' icon='inbox' kind='fresh' testid='pod-requests-empty' %}
+    {% endif %}
+  </section>
+  {% endif %}
+
+  {% if is_member %}
+  <section class="mt-10" aria-labelledby="pod-my-availability-heading" data-testid="pod-my-availability">
+    {% section_header "My availability" heading_id="pod-my-availability-heading" subtitle=availability_timezone see_all_url=availability_url see_all_label="Edit my availability" see_all_testid="pod-edit-availability" extra="mb-3" %}
+    {% if freshness_line %}<p class="mb-2 text-sm text-foreground" data-testid="pod-availability-freshness">{{ freshness_line }}</p>{% endif %}
+    {% include "pods/_availability_summary.html" with summary=availability_summary %}
+  </section>
+  {% endif %}
+</article>
+{% endblock %}
+
+{% block pods_scripts %}
+<script>
+  (function () {
+    document.querySelectorAll('[data-copy-text]').forEach(function (button) {
+      button.addEventListener('click', function () {
+        var text = button.getAttribute('data-copy-text');
+        var done = function () {
+          var label = button.querySelector('[data-copy-label]');
+          if (label) { label.textContent = 'Copied'; }
+        };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(done, done);
+        } else {
+          done();
+        }
+      });
+    });
+  })();
+</script>
+{% endblock %}

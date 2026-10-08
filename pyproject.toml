@@ -75,6 +75,7 @@ source = [
     "notifications",
     "payments",
     "plans",
+    "pods",
     "questionnaires",
     "studio",
     "topics",

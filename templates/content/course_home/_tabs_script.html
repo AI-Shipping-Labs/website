@@ -1,0 +1,20 @@
+{# Course Home tab strip: keep the current tab in view and fade the overflow edge. #}
+<script>
+  (function () {
+    var wrap = document.querySelector('[data-course-tabs]');
+    if (!wrap) return;
+    var scroller = wrap.querySelector('[data-course-tabs-scroller]');
+    var fade = wrap.querySelector('[data-course-tabs-fade]');
+    var current = scroller.querySelector('[aria-current="page"]');
+    if (current && current.offsetLeft + current.offsetWidth > scroller.clientWidth) {
+      scroller.scrollLeft = current.offsetLeft - 16;
+    }
+    function syncFade() {
+      var atEnd = scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - 2;
+      fade.hidden = atEnd;
+    }
+    scroller.addEventListener('scroll', syncFade, { passive: true });
+    window.addEventListener('resize', syncFade);
+    syncFade();
+  })();
+</script>

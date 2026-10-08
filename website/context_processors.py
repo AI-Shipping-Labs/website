@@ -536,6 +536,7 @@ def package_settings_context(request):
         ('content', 'Content', 'Content sync, video, and live-session service credentials.', {'github', 'zoom', 'calendly'}),
         ('content_tools', 'Content Tools', 'Operator-side helpers that augment synced content.', {'banner_generator'}),
         ('messaging', 'Messaging', 'Email, notifications, and community messaging integrations.', {'ses', 'slack', 'maven', 'triggers'}),
+        ('community', 'Community', 'Member community features such as pods.', {'pods'}),
         ('storage', 'Storage', 'Buckets and storage locations for generated and gated assets.', {'s3_recordings', 's3_content', 's3_downloads'}),
         ('site', 'Site', 'Platform-level URL and display settings.', {'site'}),
         ('analytics', 'Analytics', 'Visitor analytics integrations.', {'analytics'}),

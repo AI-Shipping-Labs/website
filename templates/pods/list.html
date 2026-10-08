@@ -1,0 +1,43 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components member_empty_state %}
+
+{% block pods_title %}Pods{% endblock %}
+
+{% block pods_content %}
+<section aria-labelledby="pods-heading" data-testid="pods-list">
+  {% section_header "Pods" heading_id="pods-heading" size="lg" subtitle="Small groups in your cohort that meet to work on one thing together." %}
+  {% if rows %}
+  {% if can_start %}
+  <div class="mt-4 flex flex-wrap gap-3" data-testid="pods-actions">
+    <a href="{{ new_pod_url }}" class="{% button_classes 'primary' %}" data-testid="pods-start">Start a pod</a>
+    <a href="{{ availability_url }}" class="{% button_classes 'secondary' %}" data-testid="pods-edit-availability">Edit my availability</a>
+  </div>
+  {% endif %}
+  {% if can_start and not viewer_has_availability %}
+  <p class="mt-3 text-sm text-muted-foreground" data-testid="pods-availability-hint">Add your availability to see which pods fit you.</p>
+  {% endif %}
+  <ol class="mt-6 divide-y divide-border border-y border-border" data-testid="pods-rows">
+    {% for row in rows %}
+    {% include "pods/_pod_row.html" with row=row %}
+    {% endfor %}
+  </ol>
+  {% if total_pages > 1 %}
+  <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Pods pages" data-testid="pods-pager">
+    {% if prev_page_url %}<a href="{{ prev_page_url }}" class="{% button_classes 'secondary' %}"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i>Previous</a>{% endif %}
+    <span class="text-sm text-muted-foreground">Page {{ page_number }} of {{ total_pages }}</span>
+    {% if next_page_url %}<a href="{{ next_page_url }}" class="{% button_classes 'secondary' %}">Next<i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  </nav>
+  {% endif %}
+  {% else %}
+  <div class="mt-6">
+    {% if can_start %}
+    {% button_classes 'primary' as start_cta_class %}
+    {% button_classes 'secondary' as availability_cta_class %}
+    {% member_empty_state title='No pods yet' body='Start a pod with a purpose and others in your cohort can ask to join.' icon='users' kind='fresh' primary_cta_label='Start a pod' primary_cta_url=new_pod_url primary_cta_class=start_cta_class secondary_cta_label='Edit my availability' secondary_cta_url=availability_url secondary_cta_class=availability_cta_class testid='pods-empty' %}
+    {% else %}
+    {% member_empty_state title='No pods yet' body='Start a pod with a purpose and others in your cohort can ask to join.' icon='users' kind='fresh' testid='pods-empty' %}
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

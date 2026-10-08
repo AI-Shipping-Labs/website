@@ -56,7 +56,7 @@ fallbacks used when no DB override exists.
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. The package `community_base.config` view renders every declared integration group and shows each setting's source (`db`, `environment`, `django_settings`, or `default`).
 
-Test: visit `/studio/settings/` and confirm the declared groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers). Save one non-secret value and confirm its source changes to `db`.
+Test: visit `/studio/settings/` and confirm the declared groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers, Pods). Save one non-secret value and confirm its source changes to `db`.
 
 Runtime settings are stored in the package `cb_config.Setting` table after the A0.2 migration. Secret values use the package Fernet format and are never displayed or exported in plaintext. The compatibility resolver in `integrations.config` still reads donor `IntegrationSetting` rows that have not been rewritten; this is a read-only fallback and package rows always win. The donor table remains read-only until the second A0.2 pull request.
 

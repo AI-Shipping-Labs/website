@@ -112,6 +112,7 @@ APP_LABELS: tuple[str, ...] = (
     "notifications",
     "payments",
     "plans",
+    "pods",
     "questionnaires",
     "studio",
     "topics",

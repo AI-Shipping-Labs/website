@@ -1,0 +1,40 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}New pod{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_pod_list' as pods_list_url %}
+{% studio_header_actions title='New pod' subtitle='Create a pod in a dated cohort, for example for students paired by your own tooling.' back_url=pods_list_url back_label='Back to pods' %}{% endstudio_header_actions %}
+
+{% if error %}
+<div class="bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 mb-6 text-sm" role="alert" data-testid="studio-pod-error">{{ error }}</div>
+{% endif %}
+
+<div class="bg-card border border-border rounded-lg p-6 max-w-2xl">
+  <form id="studio-pod-form" method="post" action="{% url 'studio_pod_create' %}" data-testid="studio-pod-form">
+    {% csrf_token %}
+    <div class="mb-6">
+      <label for="pod-cohort" class="block text-sm font-medium text-foreground mb-1">Cohort</label>
+      <select id="pod-cohort" name="cohort" required class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-cohort">
+        <option value="">Choose a dated cohort</option>
+        {% for value, label in cohort_options %}
+        <option value="{{ value }}"{% if form.cohort == value %} selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% include "studio/pods/_settings_fields.html" %}
+    <div class="mb-6">
+      <label for="pod-owner-email" class="block text-sm font-medium text-foreground mb-1">Owner email</label>
+      <input id="pod-owner-email" type="email" name="owner_email" value="{{ form.owner_email }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-owner-email">
+      <p class="text-xs text-muted-foreground mt-1">Optional. Must be enrolled in the cohort; becomes the first member and approves requests. Leave blank so only staff decide.</p>
+    </div>
+    <div class="mb-6">
+      <label for="pod-member-emails" class="block text-sm font-medium text-foreground mb-1">Member emails</label>
+      <textarea id="pod-member-emails" name="member_emails" rows="5" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-member-emails">{{ form.member_emails }}</textarea>
+      <p class="text-xs text-muted-foreground mt-1">One per line. People not enrolled in the cohort are skipped and listed after saving.</p>
+    </div>
+  </form>
+</div>
+{% include "studio/includes/sticky_action_bar.html" with form_id="studio-pod-form" title="New pod" subtitle="Nothing is created until you save." can_save=True primary_label="Create pod" cancel_url=pods_list_url %}
+{% endblock %}

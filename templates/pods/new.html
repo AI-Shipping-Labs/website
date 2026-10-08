@@ -1,0 +1,22 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components %}
+
+{% block pods_title %}Start a pod{% endblock %}
+
+{% block pods_content %}
+<section class="max-w-2xl" aria-labelledby="pod-new-heading" data-testid="pod-new">
+  {% section_header "Start a pod" heading_id="pod-new-heading" size="lg" subtitle="You become the owner and first member. Others in your cohort can ask to join." %}
+  {% if error %}
+  <p class="mt-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-form-error">{{ error }}</p>
+  {% endif %}
+  <form method="post" class="mt-6" data-testid="pod-new-form">
+    {% csrf_token %}
+    <input type="hidden" name="cohort" value="{{ cohort.external_key }}">
+    {% include "pods/_settings_fields.html" %}
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button type="submit" class="{% button_classes 'primary' %}" data-testid="pod-new-submit">Start pod</button>
+      <a href="{{ cancel_url }}" class="{% button_classes 'secondary' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

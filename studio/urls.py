@@ -252,6 +252,15 @@ from studio.views.plans import (
     plan_view_as_member,
     plan_visibility_update,
 )
+from studio.views.pods import (
+    studio_pod_create,
+    studio_pod_detail,
+    studio_pod_list,
+    studio_pod_member_add,
+    studio_pod_member_remove,
+    studio_pod_request_approve,
+    studio_pod_request_decline,
+)
 from studio.views.privacy_deletion import (
     privacy_deletion_confirm,
     privacy_deletion_retry_confirmation,
@@ -1152,6 +1161,27 @@ urlpatterns = [
         'personas/<int:persona_id>/edit',
         persona_edit,
         name='studio_persona_edit',
+    ),
+
+    # Pods (issue #1918). Planning section.
+    path('pods/', studio_pod_list, name='studio_pod_list'),
+    path('pods/new', studio_pod_create, name='studio_pod_create'),
+    path('pods/<int:pod_id>/', studio_pod_detail, name='studio_pod_detail'),
+    path('pods/<int:pod_id>/members/add', studio_pod_member_add, name='studio_pod_member_add'),
+    path(
+        'pods/<int:pod_id>/members/<int:user_id>/remove',
+        studio_pod_member_remove,
+        name='studio_pod_member_remove',
+    ),
+    path(
+        'pods/<int:pod_id>/requests/<int:request_id>/approve',
+        studio_pod_request_approve,
+        name='studio_pod_request_approve',
+    ),
+    path(
+        'pods/<int:pod_id>/requests/<int:request_id>/decline',
+        studio_pod_request_decline,
+        name='studio_pod_request_decline',
     ),
 
     # Sprints (issue #432). Members section.

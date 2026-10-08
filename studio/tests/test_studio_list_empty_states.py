@@ -76,6 +76,7 @@ PARTIAL_USERS = {
     'marketing_pages/list.html',
     'maven_events/list.html',
     'tags/list.html',
+    'pods/list.html',
 }
 
 

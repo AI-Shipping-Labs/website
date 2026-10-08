@@ -20,8 +20,8 @@ def create_comment(*, content_id, user, body, parent=None):
 
     Validation and permission checks stay at the HTTP boundary. This helper
     owns the side effects tied to a successful platform comment action:
-    activation and the shared-thread in-app notifications (issues #1341,
-    #1361, and #1365).
+    activation, the shared-thread in-app notifications (issues #1341,
+    #1361, and #1365), and the staff Slack comment alert (issue #1926).
     """
     comment = Comment.objects.create(
         content_id=content_id,
@@ -31,7 +31,31 @@ def create_comment(*, content_id, user, body, parent=None):
     )
     mark_activated(user)
     _notify_comment_recipients(comment)
+    _notify_staff_channel(comment)
     return comment
+
+
+def _notify_staff_channel(comment):
+    """Best-effort staff Slack alert for member comments (issue #1926).
+
+    Runs separately from ``_notify_comment_recipients`` because the owner
+    notifier returns early when a thread has no linked owner, while the
+    team alert must fire regardless. Slack failures never affect the
+    already-saved comment.
+    """
+    try:
+        # Lazy for the same reason as ``_notify_comment_recipients``: the
+        # generic comments app keeps no static dependency on notifications.
+        from notifications.services.staff_comment_alerts import (  # noqa: PLC0415
+            notify_staff_of_comment,
+        )
+
+        notify_staff_of_comment(comment)
+    except Exception:
+        logger.exception(
+            'staff comment Slack alert failed for comment %s',
+            comment.pk,
+        )
 
 
 def _notify_comment_recipients(comment):

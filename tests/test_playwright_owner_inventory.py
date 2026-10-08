@@ -1484,6 +1484,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_moderates_lesson_thread_and_homework_thread_stays_intact",
     })
 
+    issue_1926_owners = frozenset({
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_admin_hears_about_lesson_question_and_answers_it",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_homework_step_alert_links_to_that_step",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_workshop_reply_alert_names_parent_author_and_workshop",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_comment_survives_slack_outage",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_admin_pauses_and_resumes_alerts_in_studio",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_alerts_fall_back_then_route_to_dedicated_channel",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_member_owned_threads_never_reach_staff_channel",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_long_tricky_comment_has_safe_truncated_preview",
+        "playwright_tests/test_staff_comment_alerts_1926.py::"
+        "test_linked_instructor_keeps_bell_alongside_team_alert",
+    })
+
     issue_1917_owners = frozenset({
         "playwright_tests/test_homework_deadline_1917.py::"
         "test_cohort_learner_submits_after_the_deadline",
@@ -1741,8 +1762,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2749)
-        self.assertEqual(len(inventory.owners), 2545)
+        self.assertEqual(inventory.item_count, 2758)
+        self.assertEqual(len(inventory.owners), 2554)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1758,6 +1779,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1894_owners
             | self.issue_1917_owners
             | self.issue_1923_owners
+            | self.issue_1926_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

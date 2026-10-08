@@ -194,6 +194,8 @@ _KEY_ORDER = {
         "SLACK_ANNOUNCEMENTS_CHANNEL_ID",
         "STAFF_SIGNUP_NOTIFY_CHANNEL_ID",
         "STAFF_SLACK_JOIN_NOTIFY_ENABLED",
+        "STAFF_COMMENT_NOTIFY_ENABLED",
+        "STAFF_COMMENT_NOTIFY_CHANNEL_ID",
         "SLACK_DEV_COMMUNITY_CHANNEL_IDS",
         "SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID",
         "SLACK_TEST_COMMUNITY_CHANNEL_IDS",
@@ -1137,6 +1139,28 @@ STAFF_SLACK_JOIN_NOTIFY_ENABLED = declare(
     secret=False,
     optional=True,
     docs_url="_docs/integrations/slack.md#staff_slack_join_notify_enabled",
+)
+STAFF_COMMENT_NOTIFY_ENABLED = declare(
+    key="STAFF_COMMENT_NOTIFY_ENABLED",
+    group="slack",
+    label="Staff Comment Notify Enabled",
+    description="When on, every comment or reply a non-staff member posts on a course lesson, homework step, or workshop page is posted to the staff Slack channel (STAFF_COMMENT_NOTIFY_CHANNEL_ID, falling back to STAFF_SIGNUP_NOTIFY_CHANNEL_ID). No-redeploy kill switch. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/slack.md#staff_comment_notify_enabled",
+)
+STAFF_COMMENT_NOTIFY_CHANNEL_ID = declare(
+    key="STAFF_COMMENT_NOTIFY_CHANNEL_ID",
+    group="slack",
+    label="Staff Comment Notify Channel ID",
+    description="Private, staff-only Slack channel ID that receives member comment alerts from course lessons, homework steps, and workshop pages. Leave blank to use STAFF_SIGNUP_NOTIFY_CHANNEL_ID; when both are blank no alert is posted.",
+    value_type="str",
+    default="",
+    secret=False,
+    optional=True,
+    docs_url="_docs/integrations/slack.md#staff_comment_notify_channel_id",
 )
 SLACK_DEV_COMMUNITY_CHANNEL_IDS = declare(
     key="SLACK_DEV_COMMUNITY_CHANNEL_IDS",

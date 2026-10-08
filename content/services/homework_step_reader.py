@@ -27,6 +27,7 @@ from content.services.homework_step_sections import (
     validate_question_bindings,
 )
 from content.services.homework_submissions import save_submission
+from content.utils.hours import format_hours
 from content.utils.linkify import linkify_urls
 from content.utils.markdown import render_markdown, sanitize_html
 
@@ -119,7 +120,7 @@ def _final_fields(homework, submission):
         ))
         existing_final_fields['time_spent_lectures'] = (
             '' if not submission or submission.time_spent_lectures is None
-            else str(submission.time_spent_lectures)
+            else format_hours(submission.time_spent_lectures)
         )
     if homework.time_spent_homework_field:
         final_fields.append(FinalField(
@@ -128,7 +129,7 @@ def _final_fields(homework, submission):
         ))
         existing_final_fields['time_spent_homework'] = (
             '' if not submission or submission.time_spent_homework is None
-            else str(submission.time_spent_homework)
+            else format_hours(submission.time_spent_homework)
         )
     return tuple(final_fields), existing_final_fields
 

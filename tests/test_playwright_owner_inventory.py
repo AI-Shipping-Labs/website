@@ -1497,6 +1497,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_self_paced_homework_is_unchanged",
     })
 
+    issue_1923_owners = frozenset({
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_first_time_learner_sees_empty_time_spent_fields",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_blank_time_spent_is_stored_as_not_provided",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_explicit_zero_is_stored_and_shown_as_zero",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_fractional_hours_come_back_as_typed",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_learner_clears_a_saved_time_estimate",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_draft_with_blank_time_spent_resumes_empty",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_negative_hours_are_rejected_then_blank_submits",
+        "playwright_tests/test_homework_time_spent_1923.py::"
+        "test_closed_homework_shows_no_answer_saved_not_zero",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1722,8 +1741,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2741)
-        self.assertEqual(len(inventory.owners), 2537)
+        self.assertEqual(inventory.item_count, 2749)
+        self.assertEqual(len(inventory.owners), 2545)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1738,6 +1757,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1906_owners
             | self.issue_1894_owners
             | self.issue_1917_owners
+            | self.issue_1923_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

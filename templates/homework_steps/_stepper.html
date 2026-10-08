@@ -133,7 +133,7 @@
       {% for field, value in stepper.final_field_rows %}
         <label for="final-{{ field.key }}" class="mb-2 block text-sm font-medium text-foreground">{{ field.label }}{% if field.required %} <span class="font-normal text-muted-foreground">(required)</span>{% endif %}</label>
         {% if field.key == 'time_spent_lectures' or field.key == 'time_spent_homework' %}
-        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="number" min="0" step="any" inputmode="decimal" value="{{ value }}"{% if field.required %} required{% endif %}{% if not stepper.can_write %} disabled{% endif %} class="mb-3 min-h-[44px] w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">
+        <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" value="{{ value }}"{% if field.required %} required{% endif %}{% if not stepper.can_write %} disabled{% endif %} class="mb-3 min-h-[44px] w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">
         {% else %}
         <input id="final-{{ field.key }}" name="final_{{ field.key }}" type="{{ field.type }}" value="{{ value }}"{% if field.required %} required aria-required="true"{% endif %}{% if not stepper.can_write %} disabled{% endif %} class="mb-3 min-h-[44px] w-full rounded-md border border-border bg-background px-3 py-2 text-base text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent sm:text-sm">
         {% endif %}

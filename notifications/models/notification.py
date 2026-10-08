@@ -33,6 +33,11 @@ NOTIFICATION_TYPE_CHOICES = [
     ('bookclub_summary', 'Book Club Summary'),
     # Issue #1557: explicit staff action after an event recap is public.
     ('event_recap', 'Event Recap'),
+    # Issue #1918: a new or reopened join request for the pod owner
+    # ("New request to join <pod>", "A seat opened in <pod>").
+    ('pod_request', 'Pod Request'),
+    # Issue #1918: the requester's request was approved or declined.
+    ('pod_request_decided', 'Pod Request Decided'),
 ]
 
 

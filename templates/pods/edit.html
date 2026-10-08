@@ -1,0 +1,34 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components %}
+
+{% block pods_title %}Edit {{ pod.name }}{% endblock %}
+
+{% block pods_content %}
+<section class="max-w-2xl" aria-labelledby="pod-edit-heading" data-testid="pod-edit">
+  {% section_header "Edit pod" heading_id="pod-edit-heading" size="lg" subtitle=pod.name %}
+  {% if error %}
+  <p class="mt-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-form-error">{{ error }}</p>
+  {% endif %}
+  <form method="post" class="mt-6" data-testid="pod-edit-form">
+    {% csrf_token %}
+    {% include "pods/_settings_fields.html" %}
+    <fieldset class="mt-5">
+      <legend class="block text-sm font-medium text-foreground">Requests</legend>
+      <div class="mt-2 space-y-2">
+        <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
+          <input type="radio" name="status" value="open"{% if form.status != 'closed' %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-form-status-open">
+          Open: members of the cohort can ask to join
+        </label>
+        <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
+          <input type="radio" name="status" value="closed"{% if form.status == 'closed' %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-form-status-closed">
+          Closed: no new requests
+        </label>
+      </div>
+    </fieldset>
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button type="submit" class="{% button_classes 'primary' %}" data-testid="pod-edit-submit">Save pod</button>
+      <a href="{{ cancel_url }}" class="{% button_classes 'secondary' %}">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

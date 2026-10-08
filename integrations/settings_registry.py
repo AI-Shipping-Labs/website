@@ -25,7 +25,7 @@ Studio page, the settings API and the export/import service keep their
 donor behavior until the A0.2 cutover deletes this shim.
 
 NOTE: ``_docs/configuration.md`` references the count and names of these
-groups in the Studio sign-in section ("confirm 17 integration groups are
+groups in the Studio sign-in section ("confirm 18 integration groups are
 listed (...)"). When adding, removing, or renaming a group, update that
 line of the doc in the same PR.
 """
@@ -149,6 +149,14 @@ SETTING_VALUE_TYPES = {
     "ONBOARDING_AI_DEADLINE_SECONDS": "integer",
     "ONBOARDING_AI_MAX_ATTEMPTS": "integer",
     "MAVEN_OVERRIDE_DURATION_DAYS": "integer",
+    "PODS_DEFAULT_MAX_MEMBERS": "integer",
+    "PODS_DEFAULT_MEETING_COUNT": "integer",
+    "PODS_DEFAULT_MEETING_MINUTES": "integer",
+    "PODS_MAX_OPEN_REQUESTS_PER_MEMBER": "integer",
+    "PODS_MAX_CREATED_PER_MEMBER": "integer",
+    "PODS_SUGGESTION_HORIZON_DAYS": "integer",
+    "PODS_SUGGESTION_COUNT": "integer",
+    "PODS_STALE_REQUEST_DAYS": "integer",
     # One absolute HTTP(S) URL
     "STRIPE_CUSTOMER_PORTAL_URL": "url",
     "CALENDLY_CONNECTED_USER_URI": "url",

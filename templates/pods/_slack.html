@@ -1,0 +1,42 @@
+{% load accounts_extras layout_components %}
+{% comment %}
+Slack hand-off for pod members (issue #1918). No Slack API calls: members
+create a public channel themselves and paste its link here. Main or above
+only, the same rule as /community/slack.
+{% endcomment %}
+<section class="mt-10" id="slack" aria-labelledby="pod-slack-heading" data-testid="pod-slack">
+  {% section_header "Slack" heading_id="pod-slack-heading" extra="mb-3" %}
+  {% if slack.channel_url %}
+  <p class="text-sm text-foreground" data-testid="pod-slack-channel">Slack channel - <a href="{{ slack.channel_url }}" target="_blank" rel="noopener" class="font-medium text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-slack-open">Open in Slack</a></p>
+  {% if slack.viewer_eligible %}
+  <details class="mt-2" data-testid="pod-slack-change"{% if slack_error %} open{% endif %}>
+    <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden">Change link</summary>
+    {% include "pods/_slack_form.html" %}
+  </details>
+  {% endif %}
+  {% elif slack.show_callout %}
+  <div class="rounded-lg border border-accent/30 bg-accent/5 p-6" data-testid="pod-slack-callout">
+    <h3 class="text-lg font-semibold text-foreground">Move your pod to Slack</h3>
+    <ol class="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+      <li>Create a public channel named <code class="rounded bg-secondary px-1.5 py-0.5 font-mono text-xs text-foreground" data-testid="pod-slack-suggested-name">#{{ slack.suggested_name }}</code>
+        <button type="button" data-copy-text="#{{ slack.suggested_name }}" class="ml-1 inline-flex min-h-[44px] items-center gap-1 text-xs font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-slack-copy"><i data-lucide="copy" class="h-3.5 w-3.5" aria-hidden="true"></i><span data-copy-label>Copy name</span></button>
+      </li>
+      <li>Invite your pod members</li>
+      <li>Paste the channel link here</li>
+    </ol>
+    <p class="mt-3 text-sm text-muted-foreground">Public channels can be searched and kept after the pod ends.</p>
+    {% if slack.others_below_main %}
+    <p class="mt-2 text-sm text-foreground" data-testid="pod-slack-tier-warning">Not everyone in this pod can join Slack (it is part of Main and Premium). Agree how to reach them before you move.</p>
+    {% endif %}
+    {% if not slack.viewer_in_workspace %}
+    <a href="/community/slack" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-slack-join-workspace">Join the Slack workspace <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    {% endif %}
+    {% include "pods/_slack_form.html" %}
+  </div>
+  {% elif slack.show_gate %}
+  <p class="text-sm text-muted-foreground" data-testid="pod-slack-gate">Slack is available to Main and Premium members.</p>
+  <a href="/membership" class="mt-1 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-slack-membership">View membership <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="pod-slack-later">Once someone joins, you can move this pod to a Slack channel.</p>
+  {% endif %}
+</section>

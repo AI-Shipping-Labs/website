@@ -176,6 +176,16 @@ from api.views.plans import (
     sprint_plans_collection,
     sprint_plans_send_ready_emails,
 )
+from api.views.pods import (
+    cohort_roster,
+    pod_detail,
+    pod_member_detail,
+    pod_members,
+    pod_request_approve,
+    pod_request_decline,
+    pod_requests,
+    pods_collection,
+)
 from api.views.questionnaire_responses import (
     questionnaire_response_detail as questionnaire_response_by_id,
 )
@@ -855,6 +865,27 @@ urlpatterns = [
         "courses/<slug:slug>/cohorts/<str:key>",
         course_cohort_detail,
         name="api_course_cohort_detail",
+    ),
+    # ---- Pods (issue #1918): staff pairing API -------------------------
+    path(
+        "courses/<slug:slug>/cohorts/<str:key>/members",
+        cohort_roster,
+        name="api_course_cohort_roster",
+    ),
+    path("pods", pods_collection, name="api_pods_collection"),
+    path("pods/<int:pod_id>", pod_detail, name="api_pod_detail"),
+    path("pods/<int:pod_id>/members", pod_members, name="api_pod_members"),
+    path("pods/<int:pod_id>/members/<str:email>", pod_member_detail, name="api_pod_member_detail"),
+    path("pods/<int:pod_id>/requests", pod_requests, name="api_pod_requests"),
+    path(
+        "pods/<int:pod_id>/requests/<int:request_id>/approve",
+        pod_request_approve,
+        name="api_pod_request_approve",
+    ),
+    path(
+        "pods/<int:pod_id>/requests/<int:request_id>/decline",
+        pod_request_decline,
+        name="api_pod_request_decline",
     ),
     # ---- Course coursework inventory (issue #1696) --------------------
     path(

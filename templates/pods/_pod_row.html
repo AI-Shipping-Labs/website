@@ -1,0 +1,17 @@
+{% load member_badges %}
+{% comment %}
+One Pods tab row: a single-action list row (design-system Row actions), so
+the action sits under the meta below sm and is pinned right from sm.
+{% endcomment %}
+<li class="flex min-w-0 flex-col gap-1 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-3" data-testid="pod-row" data-pod-id="{{ row.pod.pk }}">
+  <div class="min-w-0 flex-1">
+    <div class="flex flex-wrap items-center gap-2">
+      <h3 class="break-words text-base font-semibold leading-snug text-foreground" data-testid="pod-row-name">{{ row.pod.name }}</h3>
+      {% member_status_badge row.state.badge tone=row.state.tone testid="pod-row-badge" %}
+    </div>
+    <p class="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">{{ row.pod.purpose }}</p>
+    <p class="mt-1 text-xs text-muted-foreground" data-testid="pod-row-meta">{{ row.meta }}{% if row.zones %} · {{ row.zones }}{% endif %}</p>
+    {% if row.fit_line %}<p class="mt-1 text-xs font-medium text-foreground" data-testid="pod-row-fit">{{ row.fit_line }}</p>{% endif %}
+  </div>
+  <a href="{{ row.state.action_url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:self-auto" data-testid="pod-row-action">{{ row.state.action_label }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+</li>

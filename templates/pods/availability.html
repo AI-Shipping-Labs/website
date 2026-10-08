@@ -1,0 +1,175 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components %}
+
+{% block pods_title %}My availability{% endblock %}
+
+{% block pods_content %}
+<section aria-labelledby="availability-heading" data-testid="availability-editor">
+  {% section_header "My availability" heading_id="availability-heading" size="lg" subtitle="The weekly times you are usually free. Every pod you join uses them to suggest meeting times." %}
+  <a href="{{ back_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="availability-back"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i>Back</a>
+
+  {% if summary %}
+  <div class="mt-4" data-testid="availability-saved">
+    <h3 class="text-sm font-semibold text-foreground">Saved</h3>
+    <div class="mt-2">{% include "pods/_availability_summary.html" with summary=summary %}</div>
+  </div>
+  {% endif %}
+  {% if freshness_line %}<p class="mt-3 text-sm text-foreground" data-testid="availability-freshness">{{ freshness_line }}</p>{% endif %}
+
+  {% if error %}
+  <p class="mt-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="availability-error">{{ error }}</p>
+  {% endif %}
+
+  <form method="post" class="mt-6" data-availability-form data-testid="availability-form">
+    {% csrf_token %}
+    <input type="hidden" name="cohort" value="{{ cohort.external_key }}">
+    {% if next_value %}<input type="hidden" name="next" value="{{ next_value }}">{% endif %}
+
+    <div class="rounded-lg border border-border bg-card p-6">
+      <p class="text-sm text-foreground" data-testid="availability-timezone-line">Times are in <span class="font-semibold" data-timezone-label>{{ timezone_label|default:"UTC" }}</span></p>
+      <label for="availability-timezone" class="mt-3 block text-sm font-medium text-foreground">Timezone</label>
+      <select id="availability-timezone" name="timezone" class="app-select mt-1 w-full rounded-md border border-border bg-background px-4 py-2.5 text-base text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-has-preference="{% if timezone_value %}true{% else %}false{% endif %}" data-timezone-select data-testid="availability-timezone">
+        {% if not timezone_value %}<option value="UTC">GMT+00:00 UTC</option>{% endif %}
+        {% for option in timezone_options %}
+        <option value="{{ option.value }}"{% if option.value == timezone_value %} selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="mt-6">
+      <p class="text-sm font-medium text-foreground">Quick start</p>
+      <div class="mt-2 flex flex-wrap gap-2" data-testid="availability-presets">
+        <button type="button" class="{% button_classes 'secondary' size='sm' %}" data-preset="weekday-evenings" data-testid="availability-preset-weekday-evenings">Weekday evenings (18:00-21:00)</button>
+        <button type="button" class="{% button_classes 'secondary' size='sm' %}" data-preset="weekend-mornings" data-testid="availability-preset-weekend-mornings">Weekend mornings (09:00-12:00)</button>
+        <button type="button" class="{% button_classes 'secondary' size='sm' %}" data-preset="copy-monday" data-testid="availability-preset-copy-monday">Copy Monday to all weekdays</button>
+      </div>
+      <p class="mt-2 text-xs text-muted-foreground">Presets fill the days below. Nothing is saved until you press Save availability.</p>
+    </div>
+
+    <div class="mt-6 divide-y divide-border border-y border-border">
+      {% for day in days %}
+      <fieldset class="py-4" data-day="{{ day.weekday }}" data-testid="availability-day">
+        <legend class="sr-only">{{ day.name }}</legend>
+        <p class="text-sm font-semibold text-foreground" aria-hidden="true">{{ day.name }}</p>
+        <div class="mt-2 space-y-3" data-windows>
+          {% for window in day.windows %}
+          {% include "pods/_availability_window.html" with index=window.index weekday=day.weekday window=window %}
+          {% endfor %}
+        </div>
+        <button type="button" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-add-window data-testid="availability-add-window"><i data-lucide="plus" class="h-4 w-4" aria-hidden="true"></i>Add window<span class="sr-only"> on {{ day.name }}</span></button>
+      </fieldset>
+      {% endfor %}
+    </div>
+
+    <p class="mt-3 text-xs text-muted-foreground">Use 30-minute steps. A window ends at midnight at the latest: choose 00:00 (12:00 AM) as the end time. For later times, add a second window on the next day.</p>
+
+    <div class="mt-6 flex flex-wrap items-center gap-3">
+      <button type="submit" class="{% button_classes 'primary' %}" data-testid="availability-save">Save availability</button>
+      <a href="{{ back_url }}" class="{% button_classes 'secondary' %}">Cancel</a>
+    </div>
+  </form>
+
+  <template data-window-template>
+    {% include "pods/_availability_window.html" with index="__INDEX__" weekday="__WEEKDAY__" window=None %}
+  </template>
+</section>
+{% endblock %}
+
+{% block pods_scripts %}
+<script>
+  (function () {
+    var form = document.querySelector('[data-availability-form]');
+    if (!form) return;
+    var template = document.querySelector('[data-window-template]');
+    var counter = 0;
+
+    function addWindow(day, start, end, preference) {
+      var weekday = day.getAttribute('data-day');
+      counter += 1;
+      var html = template.innerHTML
+        .replace(/__INDEX__/g, 'new-' + counter)
+        .replace(/__WEEKDAY__/g, weekday);
+      var holder = document.createElement('div');
+      holder.innerHTML = html.trim();
+      var row = holder.firstElementChild;
+      if (start) row.querySelector('[data-window-start]').value = start;
+      if (end) row.querySelector('[data-window-end]').value = end;
+      if (preference) row.querySelector('[data-window-preference]').value = preference;
+      day.querySelector('[data-windows]').appendChild(row);
+      if (window.lucide) window.lucide.createIcons();
+      return row;
+    }
+
+    function dayAt(weekday) {
+      return form.querySelector('[data-day="' + weekday + '"]');
+    }
+
+    function clearDay(day) {
+      day.querySelectorAll('[data-window-row]').forEach(function (row) { row.remove(); });
+    }
+
+    form.addEventListener('click', function (event) {
+      var add = event.target.closest('[data-add-window]');
+      if (add) {
+        var row = addWindow(add.closest('[data-day]'));
+        row.querySelector('[data-window-start]').focus();
+        return;
+      }
+      var remove = event.target.closest('[data-remove-window]');
+      if (remove) {
+        remove.closest('[data-window-row]').remove();
+        return;
+      }
+      var preset = event.target.closest('[data-preset]');
+      if (!preset) return;
+      var kind = preset.getAttribute('data-preset');
+      if (kind === 'weekday-evenings') {
+        [0, 1, 2, 3, 4].forEach(function (weekday) {
+          var day = dayAt(weekday);
+          clearDay(day);
+          addWindow(day, '18:00', '21:00', 'preferred');
+        });
+      } else if (kind === 'weekend-mornings') {
+        [5, 6].forEach(function (weekday) {
+          var day = dayAt(weekday);
+          clearDay(day);
+          addWindow(day, '09:00', '12:00', 'preferred');
+        });
+      } else if (kind === 'copy-monday') {
+        var monday = dayAt(0);
+        var source = Array.prototype.slice.call(monday.querySelectorAll('[data-window-row]')).map(function (row) {
+          return [
+            row.querySelector('[data-window-start]').value,
+            row.querySelector('[data-window-end]').value,
+            row.querySelector('[data-window-preference]').value,
+          ];
+        });
+        [1, 2, 3, 4].forEach(function (weekday) {
+          var day = dayAt(weekday);
+          clearDay(day);
+          source.forEach(function (values) { addWindow(day, values[0], values[1], values[2]); });
+        });
+      }
+    });
+
+    var select = form.querySelector('[data-timezone-select]');
+    var label = form.querySelector('[data-timezone-label]');
+    function syncLabel() {
+      var option = select.options[select.selectedIndex];
+      if (option && label) label.textContent = option.textContent;
+    }
+    if (select && select.getAttribute('data-has-preference') !== 'true') {
+      try {
+        var detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        if (detected && select.querySelector('option[value="' + detected + '"]')) {
+          select.value = detected;
+        }
+      } catch (error) { /* keep UTC */ }
+    }
+    if (select) {
+      select.addEventListener('change', syncLabel);
+      syncLabel();
+    }
+  })();
+</script>
+{% endblock %}

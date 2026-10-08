@@ -1537,6 +1537,33 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_closed_homework_shows_no_answer_saved_not_zero",
     })
 
+    issue_1918_owners = frozenset({
+        "playwright_tests/test_pods_1918.py::"
+        "test_buildcamp_student_starts_a_pod_of_one",
+        "playwright_tests/test_pods_1918.py::"
+        "test_student_adds_weekly_availability_in_her_own_timezone",
+        "playwright_tests/test_pods_1918.py::"
+        "test_student_finds_a_pod_that_fits_and_requests_to_join",
+        "playwright_tests/test_pods_1918.py::"
+        "test_pod_owner_reviews_a_request_with_fit_and_approves_it",
+        "playwright_tests/test_pods_1918.py::"
+        "test_member_joins_the_waiting_list_and_gets_in_when_a_seat_opens",
+        "playwright_tests/test_pods_1918.py::"
+        "test_pod_members_see_suggestions_that_respect_every_timezone",
+        "playwright_tests/test_pods_1918.py::"
+        "test_pod_moves_to_slack_through_a_public_channel",
+        "playwright_tests/test_pods_1918.py::"
+        "test_basic_member_in_a_pod_understands_why_slack_is_not_offered",
+        "playwright_tests/test_pods_1918.py::"
+        "test_someone_outside_the_cohort_cannot_see_its_pods",
+        "playwright_tests/test_pods_1918.py::"
+        "test_admin_creates_a_pod_in_studio_for_paired_students",
+        "playwright_tests/test_pods_1918.py::"
+        "test_admin_overrides_an_owner_who_has_not_answered",
+        "playwright_tests/test_pods_1918.py::"
+        "test_pods_stay_hidden_until_the_course_is_enabled",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1762,8 +1789,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2758)
-        self.assertEqual(len(inventory.owners), 2554)
+        self.assertEqual(inventory.item_count, 2770)
+        self.assertEqual(len(inventory.owners), 2566)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1780,6 +1807,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1917_owners
             | self.issue_1923_owners
             | self.issue_1926_owners
+            | self.issue_1918_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

@@ -631,6 +631,14 @@ rail rule below is scoped to ``min-width: 768px``.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_pod_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'pods' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'pods' %}aria-current="page"{% endif %}>
+                <i data-lucide="users-round" class="w-4 h-4"></i>
+                <span>Pods</span>
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_book_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'books' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                  {% if state.active_destination == 'books' %}aria-current="page"{% endif %}>

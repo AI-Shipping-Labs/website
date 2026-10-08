@@ -18,7 +18,9 @@ import datetime
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
+from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.views.decorators.http import require_POST
 
 from content.models import Cohort, Course
@@ -89,11 +91,19 @@ def cohort_list(request, course_id):
     course = get_object_or_404(Course, pk=course_id)
     search = (request.GET.get('q') or '').strip()
 
-    cohorts = course.aisl_cohorts.select_related('event_series').order_by('-start_date')
+    # Issue #1918: each dated cohort links to its filtered Studio pods list.
+    cohorts = course.aisl_cohorts.select_related('event_series').annotate(
+        pod_total=Count('pods', filter=~Q(pods__status='archived')),
+    ).order_by('-start_date')
     if search:
         cohorts = cohorts.filter(name__icontains=search)
 
     pager = studio_pagination_context(request, cohorts)
+    pods_list_url = reverse('studio_pod_list')
+    for cohort in pager['page'].object_list:
+        if cohort.mode == 'cohort':
+            cohort.pods_url = f'{pods_list_url}?cohort={cohort.pk}'
+            cohort.pods_label = f'Pods ({cohort.pod_total})'
     # Banner covers every cohort of the course, not just the current page or
     # search hits, so a broken cohort is never hidden by pagination.
     all_cohorts = list(course.aisl_cohorts.order_by('start_date', 'pk'))

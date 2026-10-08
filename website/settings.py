@@ -225,6 +225,8 @@ INSTALLED_APPS = [
     'bookclub.apps.BookclubConfig',
     'questionnaires.apps.QuestionnairesConfig',
     'crm.apps.CRMConfig',
+    # Issue #1918: small groups (pods) inside a dated course cohort.
+    'pods.apps.PodsConfig',
     'studio',
     'comments',
     'analytics',

@@ -52,6 +52,7 @@ content survives. Idempotent and audited where applicable.
 | `api/views/users.py` (`user_tags_remove`) | one tag from the `user.tags` JSON list |
 | `api/views/sprints.py` (`sprint_accountability_partners`) | reciprocal `SprintAccountabilityPartner` assignment edges between two enrolled sprint members; sprint and users untouched |
 | `api/views/course_access.py` (`course_access_detail`) | one `granted` `CourseAccess` row; purchased access is refused with `409`, the user, course and enrollment are untouched |
+| `api/views/pods.py` (`pod_member_detail`) | one `PodMembership` with the leave rules (owner hand-off, freed seat reopens the oldest waitlisted request, an emptied member-started pod is archived); the pod, its request history and the user are untouched. Pods themselves have no DELETE: archive with `PATCH status=archived` |
 
 ### 3. Soft-delete (legitimate — keep)
 

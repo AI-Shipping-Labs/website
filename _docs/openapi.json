@@ -4572,6 +4572,144 @@
         ]
       }
     },
+    "/api/courses/{slug}/cohorts/{key}/members": {
+      "get": {
+        "description": "Every user with a ``CohortEnrollment`` in the cohort (and only them), ordered by enrollment time. ``<key>`` is the cohort external key (the ``?cohort=`` value), case-insensitive. ``tier`` is the effective tier slug (paid tier or active override, whichever is higher). ``crm`` is ``null`` without a CRM record; ``availability`` is ``null`` without a profile and its windows are local wall-clock times in its ``timezone``. ``pod_ids`` are the cohort pods the user is in; ``open_request_pod_ids`` the cohort pods with a pending or waitlisted request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort_key": "4",
+                  "course": "ai-buildcamp",
+                  "limit": 200,
+                  "members": [
+                    {
+                      "availability": {
+                        "timezone": "Europe/Berlin",
+                        "updated_at": "2026-09-20T12:00:00+00:00",
+                        "windows": [
+                          {
+                            "end": "21:00",
+                            "preference": "preferred",
+                            "start": "18:00",
+                            "weekday": 1
+                          }
+                        ]
+                      },
+                      "crm": {
+                        "next_steps": "Pair with someone in Asia.",
+                        "persona": "Builder",
+                        "status": "active",
+                        "summary": "Ships RAG apps at work."
+                      },
+                      "email": "anna@example.com",
+                      "enrolled_at": "2026-09-10T08:00:00+00:00",
+                      "first_name": "Anna",
+                      "has_slack_user_id": true,
+                      "last_name": "Klein",
+                      "open_request_pod_ids": [
+                        9
+                      ],
+                      "pod_ids": [
+                        7
+                      ],
+                      "preferred_timezone": "Europe/Berlin",
+                      "slack_member": true,
+                      "tags": [
+                        "maven",
+                        "ai-buildcamp",
+                        "ai-buildcamp-4"
+                      ],
+                      "tier": "main"
+                    }
+                  ],
+                  "offset": 0,
+                  "total": 1
+                }
+              }
+            },
+            "description": "Roster page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "authentication_required",
+                  "error": "Authentication token required"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_cohort",
+                  "error": "Unknown cohort '9' for course 'ai-buildcamp'"
+                }
+              }
+            },
+            "description": "Unknown course or cohort."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "limit must be between 1 and 500; offset must be 0 or more"
+                }
+              }
+            },
+            "description": "Bad limit or offset."
+          }
+        },
+        "summary": "List a cohort roster with CRM, availability and pods (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
     "/api/courses/{slug}/coursework-inventory": {
       "get": {
         "description": "Counts the course's current legacy project rows, the baseline for moving projects onto ``community_base.coursework``. Sections: ``cohorts`` (per mode, with enrollment, project and submission counts), ``enrollments`` (``CohortEnrollment`` rows in cohorts that have projects; a self-paced cohort has projects when an unscoped attempt exists), ``projects`` (``CourseProject`` per cohort, ``null_cohort`` counted separately, and unscoped attempts with zero submissions), ``submissions`` (per ``status``, ``course_project=NULL``, blank versus non-blank ``description``), ``reviews`` (complete or incomplete, scored or null, and reviewers with no submission in the reviewed attempt as distinct ``pairs`` and ``reviews``), ``batches`` (legacy self-paced pooled groups sharing ``batch_assigned_at``) and ``certificates`` (``with_submission`` has the submission FK). Writes nothing.",
@@ -14391,6 +14529,1086 @@
         "summary": "Create a week",
         "tags": [
           "Weeks"
+        ]
+      }
+    },
+    "/api/pods": {
+      "get": {
+        "description": "Pod summaries, newest first. Filter by ``course`` slug, ``cohort`` key (needs ``course``) and ``status``.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "open",
+                "closed",
+                "archived"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "limit": 50,
+                  "offset": 0,
+                  "pods": [
+                    {
+                      "cohort_key": "4",
+                      "cohort_name": "Cohort 4",
+                      "course_slug": "ai-buildcamp",
+                      "created_at": "2026-10-01T09:00:00+00:00",
+                      "id": 7,
+                      "max_members": 4,
+                      "meeting_count": 3,
+                      "meeting_minutes": 60,
+                      "member_count": 2,
+                      "name": "Agents pod",
+                      "owner_email": "anna@example.com",
+                      "pending_count": 1,
+                      "purpose": "Ship an agent demo",
+                      "slack_channel_url": "",
+                      "source": "api",
+                      "status": "open",
+                      "waitlisted_count": 0
+                    }
+                  ],
+                  "total": 1
+                }
+              }
+            },
+            "description": "Pod page."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Unknown course or cohort filter."
+          },
+          "422": {
+            "description": "Bad status, limit or offset."
+          }
+        },
+        "summary": "List pods (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      },
+      "post": {
+        "description": "Creates a pod in a dated cohort with ``source=api``. The optional ``owner_email`` must be enrolled in the cohort and becomes the first member. ``member_emails`` are added up to the size limit; ``results`` sorts every email into ``added``, ``not_enrolled``, ``unknown_user``, ``already_member`` and ``over_capacity``. A self-paced cohort returns 422. Idempotent: when a non-archived pod with the same name (case-insensitive) already exists in the cohort, it is returned with 200 and only new emails are added; its settings and owner are left unchanged (use PATCH).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "cohort_key": "4",
+                "course_slug": "ai-buildcamp",
+                "member_emails": [
+                  "anna@example.com",
+                  "raj@example.com",
+                  "someone@example.com"
+                ],
+                "name": "Agents pod",
+                "owner_email": "anna@example.com",
+                "purpose": "Ship an agent demo"
+              },
+              "schema": {
+                "properties": {
+                  "cohort_key": {
+                    "type": "string"
+                  },
+                  "course_slug": {
+                    "type": "string"
+                  },
+                  "max_members": {
+                    "maximum": 12,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "meeting_count": {
+                    "maximum": 20,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "meeting_minutes": {
+                    "enum": [
+                      30,
+                      45,
+                      60,
+                      90
+                    ],
+                    "type": "integer"
+                  },
+                  "member_emails": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "name": {
+                    "maxLength": 80,
+                    "type": "string"
+                  },
+                  "owner_email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "purpose": {
+                    "maxLength": 500,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "course_slug",
+                  "cohort_key",
+                  "name",
+                  "purpose"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort_key": "4",
+                  "cohort_name": "Cohort 4",
+                  "course_slug": "ai-buildcamp",
+                  "created_at": "2026-10-01T09:00:00+00:00",
+                  "id": 7,
+                  "max_members": 4,
+                  "meeting_count": 3,
+                  "meeting_minutes": 60,
+                  "member_count": 2,
+                  "members": [
+                    {
+                      "email": "anna@example.com",
+                      "first_name": "Anna",
+                      "joined_at": "2026-10-01T09:00:00+00:00",
+                      "last_name": "Klein",
+                      "source": "api",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
+                  "name": "Agents pod",
+                  "open_requests": [
+                    {
+                      "created_at": "2026-10-02T10:00:00+00:00",
+                      "email": "mike@example.com",
+                      "id": 12,
+                      "message": "I am building a RAG eval harness",
+                      "status": "pending",
+                      "waitlist_position": null
+                    }
+                  ],
+                  "owner_email": "anna@example.com",
+                  "pending_count": 1,
+                  "purpose": "Ship an agent demo",
+                  "results": {
+                    "added": [],
+                    "already_member": [
+                      "anna@example.com",
+                      "raj@example.com"
+                    ],
+                    "not_enrolled": [
+                      "someone@example.com"
+                    ],
+                    "over_capacity": [],
+                    "unknown_user": []
+                  },
+                  "slack_channel_url": "",
+                  "source": "api",
+                  "status": "open",
+                  "suggested_slots": [
+                    {
+                      "available": [
+                        "anna@example.com",
+                        "raj@example.com"
+                      ],
+                      "end": "2026-10-06T17:00:00+00:00",
+                      "if_needed": [],
+                      "local_starts": [
+                        {
+                          "email": "anna@example.com",
+                          "local_start": "2026-10-06T18:00:00+02:00",
+                          "timezone": "Europe/Berlin"
+                        }
+                      ],
+                      "missing": [],
+                      "start": "2026-10-06T16:00:00+00:00"
+                    }
+                  ],
+                  "waitlisted_count": 0
+                }
+              }
+            },
+            "description": "A pod with this name already exists in the cohort; new emails were added."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort_key": "4",
+                  "cohort_name": "Cohort 4",
+                  "course_slug": "ai-buildcamp",
+                  "created_at": "2026-10-01T09:00:00+00:00",
+                  "id": 7,
+                  "max_members": 4,
+                  "meeting_count": 3,
+                  "meeting_minutes": 60,
+                  "member_count": 2,
+                  "members": [
+                    {
+                      "email": "anna@example.com",
+                      "first_name": "Anna",
+                      "joined_at": "2026-10-01T09:00:00+00:00",
+                      "last_name": "Klein",
+                      "source": "api",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
+                  "name": "Agents pod",
+                  "open_requests": [
+                    {
+                      "created_at": "2026-10-02T10:00:00+00:00",
+                      "email": "mike@example.com",
+                      "id": 12,
+                      "message": "I am building a RAG eval harness",
+                      "status": "pending",
+                      "waitlist_position": null
+                    }
+                  ],
+                  "owner_email": "anna@example.com",
+                  "pending_count": 1,
+                  "purpose": "Ship an agent demo",
+                  "results": {
+                    "added": [
+                      "anna@example.com",
+                      "raj@example.com"
+                    ],
+                    "already_member": [],
+                    "not_enrolled": [
+                      "someone@example.com"
+                    ],
+                    "over_capacity": [],
+                    "unknown_user": []
+                  },
+                  "slack_channel_url": "",
+                  "source": "api",
+                  "status": "open",
+                  "suggested_slots": [
+                    {
+                      "available": [
+                        "anna@example.com",
+                        "raj@example.com"
+                      ],
+                      "end": "2026-10-06T17:00:00+00:00",
+                      "if_needed": [],
+                      "local_starts": [
+                        {
+                          "email": "anna@example.com",
+                          "local_start": "2026-10-06T18:00:00+02:00",
+                          "timezone": "Europe/Berlin"
+                        }
+                      ],
+                      "missing": [],
+                      "start": "2026-10-06T16:00:00+00:00"
+                    }
+                  ],
+                  "waitlisted_count": 0
+                }
+              }
+            },
+            "description": "Pod created."
+          },
+          "400": {
+            "description": "Invalid JSON or non-object body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_cohort",
+                  "error": "Unknown cohort '9' for course 'ai-buildcamp'"
+                }
+              }
+            },
+            "description": "Unknown course or cohort."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "Pods need a dated cohort. A self-paced cohort cannot have pods."
+                }
+              }
+            },
+            "description": "Validation error, including a self-paced cohort or an owner who is not enrolled."
+          }
+        },
+        "summary": "Create a pod (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}": {
+      "get": {
+        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort_key": "4",
+                  "cohort_name": "Cohort 4",
+                  "course_slug": "ai-buildcamp",
+                  "created_at": "2026-10-01T09:00:00+00:00",
+                  "id": 7,
+                  "max_members": 4,
+                  "meeting_count": 3,
+                  "meeting_minutes": 60,
+                  "member_count": 2,
+                  "members": [
+                    {
+                      "email": "anna@example.com",
+                      "first_name": "Anna",
+                      "joined_at": "2026-10-01T09:00:00+00:00",
+                      "last_name": "Klein",
+                      "source": "api",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
+                  "name": "Agents pod",
+                  "open_requests": [
+                    {
+                      "created_at": "2026-10-02T10:00:00+00:00",
+                      "email": "mike@example.com",
+                      "id": 12,
+                      "message": "I am building a RAG eval harness",
+                      "status": "pending",
+                      "waitlist_position": null
+                    }
+                  ],
+                  "owner_email": "anna@example.com",
+                  "pending_count": 1,
+                  "purpose": "Ship an agent demo",
+                  "slack_channel_url": "",
+                  "source": "api",
+                  "status": "open",
+                  "suggested_slots": [
+                    {
+                      "available": [
+                        "anna@example.com",
+                        "raj@example.com"
+                      ],
+                      "end": "2026-10-06T17:00:00+00:00",
+                      "if_needed": [],
+                      "local_starts": [
+                        {
+                          "email": "anna@example.com",
+                          "local_start": "2026-10-06T18:00:00+02:00",
+                          "timezone": "Europe/Berlin"
+                        }
+                      ],
+                      "missing": [],
+                      "start": "2026-10-06T16:00:00+00:00"
+                    }
+                  ],
+                  "waitlisted_count": 0
+                }
+              }
+            },
+            "description": "Pod detail."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          }
+        },
+        "summary": "Pod detail (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      },
+      "patch": {
+        "description": "Partial update. ``max_members`` below the member count returns 422; raising it moves the oldest waitlisted requests back to ``pending`` (one per new seat). ``owner_email`` must be a member, or ``null`` for no owner. ``status=archived`` hides the pod from members and cancels its open requests; there is no DELETE. ``slack_channel_url`` must be an https Slack link (empty clears).",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "max_members": 5,
+                "status": "closed"
+              },
+              "schema": {
+                "properties": {
+                  "max_members": {
+                    "maximum": 12,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "meeting_count": {
+                    "maximum": 20,
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "meeting_minutes": {
+                    "enum": [
+                      30,
+                      45,
+                      60,
+                      90
+                    ],
+                    "type": "integer"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "owner_email": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "purpose": {
+                    "type": "string"
+                  },
+                  "slack_channel_url": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "open",
+                      "closed",
+                      "archived"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "cohort_key": "4",
+                  "cohort_name": "Cohort 4",
+                  "course_slug": "ai-buildcamp",
+                  "created_at": "2026-10-01T09:00:00+00:00",
+                  "id": 7,
+                  "max_members": 4,
+                  "meeting_count": 3,
+                  "meeting_minutes": 60,
+                  "member_count": 2,
+                  "members": [
+                    {
+                      "email": "anna@example.com",
+                      "first_name": "Anna",
+                      "joined_at": "2026-10-01T09:00:00+00:00",
+                      "last_name": "Klein",
+                      "source": "api",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
+                  "name": "Agents pod",
+                  "open_requests": [
+                    {
+                      "created_at": "2026-10-02T10:00:00+00:00",
+                      "email": "mike@example.com",
+                      "id": 12,
+                      "message": "I am building a RAG eval harness",
+                      "status": "pending",
+                      "waitlist_position": null
+                    }
+                  ],
+                  "owner_email": "anna@example.com",
+                  "pending_count": 1,
+                  "purpose": "Ship an agent demo",
+                  "slack_channel_url": "",
+                  "source": "api",
+                  "status": "open",
+                  "suggested_slots": [
+                    {
+                      "available": [
+                        "anna@example.com",
+                        "raj@example.com"
+                      ],
+                      "end": "2026-10-06T17:00:00+00:00",
+                      "if_needed": [],
+                      "local_starts": [
+                        {
+                          "email": "anna@example.com",
+                          "local_start": "2026-10-06T18:00:00+02:00",
+                          "timezone": "Europe/Berlin"
+                        }
+                      ],
+                      "missing": [],
+                      "start": "2026-10-06T16:00:00+00:00"
+                    }
+                  ],
+                  "waitlisted_count": 0
+                }
+              }
+            },
+            "description": "Updated pod."
+          },
+          "400": {
+            "description": "Invalid JSON or non-object body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "The size limit cannot be lower than the current number of members (3)."
+                }
+              }
+            },
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a pod (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/members": {
+      "post": {
+        "description": "Idempotent. Adds enrolled cohort members up to the size limit and closes their open requests on this pod as ``approved``. Returns the same ``results`` buckets as pod create.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "emails": [
+                  "raj@example.com"
+                ]
+              },
+              "schema": {
+                "properties": {
+                  "emails": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "emails"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "pod": {
+                    "cohort_key": "4",
+                    "cohort_name": "Cohort 4",
+                    "course_slug": "ai-buildcamp",
+                    "created_at": "2026-10-01T09:00:00+00:00",
+                    "id": 7,
+                    "max_members": 4,
+                    "meeting_count": 3,
+                    "meeting_minutes": 60,
+                    "member_count": 2,
+                    "members": [
+                      {
+                        "email": "anna@example.com",
+                        "first_name": "Anna",
+                        "joined_at": "2026-10-01T09:00:00+00:00",
+                        "last_name": "Klein",
+                        "source": "api",
+                        "timezone": "Europe/Berlin"
+                      }
+                    ],
+                    "name": "Agents pod",
+                    "open_requests": [
+                      {
+                        "created_at": "2026-10-02T10:00:00+00:00",
+                        "email": "mike@example.com",
+                        "id": 12,
+                        "message": "I am building a RAG eval harness",
+                        "status": "pending",
+                        "waitlist_position": null
+                      }
+                    ],
+                    "owner_email": "anna@example.com",
+                    "pending_count": 1,
+                    "purpose": "Ship an agent demo",
+                    "slack_channel_url": "",
+                    "source": "api",
+                    "status": "open",
+                    "suggested_slots": [
+                      {
+                        "available": [
+                          "anna@example.com",
+                          "raj@example.com"
+                        ],
+                        "end": "2026-10-06T17:00:00+00:00",
+                        "if_needed": [],
+                        "local_starts": [
+                          {
+                            "email": "anna@example.com",
+                            "local_start": "2026-10-06T18:00:00+02:00",
+                            "timezone": "Europe/Berlin"
+                          }
+                        ],
+                        "missing": [],
+                        "start": "2026-10-06T16:00:00+00:00"
+                      }
+                    ],
+                    "waitlisted_count": 0
+                  },
+                  "results": {
+                    "added": [
+                      "anna@example.com",
+                      "raj@example.com"
+                    ],
+                    "already_member": [],
+                    "not_enrolled": [
+                      "someone@example.com"
+                    ],
+                    "over_capacity": [],
+                    "unknown_user": []
+                  }
+                }
+              }
+            },
+            "description": "Per-email results and the pod."
+          },
+          "400": {
+            "description": "Invalid JSON or non-object body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "description": "emails missing or not a list."
+          }
+        },
+        "summary": "Add members by email (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/members/{email}": {
+      "delete": {
+        "description": "Removes the member with the normal leave rules: an owner hands ownership to the earliest-joined remaining member, a freed seat moves the oldest waitlisted request back to pending, and an emptied member-started pod is archived.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "email",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "not_a_member",
+                  "error": "That person is not a member of this pod."
+                }
+              }
+            },
+            "description": "Unknown pod or not a member."
+          }
+        },
+        "summary": "Remove a member (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/requests": {
+      "get": {
+        "description": "Every request for the pod, oldest first; filter with ``status``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "pending",
+                "waitlisted",
+                "approved",
+                "declined",
+                "withdrawn",
+                "cancelled"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "requests": [
+                    {
+                      "created_at": "2026-10-02T10:00:00+00:00",
+                      "decided_at": null,
+                      "decided_by": null,
+                      "email": "mike@example.com",
+                      "id": 12,
+                      "message": "I am building a RAG eval harness",
+                      "status": "pending",
+                      "waitlist_position": null
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Requests."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "description": "Unknown status filter."
+          }
+        },
+        "summary": "List join requests (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/requests/{request_id}/approve": {
+      "post": {
+        "description": "Approves a pending or waitlisted request regardless of the pod owner. A full pod returns 409 ``pod_full``; raise the size limit first.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-10-02T10:00:00+00:00",
+                  "decided_at": null,
+                  "decided_by": null,
+                  "email": "mike@example.com",
+                  "id": 12,
+                  "message": "I am building a RAG eval harness",
+                  "status": "approved",
+                  "waitlist_position": null
+                }
+              }
+            },
+            "description": "The decided request."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_request",
+                  "error": "Request not found"
+                }
+              }
+            },
+            "description": "Unknown pod or request."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "request_not_open",
+                  "error": "This request has already been answered."
+                }
+              }
+            },
+            "description": "Request already decided or the pod is full."
+          }
+        },
+        "summary": "Approve a request (staff override)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/requests/{request_id}/decline": {
+      "post": {
+        "description": "Declines a pending or waitlisted request regardless of the pod owner.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "created_at": "2026-10-02T10:00:00+00:00",
+                  "decided_at": null,
+                  "decided_by": null,
+                  "email": "mike@example.com",
+                  "id": 12,
+                  "message": "I am building a RAG eval harness",
+                  "status": "declined",
+                  "waitlist_position": null
+                }
+              }
+            },
+            "description": "The decided request."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_request",
+                  "error": "Request not found"
+                }
+              }
+            },
+            "description": "Unknown pod or request."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "request_not_open",
+                  "error": "This request has already been answered."
+                }
+              }
+            },
+            "description": "Request already decided."
+          }
+        },
+        "summary": "Decline a request (staff override)",
+        "tags": [
+          "Pods"
         ]
       }
     },

@@ -120,6 +120,9 @@
           <div class="{% studio_list_class 'action_group' %}">
             {% url 'studio_course_cohort_edit' course_id=course.pk cohort_id=cohort.pk as cohort_edit_url %}
             {% studio_list_action cohort_edit_url 'Edit' 'secondary' %}
+            {% if cohort.pods_url %}
+            {% studio_list_action cohort.pods_url cohort.pods_label 'secondary' %}
+            {% endif %}
           </div>
         </td>
       </tr>

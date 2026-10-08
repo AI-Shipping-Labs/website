@@ -1,0 +1,46 @@
+{% load member_badges %}
+{% comment %}
+Course Home header (title, cohort line, member count) and the tab strip,
+shared by course Home and the Pods pages (issue #1918). Needs ``course``,
+``cohort``, ``section``, ``cohort_query``, ``self_paced_view``,
+``home_enrollment_count``, ``preview_cohorts`` (staff), and the Pods tab
+context from ``pods.services.tab.pods_tab_context``.
+{% endcomment %}
+    <header class="mb-2 sm:mb-4">
+      <h1 class="break-words text-xl font-semibold tracking-tight text-foreground sm:text-3xl">{{ course.title }}</h1>
+      {% if cohort %}
+      <div class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div class="flex flex-wrap items-center text-sm text-muted-foreground" data-testid="course-home-cohort">
+          {% if preview_cohorts|length > 1 %}
+          <details class="relative" data-testid="course-home-cohort-switcher">
+            <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center gap-1 rounded hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">{{ cohort.name }}<i data-lucide="chevron-down" class="h-3.5 w-3.5" aria-hidden="true"></i><span class="sr-only"> (switch cohort)</span></summary>
+            <ul class="absolute left-0 z-20 mt-1 min-w-[10rem] rounded-lg border border-border bg-card py-1 shadow-lg" aria-label="Cohort schedule">
+              {% for option in preview_cohorts %}<li><a href="{{ request.path }}?cohort={{ option.external_key|urlencode }}" class="flex min-h-[44px] items-center px-3 {% if cohort.pk == option.pk %}bg-accent/10 font-medium text-accent{% else %}text-muted-foreground hover:bg-muted/50 hover:text-foreground{% endif %}"{% if cohort.pk == option.pk %} aria-current="true"{% endif %}>{{ option.name }}</a></li>{% endfor %}
+            </ul>
+          </details>
+          {% else %}
+          <span>{{ cohort.name }}</span>
+          {% endif %}
+          {% if cohort.mode == 'self_paced' %}<span aria-hidden="true">&nbsp;·&nbsp;</span>Learn at your own pace{% elif cohort.start_date and cohort.end_date %}<span aria-hidden="true">&nbsp;·&nbsp;</span><time datetime="{{ cohort.start_date|form_date_value }}">{{ cohort.start_date|member_short_date }}</time>–<time datetime="{{ cohort.end_date|form_date_value }}">{{ cohort.end_date|member_short_date }}</time>{% endif %}
+        </div>
+        {% if home_enrollment_count %}{% member_label_badge home_enrollment_count|stringformat:"d"|add:" enrolled" tone="neutral" size="sm" icon="users" testid="course-home-enrollment-count-badge" %}{% endif %}
+      </div>
+      {% endif %}
+    </header>
+
+    <div class="relative -mx-4 mb-3 sm:mx-0 sm:mb-6" data-course-tabs>
+    <nav class="flex gap-4 overflow-x-auto border-b border-border px-4 text-sm font-medium [scrollbar-width:none] sm:gap-5 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Course pages" data-course-tabs-scroller>
+      <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
+      <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
+      {% if not self_paced_view %}
+      <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" {% if section == 'sessions' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'sessions' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Live sessions</a>
+      {% endif %}
+      <a href="{% url 'course_homework' slug=course.slug %}{{ cohort_query }}" {% if section == 'homework' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'homework' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Homework</a>
+      <a href="{% url 'course_projects' slug=course.slug %}{{ cohort_query }}" {% if section == 'projects' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'projects' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Projects</a>
+      {% if show_pods_tab %}
+      <a href="{% url 'course_pods' slug=course.slug %}{{ cohort_query }}" {% if section == 'pods' %}aria-current="page"{% endif %} class="relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 {% if section == 'pods' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}" data-testid="course-tab-pods">Pods{% if pods_tab_count %}{% member_label_badge pods_tab_count|stringformat:"d" tone="info" size="xs" testid="course-tab-pods-count" %}<span class="sr-only"> pending requests</span>{% endif %}</a>
+      {% endif %}
+    </nav>
+    <div class="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-background to-transparent sm:hidden" aria-hidden="true" data-testid="course-tabs-fade" data-course-tabs-fade></div>
+    </div>
+

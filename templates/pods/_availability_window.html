@@ -1,0 +1,21 @@
+{% comment %}
+One availability window row. ``index`` keeps field names unique; the JS
+editor clones the same markup from a <template> with an ``__INDEX__``
+placeholder. Native time inputs step by 30 minutes; there is no drag input.
+{% endcomment %}
+<div class="flex flex-wrap items-end gap-3" data-window-row data-testid="availability-window">
+  <input type="hidden" name="window-{{ index }}-weekday" value="{{ weekday }}">
+  <label class="flex flex-col text-xs font-medium text-muted-foreground">Start
+    <input type="time" step="1800" name="window-{{ index }}-start" value="{{ window.start }}" class="mt-1 min-h-[44px] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-window-start data-testid="availability-window-start">
+  </label>
+  <label class="flex flex-col text-xs font-medium text-muted-foreground">End
+    <input type="time" step="1800" name="window-{{ index }}-end" value="{{ window.end }}" class="mt-1 min-h-[44px] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-window-end data-testid="availability-window-end">
+  </label>
+  <label class="flex flex-col text-xs font-medium text-muted-foreground">How well it works
+    <select name="window-{{ index }}-preference" class="app-select mt-1 min-h-[44px] rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-window-preference data-testid="availability-window-preference">
+      <option value="preferred"{% if window.preference != 'if_needed' %} selected{% endif %}>Works well</option>
+      <option value="if_needed"{% if window.preference == 'if_needed' %} selected{% endif %}>If needed</option>
+    </select>
+  </label>
+  <button type="button" class="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-label="Remove window" data-remove-window data-testid="availability-window-remove"><i data-lucide="x" class="h-4 w-4" aria-hidden="true"></i></button>
+</div>

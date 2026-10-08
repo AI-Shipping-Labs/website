@@ -1,0 +1,33 @@
+{% comment %}
+Pod settings fields shared by Start a pod and Edit pod (issue #1918).
+Blank number fields fall back to the configured PODS_DEFAULT_* values.
+{% endcomment %}
+<div class="space-y-5">
+  <div>
+    <label for="pod-name" class="block text-sm font-medium text-foreground">Name</label>
+    <input id="pod-name" name="name" type="text" maxlength="80" required value="{{ form.name }}" placeholder="RAG evals study group" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-name"{% if error_field == 'name' %} aria-invalid="true"{% endif %}>
+  </div>
+  <div>
+    <label for="pod-purpose" class="block text-sm font-medium text-foreground">Purpose</label>
+    <p id="pod-purpose-help" class="mt-0.5 text-xs text-muted-foreground">What will you work on together?</p>
+    <textarea id="pod-purpose" name="purpose" rows="4" maxlength="500" required aria-describedby="pod-purpose-help" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-purpose"{% if error_field == 'purpose' %} aria-invalid="true"{% endif %}>{{ form.purpose }}</textarea>
+  </div>
+  <div class="grid gap-4 sm:grid-cols-3">
+    <div>
+      <label for="pod-max-members" class="block text-sm font-medium text-foreground">Size limit</label>
+      <input id="pod-max-members" name="max_members" type="number" min="1" max="12" value="{% if form.max_members %}{{ form.max_members }}{% else %}{{ default_max_members }}{% endif %}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-max-members"{% if error_field == 'max_members' %} aria-invalid="true"{% endif %}>
+    </div>
+    <div>
+      <label for="pod-meeting-count" class="block text-sm font-medium text-foreground">Number of meetings</label>
+      <input id="pod-meeting-count" name="meeting_count" type="number" min="1" max="20" value="{% if form.meeting_count %}{{ form.meeting_count }}{% else %}{{ default_meeting_count }}{% endif %}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-meeting-count">
+    </div>
+    <div>
+      <label for="pod-meeting-minutes" class="block text-sm font-medium text-foreground">Meeting length</label>
+      <select id="pod-meeting-minutes" name="meeting_minutes" class="app-select mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-meeting-minutes">
+        {% for minutes in meeting_minute_options %}
+        <option value="{{ minutes }}"{% if form.meeting_minutes|stringformat:"s" == minutes|stringformat:"s" %} selected{% elif not form.meeting_minutes and minutes == default_meeting_minutes %} selected{% endif %}>{{ minutes }} min</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</div>

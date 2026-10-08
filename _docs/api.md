@@ -425,6 +425,62 @@ Errors: unknown UUID returns `404 content_not_found`. A UUID used by more than
 one row returns `409 content_id_ambiguous` with a `matches` list of `type`,
 `id`, `title`, and `url` for each colliding row.
 
+## Pods API
+
+Staff-token endpoints for pods (issue #1918): small groups inside a dated
+course cohort. Pairing logic stays in your own tooling; the site never pairs
+people automatically. Every write follows the same rules as the member pages
+and Studio: capacity, the waiting list (a freed seat moves the oldest
+waitlisted request back to `pending`, nobody is auto-approved), and the leave
+rules. Errors use the canonical `{"error", "code"}` envelope; a missing or
+non-staff token returns `401`.
+
+| Method | Path | Notes |
+|--------|------|-------|
+| GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
+| GET | `/api/pods` | Pod summaries; filters `course`, `cohort` (needs `course`), `status`; `limit`/`offset` |
+| POST | `/api/pods` | Create (`source=api`), `201`. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
+| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `suggested_slots` (UTC) |
+| PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count`, `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url` |
+| POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
+| DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
+| GET | `/api/pods/<id>/requests` | Every request, optional `status` filter |
+| POST | `/api/pods/<id>/requests/<request_id>/approve` | Staff override; `409 pod_full`, `409 request_not_open` |
+| POST | `/api/pods/<id>/requests/<request_id>/decline` | Staff override; `409 request_not_open` |
+
+There is no pod DELETE: archive with `PATCH {"status": "archived"}` so the
+request history is kept.
+
+```bash
+# Roster for pairing (Cohort 4 of the Buildcamp course)
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/courses/ai-buildcamp/cohorts/4/members?limit=200"
+
+# Create a pod for two students your tooling paired
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"course_slug": "ai-buildcamp", "cohort_key": "4", "name": "Agents pod",
+       "purpose": "Ship an agent demo", "owner_email": "anna@example.com",
+       "member_emails": ["anna@example.com", "raj@example.com"]}' \
+  "https://aishippinglabs.com/api/pods"
+
+# Raise the size limit (moves waitlisted requests back to pending)
+curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"max_members": 5}' "https://aishippinglabs.com/api/pods/7"
+
+# Re-pair: remove one member, add another
+curl -sL -X DELETE -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/members/raj@example.com"
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"emails": ["mike@example.com"]}' "https://aishippinglabs.com/api/pods/7/members"
+
+# Approve a stale request as staff
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/requests/12/approve"
+```
+
+Settings live in the `Pods` IntegrationSetting group; see
+[`_docs/integrations/pods.md`](integrations/pods.md).
+
 ## Not exposed (Studio-only)
 
 By design, the API does NOT expose:

@@ -138,6 +138,9 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Cohort enrollment | `/api/courses/<slug>/cohorts/<id>/enroll` | Enroll in a course cohort | Authenticated users with access | Shipped |
 | Cohort unenrollment | `/api/courses/<slug>/cohorts/<id>/unenroll` | Unenroll from a cohort | Authenticated users with access | Shipped |
 | Course API | `/api/courses`, `/api/courses/<slug>`, `/api/courses/<slug>/units/<id>` | JSON API for course data | Varies | Shipped |
+| Pods tab | `/courses/<slug>/home/pods` | Course Home tab listing the cohort's pods as divider-led rows: the viewer's pods first, then open pods by timezone fit, then full and closed pods; per-row status badge and one action; `Start a pod` and `Edit my availability` below the heading; owners see a pending-request count on the tab. Only for courses listed in `PODS_COURSE_SLUGS` | Members enrolled in the dated cohort with course access; staff | Shipped |
+| Pod page | `/courses/<slug>/home/pods/<id>` | One pod: purpose, members by display name and timezone, request or waiting-list action, suggested meeting times in the viewer's timezone with a per-member local-time strip, Slack hand-off (Main or above), owner request queue with fit, leave and edit | Enrolled cohort members (suggested times, Slack and availability details for pod members and staff only) | Shipped |
+| Availability editor | `/courses/<slug>/home/pods/availability` | Weekly windows per weekday in the member's own timezone, 30-minute steps, `Works well` / `If needed`, presets; one profile reused by every pod | Enrolled cohort members | Shipped |
 
 ### Content -- Tags
 
@@ -205,6 +208,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Project review | `/studio/projects/`, `/studio/projects/<id>/review` | List submitted projects; approve/reject | Staff only | Shipped |
 | Campaign management | `/studio/campaigns/`, `/studio/campaigns/new`, `/studio/campaigns/<id>/` | List, create, view email campaigns | Staff only | Shipped |
 | Subscriber management | `/studio/users/?filter=subscribers`, `/studio/users/export?filter=subscribers` | List subscribers; export to CSV | Staff only | Shipped |
+| Pods | `/studio/pods/`, `/studio/pods/new`, `/studio/pods/<id>/` | List pods with request queue and stale-request highlight; create pods with owner and member emails; edit, archive, change owner, add/remove members, approve/decline requests | Staff only | Shipped |
 
 ### Integrations & Webhooks
 
@@ -313,6 +317,10 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Module | A grouping of units within a course | Section, chapter |
 | Unit | A single lesson within a module (video + text + homework) | Lesson, lecture |
 | Cohort | A time-bound group taking a course together (with drip scheduling) | Batch, class, group |
+| Pod | A small group of members inside one community activity (a dated course cohort today) with a purpose, a size limit and a number of meetings. Members start pods or ask to join; the site never pairs people automatically | Group, team, squad |
+| Join request | A member's request to join a pod. It is `pending` while the pod has a free seat and is answered by the pod owner (or staff) | Application, invite |
+| Waiting list | The join requests on a full pod, in order. When a seat opens the oldest moves back to pending for the owner | Queue, backlog |
+| Availability | A member's weekly windows in their own timezone (`Works well` or `If needed`), reused by every pod to suggest meeting times | Schedule, calendar |
 | Project | A project idea or portfolio project writeup | Showcase, portfolio item |
 | Resource | Passive or self-serve content surfaced through the Resources navigation group. The `/resources` route itself is Curated Links. | Activity, live event |
 | Curated Link | An external link categorized by type (workshop, course, article, other) on `/resources` | Resource hub, activity, recording library |

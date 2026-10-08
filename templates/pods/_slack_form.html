@@ -1,0 +1,10 @@
+{% load accounts_extras %}
+<form method="post" action="{% url 'pod_slack' slug=course.slug pod_id=pod.pk %}" class="mt-4" data-testid="pod-slack-form">
+  {% csrf_token %}
+  <label for="pod-slack-url" class="block text-sm font-medium text-foreground">Slack channel link</label>
+  {% if slack_error %}<p id="pod-slack-error" class="mt-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-slack-error">{{ slack_error }}</p>{% endif %}
+  <div class="mt-1 flex flex-col gap-3 sm:flex-row">
+    <input id="pod-slack-url" name="slack_channel_url" type="text" inputmode="url" value="{{ slack.channel_url }}" placeholder="https://yourworkspace.slack.com/archives/C0123456789" class="w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-slack-input"{% if slack_error %} aria-invalid="true" aria-describedby="pod-slack-error"{% endif %}>
+    <button type="submit" class="{% button_classes 'primary' extra='shrink-0' %}" data-testid="pod-slack-save">Save link</button>
+  </div>
+</form>

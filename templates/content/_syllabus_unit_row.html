@@ -2,24 +2,8 @@
   The entire lesson row is its canonical link. This specialized row keeps
   the shared list-row scale while showing access/progress and unit kind.
 
-  Issue #1794: an activated stepped homework (annotated by
-  `content.services.homework_outline.annotate_homework_outlines` for an
-  entitled learner's own cohort) expands into a virtual outline — the row
-  becomes the disclosure heading and `_syllabus_homework_steps.html` lists
-  the reader stepper's pages beneath it. Everyone else keeps the single
-  ordinary homework row.
+  Issue #1916: homework and capstone rows render through the same anchor as
+  every other unit row (no disclosure, no child steps); their question
+  count and learner status sit in the anchor's right-hand meta slot.
 {% endcomment %}
-{% load access_tags %}
-{% load schedule_tags %}
-{% load member_badges %}
-{% if unit.homework_outline_steps %}
-<details class="syllabus-topic" open data-testid="syllabus-homework-group">
-  <summary class="flex cursor-pointer list-none items-center gap-1 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-inset">
-    {% include "content/_syllabus_unit_row_anchor.html" %}
-    <i data-lucide="chevron-right" class="topic-chevron mr-2 h-4 w-4 flex-shrink-0 text-muted-foreground transition-transform duration-200 motion-reduce:transition-none" aria-hidden="true"></i>
-  </summary>
-  {% include "content/_syllabus_homework_steps.html" with steps=unit.homework_outline_steps only %}
-</details>
-{% else %}
 {% include "content/_syllabus_unit_row_anchor.html" %}
-{% endif %}

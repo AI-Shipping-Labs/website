@@ -68,8 +68,8 @@ from content.services.enrollment import (
 from content.services.enrollment import (
     unenroll as unenroll_user,
 )
-from content.services.homework_outline import annotate_homework_outlines
 from content.services.homework_reveal import locked_after_submit
+from content.services.homework_rows import annotate_homework_rows
 from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
     AISLHomeworkAdapter,
@@ -211,13 +211,12 @@ def course_detail(request, slug):
     unit_deadlines, module_deadline_summaries = build_deadline_context(
         course, viewer_cohort,
     )
-    # Issue #1794: annotated in place so the syllabus can expand an
-    # activated stepped homework into its virtual outline. Only an owned
-    # selected cohort (never a public/staff preview) earns the outline;
-    # everyone else keeps the single ordinary homework row.
-    annotate_homework_outlines(
-        modules, user,
-        viewer_cohort if not schedule_is_preview else None,
+    # Issue #1916: homework rows show the question count for the display
+    # cohort; only an owned selected cohort (never a public/staff preview)
+    # adds the learner's homework status.
+    annotate_homework_rows(
+        modules, user, viewer_cohort,
+        include_status=not schedule_is_preview,
     )
     module_week_ranges = {
         module_id: course_unit_service.format_week_range(*week_range)
@@ -661,11 +660,11 @@ def course_home(request, slug, section='home'):
     # Home renders the syllabus hidden as its search index, so every section
     # gets the syllabus module context.
     modules = course.get_syllabus()
-    # Issue #1794: same owned-cohort homework outline annotation as the
-    # public syllabus; a staff cohort preview keeps plain rows.
-    annotate_homework_outlines(
-        modules, request.user,
-        None if context['is_cohort_preview'] else cohort,
+    # Issue #1916: same homework row meta as the public syllabus; a staff
+    # cohort preview shows the question count but no learner status.
+    annotate_homework_rows(
+        modules, request.user, cohort,
+        include_status=not context['is_cohort_preview'],
     )
     progress_rows = UserCourseProgress.objects.filter(
         user=request.user, unit__module__course=course,
@@ -1135,15 +1134,21 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
         user, course, module, unit, request=request,
         session_cohort=selected_cohort,
     )
-    # Issue #1794: annotated in place so the reader sidebar can expand an
-    # activated stepped homework into its virtual outline (scoped and full
-    # navigation share these module instances). Only an owned selected
-    # cohort earns the outline; a staff cohort preview keeps plain rows.
-    # The outline for the resolved gated/drip-locked contexts is never
-    # annotated, so anonymous and unentitled visitors keep single rows.
-    annotate_homework_outlines(
-        context['modules'], user, owned_cohort,
-        current_path=request.path,
+    # Issue #1916: annotated in place so the reader sidebar's homework rows
+    # show the learner's homework status (scoped and full navigation share
+    # these module instances). Only an owned selected cohort earns status;
+    # a staff cohort preview and the gated/drip-locked contexts keep plain
+    # rows. A self-paced-only learner has no dated cohort to select, so
+    # their own self-paced cohort stands in (as on course Home).
+    row_cohort = owned_cohort
+    if row_cohort is None and not selected_is_preview and user.is_authenticated:
+        self_paced_enrollment = CohortEnrollment.objects.filter(
+            user=user, cohort__course=course,
+            cohort__mode='self_paced', cohort__is_active=True,
+        ).select_related('cohort').first()
+        row_cohort = self_paced_enrollment.cohort if self_paced_enrollment else None
+    annotate_homework_rows(
+        context['modules'], user, row_cohort, include_status=True,
     )
     context['reader_cohort_param'] = request.GET.get('cohort', '')
     if context['reader_cohort_param'] and context['scoped_module']:

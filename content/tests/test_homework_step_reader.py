@@ -208,30 +208,15 @@ class HomeworkSidebarRowConsistencyTest(HomeworkUnitSetupMixin, TestCase):
                     other_page, self.unit_url,
                 )
                 self.assertEqual(current, other)
-                self.assertNotIn('data-homework-state', current)
-                if 'data-testid="reader-homework-group"' in current_page.content.decode():
-                    # Issue #1794: an activated homework's heading is a
-                    # plain link; its outline's current STEP row carries
-                    # the current state, and only on its own step pages.
-                    self.assertNotIn('aria-current', current_attrs)
-                    self.assertNotIn('aria-current', other_attrs)
-                    step_attrs, _ = sidebar_row_parts(
-                        current_page, f'{self.unit_url}/intro',
-                    )
-                    self.assertIn('aria-current="page"', step_attrs)
-                    other_step_attrs, _ = sidebar_row_parts(
-                        other_page, f'{self.unit_url}/intro',
-                    )
-                    self.assertNotIn('aria-current', other_step_attrs)
-                else:
-                    self.assertIn('aria-current="page"', current_attrs)
-                    self.assertNotIn('aria-current', other_attrs)
+                self.assertIn('aria-current="page"', current_attrs)
+                self.assertNotIn('aria-current', other_attrs)
         return current
 
-    def test_not_submitted_row_keeps_type_icon_and_no_status_text(self):
+    def test_unenrolled_row_keeps_type_icon_and_no_status_text(self):
         self.client.force_login(self.student)
         row = self.assert_row_matches_when_current()
         self.assertIn('data-lucide="clipboard-list"', row)
+        self.assertNotIn('data-homework-state', row)
 
     def test_submitted_row_shows_done_tick_in_both_states(self):
         save_submission(
@@ -242,6 +227,9 @@ class HomeworkSidebarRowConsistencyTest(HomeworkUnitSetupMixin, TestCase):
         self.client.force_login(self.student)
         row = self.assert_row_matches_when_current()
         self.assertIn('data-lucide="check-circle-2"', row)
+        # Issue #1916: the submission enrolled the learner in the cohort, so
+        # the row carries the shared status label, identically when current.
+        self.assertIn('data-homework-state="submitted"', row)
 
 
 class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
@@ -288,11 +276,29 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertNotContains(question, self.canary_question.correct_answer)
 
     def test_nav_and_page_show_all_six_learner_homework_states(self):
+        # Issue #1916: an enrolled learner's sidebar homework row shows the
+        # same shared state as the stepper page, in every state.
+        CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
+
         def assert_state(expected):
             response = self.client.get(f'{self.unit_url}?homework_step=review')
             self.assertEqual(response.context['homework_state'].value, expected)
             self.assertEqual(response.context['stepper']['homework_state'].value, expected)
-            self.assertContains(response, f'data-homework-state="{expected}"', count=1)
+            page_state = re.search(
+                r'data-testid="homework-page-state"><span role="status" '
+                r'aria-label="([^"]*)" data-homework-state="([^"]*)">([^<]*)<',
+                response.content.decode(),
+            )
+            row_state = re.search(
+                r'data-testid="homework-row-status" data-homework-state="([^"]*)">([^<]*)<',
+                response.content.decode(),
+            )
+            self.assertEqual(page_state.group(2), expected)
+            self.assertEqual(
+                (row_state.group(1), row_state.group(2)),
+                (page_state.group(2), page_state.group(3)),
+            )
+            self.assertContains(response, f'data-homework-state="{expected}"', count=2)
 
         self.client.get(self.unit_url)
         assert_state('not_submitted')

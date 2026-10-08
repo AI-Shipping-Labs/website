@@ -78,70 +78,31 @@ def _render_safe(markdown):
     return mark_safe(sanitize_html(linkify_urls(render_markdown(markdown))))
 
 
-def build_assignment(homework, unit, user, *, context=None):
-    """Construct the package descriptor.
+def assignment_key(homework):
+    """The shared draft/assignment identity for one cohort ``Homework`` row."""
+    return f'aisl:homework:{homework.pk}'
 
-    Answer keys and correctness reach the descriptor only through
-    ``question_results``, and only once ``homework_reveal`` reveals them:
-    after submit for self-paced homework, after scoring for a dated cohort.
+
+def homework_availability(homework, submission):
+    """Map AISL homework state onto the shared ``open|closed|scored`` value.
+
+    The one mapping used by the stepper (``build_assignment``) and the
+    navigation row status (``content.services.homework_rows.
+    annotate_homework_rows``), so a row label and the stepper page's state
+    label can never disagree. Acceptance follows ``state`` only (issue
+    #1917): a past-due ``OPEN`` homework stays ``open``; only an operator
+    setting ``CLOSED`` lands on ``closed``, and ``SCORED`` (or a self-paced
+    learner locked after submitting) on ``scored``.
     """
-    questions = list(homework.questions.all())
-    keys = [question_key(question) for question in questions]
-    introduction, rich_prompts, closing = validate_question_bindings(
-        unit.homework or '', keys, unit.source_path or homework.source_path or unit.slug,
-    )
-    learning_in_public_cap = homework.learning_in_public_cap
-    learning_guidance = ''
-    if learning_in_public_cap:
-        closing, learning_guidance = split_out_named_section(
-            closing, 'Learning in Public',
-        )
-    submission = None
-    if user.is_authenticated:
-        submission = (
-            Submission.objects.filter(homework=homework, student=user)
-            .prefetch_related('answers').first()
-        )
-    existing_answers = {}
-    if submission:
-        for answer in submission.answers.all():
-            question = next((item for item in questions if item.pk == answer.question_id), None)
-            if question is None:
-                continue
-            value = answer.answer_text or ''
-            existing_answers[question_key(question)] = _submitted_value_to_key(question, value)
-    step_questions = tuple(
-        StepQuestion(
-            key=question_key(question),
-            prompt=_render_safe(rich_prompts[question_key(question)])
-            if question_key(question) in rich_prompts else question.text,
-            type=QUESTION_TYPES[question.question_type],
-            options=tuple(
-                Option(key, text)
-                for key, text in zip(_option_keys(question), question.options_list, strict=True)
-            ),
-        )
-        for question in questions
-    )
-    existing_public_links = (
-        submission.learning_in_public_links
-        if submission and isinstance(submission.learning_in_public_links, list)
-        else []
-    )
-    if learning_in_public_cap:
-        guidance = learning_guidance or (
-            'Share your progress in public if you would like.'
-        )
-        learning_prompt = _render_safe(f'## Learning in Public\n\n{guidance}')
-        step_questions += (
-            StepQuestion(
-                key=LEARNING_IN_PUBLIC_KEY,
-                prompt=learning_prompt,
-                type='long_text',
-                step_label='Learning in Public',
-            ),
-        )
-        existing_answers[LEARNING_IN_PUBLIC_KEY] = '\n'.join(existing_public_links)
+    if homework.state == HomeworkState.SCORED or locked_after_submit(homework, submission):
+        return 'scored'
+    if not homework.is_accepting_submissions:
+        return 'closed'
+    return 'open'
+
+
+def _final_fields(homework, submission):
+    """The configured final fields and the submission's accepted values."""
     final_fields = []
     existing_final_fields = {}
     if homework.homework_url_field:
@@ -169,12 +130,130 @@ def build_assignment(homework, unit, user, *, context=None):
             '' if not submission or submission.time_spent_homework is None
             else str(submission.time_spent_homework)
         )
-    availability = (
-        'scored' if homework.state == HomeworkState.SCORED
-        or locked_after_submit(homework, submission) else
-        'closed' if not homework.is_accepting_submissions else
-        'open'
+    return tuple(final_fields), existing_final_fields
+
+
+def _existing_answers(homework, questions, submission):
+    """The accepted submission's answers keyed by the stepper's step keys."""
+    existing_answers = {}
+    if submission:
+        for answer in submission.answers.all():
+            question = next((item for item in questions if item.pk == answer.question_id), None)
+            if question is None:
+                continue
+            value = answer.answer_text or ''
+            existing_answers[question_key(question)] = _submitted_value_to_key(question, value)
+    if homework.learning_in_public_cap:
+        existing_public_links = (
+            submission.learning_in_public_links
+            if submission and isinstance(submission.learning_in_public_links, list)
+            else []
+        )
+        existing_answers[LEARNING_IN_PUBLIC_KEY] = '\n'.join(existing_public_links)
+    return existing_answers
+
+
+def _accepted_submission(existing_answers, existing_final_fields, submission):
+    if submission is None:
+        return None
+    return AcceptedSubmission(
+        answers=existing_answers,
+        final_fields=existing_final_fields,
+        submitted_at=submission.submitted_at,
     )
+
+
+def build_state_assignment(homework, questions, submission):
+    """A prompt-free descriptor carrying only what the shared state needs.
+
+    ``calculate_homework_state`` compares a draft against the accepted
+    snapshot using question keys and types, final fields, and availability.
+    This builds exactly those from the same helpers as ``build_assignment``
+    without rendering any markdown, so navigation rows can compute status
+    for many homework rows from batch-loaded data.
+    """
+    step_questions = tuple(
+        StepQuestion(
+            key=question_key(question),
+            prompt='',
+            type=QUESTION_TYPES[question.question_type],
+        )
+        for question in questions
+    )
+    if homework.learning_in_public_cap:
+        step_questions += (
+            StepQuestion(key=LEARNING_IN_PUBLIC_KEY, prompt='', type='long_text'),
+        )
+    existing_answers = _existing_answers(homework, questions, submission)
+    final_fields, existing_final_fields = _final_fields(homework, submission)
+    return Assignment(
+        key=assignment_key(homework),
+        title=homework.title,
+        questions=step_questions,
+        final_fields=final_fields,
+        existing_answers=existing_answers,
+        existing_final_fields=existing_final_fields,
+        has_submission=bool(submission),
+        availability=homework_availability(homework, submission),
+        accepted_submission=_accepted_submission(
+            existing_answers, existing_final_fields, submission,
+        ),
+    )
+
+
+def build_assignment(homework, unit, user, *, context=None):
+    """Construct the package descriptor.
+
+    Answer keys and correctness reach the descriptor only through
+    ``question_results``, and only once ``homework_reveal`` reveals them:
+    after submit for self-paced homework, after scoring for a dated cohort.
+    """
+    questions = list(homework.questions.all())
+    keys = [question_key(question) for question in questions]
+    introduction, rich_prompts, closing = validate_question_bindings(
+        unit.homework or '', keys, unit.source_path or homework.source_path or unit.slug,
+    )
+    learning_in_public_cap = homework.learning_in_public_cap
+    learning_guidance = ''
+    if learning_in_public_cap:
+        closing, learning_guidance = split_out_named_section(
+            closing, 'Learning in Public',
+        )
+    submission = None
+    if user.is_authenticated:
+        submission = (
+            Submission.objects.filter(homework=homework, student=user)
+            .prefetch_related('answers').first()
+        )
+    existing_answers = _existing_answers(homework, questions, submission)
+    step_questions = tuple(
+        StepQuestion(
+            key=question_key(question),
+            prompt=_render_safe(rich_prompts[question_key(question)])
+            if question_key(question) in rich_prompts else question.text,
+            type=QUESTION_TYPES[question.question_type],
+            options=tuple(
+                Option(key, text)
+                for key, text in zip(_option_keys(question), question.options_list, strict=True)
+            ),
+        )
+        for question in questions
+    )
+    if learning_in_public_cap:
+        guidance = learning_guidance or (
+            'Share your progress in public if you would like.'
+        )
+        learning_prompt = _render_safe(f'## Learning in Public\n\n{guidance}')
+        step_questions += (
+            StepQuestion(
+                key=LEARNING_IN_PUBLIC_KEY,
+                prompt=learning_prompt,
+                type='long_text',
+                step_label='Learning in Public',
+            ),
+        )
+    final_fields, existing_final_fields = _final_fields(homework, submission)
+    availability = homework_availability(homework, submission)
     results_by_id = question_results(homework, submission)
     revealed_results = (
         None if results_by_id is None else {
@@ -183,12 +262,12 @@ def build_assignment(homework, unit, user, *, context=None):
         }
     )
     return Assignment(
-        key=f'aisl:homework:{homework.pk}',
+        key=assignment_key(homework),
         title=homework.title,
         questions=step_questions,
         introduction=_render_safe(introduction),
         instructions=_render_safe(closing),
-        final_fields=tuple(final_fields),
+        final_fields=final_fields,
         existing_answers=existing_answers,
         existing_final_fields=existing_final_fields,
         context={
@@ -198,13 +277,8 @@ def build_assignment(homework, unit, user, *, context=None):
         },
         has_submission=bool(submission),
         availability=availability,
-        accepted_submission=(
-            AcceptedSubmission(
-                answers=existing_answers,
-                final_fields=existing_final_fields,
-                submitted_at=submission.submitted_at,
-            )
-            if submission else None
+        accepted_submission=_accepted_submission(
+            existing_answers, existing_final_fields, submission,
         ),
         question_results=revealed_results,
     )

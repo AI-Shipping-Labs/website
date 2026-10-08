@@ -1484,6 +1484,19 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_moderates_lesson_thread_and_homework_thread_stays_intact",
     })
 
+    issue_1917_owners = frozenset({
+        "playwright_tests/test_homework_deadline_1917.py::"
+        "test_cohort_learner_submits_after_the_deadline",
+        "playwright_tests/test_homework_deadline_1917.py::"
+        "test_draft_autosave_works_after_the_deadline",
+        "playwright_tests/test_homework_deadline_1917.py::"
+        "test_submitted_learner_updates_submission_after_the_deadline",
+        "playwright_tests/test_homework_deadline_1917.py::"
+        "test_operator_closed_stepper_is_read_only_without_deadline_claim",
+        "playwright_tests/test_homework_deadline_1917.py::"
+        "test_self_paced_homework_is_unchanged",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1697,8 +1710,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2730)
-        self.assertEqual(len(inventory.owners), 2526)
+        self.assertEqual(inventory.item_count, 2735)
+        self.assertEqual(len(inventory.owners), 2531)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1712,6 +1725,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1897_owners
             | self.issue_1906_owners
             | self.issue_1894_owners
+            | self.issue_1917_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

@@ -1577,9 +1577,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_picks_and_changes_a_users_cohort",
     })
 
-    issue_1794_owners = frozenset({
-        "playwright_tests/test_homework_outline_1794.py::"
-        "test_syllabus_outline_toggles_and_deep_links_the_stepper",
+    issue_1916_owners = frozenset({
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_learner_status_follows_homework_progress_across_the_course",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_learner_moves_between_homework_steps_from_the_sidebar",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_past_due_homework_stays_open_until_the_operator_closes_it",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_scored_and_unsubmitted_changes_follow_the_learner",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_anonymous_and_staff_preview_see_count_without_status",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_zero_question_homework_and_no_cohort_render_clean_rows",
+        "playwright_tests/test_homework_rows_1916.py::"
+        "test_phone_learner_reads_long_status_without_overflow",
     })
 
     def test_reviewed_recap_owner_stays_in_browser_partition(self):
@@ -1710,8 +1722,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2735)
-        self.assertEqual(len(inventory.owners), 2531)
+        self.assertEqual(inventory.item_count, 2741)
+        self.assertEqual(len(inventory.owners), 2537)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1730,7 +1742,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
             | self.hotfix_cohort_owners
-            | self.issue_1794_owners
+            | self.issue_1916_owners
             | self.design_layout_guard_owners
             | self.workshop_search_owners
             | self.checklist_skip_owners

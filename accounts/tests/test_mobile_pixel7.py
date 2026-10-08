@@ -138,12 +138,10 @@ class CourseUnitTouchTargetTest(TestCase):
 
         Issue #1674 extracted the unit row markup out of course_detail.html
         into content/_syllabus_unit_row.html so the three-level accordion can
-        reuse it at every module-nesting depth. Issue #1794 moved the row
-        link itself into included partials (`_syllabus_unit_row_anchor.html`
-        renders the row anchor and `_syllabus_homework_steps.html` the step
-        links), so the 44px touch-target contract is asserted on every
-        template in the row's include closure that renders a link — not on
-        the dispatcher alone.
+        reuse it at every module-nesting depth. The row link itself lives in
+        the included `_syllabus_unit_row_anchor.html`, so the 44px
+        touch-target contract is asserted on every template in the row's
+        include closure that renders a link — not on the dispatcher alone.
         """
         for name, source in self._row_template_sources(
             "content/_syllabus_unit_row.html"

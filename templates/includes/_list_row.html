@@ -29,9 +29,18 @@ Marker variants — the caller fills the leading `<span>` slot via the
   Renders the `check-circle-2` glyph (`text-green-700 dark:text-green-400`).
 - Plain (drawer, anonymous or incomplete): `marker_kind="circle"`.
   Renders the `circle` glyph in `text-muted-foreground`.
-- Optional pill: `{% member_badge %}`. Rows carry no status text; a row
-  renders the same meta whether it is current or not, so only the
-  highlight changes. Done state is the leading `check` marker.
+- Optional pill: `{% member_badge %}`. A row renders the same meta
+  whether it is current or not, so only the highlight changes. Done state
+  is the leading `check` marker.
+- Status meta (issue #1916): the optional `status_meta` slot renders one
+  right-aligned muted `text-xs` label after the title. Only homework rows
+  in the course reader sidebar use it, passing the shared
+  `community_base` `LearnerHomeworkState` (`unit.homework_row_state`). The
+  visible label is `aria-hidden` and carries
+  `data-testid="homework-row-status"` plus `data-homework-state`; the
+  state's `aria_label` joins the row's accessible name as `sr-only` text.
+  No other row carries status text, and rows that do not pass it render
+  unchanged.
 - Custom: `marker_kind="custom"` and pass `marker_html` (rendered with
   `|safe`) to inject any other glyph.
 
@@ -57,13 +66,16 @@ marker_testid: optional `data-testid` for the marker icon (used so the
 extra_anchor_class: optional Tailwind classes appended to the anchor.
 extra_attrs: optional raw attribute string (rendered with `|safe`),
     e.g. `aria-current="page"`.
+status_meta: optional `LearnerHomeworkState` (`.label`, `.value`,
+    `.aria_label`) rendered in the right-aligned status meta slot.
+    Homework rows only; omit it everywhere else.
 
 Notes
 -----
 - The anchor sets `min-h-[44px]` so taps land on iOS/Android even when
   the title is short.
 - `<span>` text uses `truncate` so long titles do not wrap and break
-  the row rhythm.
+  the row rhythm. A long status label wraps inside its own slot instead.
 {% endcomment %}
 {% load member_badges %}
 <a href="{{ href }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
@@ -81,7 +93,8 @@ Notes
       {{ marker_html|safe }}
     {% endif %}
   </span>
-  <span class="min-w-0 flex-1 truncate">{{ title }}</span>
+  <span class="min-w-0 flex-1 truncate">{{ title }}{% if status_meta %}<span class="sr-only">, {{ status_meta.aria_label }}</span>{% endif %}</span>
+  {% if status_meta %}<span class="max-w-[45%] flex-shrink-0 text-right text-xs font-normal text-muted-foreground" aria-hidden="true" data-testid="homework-row-status" data-homework-state="{{ status_meta.value }}">{{ status_meta.label }}</span>{% endif %}
   {% if not root_optional and wrapper_optional or optional_badge and not root_optional and not ancestor_optional %}
     {% if '(Optional)' not in title %}
     {% member_badge 'Optional' tone='muted' %}

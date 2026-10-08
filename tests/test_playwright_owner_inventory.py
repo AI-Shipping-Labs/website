@@ -1564,6 +1564,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_pods_stay_hidden_until_the_course_is_enabled",
     })
 
+    issue_1924_owners = frozenset({
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_learner_working_through_homework_sees_answered_questions_ticked_off",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_sidebar_jump_autosaves_and_marks_the_answer",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_skipped_question_stays_open_until_answered",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_clearing_an_answer_removes_the_check",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_submitted_learner_still_sees_answered_questions_checked",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_phone_learner_finds_the_unanswered_question_from_the_pills",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_learning_in_public_is_ticked_once_a_link_is_saved",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_closed_homework_checks_match_the_accepted_submission",
+        "playwright_tests/test_homework_step_checks_1924.py::"
+        "test_screen_reader_hears_which_steps_are_done",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1789,8 +1810,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2770)
-        self.assertEqual(len(inventory.owners), 2566)
+        self.assertEqual(inventory.item_count, 2779)
+        self.assertEqual(len(inventory.owners), 2575)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1806,6 +1827,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1894_owners
             | self.issue_1917_owners
             | self.issue_1923_owners
+            | self.issue_1924_owners
             | self.issue_1926_owners
             | self.issue_1918_owners
             | self.youtube_referrer_owners

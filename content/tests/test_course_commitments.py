@@ -195,6 +195,31 @@ class CourseCommitmentsTests(TestCase):
         self.assertEqual(closed_homework['action'], '')
         self.assertFalse(any(row['kind'] == 'Homework' for row in closed['coming_up']))
 
+    def test_past_due_unsubmitted_homework_stays_startable(self):
+        """Issue #1917: the deadline informs, it does not close the row --
+        only a CLOSED/SCORED state does."""
+        self.homework_one.due_date = self.now - datetime.timedelta(days=1)
+        self.homework_one.save(update_fields=['due_date'])
+        model = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+        row = next(row for row in model['open_assignments'] if row['kind'] == 'Homework')
+        self.assertEqual(row['status'], 'Not submitted')
+        self.assertEqual(row['action'], 'Start homework')
+        self.assertFalse(row['closed'])
+
+        self.homework_one.state = 'CL'
+        self.homework_one.save(update_fields=['state'])
+        closed = build_course_commitments(
+            self.course, self.user, self.cohort_one, now=self.now,
+        )
+        closed_row = next(
+            row for row in closed['open_assignments'] if row['kind'] == 'Homework'
+        )
+        self.assertEqual(closed_row['status'], 'Closed')
+        self.assertEqual(closed_row['action'], '')
+        self.assertTrue(closed_row['closed'])
+
     def test_submitted_project_keeps_one_of_three_review_action(self):
         ProjectSubmission.objects.create(
             user=self.user, course=self.course, course_project=self.project_one,

@@ -1,9 +1,13 @@
 {% load curriculum_tags %}
 <div role="group" aria-label="Homework steps" data-testid="homework-step-nav">
 <ul class="reader-nav-list ml-4 mt-0.5">
-  {% for title, url, current in stepper.nav_steps %}
+  {% for title, url, current, answered in stepper|homework_nav_steps %}
   <li>
-    {% if current %}
+    {% if answered and current %}
+      {% include "includes/_list_row.html" with href=url title=title is_current=True marker_kind="check" marker_testid="homework-step-answered" sr_suffix=", answered" trailing_icon="" testid="homework-step-current" extra_attrs='aria-current="step" data-reader-current data-homework-step-answered="true"' scoped_module='' reader_cohort_param='' %}
+    {% elif answered %}
+      {% include "includes/_list_row.html" with href=url title=title marker_kind="check" marker_testid="homework-step-answered" sr_suffix=", answered" trailing_icon="" extra_attrs='data-homework-step-answered="true"' scoped_module='' reader_cohort_param='' %}
+    {% elif current %}
       {% include "includes/_list_row.html" with href=url title=title is_current=True marker_kind="custom" marker_html=title|homework_step_nav_marker_html trailing_icon="" testid="homework-step-current" extra_attrs='aria-current="step" data-reader-current' scoped_module='' reader_cohort_param='' %}
     {% else %}
       {% include "includes/_list_row.html" with href=url title=title marker_kind="custom" marker_html=title|homework_step_nav_marker_html trailing_icon="" scoped_module='' reader_cohort_param='' %}

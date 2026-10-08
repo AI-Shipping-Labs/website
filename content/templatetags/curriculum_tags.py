@@ -115,3 +115,34 @@ def homework_step_nav_marker_html(title):
         '<i data-lucide="{}" class="h-4 w-4 text-muted-foreground" aria-hidden="true"></i>',
         icon,
     )
+
+
+def _has_review_answer(answer):
+    if isinstance(answer, str):
+        return bool(answer.strip())
+    return bool(answer)
+
+
+@register.filter
+def homework_nav_steps(stepper):
+    """Return ``(title, url, current, answered)`` for each stepper nav step.
+
+    Issue #1924: a question step is "answered" exactly when the Review &
+    submit rows (``stepper.review_display_rows``) show a non-blank answer
+    for it -- the saved draft while open, the accepted snapshot when closed
+    or scored with a submission. Nav steps and review rows are both built
+    by the same ``_step_url`` call, so they match by URL. Introduction and
+    Review & submit have no review row and are never answered. Derived from
+    data the stepper render already holds: no queries.
+    """
+    if not stepper:
+        return []
+    answered_urls = {
+        row.get('url')
+        for row in stepper.get('review_display_rows') or ()
+        if _has_review_answer(row.get('answer'))
+    }
+    return [
+        (title, url, current, url in answered_urls)
+        for title, url, current in stepper.get('nav_steps') or ()
+    ]

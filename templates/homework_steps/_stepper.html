@@ -4,13 +4,14 @@
 {% load homework_step_tags %}
 {% load date_formatting %}
 {% load tz %}
+{% load curriculum_tags %}
 
 <section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
   <nav class="mb-3 lg:hidden" aria-label="Homework progress" data-testid="homework-step-pills">
     {% for title, url, current in stepper.nav_steps %}{% if current %}<p class="mb-2 text-sm font-medium text-foreground" data-testid="homework-step-position">Step {{ forloop.counter }} of {{ stepper.step_count }}<span class="text-muted-foreground"> · {{ title }}</span></p>{% endif %}{% endfor %}
     <ol class="flex gap-1 overflow-x-auto [scrollbar-width:none]">
-      {% for title, url, current in stepper.nav_steps %}
-      <li class="min-w-[2rem] flex-1"><a href="{{ url }}" class="flex h-11 items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if current %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"{% if current %} aria-current="step"{% endif %} aria-label="Step {{ forloop.counter }}: {{ title }}">{{ forloop.counter }}</a></li>
+      {% for title, url, current, answered in stepper|homework_nav_steps %}
+      <li class="min-w-[2rem] flex-1"><a href="{{ url }}" class="flex h-11 items-center justify-center gap-0.5 rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if current %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"{% if current %} aria-current="step"{% endif %}{% if answered %} data-homework-step-answered="true"{% endif %} aria-label="Step {{ forloop.counter }}: {{ title }}{% if answered %}, answered{% endif %}">{{ forloop.counter }}{% if answered %}<i data-lucide="check" class="h-3.5 w-3.5 flex-shrink-0{% if not current %} text-green-700 dark:text-green-400{% endif %}" aria-hidden="true" data-testid="homework-step-pill-answered"></i>{% endif %}</a></li>
       {% endfor %}
     </ol>
   </nav>

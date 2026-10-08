@@ -41,6 +41,16 @@ Marker variants — the caller fills the leading `<span>` slot via the
   state's `aria_label` joins the row's accessible name as `sr-only` text.
   No other row carries status text, and rows that do not pass it render
   unchanged.
+- Screen-reader suffix (issue #1924): the optional `sr_suffix` slot
+  appends text to the row's accessible name so the marker's meaning is
+  announced, e.g. the homework step nav passes `sr_suffix=", answered"`
+  with `marker_kind="check"` so the link reads "Question 2, answered".
+  It renders as the anchor's `aria-label` (title + suffix) rather than
+  an `sr-only` span, because Chromium joins an absolutely positioned
+  `sr-only` span with a space ("Question 2 , answered"). The visible
+  title stays the start of the label. When `sr_suffix` is set the
+  `check` glyph is `aria-hidden="true"` because the label carries the
+  meaning. Rows that omit it render unchanged.
 - Custom: `marker_kind="custom"` and pass `marker_html` (rendered with
   `|safe`) to inject any other glyph.
 
@@ -69,6 +79,9 @@ extra_attrs: optional raw attribute string (rendered with `|safe`),
 status_meta: optional `LearnerHomeworkState` (`.label`, `.value`,
     `.aria_label`) rendered in the right-aligned status meta slot.
     Homework rows only; omit it everywhere else.
+sr_suffix: optional text appended to the title in the anchor's
+    `aria-label` (e.g. `", answered"`); also marks the `check` glyph
+    `aria-hidden`. Homework step nav rows only; omit it everywhere else.
 
 Notes
 -----
@@ -81,12 +94,12 @@ Notes
 <a href="{{ href }}{% if scoped_module and reader_cohort_param %}?cohort={{ reader_cohort_param|urlencode }}{% endif %}"
    class="reader-list-row group flex min-h-[44px] items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if is_current %}bg-accent/10 text-accent font-medium{% else %}text-foreground hover:bg-muted/50{% endif %}{% if extra_anchor_class %} {{ extra_anchor_class }}{% endif %}"
    {% if testid %}data-testid="{{ testid }}"{% endif %}
-   {% if extra_attrs %}{{ extra_attrs|safe }}{% endif %}>
+   {% if extra_attrs %}{{ extra_attrs|safe }}{% endif %}{% if sr_suffix %} aria-label="{{ title }}{{ sr_suffix }}"{% endif %}>
   <span class="flex h-5 w-5 flex-shrink-0 items-center justify-center">
     {% if marker_kind == "number" %}
       <span class="flex h-5 w-5 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent">{{ marker_number }}</span>
     {% elif marker_kind == "check" %}
-      <i data-lucide="check-circle-2" class="h-4 w-4 text-green-700 dark:text-green-400"{% if marker_testid %} data-testid="{{ marker_testid }}"{% endif %}></i>
+      <i data-lucide="check-circle-2" class="h-4 w-4 text-green-700 dark:text-green-400"{% if marker_testid %} data-testid="{{ marker_testid }}"{% endif %}{% if sr_suffix %} aria-hidden="true"{% endif %}></i>
     {% elif marker_kind == "circle" %}
       <i data-lucide="circle" class="h-4 w-4 text-muted-foreground"></i>
     {% elif marker_kind == "custom" %}

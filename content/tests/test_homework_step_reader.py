@@ -868,16 +868,29 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             {'q2-reflect': 'A detail'},
         )
 
-    def test_save_is_csrf_protected_and_deadline_gated(self):
+    def test_save_is_csrf_protected_and_state_gated(self):
+        """Issue #1917: a passed deadline no longer blocks draft saves --
+        only a closed state does."""
         csrf_client = Client(enforce_csrf_checks=True)
         csrf_client.force_login(self.student)
         url = f'/api/homework-reader/drafts/{self.homework.pk}/questions/q1-lines'
         self.assertEqual(csrf_client.post(url, {'revision': '0', 'answer': '2'}).status_code, 403)
         self.homework.due_date = timezone.now() - datetime.timedelta(minutes=1)
         self.homework.save(update_fields=['due_date'])
-        response = self.client.post(url, {'revision': '0', 'answer': '2'})
-        self.assertEqual(response.status_code, 403)
-        self.assertFalse(HomeworkDraft.objects.filter(user=self.student).exists())
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+        response = self.client.post(url, {
+            'draft_token': str(draft.token), 'revision': str(draft.revision),
+            'answer': option_key(self.mc_question.options_list[1]),
+        })
+        self.assertEqual(response.json(), {'revision': 1, 'saved': True})
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
+        draft.refresh_from_db()
+        closed = self.client.post(url, {
+            'draft_token': str(draft.token), 'revision': str(draft.revision), 'answer': '2',
+        })
+        self.assertEqual(closed.status_code, 403)
 
     def test_review_submits_complete_snapshot_through_existing_service(self):
         self.client.get(self.unit_url)
@@ -908,11 +921,65 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(stale.status_code, 409)
         self.assertFalse(HomeworkDraft.objects.filter(user=self.student).exists())
 
-    def test_rejected_submit_keeps_draft_without_creating_submission(self):
+    def test_submit_after_deadline_is_accepted(self):
+        """The reported blocker (issue #1917): a learner who missed the
+        deadline can still complete and submit while the form is OPEN."""
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
+        self.homework.save(update_fields=['due_date'])
         self.client.get(self.unit_url)
         self.save_answer('q1-lines', 0, '2')
-        self.homework.due_date = timezone.now() - datetime.timedelta(minutes=1)
+        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        self.assertContains(review, 'Was due')
+        self.assertContains(review, 'homework-submit-button')
+        self.assertNotContains(review, 'This homework is closed')
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
+            'homework_step': 'review', 'revision': '1', 'intent': 'submit',
+            'final_homework_link': 'https://github.com/example/late',
+        })
+        self.assertEqual(response.status_code, 302)
+        submission = Submission.objects.get(homework=self.homework, student=self.student)
+        self.assertEqual(submission.homework_link, 'https://github.com/example/late')
+        self.assertFalse(HomeworkDraft.objects.filter(user=self.student).exists())
+
+    def test_submitted_learner_updates_submission_after_deadline(self):
+        """Issue #1917: an existing submission stays updatable past the
+        deadline while the form is OPEN -- same row, no duplicates."""
+        save_submission(
+            self.homework, self.student,
+            homework_link='https://example.com/before',
+            answers_by_question_id={self.mc_question.pk: '2'},
+        )
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
         self.homework.save(update_fields=['due_date'])
+
+        review = self.client.get(f'{self.unit_url}?homework_step=review')
+
+        self.assertContains(review, 'homework-submit-button')
+        self.assertContains(review, 'Update submission')
+        self.assertContains(review, 'You can update it while submissions are open.')
+        self.assertNotContains(review, 'The submission window is closed.')
+        self.client.get(self.unit_url)
+        draft = HomeworkDraft.objects.get(user=self.student)
+        response = self.client.post(self.unit_url, {
+            'assignment_key': f'aisl:homework:{self.homework.pk}',
+            'draft_token': str(draft.token),
+            'homework_step': 'review', 'revision': str(draft.revision), 'intent': 'submit',
+            'final_homework_link': 'https://example.com/after',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            Submission.objects.filter(homework=self.homework, student=self.student).count(), 1,
+        )
+        submission = Submission.objects.get(homework=self.homework, student=self.student)
+        self.assertEqual(submission.homework_link, 'https://example.com/after')
+
+    def test_closed_submit_keeps_draft_without_creating_submission(self):
+        self.client.get(self.unit_url)
+        self.save_answer('q1-lines', 0, '2')
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
         response = self.client.post(self.unit_url, {
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
@@ -920,12 +987,47 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'final_homework_link': '',
         })
         self.assertEqual(response.status_code, 403)
-        self.assertContains(response, 'deadline', status_code=403)
+        self.assertContains(response, 'This homework is closed', status_code=403)
+        self.assertNotContains(response, 'deadline for this homework', status_code=403)
         self.assertEqual(
             HomeworkDraft.objects.get(user=self.student).answers,
             {'q1-lines': option_key('14')},
         )
         self.assertFalse(Submission.objects.filter(homework=self.homework).exists())
+
+    def test_closed_past_due_homework_uses_closed_copy_everywhere(self):
+        """A closed homework never claims a deadline passed, even when the
+        deadline is also in the past (issue #1917)."""
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['due_date', 'state'])
+
+        response = self.client.get(self.unit_url)
+
+        self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
+        self.assertContains(response, "This homework is closed. Sorry, it's too late to submit.")
+        self.assertContains(response, 'homework-closed-banner')
+        self.assertContains(response, 'Was due')
+        self.assertNotContains(response, 'deadline for this homework has passed')
+
+    def test_availability_tracks_state_past_the_deadline(self):
+        """Issue #1917: availability is state-gated only (cmp parity) --
+        a past-due OPEN homework stays open; CLOSED and SCORED do not."""
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
+        self.homework.save(update_fields=['due_date'])
+        self.assertEqual(
+            build_assignment(self.homework, self.unit, self.student).availability, 'open',
+        )
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
+        self.assertEqual(
+            build_assignment(self.homework, self.unit, self.student).availability, 'closed',
+        )
+        self.homework.state = HomeworkState.SCORED
+        self.homework.save(update_fields=['state'])
+        self.assertEqual(
+            build_assignment(self.homework, self.unit, self.student).availability, 'scored',
+        )
 
     def test_existing_submission_seeds_draft_without_changing_submission(self):
         self.client.get(self.unit_url)

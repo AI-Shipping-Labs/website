@@ -57,15 +57,15 @@ class HomeworkModelTest(TestCase):
         )
         self.assertTrue(homework.is_accepting_submissions)
 
-    def test_is_accepting_submissions_false_after_deadline(self):
-        """The absolute deadline-enforcement requirement: due_date alone,
-        with no operator action, must close submissions -- tranche 1 has
-        no Studio surface to flip `state` manually."""
+    def test_is_accepting_submissions_true_after_deadline(self):
+        """cmp parity (issue #1917): a passed due_date is informational --
+        the form accepts late submissions until an operator flips
+        `state`. `is_past_due` stays True for the "Was due" wording."""
         homework = Homework.objects.create(
             cohort=self.cohort, slug='hw1', title='HW1',
             due_date=timezone.now() - datetime.timedelta(days=1),
         )
-        self.assertFalse(homework.is_accepting_submissions)
+        self.assertTrue(homework.is_accepting_submissions)
         self.assertTrue(homework.is_past_due)
         self.assertFalse(homework.is_self_paced)
 
@@ -76,6 +76,15 @@ class HomeworkModelTest(TestCase):
             state=HomeworkState.CLOSED,
         )
         self.assertFalse(homework.is_accepting_submissions)
+
+    def test_is_accepting_submissions_false_when_scored_even_before_deadline(self):
+        homework = Homework.objects.create(
+            cohort=self.cohort, slug='hw1', title='HW1',
+            due_date=timezone.now() + datetime.timedelta(days=1),
+            state=HomeworkState.SCORED,
+        )
+        self.assertFalse(homework.is_accepting_submissions)
+        self.assertFalse(homework.is_past_due)
 
     def test_no_deadline_stays_open_until_state_is_closed(self):
         homework = Homework.objects.create(

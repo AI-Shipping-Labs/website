@@ -268,9 +268,13 @@ class HomeworkDeadlineTest(HomeworkUnitSetupMixin, TestCase):
         self.client.force_login(self.student)
         response = self.client.get(self.unit_url)
         self.assertContains(response, 'homework-submit-button')
-        self.assertNotContains(response, 'homework-deadline-passed-banner')
+        self.assertNotContains(response, 'homework-closed-banner')
+        self.assertContains(response, 'data-testid="homework-due-date">Due ')
+        self.assertNotContains(response, 'data-testid="homework-due-date">Was due ')
 
-    def test_get_after_deadline_shows_disabled_form_with_saved_answers_and_banner(self):
+    def test_get_after_deadline_keeps_form_editable_with_saved_answers(self):
+        """cmp parity (issue #1917): past the deadline the form stays
+        editable and the header flips to informational "Was due"."""
         self.client.force_login(self.student)
         self.client.post(self.unit_url, {f'answer_{self.mc_question.pk}': '2'})
 
@@ -278,13 +282,15 @@ class HomeworkDeadlineTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.save(update_fields=['due_date'])
 
         response = self.client.get(self.unit_url)
-        self.assertContains(response, 'homework-deadline-passed-banner')
-        self.assertContains(response, 'The deadline for this homework passed on')
-        self.assertNotContains(response, 'homework-submit-button')
+        self.assertNotContains(response, 'homework-closed-banner')
+        self.assertContains(response, 'homework-submit-button')
+        self.assertContains(response, 'Was due')
+        self.assertContains(response, 'data-testid="homework-due-date">Was due ')
+        self.assertNotContains(response, 'data-testid="homework-due-date">Due ')
         # The previously-saved answer is still shown, not hidden.
         self.assertContains(response, 'checked')
 
-    def test_post_after_deadline_is_rejected_and_does_not_alter_saved_submission(self):
+    def test_post_after_deadline_updates_the_existing_submission(self):
         self.client.force_login(self.student)
         self.client.post(self.unit_url, {f'answer_{self.mc_question.pk}': '2'})
 
@@ -295,20 +301,79 @@ class HomeworkDeadlineTest(HomeworkUnitSetupMixin, TestCase):
             f'answer_{self.mc_question.pk}': '1',
         }, follow=True)
 
-        self.assertContains(response, 'The deadline for this homework has passed')
+        self.assertContains(response, 'Your homework was submitted')
+        self.assertEqual(
+            Submission.objects.filter(homework=self.homework, student=self.student).count(), 1,
+        )
         submission = Submission.objects.get(homework=self.homework, student=self.student)
-        self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '2')
+        self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '1')
 
-    def test_post_after_deadline_with_no_prior_submission_saves_nothing(self):
+    def test_post_after_deadline_with_no_prior_submission_saves_the_submission(self):
         self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
         self.homework.save(update_fields=['due_date'])
 
         self.client.force_login(self.student)
         self.client.post(self.unit_url, {f'answer_{self.mc_question.pk}': '2'})
 
-        self.assertFalse(
+        self.assertTrue(
             Submission.objects.filter(homework=self.homework, student=self.student).exists()
         )
+
+    def test_get_after_close_with_past_deadline_uses_the_closed_banner(self):
+        """A closed homework never blames the deadline, even when the
+        deadline is also in the past (issue #1917)."""
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['due_date', 'state'])
+        self.client.force_login(self.student)
+
+        response = self.client.get(self.unit_url)
+
+        self.assertContains(response, 'homework-closed-banner')
+        self.assertContains(response, 'This homework is closed')
+        self.assertContains(response, "Sorry, it's too late to submit.")
+        self.assertNotContains(response, 'shown below and can no longer be edited')
+        self.assertNotContains(response, 'deadline for this homework')
+        self.assertNotContains(response, 'homework-submit-button')
+
+    def test_get_after_close_with_submission_keeps_the_submitted_copy(self):
+        """Operator-requested split (issue #1917): a learner who submitted
+        before the close keeps the submission-shown-below banner; only a
+        learner without a submission is told it is too late."""
+        self.client.force_login(self.student)
+        self.client.post(self.unit_url, {f'answer_{self.mc_question.pk}': '1'})
+        self.homework.state = HomeworkState.CLOSED
+        self.homework.save(update_fields=['state'])
+
+        response = self.client.get(self.unit_url)
+
+        self.assertContains(response, 'homework-closed-banner')
+        self.assertContains(response, 'Your submission is shown below and can no longer be edited.')
+        self.assertNotContains(response, "Sorry, it's too late to submit.")
+        self.assertNotContains(response, 'homework-submit-button')
+
+    def test_post_after_close_with_past_deadline_uses_closed_copy(self):
+        """Issue #1917: CLOSED and SCORED both reject with the closed copy
+        -- never a deadline claim -- and save nothing."""
+        self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
+        self.homework.save(update_fields=['due_date'])
+        self.client.force_login(self.student)
+        for state in (HomeworkState.CLOSED, HomeworkState.SCORED):
+            with self.subTest(state=state):
+                self.homework.state = state
+                self.homework.save(update_fields=['state'])
+                response = self.client.post(self.unit_url, {
+                    f'answer_{self.mc_question.pk}': '2',
+                }, follow=True)
+                self.assertContains(
+                    response, 'This homework is closed; this answer was not saved.',
+                )
+                self.assertNotContains(response, 'deadline for this homework')
+                self.assertFalse(
+                    Submission.objects.filter(
+                        homework=self.homework, student=self.student,
+                    ).exists()
+                )
 
     def test_closed_no_deadline_post_uses_closed_copy(self):
         self.homework.due_date = None
@@ -471,7 +536,10 @@ class HomeworkSelfPacedCohortTest(TestCase):
 
         self.assertContains(response, 'homework-submission-form')
         self.assertContains(response, 'homework-submit-button')
-        self.assertNotContains(response, 'homework-deadline-passed-banner')
+        self.assertNotContains(response, 'homework-closed-banner')
+        # A self-paced homework renders no deadline line at all, even with
+        # a stamped due_date (issue #1917 keeps this display rule).
+        self.assertNotContains(response, 'data-testid="homework-due-date"')
 
     def test_post_creates_a_submission_past_the_stamped_due_date(self):
         self.client.force_login(self.student)
@@ -493,8 +561,9 @@ class HomeworkSelfPacedCohortTest(TestCase):
 
         response = self.client.get(self.unit_url)
 
-        self.assertContains(response, 'homework-deadline-passed-banner')
+        self.assertContains(response, 'homework-closed-banner')
         self.assertContains(response, 'This homework is closed')
+        self.assertContains(response, "Sorry, it's too late to submit.")
         self.assertNotContains(response, 'The deadline for this homework passed on')
 
     def test_post_after_close_is_rejected_with_the_closed_not_deadline_message(self):

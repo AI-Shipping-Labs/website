@@ -109,6 +109,7 @@ _POD_DETAIL_EXAMPLE = {
         'waitlist_position': None,
         'message': 'I am building a RAG eval harness',
         'created_at': '2026-10-02T10:00:00+00:00',
+        'stale_alerted_at': None,
     }],
     'suggested_slots': [{
         'start': '2026-10-06T16:00:00+00:00',
@@ -131,6 +132,7 @@ _REQUEST_EXAMPLE = {
     'created_at': '2026-10-02T10:00:00+00:00',
     'decided_at': None,
     'decided_by': None,
+    'stale_alerted_at': None,
 }
 
 _ROSTER_EXAMPLE = {
@@ -227,6 +229,7 @@ def _serialize_request(join_request, position=None):
         'created_at': isoformat_or_none(join_request.created_at),
         'decided_at': isoformat_or_none(join_request.decided_at),
         'decided_by': join_request.decided_by.email if join_request.decided_by_id else None,
+        'stale_alerted_at': isoformat_or_none(join_request.stale_alerted_at),
     }
 
 

@@ -449,7 +449,7 @@ non-staff token returns `401`.
 | PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count`, `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url` |
 | POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
-| GET | `/api/pods/<id>/requests` | Every request, optional `status` filter |
+| GET | `/api/pods/<id>/requests` | Every request, optional `status` filter. Each request has `status`, `decided_at`, `decided_by`, and `stale_alerted_at` (when the daily staff Slack alert first reported it as stale, else `null`) |
 | POST | `/api/pods/<id>/requests/<request_id>/approve` | Staff override; `409 pod_full`, `409 request_not_open` |
 | POST | `/api/pods/<id>/requests/<request_id>/decline` | Staff override; `409 request_not_open` |
 

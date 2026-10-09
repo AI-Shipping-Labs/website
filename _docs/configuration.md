@@ -336,6 +336,15 @@ Foot-gun: this is the Slack BOT app, separate from the Slack OAuth LOGIN app in 
 
 Test: in Studio, trigger an announcement (e.g. publish an article and use the "Announce on Slack" action) and confirm the bot posted to the configured channel. For the ingest, invite the bot to `#plan-sprints`, set the channel ID, then run `uv run python manage.py shell -c "from crm.tasks.ingest_plan_sprints import ingest_plan_sprints; print(ingest_plan_sprints())"` and confirm the run completes with `status='success'` and a non-zero `messages_seen` rather than a `missing_scope` / `not_in_channel` error.
 
+### Pods settings
+
+Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_docs/integrations/pods.md`. Two of them change how requests and staff alerts behave:
+
+| Key | Default | Notes |
+|-----|---------|-------|
+| `PODS_REREQUEST_COOLDOWN_DAYS` | `14` | After a first decline a student waits this many days before asking the same pod once more. A second decline on that pod is final; staff can still add the student. `0` allows an immediate second request. |
+| `PODS_STALE_REQUEST_ALERT_ENABLED` | `true` | Daily job `pods-stale-request-alert` (09:00 UTC) posts one staff Slack message about pending pod requests older than `PODS_STALE_REQUEST_DAYS`. Uses the staff comment channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`) plus `SLACK_ENABLED` and `SLACK_BOT_TOKEN`. Set `false` to stop the post. |
+
 ## 7. GitHub App (content sync)
 
 Studio path: `Studio > Settings > GitHub App`.

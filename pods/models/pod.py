@@ -233,6 +233,9 @@ class PodJoinRequest(models.Model):
         on_delete=models.SET_NULL,
         related_name='+',
     )
+    # Set when the daily staff Slack alert (issue #1927) first announced
+    # this request as stale, so each request is announced as new only once.
+    stale_alerted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['created_at', 'pk']

@@ -330,11 +330,13 @@ class PodPageTest(PodViewFixture):
         strip = texts(response, 'pod-slot-strip')[0]
         self.assertIn('Anna K. 18:00 Berlin', strip)
         self.assertIn('Raj S. 21:30 Kolkata', strip)
+        self.assertIn('Mike K. - no availability', strip)
         self.assertEqual(
             texts(response, 'pod-times-based-on'),
             ["Based on 2 of 3 members. Mike K. hasn't added availability yet."],
         )
-        self.assertEqual(texts(response, 'pod-slot-fit')[0], 'Everyone - works well')
+        # Issue #1927: Mike has no availability, so the badge does not claim "Everyone".
+        self.assertEqual(texts(response, 'pod-slot-fit')[0], 'All 2 with availability - works well')
         self.assertEqual(texts(response, 'availability-summary-day'), ['Tuesday 18:00-21:00', 'Thursday 18:00-21:00'])
         self.client.force_login(self.raj)
         raj_times = texts(self.client.get(self.pod_url(pod)), 'pod-slot-time')

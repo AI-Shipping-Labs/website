@@ -27,6 +27,10 @@ SUGGESTION_LEAD = timedelta(hours=12)
 FIT_HORIZON = timedelta(days=7)
 SOCIAL_START_MINUTE = 8 * 60
 SOCIAL_END_MINUTE = 22 * 60
+MINUTES_PER_WEEK = 7 * 24 * 60
+# Two suggestions closer than this on the weekly cycle are near-duplicates
+# (``Tue 18:00`` and ``Tue 18:15`` of another week), issue #1927.
+MIN_WEEKLY_GAP_MINUTES = 60
 
 FIT_EVERYONE = 'everyone'
 FIT_EVERYONE_IF_NEEDED = 'everyone_if_needed'
@@ -55,6 +59,8 @@ class Slot:
     missing: list
     local_starts: list
     considered: int
+    # Pod members in total, with or without availability (issue #1927).
+    member_total: int = 0
 
     @property
     def attending(self):
@@ -68,12 +74,21 @@ class Slot:
 
     @property
     def fit_label(self):
+        """``Everyone`` only when every pod member has availability.
+
+        When some members have not added availability, the label names how
+        many were checked (``All 2 with availability - works well``) so a
+        pod of 3 never reads ``Everyone`` on a 2-person fit.
+        """
         if self.missing:
             names = ', '.join(display_name(m.user) for m in self.missing)
             return f'Missing {len(self.missing)}: {names}'
+        who = 'Everyone'
+        if self.member_total > self.considered:
+            who = f'All {self.considered} with availability'
         if self.if_needed:
-            return 'Everyone - some if needed'
-        return 'Everyone - works well'
+            return f'{who} - some if needed'
+        return f'{who} - works well'
 
     @property
     def fit_tone(self):
@@ -175,6 +190,18 @@ def _local_minute(value, timezone_name):
     return local.hour * 60 + local.minute
 
 
+def minute_of_week(value):
+    """UTC minutes since Monday 00:00 for ``value``."""
+    value = value.astimezone(UTC)
+    return value.weekday() * 1440 + value.hour * 60 + value.minute
+
+
+def weekly_gap(first, second):
+    """Cyclic distance in minutes between two minute-of-week values."""
+    diff = abs(first - second) % MINUTES_PER_WEEK
+    return min(diff, MINUTES_PER_WEEK - diff)
+
+
 def required_attendance(considered):
     if considered < 2:
         return None
@@ -189,7 +216,12 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
     ``members`` are the pod members' :class:`MemberAvailability`; only those
     with windows are considered. ``all_members`` (default ``members``) feed
     the per-member local-time strip, which also names members whose zone is
-    known but who have no windows yet.
+    known but who have no windows yet, and the member total behind the
+    ``All N with availability`` label.
+
+    Variety: never two slots on the same UTC date, and never two whose
+    starts are less than ``MIN_WEEKLY_GAP_MINUTES`` apart on the weekly
+    cycle (issue #1927).
     """
     now = now or timezone.now()
     horizon_days = horizon_days or pods_config.suggestion_horizon_days()
@@ -222,15 +254,18 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
 
     chosen = []
     used_dates = set()
-    used_weekly = set()
-    strip_members = [m for m in (all_members or members) if m.timezone_name]
+    used_weekly = []
+    everyone = list(all_members or members)
+    strip_members = [m for m in everyone if m.timezone_name]
     for _rank, index, statuses in candidates:
         slot_start = grid.time_at(index)
-        weekly_key = (slot_start.weekday(), slot_start.hour, slot_start.minute)
-        if slot_start.date() in used_dates or weekly_key in used_weekly:
+        weekly = minute_of_week(slot_start)
+        if slot_start.date() in used_dates:
+            continue
+        if any(weekly_gap(weekly, other) < MIN_WEEKLY_GAP_MINUTES for other in used_weekly):
             continue
         used_dates.add(slot_start.date())
-        used_weekly.add(weekly_key)
+        used_weekly.append(weekly)
         chosen.append(Slot(
             start=slot_start,
             end=slot_start + timedelta(minutes=int(meeting_minutes)),
@@ -248,10 +283,32 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
                 for m in strip_members
             ],
             considered=len(considered),
+            member_total=max(len(everyone), len(considered)),
         ))
         if len(chosen) >= count:
             break
     return chosen
+
+
+def member_strip(slot, members):
+    """Per-slot strip for the member pod page: every pod member, in order.
+
+    Members with availability get ``Name HH:MM City``; members without it
+    (no windows, or no valid timezone) get ``no_availability`` so the page
+    reads ``Mike K. - no availability`` instead of a time they never
+    offered (issue #1927).
+    """
+    rows = []
+    for member in members:
+        row = {'member': member, 'name': display_name(member.user), 'no_availability': not member.has_windows}
+        if member.has_windows:
+            row.update({
+                'time': slot.start.astimezone(ZoneInfo(member.timezone_name)).strftime('%H:%M'),
+                'city': city_from_zone(member.timezone_name),
+                'timezone': member.timezone_name,
+            })
+        rows.append(row)
+    return rows
 
 
 def slots_attendable(member, slots):

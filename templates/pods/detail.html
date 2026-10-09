@@ -13,6 +13,7 @@
       {% member_status_badge state.badge tone=state.tone testid="pod-status-badge" %}
       {% if pod.status == 'archived' %}{% member_status_badge 'Archived' tone='muted' testid="pod-archived-badge" %}{% endif %}
     </div>
+    {% if request_notice %}<p class="mt-2 text-sm text-foreground" data-testid="{{ request_notice.testid }}">{{ request_notice.text }}{% if request_notice.link_url %} <a href="{{ request_notice.link_url }}" class="font-medium text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-request-browse">{{ request_notice.link_label }}</a>{{ request_notice.link_suffix }}{% endif %}</p>{% endif %}
     <p class="mt-3 whitespace-pre-line break-words text-base leading-relaxed text-muted-foreground" data-testid="pod-purpose">{{ pod.purpose }}</p>
     <p class="mt-2 text-sm text-muted-foreground" data-testid="pod-meta">{{ meta }}{% if owner_name %} · Started by {{ owner_name }}{% endif %}</p>
 
@@ -60,23 +61,24 @@
     {% endwith %}
     {% if suggestions.needs_more %}
     <p class="text-sm text-muted-foreground" data-testid="pod-times-needs-more">Suggested times appear when at least two members have added availability.</p>
-    {% elif suggestions.slots %}
+    {% else %}
+    {% if suggestions.based_on_line %}<p class="mb-3 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
+    {% if suggestions.slots %}
     <ol class="divide-y divide-border border-y border-border" data-testid="pod-slots">
       {% for row in suggestions.slots %}
       <li class="py-3" data-testid="pod-slot">
         <p class="text-sm font-semibold text-foreground"><time datetime="{{ row.start_iso }}" data-testid="pod-slot-time">{{ row.start_label }}</time> <span class="font-normal text-muted-foreground">· {{ pod.meeting_minutes }} min</span></p>
         <div class="mt-1">{% member_status_badge row.fit_label tone=row.fit_tone testid="pod-slot-fit" %}</div>
         <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-slot-strip">
-          {% for local in row.strip %}<span data-testid="pod-slot-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endfor %}
+          {% for local in row.strip %}{% if local.no_availability %}<span data-testid="pod-slot-strip-item" data-no-availability="true">{{ local.name }} - no availability</span>{% else %}<span data-testid="pod-slot-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endif %}{% endfor %}
         </p>
       </li>
       {% endfor %}
     </ol>
-    {% if suggestions.based_on_line %}<p class="mt-3 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
     {% else %}
     <p class="text-sm text-foreground" data-testid="pod-times-no-fit">{{ suggestions.no_fit_line }}</p>
-    {% if suggestions.based_on_line %}<p class="mt-2 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
     <a href="{{ availability_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-edit-availability">Edit my availability <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    {% endif %}
     {% endif %}
   </section>
   {% endif %}

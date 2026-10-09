@@ -203,6 +203,12 @@ SCHEDULE_DEFINITIONS = (
         description="daily at 05:30 UTC",
     ),
     ScheduleDefinition(
+        "pods-stale-request-alert",
+        "pods.tasks.stale_requests.send_stale_request_alert",
+        "0 9 * * *",
+        description="daily at 09:00 UTC",
+    ),
+    ScheduleDefinition(
         "onboarding-reminders",
         "accounts.tasks.remind_onboarding.remind_onboarding_incomplete",
         "30 6 * * *",

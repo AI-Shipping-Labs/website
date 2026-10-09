@@ -19,8 +19,6 @@ owner bell, and the HTTP response to the commenter never depend on Slack.
 
 import logging
 
-import requests
-
 from accounts.utils.display import display_name
 from community.slack_config import slack_api_enabled
 from content.models import Unit, WorkshopPage
@@ -31,12 +29,16 @@ from notifications.services.notification_service import (
     _resolve_commented_content,
     content_comment_urls,
 )
+from notifications.services.staff_slack import (
+    escape_slack_text,
+    message_payload,
+    mrkdwn,
+    post_staff_slack_message,
+    staff_alert_channel_id,
+)
 
 logger = logging.getLogger(__name__)
 
-SLACK_POST_MESSAGE_URL = 'https://slack.com/api/chat.postMessage'
-# (connect, read): keeps the whole call bounded near five seconds.
-SLACK_TIMEOUT_SECONDS = (3.05, 5)
 PREVIEW_MAX_CHARS = 300
 
 
@@ -54,24 +56,7 @@ def staff_comment_alerts_enabled():
 
 def staff_comment_channel_id():
     """Return the comment-alert channel, falling back to the signup feed."""
-    channel = str(get_config('STAFF_COMMENT_NOTIFY_CHANNEL_ID', '') or '').strip()
-    if channel:
-        return channel
-    return str(get_config('STAFF_SIGNUP_NOTIFY_CHANNEL_ID', '') or '').strip()
-
-
-def escape_slack_text(value):
-    """Escape the three control characters Slack mrkdwn interprets.
-
-    Escaping ``&``, ``<`` and ``>`` stops user text such as ``<!channel>``
-    or ``<https://x|y>`` from becoming a mention or an injected link.
-    """
-    return (
-        str(value or '')
-        .replace('&', '&amp;')
-        .replace('<', '&lt;')
-        .replace('>', '&gt;')
-    )
+    return staff_alert_channel_id()
 
 
 def comment_preview(body):
@@ -94,16 +79,6 @@ def _surface_label(content):
     if isinstance(content, WorkshopPage):
         return 'Workshop page'
     return None
-
-
-def _mrkdwn(text):
-    """A ``verbatim`` mrkdwn text object.
-
-    ``verbatim: true`` stops Slack from auto-parsing plain ``@channel``,
-    ``@here``, ``@everyone``, channel names, and bare URLs in member text;
-    the explicit ``<url|label>`` links built here still render.
-    """
-    return {'type': 'mrkdwn', 'text': text, 'verbatim': True}
 
 
 def build_staff_comment_message(comment, content, content_title):
@@ -141,15 +116,15 @@ def build_staff_comment_message(comment, content, content_title):
     preview = escape_slack_text(comment_preview(comment.body))
 
     blocks = [
-        {'type': 'section', 'text': _mrkdwn(headline)},
+        {'type': 'section', 'text': mrkdwn(headline)},
         {
             'type': 'context',
-            'elements': [_mrkdwn(surface)],
+            'elements': [mrkdwn(surface)],
         },
     ]
     if preview:
         blocks.append(
-            {'type': 'section', 'text': _mrkdwn(f'>{preview}')},
+            {'type': 'section', 'text': mrkdwn(f'>{preview}')},
         )
     blocks.append({
         'type': 'actions',
@@ -159,14 +134,7 @@ def build_staff_comment_message(comment, content, content_title):
             'url': thread_url,
         }],
     })
-    return {
-        'text': escape_slack_text(fallback),
-        'blocks': blocks,
-        'unfurl_links': False,
-        'unfurl_media': False,
-        'link_names': False,
-        'parse': 'none',
-    }
+    return message_payload(escape_slack_text(fallback), blocks)
 
 
 def notify_staff_of_comment(comment):
@@ -214,29 +182,17 @@ def _notify_staff_of_comment(comment):
     if message is None:
         return False
 
-    try:
-        response = requests.post(
-            SLACK_POST_MESSAGE_URL,
-            json={'channel': channel_id, **message},
-            headers={
-                'Authorization': f'Bearer {get_config("SLACK_BOT_TOKEN")}',
-                'Content-Type': 'application/json; charset=utf-8',
-            },
-            timeout=SLACK_TIMEOUT_SECONDS,
-        )
-        data = response.json()
-    except (requests.exceptions.RequestException, ValueError):
-        logger.exception(
+    result = post_staff_slack_message(channel_id, message)
+    if result.exception is not None:
+        logger.error(
             'Staff comment Slack alert failed for comment %s (channel=%s)',
-            comment.pk, channel_id,
+            comment.pk, channel_id, exc_info=result.exception,
         )
         return False
-
-    if not isinstance(data, dict) or not data.get('ok'):
-        error = data.get('error', 'unknown') if isinstance(data, dict) else 'non-dict'
+    if not result.ok:
         logger.error(
             'Staff comment Slack alert rejected for comment %s (channel=%s): %s',
-            comment.pk, channel_id, error,
+            comment.pk, channel_id, result.error,
         )
         return False
 

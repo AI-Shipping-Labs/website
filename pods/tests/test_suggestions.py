@@ -79,11 +79,12 @@ class RankingAndDiversityTest(SimpleTestCase):
         self.assertEqual(len(suggest_slots([a, b, c], 60, horizon_days=7, count=2)), 2)
 
     @freeze_time('2026-07-05 00:00:00')  # date-rot-ok: frozen Sunday, two week horizon
-    def test_never_two_slots_on_same_utc_date_or_same_weekday_and_time(self):
+    def test_never_two_slots_on_same_utc_date_or_within_an_hour_of_the_weekly_cycle(self):
         a = member('A', 'UTC', [(TUESDAY, '12:00', '14:00')])
         b = member('B', 'UTC', [(TUESDAY, '12:00', '14:00')])
         slots = suggest_slots([a, b], 60, horizon_days=14, count=5)
-        self.assertEqual([s.start for s in slots], [utc(2026, 7, 7, 12), utc(2026, 7, 14, 12, 15)])
+        # Issue #1927: 12:15 / 12:30 / 12:45 of the next Tuesday are near-duplicates.
+        self.assertEqual([s.start for s in slots], [utc(2026, 7, 7, 12), utc(2026, 7, 14, 13)])
 
     @freeze_time('2026-07-05 00:00:00')  # date-rot-ok: frozen Sunday
     def test_four_members_need_three_and_two_members_need_both(self):

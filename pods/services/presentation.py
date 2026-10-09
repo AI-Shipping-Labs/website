@@ -24,7 +24,16 @@ from pods.models import (
 )
 from pods.services import config as pods_config
 from pods.services.availability import freshness_line, summary_rows
-from pods.services.membership import can_manage, pod_url
+from pods.services.membership import (
+    REREQUEST_COOLDOWN,
+    REREQUEST_FINAL,
+    REREQUEST_RETRY,
+    can_manage,
+    pod_url,
+    pods_tab_url,
+    rerequest_state,
+    user_date_label,
+)
 from pods.services.people import (
     display_name,
     humanize_age,
@@ -36,6 +45,7 @@ from pods.services.people import (
 from pods.services.slack import profile_url, suggested_channel_name
 from pods.services.suggestions import (
     load_member_availability,
+    member_strip,
     required_attendance,
     slots_attendable,
     suggest_slots,
@@ -199,7 +209,13 @@ def _viewer_zone(viewer_availability, viewer):
     return 'UTC'
 
 
-def slot_rows(slots, viewer_zone):
+def slot_rows(slots, viewer_zone, members):
+    """Template rows for suggested slots.
+
+    ``members`` (the pod's :class:`MemberAvailability` rows in membership
+    order) drive the strip, so members without availability are listed as
+    ``no availability`` rather than dropped or given a time.
+    """
     viewer = SimpleNamespace(preferred_timezone=viewer_zone)
     rows = []
     for slot in slots:
@@ -209,7 +225,7 @@ def slot_rows(slots, viewer_zone):
             'start_iso': slot.start.isoformat(),
             'fit_label': slot.fit_label,
             'fit_tone': slot.fit_tone,
-            'strip': slot.local_starts,
+            'strip': member_strip(slot, members),
         })
     return rows
 
@@ -248,7 +264,7 @@ def suggestions_context(pod, members_availability, viewer_zone, *, now=None):
         members_availability, pod.meeting_minutes, now=now, all_members=members_availability,
     )
     context['raw_slots'] = slots
-    context['slots'] = slot_rows(slots, viewer_zone)
+    context['slots'] = slot_rows(slots, viewer_zone, members_availability)
     if missing:
         names = [display_name(m.user) for m in missing]
         verb = "hasn't" if len(names) == 1 else "haven't"
@@ -263,6 +279,31 @@ def suggestions_context(pod, members_availability, viewer_zone, *, now=None):
             'Ask members to add more windows, or add some yourself.'
         )
     return context
+
+
+def request_notice(rerequest, viewer):
+    """The line under the ``Not accepted`` badge (issue #1927), or ``None``."""
+    if rerequest.key == REREQUEST_COOLDOWN:
+        return {
+            'testid': 'pod-request-blocked',
+            'text': (
+                'Your request was not accepted. You can ask again on '
+                f'{user_date_label(rerequest.available_at, viewer)}.'
+            ),
+        }
+    if rerequest.key == REREQUEST_RETRY:
+        return {
+            'testid': 'pod-request-retry',
+            'text': 'Your last request was not accepted. You can ask once more.',
+        }
+    if rerequest.key == REREQUEST_FINAL:
+        return {
+            'testid': 'pod-request-blocked',
+            'text': "This pod declined your request twice, so you can't ask to join it again.",
+            'link_label': 'Browse other pods',
+            'link_suffix': ' or start your own.',
+        }
+    return None
 
 
 def build_pod_page(pod, viewer, *, now=None):
@@ -296,6 +337,16 @@ def build_pod_page(pod, viewer, *, now=None):
         open_request=open_requests.get(pod.pk), last_request=last_requests.get(pod.pk),
         can_request=can_request,
     )
+    rerequest = None
+    notice = None
+    if not is_member and state.request is None:
+        rerequest = rerequest_state(pod, viewer, now=now)
+        notice = request_notice(rerequest, viewer)
+        if rerequest.key == REREQUEST_RETRY and state.key != STATE_DECLINED:
+            # A later withdrawn request: no "last request was not accepted".
+            notice = None
+        if notice and notice.get('link_label'):
+            notice['link_url'] = pods_tab_url(pod.cohort)
     show_private = is_member or is_staff
     viewer_slack_ok = is_slack_eligible(viewer)
 
@@ -386,7 +437,9 @@ def build_pod_page(pod, viewer, *, now=None):
         'can_request': (
             can_request and not is_member and state.request is None
             and pod.status == POD_STATUS_OPEN
+            and not (rerequest and rerequest.blocked)
         ),
+        'request_notice': notice,
         'request_label': 'Join waiting list' if count >= pod.max_members else 'Request to join',
         'show_private': show_private,
         'suggestions': suggestions,

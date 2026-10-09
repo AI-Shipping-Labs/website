@@ -14752,6 +14752,7 @@
                       "email": "mike@example.com",
                       "id": 12,
                       "message": "I am building a RAG eval harness",
+                      "stale_alerted_at": null,
                       "status": "pending",
                       "waitlist_position": null
                     }
@@ -14829,6 +14830,7 @@
                       "email": "mike@example.com",
                       "id": 12,
                       "message": "I am building a RAG eval harness",
+                      "stale_alerted_at": null,
                       "status": "pending",
                       "waitlist_position": null
                     }
@@ -14955,6 +14957,7 @@
                       "email": "mike@example.com",
                       "id": 12,
                       "message": "I am building a RAG eval harness",
+                      "stale_alerted_at": null,
                       "status": "pending",
                       "waitlist_position": null
                     }
@@ -15111,6 +15114,7 @@
                       "email": "mike@example.com",
                       "id": 12,
                       "message": "I am building a RAG eval harness",
+                      "stale_alerted_at": null,
                       "status": "pending",
                       "waitlist_position": null
                     }
@@ -15252,6 +15256,7 @@
                         "email": "mike@example.com",
                         "id": 12,
                         "message": "I am building a RAG eval harness",
+                        "stale_alerted_at": null,
                         "status": "pending",
                         "waitlist_position": null
                       }
@@ -15415,6 +15420,7 @@
                       "email": "mike@example.com",
                       "id": 12,
                       "message": "I am building a RAG eval harness",
+                      "stale_alerted_at": null,
                       "status": "pending",
                       "waitlist_position": null
                     }
@@ -15491,6 +15497,7 @@
                   "email": "mike@example.com",
                   "id": 12,
                   "message": "I am building a RAG eval harness",
+                  "stale_alerted_at": null,
                   "status": "approved",
                   "waitlist_position": null
                 }
@@ -15573,6 +15580,7 @@
                   "email": "mike@example.com",
                   "id": 12,
                   "message": "I am building a RAG eval harness",
+                  "stale_alerted_at": null,
                   "status": "declined",
                   "waitlist_position": null
                 }

@@ -94,7 +94,8 @@ def _validate_list_filters(params):
 @click.option(
     "--homework-step",
     help="Public step slug (intro, q2-reflect, learning-in-public, review); "
-    "requires --course, --module, and --unit.",
+    "review lists the unit thread archive, learning-in-public lists nothing. "
+    "Requires --course, --module, and --unit.",
 )
 @click.option("--workshop", "workshop_key")
 @click.option("--page", "page_slug")

@@ -12,6 +12,11 @@
   // `can_moderate`, every top-level comment and reply also renders Edit and
   // Delete (soft hide). The list payload is the source of truth -- the
   // server enforces the same staff-only rule on the write endpoints.
+  //
+  // Read-only archive (issue #1925): a wrapper with `data-read-only="true"`
+  // renders no Reply toggle, reply form, or vote button (the vote count
+  // stays visible). Staff moderation still renders. UI-level only: the
+  // write endpoints are unchanged.
   (function() {
     var sections = document.querySelectorAll('.qa-thread');
     if (!sections.length) return;
@@ -95,11 +100,38 @@
       '</div>';
     }
 
-    function renderComment(comment, canModerate) {
+    var UPVOTE_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>';
+
+    function renderVoteControl(comment, readOnly) {
+      if (readOnly) {
+        // Archived threads keep earned upvotes visible but not clickable;
+        // a zero count is omitted rather than shown as a bare "0".
+        if (!comment.vote_count) return '';
+        return '<span class="text-muted-foreground" aria-hidden="true">' + UPVOTE_SVG + '</span>' +
+          '<span class="qa-vote-count text-sm font-medium" aria-label="' + comment.vote_count + ' upvotes">' + comment.vote_count + '</span>';
+      }
       var votedClass = comment.user_voted
         ? 'text-accent'
         : 'text-muted-foreground hover:text-foreground';
       var votedFill = comment.user_voted ? 'fill-current' : '';
+      return '<button class="qa-vote-btn transition-colors ' + votedClass + '" data-comment-id="' + comment.id + '" title="Upvote">' +
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="' + votedFill + '"><path d="M12 19V5M5 12l7-7 7 7"/></svg>' +
+        '</button>' +
+        '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>';
+    }
+
+    function renderReplyControls(comment, readOnly) {
+      if (readOnly) return { toggle: '', form: '' };
+      return {
+        toggle: '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>',
+        form: '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
+          '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
+          '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
+        '</div>',
+      };
+    }
+
+    function renderComment(comment, canModerate, readOnly) {
       var modButtons = canModerate ? renderModerationButtons(comment.id) : '';
       var editForm = canModerate ? renderEditForm(comment.id, comment.body) : '';
 
@@ -124,26 +156,22 @@
       }
 
       var hasReplies = comment.replies && comment.replies.length > 0;
+      var reply = renderReplyControls(comment, readOnly);
+      var actionsHtml = reply.toggle + modButtons;
+      var voteHtml = renderVoteControl(comment, readOnly);
 
       return '<div class="qa-card mb-4 rounded-lg border border-border bg-card p-4" data-comment-id="' + comment.id + '" data-reply-count="' + (hasReplies ? comment.replies.length : 0) + '">' +
         '<div class="flex gap-3">' +
-          '<div class="flex flex-col items-center gap-1">' +
-            '<button class="qa-vote-btn transition-colors ' + votedClass + '" data-comment-id="' + comment.id + '" title="Upvote">' +
-              '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="' + votedFill + '"><path d="M12 19V5M5 12l7-7 7 7"/></svg>' +
-            '</button>' +
-            '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>' +
-          '</div>' +
+          (voteHtml
+            ? '<div class="flex flex-col items-center gap-1">' + voteHtml + '</div>'
+            : '') +
           '<div class="flex-1 min-w-0">' +
             renderMetaLine(comment.user_name, comment.created_at, 'comment-timestamp', comment.is_edited) +
             '<p class="qa-body mb-2 break-words text-sm text-foreground">' + escapeHtml(comment.body) + '</p>' +
-            '<div class="flex flex-wrap items-center gap-x-4 gap-y-1">' +
-              '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>' +
-              modButtons +
-            '</div>' +
-            '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
-              '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
-              '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
-            '</div>' +
+            (actionsHtml
+              ? '<div class="flex flex-wrap items-center gap-x-4 gap-y-1">' + actionsHtml + '</div>'
+              : '') +
+            reply.form +
             editForm +
             repliesHtml +
           '</div>' +
@@ -158,6 +186,7 @@
       var countWrapperEl = section.querySelector('.qa-count-wrapper');
       var postBtn = section.querySelector('.qa-post-btn');
       var textarea = section.querySelector('.qa-new-question');
+      var readOnly = section.dataset.readOnly === 'true';
       if (!listEl) return;
 
       function loadComments() {
@@ -167,6 +196,12 @@
             var comments = data.comments || [];
             var canModerate = data.can_moderate === true;
             if (countEl) countEl.textContent = comments.length;
+            // Lets a host surface mirror the visible count (the homework
+            // review archive summary, issue #1925) without reaching in.
+            section.dispatchEvent(new CustomEvent('qa:loaded', {
+              bubbles: true,
+              detail: { count: comments.length },
+            }));
             // Hide the parenthesized count entirely when the thread is
             // empty so the heading reads "Comments" rather than
             // "Comments (0)" (issue #597). The count span itself is kept
@@ -184,7 +219,7 @@
             }
             var html = '';
             for (var i = 0; i < comments.length; i++) {
-              html += renderComment(comments[i], canModerate);
+              html += renderComment(comments[i], canModerate, readOnly);
             }
             listEl.innerHTML = html;
             bindEvents();

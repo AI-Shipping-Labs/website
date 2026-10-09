@@ -1,10 +1,20 @@
-"""Bind homework stepper pages to their Q&A comment threads (issue #1897).
+"""Bind homework stepper pages to their Q&A comment threads.
 
 On a stepper homework, the Q&A thread is bound to the current stepper page
-instead of the homework unit as a whole: each question step, the optional
-``learning-in-public`` step, and ``review`` own one thread; ``intro`` keeps
-mounting the unit's own ``content_id`` thread, exactly like the non-stepper
-all-questions page and every lesson unit.
+instead of the homework unit as a whole (issue #1897). Issue #1925 narrowed
+which pages carry Q&A:
+
+- ``intro`` and every question step own one live thread (composer on).
+- ``learning-in-public`` renders no Q&A at all.
+- ``review`` renders no live thread; it shows the unit's own ``content_id``
+  thread read-only, as the ``Earlier homework discussion`` archive. That
+  unit thread holds the pre-#1897 whole-homework comments, the comments
+  posted on ``intro`` while it still mounted the unit thread, and (moved by
+  ``content`` migration ``0086``) the comments once posted on the
+  ``review`` / ``learning-in-public`` step threads.
+
+The non-stepper all-questions page and every lesson unit keep mounting the
+unit thread with its composer.
 
 Thread identity is a deterministic ``uuid5`` over the pair (unit's stable
 content identity, public step slug), so the same unit and step keep the same
@@ -15,6 +25,7 @@ belongs to the current step.
 
 import uuid
 
+from comments.models import Comment
 from content.models.homework import HomeworkStepThread
 
 # Namespace for derived step-thread UUIDs. Fixed so every environment and
@@ -25,6 +36,12 @@ HOMEWORK_STEP_THREAD_NAMESPACE = uuid.uuid5(
 
 INTRO_STEP = 'intro'
 REVIEW_STEP = 'review'
+LEARNING_IN_PUBLIC_STEP = 'learning-in-public'
+
+# Steps that used to own a live thread (issue #1897) and no longer do
+# (issue #1925). Their stored rows stay registered owners; their comments
+# were moved onto the unit thread by a data migration.
+RETIRED_THREAD_STEPS = (REVIEW_STEP, LEARNING_IN_PUBLIC_STEP)
 
 # Sidebar titles the homework stepper renders for the fixed steps
 # (``community_base.homework_steps.views._render`` nav_steps).
@@ -41,45 +58,43 @@ def step_thread_content_id(unit_content_id, step_slug):
 
 
 def mounted_content_id(unit_content_id, step_slug):
-    """Return the UUID the given step page mounts.
+    """Return the UUID whose comments the given step page shows, or None.
 
-    ``intro`` mounts the unit thread (existing unit-thread comments stay
-    visible there after the stepper is enabled); every other step mounts its
-    derived step thread.
+    ``review`` shows the unit thread (read-only archive),
+    ``learning-in-public`` shows nothing (``None``), and ``intro`` plus every
+    question step show their own derived step thread.
     """
-    if step_slug == INTRO_STEP:
+    if step_slug == REVIEW_STEP:
         return unit_content_id
+    if step_slug == LEARNING_IN_PUBLIC_STEP:
+        return None
     return step_thread_content_id(unit_content_id, step_slug)
 
 
 def step_slugs(homework):
-    """Return the public step slugs that own their own thread.
+    """Return the public step slugs that own a live thread.
 
-    Mirrors the stepper's valid steps (``_is_valid_homework_route_step``):
-    every question's public key plus ``review``, plus ``learning-in-public``
-    when the homework has a learning-in-public cap. ``intro`` is excluded --
-    it mounts the unit thread and owns no separate identity.
+    ``intro`` plus every question's public key, in stepper order. ``review``
+    and ``learning-in-public`` carry no live Q&A (issue #1925).
     """
     from content.services.homework_step_reader import (  # noqa: PLC0415
-        LEARNING_IN_PUBLIC_KEY,
         question_key,
     )
 
-    slugs = [question_key(question) for question in homework.questions.all()]
-    if homework.learning_in_public_cap:
-        slugs.append(LEARNING_IN_PUBLIC_KEY)
-    slugs.append(REVIEW_STEP)
-    return slugs
+    return [INTRO_STEP] + [
+        question_key(question) for question in homework.questions.all()
+    ]
 
 
 def ensure_homework_step_threads(unit, homework):
-    """Persist and return the thread UUID each stepper page mounts.
+    """Persist and return the thread UUID each live-Q&A stepper page mounts.
 
     One row per step slug keeps step threads resolvable for notifications,
     orphan detection, and the operator API -- including steps whose question
-    was later removed from source (their comments stay stored). Returns a
-    mapping of every valid step slug (``intro`` included, mapped to the
-    unit's own ``content_id``) to its mounted UUID string.
+    was later removed from source (their comments stay stored). Rows are
+    only created for ``intro`` and question steps; existing ``review`` /
+    ``learning-in-public`` rows are left in place. Returns a mapping of each
+    live-Q&A step slug to its mounted UUID string.
     """
     unit_content_id = unit.content_id
     if not unit_content_id:
@@ -104,7 +119,6 @@ def ensure_homework_step_threads(unit, homework):
             )
             mounted_uuid = str(thread.content_id)
         mounted[slug] = mounted_uuid
-    mounted[INTRO_STEP] = str(unit_content_id)
     return mounted
 
 
@@ -113,7 +127,8 @@ def unit_has_stepper_homework(unit):
 
     Stepper state is authored per unit and synced to every cohort's
     ``Homework`` row, so any stepper-enabled row with questions means the
-    unit renders stepper pages whose unit thread is mounted on ``intro``.
+    unit renders stepper pages whose unit thread is shown on ``review`` as
+    the read-only archive.
     """
     from content.models.homework import Homework  # noqa: PLC0415
 
@@ -122,6 +137,23 @@ def unit_has_stepper_homework(unit):
         stepper_enabled=True,
         questions__isnull=False,
     ).exists()
+
+
+def archived_unit_comment_count(unit_content_id):
+    """Count the visible top-level comments of a unit's own thread.
+
+    The Review & submit step shows the unit thread as the read-only
+    ``Earlier homework discussion (N)`` archive only when N > 0. Matches the
+    browser list endpoint: hidden comments and replies are not counted.
+    One indexed ``COUNT`` query.
+    """
+    if not unit_content_id:
+        return 0
+    return Comment.objects.filter(
+        content_id=unit_content_id,
+        parent__isnull=True,
+        hidden_at__isnull=True,
+    ).count()
 
 
 def step_page_url(unit, step_slug):

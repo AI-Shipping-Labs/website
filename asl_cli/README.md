@@ -86,13 +86,17 @@ find what to restore:
 uv run asl comments list --moderation-state hidden --limit 100
 ```
 
-A homework unit with the homework stepper enabled owns one comment thread per
-stepper page (issue #1897). A unit filter returns the unit thread and every
-homework step thread of that unit; each homework-step row's `context` names
-the `homework_step` slug and links to that step plus `#qa-section`. Isolate
-one step with `--homework-step` and a public step slug (`intro`, an authored
-question id such as `q2-reflect`, `learning-in-public`, or `review`); it
-requires `--course`, `--module`, and `--unit`:
+A homework unit with the homework stepper enabled binds Q&A to the stepper
+page (issues #1897 and #1925): `intro` and each question step own a thread,
+`learning-in-public` has no Q&A, and `review` shows the unit thread read-only
+as the `Earlier homework discussion` archive. A unit filter returns the unit
+thread and every homework step thread of that unit; each homework-step row's
+`context` names the `homework_step` slug (`review` for the unit thread of a
+stepper unit) and links to that step plus `#qa-section`. Isolate one step with
+`--homework-step` and a public step slug: `intro` or an authored question id
+such as `q2-reflect` returns that step's thread, `review` returns the unit
+thread, and `learning-in-public` returns nothing. It requires `--course`,
+`--module`, and `--unit`:
 
 ```bash
 uv run asl comments list --course ai-buildcamp --module foundation \

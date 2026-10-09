@@ -31,6 +31,14 @@ Parameters:
   where comments are visible but only staff can write.
 - ``composer_disabled_reason`` (optional): the text shown in the
   disabled notice. Defaults to a generic message.
+- ``read_only`` (optional, default False): archive mode (issue #1925, the
+  homework Review & submit ``Earlier homework discussion``). When True the
+  thread renders no heading (the caller's disclosure summary names it), no
+  composer, no anonymous sign-up prompt, and the wrapper carries
+  ``data-read-only="true"`` so ``comments/_qa_script.html`` renders no
+  ``Reply`` toggle, reply form, or vote button. Staff still get the #1894
+  Edit/Delete controls. This is a UI-level rule only: the browser comments
+  API still accepts a hand-crafted POST to the thread's UUID.
 - ``instance_id`` (optional): a unique suffix appended to every element
   id so several threads can coexist on one page (the Book Club chapter
   page, issue #1365, renders one thread per member note). When omitted
@@ -51,13 +59,13 @@ Staff moderation (issue #1894) needs no extra parameters: the script in
 the list payload reports ``can_moderate`` for the signed-in staff viewer.
 {% endcomment %}
 {% load accounts_extras %}
-<div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}">
+<div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}"{% if read_only %} data-read-only="true"{% endif %}>{% if not read_only %}
   <h2 class="mb-6 flex items-center gap-2 {{ heading_class|default:'text-xl' }} font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
     {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %}<span class="qa-count-wrapper" id="qa-count-wrapper{% if instance_id %}-{{ instance_id }}{% endif %}" hidden> (<span class="qa-count" id="qa-count{% if instance_id %}-{{ instance_id }}{% endif %}">0</span>)</span>
-  </h2>
+  </h2>{% endif %}
 
-  {% if user_authenticated %}
+  {% if read_only %}{% elif user_authenticated %}
     {% if composer_disabled %}
     <div class="mb-8 rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground" data-testid="qa-composer-disabled">
       {{ composer_disabled_reason|default:"Discussion is not available right now." }}

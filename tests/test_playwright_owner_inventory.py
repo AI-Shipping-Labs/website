@@ -1453,9 +1453,9 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_homework_step_qa_1897.py::"
         "test_instructor_notification_opens_the_step_page",
         "playwright_tests/test_homework_step_qa_1897.py::"
-        "test_intro_discussion_stays_on_intro_with_unit_thread_leftovers",
+        "test_intro_has_its_own_thread_without_unit_thread_leftovers",
         "playwright_tests/test_homework_step_qa_1897.py::"
-        "test_learning_in_public_and_review_comments_stay_on_their_pages",
+        "test_learning_in_public_and_review_have_no_live_qa",
         "playwright_tests/test_homework_step_qa_1897.py::"
         "test_lesson_thread_does_not_mix_with_homework_steps",
         "playwright_tests/test_homework_step_qa_1897.py::"
@@ -1562,6 +1562,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_admin_overrides_an_owner_who_has_not_answered",
         "playwright_tests/test_pods_1918.py::"
         "test_pods_stay_hidden_until_the_course_is_enabled",
+    })
+
+    issue_1925_owners = frozenset({
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_learner_reviewing_reads_the_earlier_discussion_read_only",
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_review_stays_clean_without_earlier_discussion",
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_comments_from_review_and_lip_threads_survive_in_the_archive",
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_staff_hides_a_leftover_spoiler_from_the_archive",
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_instructor_notification_for_an_intro_question_opens_intro",
+        "playwright_tests/test_homework_qa_scope_1925.py::"
+        "test_cohort_learner_sees_the_same_intro_thread",
     })
 
     issue_1924_owners = frozenset({
@@ -1810,8 +1825,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2779)
-        self.assertEqual(len(inventory.owners), 2575)
+        self.assertEqual(inventory.item_count, 2785)
+        self.assertEqual(len(inventory.owners), 2581)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1828,6 +1843,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1917_owners
             | self.issue_1923_owners
             | self.issue_1924_owners
+            | self.issue_1925_owners
             | self.issue_1926_owners
             | self.issue_1918_owners
             | self.youtube_referrer_owners

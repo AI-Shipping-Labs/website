@@ -752,12 +752,24 @@ class HomeworkStepCommentNotifyTest(TestCase):
             note.url, f'{self.unit.get_absolute_url()}/review#qa-section',
         )
 
-    def test_unit_thread_comment_on_a_stepper_unit_links_to_intro(self):
+    def test_comment_on_intro_step_links_to_intro(self):
+        """Issue #1925: intro owns its own step thread."""
+        thread = self._create_step_thread('intro')
+        self._comment(thread.content_id)
+
+        note = Notification.objects.get(notification_type='content_comment')
+        self.assertEqual(note.title, 'New comment on Homework One — Introduction')
+        self.assertEqual(
+            note.url, f'{self.unit.get_absolute_url()}/intro#qa-section',
+        )
+
+    def test_unit_thread_comment_on_a_stepper_unit_links_to_review(self):
+        """Issue #1925: the unit thread is the Review & submit archive."""
         self._comment(self.unit.content_id)
 
         note = Notification.objects.get(notification_type='content_comment')
         self.assertEqual(
-            note.url, f'{self.unit.get_absolute_url()}/intro#qa-section',
+            note.url, f'{self.unit.get_absolute_url()}/review#qa-section',
         )
 
     def test_lesson_unit_comment_keeps_the_unit_url(self):

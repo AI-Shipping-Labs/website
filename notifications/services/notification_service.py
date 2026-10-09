@@ -464,16 +464,16 @@ def content_comment_urls(content):
         )
     if isinstance(content, Unit):
         from content.services.homework_step_threads import (  # noqa: PLC0415
-            INTRO_STEP,
+            REVIEW_STEP,
             step_page_url,
             unit_has_stepper_homework,
         )
 
         if unit_has_stepper_homework(content):
-            # Issue #1897: on stepper homework the unit thread is mounted on
-            # the intro step only, so its notices deep-link there instead of
-            # the bare unit URL.
-            return (f'{step_page_url(content, INTRO_STEP)}#qa-section',)
+            # Issue #1925: on stepper homework the unit thread is shown only
+            # on Review & submit, as the read-only archive, so its notices
+            # deep-link there instead of the bare unit URL.
+            return (f'{step_page_url(content, REVIEW_STEP)}#qa-section',)
     if hasattr(content, 'get_absolute_url'):
         return (content.get_absolute_url() + '#qa-section',)
     return ()

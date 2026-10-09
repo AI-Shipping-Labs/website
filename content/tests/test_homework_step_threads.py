@@ -1,17 +1,20 @@
-"""Homework stepper Q&A thread identity (issue #1897).
+"""Homework stepper Q&A thread identity (issues #1897, #1925).
 
 Thread UUIDs are derived deterministically from (unit content identity,
 public step slug), so re-syncs and cohorts never fork a thread; the map the
-course unit view builds mounts the unit thread on ``intro`` and one derived
-thread per question/learning-in-public/review step.
+course unit view builds mounts one derived thread per intro/question step.
+``review`` shows the unit thread (read-only archive) and
+``learning-in-public`` shows nothing.
 """
 
 import datetime
 import uuid
 
+from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
 
+from comments.models import Comment
 from comments.threads import thread_owners
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort
@@ -24,8 +27,10 @@ from content.models.homework import (
 from content.services.homework_step_threads import (
     INTRO_STEP,
     LEARNING_IN_PUBLIC_SIDEBAR_TITLE,
+    LEARNING_IN_PUBLIC_STEP,
     REVIEW_SIDEBAR_TITLE,
     REVIEW_STEP,
+    archived_unit_comment_count,
     ensure_homework_step_threads,
     homework_step_sidebar_title,
     mounted_content_id,
@@ -53,9 +58,21 @@ class StepThreadIdentityTest(TestCase):
         other_unit = step_thread_content_id(uuid.uuid4(), 'q2-reflect')
         self.assertEqual(len({reflect, review, other_unit}), 3)
 
-    def test_intro_mounts_the_unit_thread(self):
+    def test_intro_mounts_its_derived_thread_not_the_unit_thread(self):
+        mounted = mounted_content_id(UNIT_CONTENT_ID, INTRO_STEP)
         self.assertEqual(
-            mounted_content_id(UNIT_CONTENT_ID, INTRO_STEP), UNIT_CONTENT_ID,
+            mounted, step_thread_content_id(UNIT_CONTENT_ID, INTRO_STEP),
+        )
+        self.assertNotEqual(mounted, UNIT_CONTENT_ID)
+
+    def test_review_shows_the_unit_thread(self):
+        self.assertEqual(
+            mounted_content_id(UNIT_CONTENT_ID, REVIEW_STEP), UNIT_CONTENT_ID,
+        )
+
+    def test_learning_in_public_shows_no_thread(self):
+        self.assertIsNone(
+            mounted_content_id(UNIT_CONTENT_ID, LEARNING_IN_PUBLIC_STEP),
         )
 
     def test_question_step_mounts_its_derived_thread(self):
@@ -103,35 +120,44 @@ class StepperThreadSetupMixin:
 
 
 class StepSlugsTest(StepperThreadSetupMixin, TestCase):
-    def test_slugs_cover_questions_learning_in_public_and_review(self):
+    def test_slugs_are_intro_and_questions_only(self):
+        """Learning in Public (cap set here) and review own no live thread."""
         self.assertEqual(
-            step_slugs(self.homework),
-            ['q1-first', 'q2-second', 'learning-in-public', REVIEW_STEP],
-        )
-
-    def test_learning_in_public_omitted_without_cap(self):
-        self.homework.learning_in_public_cap = 0
-        self.assertEqual(
-            step_slugs(self.homework),
-            ['q1-first', 'q2-second', REVIEW_STEP],
+            step_slugs(self.homework), [INTRO_STEP, 'q1-first', 'q2-second'],
         )
 
 
 class EnsureHomeworkStepThreadsTest(StepperThreadSetupMixin, TestCase):
-    def test_maps_every_step_and_persists_one_row_per_step(self):
+    def test_maps_intro_and_questions_and_persists_one_row_each(self):
         mounted = ensure_homework_step_threads(self.unit, self.homework)
 
+        self.assertEqual(list(mounted), [INTRO_STEP, 'q1-first', 'q2-second'])
         self.assertEqual(
-            list(mounted),
-            ['q1-first', 'q2-second', 'learning-in-public', REVIEW_STEP, INTRO_STEP],
+            mounted[INTRO_STEP],
+            str(step_thread_content_id(UNIT_CONTENT_ID, INTRO_STEP)),
         )
-        self.assertEqual(mounted[INTRO_STEP], str(UNIT_CONTENT_ID))
         self.assertEqual(
             mounted['q1-first'],
             str(step_thread_content_id(UNIT_CONTENT_ID, 'q1-first')),
         )
-        self.assertEqual(HomeworkStepThread.objects.count(), 4)
-        for slug in ('q1-first', 'q2-second', 'learning-in-public', REVIEW_STEP):
+        self.assertEqual(
+            sorted(HomeworkStepThread.objects.values_list('step_slug', flat=True)),
+            [INTRO_STEP, 'q1-first', 'q2-second'],
+        )
+
+    def test_keeps_existing_review_and_learning_in_public_rows(self):
+        """Rows created before #1925 stay registered owners."""
+        for slug in (REVIEW_STEP, LEARNING_IN_PUBLIC_STEP):
+            HomeworkStepThread.objects.create(
+                unit_content_id=UNIT_CONTENT_ID, step_slug=slug,
+                content_id=step_thread_content_id(UNIT_CONTENT_ID, slug),
+            )
+
+        mounted = ensure_homework_step_threads(self.unit, self.homework)
+
+        self.assertNotIn(REVIEW_STEP, mounted)
+        self.assertNotIn(LEARNING_IN_PUBLIC_STEP, mounted)
+        for slug in (REVIEW_STEP, LEARNING_IN_PUBLIC_STEP):
             self.assertTrue(
                 HomeworkStepThread.objects.filter(
                     unit_content_id=UNIT_CONTENT_ID, step_slug=slug,
@@ -151,7 +177,7 @@ class EnsureHomeworkStepThreadsTest(StepperThreadSetupMixin, TestCase):
         first = ensure_homework_step_threads(self.unit, self.homework)
         second = ensure_homework_step_threads(self.unit, self.homework)
         self.assertEqual(first, second)
-        self.assertEqual(HomeworkStepThread.objects.count(), 4)
+        self.assertEqual(HomeworkStepThread.objects.count(), 3)
 
     def test_removed_question_keeps_its_stored_thread(self):
         ensure_homework_step_threads(self.unit, self.homework)
@@ -180,6 +206,33 @@ class EnsureHomeworkStepThreadsTest(StepperThreadSetupMixin, TestCase):
         self.assertEqual(
             ensure_homework_step_threads(orphan, self.homework), {},
         )
+
+
+class ArchivedUnitCommentCountTest(StepperThreadSetupMixin, TestCase):
+    """Review & submit archive size: visible top-level unit comments only."""
+
+    def test_counts_visible_top_level_unit_comments_only(self):
+        user = get_user_model().objects.create_user(email='archive-count@test.com')
+        parent = Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=user, body='Q5 is 42',
+        )
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=user, body='Agreed', parent=parent,
+        )
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=user, body='Hidden spoiler',
+            hidden_at=timezone.now(),
+        )
+        Comment.objects.create(
+            content_id=step_thread_content_id(UNIT_CONTENT_ID, INTRO_STEP),
+            user=user, body='Intro question',
+        )
+
+        self.assertEqual(archived_unit_comment_count(UNIT_CONTENT_ID), 1)
+
+    def test_missing_unit_content_id_counts_zero_without_a_query(self):
+        with self.assertNumQueries(0):
+            self.assertEqual(archived_unit_comment_count(None), 0)
 
 
 class UnitHasStepperHomeworkTest(StepperThreadSetupMixin, TestCase):

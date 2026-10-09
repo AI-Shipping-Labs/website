@@ -103,9 +103,10 @@ def _owner_subquery(content_type, params):
         if 'unit_slug' in params:
             qs = qs.filter(slug=params['unit_slug'])
         # Issue #1897: a homework step filter isolates exactly the thread
-        # the step page mounts (intro keeps the unit content_id); without
-        # it, a unit filter returns the unit thread AND every homework step
-        # thread of the unit.
+        # the step page shows (issue #1925: intro and question steps their
+        # own thread, review the unit thread archive, learning-in-public
+        # nothing); without it, a unit filter returns the unit thread AND
+        # every homework step thread of the unit.
         if 'homework_step' in params:
             unit = qs.first()
             if unit is None or not unit.content_id:
@@ -114,7 +115,8 @@ def _owner_subquery(content_type, params):
                 mounted_content_id,
             )
 
-            return [mounted_content_id(unit.content_id, params['homework_step'])]
+            shown = mounted_content_id(unit.content_id, params['homework_step'])
+            return [shown] if shown is not None else []
         from content.models import HomeworkStepThread  # noqa: PLC0415
 
         # order_by() strips the models' default ordering: SQLite refuses
@@ -368,9 +370,10 @@ def _parse_list_filters(request, qs):
 def _course_context(unit, *, has_stepper_homework=False):
     """Context for the unit's own thread.
 
-    On stepper homework that thread is mounted on the ``intro`` step only
-    (issue #1897), so its context names that step and deep-links to it
-    instead of the bare unit URL.
+    On stepper homework that thread is shown only on ``review``, as the
+    read-only ``Earlier homework discussion`` archive (issue #1925), so its
+    context names that step and deep-links to it instead of the bare unit
+    URL.
     """
     module = unit.module
     course = module.course
@@ -386,12 +389,14 @@ def _course_context(unit, *, has_stepper_homework=False):
     }
     if has_stepper_homework:
         from content.services.homework_step_threads import (  # noqa: PLC0415
-            INTRO_STEP,
+            REVIEW_SIDEBAR_TITLE,
+            REVIEW_STEP,
             step_page_url,
         )
 
-        context['homework_step'] = INTRO_STEP
-        context['url'] = f'{step_page_url(unit, INTRO_STEP)}#qa-section'
+        context['homework_step'] = REVIEW_STEP
+        context['title'] = f'{context["title"]} — {REVIEW_SIDEBAR_TITLE}'
+        context['url'] = f'{step_page_url(unit, REVIEW_STEP)}#qa-section'
     return context
 
 
@@ -586,8 +591,10 @@ COMMENTS_QUERY = {
         'description': (
             'Public homework step slug (intro, an authored question id such '
             'as q2-reflect, learning-in-public, or review). Requires '
-            'course_slug, module_slug, and unit_slug; isolates that step '
-            "page's comment thread."
+            'course_slug, module_slug, and unit_slug; isolates the comments '
+            'that step page shows: intro and question steps their own '
+            'thread, review the unit thread (Earlier homework discussion '
+            'archive), learning-in-public none.'
         ),
     },
     'workshop_key': {'type': 'string', 'required': False},

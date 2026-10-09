@@ -22,7 +22,11 @@ from accounts.services.timezones import (
     get_timezone_label,
     is_valid_timezone,
 )
-from content.access import VISIBILITY_CHOICES
+from content.access import (
+    VISIBILITY_CHOICES,
+    get_active_overrides_by_user,
+    resolve_effective_tier,
+)
 from email_app.models import EmailCampaign
 from events.models import (
     Event,
@@ -70,7 +74,12 @@ from integrations.services.banner_generator.dispatch import enqueue_if_missing
 from integrations.services.zoom import ZoomAPIError, create_meeting
 from studio.decorators import staff_required
 from studio.services.banner_panel import banner_panel_context
-from studio.utils import get_github_edit_url, is_synced, studio_pagination_context
+from studio.utils import (
+    effective_tier_override_note,
+    get_github_edit_url,
+    is_synced,
+    studio_pagination_context,
+)
 from studio.views.form_helpers import parse_comma_separated_tags
 from studio.views.notifications import notification_action_context
 
@@ -943,7 +952,7 @@ def _event_edit_panels_context(event) -> dict:
         .select_related('user', 'user__membership__tier')
         .order_by('-registered_at')
     )
-    context['registrations'] = registrations
+    context['registrations'] = _with_effective_tiers(registrations)
     context['registration_count'] = registrations.count()
     context['reschedule_guard_enabled'] = (
         not is_synced(event) and event.start_datetime is not None
@@ -1296,6 +1305,28 @@ def event_edit(request, event_id):
     return render(request, 'studio/events/form.html', context)
 
 
+def _with_effective_tiers(registrations):
+    """Return ``registrations`` as a list carrying each user's effective tier.
+
+    Issue #1929: active tier overrides are resolved for the whole roster in
+    one batched query. Each registration gains ``effective_tier`` (a
+    ``content.access.EffectiveTier``) and ``tier_override_note`` (e.g.
+    ``override until Oct 30``, empty for base tiers).
+    """
+    registrations = list(registrations)
+    override_map = get_active_overrides_by_user(
+        [reg.user_id for reg in registrations],
+    )
+    for reg in registrations:
+        reg.effective_tier = resolve_effective_tier(
+            reg.user, override_map.get(reg.user_id),
+        )
+        reg.tier_override_note = effective_tier_override_note(
+            reg.effective_tier,
+        )
+    return registrations
+
+
 @staff_required
 def event_registrations_csv(request, event_id):
     """Export the roster for ``event_id`` as CSV.
@@ -1304,8 +1335,9 @@ def event_registrations_csv(request, event_id):
     ``HttpResponse(content_type='text/csv')`` + ``csv.writer`` + an attachment
     filename with a UTC timestamp. Session-gated via ``@staff_required``; no
     token mechanism. Columns are locked at ``email, name, registered_at, tier``
-    (in that order). The ``registered_at`` cell is ISO 8601 UTC. ``tier``
-    defaults to ``Free`` when the user row has no tier FK set.
+    (in that order). The ``registered_at`` cell is ISO 8601 UTC. ``tier`` is
+    the effective tier name (an active override above the base tier wins)
+    and defaults to ``Free`` when the user row has no tier FK set.
     """
     event = get_object_or_404(Event, pk=event_id)
 
@@ -1331,18 +1363,16 @@ def event_registrations_csv(request, event_id):
     # ``email, name, registered_at, tier`` columns (those keep their
     # order). Cell is ISO 8601 UTC when set, empty string when null.
     writer.writerow(['email', 'name', 'registered_at', 'tier', 'joined_at'])
-    for reg in registrations:
+    for reg in _with_effective_tiers(registrations):
         user = reg.user
         name = user.get_full_name() or ''
-        # Issue #1579: the tier lives on payments.Membership.
-        tier_name = (
-            user.membership.tier.name if user.membership.tier_id else 'Free'
-        )
         writer.writerow([
             user.email,
             name,
             reg.registered_at.isoformat() if reg.registered_at else '',
-            tier_name,
+            # Issue #1929: effective tier name only (no override suffix) so
+            # the column stays filterable in spreadsheets.
+            reg.effective_tier.name,
             (
                 reg.joined_at
                 .astimezone(_datetime.timezone.utc)

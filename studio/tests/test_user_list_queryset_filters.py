@@ -138,8 +138,8 @@ class StudioUserListQuerySetFiltersTest(TestCase):
         with (
             mock.patch('studio.views.users.USER_LIST_PAGE_SIZE', 3),
             mock.patch(
-                'studio.views.users._active_override_map',
-                wraps=users_view._active_override_map,
+                'studio.views.users.get_active_overrides_by_user',
+                wraps=users_view.get_active_overrides_by_user,
             ) as override_map_spy,
         ):
             response = self.client.get('/studio/users/', {'page': 2})

@@ -5,6 +5,9 @@ Provides the core access check pattern: membership tier level >= content.require
 Anonymous users are treated as level 0 (free tier).
 """
 
+from dataclasses import dataclass
+from datetime import datetime
+
 # Visibility level constants have one source since plan issue A0.3: the
 # community-base kernel. The values match the tier levels on payments.Tier.
 # LEVEL_REGISTERED stays a content-side sentinel (issue #465): no Tier row
@@ -167,20 +170,38 @@ def _get_override_level(user):
 
     Returns None if no active override exists.
     """
+    override = active_overrides_queryset().filter(user=user).first()
+    if override is not None:
+        return override.override_tier.level
+    return None
+
+
+# Issue #1929: the single definition of "the" active override for a user.
+# Several overrides can be active at once (e.g. a Maven grant and a staff
+# grant); the strongest tier wins, ties broken by the latest expiry. Every
+# surface that labels a user's tier (Studio user list/detail, CRM, global
+# search, event rosters) resolves through this ordering so it can never
+# disagree with what ``get_user_level`` grants.
+ACTIVE_OVERRIDE_ORDERING = ('-override_tier__level', '-expires_at')
+
+
+def active_overrides_queryset(now=None):
+    """Return active, non-expired TierOverrides ordered strongest first."""
+    # Deferred imports, matching the rest of this module: content models
+    # import this module at class-definition time, before the app registry
+    # can load ``payments.models``.
     from django.utils import timezone
 
     from payments.models import TierOverride
 
-    override = (
+    if now is None:
+        now = timezone.now()
+    return (
         TierOverride.objects
-        .filter(user=user, is_active=True, expires_at__gt=timezone.now())
+        .filter(is_active=True, expires_at__gt=now)
         .select_related('override_tier')
-        .order_by('-override_tier__level', '-expires_at')
-        .first()
+        .order_by(*ACTIVE_OVERRIDE_ORDERING)
     )
-    if override is not None:
-        return override.override_tier.level
-    return None
 
 
 def get_active_override(user):
@@ -191,16 +212,69 @@ def get_active_override(user):
     """
     if user is None or not user.is_authenticated:
         return None
-    from django.utils import timezone
+    return active_overrides_queryset().filter(user=user).first()
 
-    from payments.models import TierOverride
 
-    return (
-        TierOverride.objects
-        .filter(user=user, is_active=True, expires_at__gt=timezone.now())
-        .select_related('override_tier')
-        .order_by('-override_tier__level', '-expires_at')
-        .first()
+def get_active_overrides_by_user(users):
+    """Return ``{user_id: strongest active override}`` in one query.
+
+    Batched form of :func:`get_active_override` for list surfaces. Accepts
+    user instances or primary keys. Users without an active override are
+    absent from the mapping.
+    """
+    user_ids = [getattr(user, 'pk', user) for user in users]
+    if not user_ids:
+        return {}
+    override_map = {}
+    for override in active_overrides_queryset().filter(user_id__in=user_ids):
+        # Rows arrive strongest first, so the first row seen per user is
+        # the same override ``get_active_override`` returns for that user.
+        override_map.setdefault(override.user_id, override)
+    return override_map
+
+
+@dataclass(frozen=True)
+class EffectiveTier:
+    """Display data for the tier a user effectively has right now."""
+
+    name: str
+    slug: str
+    level: int
+    # ``override`` when an active override above the base tier applies,
+    # otherwise ``base`` (the stored subscription tier, Free when unset).
+    source: str
+    override_expires_at: datetime | None = None
+
+    @property
+    def is_override(self):
+        return self.source == 'override'
+
+
+def resolve_effective_tier(user, override):
+    """Return the :class:`EffectiveTier` for ``user`` given its active override.
+
+    ``user`` should have ``membership__tier`` loaded; ``override`` is the
+    strongest active override (or ``None``). The override only applies when
+    its level is above the base tier, mirroring ``get_user_level``'s
+    ``max(base, override)``. Staff escalation is deliberately not applied:
+    Studio displays the stored or overridden tier for staff accounts.
+    """
+    membership = user.membership
+    tier = membership.tier if membership.tier_id else None
+    base_level = tier.level if tier is not None else 0
+    if override is not None and override.override_tier.level > base_level:
+        override_tier = override.override_tier
+        return EffectiveTier(
+            name=override_tier.name,
+            slug=override_tier.slug,
+            level=override_tier.level,
+            source='override',
+            override_expires_at=override.expires_at,
+        )
+    if tier is None:
+        return EffectiveTier(name='Free', slug='free', level=0, source='base')
+    return EffectiveTier(
+        name=tier.name, slug=tier.slug, level=tier.level, source='base',
     )
 
 

@@ -15,7 +15,6 @@ from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -29,6 +28,11 @@ from accounts.lifecycle import (
 from accounts.utils.tags import list_all_tags, normalize_tag, user_ids_with_exact_tag
 from community.models import STATUS_BOOKED, BookedCall
 from community.slack_config import get_slack_plan_sprints_user_token
+from content.access import (
+    get_active_override,
+    get_active_overrides_by_user,
+    resolve_effective_tier,
+)
 from crm.models import (
     STATUS_CHOICES,
     AppliedProgressChange,
@@ -50,7 +54,6 @@ from crm.services.markdown_export import (
 )
 from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
-from payments.models import TierOverride
 from plans.models import InterviewNote, Plan
 from questionnaires.models import Persona
 from questionnaires.onboarding import (
@@ -99,35 +102,24 @@ def _normalize_account_lifecycle_filter(raw):
     return normalize_account_lifecycle(raw)
 
 
-def _active_tier_info(user):
-    """Return effective tier display fields for CRM list/detail templates."""
-    # Issue #1579: the base tier and Stripe id live on payments.Membership.
-    membership = user.membership
-    base_name = membership.tier.name if membership.tier_id else 'Free'
-    base_slug = membership.tier.slug if membership.tier_id else 'free'
-    base_info = {'name': base_name, 'slug': base_slug, 'source': 'stripe' if membership.stripe_customer_id else 'default'}
-    override = (
-        TierOverride.objects
-        .filter(
-            user_id=user.pk,
-            is_active=True,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related('override_tier')
-        .order_by('-created_at')
-        .first()
-    )
-    if override is None:
-        return base_info
-    # Local base comparison is internal to this effective display helper: only
-    # show the override source when it exceeds the stored subscription tier.
-    base_level = membership.tier.level if membership.tier_id else 0
-    if override.override_tier.level <= base_level:
-        return base_info
+def _active_tier_info(user, override):
+    """Return effective tier display fields for CRM list/detail templates.
+
+    ``override`` is the user's strongest active override (or ``None``) from
+    the shared ``content.access`` resolver (issue #1929).
+    """
+    effective_tier = resolve_effective_tier(user, override)
+    if effective_tier.is_override:
+        source = 'override'
+    elif user.membership.stripe_customer_id:
+        # Issue #1579: the Stripe id lives on payments.Membership.
+        source = 'stripe'
+    else:
+        source = 'default'
     return {
-        'name': override.override_tier.name,
-        'slug': override.override_tier.slug,
-        'source': 'override',
+        'name': effective_tier.name,
+        'slug': effective_tier.slug,
+        'source': source,
     }
 
 
@@ -210,9 +202,15 @@ def crm_list(request):
         page_number = paginator.num_pages
     page = paginator.page(page_number)
 
+    records = list(page.object_list)
+    override_map = get_active_overrides_by_user(
+        [record.user_id for record in records],
+    )
     rows = []
-    for record in page.object_list:
-        tier_info = _active_tier_info(record.user)
+    for record in records:
+        tier_info = _active_tier_info(
+            record.user, override_map.get(record.user_id),
+        )
         account_lifecycle = derive_account_lifecycle(record.user)
         rows.append({
             'pk': record.pk,
@@ -324,7 +322,9 @@ def _activity_filter_chips(request, active_category):
 
 def _record_detail_context(record, request):
     """Build the shared context for the CRM detail page."""
-    tier_info = _active_tier_info(record.user)
+    tier_info = _active_tier_info(
+        record.user, get_active_override(record.user),
+    )
     account_lifecycle = derive_account_lifecycle(record.user)
     activity_category = normalize_activity_category(
         request.GET.get('activity_category', ''),

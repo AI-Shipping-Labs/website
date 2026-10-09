@@ -6,10 +6,12 @@ from django.http import JsonResponse
 from django.urls import reverse
 
 from accounts.utils.display import display_name
+from content.access import get_active_overrides_by_user, resolve_effective_tier
 from content.models import Article, Course, Download, Project, Workshop
 from email_app.models import EmailCampaign
 from events.models import Event, EventSeries
 from studio.decorators import staff_required
+from studio.utils import effective_tier_label
 
 User = get_user_model()
 
@@ -153,23 +155,29 @@ def _user_results(query):
         ),
         user.email.lower(),
     ))
-    return [
-        _result(
+    returned = candidates[:GROUP_LIMIT]
+    # Issue #1929: label the effective tier (active overrides included) for
+    # the returned rows only, in one batched query.
+    override_map = get_active_overrides_by_user(returned)
+    results = []
+    for user in returned:
+        tier_label = effective_tier_label(
+            resolve_effective_tier(user, override_map.get(user.pk)),
+        )
+        results.append(_result(
             obj_id=user.pk,
             group='users',
             item_type='User',
             label=display_name(user),
             summary=user.email,
             metadata=(
-                # Issue #1579: the tier lives on payments.Membership.
-                f'{user.membership.tier.name if user.membership.tier_id else "Free"} · '
+                f'{tier_label} · '
                 f'{"verified" if user.email_verified else "unverified"} · '
                 f'{user.get_bounce_state_display()}'
             ),
             url=reverse('studio_user_detail', kwargs={'user_id': user.pk}),
-        )
-        for user in candidates[:GROUP_LIMIT]
-    ]
+        ))
+    return results
 
 
 def _model_results(

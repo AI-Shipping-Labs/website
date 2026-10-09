@@ -1,8 +1,15 @@
 """Utility functions for Studio views."""
 
+import datetime
 import logging
 
 from django.core.paginator import Paginator
+from django.utils import dateformat, timezone
+
+from accounts.templatetags.date_formatting import (
+    MEMBER_COMPACT_DATE,
+    MEMBER_SHORT_DATE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -144,3 +151,35 @@ def get_github_edit_url(obj):
         return None
 
     return f'https://github.com/{obj.source_repo}/blob/main/{source_path}'
+
+
+def effective_tier_override_note(effective_tier, now=None):
+    """Return ``override until Oct 30`` for an override tier, else ``''``.
+
+    Issue #1929. ``effective_tier`` is a ``content.access.EffectiveTier``.
+    The expiry is shown in UTC (as Studio shows override expiries
+    elsewhere); the year is added only when the expiry falls outside the
+    current UTC calendar year.
+    """
+    if not effective_tier.is_override:
+        return ''
+    expires_at = effective_tier.override_expires_at.astimezone(
+        datetime.timezone.utc,
+    )
+    today = (now or timezone.now()).astimezone(datetime.timezone.utc)
+    date_format = (
+        MEMBER_COMPACT_DATE if expires_at.year == today.year
+        else MEMBER_SHORT_DATE
+    )
+    return f'override until {dateformat.format(expires_at, date_format)}'
+
+
+def effective_tier_label(effective_tier, now=None):
+    """Return the Studio tier label, e.g. ``Main (override until Oct 30)``.
+
+    Base tiers render as their bare name (issue #1929).
+    """
+    note = effective_tier_override_note(effective_tier, now=now)
+    if not note:
+        return effective_tier.name
+    return f'{effective_tier.name} ({note})'

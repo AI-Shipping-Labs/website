@@ -215,3 +215,27 @@ class PodsApiTest(TestCase):
         listed = self.call('get', f'/api/pods/{pod.pk}/requests?status=approved').json()['requests']
         self.assertEqual([(r['email'], r['decided_by']) for r in listed], [('raj@test.com', 'staff@test.com')])
         self.assertTrue(PodJoinRequest.objects.filter(pk=waiting.pk, status='approved').exists())
+
+    def test_requests_expose_stale_alerted_at(self):
+        """Issue #1927: staff see when the daily Slack alert reported a request."""
+        pod = self._pod(members=[self.raj], owner=self.raj)
+        announced = svc.request_to_join(pod, self.anna)
+        svc.request_to_join(pod, self.mike)
+        PodJoinRequest.objects.filter(pk=announced.pk).update(stale_alerted_at='2026-10-08T09:00:00Z')
+        listed = self.call('get', f'/api/pods/{pod.pk}/requests').json()['requests']
+        self.assertEqual(
+            {r['email']: r['stale_alerted_at'] for r in listed},
+            {'anna@test.com': '2026-10-08T09:00:00+00:00', 'mike@test.com': None},
+        )
+
+    def test_staff_can_add_a_twice_declined_student(self):
+        """Issue #1927: the decline rule only limits member requests."""
+        pod = self._pod(members=[self.raj], owner=self.raj)
+        for _ in range(2):
+            request = PodJoinRequest.objects.create(pod=pod, user=self.anna, status='pending')
+            svc.decline_request(request, self.raj)
+        with self.assertRaises(svc.PodError):
+            svc.request_to_join(pod, self.anna)
+        response = self.call('post', f'/api/pods/{pod.pk}/members', {'emails': ['anna@test.com']})
+        self.assertEqual(response.json()['results']['added'], ['anna@test.com'])
+        self.assertTrue(PodMembership.objects.filter(pod=pod, user=self.anna).exists())

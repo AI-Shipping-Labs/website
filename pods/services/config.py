@@ -63,3 +63,21 @@ def suggestion_count():
 
 def stale_request_days():
     return _int_config('PODS_STALE_REQUEST_DAYS', 5, minimum=0)
+
+
+def rerequest_cooldown_days():
+    """Days a student waits after a first decline before asking the same pod again."""
+    return _int_config('PODS_REREQUEST_COOLDOWN_DAYS', 14, minimum=0)
+
+
+def stale_request_alert_enabled():
+    """Default-on read of ``PODS_STALE_REQUEST_ALERT_ENABLED``.
+
+    ``is_enabled`` hardcodes a ``'false'`` fallback, so the default-on
+    contract reads the raw value with a ``'true'`` default instead (same
+    pattern as ``staff_comment_alerts_enabled``).
+    """
+    raw = get_config('PODS_STALE_REQUEST_ALERT_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')

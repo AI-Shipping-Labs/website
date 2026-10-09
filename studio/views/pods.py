@@ -7,7 +7,6 @@ write goes through ``pods.services.membership`` so the capacity, waiting
 list and leave rules match the member pages and the staff API.
 """
 
-from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.contrib import messages
@@ -31,6 +30,7 @@ from pods.models import (
 from pods.services import config as pods_config
 from pods.services import membership as svc
 from pods.services.people import humanize_age
+from pods.services.stale_requests import is_stale
 from pods.services.suggestions import load_member_availability, suggest_slots
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
@@ -93,6 +93,9 @@ def studio_pod_list(request):
                 'join_requests', filter=Q(join_requests__status=REQUEST_STATUS_WAITLISTED), distinct=True,
             ),
             oldest_open_request=Min('join_requests__created_at', filter=open_filter),
+            oldest_pending_request=Min(
+                'join_requests__created_at', filter=Q(join_requests__status=REQUEST_STATUS_PENDING),
+            ),
         )
         .order_by('-created_at', '-pk')
     )
@@ -110,7 +113,11 @@ def studio_pod_list(request):
         rows.append({
             'pod': pod,
             'oldest_age': humanize_age(oldest, now) if oldest else '',
-            'stale': oldest is not None and now - oldest > timedelta(days=stale_days),
+            # Pending only (issue #1927): a waitlisted request cannot be
+            # approved until a seat opens, so it never makes a pod stale.
+            # Same rule as the daily staff Slack alert.
+            'stale': is_stale(pod.oldest_pending_request, now, stale_days),
+            'stale_age': humanize_age(pod.oldest_pending_request, now) if pod.oldest_pending_request else '',
         })
     cohort_options = [(str(c.pk), _cohort_label(c)) for c in _dated_cohorts()]
     return render(request, 'studio/pods/list.html', {

@@ -7,7 +7,9 @@ waitlisted requests move back to ``pending`` for the owner (or staff).
 """
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from django.db import transaction
 from django.urls import reverse
@@ -34,12 +36,13 @@ from pods.models import (
     REQUEST_STATUS_PENDING,
     REQUEST_STATUS_WAITLISTED,
     REQUEST_STATUS_WITHDRAWN,
+    AvailabilityProfile,
     Pod,
     PodJoinRequest,
     PodMembership,
 )
 from pods.services import config as pods_config
-from pods.services.people import is_cohort_participant, is_dated_cohort
+from pods.services.people import is_cohort_participant, is_dated_cohort, user_timezone_name
 
 NOTIFICATION_POD_REQUEST = 'pod_request'
 NOTIFICATION_POD_REQUEST_DECIDED = 'pod_request_decided'
@@ -51,6 +54,14 @@ MSG_ALREADY_REQUESTED = 'You already asked to join this pod.'
 MSG_NOT_ELIGIBLE = 'Only members of this cohort can join its pods.'
 MSG_REQUEST_NOT_OPEN = 'This request has already been answered.'
 MSG_NOT_A_MEMBER = 'That person is not a member of this pod.'
+MSG_REQUEST_DECLINED_FINAL = "You can't ask to join this pod again."
+
+# Re-request rule after a decline (issue #1927), per pod and per student.
+REREQUEST_ALLOWED = ''
+REREQUEST_COOLDOWN = 'cooldown'
+REREQUEST_RETRY = 'retry'
+REREQUEST_FINAL = 'final'
+REREQUEST_DATE_FORMAT = '%b %d'
 
 VALID_MEETING_MINUTES = {value for value, _label in MEETING_MINUTES_CHOICES}
 VALID_STATUSES = {value for value, _label in POD_STATUS_CHOICES}
@@ -80,6 +91,10 @@ def msg_open_request_limit(limit):
 
 def msg_created_limit(limit):
     return f'You can start up to {limit} pods in this cohort.'
+
+
+def msg_request_cooldown(date_label):
+    return f'You can ask to join this pod again on {date_label}.'
 
 
 def msg_size_below_members(count):
@@ -128,6 +143,62 @@ def waitlist_position(join_request):
         status=REQUEST_STATUS_WAITLISTED,
         created_at__lt=join_request.created_at,
     ).count() + 1
+
+
+# --- Re-request after a decline ---------------------------------------------
+
+@dataclass
+class RerequestState:
+    """Where a student stands on asking ``pod`` again after declines.
+
+    ``key`` is ``REREQUEST_ALLOWED`` (no decline), ``REREQUEST_COOLDOWN``
+    (one decline, cooldown running until ``available_at``),
+    ``REREQUEST_RETRY`` (one decline, cooldown over: one more request) or
+    ``REREQUEST_FINAL`` (two or more declines).
+    """
+
+    key: str
+    declines: int = 0
+    available_at: object = None
+
+    @property
+    def blocked(self):
+        return self.key in (REREQUEST_COOLDOWN, REREQUEST_FINAL)
+
+
+def rerequest_state(pod, user, *, now=None):
+    """Apply the per-pod decline rule for ``user`` (issue #1927).
+
+    Only ``declined`` requests count; ``withdrawn`` and ``cancelled`` do
+    not. Staff adding a member directly never goes through this rule.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return RerequestState(REREQUEST_ALLOWED)
+    declined = list(
+        PodJoinRequest.objects.filter(pod_id=pod.pk, user_id=user.pk, status=REQUEST_STATUS_DECLINED)
+        .order_by('created_at', 'pk')
+        .values_list('decided_at', 'created_at')
+    )
+    if not declined:
+        return RerequestState(REREQUEST_ALLOWED)
+    if len(declined) >= 2:
+        return RerequestState(REREQUEST_FINAL, declines=len(declined))
+    decided_at, created_at = declined[0]
+    available_at = (decided_at or created_at) + timedelta(days=pods_config.rerequest_cooldown_days())
+    now = now or timezone.now()
+    if now < available_at:
+        return RerequestState(REREQUEST_COOLDOWN, declines=1, available_at=available_at)
+    return RerequestState(REREQUEST_RETRY, declines=1)
+
+
+def user_date_label(value, user):
+    """``Oct 23`` in the member's own zone (availability zone, else
+    preferred timezone, else UTC)."""
+    profile = getattr(user, '_pods_profile', None)
+    if profile is None:
+        profile = AvailabilityProfile.objects.filter(user_id=user.pk).first()
+    zone = user_timezone_name(user, profile) or 'UTC'
+    return value.astimezone(ZoneInfo(zone)).strftime(REREQUEST_DATE_FORMAT)
 
 
 # --- Field validation -----------------------------------------------------
@@ -466,6 +537,14 @@ def request_to_join(pod, user, message=''):
         raise PodError(MSG_ALREADY_MEMBER, code='already_member')
     if pod.join_requests.filter(user=user, status__in=OPEN_REQUEST_STATUSES).exists():
         raise PodError(MSG_ALREADY_REQUESTED, code='request_exists')
+    rerequest = rerequest_state(pod, user)
+    if rerequest.key == REREQUEST_FINAL:
+        raise PodError(MSG_REQUEST_DECLINED_FINAL, code='request_declined_final')
+    if rerequest.key == REREQUEST_COOLDOWN:
+        raise PodError(
+            msg_request_cooldown(user_date_label(rerequest.available_at, user)),
+            code='request_cooldown',
+        )
     limit = pods_config.max_open_requests_per_member()
     open_in_cohort = PodJoinRequest.objects.filter(
         user=user, pod__cohort=pod.cohort, status__in=OPEN_REQUEST_STATUSES,

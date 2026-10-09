@@ -4,7 +4,7 @@ A non-staff member's comment or reply on a course lesson, homework step, or
 workshop page posts one message to the staff Slack channel. The Django
 server runs in this process (background thread), so the Slack HTTP call is
 captured in-process by patching
-``notifications.services.staff_comment_alerts.requests.post``; no live call
+``notifications.services.staff_slack.requests.post``; no live call
 is made. Settings are DB overrides written through the package settings
 service, or edited in Studio where the scenario says so.
 
@@ -29,7 +29,7 @@ from django.db import connection  # noqa: E402
 
 pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
-POST_TARGET = 'notifications.services.staff_comment_alerts.requests.post'
+POST_TARGET = 'notifications.services.staff_slack.requests.post'
 CONFIG_KEYS = (
     'SLACK_ENABLED',
     'SLACK_BOT_TOKEN',

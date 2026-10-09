@@ -87,6 +87,49 @@ Studio highlight for unanswered join requests.
 
 - Type: integer.
 - Default: `5`.
-- On `/studio/pods/`, a pod whose oldest open request is older than this many
+- On `/studio/pods/`, a pod whose oldest pending request is older than this many
   days shows its age in an amber pill so staff can approve or decline as an
   override. Nothing is approved automatically.
+
+Pending requests only: since issue #1927 the Studio `stale` badge looks at
+the oldest `pending` request. A waitlisted request is never stale, because
+nobody can approve it until a seat opens. The same threshold drives the daily
+staff Slack alert (`PODS_STALE_REQUEST_ALERT_ENABLED`).
+
+## PODS_REREQUEST_COOLDOWN_DAYS
+
+How long a student waits after a declined request before asking the same pod
+again.
+
+- Type: integer, `0` or more. Invalid values fall back to `14`.
+- Default: `14`.
+- Counted per pod and per student, from the decline's `decided_at`. Withdrawn
+  and cancelled requests do not count.
+- First decline: the pod page hides the request form and shows `Your request
+  was not accepted. You can ask again on Oct 23.` After the cooldown the form
+  comes back with `Your last request was not accepted. You can ask once more.`
+- Second decline on the same pod: final. The student sees `This pod declined
+  your request twice, so you can't ask to join it again.` with a `Browse other
+  pods` link. Staff can still add the student in Studio or through the API.
+- `0` allows an immediate second request; the second decline is still final.
+- A refused request creates no request and no owner notification.
+
+## PODS_STALE_REQUEST_ALERT_ENABLED
+
+Kill switch for the daily staff Slack alert about stale pod requests.
+
+- Type: boolean.
+- Default: `true`.
+- Job: `pods-stale-request-alert`, daily at 09:00 UTC
+  (`pods.tasks.stale_requests.send_stale_request_alert`).
+- Stale request: `pending`, pod not archived, created more than
+  `PODS_STALE_REQUEST_DAYS` days ago.
+- One message per run, only when at least one stale request has not been
+  announced yet (`PodJoinRequest.stale_alerted_at` is empty). Up to 10 request
+  lines, then `and N more`; already announced requests still waiting are
+  counted in a `N earlier requests are still waiting.` line. No message on
+  days with nothing new.
+- Channel: `STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to
+  `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`. Also needs `SLACK_ENABLED` and
+  `SLACK_BOT_TOKEN`. With any of these missing, or on a Slack error, nothing
+  is marked as announced and the job retries the next day.

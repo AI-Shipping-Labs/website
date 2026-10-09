@@ -49,7 +49,7 @@ from plans.models import Plan, Sprint
 
 User = get_user_model()
 
-POST_TARGET = 'notifications.services.staff_comment_alerts.requests.post'
+POST_TARGET = 'notifications.services.staff_slack.requests.post'
 BASE_URL = 'https://aisl.test'
 
 
@@ -530,3 +530,36 @@ class StaffCommentAlertFailureTest(StaffCommentAlertBase):
         response = mock.Mock()
         response.json.return_value = {'ok': False, 'error': 'not_in_channel'}
         self._assert_isolated(post_return=response)
+
+
+@tag('core')
+class StaffCommentAlertLogWordingTest(StaffCommentAlertBase):
+    """The #1926 failure log lines keep their exact wording after the post
+    moved into the shared ``staff_slack`` helper (issue #1927)."""
+
+    def _error_messages(self, logs):
+        return [record.getMessage() for record in logs.records if record.levelname == 'ERROR']
+
+    def test_transport_failure_logs_the_original_text_with_traceback(self):
+        self.post.side_effect = requests.exceptions.Timeout('slow')
+        with self.assertLogs('notifications.services.staff_comment_alerts', level='ERROR') as logs:
+            comment = self._comment(self.lesson.content_id)
+        self.assertEqual(
+            self._error_messages(logs),
+            [f'Staff comment Slack alert failed for comment {comment.pk} (channel=C_COMMENTS)'],
+        )
+        self.assertIsInstance(logs.records[0].exc_info[1], requests.exceptions.Timeout)
+
+    def test_slack_rejection_logs_the_original_text(self):
+        rejected = mock.Mock()
+        rejected.json.return_value = {'ok': False, 'error': 'channel_not_found'}
+        self.post.return_value = rejected
+        with self.assertLogs('notifications.services.staff_comment_alerts', level='ERROR') as logs:
+            comment = self._comment(self.lesson.content_id)
+        self.assertEqual(
+            self._error_messages(logs),
+            [
+                f'Staff comment Slack alert rejected for comment {comment.pk} '
+                '(channel=C_COMMENTS): channel_not_found',
+            ],
+        )

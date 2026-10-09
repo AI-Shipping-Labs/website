@@ -45,7 +45,7 @@
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Members" data-testid="studio-pod-members">{{ row.pod.member_total }}/{{ row.pod.max_members }}</td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} whitespace-nowrap text-sm text-muted-foreground" data-label="Requests" data-testid="studio-pod-requests"><span data-testid="studio-pod-pending">{{ row.pod.pending_total }} pending</span><div data-testid="studio-pod-waiting">{{ row.pod.waiting_total }} waiting</div></td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Oldest request" data-testid="studio-pod-oldest">
-          {% if row.stale %}{% studio_status_badge 'stale' row.oldest_age %}{% elif row.oldest_age %}{{ row.oldest_age }}{% else %}—{% endif %}
+          {% if row.stale %}{% studio_status_badge 'stale' row.stale_age %}{% elif row.oldest_age %}{{ row.oldest_age }}{% else %}—{% endif %}
         </td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Owner" data-testid="studio-pod-owner">{% if row.pod.owner %}{{ row.pod.owner.email }}{% else %}—{% endif %}</td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} whitespace-nowrap" data-label="Slack">

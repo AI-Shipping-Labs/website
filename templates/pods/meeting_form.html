@@ -1,0 +1,69 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components member_badges %}
+
+{% block pods_title %}{{ heading }}{% endblock %}
+
+{% block pods_content %}
+{% comment %}
+Confirm page for a proposal and the Change time form (issue #1919). One
+narrow column: the chosen time with the member strip and fit badge, or the
+date and time inputs read in the viewer's zone; the weekly-repeat or
+move-later checkbox; then submit and a quiet way back.
+{% endcomment %}
+<section class="max-w-2xl" aria-labelledby="pod-meeting-form-heading" data-testid="pod-meeting-form-page">
+  {% section_header heading heading_id="pod-meeting-form-heading" size="lg" subtitle=pod.name %}
+  {% if error %}
+  <p class="mt-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-meeting-form-error">{{ error }}</p>
+  {% endif %}
+  <form method="post" action="{{ form_action }}" class="mt-6" data-testid="pod-meeting-form">
+    {% csrf_token %}
+    {% if mode == 'new' and slot %}
+    <input type="hidden" name="start" value="{{ slot.start_iso }}">
+    <div data-testid="pod-meeting-form-slot">
+      <p class="text-base font-semibold text-foreground"><time datetime="{{ slot.start_iso }}" data-testid="pod-meeting-form-time">{{ slot.start_label }}</time> <span class="font-normal text-muted-foreground">· {{ pod.meeting_minutes }} min</span></p>
+      <div class="mt-1">{% member_status_badge slot.fit_label tone=slot.fit_tone testid="pod-meeting-form-fit" %}</div>
+      <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-meeting-form-strip">{% for local in slot.strip %}{% if local.no_availability %}<span data-testid="pod-meeting-form-strip-item">{{ local.name }} - no availability</span>{% else %}<span data-testid="pod-meeting-form-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endif %}{% endfor %}</p>
+    </div>
+    {% elif mode == 'new' %}
+    {% include "pods/_meeting_custom_time.html" %}
+    {% else %}
+    <p class="text-sm text-muted-foreground" data-testid="pod-meeting-form-current">Now: {{ current_label }}</p>
+    <fieldset class="mt-4">
+      <legend class="block text-sm font-medium text-foreground">New time</legend>
+      <div class="mt-2 space-y-1">
+        {% for choice in choices %}
+        <label class="flex min-h-[44px] flex-wrap items-center gap-x-3 gap-y-1 text-sm text-foreground" data-testid="pod-move-choice-row">
+          <input type="radio" name="choice" value="{{ choice.value }}"{% if choice.checked %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-move-choice">
+          <span>{{ choice.label }}</span>
+          {% member_status_badge choice.fit_label tone=choice.fit_tone %}
+        </label>
+        {% endfor %}
+        <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
+          <input type="radio" name="choice" value="custom"{% if custom_checked %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-move-choice-custom">
+          Another time
+        </label>
+      </div>
+    </fieldset>
+    {% include "pods/_meeting_custom_time.html" %}
+    {% endif %}
+
+    {% if show_repeat %}
+    <label class="mt-5 flex min-h-[44px] items-start gap-3 text-sm text-foreground">
+      <input type="checkbox" name="repeat_weekly" value="1"{% if repeat_checked %} checked{% endif %} aria-describedby="pod-meeting-repeat-help" class="mt-0.5 h-4 w-4 accent-accent" data-testid="pod-meeting-repeat">
+      <span><span class="font-medium" data-testid="pod-meeting-repeat-label">{{ repeat_label }}</span><span id="pod-meeting-repeat-help" class="mt-0.5 block text-xs text-muted-foreground">Same day and time each week in your timezone. You can move single meetings later.</span></span>
+    </label>
+    {% endif %}
+    {% if show_move_later %}
+    <label class="mt-5 flex min-h-[44px] items-start gap-3 text-sm text-foreground">
+      <input type="checkbox" name="move_later" value="1"{% if move_later_checked %} checked{% endif %} class="mt-0.5 h-4 w-4 accent-accent" data-testid="pod-meeting-move-later">
+      <span class="font-medium">Also move the later meetings to this weekly time</span>
+    </label>
+    {% endif %}
+
+    <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <button type="submit" class="{% button_classes 'primary' %}" data-testid="pod-meeting-form-submit">{{ submit_label }}</button>
+      <a href="{{ pod_url }}" class="inline-flex min-h-[44px] items-center text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-meeting-form-back">Back to pod</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

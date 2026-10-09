@@ -38,6 +38,9 @@ NOTIFICATION_TYPE_CHOICES = [
     ('pod_request', 'Pod Request'),
     # Issue #1918: the requester's request was approved or declined.
     ('pod_request_decided', 'Pod Request Decided'),
+    # Issue #1919: pod meeting proposed, agreed, moved, can't make it,
+    # cancelled, and the hourly 24h reminder. Links to the pod page.
+    ('pod_meeting', 'Pod Meeting'),
 ]
 
 

@@ -45,6 +45,7 @@ from plans.dashboard import (
     build_sprint_plan_card_context,
 )
 from plans.models import Sprint
+from pods.services.meeting_presentation import dashboard_pod_meetings
 from questionnaires.onboarding import has_completed_onboarding
 
 DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
@@ -352,6 +353,14 @@ def _dashboard(request):
         user,
         now=dashboard_now,
     )
+    # Issue #1919: the member's scheduled pod meetings in the next 7 days
+    # join the Your week list, sorted with the events by start time.
+    dashboard_pod_meeting_rows = dashboard_pod_meetings(user, dashboard_now)
+    dashboard_week_rows = sorted(
+        [{'kind': 'event', 'event': event, 'start': event.start_datetime} for event in dashboard_upcoming_events]
+        + [{'kind': 'pod_meeting', 'pod_meeting': row, 'start': row['starts_at']} for row in dashboard_pod_meeting_rows],
+        key=lambda row: row['start'],
+    )
 
     # --- Starting soon card (issue #705) ---
     # The same imminent event continues to appear in ``upcoming_events`` —
@@ -494,6 +503,8 @@ def _dashboard(request):
         'dashboard_book_club': dashboard_book_club,
         'upcoming_events': upcoming_events,
         'dashboard_upcoming_events': dashboard_upcoming_events,
+        'dashboard_pod_meetings': dashboard_pod_meeting_rows,
+        'dashboard_week_rows': dashboard_week_rows,
         'starting_soon': starting_soon,
         'recent_content': recent_content,
         'active_polls': active_polls,

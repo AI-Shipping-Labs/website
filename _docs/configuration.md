@@ -338,11 +338,12 @@ Test: in Studio, trigger an announcement (e.g. publish an article and use the "A
 
 ### Pods settings
 
-Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_docs/integrations/pods.md`. Two of them change how requests and staff alerts behave:
+Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_docs/integrations/pods.md`. These change how requests, staff alerts and meeting reminders behave:
 
 | Key | Default | Notes |
 |-----|---------|-------|
 | `PODS_REREQUEST_COOLDOWN_DAYS` | `14` | After a first decline a student waits this many days before asking the same pod once more. A second decline on that pod is final; staff can still add the student. `0` allows an immediate second request. |
+| `PODS_MEETING_REMINDER_HOURS` | `24` | Hourly job `pods-meeting-reminders` sends a bell reminder this many hours (1-72) before each scheduled pod meeting, skipping members who can't make it. On-site only, no email. |
 | `PODS_STALE_REQUEST_ALERT_ENABLED` | `true` | Daily job `pods-stale-request-alert` (09:00 UTC) posts one staff Slack message about pending pod requests older than `PODS_STALE_REQUEST_DAYS`. Uses the staff comment channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`) plus `SLACK_ENABLED` and `SLACK_BOT_TOKEN`. Set `false` to stop the post. |
 
 ## 7. GitHub App (content sync)

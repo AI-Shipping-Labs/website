@@ -140,6 +140,8 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Course API | `/api/courses`, `/api/courses/<slug>`, `/api/courses/<slug>/units/<id>` | JSON API for course data | Varies | Shipped |
 | Pods tab | `/courses/<slug>/home/pods` | Course Home tab listing the cohort's pods as divider-led rows: the viewer's pods first, then open pods by timezone fit, then full and closed pods; per-row status badge and one action; `Start a pod` and `Edit my availability` below the heading; owners see a pending-request count on the tab. Only for courses listed in `PODS_COURSE_SLUGS` | Members enrolled in the dated cohort with course access; staff | Shipped |
 | Pod page | `/courses/<slug>/home/pods/<id>` | One pod: purpose, members by display name and timezone, request or waiting-list action, suggested meeting times in the viewer's timezone with a per-member local-time strip, Slack hand-off (Main or above), owner request queue with fit, leave and edit | Enrolled cohort members (suggested times, Slack and availability details for pod members and staff only) | Shipped |
+| Pod meetings | `/courses/<slug>/home/pods/<id>` (Meetings section), `/courses/<slug>/home/pods/<id>/meetings/new`, `.../meetings/<meeting_id>/move` | Agreed pod meetings: propose a suggested or custom time (one meeting or a weekly series for the remaining meetings), confirm by required attendance, `Can't make it` with the next best time and a one-tap move, change time (optionally the rest of the series), cancel, mark held or didn't happen, held progress, one pod call link with `Join call` from 10 minutes before the start, clock-change notes, a `Same weekly time` suggestion, bell notifications and a reminder before each meeting (`PODS_MEETING_REMINDER_HOURS`) | Pod members (staff can move, cancel, record and set the call link) | Shipped |
+| Pod meetings in Your week | `/` (authenticated) | The member's scheduled pod meetings in the next 7 days join the dashboard `Your week` list with the events, sorted by start, linking to the pod page; meetings they can't make are left out | Pod members | Shipped |
 | Availability editor | `/courses/<slug>/home/pods/availability` | Weekly windows per weekday in the member's own timezone, 30-minute steps, `Works well` / `If needed`, presets; one profile reused by every pod | Enrolled cohort members | Shipped |
 
 ### Content -- Tags
@@ -208,7 +210,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 | Project review | `/studio/projects/`, `/studio/projects/<id>/review` | List submitted projects; approve/reject | Staff only | Shipped |
 | Campaign management | `/studio/campaigns/`, `/studio/campaigns/new`, `/studio/campaigns/<id>/` | List, create, view email campaigns | Staff only | Shipped |
 | Subscriber management | `/studio/users/?filter=subscribers`, `/studio/users/export?filter=subscribers` | List subscribers; export to CSV | Staff only | Shipped |
-| Pods | `/studio/pods/`, `/studio/pods/new`, `/studio/pods/<id>/` | List pods with request queue and stale-request highlight; create pods with owner and member emails; edit, archive, change owner, add/remove members, approve/decline requests | Staff only | Shipped |
+| Pods | `/studio/pods/`, `/studio/pods/new`, `/studio/pods/<id>/` | List pods with request queue, stale-request highlight, held meetings and next meeting; create pods with owner and member emails; edit (including the call link), archive, change owner, add/remove members, approve/decline requests; meetings table with `Mark held` / `Cancel` and a `Schedule meeting` form (one meeting or weekly) | Staff only | Shipped |
 
 ### Integrations & Webhooks
 
@@ -321,6 +323,9 @@ Member goes to `/account/` -> sees current tier, billing period end date -> want
 | Join request | A member's request to join a pod. It is `pending` while the pod has a free seat and is answered by the pod owner (or staff) | Application, invite |
 | Waiting list | The join requests on a full pod, in order. When a seat opens the oldest moves back to pending for the owner | Queue, backlog |
 | Availability | A member's weekly windows in their own timezone (`Works well` or `If needed`), reused by every pod to suggest meeting times | Schedule, calendar |
+| Pod meeting | One agreed (or proposed) meeting of a pod, stored as a time plus the timezone it was set in; a pod meets `meeting_count` times | Call, session, event |
+| Proposed time | A pod meeting time one member put forward; it becomes a confirmed meeting once enough members can make it | Invite, poll |
+| Call link | The one optional video-call link (Meet, Zoom or other) a pod shares for all its meetings; members bring their own | Meeting URL, Zoom link |
 | Project | A project idea or portfolio project writeup | Showcase, portfolio item |
 | Resource | Passive or self-serve content surfaced through the Resources navigation group. The `/resources` route itself is Curated Links. | Activity, live event |
 | Curated Link | An external link categorized by type (workshop, course, article, other) on `/resources` | Resource hub, activity, recording library |

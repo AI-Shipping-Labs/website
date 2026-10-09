@@ -256,7 +256,6 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
     used_dates = set()
     used_weekly = []
     everyone = list(all_members or members)
-    strip_members = [m for m in everyone if m.timezone_name]
     for _rank, index, statuses in candidates:
         slot_start = grid.time_at(index)
         weekly = minute_of_week(slot_start)
@@ -266,28 +265,54 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
             continue
         used_dates.add(slot_start.date())
         used_weekly.append(weekly)
-        chosen.append(Slot(
-            start=slot_start,
-            end=slot_start + timedelta(minutes=int(meeting_minutes)),
-            available=[m for m, s in statuses if s == 2],
-            if_needed=[m for m, s in statuses if s == 1],
-            missing=[m for m, s in statuses if s == 0],
-            local_starts=[
-                {
-                    'member': m,
-                    'name': display_name(m.user),
-                    'time': slot_start.astimezone(ZoneInfo(m.timezone_name)).strftime('%H:%M'),
-                    'city': city_from_zone(m.timezone_name),
-                    'timezone': m.timezone_name,
-                }
-                for m in strip_members
-            ],
-            considered=len(considered),
-            member_total=max(len(everyone), len(considered)),
-        ))
+        chosen.append(_make_slot(slot_start, meeting_minutes, statuses, considered, everyone))
         if len(chosen) >= count:
             break
     return chosen
+
+
+def _make_slot(slot_start, meeting_minutes, statuses, considered, everyone):
+    strip_members = [m for m in everyone if m.timezone_name]
+    return Slot(
+        start=slot_start,
+        end=slot_start + timedelta(minutes=int(meeting_minutes)),
+        available=[m for m, s in statuses if s == 2],
+        if_needed=[m for m, s in statuses if s == 1],
+        missing=[m for m, s in statuses if s == 0],
+        local_starts=[
+            {
+                'member': m,
+                'name': display_name(m.user),
+                'time': slot_start.astimezone(ZoneInfo(m.timezone_name)).strftime('%H:%M'),
+                'city': city_from_zone(m.timezone_name),
+                'timezone': m.timezone_name,
+            }
+            for m in strip_members
+        ],
+        considered=len(considered),
+        member_total=max(len(everyone), len(considered)),
+    )
+
+
+def evaluate_slot(members, start, meeting_minutes, *, all_members=None):
+    """A :class:`Slot` for one fixed ``start`` (issue #1919).
+
+    Same fit fields as :func:`suggest_slots` (``available``, ``if_needed``,
+    ``missing``, honest labels) for a time the pod did not get from the
+    ranked list: the confirm page for a custom or ``Same time next week``
+    start, and the per-member strip of a meeting row.
+    """
+    considered = [m for m in members if m.has_windows]
+    length = max(int(meeting_minutes) // GRID_MINUTES, 1)
+    start = start.astimezone(UTC)
+    grid = Grid(start, start + timedelta(minutes=GRID_MINUTES * length))
+    index = grid.index_at_or_after(start)
+    statuses = []
+    for member in considered:
+        cells = grid.cells(member)
+        fits = index + length <= grid.size
+        statuses.append((member, _status(cells, index, length) if fits else 0))
+    return _make_slot(start, meeting_minutes, statuses, considered, list(all_members or members))
 
 
 def member_strip(slot, members):

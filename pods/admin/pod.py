@@ -5,6 +5,8 @@ from pods.models import (
     AvailabilityWindow,
     Pod,
     PodJoinRequest,
+    PodMeeting,
+    PodMeetingResponse,
     PodMembership,
 )
 
@@ -43,3 +45,19 @@ class AvailabilityProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'timezone', 'updated_at')
     raw_id_fields = ('user',)
     inlines = [AvailabilityWindowInline]
+
+
+class PodMeetingResponseInline(admin.TabularInline):
+    model = PodMeetingResponse
+    extra = 0
+    raw_id_fields = ('user',)
+
+
+@admin.register(PodMeeting)
+class PodMeetingAdmin(admin.ModelAdmin):
+    """Read-mostly view of pod meetings (issue #1919); Studio is the operator UI."""
+
+    list_display = ('pod', 'starts_at', 'timezone', 'status', 'created_via', 'series_id')
+    list_filter = ('status', 'created_via')
+    raw_id_fields = ('pod', 'proposed_by', 'moved_by', 'status_changed_by')
+    inlines = [PodMeetingResponseInline]

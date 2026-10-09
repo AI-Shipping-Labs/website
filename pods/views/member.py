@@ -232,6 +232,10 @@ def pod_detail(request, slug, pod_id):
         'pod_url': svc.pod_url(pod),
         'slack_error': request.session.pop(f'pod_slack_error_{pod.pk}', ''),
     })
+    call_link_error = request.session.pop(f'pod_call_link_error_{pod.pk}', None)
+    if call_link_error and page['show_private']:
+        context['call_link_error'] = call_link_error.get('message', '')
+        context['call_link_value'] = call_link_error.get('value', '')
     return render(request, 'pods/detail.html', context)
 
 

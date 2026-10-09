@@ -58,6 +58,11 @@
         </select>
       </div>
     </div>
+    <div class="mb-6">
+      <label for="pod-meeting-url" class="block text-sm font-medium text-foreground mb-1">Call link</label>
+      <input id="pod-meeting-url" name="meeting_url" type="text" inputmode="url" maxlength="500" value="{{ pod.meeting_url }}" placeholder="https://meet.google.com/abc-defg-hij" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-meeting-url">
+      <p class="text-xs text-muted-foreground mt-1">One https link for every meeting of this pod. Members see it on the pod page. Leave empty to remove it.</p>
+    </div>
   </form>
 </section>
 {% include "studio/includes/sticky_action_bar.html" with form_id="studio-pod-settings-form" title="Pod settings" subtitle="Raising the size limit moves the oldest waitlisted requests back to pending." can_save=True primary_label="Save pod" cancel_url=pods_list_url %}
@@ -150,6 +155,86 @@
   {% else %}
   <p class="mt-3 text-sm text-muted-foreground">No open requests.</p>
   {% endif %}
+</section>
+
+<section id="meetings" class="mb-8" aria-labelledby="studio-pod-meetings-heading" data-testid="studio-pod-meetings">
+  <h2 id="studio-pod-meetings-heading" class="text-base font-semibold text-foreground">Meetings ({{ meetings_held }} held, {{ meetings_used }}/{{ pod.meeting_count }} planned or held)</h2>
+  {% if meeting_rows %}
+  <div class="{% studio_list_class 'wrapper' %} mt-3">
+    <table class="{% studio_list_class 'table' %}">
+      <thead class="{% studio_list_class 'thead' %}">
+        <tr>
+          <th class="{% studio_list_class 'th' %}">Meeting</th>
+          <th class="{% studio_list_class 'th' %}">Start</th>
+          <th class="{% studio_list_class 'th' %}">Status</th>
+          <th class="{% studio_list_class 'th' %}">Can make it</th>
+          <th class="{% studio_list_class 'th' %}">Can't make it</th>
+          <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="{% studio_list_class 'tbody' %}">
+        {% for row in meeting_rows %}
+        <tr class="{% studio_list_class 'row' %}" data-testid="studio-pod-meeting" data-meeting-id="{{ row.meeting.pk }}">
+          <td class="px-6 py-4 text-sm text-foreground whitespace-nowrap" data-label="Meeting"><span data-testid="studio-pod-meeting-number">{{ row.number|default:"—" }}</span><div class="text-xs text-muted-foreground" data-testid="studio-pod-meeting-source">{{ row.meeting.get_created_via_display }}{% if row.series_short %} · series <span class="font-mono">{{ row.series_short }}</span>{% endif %}</div></td>
+          <td class="px-6 py-4 text-sm text-foreground whitespace-nowrap" data-label="Start" data-testid="studio-pod-meeting-start">{{ row.meeting.starts_at|operator_datetime }} UTC<div class="text-xs text-muted-foreground" data-testid="studio-pod-meeting-zone">{{ row.meeting.timezone }}</div>{% if row.meeting.moved_at %}<div class="text-xs text-muted-foreground" data-testid="studio-pod-meeting-moved">Moved by {{ row.moved_by|default:"—" }} {{ row.meeting.moved_at|operator_datetime }}</div>{% endif %}</td>
+          <td class="px-6 py-4" data-label="Status" data-testid="studio-pod-meeting-status">{% studio_status_badge row.status_key row.status_label %}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Can make it" data-testid="studio-pod-meeting-going">{% for name in row.going %}<div class="whitespace-nowrap">{{ name }}</div>{% empty %}—{% endfor %}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Can't make it" data-testid="studio-pod-meeting-cant">{% for name in row.cant %}<div class="whitespace-nowrap">{{ name }}</div>{% empty %}—{% endfor %}</td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+            <div class="{% studio_list_class 'action_group' %}">
+              {% if row.can_hold %}
+              <form method="post" action="{% url 'studio_pod_meeting_status' pod_id=pod.pk meeting_id=row.meeting.pk %}" class="{% studio_list_class 'action_form' %}">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="held">
+                <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="studio-pod-meeting-held">Mark held</button>
+              </form>
+              {% endif %}
+              {% if row.can_cancel %}
+              <form method="post" action="{% url 'studio_pod_meeting_status' pod_id=pod.pk meeting_id=row.meeting.pk %}" class="{% studio_list_class 'action_form' %}" onsubmit="return confirm('Cancel this meeting?');">
+                {% csrf_token %}
+                <input type="hidden" name="status" value="cancelled">
+                <button type="submit" class="{% studio_action_class 'destructive' %}" data-testid="studio-pod-meeting-cancel">Cancel</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="mt-3">{% studio_empty_state 'fresh' entity_label='meeting' entity_label_plural='meetings' %}</div>
+  {% endif %}
+  <form method="post" action="{% url 'studio_pod_meeting_schedule' pod_id=pod.pk %}" class="mt-4 max-w-3xl bg-card border border-border rounded-lg p-6" data-testid="studio-pod-schedule-form">
+    {% csrf_token %}
+    <h3 class="text-sm font-semibold text-foreground">Schedule meeting</h3>
+    <p class="text-xs text-muted-foreground mt-1">Creates confirmed meetings straight away and notifies the members. Weekly repeats keep the same local time in the chosen timezone.</p>
+    {% if schedule_form.error %}<p class="mt-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg px-4 py-3 text-sm" role="alert" data-testid="studio-pod-schedule-error">{{ schedule_form.error }}</p>{% endif %}
+    <div class="mt-4 grid gap-4 sm:grid-cols-3">
+      <div>
+        <label for="pod-schedule-date" class="block text-sm font-medium text-foreground mb-1">Start date</label>
+        <input id="pod-schedule-date" name="date" type="date" value="{{ schedule_form.date }}" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-schedule-date">
+      </div>
+      <div>
+        <label for="pod-schedule-time" class="block text-sm font-medium text-foreground mb-1">Start time</label>
+        <input id="pod-schedule-time" name="time" type="time" step="900" value="{{ schedule_form.time }}" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-schedule-time">
+      </div>
+      <div>
+        <label for="pod-schedule-timezone" class="block text-sm font-medium text-foreground mb-1">Timezone</label>
+        <select id="pod-schedule-timezone" name="timezone" class="studio-select w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-schedule-timezone">
+          {% for option in timezone_options %}
+          <option value="{{ option.value }}"{% if option.value == schedule_form.timezone %} selected{% endif %}>{{ option.label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <label class="mt-4 flex items-center gap-3 text-sm text-foreground">
+      <input type="checkbox" name="repeat_weekly" value="1"{% if schedule_form.repeat_weekly %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="studio-pod-schedule-repeat">
+      Repeat weekly for the remaining meetings
+    </label>
+    <button type="submit" class="mt-4 bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="studio-pod-schedule-submit">Schedule meeting</button>
+  </form>
 </section>
 
 <section class="mb-8 max-w-3xl" aria-labelledby="studio-pod-times-heading" data-testid="studio-pod-times">

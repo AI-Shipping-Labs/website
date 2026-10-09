@@ -14734,6 +14734,32 @@
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
+                  "meeting_url": "https://meet.google.com/abc-defg-hij",
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
                   "member_count": 2,
                   "members": [
                     {
@@ -14812,6 +14838,32 @@
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
+                  "meeting_url": "https://meet.google.com/abc-defg-hij",
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
                   "member_count": 2,
                   "members": [
                     {
@@ -14915,7 +14967,7 @@
     },
     "/api/pods/{pod_id}": {
       "get": {
-        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
+        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
         "parameters": [
           {
             "in": "path",
@@ -14939,6 +14991,32 @@
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
+                  "meeting_url": "https://meet.google.com/abc-defg-hij",
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
                   "member_count": 2,
                   "members": [
                     {
@@ -15014,7 +15092,7 @@
         ]
       },
       "patch": {
-        "description": "Partial update. ``max_members`` below the member count returns 422; raising it moves the oldest waitlisted requests back to ``pending`` (one per new seat). ``owner_email`` must be a member, or ``null`` for no owner. ``status=archived`` hides the pod from members and cancels its open requests; there is no DELETE. ``slack_channel_url`` must be an https Slack link (empty clears).",
+        "description": "Partial update. ``max_members`` below the member count returns 422; raising it moves the oldest waitlisted requests back to ``pending`` (one per new seat). ``owner_email`` must be a member, or ``null`` for no owner. ``status=archived`` hides the pod from members and cancels its open requests; there is no DELETE. ``slack_channel_url`` must be an https Slack link (empty clears). ``meeting_url`` is the pod call link: https only, up to 500 characters, empty clears. ``meeting_count`` below the meetings already planned or held returns 422.",
         "parameters": [
           {
             "in": "path",
@@ -15030,6 +15108,7 @@
             "application/json": {
               "example": {
                 "max_members": 5,
+                "meeting_url": "https://meet.google.com/abc-defg-hij",
                 "status": "closed"
               },
               "schema": {
@@ -15052,6 +15131,13 @@
                       90
                     ],
                     "type": "integer"
+                  },
+                  "meeting_url": {
+                    "maxLength": 500,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   },
                   "name": {
                     "type": "string"
@@ -15096,6 +15182,32 @@
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
+                  "meeting_url": "https://meet.google.com/abc-defg-hij",
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ],
                   "member_count": 2,
                   "members": [
                     {
@@ -15185,6 +15297,364 @@
         ]
       }
     },
+    "/api/pods/{pod_id}/meetings": {
+      "get": {
+        "description": "Every meeting of the pod in start order, including cancelled ones; filter with ``status``. ``number`` is the 1-based position among meetings that are neither cancelled nor expired (``null`` otherwise). A proposal is ``expired`` once its start passed while it was still ``proposed``. ``responses`` hold the explicit answers; after agreement a member without an answer counts as going.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "enum": [
+                "proposed",
+                "scheduled",
+                "held",
+                "cancelled"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Meetings."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "description": "Unknown status filter."
+          }
+        },
+        "summary": "List pod meetings (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      },
+      "post": {
+        "description": "Creates confirmed (``scheduled``) meetings with ``created_via=api`` and notifies the members. ``starts_at`` is an ISO 8601 instant with an offset, on the quarter hour, at least 1 hour ahead and at most 180 days ahead. ``timezone`` is the IANA zone weekly repeats keep their local time in. ``count`` defaults to 1, or to every remaining meeting with ``repeat_weekly``; more than 1 needs ``repeat_weekly``. A repeat that overlaps another meeting moves on a week. Over ``meeting_count`` returns 409 ``meeting_limit_reached``.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "repeat_weekly": true,
+                "starts_at": "2026-10-13T18:00:00+02:00",
+                "timezone": "Europe/Berlin"
+              },
+              "schema": {
+                "properties": {
+                  "count": {
+                    "minimum": 1,
+                    "type": "integer"
+                  },
+                  "repeat_weekly": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "starts_at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "starts_at",
+                  "timezone"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Created meetings."
+          },
+          "400": {
+            "description": "Invalid JSON or non-object body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "meeting_limit_reached",
+                  "error": "All 4 meetings are planned. Cancel one or raise the number of meetings to plan another."
+                }
+              }
+            },
+            "description": "The pod already has all its meetings planned."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "start"
+                  },
+                  "error": "Pick a time at least 1 hour from now and within the next 6 months."
+                }
+              }
+            },
+            "description": "Bad time (past, over 180 days, off the quarter hour), overlap, or bad field."
+          }
+        },
+        "summary": "Schedule pod meetings (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/meetings/{meeting_id}": {
+      "patch": {
+        "description": "Send ``starts_at`` to move (with optional ``timezone``, default the meeting's own zone, and ``move_later`` to move the later meetings of its weekly series to the same weekly time; all or nothing on overlap), or ``status`` (``scheduled``, ``held`` or ``cancelled``) to set it as a staff override. Moving keeps the status, clears ``Can't make it`` answers and the reminder. Moving a past, held or cancelled meeting returns 409 ``meeting_not_movable``; ``held`` on a proposal returns 422 (schedule it first); ``cancelled`` on a proposal cancels the whole proposal; bringing a meeting back to ``scheduled`` over ``meeting_count`` returns 409 ``meeting_limit_reached``. Returns the changed meetings. There is no DELETE: cancel instead so history is kept.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "meeting_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "move_later": true,
+                "starts_at": "2026-10-15T17:00:00+02:00",
+                "timezone": "Europe/Berlin"
+              },
+              "schema": {
+                "properties": {
+                  "move_later": {
+                    "default": false,
+                    "type": "boolean"
+                  },
+                  "starts_at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "scheduled",
+                      "held",
+                      "cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "timezone": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "meetings": [
+                    {
+                      "created_via": "member",
+                      "duration_minutes": 60,
+                      "ends_at": "2026-10-13T17:00:00+00:00",
+                      "expired": false,
+                      "id": 31,
+                      "moved_at": null,
+                      "moved_by": null,
+                      "number": 2,
+                      "previous_starts_at": null,
+                      "proposed_by": "anna@example.com",
+                      "reminder_sent_at": null,
+                      "responses": [
+                        {
+                          "email": "mike@example.com",
+                          "response": "cant_make_it"
+                        }
+                      ],
+                      "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                      "starts_at": "2026-10-13T16:00:00+00:00",
+                      "status": "scheduled",
+                      "timezone": "Europe/Berlin"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Changed meetings."
+          },
+          "400": {
+            "description": "Invalid JSON or non-object body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_meeting",
+                  "error": "Meeting not found"
+                }
+              }
+            },
+            "description": "Unknown pod or a meeting of another pod."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "meeting_not_movable",
+                  "error": "This meeting has already happened."
+                }
+              }
+            },
+            "description": "Meeting cannot be moved, or the meeting limit is reached."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "details": {
+                    "field": "start"
+                  },
+                  "error": "Pick a start time on the quarter hour."
+                }
+              }
+            },
+            "description": "Validation error."
+          }
+        },
+        "summary": "Move a meeting or set its status (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
     "/api/pods/{pod_id}/members": {
       "post": {
         "description": "Idempotent. Adds enrolled cohort members up to the size limit and closes their open requests on this pod as ``approved``. Returns the same ``results`` buckets as pod create.",
@@ -15238,6 +15708,32 @@
                     "max_members": 4,
                     "meeting_count": 3,
                     "meeting_minutes": 60,
+                    "meeting_url": "https://meet.google.com/abc-defg-hij",
+                    "meetings": [
+                      {
+                        "created_via": "member",
+                        "duration_minutes": 60,
+                        "ends_at": "2026-10-13T17:00:00+00:00",
+                        "expired": false,
+                        "id": 31,
+                        "moved_at": null,
+                        "moved_by": null,
+                        "number": 2,
+                        "previous_starts_at": null,
+                        "proposed_by": "anna@example.com",
+                        "reminder_sent_at": null,
+                        "responses": [
+                          {
+                            "email": "mike@example.com",
+                            "response": "cant_make_it"
+                          }
+                        ],
+                        "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
+                        "starts_at": "2026-10-13T16:00:00+00:00",
+                        "status": "scheduled",
+                        "timezone": "Europe/Berlin"
+                      }
+                    ],
                     "member_count": 2,
                     "members": [
                       {

@@ -348,6 +348,7 @@ class SetupSchedulesCommandTest(TestCase):
             'sprint-cadence-notifications',
             'sprint-end-recaps',
             'pods-stale-request-alert',
+            'pods-meeting-reminders',
             'onboarding-reminders',
             'onboarding-staff-notification-recovery',
             'cb-jobs-run-due',

@@ -245,6 +245,7 @@ _KEY_ORDER = {
         "PODS_STALE_REQUEST_DAYS",
         "PODS_REREQUEST_COOLDOWN_DAYS",
         "PODS_STALE_REQUEST_ALERT_ENABLED",
+        "PODS_MEETING_REMINDER_HOURS",
     ),
     "zoom": (
         "ZOOM_CLIENT_ID",
@@ -2175,4 +2176,14 @@ PODS_STALE_REQUEST_ALERT_ENABLED = declare(
     default="true",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_stale_request_alert_enabled",
+)
+PODS_MEETING_REMINDER_HOURS = declare(
+    key="PODS_MEETING_REMINDER_HOURS",
+    group="pods",
+    label="Pods Meeting Reminder Hours",
+    description="Hours before a scheduled pod meeting when members get the bell reminder (1-72). The hourly pods-meeting-reminders job sends one reminder per member and meeting, skipping members who can't make it; a moved meeting is reminded again. Defaults to 24.",
+    value_type="int",
+    default="24",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_meeting_reminder_hours",
 )

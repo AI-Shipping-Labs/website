@@ -159,6 +159,8 @@ class Pod(TimestampedModelMixin, models.Model):
         default=POD_SOURCE_MEMBER,
     )
     slack_channel_url = models.URLField(max_length=300, blank=True, default='')
+    # One optional call link for every meeting of the pod (issue #1919).
+    meeting_url = models.URLField(max_length=500, blank=True, default='', db_default='')
 
     class Meta:
         ordering = ['-created_at', '-pk']

@@ -445,16 +445,25 @@ non-staff token returns `401`.
 | GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
 | GET | `/api/pods` | Pod summaries; filters `course`, `cohort` (needs `course`), `status`; `limit`/`offset` |
 | POST | `/api/pods` | Create (`source=api`), `201`. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
-| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `suggested_slots` (UTC) |
-| PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count`, `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url` |
+| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
+| PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count` (`422` below the meetings already planned or held), `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url`, `meeting_url` (the pod call link: https only, max 500, empty clears) |
 | POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
 | GET | `/api/pods/<id>/requests` | Every request, optional `status` filter. Each request has `status`, `decided_at`, `decided_by`, and `stale_alerted_at` (when the daily staff Slack alert first reported it as stale, else `null`) |
 | POST | `/api/pods/<id>/requests/<request_id>/approve` | Staff override; `409 pod_full`, `409 request_not_open` |
 | POST | `/api/pods/<id>/requests/<request_id>/decline` | Staff override; `409 request_not_open` |
+| GET | `/api/pods/<id>/meetings` | Every meeting (issue #1919), optional `status` filter (`proposed`, `scheduled`, `held`, `cancelled`). Each has `id`, `number` (`null` when cancelled or expired), `starts_at`, `ends_at`, `duration_minutes`, `timezone`, `status`, `expired`, `series_id`, `created_via`, `proposed_by`, `moved_by`, `moved_at`, `previous_starts_at`, `reminder_sent_at`, `responses` (`email`, `response`) |
+| POST | `/api/pods/<id>/meetings` | Schedule agreed meetings (`created_via=api`), notifies members. `starts_at` (ISO 8601 with offset, quarter hour, 1 hour to 180 days ahead), `timezone` (IANA), `repeat_weekly` (default `false`), `count` (default 1, or every remaining meeting with `repeat_weekly`). `201`; `409 meeting_limit_reached`; `422 validation_error` for a bad time, an overlap or a bad field |
+| PATCH | `/api/pods/<id>/meetings/<meeting_id>` | Either `starts_at` (+ optional `timezone`, default the meeting's zone, and `move_later`) to move, or `status` (`scheduled`, `held`, `cancelled`) as a staff override. Returns the changed meetings. `409 meeting_not_movable` (past, held or cancelled), `409 meeting_limit_reached`, `404 unknown_meeting` (another pod's meeting), `422 validation_error` |
 
 There is no pod DELETE: archive with `PATCH {"status": "archived"}` so the
-request history is kept.
+request history is kept. There is no meeting DELETE either: cancel with
+`PATCH {"status": "cancelled"}` so the history stays.
+
+Meeting times are a UTC instant plus the IANA zone they were set in. Weekly
+repeats keep the same local wall-clock time in that zone per date, so a
+series at 18:00 Berlin stays at 18:00 Berlin across the October clock change
+(16:00 UTC before, 17:00 UTC after).
 
 ```bash
 # Roster for pairing (Cohort 4 of the Buildcamp course)
@@ -481,6 +490,20 @@ curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: applicat
 # Approve a stale request as staff
 curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/pods/7/requests/12/approve"
+
+# Schedule the pod's remaining meetings weekly at 18:00 Berlin time
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"starts_at": "2026-10-13T18:00:00+02:00", "timezone": "Europe/Berlin", "repeat_weekly": true}' \
+  "https://aishippinglabs.com/api/pods/7/meetings"
+
+# Move meeting 31 and the later meetings of its series to Thursdays 17:00 Berlin
+curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"starts_at": "2026-10-15T17:00:00+02:00", "timezone": "Europe/Berlin", "move_later": true}' \
+  "https://aishippinglabs.com/api/pods/7/meetings/31"
+
+# Mark a past meeting as held
+curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"status": "held"}' "https://aishippinglabs.com/api/pods/7/meetings/30"
 ```
 
 Settings live in the `Pods` IntegrationSetting group; see

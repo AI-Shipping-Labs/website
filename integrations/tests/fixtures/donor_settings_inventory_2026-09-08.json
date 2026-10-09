@@ -1309,6 +1309,13 @@
     "default": "true",
     "description": "When on, a daily job (09:00 UTC) posts one staff Slack message listing pending pod join requests older than PODS_STALE_REQUEST_DAYS that were not announced before. Posts to STAFF_COMMENT_NOTIFY_CHANNEL_ID, falling back to STAFF_SIGNUP_NOTIFY_CHANNEL_ID. No-redeploy kill switch. Defaults on.",
     "docs_url": "_docs/integrations/pods.md#pods_stale_request_alert_enabled"
+   },
+   {
+    "key": "PODS_MEETING_REMINDER_HOURS",
+    "is_secret": false,
+    "description": "Hours before a scheduled pod meeting when members get the bell reminder (1-72). The hourly pods-meeting-reminders job sends one reminder per member and meeting, skipping members who can't make it; a moved meeting is reminded again. Defaults to 24.",
+    "default": "24",
+    "docs_url": "_docs/integrations/pods.md#pods_meeting_reminder_hours"
    }
   ]
  }

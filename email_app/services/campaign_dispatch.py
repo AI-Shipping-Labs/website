@@ -52,8 +52,10 @@ def retry_delivery(delivery_id, *, actor, source="Studio campaign reconciliation
     from jobs.tasks import async_task, build_task_name
 
     with transaction.atomic():
+        # ``of=('self',)``: ``wave`` is nullable, so ``select_related`` is a
+        # LEFT OUTER JOIN and PostgreSQL refuses FOR UPDATE on it.
         delivery = (
-            CampaignDelivery.objects.select_for_update()
+            CampaignDelivery.objects.select_for_update(of=('self',))
             .select_related('campaign', 'wave')
             .get(pk=delivery_id)
         )

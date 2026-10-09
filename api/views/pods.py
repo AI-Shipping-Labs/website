@@ -12,9 +12,12 @@ rules match the member pages and Studio. Staff-only, so emails are fine.
 - ``POST /api/pods/<id>/members`` / ``DELETE /api/pods/<id>/members/<email>``
 - ``GET  /api/pods/<id>/requests``
 - ``POST /api/pods/<id>/requests/<request_id>/approve|decline``
+- ``GET  /api/pods/<id>/meetings`` / ``POST /api/pods/<id>/meetings``
+- ``PATCH /api/pods/<id>/meetings/<meeting_id>`` (issue #1919)
 
 There is no DELETE for a pod: archive with ``PATCH {"status": "archived"}``
-so request history is kept.
+so request history is kept. There is no DELETE for a meeting either:
+``PATCH {"status": "cancelled"}`` keeps its history.
 """
 
 from zoneinfo import ZoneInfo
@@ -35,6 +38,8 @@ from content.services.course_cohorts import get_course_cohort_by_key
 from crm.models import CRMRecord
 from payments.models import Membership, TierOverride
 from pods.models import (
+    MEETING_STATUS_CANCELLED,
+    MEETING_STATUS_CHOICES,
     OPEN_REQUEST_STATUSES,
     POD_SOURCE_API,
     POD_STATUS_CHOICES,
@@ -44,10 +49,13 @@ from pods.models import (
     AvailabilityProfile,
     Pod,
     PodJoinRequest,
+    PodMeeting,
     PodMembership,
 )
+from pods.services import meetings as mtg
 from pods.services import membership as svc
 from pods.services.availability import format_minute
+from pods.services.meeting_rules import meeting_end, meeting_state
 from pods.services.slack import clean_channel_url
 from pods.services.suggestions import load_member_availability, suggest_slots
 
@@ -59,8 +67,13 @@ POD_LIST_MAX_LIMIT = 200
 
 _POD_WRITABLE = (
     'name', 'purpose', 'max_members', 'meeting_count', 'meeting_minutes',
-    'status', 'owner_email', 'slack_channel_url',
+    'status', 'owner_email', 'slack_channel_url', 'meeting_url',
 )
+_MEETING_STATUS_VALUES = [value for value, _label in MEETING_STATUS_CHOICES]
+_MEETING_CREATE_FIELDS = ('starts_at', 'timezone', 'repeat_weekly', 'count')
+_MEETING_PATCH_FIELDS = ('starts_at', 'timezone', 'move_later', 'status')
+_MEETING_PATCH_STATUSES = ['scheduled', 'held', 'cancelled']
+_CONFLICT_CODES = ('pod_full', 'request_not_open', mtg.CODE_LIMIT, mtg.CODE_NOT_MOVABLE, mtg.CODE_PROPOSAL_EXISTS)
 _STATUS_VALUES = [value for value, _label in POD_STATUS_CHOICES]
 _REQUEST_STATUS_VALUES = [value for value, _label in REQUEST_STATUS_CHOICES]
 
@@ -92,6 +105,25 @@ _POD_SUMMARY_EXAMPLE = {
     'created_at': '2026-10-01T09:00:00+00:00',
 }
 
+_MEETING_EXAMPLE = {
+    'id': 31,
+    'number': 2,
+    'starts_at': '2026-10-13T16:00:00+00:00',
+    'ends_at': '2026-10-13T17:00:00+00:00',
+    'duration_minutes': 60,
+    'timezone': 'Europe/Berlin',
+    'status': 'scheduled',
+    'expired': False,
+    'series_id': '6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f',
+    'created_via': 'member',
+    'proposed_by': 'anna@example.com',
+    'moved_by': None,
+    'moved_at': None,
+    'previous_starts_at': None,
+    'reminder_sent_at': None,
+    'responses': [{'email': 'mike@example.com', 'response': 'cant_make_it'}],
+}
+
 _POD_DETAIL_EXAMPLE = {
     **_POD_SUMMARY_EXAMPLE,
     'members': [{
@@ -111,6 +143,8 @@ _POD_DETAIL_EXAMPLE = {
         'created_at': '2026-10-02T10:00:00+00:00',
         'stale_alerted_at': None,
     }],
+    'meeting_url': 'https://meet.google.com/abc-defg-hij',
+    'meetings': [_MEETING_EXAMPLE],
     'suggested_slots': [{
         'start': '2026-10-06T16:00:00+00:00',
         'end': '2026-10-06T17:00:00+00:00',
@@ -161,6 +195,7 @@ _ROSTER_EXAMPLE = {
 }
 
 _ERR_UNKNOWN_POD = {'error': 'Pod not found', 'code': 'unknown_pod'}
+_ERR_LIMIT = {'error': mtg.msg_limit(4), 'code': mtg.CODE_LIMIT}
 
 
 def _parse_limit(request, default, maximum):
@@ -251,6 +286,8 @@ def _serialize_detail(pod):
     slots = suggest_slots(member_avail, pod.meeting_minutes, all_members=member_avail)
     data = _serialize_summary(pod)
     data.update({
+        'meeting_url': pod.meeting_url,
+        'meetings': _serialize_meetings(pod, exclude_cancelled=True),
         'members': [{
             'email': m.user.email,
             'first_name': m.user.first_name,
@@ -280,8 +317,56 @@ def _serialize_detail(pod):
     return data
 
 
+def _meeting_queryset(pod):
+    return (
+        PodMeeting.objects.filter(pod=pod)
+        .select_related('proposed_by', 'moved_by')
+        .prefetch_related('responses__user')
+        .order_by('starts_at', 'pk')
+    )
+
+
+def _serialize_meeting(meeting, state):
+    return {
+        'id': meeting.pk,
+        'number': state.numbers.get(meeting.pk),
+        'starts_at': isoformat_or_none(meeting.starts_at),
+        'ends_at': isoformat_or_none(meeting_end(meeting)),
+        'duration_minutes': meeting.duration_minutes,
+        'timezone': meeting.timezone,
+        'status': meeting.status,
+        'expired': state.is_expired(meeting),
+        'series_id': str(meeting.series_id) if meeting.series_id else None,
+        'created_via': meeting.created_via,
+        'proposed_by': meeting.proposed_by.email if meeting.proposed_by_id else None,
+        'moved_by': meeting.moved_by.email if meeting.moved_by_id else None,
+        'moved_at': isoformat_or_none(meeting.moved_at),
+        'previous_starts_at': isoformat_or_none(meeting.previous_starts_at),
+        'reminder_sent_at': isoformat_or_none(meeting.reminder_sent_at),
+        'responses': [
+            {'email': response.user.email, 'response': response.response}
+            for response in sorted(meeting.responses.all(), key=lambda r: r.pk)
+        ],
+    }
+
+
+def _serialize_meetings(pod, *, exclude_cancelled=False, status=None, only_ids=None):
+    meetings = list(_meeting_queryset(pod))
+    state = meeting_state(pod, meetings=meetings)
+    rows = []
+    for meeting in state.meetings:
+        if exclude_cancelled and meeting.status == MEETING_STATUS_CANCELLED:
+            continue
+        if status and meeting.status != status:
+            continue
+        if only_ids is not None and meeting.pk not in only_ids:
+            continue
+        rows.append(_serialize_meeting(meeting, state))
+    return rows
+
+
 def _pod_error_response(exc):
-    status = 409 if exc.code in ('pod_full', 'request_not_open') else 422
+    status = 409 if exc.code in _CONFLICT_CODES else 422
     if exc.code == 'not_a_member':
         status = 404
     details = {'field': exc.field} if exc.field else None
@@ -586,7 +671,9 @@ def _patch_pod(request, pod):
                                    message=f'Unknown field(s): {", ".join(unknown)}')
     if not data:
         return validation_response({'field': 'body', 'allowed': list(_POD_WRITABLE)}, message='Nothing to update')
-    changes = {key: value for key, value in data.items() if key not in ('owner_email', 'slack_channel_url')}
+    changes = {
+        key: value for key, value in data.items() if key not in ('owner_email', 'slack_channel_url', 'meeting_url')
+    }
     if 'owner_email' in data:
         email = normalize_email(data['owner_email'] or '')
         if not email:
@@ -601,6 +688,13 @@ def _patch_pod(request, pod):
             changes['slack_channel_url'] = clean_channel_url(data['slack_channel_url'] or '')
         except ValueError as exc:
             return validation_response({'field': 'slack_channel_url'}, message=str(exc))
+    if 'meeting_url' in data:
+        if data['meeting_url'] is not None and not isinstance(data['meeting_url'], str):
+            return validation_response({'field': 'meeting_url', 'expected': 'string'}, message=mtg.MSG_CALL_LINK)
+        try:
+            changes['meeting_url'] = mtg.clean_call_link(data['meeting_url'] or '')
+        except ValueError as exc:
+            return validation_response({'field': 'meeting_url'}, message=str(exc))
     try:
         svc.update_pod(pod, changes, actor=request.user, staff=True)
     except svc.PodError as exc:
@@ -619,7 +713,9 @@ def _patch_pod(request, pod):
             'summary': 'Pod detail (staff-only)',
             'description': (
                 'Settings, members, open requests (pending and waitlisted with '
-                'their 1-based waiting-list position), the Slack channel link '
+                'their 1-based waiting-list position), the Slack channel link, '
+                'the call link ``meeting_url``, ``meetings`` (every meeting that '
+                'is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) '
                 'and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC '
                 'slots with ``available``, ``if_needed`` and ``missing`` member '
                 'emails and each member\'s local start time.'
@@ -638,7 +734,10 @@ def _patch_pod(request, pod):
                 '``pending`` (one per new seat). ``owner_email`` must be a member, '
                 'or ``null`` for no owner. ``status=archived`` hides the pod from '
                 'members and cancels its open requests; there is no DELETE. '
-                '``slack_channel_url`` must be an https Slack link (empty clears).'
+                '``slack_channel_url`` must be an https Slack link (empty clears). '
+                '``meeting_url`` is the pod call link: https only, up to 500 '
+                'characters, empty clears. ``meeting_count`` below the meetings '
+                'already planned or held returns 422.'
             ),
             'request_body': {
                 'properties': {
@@ -650,8 +749,9 @@ def _patch_pod(request, pod):
                     'status': {'type': 'string', 'enum': _STATUS_VALUES},
                     'owner_email': {'type': ['string', 'null']},
                     'slack_channel_url': {'type': 'string'},
+                    'meeting_url': {'type': ['string', 'null'], 'maxLength': 500},
                 },
-                'example': {'max_members': 5, 'status': 'closed'},
+                'example': {'max_members': 5, 'status': 'closed', 'meeting_url': 'https://meet.google.com/abc-defg-hij'},
             },
             'responses': {
                 200: {'description': 'Updated pod.', 'example': _POD_DETAIL_EXAMPLE},
@@ -848,3 +948,202 @@ def pod_request_approve(request, pod_id, request_id):
 )
 def pod_request_decline(request, pod_id, request_id):
     return _decide(request, pod_id, request_id, svc.decline_request)
+
+
+# --- Meetings (issue #1919) -----------------------------------------------------
+
+def _parse_bool(data, field, default=False):
+    value = data.get(field, default)
+    if not isinstance(value, bool):
+        return None, validation_response({'field': field, 'expected': 'boolean'}, message=f'{field} must be true or false')
+    return value, None
+
+
+def _create_meetings(request, pod):
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return body_must_be_object_response()
+    unknown = sorted(set(data) - set(_MEETING_CREATE_FIELDS))
+    if unknown:
+        return validation_response({'field': unknown[0], 'allowed': list(_MEETING_CREATE_FIELDS)},
+                                   message=f'Unknown field(s): {", ".join(unknown)}')
+    for field in ('starts_at', 'timezone'):
+        if not isinstance(data.get(field), str) or not data[field].strip():
+            return validation_response({'field': field}, message=f'{field} is required')
+    repeat_weekly, error = _parse_bool(data, 'repeat_weekly')
+    if error is not None:
+        return error
+    count = data.get('count')
+    if count is not None and (isinstance(count, bool) or not isinstance(count, int) or count < 1):
+        return validation_response({'field': 'count', 'expected': 'integer >= 1'}, message='count must be 1 or more')
+    try:
+        start = mtg.parse_instant(data['starts_at'], field='starts_at')
+        created = mtg.schedule_meetings(
+            pod, request.user, start, zone_name=data['timezone'], repeat_weekly=repeat_weekly,
+            count=count, created_via=POD_SOURCE_API,
+        )
+    except svc.PodError as exc:
+        return _pod_error_response(exc)
+    return JsonResponse({'meetings': _serialize_meetings(pod, only_ids={m.pk for m in created})}, status=201)
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods('GET', 'POST', structured_errors=True)
+@openapi_spec(
+    tag=TAG,
+    summary='List or schedule pod meetings (staff-only)',
+    methods={
+        'GET': {
+            'summary': 'List pod meetings (staff-only)',
+            'description': (
+                'Every meeting of the pod in start order, including cancelled '
+                'ones; filter with ``status``. ``number`` is the 1-based position '
+                'among meetings that are neither cancelled nor expired (``null`` '
+                'otherwise). A proposal is ``expired`` once its start passed '
+                'while it was still ``proposed``. ``responses`` hold the explicit '
+                'answers; after agreement a member without an answer counts as '
+                'going.'
+            ),
+            'query': {'status': {'type': 'string', 'enum': _MEETING_STATUS_VALUES}},
+            'responses': {
+                200: {'description': 'Meetings.', 'example': {'meetings': [_MEETING_EXAMPLE]}},
+                401: {'description': 'Missing or invalid staff token.'},
+                404: {'description': 'Unknown pod.', 'example': _ERR_UNKNOWN_POD},
+                422: {'description': 'Unknown status filter.'},
+            },
+        },
+        'POST': {
+            'summary': 'Schedule pod meetings (staff-only)',
+            'description': (
+                'Creates confirmed (``scheduled``) meetings with '
+                '``created_via=api`` and notifies the members. ``starts_at`` is '
+                'an ISO 8601 instant with an offset, on the quarter hour, at '
+                'least 1 hour ahead and at most 180 days ahead. ``timezone`` is '
+                'the IANA zone weekly repeats keep their local time in. '
+                '``count`` defaults to 1, or to every remaining meeting with '
+                '``repeat_weekly``; more than 1 needs ``repeat_weekly``. A repeat '
+                'that overlaps another meeting moves on a week. Over '
+                '``meeting_count`` returns 409 ``meeting_limit_reached``.'
+            ),
+            'request_body': {
+                'required': ['starts_at', 'timezone'],
+                'properties': {
+                    'starts_at': {'type': 'string', 'format': 'date-time'},
+                    'timezone': {'type': 'string'},
+                    'repeat_weekly': {'type': 'boolean', 'default': False},
+                    'count': {'type': 'integer', 'minimum': 1},
+                },
+                'example': {'starts_at': '2026-10-13T18:00:00+02:00', 'timezone': 'Europe/Berlin', 'repeat_weekly': True},
+            },
+            'responses': {
+                201: {'description': 'Created meetings.', 'example': {'meetings': [_MEETING_EXAMPLE]}},
+                400: {'description': 'Invalid JSON or non-object body.'},
+                401: {'description': 'Missing or invalid staff token.'},
+                404: {'description': 'Unknown pod.', 'example': _ERR_UNKNOWN_POD},
+                409: {'description': 'The pod already has all its meetings planned.', 'example': _ERR_LIMIT},
+                422: {'description': 'Bad time (past, over 180 days, off the quarter hour), overlap, or bad field.',
+                      'example': {'error': mtg.MSG_TIME_RANGE, 'code': 'validation_error',
+                                  'details': {'field': 'start'}}},
+            },
+        },
+    },
+)
+def pod_meetings(request, pod_id):
+    pod = _get_pod(pod_id)
+    if pod is None:
+        return _unknown_pod()
+    if request.method == 'POST':
+        return _create_meetings(request, pod)
+    status = (request.GET.get('status') or '').strip()
+    if status and status not in _MEETING_STATUS_VALUES:
+        return validation_response({'field': 'status', 'allowed': _MEETING_STATUS_VALUES}, message='Unknown status')
+    return JsonResponse({'meetings': _serialize_meetings(pod, status=status or None)})
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods('PATCH', structured_errors=True)
+@openapi_spec(
+    tag=TAG,
+    summary='Move a pod meeting or set its status (staff-only)',
+    methods={
+        'PATCH': {
+            'summary': 'Move a meeting or set its status (staff-only)',
+            'description': (
+                'Send ``starts_at`` to move (with optional ``timezone``, default '
+                "the meeting's own zone, and ``move_later`` to move the later "
+                'meetings of its weekly series to the same weekly time; all or '
+                'nothing on overlap), or ``status`` (``scheduled``, ``held`` or '
+                '``cancelled``) to set it as a staff override. Moving keeps the '
+                "status, clears ``Can't make it`` answers and the reminder. "
+                'Moving a past, held or cancelled meeting returns 409 '
+                '``meeting_not_movable``; ``held`` on a proposal returns 422 '
+                '(schedule it first); ``cancelled`` on a proposal cancels the '
+                'whole proposal; bringing a meeting back to '
+                '``scheduled`` over ``meeting_count`` returns 409 '
+                '``meeting_limit_reached``. Returns the changed meetings. There '
+                'is no DELETE: cancel instead so history is kept.'
+            ),
+            'request_body': {
+                'properties': {
+                    'starts_at': {'type': 'string', 'format': 'date-time'},
+                    'timezone': {'type': 'string'},
+                    'move_later': {'type': 'boolean', 'default': False},
+                    'status': {'type': 'string', 'enum': _MEETING_PATCH_STATUSES},
+                },
+                'example': {'starts_at': '2026-10-15T17:00:00+02:00', 'timezone': 'Europe/Berlin', 'move_later': True},
+            },
+            'responses': {
+                200: {'description': 'Changed meetings.', 'example': {'meetings': [_MEETING_EXAMPLE]}},
+                400: {'description': 'Invalid JSON or non-object body.'},
+                401: {'description': 'Missing or invalid staff token.'},
+                404: {'description': 'Unknown pod or a meeting of another pod.',
+                      'example': {'error': 'Meeting not found', 'code': 'unknown_meeting'}},
+                409: {'description': 'Meeting cannot be moved, or the meeting limit is reached.',
+                      'example': {'error': mtg.MSG_HAPPENED, 'code': mtg.CODE_NOT_MOVABLE}},
+                422: {'description': 'Validation error.',
+                      'example': {'error': mtg.MSG_QUARTER, 'code': 'validation_error', 'details': {'field': 'start'}}},
+            },
+        },
+    },
+)
+def pod_meeting_detail(request, pod_id, meeting_id):
+    pod = _get_pod(pod_id)
+    if pod is None:
+        return _unknown_pod()
+    meeting = PodMeeting.objects.filter(pk=meeting_id, pod=pod).first()
+    if meeting is None:
+        return error_response('Meeting not found', 'unknown_meeting', status=404)
+    data, parse_error = parse_json_body(request)
+    if parse_error is not None:
+        return parse_error
+    if not isinstance(data, dict):
+        return body_must_be_object_response()
+    unknown = sorted(set(data) - set(_MEETING_PATCH_FIELDS))
+    if unknown:
+        return validation_response({'field': unknown[0], 'allowed': list(_MEETING_PATCH_FIELDS)},
+                                   message=f'Unknown field(s): {", ".join(unknown)}')
+    if ('starts_at' in data) == ('status' in data):
+        return validation_response({'field': 'body', 'allowed': list(_MEETING_PATCH_FIELDS)},
+                                   message='Send either starts_at or status')
+    try:
+        if 'status' in data:
+            if data['status'] not in _MEETING_PATCH_STATUSES:
+                return validation_response({'field': 'status', 'allowed': _MEETING_PATCH_STATUSES},
+                                           message='Unknown status')
+            changed = mtg.set_meeting_status(meeting, request.user, data['status'])
+        else:
+            move_later, error = _parse_bool(data, 'move_later')
+            if error is not None:
+                return error
+            zone = data.get('timezone') or meeting.timezone
+            if not isinstance(zone, str):
+                return validation_response({'field': 'timezone', 'expected': 'string'}, message=mtg.MSG_BAD_ZONE)
+            start = mtg.parse_instant(data['starts_at'], field='starts_at')
+            changed = mtg.move_meeting(meeting, request.user, start, zone_name=zone, move_later=move_later)
+    except svc.PodError as exc:
+        return _pod_error_response(exc)
+    return JsonResponse({'meetings': _serialize_meetings(pod, only_ids={m.pk for m in changed})})

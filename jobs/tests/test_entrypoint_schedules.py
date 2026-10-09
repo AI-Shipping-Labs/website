@@ -76,6 +76,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'sprint-cadence-notifications',
             'sprint-end-recaps',
             'pods-stale-request-alert',
+            'pods-meeting-reminders',
             'onboarding-reminders',
             'cb-jobs-run-due',
             'cb-jobs-sweep',

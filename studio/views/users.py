@@ -74,7 +74,12 @@ from accounts.utils.tags import (
 from community.models import CommunityAuditLog
 from community.services.slack_links import build_slack_profile_url
 from community.tasks.slack_membership import check_user_slack_membership
-from content.access import get_active_override
+from content.access import (
+    active_overrides_queryset,
+    get_active_override,
+    get_active_overrides_by_user,
+    resolve_effective_tier,
+)
 from content.models import Enrollment, UserCourseProgress
 from crm.models import CRMRecord
 from email_app.models import SesEvent
@@ -205,82 +210,13 @@ def _slack_status(user):
     return 'Member' if user.slack_member else 'Not in Slack'
 
 
-def _base_tier_level(user):
-    """Return the stored subscription/base level, treating null as free.
-
-    Used for paid-vs-comped counts and upward-only override authoring; display
-    helpers layer active overrides on top separately.
-    """
-    # Issue #1579: the base tier lives on payments.Membership.
-    if user.membership.tier_id is None:
-        return 0
-    return user.membership.tier.level
-
-
-def _active_override_map(users):
-    """Return the active non-expired override for each listed user, if any."""
-    user_ids = [user.pk for user in users]
-    if not user_ids:
-        return {}
-
-    overrides = (
-        TierOverride.objects
-        .filter(
-            user_id__in=user_ids,
-            is_active=True,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related('override_tier')
-        .order_by('user_id', '-created_at')
-    )
-
-    override_map = {}
-    for override in overrides:
-        override_map.setdefault(override.user_id, override)
-    return override_map
-
-
-def _effective_tier_name(user, override=None):
-    """Return the effective tier label without provenance suffixes."""
-    base_name = (
-        user.membership.tier.name if user.membership.tier_id else 'Free'
-    )
-    if override is None:
-        return base_name
-
-    base_level = _base_tier_level(user)
-    override_level = override.override_tier.level
-    if override_level <= base_level:
-        return base_name
-    return override.override_tier.name
-
-
-def _effective_tier_slug(user, override=None):
-    """Return the effective tier slug for Studio pill colour mapping."""
-    base_slug = (
-        user.membership.tier.slug if user.membership.tier_id else 'free'
-    )
-    if override is None:
-        return base_slug
-
-    base_level = _base_tier_level(user)
-    override_level = override.override_tier.level
-    if override_level <= base_level:
-        return base_slug
-    return override.override_tier.slug
-
-
 def _active_override_subquery(now):
-    """Return the latest active non-expired override subquery for users."""
-    return (
-        TierOverride.objects
-        .filter(
-            user_id=OuterRef('pk'),
-            is_active=True,
-            expires_at__gt=now,
-        )
-        .order_by('-created_at')
-    )
+    """Return the strongest active non-expired override subquery for users.
+
+    Issue #1929: same filter and ordering as ``content.access`` so the tier
+    filters and counts agree with the row pill and with access checks.
+    """
+    return active_overrides_queryset(now).filter(user_id=OuterRef('pk'))
 
 
 def _active_subscription_q():
@@ -517,11 +453,12 @@ def _row_tooltip(user, slack_status):
 def _user_rows_from_users(users):
     """Build Studio row dictionaries for already-filtered user objects."""
     users = list(users)
-    override_map = _active_override_map(users)
+    override_map = get_active_overrides_by_user(users)
 
     user_rows = []
     for user in users:
         override = override_map.get(user.pk)
+        effective_tier = resolve_effective_tier(user, override)
         tags = list(user.tags or [])
         first_name = user.first_name or ''
         last_name = user.last_name or ''
@@ -547,8 +484,8 @@ def _user_rows_from_users(users):
             'account_lifecycle': account_lifecycle,
             'account_lifecycle_label': lifecycle_label(account_lifecycle),
             'email_verified': user.email_verified,
-            'tier_name': _effective_tier_name(user, override),
-            'tier_slug': _effective_tier_slug(user, override),
+            'tier_name': effective_tier.name,
+            'tier_slug': effective_tier.slug,
             'tier_source': _tier_source(user, override is not None),
             'status': _user_status(user),
             'tags': tags,
@@ -999,11 +936,6 @@ def user_create_done(request):
 # ---------------------------------------------------------------------------
 
 
-def _active_override_for_user(user):
-    """Return the canonical strongest active non-expired override."""
-    return get_active_override(user)
-
-
 def _tier_source(user, has_override):
     """Classify the source of the displayed tier for the badge.
 
@@ -1414,7 +1346,8 @@ def user_detail(request, user_id):
             deletion_request_blocker = "Protected staff account"
         elif user.membership.subscription_id:
             deletion_request_blocker = "Active subscription cleanup required"
-    override = _active_override_for_user(user)
+    override = get_active_override(user)
+    effective_tier = resolve_effective_tier(user, override)
     crm_record = CRMRecord.objects.filter(user=user).first()
     course_enrollments = _build_course_enrollments(user)
     plan_sprint_rows = _build_plan_sprint_rows(user)
@@ -1506,8 +1439,8 @@ def user_detail(request, user_id):
             if deletion_request is not None
             else ""
         ),
-        'tier_name': _effective_tier_name(user, override),
-        'tier_slug': _effective_tier_slug(user, override),
+        'tier_name': effective_tier.name,
+        'tier_slug': effective_tier.slug,
         'has_override': has_override,
         'active_override': override,
         'is_subscribed': not user.unsubscribed,

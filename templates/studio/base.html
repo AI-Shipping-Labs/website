@@ -357,7 +357,7 @@ rail rule below is scoped to ``min-width: 768px``.
             <span class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">/</span>
           </div>
           <div id="studio-global-search-results"
-               class="absolute left-0 z-50 mt-1 hidden max-h-[60vh] w-[min(28rem,calc(100vw-3rem))] overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+               class="absolute left-0 z-50 mt-1 hidden max-h-[60vh] w-full overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
                role="listbox" data-studio-global-search-results
                data-testid="studio-global-search-results"></div>
         </div>
@@ -1348,12 +1348,12 @@ document.addEventListener('click', function(event) {
         html += '<div class="pb-2">';
         items.forEach(function(item) {
           html += '<button type="button" role="option" aria-selected="false" class="flex min-h-[44px] w-full items-start gap-3 px-3 py-2 text-left hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent" data-studio-search-result data-result-url="' + escapeHtml(item.url) + '">';
-          html += '<span class="mt-0.5 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">' + escapeHtml(item.type) + '</span>';
+          html += '<span class="mt-0.5 shrink-0 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">' + escapeHtml(item.type) + '</span>';
           html += '<span class="min-w-0 flex-1">';
-          html += '<span class="block truncate text-sm font-medium text-foreground">' + escapeHtml(item.label) + '</span>';
-          html += '<span class="block truncate text-xs text-muted-foreground">' + escapeHtml(item.summary) + '</span>';
+          html += '<span class="block truncate text-sm font-medium text-foreground" title="' + escapeHtml(item.label) + '" data-studio-search-result-label>' + escapeHtml(item.label) + '</span>';
+          html += '<span class="block break-all text-xs text-muted-foreground" title="' + escapeHtml(item.summary) + '" data-studio-search-result-summary>' + escapeHtml(item.summary) + '</span>';
           if (item.metadata) {
-            html += '<span class="block truncate text-xs text-muted-foreground/80">' + escapeHtml(item.metadata) + '</span>';
+            html += '<span class="block break-words text-xs text-muted-foreground/80" title="' + escapeHtml(item.metadata) + '" data-studio-search-result-metadata>' + escapeHtml(item.metadata) + '</span>';
           }
           html += '</span></button>';
         });

@@ -19,7 +19,9 @@ from accounts.services.email_resolution import normalize_email, resolve_users_by
 from content.models import CohortEnrollment
 from notifications.models import Notification
 from pods.models import (
+    ACTIVE_MEETING_STATUSES,
     MEETING_MINUTES_CHOICES,
+    MEETING_STATUS_CANCELLED,
     MEMBERSHIP_SOURCE_CREATOR,
     MEMBERSHIP_SOURCE_REQUEST,
     MEMBERSHIP_SOURCE_STAFF,
@@ -39,9 +41,12 @@ from pods.models import (
     AvailabilityProfile,
     Pod,
     PodJoinRequest,
+    PodMeeting,
+    PodMeetingResponse,
     PodMembership,
 )
 from pods.services import config as pods_config
+from pods.services.meeting_rules import used_meeting_count
 from pods.services.people import is_cohort_participant, is_dated_cohort, user_timezone_name
 
 NOTIFICATION_POD_REQUEST = 'pod_request'
@@ -99,6 +104,13 @@ def msg_request_cooldown(date_label):
 
 def msg_size_below_members(count):
     return f'The size limit cannot be lower than the current number of members ({count}).'
+
+
+def msg_count_below_used(used):
+    return (
+        f'This pod already has {used} meetings planned or held. '
+        'Cancel a meeting before lowering the number.'
+    )
 
 
 # --- URLs -----------------------------------------------------------------
@@ -337,7 +349,10 @@ def _sync_queue(pod, *, notify_owner=True):
 
 
 def _lock(pod):
-    return Pod.objects.select_for_update().select_related('cohort__course', 'owner').get(pk=pod.pk)
+    # ``of=('self',)``: ``Pod.cohort`` and ``Pod.owner`` are nullable, so
+    # ``select_related`` is a LEFT OUTER JOIN and PostgreSQL refuses FOR
+    # UPDATE on it (issue #1919). Only the pod row needs the lock.
+    return Pod.objects.select_for_update(of=('self',)).select_related('cohort__course', 'owner').get(pk=pod.pk)
 
 
 # --- Creating pods --------------------------------------------------------
@@ -642,6 +657,9 @@ def remove_member(pod, user, *, actor=None):
     deleted, _ = pod.memberships.filter(user=user).delete()
     if not deleted:
         raise PodError(MSG_NOT_A_MEMBER, code='not_a_member')
+    now = timezone.now()
+    # Issue #1919: a leaver's answers on future meetings no longer count.
+    PodMeetingResponse.objects.filter(user=user, meeting__pod=pod, meeting__starts_at__gt=now).delete()
     remaining = list(pod.memberships.select_related('user').order_by('joined_at', 'pk'))
     update_fields = []
     if pod.owner_id == user.pk:
@@ -652,8 +670,11 @@ def remove_member(pod, user, *, actor=None):
         update_fields.append('status')
         pod.join_requests.filter(status__in=OPEN_REQUEST_STATUSES).update(
             status=REQUEST_STATUS_CANCELLED,
-            decided_at=timezone.now(),
+            decided_at=now,
         )
+        PodMeeting.objects.filter(
+            pod=pod, status__in=ACTIVE_MEETING_STATUSES, starts_at__gt=now,
+        ).update(status=MEETING_STATUS_CANCELLED, status_changed_at=now, updated_at=now)
     if update_fields:
         update_fields.append('updated_at')
         pod.save(update_fields=update_fields)
@@ -687,6 +708,10 @@ def update_pod(pod, data, *, actor=None, staff=False):
     if errors:
         first_field = next(iter(errors))
         raise PodError(errors[first_field], field=first_field)
+    if 'meeting_count' in cleaned and cleaned['meeting_count'] != pod.meeting_count:
+        used = used_meeting_count(pod)
+        if cleaned['meeting_count'] < used:
+            raise PodError(msg_count_below_used(used), field='meeting_count')
     if 'status' in data:
         new_status = str(data['status'] or '').strip()
         if new_status not in VALID_STATUSES:
@@ -704,6 +729,9 @@ def update_pod(pod, data, *, actor=None, staff=False):
         cleaned['owner'] = owner
     if 'slack_channel_url' in data:
         cleaned['slack_channel_url'] = data['slack_channel_url']
+    if 'meeting_url' in data:
+        # Callers validate with ``meetings.clean_call_link`` first.
+        cleaned['meeting_url'] = data['meeting_url']
     for key, value in cleaned.items():
         setattr(pod, key, value)
     pod.save()
@@ -738,6 +766,7 @@ __all__ = [
     'free_seats',
     'is_member',
     'member_count',
+    'msg_count_below_used',
     'msg_pod_full',
     'open_request_for',
     'pod_url',

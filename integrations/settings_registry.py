@@ -159,6 +159,7 @@ SETTING_VALUE_TYPES = {
     "PODS_SUGGESTION_COUNT": "integer",
     "PODS_STALE_REQUEST_DAYS": "integer",
     "PODS_REREQUEST_COOLDOWN_DAYS": "integer",
+    "PODS_MEETING_REMINDER_HOURS": "integer",
     # One absolute HTTP(S) URL
     "STRIPE_CUSTOMER_PORTAL_URL": "url",
     "CALENDLY_CONNECTED_USER_URI": "url",

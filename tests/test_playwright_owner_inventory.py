@@ -1639,6 +1639,31 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_coexisting_grants_show_strongest_tier_across_pages",
     })
 
+    issue_1919_owners = frozenset({
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_pod_member_proposes_a_weekly_meeting_from_a_suggested_time",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_second_member_confirms_and_the_pod_gets_its_four_weekly_meetings",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_member_cant_make_it_and_the_pod_moves_it_to_the_next_best_time",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_member_moves_the_rest_of_the_series_to_a_new_weekly_time",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_pod_adds_its_call_link_and_joins_when_the_meeting_starts",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_pod_records_whether_past_meetings_happened",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_pod_cannot_plan_more_meetings_than_agreed",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_series_across_a_clock_change_warns_the_member_whose_time_shifts",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_member_schedules_meeting_2_at_the_same_weekly_time_after_a_one_off_first_meeting",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_outsider_cannot_see_or_act_on_pod_meetings",
+        "playwright_tests/test_pod_meetings_1919.py::"
+        "test_staff_schedules_pod_meetings_from_studio",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1864,8 +1889,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2802)
-        self.assertEqual(len(inventory.owners), 2598)
+        self.assertEqual(inventory.item_count, 2813)
+        self.assertEqual(len(inventory.owners), 2609)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1887,6 +1912,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1918_owners
             | self.issue_1927_owners
             | self.issue_1929_owners
+            | self.issue_1919_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

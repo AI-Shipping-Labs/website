@@ -24,6 +24,14 @@ from pods.models import (
 )
 from pods.services import config as pods_config
 from pods.services.availability import freshness_line, summary_rows
+from pods.services.meeting_presentation import (
+    meetings_section,
+    next_meeting_lines,
+    propose_state,
+    propose_url,
+    same_week_slot,
+    without_near,
+)
 from pods.services.membership import (
     REREQUEST_COOLDOWN,
     REREQUEST_FINAL,
@@ -153,6 +161,8 @@ def build_pod_rows(cohort, viewer, *, now=None):
     viewer_availability = availability.get(viewer.pk)
     open_requests, last_requests = _requests_by_pod(pods, viewer)
     can_request = is_cohort_participant(viewer, cohort)
+    own_pods = [pod for pod in pods if any(m.user_id == viewer.pk for m in pod.memberships.all())]
+    meeting_lines = next_meeting_lines(own_pods, _viewer_zone(viewer_availability, viewer), now)
     rows = []
     for pod in pods:
         members = [m.user for m in pod.memberships.all()]
@@ -175,6 +185,7 @@ def build_pod_rows(cohort, viewer, *, now=None):
             'state': state,
             'fit_hours': hours,
             'fit_line': fit_line(hours),
+            'meeting_line': meeting_lines.get(pod.pk, '') if state.key == STATE_MEMBER else '',
         })
 
     def group(row):
@@ -281,6 +292,23 @@ def suggestions_context(pod, members_availability, viewer_zone, *, now=None):
     return context
 
 
+def _add_meeting_actions(pod, suggestions, state, member_avail, viewer_zone, *, is_member, count, now):
+    """Issue #1919: ``Propose this time`` on each slot, the leading ``Same
+    weekly time`` row, and the line explaining why proposing is blocked."""
+    can_propose, blocked = propose_state(pod, state, is_member=is_member, member_count=count)
+    same = same_week_slot(pod, state, member_avail, now)
+    if same is not None:
+        rows = slot_rows([same], viewer_zone, member_avail)
+        rows[0]['same_week'] = True
+        suggestions['slots'] = rows + slot_rows(
+            without_near(suggestions['raw_slots'], same), viewer_zone, member_avail,
+        )
+    for row in suggestions['slots']:
+        row['propose_url'] = propose_url(pod, row['slot'].start) if can_propose else ''
+    suggestions['propose_blocked_line'] = blocked
+    suggestions['custom_propose_url'] = propose_url(pod) if can_propose else ''
+
+
 def request_notice(rerequest, viewer):
     """The line under the ``Not accepted`` badge (issue #1927), or ``None``."""
     if rerequest.key == REREQUEST_COOLDOWN:
@@ -368,6 +396,14 @@ def build_pod_page(pod, viewer, *, now=None):
 
     suggestions = suggestions_context(pod, member_avail, viewer_zone, now=now) if show_private else None
     raw_slots = suggestions['raw_slots'] if suggestions else []
+    meetings = None
+    if show_private:
+        meetings = meetings_section(
+            pod, viewer, member_avail=member_avail, viewer_zone=viewer_zone, raw_slots=raw_slots,
+            is_member=is_member, can_manage=manage, now=now,
+        )
+        _add_meeting_actions(pod, suggestions, meetings['state'], member_avail, viewer_zone,
+                             is_member=is_member, count=count, now=now)
     if manage and not raw_slots:
         raw_slots = suggest_slots(member_avail, pod.meeting_minutes, now=now) if len(
             [m for m in member_avail if m.has_windows]) >= 2 else []
@@ -443,6 +479,8 @@ def build_pod_page(pod, viewer, *, now=None):
         'request_label': 'Join waiting list' if count >= pod.max_members else 'Request to join',
         'show_private': show_private,
         'suggestions': suggestions,
+        'meetings': meetings,
+        'call_link_value': pod.meeting_url if show_private else '',
         'viewer_zone': viewer_zone,
         'member_rows': member_rows,
         'zones': offset_range_label([m.timezone_name for m in member_avail], now),

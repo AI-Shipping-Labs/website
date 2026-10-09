@@ -1,0 +1,33 @@
+{% load accounts_extras layout_components member_empty_state %}
+{% comment %}
+Pod meetings (issue #1919), members and staff only: held progress, the pod
+call link, then meeting rows (upcoming soonest first, then past newest
+first). Every row puts its actions below the meta (design-system Row
+actions), so the list keeps one action placement.
+{% endcomment %}
+<section class="mt-10" id="meetings" aria-labelledby="pod-meetings-heading" data-testid="pod-meetings">
+  {% with meetings_subtitle="Shown in your timezone: "|add:viewer_zone %}
+  {% section_header "Meetings" heading_id="pod-meetings-heading" subtitle=meetings_subtitle extra="mb-3" %}
+  {% endwith %}
+  {% progress_block meetings.held meetings.total label="Meetings" summary_word="held" testid="pod-meetings-progress" summary_testid="pod-meetings-progress-summary" %}
+  {% if meetings.all_done_line %}
+  <p class="mt-2 text-sm text-foreground" data-testid="pod-meetings-all-done">{{ meetings.all_done_line }}</p>
+  {% if meetings.can_manage %}
+  <a href="{% url 'pod_edit' slug=course.slug pod_id=pod.pk %}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-meetings-edit-pod">Edit pod <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+  {% endif %}
+  {% endif %}
+
+  {% include "pods/_call_link.html" %}
+
+  {% if meetings.rows %}
+  <ol class="mt-4 divide-y divide-border border-y border-border" data-testid="pod-meeting-rows">
+    {% for row in meetings.rows %}
+    {% include "pods/_meeting_row.html" with row=row %}
+    {% endfor %}
+  </ol>
+  {% elif meetings.empty %}
+  <div class="mt-4">
+    {% member_empty_state title=meetings.empty.0 body=meetings.empty.1 icon='calendar' kind='fresh' testid='pod-meetings-empty' %}
+  </div>
+  {% endif %}
+</section>

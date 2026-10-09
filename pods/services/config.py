@@ -81,3 +81,8 @@ def stale_request_alert_enabled():
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def meeting_reminder_hours():
+    """Hours before a scheduled pod meeting when the bell reminder goes out (issue #1919)."""
+    return _int_config('PODS_MEETING_REMINDER_HOURS', 24, minimum=1, maximum=72)

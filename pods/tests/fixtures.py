@@ -64,3 +64,25 @@ def set_windows(user, timezone_name, windows):
             preference=rest[0] if rest else 'preferred',
         )
     return profile
+
+
+def make_pod(cohort, name, members=(), *, owner=None, meeting_count=4, meeting_minutes=60, source='studio', **extra):
+    """A pod with ``members`` (issue #1919 meeting tests)."""
+    from pods.models import Pod, PodMembership
+
+    pod = Pod.objects.create(
+        cohort=cohort, name=name, purpose=f'{name} purpose', owner=owner, source=source,
+        meeting_count=meeting_count, meeting_minutes=meeting_minutes, **extra,
+    )
+    for user in members:
+        PodMembership.objects.create(pod=pod, user=user, source='staff')
+    return pod
+
+
+def make_meeting(pod, starts_at, *, status='scheduled', zone='UTC', series_id=None, created_via='studio', **extra):
+    from pods.models import PodMeeting
+
+    return PodMeeting.objects.create(
+        pod=pod, starts_at=starts_at, duration_minutes=pod.meeting_minutes, timezone=zone,
+        status=status, series_id=series_id, created_via=created_via, **extra,
+    )

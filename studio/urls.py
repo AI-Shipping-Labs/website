@@ -256,6 +256,8 @@ from studio.views.pods import (
     studio_pod_create,
     studio_pod_detail,
     studio_pod_list,
+    studio_pod_meeting_schedule,
+    studio_pod_meeting_status,
     studio_pod_member_add,
     studio_pod_member_remove,
     studio_pod_request_approve,
@@ -1182,6 +1184,12 @@ urlpatterns = [
         'pods/<int:pod_id>/requests/<int:request_id>/decline',
         studio_pod_request_decline,
         name='studio_pod_request_decline',
+    ),
+    path('pods/<int:pod_id>/meetings/schedule', studio_pod_meeting_schedule, name='studio_pod_meeting_schedule'),
+    path(
+        'pods/<int:pod_id>/meetings/<int:meeting_id>/status',
+        studio_pod_meeting_status,
+        name='studio_pod_meeting_status',
     ),
 
     # Sprints (issue #432). Members section.

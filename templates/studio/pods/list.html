@@ -37,6 +37,8 @@
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm" data-label="Pod">
           <a href="{% url 'studio_pod_detail' pod_id=row.pod.pk %}" class="font-medium text-foreground hover:text-accent" data-testid="studio-pod-name">{{ row.pod.name }}</a>
           <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-created">Created {{ row.pod.created_at|operator_date }}</div>
+          <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-meetings">Meetings {{ row.pod.held_total }}/{{ row.pod.meeting_count }} held</div>
+          <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-next-meeting">{% if row.pod.next_meeting_at %}Next {{ row.pod.next_meeting_at|operator_datetime }}{% else %}No meeting planned{% endif %}</div>
         </td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm" data-label="Activity" data-testid="studio-pod-activity">
           <span class="whitespace-nowrap text-foreground">{{ row.pod.cohort.name }}</span>

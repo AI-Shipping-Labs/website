@@ -1,0 +1,15 @@
+{% comment %}
+Custom date and start time for a pod meeting (issue #1919), read in the
+viewer's pod timezone, which the zone line names. Quarter-hour steps.
+{% endcomment %}
+<div class="mt-4 grid gap-4 sm:grid-cols-2" data-testid="pod-meeting-custom">
+  <div>
+    <label for="pod-meeting-date" class="block text-sm font-medium text-foreground">Date</label>
+    <input id="pod-meeting-date" name="date" type="date" value="{{ date_value }}" aria-describedby="pod-meeting-zone-line" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-meeting-date">
+  </div>
+  <div>
+    <label for="pod-meeting-time" class="block text-sm font-medium text-foreground">Start time</label>
+    <input id="pod-meeting-time" name="time" type="time" step="900" value="{{ time_value }}" aria-describedby="pod-meeting-zone-line" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-meeting-time">
+  </div>
+</div>
+<p id="pod-meeting-zone-line" class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-zone-line">{{ zone_line }}</p>

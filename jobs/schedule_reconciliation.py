@@ -209,6 +209,12 @@ SCHEDULE_DEFINITIONS = (
         description="daily at 09:00 UTC",
     ),
     ScheduleDefinition(
+        "pods-meeting-reminders",
+        "pods.tasks.meeting_reminders.send_meeting_reminders",
+        "0 * * * *",
+        description="hourly",
+    ),
+    ScheduleDefinition(
         "onboarding-reminders",
         "accounts.tasks.remind_onboarding.remind_onboarding_incomplete",
         "30 6 * * *",

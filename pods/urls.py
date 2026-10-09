@@ -8,6 +8,14 @@ submodule routes).
 
 from django.urls import path
 
+from pods.views.meetings import (
+    meeting_cancel,
+    meeting_held,
+    meeting_move,
+    meeting_new,
+    meeting_respond,
+    pod_call_link,
+)
 from pods.views.member import (
     availability_edit,
     pod_detail,
@@ -42,4 +50,27 @@ urlpatterns = [
         name='pod_request_decline',
     ),
     path('courses/<slug:slug>/home/pods/<int:pod_id>/slack', pod_slack, name='pod_slack'),
+    # Issue #1919: agreed pod meetings and the pod call link.
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/call-link', pod_call_link, name='pod_call_link'),
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/meetings/new', meeting_new, name='pod_meeting_new'),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/meetings/<int:meeting_id>/respond',
+        meeting_respond,
+        name='pod_meeting_respond',
+    ),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/meetings/<int:meeting_id>/move',
+        meeting_move,
+        name='pod_meeting_move',
+    ),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/meetings/<int:meeting_id>/cancel',
+        meeting_cancel,
+        name='pod_meeting_cancel',
+    ),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/meetings/<int:meeting_id>/held',
+        meeting_held,
+        name='pod_meeting_held',
+    ),
 ]

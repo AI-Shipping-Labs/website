@@ -54,31 +54,42 @@
     {% endif %}
   </header>
 
+  {% if meetings %}
+  {% include "pods/_meetings.html" %}
+  {% endif %}
+
   {% if suggestions %}
   <section class="mt-10" aria-labelledby="pod-times-heading" data-testid="pod-suggested-times">
     {% with times_subtitle="Shown in your timezone: "|add:viewer_zone %}
     {% section_header "Suggested times" heading_id="pod-times-heading" subtitle=times_subtitle extra="mb-3" %}
     {% endwith %}
+    {% if suggestions.propose_blocked_line %}<p class="mb-3 text-sm text-foreground" data-testid="pod-times-propose-blocked">{{ suggestions.propose_blocked_line }}</p>{% endif %}
     {% if suggestions.needs_more %}
     <p class="text-sm text-muted-foreground" data-testid="pod-times-needs-more">Suggested times appear when at least two members have added availability.</p>
-    {% else %}
-    {% if suggestions.based_on_line %}<p class="mb-3 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
+    {% elif suggestions.based_on_line %}<p class="mb-3 text-sm text-muted-foreground" data-testid="pod-times-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
     {% if suggestions.slots %}
-    <ol class="divide-y divide-border border-y border-border" data-testid="pod-slots">
+    <ol class="{% if suggestions.needs_more %}mt-3 {% endif %}divide-y divide-border border-y border-border" data-testid="pod-slots">
       {% for row in suggestions.slots %}
-      <li class="py-3" data-testid="pod-slot">
-        <p class="text-sm font-semibold text-foreground"><time datetime="{{ row.start_iso }}" data-testid="pod-slot-time">{{ row.start_label }}</time> <span class="font-normal text-muted-foreground">· {{ pod.meeting_minutes }} min</span></p>
-        <div class="mt-1">{% member_status_badge row.fit_label tone=row.fit_tone testid="pod-slot-fit" %}</div>
-        <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-slot-strip">
-          {% for local in row.strip %}{% if local.no_availability %}<span data-testid="pod-slot-strip-item" data-no-availability="true">{{ local.name }} - no availability</span>{% else %}<span data-testid="pod-slot-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endif %}{% endfor %}
-        </p>
+      <li class="flex min-w-0 flex-col gap-1 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3" data-testid="pod-slot"{% if row.same_week %} data-same-week="true"{% endif %}>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-foreground"><time datetime="{{ row.start_iso }}" data-testid="pod-slot-time">{{ row.start_label }}</time> <span class="font-normal text-muted-foreground">· {{ pod.meeting_minutes }} min</span></p>
+          <div class="mt-1 flex flex-wrap items-center gap-2">{% if row.same_week %}{% member_label_badge 'Same weekly time' tone='info' testid='pod-slot-same-week' %}{% endif %}{% member_status_badge row.fit_label tone=row.fit_tone testid="pod-slot-fit" %}</div>
+          <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-slot-strip">
+            {% for local in row.strip %}{% if local.no_availability %}<span data-testid="pod-slot-strip-item" data-no-availability="true">{{ local.name }} - no availability</span>{% else %}<span data-testid="pod-slot-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endif %}{% endfor %}
+          </p>
+        </div>
+        {% if row.propose_url %}
+        <a href="{{ row.propose_url }}" class="inline-flex min-h-[44px] shrink-0 items-center gap-2 self-start text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:self-auto" data-testid="pod-slot-propose">Propose this time <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+        {% endif %}
       </li>
       {% endfor %}
     </ol>
-    {% else %}
+    {% elif not suggestions.needs_more %}
     <p class="text-sm text-foreground" data-testid="pod-times-no-fit">{{ suggestions.no_fit_line }}</p>
     <a href="{{ availability_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-edit-availability">Edit my availability <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
     {% endif %}
+    {% if suggestions.custom_propose_url %}
+    <a href="{{ suggestions.custom_propose_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-propose-custom">Propose another time <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
     {% endif %}
   </section>
   {% endif %}

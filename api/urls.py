@@ -179,6 +179,8 @@ from api.views.plans import (
 from api.views.pods import (
     cohort_roster,
     pod_detail,
+    pod_meeting_detail,
+    pod_meetings,
     pod_member_detail,
     pod_members,
     pod_request_approve,
@@ -887,6 +889,9 @@ urlpatterns = [
         pod_request_decline,
         name="api_pod_request_decline",
     ),
+    # Issue #1919: agreed pod meetings (no DELETE: cancel keeps history).
+    path("pods/<int:pod_id>/meetings", pod_meetings, name="api_pod_meetings"),
+    path("pods/<int:pod_id>/meetings/<int:meeting_id>", pod_meeting_detail, name="api_pod_meeting_detail"),
     # ---- Course coursework inventory (issue #1696) --------------------
     path(
         "courses/<slug:slug>/coursework-inventory",

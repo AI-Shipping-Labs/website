@@ -16,9 +16,16 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
+from accounts.services.timezones import build_timezone_options
 from content.models import Cohort
 from pods.models import (
     MEETING_MINUTES_CHOICES,
+    MEETING_RESPONSE_CANT,
+    MEETING_RESPONSE_GOING,
+    MEETING_STATUS_CANCELLED,
+    MEETING_STATUS_HELD,
+    MEETING_STATUS_PROPOSED,
+    MEETING_STATUS_SCHEDULED,
     OPEN_REQUEST_STATUSES,
     POD_SOURCE_STUDIO,
     POD_STATUS_CHOICES,
@@ -26,10 +33,14 @@ from pods.models import (
     REQUEST_STATUS_WAITLISTED,
     Pod,
     PodJoinRequest,
+    PodMeeting,
+    PodMeetingResponse,
 )
 from pods.services import config as pods_config
+from pods.services import meetings as mtg
 from pods.services import membership as svc
-from pods.services.people import humanize_age
+from pods.services.meeting_rules import meeting_state
+from pods.services.people import display_name, humanize_age
 from pods.services.stale_requests import is_stale
 from pods.services.suggestions import load_member_availability, suggest_slots
 from studio.decorators import staff_required
@@ -95,6 +106,12 @@ def studio_pod_list(request):
             oldest_open_request=Min('join_requests__created_at', filter=open_filter),
             oldest_pending_request=Min(
                 'join_requests__created_at', filter=Q(join_requests__status=REQUEST_STATUS_PENDING),
+            ),
+            # Issue #1919: held meetings and the next scheduled start.
+            held_total=Count('meetings', filter=Q(meetings__status=MEETING_STATUS_HELD), distinct=True),
+            next_meeting_at=Min(
+                'meetings__starts_at',
+                filter=Q(meetings__status=MEETING_STATUS_SCHEDULED, meetings__starts_at__gt=now),
             ),
         )
         .order_by('-created_at', '-pk')
@@ -203,6 +220,12 @@ def studio_pod_detail(request, pod_id):
         data = {key: request.POST.get(key, '') for key in (
             'name', 'purpose', 'max_members', 'meeting_count', 'meeting_minutes', 'status',
         )}
+        call_link_error = ''
+        if 'meeting_url' in request.POST:
+            try:
+                data['meeting_url'] = mtg.clean_call_link(request.POST['meeting_url'])
+            except ValueError as exc:
+                call_link_error = str(exc)
         owner_raw = request.POST.get('owner', '')
         if owner_raw == '':
             data['owner'] = None
@@ -210,6 +233,8 @@ def studio_pod_detail(request, pod_id):
             membership = pod.memberships.select_related('user').filter(user_id=int(owner_raw)).first()
             data['owner'] = membership.user if membership else -1
         try:
+            if call_link_error:
+                raise svc.PodError(call_link_error, field='meeting_url')
             if data.get('owner') == -1:
                 raise svc.PodError('The owner must be a member of the pod.')
             svc.update_pod(pod, data, actor=request.user, staff=True)
@@ -259,6 +284,7 @@ def studio_pod_detail(request, pod_id):
     return render(request, 'studio/pods/detail.html', {
         'pod': pod,
         'error': error,
+        **_meetings_context(pod, users, request.session.pop(SCHEDULE_FORM_SESSION_KEY, None)),
         'activity': _cohort_label(pod.cohort),
         'memberships': memberships,
         'member_rows': [
@@ -275,6 +301,111 @@ def studio_pod_detail(request, pod_id):
         'member_view_url': _member_url(pod),
         'enabled_for_members': pods_config.pods_enabled_for_course(pod.cohort.course),
     }, status=400 if error else 200)
+
+
+SCHEDULE_FORM_SESSION_KEY = 'studio_pod_schedule_form'
+STUDIO_MEETING_STATUS = {
+    MEETING_STATUS_PROPOSED: ('pending', 'Proposed'),
+    MEETING_STATUS_SCHEDULED: ('upcoming', 'Scheduled'),
+    MEETING_STATUS_HELD: ('completed', 'Held'),
+    MEETING_STATUS_CANCELLED: ('cancelled', 'Cancelled'),
+}
+
+
+def _meetings_context(pod, users, schedule_form):
+    """Issue #1919: the Studio Meetings table and the Schedule meeting form."""
+    now = timezone.now()
+    state = meeting_state(
+        pod, now, meetings=list(PodMeeting.objects.filter(pod=pod).select_related('moved_by')),
+    )
+    names = {u.pk: display_name(u) for u in users}
+    responses = {}
+    for meeting_id, user_id, response in PodMeetingResponse.objects.filter(
+        meeting__pod=pod,
+    ).values_list('meeting_id', 'user_id', 'response'):
+        responses.setdefault(meeting_id, {})[user_id] = response
+    rows = []
+    for meeting in state.meetings:
+        answers = responses.get(meeting.pk, {})
+        if state.is_expired(meeting):
+            badge = ('expired', 'Not confirmed')
+        else:
+            badge = STUDIO_MEETING_STATUS.get(meeting.status, ('draft', meeting.status))
+        if meeting.status == MEETING_STATUS_PROPOSED:
+            going = [names[uid] for uid, r in answers.items() if r == MEETING_RESPONSE_GOING and uid in names]
+        else:
+            going = [name for uid, name in names.items() if answers.get(uid) != MEETING_RESPONSE_CANT]
+        rows.append({
+            'meeting': meeting,
+            'number': state.numbers.get(meeting.pk),
+            'status_key': badge[0],
+            'status_label': badge[1],
+            'going': going,
+            'cant': [names[uid] for uid, r in answers.items() if r == MEETING_RESPONSE_CANT and uid in names],
+            'moved_by': display_name(meeting.moved_by) if meeting.moved_by_id else '',
+            'series_short': str(meeting.series_id)[:8] if meeting.series_id else '',
+            'can_hold': meeting.status == MEETING_STATUS_SCHEDULED,
+            'can_cancel': meeting.status != MEETING_STATUS_CANCELLED,
+        })
+    form = schedule_form or {}
+    return {
+        'meeting_rows': rows,
+        'meetings_used': state.used,
+        'meetings_held': state.held,
+        'schedule_form': {
+            'date': form.get('date', ''),
+            'time': form.get('time', ''),
+            'timezone': form.get('timezone', 'UTC'),
+            'repeat_weekly': form.get('repeat_weekly', False),
+            'error': form.get('error', ''),
+        },
+        'timezone_options': build_timezone_options(),
+    }
+
+
+@staff_required
+@require_POST
+def studio_pod_meeting_schedule(request, pod_id):
+    """Schedule agreed meetings for a pod (one, or weekly for the rest)."""
+    pod = get_object_or_404(Pod.objects.select_related('cohort__course'), pk=pod_id)
+    form = {
+        'date': request.POST.get('date', ''),
+        'time': request.POST.get('time', ''),
+        'timezone': request.POST.get('timezone', '') or 'UTC',
+        'repeat_weekly': bool(request.POST.get('repeat_weekly')),
+    }
+    try:
+        zone_name = mtg.valid_zone(form['timezone'])
+        start = mtg.parse_local(form['date'], form['time'], zone_name)
+        created = mtg.schedule_meetings(
+            pod, request.user, start, zone_name=zone_name, repeat_weekly=form['repeat_weekly'],
+            created_via=POD_SOURCE_STUDIO,
+        )
+    except svc.PodError as exc:
+        request.session[SCHEDULE_FORM_SESSION_KEY] = {**form, 'error': exc.message}
+    else:
+        noun = 'meeting' if len(created) == 1 else 'meetings'
+        messages.success(request, f'Scheduled {len(created)} {noun}.')
+    return redirect(f'{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}#meetings')
+
+
+@staff_required
+@require_POST
+def studio_pod_meeting_status(request, pod_id, meeting_id):
+    """Row actions: ``status=held`` or ``status=cancelled`` (staff override)."""
+    pod = get_object_or_404(Pod, pk=pod_id)
+    meeting = get_object_or_404(PodMeeting, pk=meeting_id, pod=pod)
+    status = request.POST.get('status', '')
+    if status not in (MEETING_STATUS_HELD, MEETING_STATUS_CANCELLED):
+        messages.error(request, 'Choose held or cancelled.')
+    else:
+        try:
+            mtg.set_meeting_status(meeting, request.user, status)
+        except svc.PodError as exc:
+            messages.error(request, exc.message)
+        else:
+            messages.success(request, 'Meeting marked as held.' if status == MEETING_STATUS_HELD else 'Meeting cancelled.')
+    return redirect(f'{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}#meetings')
 
 
 @staff_required

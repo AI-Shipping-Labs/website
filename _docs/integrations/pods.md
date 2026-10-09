@@ -4,8 +4,12 @@ Pods are small groups of members inside a community activity (issue #1918).
 Phase 1 attaches pods to dated course cohorts: enrolled cohort members see a
 `Pods` tab on course Home, start a pod of one, send join requests, join a
 waiting list when a pod is full, add weekly availability in their own
-timezone, and see suggested meeting times. Staff manage pods in Studio
-(`Planning -> Pods`) and through the staff API (`_docs/api.md`, `Pods API`).
+timezone, and see suggested meeting times. Since issue #1919 they turn a
+suggested time into an agreed pod meeting (propose, confirm, `Can't make it`
+with the next best time, move, cancel, held, a weekly series and one pod call
+link), with bell notifications and a reminder before each meeting. Staff
+manage pods in Studio (`Planning -> Pods`) and through the staff API
+(`_docs/api.md`, `Pods API`).
 
 Every key below is set in Studio (`Operations -> Settings`, `Pods` group). An
 environment variable with the same name is an optional fallback.
@@ -133,3 +137,44 @@ Kill switch for the daily staff Slack alert about stale pod requests.
   `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`. Also needs `SLACK_ENABLED` and
   `SLACK_BOT_TOKEN`. With any of these missing, or on a Slack error, nothing
   is marked as announced and the job retries the next day.
+
+## PODS_MEETING_REMINDER_HOURS
+
+How many hours before a scheduled pod meeting members get the bell reminder
+(issue #1919).
+
+- Type: integer, 1-72. Invalid values fall back to `24`.
+- Default: `24`.
+- Job: `pods-meeting-reminders`, hourly at minute 0
+  (`pods.tasks.meeting_reminders.send_meeting_reminders`).
+- Sends `Reminder: <pod name> meets Tue Oct 14, 18:00 Europe/Berlin` (in each
+  member's timezone) to every member of a `scheduled` meeting that starts
+  within this many hours, except members who answered `Can't make it`.
+- Each meeting is reminded once (`PodMeeting.reminder_sent_at`); running the
+  job twice in an hour sends nothing new. Moving a meeting clears the mark, so
+  a moved meeting is reminded again.
+- Reminders are on-site only (the bell and the dashboard `Your week` list).
+  There is no email and no Slack message.
+
+## Pod meetings
+
+How agreed meetings work (issue #1919):
+
+- A member proposes a suggested or custom time. The meeting is agreed
+  (`scheduled`) once the members who can make it reach the pod's required
+  attendance: 2 in a pod of 2 or 3, all but one in a pod of 4 or more. Staff,
+  Studio and API meetings are scheduled directly.
+- A pod has at most one open proposal. A proposal whose start passes before
+  agreement is `Not confirmed`, does not count and does not block a new one.
+- Scheduled, held and live proposed meetings count toward `meeting_count`;
+  lowering `meeting_count` below that number is rejected.
+- From meeting 2 the propose page offers `Repeat weekly for the remaining N
+  meetings`. Repeats keep the same local wall-clock time in the proposer's
+  timezone per date, so a clock change never moves the meeting for them; a
+  member in a zone that changes clocks on another date sees a `Clock change`
+  line for that week. A nonexistent local time (spring-forward gap) moves
+  forward by the gap; an ambiguous one (fall-back) uses its first occurrence.
+- Any member or staff can move, cancel or record a meeting. A move clears
+  `Can't make it` answers and notifies the others; no re-agreement.
+- One optional call link per pod (`Pod.meeting_url`, https only). The meeting
+  row shows `Join call` from 10 minutes before the start until the end.

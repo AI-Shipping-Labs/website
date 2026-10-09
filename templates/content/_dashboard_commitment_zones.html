@@ -7,7 +7,7 @@
 <div class="space-y-12 sm:space-y-16" data-testid="dashboard-commitment-zones">
   {% if not plan %}{% include "content/_dashboard_getting_started.html" %}{% endif %}
 
-  {% if plan or show_plan_preparing or dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
+  {% if plan or show_plan_preparing or dashboard_week_rows or dashboard_book_club.next_deadline_is_soon %}
   <section class="space-y-4" data-testid="dashboard-this-week">
     {% section_header "Your week" size="lg" %}
 
@@ -60,10 +60,14 @@
     </div>
     {% endif %}
 
-    {% if dashboard_upcoming_events or dashboard_book_club.next_deadline_is_soon %}
+    {% if dashboard_week_rows or dashboard_book_club.next_deadline_is_soon %}
     <div class="border-t border-border/70" data-testid="dashboard-commitment-list">
-      {% for event in dashboard_upcoming_events %}
-      {% include "content/_content_card.html" with card_url=event.get_absolute_url card_testid="dashboard-upcoming-event-row" card_anchor_testid="dashboard-upcoming-event-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_trailing_badge_template="content/_dashboard_editorial_card_trailing_badges.html" card_editorial=True card_title=event.title card_heading_tag="h3" card_aria_label=event.title dashboard_card_variant="registered_event" %}
+      {% for week_row in dashboard_week_rows %}
+      {% if week_row.kind == 'pod_meeting' %}
+      {% include "content/_content_card.html" with card_url=week_row.pod_meeting.url card_testid="dashboard-pod-meeting-row" card_anchor_testid="dashboard-pod-meeting-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=week_row.pod_meeting.title card_title_testid="dashboard-pod-meeting-title" card_heading_tag="h3" card_aria_label=week_row.pod_meeting.title dashboard_card_variant="pod_meeting" pod_meeting=week_row.pod_meeting %}
+      {% else %}
+      {% include "content/_content_card.html" with event=week_row.event card_url=week_row.event.get_absolute_url card_testid="dashboard-upcoming-event-row" card_anchor_testid="dashboard-upcoming-event-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_trailing_badge_template="content/_dashboard_editorial_card_trailing_badges.html" card_editorial=True card_title=week_row.event.title card_heading_tag="h3" card_aria_label=week_row.event.title dashboard_card_variant="registered_event" %}
+      {% endif %}
       {% endfor %}
       {% if dashboard_book_club.next_deadline_is_soon %}
       {% include "content/_content_card.html" with card_url=dashboard_book_club.next_url card_testid="dashboard-book-club-deadline" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=dashboard_book_club.next_title card_heading_tag="h3" card_aria_label=dashboard_book_club.next_title dashboard_card_variant="book_deadline" %}

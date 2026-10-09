@@ -31,6 +31,13 @@
     </span>
     {% if event.dashboard_series_remaining_count > 0 %}<span>{{ event.dashboard_series_remaining_count }} more session{{ event.dashboard_series_remaining_count|pluralize }}</span>{% endif %}
   </div>
+{% elif dashboard_card_variant == "pod_meeting" %}
+  <div class="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground">
+    <span class="flex items-center gap-1.5" data-testid="dashboard-pod-meeting-time">
+      <i data-lucide="calendar" class="h-4 w-4 shrink-0" aria-hidden="true"></i>
+      {{ pod_meeting.time_label }}
+    </span>
+  </div>
 {% elif dashboard_card_variant == "book_deadline" %}
   <p class="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">{{ dashboard_book_club.book.title }}</p>
   <div class="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">

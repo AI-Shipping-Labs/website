@@ -17,6 +17,8 @@
   {% if event.dashboard_is_event_series %}
   <span class="text-xs font-medium uppercase tracking-wide text-accent" data-testid="dashboard-event-series-badge">Event series</span>
   {% endif %}
+{% elif dashboard_card_variant == "pod_meeting" %}
+  <span class="text-xs font-medium uppercase tracking-wide text-accent">Pod meeting</span>
 {% elif dashboard_card_variant == "book_deadline" %}
   <span class="text-xs font-medium uppercase tracking-wide text-accent">Book Club</span>
 {% endif %}

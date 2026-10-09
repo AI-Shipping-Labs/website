@@ -148,8 +148,17 @@
 {% if unit_content_id %}
 {% load qa_threads %}
 {% if homework_stepper and stepper.step %}
+{# Issue #1925: live Q&A on intro + question steps, archive on review, none on learning-in-public. #}
+{% with qa_mode=stepper.step|homework_step_qa_mode %}
+{% if qa_mode == "archive" %}
+{% with archive_count=homework_review_archive_count %}
+{% if archive_count %}{% include "content/reader/_homework_qa_archive.html" %}{% endif %}
+{% endwith %}
+{% elif qa_mode == "live" %}
 {% with mounted_qa_id=homework_step_qa_content_ids|qa_content_id:stepper.step %}
 {% include "comments/_qa_section.html" with content_id=mounted_qa_id|default:unit_content_id user_authenticated=user_authenticated %}
+{% endwith %}
+{% endif %}
 {% endwith %}
 {% else %}
 {% include "comments/_qa_section.html" with content_id=unit_content_id user_authenticated=user_authenticated %}

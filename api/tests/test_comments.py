@@ -496,16 +496,24 @@ class OperatorCommentReplyConcurrencyTest(TransactionTestCase):
 
 class HomeworkStepCommentsApiTest(TestCase):
     """Issue #1897: unit filters include homework step threads; the
-    optional ``homework_step`` query isolates one step."""
+    optional ``homework_step`` query isolates what one step page shows
+    (issue #1925: intro/question threads, review = unit thread archive,
+    learning-in-public = nothing)."""
 
     @classmethod
     def setUpTestData(cls):
         from django.utils import timezone
 
         from content.models.cohort import Cohort
-        from content.models.homework import Homework, Question, QuestionType
+        from content.models.homework import (
+            Homework,
+            HomeworkStepThread,
+            Question,
+            QuestionType,
+        )
         from content.services.homework_step_threads import (
             ensure_homework_step_threads,
+            step_thread_content_id,
         )
 
         cls.staff = User.objects.create_user(
@@ -553,7 +561,13 @@ class HomeworkStepCommentsApiTest(TestCase):
         cls.unit_thread = str(cls.unit.content_id)
         mounted = ensure_homework_step_threads(cls.unit, homework)
         cls.q1_thread = mounted['q1-first']
-        cls.review_thread = mounted['review']
+        cls.intro_thread = mounted['intro']
+        # A review step-thread row kept from before #1925 (its comment would
+        # normally have been moved by migration 0086): it stays listed.
+        cls.review_thread = str(HomeworkStepThread.objects.create(
+            unit_content_id=cls.unit.content_id, step_slug='review',
+            content_id=step_thread_content_id(cls.unit.content_id, 'review'),
+        ).content_id)
 
         Comment.objects.create(
             content_id=cls.unit.content_id, user=cls.member,
@@ -571,6 +585,10 @@ class HomeworkStepCommentsApiTest(TestCase):
             content_id=uuid.UUID(cls.review_thread), user=cls.member,
             body='question about review',
         )
+        Comment.objects.create(
+            content_id=uuid.UUID(cls.intro_thread), user=cls.member,
+            body='deadline in UTC?',
+        )
 
     def auth(self, token=None):
         return {'HTTP_AUTHORIZATION': f'Token {token or self.plaintext}'}
@@ -585,7 +603,7 @@ class HomeworkStepCommentsApiTest(TestCase):
             'course_slug=ai-buildcamp-1897&module_slug=foundation&unit_slug=homework',
         )
 
-        self.assertEqual(data['count'], 3)
+        self.assertEqual(data['count'], 4)
         bodies = {row['body']: row for row in data['comments']}
         self.assertEqual(
             {row['content_type'] for row in data['comments']}, {'course_unit'},
@@ -601,12 +619,24 @@ class HomeworkStepCommentsApiTest(TestCase):
         self.assertTrue(
             review['context']['url'].endswith('/homework/review#qa-section'),
         )
+        # Issue #1925: the unit thread of a stepper unit is the Review &
+        # submit archive.
         unit_row = bodies['leftover on the unit thread']
-        self.assertEqual(unit_row['context']['homework_step'], 'intro')
+        self.assertEqual(unit_row['context']['homework_step'], 'review')
         self.assertTrue(
-            unit_row['context']['url'].endswith('/homework/intro#qa-section'),
+            unit_row['context']['url'].endswith('/homework/review#qa-section'),
         )
-        self.assertIn('Homework 1', unit_row['context']['title'])
+        self.assertTrue(
+            unit_row['context']['title'].endswith('Homework 1 — Review & submit'),
+        )
+        intro = bodies['deadline in UTC?']
+        self.assertEqual(intro['context']['homework_step'], 'intro')
+        self.assertTrue(
+            intro['context']['url'].endswith('/homework/intro#qa-section'),
+        )
+        self.assertTrue(
+            intro['context']['title'].endswith('Homework 1 — Introduction'),
+        )
 
     def test_homework_step_filter_isolates_one_step(self):
         data = self._list(
@@ -619,16 +649,35 @@ class HomeworkStepCommentsApiTest(TestCase):
         self.assertEqual(row['body'], 'spoiler on q1')
         self.assertEqual(row['context']['homework_step'], 'q1-first')
 
-    def test_homework_step_intro_returns_the_unit_thread(self):
+    def test_homework_step_intro_returns_only_the_intro_thread(self):
         data = self._list(
             'course_slug=ai-buildcamp-1897&module_slug=foundation'
             '&unit_slug=homework&homework_step=intro',
         )
 
-        self.assertEqual(data['count'], 1)
         self.assertEqual(
-            data['comments'][0]['body'], 'leftover on the unit thread',
+            [row['body'] for row in data['comments']], ['deadline in UTC?'],
         )
+
+    def test_homework_step_review_returns_the_unit_thread(self):
+        data = self._list(
+            'course_slug=ai-buildcamp-1897&module_slug=foundation'
+            '&unit_slug=homework&homework_step=review',
+        )
+
+        self.assertEqual(
+            [row['body'] for row in data['comments']],
+            ['leftover on the unit thread'],
+        )
+
+    def test_homework_step_learning_in_public_returns_nothing(self):
+        data = self._list(
+            'course_slug=ai-buildcamp-1897&module_slug=foundation'
+            '&unit_slug=homework&homework_step=learning-in-public',
+        )
+
+        self.assertEqual(data['count'], 0)
+        self.assertEqual(data['comments'], [])
 
     def test_homework_step_requires_the_full_owner_nesting(self):
         response = self.client.get(

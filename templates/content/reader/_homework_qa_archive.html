@@ -1,0 +1,35 @@
+{% comment %}
+Read-only "Earlier homework discussion" archive on the homework stepper's
+Review & submit step (issue #1925).
+
+Shows the unit's own content_id thread: pre-#1897 whole-homework comments,
+comments posted on Introduction before it got its own thread, and comments
+moved off the retired review / learning-in-public step threads. Rendered only
+when ``archive_count`` (visible top-level comments) is above zero.
+
+The wrapper keeps the bare ``id="qa-section"`` so older notification links to
+``/review#qa-section`` land here; the inner thread uses an ``archive`` id
+suffix so ids stay unique. A ``#qa-section`` deep link opens the disclosure,
+and the summary count follows the thread's ``qa:loaded`` event (a staff
+Delete drops it without a reload).
+{% endcomment %}
+{% with archive_count_text=archive_count|stringformat:"d" %}
+{% with archive_summary="Earlier homework discussion ("|add:archive_count_text|add:")" %}
+<div class="mt-12 mb-12" id="qa-section" data-testid="homework-qa-archive">
+  {% include "includes/_accordion.html" with summary=archive_summary testid="homework-qa-archive-details" body_template="content/reader/_homework_qa_archive_body.html" %}
+</div>
+{% endwith %}
+{% endwith %}
+<script>
+  (function() {
+    var wrapper = document.querySelector('[data-testid="homework-qa-archive"]');
+    if (!wrapper) return;
+    var details = wrapper.querySelector('[data-testid="homework-qa-archive-details"]');
+    if (details && window.location.hash === '#qa-section') details.open = true;
+    // Keep "(N)" in step with the thread after a staff Delete (issue #1894).
+    var label = details ? details.querySelector('summary > span') : null;
+    wrapper.addEventListener('qa:loaded', function(event) {
+      if (label) label.textContent = 'Earlier homework discussion (' + event.detail.count + ')';
+    });
+  })();
+</script>

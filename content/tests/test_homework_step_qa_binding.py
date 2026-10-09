@@ -1,8 +1,9 @@
-"""Per-step Q&A thread binding on homework stepper pages (issue #1897).
+"""Per-step Q&A thread binding on homework stepper pages (#1897, #1925).
 
-The Q&A partial mounts one ``data-content-id`` per page: the unit's own
-thread on ``intro`` (and on every non-stepper surface), one derived step
-thread on each question, learning-in-public, and review page.
+The Q&A partial mounts one ``data-content-id`` per page: one derived step
+thread on ``intro`` and on each question page; nothing on
+``learning-in-public``; on ``review`` only the read-only unit-thread archive
+when it has comments. Non-stepper surfaces keep the unit's own thread.
 """
 
 import datetime
@@ -10,9 +11,12 @@ import uuid
 from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
+from comments.models import Comment
 from content.models import Course, Module, Unit
 from content.models.cohort import Cohort, CohortEnrollment
 from content.models.homework import Homework, Question, QuestionType
@@ -32,6 +36,7 @@ class QaContentIdParser(HTMLParser):
     def __init__(self):
         super().__init__()
         self.content_ids = []
+        self.read_only_flags = []
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
@@ -39,12 +44,19 @@ class QaContentIdParser(HTMLParser):
             content_id = attributes.get('data-content-id')
             if content_id:
                 self.content_ids.append(content_id)
+                self.read_only_flags.append(attributes.get('data-read-only'))
 
 
 def mounted_qa_content_ids(response):
     parser = QaContentIdParser()
     parser.feed(response.content.decode())
     return parser.content_ids
+
+
+def mounted_qa_read_only_flags(response):
+    parser = QaContentIdParser()
+    parser.feed(response.content.decode())
+    return parser.read_only_flags
 
 
 class StepperQaBindingSetupMixin:
@@ -88,11 +100,9 @@ class StepperQaBindingSetupMixin:
             question_type=QuestionType.FREE_FORM, answer_type='ANY',
         )
         cls.base_path = cls.unit.get_absolute_url()
+        cls.step_intro_id = str(step_thread_content_id(UNIT_CONTENT_ID, 'intro'))
         cls.step_q1_id = str(step_thread_content_id(UNIT_CONTENT_ID, 'q1-first'))
         cls.step_q2_id = str(step_thread_content_id(UNIT_CONTENT_ID, 'q2-second'))
-        cls.step_lip_id = str(
-            step_thread_content_id(UNIT_CONTENT_ID, 'learning-in-public'),
-        )
         cls.step_review_id = str(
             step_thread_content_id(UNIT_CONTENT_ID, 'review'),
         )
@@ -139,58 +149,64 @@ class QuestionStepMountsItsOwnThreadTest(StepperQaBindingSetupMixin, TestCase):
 
 
 class IntroAndFixedStepsTest(StepperQaBindingSetupMixin, TestCase):
-    def test_intro_mounts_the_unit_thread(self):
+    """Issue #1925: intro owns a thread; review/LIP mount no live thread."""
+
+    def test_intro_mounts_its_derived_thread_not_the_unit_thread(self):
         self.threads_ready()
         self.client.force_login(self.member)
         response = self.client.get(f'{self.base_path}/intro')
 
-        self.assertEqual(
-            mounted_qa_content_ids(response), [str(UNIT_CONTENT_ID)],
-        )
+        self.assertEqual(mounted_qa_content_ids(response), [self.step_intro_id])
+        self.assertContains(response, 'id="qa-new-question"')
 
-    def test_review_mounts_its_derived_thread(self):
-        self.threads_ready()
-        self.client.force_login(self.member)
-        response = self.client.get(f'{self.base_path}/review')
-
-        self.assertEqual(
-            mounted_qa_content_ids(response), [self.step_review_id],
-        )
-
-    def test_learning_in_public_mounts_its_derived_thread(self):
-        self.threads_ready()
-        self.client.force_login(self.member)
-        response = self.client.get(f'{self.base_path}/learning-in-public')
-
-        self.assertEqual(
-            mounted_qa_content_ids(response), [self.step_lip_id],
-        )
-
-    def test_bare_unit_url_mounts_the_thread_of_the_landed_step(self):
-        """First visit lands on intro; its Q&A is the unit thread, not the
-        union of every step thread."""
+    def test_bare_unit_url_lands_on_intro_and_mounts_the_intro_thread(self):
+        """First visit lands on intro; the unit thread (pre-#1897 spoilers)
+        is not mounted there."""
         self.client.force_login(self.member)
         response = self.client.get(self.base_path)
 
-        self.assertEqual(
-            mounted_qa_content_ids(response), [str(UNIT_CONTENT_ID)],
-        )
+        self.assertEqual(mounted_qa_content_ids(response), [self.step_intro_id])
 
-    def test_every_step_mounts_exactly_one_thread(self):
+    def test_cohort_and_legacy_query_forms_mount_the_same_intro_thread(self):
+        self.threads_ready()
+        self.client.force_login(self.member)
+        for url in (
+            f'{self.base_path}/intro?cohort=4',
+            f'{self.base_path}?homework_step=intro',
+            f'{self.base_path}?homework_step=intro&cohort=4',
+        ):
+            response = self.client.get(url)
+            self.assertEqual(
+                mounted_qa_content_ids(response), [self.step_intro_id], url,
+            )
+
+    def test_learning_in_public_renders_no_qa_at_all(self):
+        self.threads_ready()
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Unit spoiler',
+        )
+        self.client.force_login(self.member)
+        response = self.client.get(f'{self.base_path}/learning-in-public')
+
+        self.assertContains(response, 'data-testid="homework-stepper"')
+        self.assertEqual(mounted_qa_content_ids(response), [])
+        self.assertNotContains(response, 'id="qa-section"')
+        self.assertNotContains(response, 'Questions &amp; Answers')
+        self.assertNotContains(response, 'id="qa-new-question')
+        self.assertNotContains(response, 'data-testid="homework-qa-archive"')
+
+    def test_question_steps_mount_their_own_threads(self):
         self.threads_ready()
         self.client.force_login(self.member)
         for step, expected in (
-            ('intro', str(UNIT_CONTENT_ID)),
             ('q1-first', self.step_q1_id),
             ('q2-second', self.step_q2_id),
-            ('learning-in-public', self.step_lip_id),
-            ('review', self.step_review_id),
         ):
             response = self.client.get(f'{self.base_path}/{step}')
             self.assertEqual(
-                mounted_qa_content_ids(response), [expected],
-                f'step {step}',
+                mounted_qa_content_ids(response), [expected], f'step {step}',
             )
+            self.assertContains(response, 'id="qa-new-question"')
 
     def test_cohort_param_does_not_fork_the_thread(self):
         self.threads_ready()
@@ -205,6 +221,141 @@ class IntroAndFixedStepsTest(StepperQaBindingSetupMixin, TestCase):
         )
 
 
+class ReviewArchiveTest(StepperQaBindingSetupMixin, TestCase):
+    """Review & submit: no live Q&A, read-only unit-thread archive."""
+
+    def _review(self):
+        self.client.force_login(self.member)
+        return self.client.get(f'{self.base_path}/review')
+
+    def test_no_archive_markup_when_unit_thread_has_no_visible_comments(self):
+        self.threads_ready()
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Hidden',
+            hidden_at=timezone.now(),
+        )
+        # A comment on the review step thread UUID is not the unit thread.
+        Comment.objects.create(
+            content_id=self.step_review_id, user=self.member, body='Stranded',
+        )
+        response = self._review()
+
+        self.assertContains(response, 'data-testid="homework-stepper"')
+        self.assertEqual(mounted_qa_content_ids(response), [])
+        self.assertNotContains(response, 'id="qa-section"')
+        self.assertNotContains(response, 'Earlier homework discussion')
+        self.assertNotContains(response, 'Questions &amp; Answers')
+        self.assertNotContains(response, 'id="qa-new-question')
+
+    def test_archive_lists_unit_thread_read_only_with_visible_count(self):
+        self.threads_ready()
+        first = Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Q5 is 42?',
+        )
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Yes',
+            parent=first,
+        )
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Q6 is 7?',
+        )
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Hidden one',
+            hidden_at=timezone.now(),
+        )
+        response = self._review()
+
+        archive = ArchiveParser.parse(response)
+        self.assertEqual(archive.wrapper_id, 'qa-section')
+        self.assertEqual(archive.summary, 'Earlier homework discussion (2)')
+        # Collapsed by default, rendered through the accordion owner.
+        self.assertFalse(archive.details_open)
+        self.assertEqual(
+            archive.thread_attrs.get('data-content-id'), str(UNIT_CONTENT_ID),
+        )
+        self.assertEqual(archive.thread_attrs.get('data-read-only'), 'true')
+        self.assertEqual(archive.thread_attrs.get('id'), 'qa-section-archive')
+        self.assertIn(
+            'Questions posted before each step had its own Q&A.',
+            archive.helper_text,
+        )
+        # Exactly one thread on the page, and it is the read-only archive.
+        self.assertEqual(mounted_qa_content_ids(response), [str(UNIT_CONTENT_ID)])
+        self.assertNotContains(response, 'id="qa-new-question')
+        self.assertNotContains(response, 'id="qa-post-btn')
+        self.assertNotContains(response, 'Questions &amp; Answers')
+
+    def test_archive_adds_exactly_one_comment_count_query(self):
+        self.threads_ready()
+        Comment.objects.create(
+            content_id=UNIT_CONTENT_ID, user=self.member, body='Old one',
+        )
+        self.client.force_login(self.member)
+        # Warm-up so one-time lookups never count against the review page.
+        self.client.get(f'{self.base_path}/review')
+        with CaptureQueriesContext(connection) as review_queries:
+            self.client.get(f'{self.base_path}/review')
+        with CaptureQueriesContext(connection) as question_queries:
+            self.client.get(f'{self.base_path}/q1-first')
+
+        def comment_queries(captured):
+            return [
+                query['sql'] for query in captured.captured_queries
+                if 'comments_comment' in query['sql']
+            ]
+
+        review_comment_sql = comment_queries(review_queries)
+        self.assertEqual(len(review_comment_sql), 1, review_comment_sql)
+        self.assertIn('COUNT(', review_comment_sql[0].upper())
+        self.assertEqual(comment_queries(question_queries), [])
+
+
+class ArchiveParser(HTMLParser):
+    """Extract the review archive wrapper, accordion and read-only thread."""
+
+    def __init__(self):
+        super().__init__()
+        self.wrapper_id = None
+        self.details_open = None
+        self.summary = ''
+        self.helper_text = ''
+        self.thread_attrs = {}
+        self._in_archive = False
+        self._capture = None
+
+    @classmethod
+    def parse(cls, response):
+        parser = cls()
+        parser.feed(response.content.decode())
+        return parser
+
+    def handle_starttag(self, tag, attrs):
+        attributes = dict(attrs)
+        if attributes.get('data-testid') == 'homework-qa-archive':
+            self._in_archive = True
+            self.wrapper_id = attributes.get('id')
+            return
+        if not self._in_archive:
+            return
+        if attributes.get('data-testid') == 'homework-qa-archive-details':
+            self.details_open = 'open' in attributes
+        elif tag == 'summary':
+            self._capture = 'summary'
+        elif attributes.get('data-testid') == 'homework-qa-archive-helper':
+            self._capture = 'helper_text'
+        elif 'qa-thread' in (attributes.get('class') or ''):
+            self.thread_attrs = attributes
+
+    def handle_endtag(self, tag):
+        if tag in ('summary', 'p'):
+            self._capture = None
+
+    def handle_data(self, data):
+        if self._capture:
+            current = getattr(self, self._capture)
+            setattr(self, self._capture, (current + ' ' + data.strip()).strip())
+
+
 class NonStepperSurfacesKeepUnitThreadTest(StepperQaBindingSetupMixin, TestCase):
     def test_all_questions_homework_mounts_one_unit_thread(self):
         self.homework.stepper_enabled = False
@@ -216,6 +367,10 @@ class NonStepperSurfacesKeepUnitThreadTest(StepperQaBindingSetupMixin, TestCase)
         self.assertEqual(
             mounted_qa_content_ids(response), [str(UNIT_CONTENT_ID)],
         )
+        # Live thread with its composer, never the read-only archive.
+        self.assertContains(response, 'id="qa-new-question"')
+        self.assertEqual(mounted_qa_read_only_flags(response), [None])
+        self.assertNotContains(response, 'Earlier homework discussion')
 
     def test_lesson_unit_mounts_the_unit_thread(self):
         lesson = Unit.objects.create(
@@ -228,6 +383,9 @@ class NonStepperSurfacesKeepUnitThreadTest(StepperQaBindingSetupMixin, TestCase)
         self.assertEqual(
             mounted_qa_content_ids(response), [str(lesson.content_id)],
         )
+        self.assertContains(response, 'Questions &amp; Answers')
+        self.assertContains(response, 'id="qa-new-question"')
+        self.assertEqual(mounted_qa_read_only_flags(response), [None])
 
 
 class StepThreadRoundTripTest(StepperQaBindingSetupMixin, TestCase):

@@ -2624,7 +2624,7 @@
             "name": "homework_step",
             "required": false,
             "schema": {
-              "description": "Public homework step slug (intro, an authored question id such as q2-reflect, learning-in-public, or review). Requires course_slug, module_slug, and unit_slug; isolates that step page's comment thread.",
+              "description": "Public homework step slug (intro, an authored question id such as q2-reflect, learning-in-public, or review). Requires course_slug, module_slug, and unit_slug; isolates the comments that step page shows: intro and question steps their own thread, review the unit thread (Earlier homework discussion archive), learning-in-public none.",
               "type": "string"
             }
           },

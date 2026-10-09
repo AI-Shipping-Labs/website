@@ -43,17 +43,22 @@ Owner-specific filters for different thread types cannot be mixed. Timestamp
 filters require RFC 3339 offsets; invalid and contradictory filters return
 `422 validation_error` rather than an unfiltered result.
 
-A homework unit with the homework stepper enabled owns one comment thread per
-stepper page (issue #1897): the unit's own `content_id` thread mounted on
-`intro`, plus one derived thread per question step (`learning-in-public` and
-`review` included). A `course_slug`/`module_slug`/`unit_slug` filter returns
-the unit thread and every homework step thread of that unit, all as
+A homework unit with the homework stepper enabled binds Q&A to the stepper
+page (issues #1897 and #1925): `intro` and every question step own one derived
+thread each with a live composer; `learning-in-public` shows no Q&A; `review`
+shows the unit's own `content_id` thread read-only, as the `Earlier homework
+discussion` archive (pre-#1897 whole-homework comments, early intro comments,
+and the comments once posted on the retired `review` / `learning-in-public`
+step threads). A `course_slug`/`module_slug`/`unit_slug` filter returns the
+unit thread and every homework step thread of that unit, all as
 `content_type=course_unit`. Each homework-step row's `context` adds
 `homework_step` (the public step slug; the unit thread of a stepper unit
-reports `intro`, and a non-stepper unit thread omits the field) and a `url`
+reports `review`, and a non-stepper unit thread omits the field) and a `url`
 that opens that step's canonical path plus `#qa-section`; `title` appends the
 step's sidebar label. Isolate one step with the `homework_step` query
-parameter, which requires the course/module/unit triple:
+parameter, which requires the course/module/unit triple: `intro` and a
+question id return that step's thread, `review` returns the unit thread, and
+`learning-in-public` returns an empty list:
 
 ```bash
 curl -sL -H "Authorization: Token $API_TOKEN" \

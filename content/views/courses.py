@@ -1,5 +1,6 @@
 from collections import Counter
 from dataclasses import replace
+from functools import partial
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
@@ -76,7 +77,10 @@ from content.services.homework_step_reader import (
     build_assignment,
     question_key,
 )
-from content.services.homework_step_threads import ensure_homework_step_threads
+from content.services.homework_step_threads import (
+    archived_unit_comment_count,
+    ensure_homework_step_threads,
+)
 from content.services.homework_submissions import (
     parse_submission_post,
     save_submission,
@@ -1174,11 +1178,18 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
             for question in homework.questions.all()
         }
         # Issue #1897: the Q&A thread binds to the current stepper page, not
-        # to the unit as a whole. Persist one thread identity per step and
-        # hand every step's mounted UUID to the template, which mounts the
-        # one for the resolved step (intro keeps the unit content_id).
+        # to the unit as a whole. Persist one thread identity per live-Q&A
+        # step (intro + questions, issue #1925) and hand every step's mounted
+        # UUID to the template, which mounts the one for the resolved step.
         context['homework_step_qa_content_ids'] = ensure_homework_step_threads(
             unit, homework,
+        )
+        # Issue #1925: Review & submit shows the unit thread as a read-only
+        # archive only when it has visible top-level comments. The step is
+        # resolved later by the stepper, so the count is a callable the
+        # template evaluates (one COUNT query) on the review step only.
+        context['homework_review_archive_count'] = partial(
+            archived_unit_comment_count, unit.content_id,
         )
         assignment = build_assignment(homework, unit, user, context=context)
         assignment = replace(

@@ -1,9 +1,11 @@
-"""Homework stepper Q&A threads bind to the current page (issue #1897).
+"""Homework stepper Q&A threads bind to the current page (#1897, #1925).
 
-A comment posted on one stepper step must appear only on that step's page:
-question, learning-in-public, review, and intro (which keeps the unit's own
-thread, including the pre-existing unit-thread comments) each own one Q&A
-thread; the all-questions homework keeps one page-level thread.
+A comment posted on one stepper step must appear only on that step's page.
+Issue #1925 narrowed which pages carry Q&A: intro and each question step own
+one live thread; learning-in-public has none; review shows the unit thread
+(pre-existing whole-homework comments) only as the read-only "Earlier
+homework discussion" archive. The all-questions homework keeps one
+page-level thread.
 """
 
 import datetime
@@ -23,8 +25,6 @@ pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 QUESTION_BODY = 'I got 7944 for unstructured'
 INTRO_BODY = 'Where do I find the notebook?'
 UNIT_LEFTOVER_BODY = 'I had 7944 for unstructured and 8102 for structured'
-LIP_BODY = 'Shared my notes at example.com'
-REVIEW_BODY = 'Ready to submit'
 
 
 def _learner_context(browser, email):
@@ -86,8 +86,8 @@ def _create_stepper_homework(*, with_learning_in_public=True):
         question_type=QuestionType.FREE_FORM,
     )
     # A pre-existing comment on the unit content_id: the spoiler-shaped
-    # leftover that today leaks onto every step and after the fix must be
-    # visible on intro only.
+    # leftover that must never show on intro or a question step, only in the
+    # Review & submit archive (issue #1925).
     create_user('qa-earlier@test.com')
     Comment.objects.create(
         content_id=content_id,
@@ -160,6 +160,11 @@ def test_question_comment_is_visible_only_on_its_step(
     _wait_for_count(page, '0')
     assert QUESTION_BODY not in page.content()
 
+    page.goto(_step_url(django_server, unit, 'intro'),
+              wait_until='networkidle')
+    _wait_for_count(page, '0')
+    assert QUESTION_BODY not in page.content()
+
     # Reload and come back: the comment persists on its own step.
     page.goto(_step_url(django_server, unit, 'q1-first'),
               wait_until='networkidle')
@@ -171,11 +176,12 @@ def test_question_comment_is_visible_only_on_its_step(
 
 @browser_journey
 @pytest.mark.core
-def test_intro_discussion_stays_on_intro_with_unit_thread_leftovers(
+def test_intro_has_its_own_thread_without_unit_thread_leftovers(
     django_server, browser,
 ):
-    """Intro mounts the unit thread: pre-existing unit comments show there
-    and nowhere else; a fresh intro comment stays intro-only."""
+    """Intro mounts its own thread: the unit-thread leftover (an answer
+    spoiler) is not shown there; a fresh intro comment stays intro-only and
+    never lands in the Review & submit archive."""
     create_user('qa-intro@test.com')
     _course, unit = _create_stepper_homework()
 
@@ -184,11 +190,12 @@ def test_intro_discussion_stays_on_intro_with_unit_thread_leftovers(
 
     page.goto(_step_url(django_server, unit, 'intro'),
               wait_until='networkidle')
-    _wait_for_count(page, '1')
-    assert UNIT_LEFTOVER_BODY in page.content()
+    _wait_for_count(page, '0')
+    assert UNIT_LEFTOVER_BODY not in page.content()
+    expect(page.get_by_placeholder('Ask a question about this lesson...')).to_be_visible()
 
     _post_question(page, INTRO_BODY)
-    _wait_for_count(page, '2')
+    _wait_for_count(page, '1')
 
     page.goto(_step_url(django_server, unit, 'q1-first'),
               wait_until='networkidle')
@@ -198,17 +205,26 @@ def test_intro_discussion_stays_on_intro_with_unit_thread_leftovers(
 
     page.goto(_step_url(django_server, unit, 'review'),
               wait_until='networkidle')
-    _wait_for_count(page, '0')
-    assert UNIT_LEFTOVER_BODY not in page.content()
+    archive = page.get_by_test_id('homework-qa-archive-details')
+    archive.locator('summary').click()
+    expect(archive.get_by_text(UNIT_LEFTOVER_BODY)).to_be_visible()
+    assert INTRO_BODY not in archive.inner_text()
+
+    page.goto(_step_url(django_server, unit, 'intro'),
+              wait_until='networkidle')
+    _wait_for_count(page, '1')
+    expect(page.locator('#qa-section').get_by_text(INTRO_BODY)).to_be_visible()
 
     context.close()
 
 
 @browser_journey
 @pytest.mark.core
-def test_learning_in_public_and_review_comments_stay_on_their_pages(
+def test_learning_in_public_and_review_have_no_live_qa(
     django_server, browser,
 ):
+    """Learning in Public renders no Q&A; Review & submit renders no
+    composer, only the collapsed read-only archive of the unit thread."""
     create_user('qa-lip@test.com')
     _course, unit = _create_stepper_homework()
 
@@ -217,31 +233,21 @@ def test_learning_in_public_and_review_comments_stay_on_their_pages(
 
     page.goto(_step_url(django_server, unit, 'learning-in-public'),
               wait_until='networkidle')
-    assert page.locator('#qa-count').inner_text() == '0'
-    _post_question(page, LIP_BODY)
-    _wait_for_count(page, '1')
+    expect(page.get_by_test_id('homework-step-form')).to_be_visible()
+    assert page.locator('#qa-section').count() == 0
+    assert page.locator('.qa-thread').count() == 0
+    assert page.get_by_role('heading', name='Questions & Answers').count() == 0
+    assert page.locator('textarea.qa-new-question').count() == 0
 
     page.goto(_step_url(django_server, unit, 'review'),
               wait_until='networkidle')
-    assert page.locator('#qa-count').inner_text() == '0'
-    _post_question(page, REVIEW_BODY)
-    _wait_for_count(page, '1')
-
-    page.goto(_step_url(django_server, unit, 'q1-first'),
-              wait_until='networkidle')
-    assert REVIEW_BODY not in page.content()
-    assert LIP_BODY not in page.content()
-
-    page.goto(_step_url(django_server, unit, 'intro'),
-              wait_until='networkidle')
-    assert REVIEW_BODY not in page.content()
-    assert LIP_BODY not in page.content()
-
-    page.goto(_step_url(django_server, unit, 'learning-in-public'),
-              wait_until='networkidle')
-    _wait_for_count(page, '1')
-    assert LIP_BODY in page.content()
-    assert REVIEW_BODY not in page.content()
+    assert page.locator('textarea.qa-new-question').count() == 0
+    assert page.get_by_role('heading', name='Questions & Answers').count() == 0
+    archive = page.get_by_test_id('homework-qa-archive-details')
+    expect(archive.locator('summary')).to_have_text(
+        'Earlier homework discussion (1)',
+    )
+    assert archive.get_attribute('open') is None
 
     context.close()
 

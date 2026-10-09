@@ -284,9 +284,11 @@ class Answer(models.Model):
 class HomeworkStepThread(models.Model):
     """Q&A thread identity for one homework stepper page (issue #1897).
 
-    On a stepper homework, every question step, the ``learning-in-public``
-    step (when present), and ``review`` own their own comment thread; the
-    ``intro`` step keeps mounting the unit's own ``content_id`` thread. The
+    On a stepper homework, ``intro`` and every question step own their own
+    comment thread (issue #1925). ``learning-in-public`` and ``review`` carry
+    no live Q&A any more: rows created for them before #1925 are kept as
+    registered owners, and their comments were moved onto the unit's own
+    ``content_id`` thread, which ``review`` shows read-only. The
     pair (unit's stable content identity, public step slug) maps to one
     deterministic ``content_id`` (``uuid5``, see
     ``content.services.homework_step_threads``), so a content re-sync never
@@ -309,8 +311,9 @@ class HomeworkStepThread(models.Model):
     step_slug = models.CharField(
         max_length=128,
         help_text=(
-            "Public step slug in the canonical step URL: an authored question "
-            "source_question_id, 'learning-in-public', or 'review'."
+            "Public step slug in the canonical step URL: 'intro' or an "
+            "authored question source_question_id ('learning-in-public' and "
+            "'review' rows predate issue #1925 and are kept)."
         ),
     )
     content_id = models.UUIDField(

@@ -70,17 +70,32 @@ def rerequest_cooldown_days():
     return _int_config('PODS_REREQUEST_COOLDOWN_DAYS', 14, minimum=0)
 
 
-def stale_request_alert_enabled():
-    """Default-on read of ``PODS_STALE_REQUEST_ALERT_ENABLED``.
+def _default_on(key):
+    """Default-on boolean read of ``key``.
 
     ``is_enabled`` hardcodes a ``'false'`` fallback, so the default-on
     contract reads the raw value with a ``'true'`` default instead (same
     pattern as ``staff_comment_alerts_enabled``).
     """
-    raw = get_config('PODS_STALE_REQUEST_ALERT_ENABLED', 'true')
+    raw = get_config(key, 'true')
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def stale_request_alert_enabled():
+    """Default-on read of ``PODS_STALE_REQUEST_ALERT_ENABLED``."""
+    return _default_on('PODS_STALE_REQUEST_ALERT_ENABLED')
+
+
+def stuck_proposal_hours():
+    """Hours a proposal may wait for answers before it is stuck (issue #1935)."""
+    return _int_config('PODS_STUCK_PROPOSAL_HOURS', 48, minimum=1, maximum=336)
+
+
+def stuck_proposal_alert_enabled():
+    """Default-on read of ``PODS_STUCK_PROPOSAL_ALERT_ENABLED`` (issue #1935)."""
+    return _default_on('PODS_STUCK_PROPOSAL_ALERT_ENABLED')
 
 
 def meeting_reminder_hours():

@@ -139,6 +139,56 @@ Kill switch for the daily staff Slack alert about stale pod requests.
   `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`. Also needs `SLACK_ENABLED` and
   `SLACK_BOT_TOKEN`. With any of these missing, or on a Slack error, nothing
   is marked as announced and the job retries the next day.
+- Since issue #1935 the same daily message also carries stuck pod meeting
+  proposals (`PODS_STUCK_PROPOSAL_ALERT_ENABLED`). This key gates only the
+  requests section: with it off, stuck proposals still post.
+
+## PODS_STUCK_PROPOSAL_HOURS
+
+How long a pod meeting proposal may wait for answers before it is stuck
+(issue #1935).
+
+- Type: integer, 1-336. Invalid or out-of-range values fall back to `48`.
+- Default: `48`.
+- Stuck proposal: `proposed`, start still in the future and not expired, pod
+  not archived, and more than this many hours since it was proposed or last
+  moved (`moved_at`, else `created_at`; a move resets the answers, so the
+  clock restarts). A weekly proposal counts once, on its first meeting, where
+  the answers live.
+- Waiting on: pod members with no answer on that meeting, the same rule as
+  the member-side `Waiting on` line.
+- Studio: the pod's Meetings table shows `No answer: Mike K.` under a live
+  proposal's status and a `Stuck` badge on a stuck one; `/studio/pods/` shows
+  a `Stuck proposal` badge on pods with a stuck proposal.
+- Staff API: each meeting has `waiting_on` (emails), `stuck` and
+  `stuck_alerted_at`.
+
+## PODS_STUCK_PROPOSAL_ALERT_ENABLED
+
+Kill switch for the stuck proposals section of the daily pods staff Slack
+message.
+
+- Type: boolean.
+- Default: `true`.
+- Job: the same `pods-stale-request-alert` (daily at 09:00 UTC). One message
+  per run covers stale requests and stuck proposals; it posts only when at
+  least one of them is new.
+- Section: `*3 pod proposals have had no answer for 48 hours*`, then up to 10
+  lines, oldest first, then `and N more`:
+  `Pod name (Course, Cohort) - Tue Oct 20, 18:00 UTC, proposed by Anna K. 3
+  days ago - waiting on Mike K. (mike@example.com, last sign-in 12 days ago)`.
+  A moved proposal reads `moved by`. Members who answered `Can't make it`
+  follow as `- can't make it: Raj P.`; a member who never signed in reads
+  `never signed in`. Already announced proposals still stuck are counted in
+  `N earlier proposals are still waiting.`
+- Each stuck proposal is announced once: `PodMeeting.stuck_alerted_at` is set
+  on its first meeting after Slack accepts the post, and cleared when the
+  proposal is moved, so a moved proposal that gets stuck again is announced
+  again.
+- Fallback text: `Stale pod requests need attention`, `Stuck pod proposals
+  need attention`, or `Pod requests and proposals need attention`.
+- Same channel and Slack gates as `PODS_STALE_REQUEST_ALERT_ENABLED`. Off
+  drops only this section; stale requests still post.
 
 ## PODS_MEETING_REMINDER_HOURS
 

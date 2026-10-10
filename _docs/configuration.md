@@ -344,7 +344,9 @@ Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_d
 |-----|---------|-------|
 | `PODS_REREQUEST_COOLDOWN_DAYS` | `14` | After a first decline a student waits this many days before asking the same pod once more. A second decline on that pod is final; staff can still add the student. `0` allows an immediate second request. |
 | `PODS_MEETING_REMINDER_HOURS` | `24` | Hourly job `pods-meeting-reminders` sends a bell reminder this many hours (1-72) before each scheduled pod meeting, skipping members who can't make it. On-site only, no email. |
-| `PODS_STALE_REQUEST_ALERT_ENABLED` | `true` | Daily job `pods-stale-request-alert` (09:00 UTC) posts one staff Slack message about pending pod requests older than `PODS_STALE_REQUEST_DAYS`. Uses the staff comment channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`) plus `SLACK_ENABLED` and `SLACK_BOT_TOKEN`. Set `false` to stop the post. |
+| `PODS_STALE_REQUEST_ALERT_ENABLED` | `true` | Daily job `pods-stale-request-alert` (09:00 UTC) posts one staff Slack message about pending pod requests older than `PODS_STALE_REQUEST_DAYS`. The same daily message now also carries stuck pod meeting proposals (see `PODS_STUCK_PROPOSAL_ALERT_ENABLED`). Uses the staff comment channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`) plus `SLACK_ENABLED` and `SLACK_BOT_TOKEN`. Set `false` to drop the requests section; stuck proposals still post. |
+| `PODS_STUCK_PROPOSAL_HOURS` | `48` | A live pod meeting proposal is stuck once it has waited this many hours (1-336; invalid values fall back to `48`) since it was proposed or last moved. Studio `/studio/pods/` shows a `Stuck proposal` badge, the pod page a `Stuck` badge, and the staff API meeting payload `stuck: true`. |
+| `PODS_STUCK_PROPOSAL_ALERT_ENABLED` | `true` | Adds a stuck proposals section to the same daily `pods-stale-request-alert` message: each stuck proposal once, with who has not answered (email and last sign-in). Set `false` to drop that section; stale requests still post. |
 
 ## 7. GitHub App (content sync)
 

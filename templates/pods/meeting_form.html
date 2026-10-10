@@ -7,7 +7,8 @@
 {% comment %}
 Confirm page for a proposal and the Change time form (issue #1919). One
 narrow column: the chosen time with the member strip and fit badge, or the
-date and time inputs read in the viewer's zone; the weekly-repeat or
+date and time inputs read in the viewer's zone; for a proposal, the rule
+that confirms it (issue #1934); the weekly-repeat or
 move-later checkbox; then submit and a quiet way back.
 {% endcomment %}
 <section class="max-w-2xl" aria-labelledby="pod-meeting-form-heading" data-testid="pod-meeting-form-page">
@@ -46,6 +47,7 @@ move-later checkbox; then submit and a quiet way back.
     </fieldset>
     {% include "pods/_meeting_custom_time.html" %}
     {% endif %}
+    {% if rule_line %}<p class="mt-4 text-sm text-foreground" data-testid="pod-meeting-form-rule">{{ rule_line }}</p>{% endif %}
 
     {% if show_repeat %}
     <label class="mt-5 flex min-h-[44px] items-start gap-3 text-sm text-foreground">

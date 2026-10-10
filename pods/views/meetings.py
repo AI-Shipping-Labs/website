@@ -25,7 +25,7 @@ from pods.models import (
 )
 from pods.services import meetings as mtg
 from pods.services import membership as svc
-from pods.services.meeting_presentation import propose_state, propose_url
+from pods.services.meeting_presentation import msg_rule, propose_state, propose_url
 from pods.services.meeting_rules import meeting_state
 from pods.services.suggestions import (
     evaluate_slot,
@@ -129,6 +129,7 @@ def meeting_new(request, slug, pod_id):
             messages.error(request, blocked or mtg.MSG_NEEDS_TWO)
             return _back(pod)
     context = _form_base(request, course, pod, zone_name)
+    needed = required_attendance(len(members)) or 2
     raw_start = (request.POST.get('start') if request.method == 'POST' else request.GET.get('start')) or ''
     slot = None
     if raw_start.strip():
@@ -145,7 +146,6 @@ def meeting_new(request, slug, pod_id):
         except svc.PodError as exc:
             context['error'] = exc.message
         else:
-            needed = required_attendance(len(members)) or 2
             messages.success(request, MSG_PROPOSED.format(needed=needed))
             return _back(pod)
     context.update({
@@ -157,6 +157,7 @@ def meeting_new(request, slug, pod_id):
         'show_repeat': remaining >= 2,
         'repeat_label': f'Repeat weekly for the remaining {remaining} meetings',
         'repeat_checked': repeat_checked,
+        'rule_line': msg_rule(needed),
         'form_action': propose_url(pod),
     })
     return render(request, 'pods/meeting_form.html', context, status=400 if context['error'] else 200)
@@ -232,6 +233,11 @@ def meeting_move(request, slug, pod_id, meeting_id):
         'custom_checked': choice == 'custom' or not choices,
         'show_move_later': show_move_later,
         'move_later_checked': move_later,
+        # Moving a proposal resets its answers, so it needs agreeing again.
+        'rule_line': (
+            msg_rule(required_attendance(len(members)) or 2)
+            if meeting.status == MEETING_STATUS_PROPOSED else ''
+        ),
         'form_action': request.path,
     })
     return render(request, 'pods/meeting_form.html', context, status=400 if context['error'] else 200)

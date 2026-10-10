@@ -344,7 +344,8 @@ def _meetings_context(pod, users, schedule_form):
             'cant': [names[uid] for uid, r in answers.items() if r == MEETING_RESPONSE_CANT and uid in names],
             'moved_by': display_name(meeting.moved_by) if meeting.moved_by_id else '',
             'series_short': str(meeting.series_id)[:8] if meeting.series_id else '',
-            'can_hold': meeting.status == MEETING_STATUS_SCHEDULED,
+            # Same rule as the member page and ``set_meeting_status`` (issue #1934).
+            'can_hold': meeting.status == MEETING_STATUS_SCHEDULED and meeting.starts_at <= now,
             'can_cancel': meeting.status != MEETING_STATUS_CANCELLED,
         })
     form = schedule_form or {}

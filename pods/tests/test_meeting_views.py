@@ -177,7 +177,7 @@ class MeetingsSectionTest(MeetingViewFixture):
         self.assertEqual(ids, [future.pk, cancelled.pk, proposal.pk, expired.pk, past.pk, held.pk])
         self.assertEqual(
             texts(response, 'pod-meeting-badge'),
-            ['Confirmed', 'Cancelled', 'Proposed - 1 of 2 can make it', 'Not confirmed', 'Confirmed', 'Held'],
+            ['Confirmed', 'Cancelled', 'Proposed - 1 of 2 needed', 'Not confirmed', 'Confirmed', 'Held'],
         )
         self.assertEqual(
             texts(response, 'pod-meeting-title'),
@@ -232,13 +232,15 @@ class MeetingsSectionTest(MeetingViewFixture):
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(texts(response, 'pod-meeting-badge'), ['Starting now', 'Confirmed'])
+        # The section line and Join call; the soonest row shows Join call
+        # instead of the Call link meta, and later rows carry no meta (#1934).
         self.assertContains(
             response,
             '<a href="https://meet.google.com/abc-defg-hij" target="_blank" rel="noopener noreferrer"',
-            count=3,
+            count=2,
         )
         self.assertEqual(texts(response, 'pod-meeting-join'), ['Join call'])
-        self.assertEqual(texts(response, 'pod-meeting-call-link'), ['Call link: meet.google.com/abc-defg-hij'])
+        self.assertEqual(texts(response, 'pod-meeting-call-link'), [])
         pod.meeting_url = ''
         pod.save()
         response = self.client.get(self.pod_url(pod))
@@ -277,7 +279,7 @@ class ProposeFlowTest(MeetingViewFixture):
         self.assertIn('Time proposed. It is confirmed once 2 of you can make it.', message_texts(response))
         title = texts(response, 'pod-meeting-title')[0]
         self.assertRegex(title, r'^Proposed: \w+days at \d\d:\d\d Europe/Berlin, 4 meetings from \w{3} \d+$')
-        self.assertEqual(texts(response, 'pod-meeting-badge'), ['Proposed - 1 of 2 can make it'])
+        self.assertEqual(texts(response, 'pod-meeting-badge'), ['Proposed - 1 of 2 needed'])
         self.assertEqual(texts(response, 'pod-slot-propose'), [])
         self.assertEqual(
             texts(response, 'pod-times-propose-blocked'),
@@ -393,6 +395,9 @@ class ChangeFlowTest(MeetingViewFixture):
     def test_no_candidate_line_when_no_other_time_fits(self):
         pod = self.make_pod()
         meeting = make_meeting(pod, berlin(2026, 10, 14, 18, 0), zone='Europe/Berlin')
+        # The only other fitting time in the week either side (Wed Oct 21) is
+        # the next meeting's own start, which an offer may never reach.
+        make_meeting(pod, berlin(2026, 10, 21, 18, 0), zone='Europe/Berlin')
         PodMeetingResponse.objects.create(meeting=meeting, user=self.mike, response=MEETING_RESPONSE_CANT)
         for user in (self.anna, self.raj, self.mike):
             set_windows(user, 'Europe/Berlin', [(2, '18:00', '19:00')])
@@ -400,7 +405,7 @@ class ChangeFlowTest(MeetingViewFixture):
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(
             texts(response, 'pod-meeting-no-offer'),
-            ['No other time fits at least 2 of you in the next 2 weeks.'],
+            ['No other time within a week of this meeting fits at least 2 of you.'],
         )
         self.assertIn('Change time', texts(response, 'pod-meeting-actions')[0])
 
@@ -537,6 +542,6 @@ class ProposalJoinWindowTest(MeetingViewFixture):
         make_meeting(pod, NOW + datetime.timedelta(minutes=5), status='proposed', created_via='member')
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-badge'), ['Proposed - 0 of 2 can make it'])
+        self.assertEqual(texts(response, 'pod-meeting-badge'), ['Proposed - 0 of 2 needed'])
         self.assertEqual(texts(response, 'pod-meeting-join'), [])
         self.assertEqual(texts(response, 'pod-meeting-call-link'), ['Call link: meet.google.com/abc-defg-hij'])

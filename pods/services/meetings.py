@@ -606,7 +606,8 @@ def set_meeting_status(meeting, actor, status, *, now=None):
     the meeting count and overlaps. Scheduling a live proposal agrees the
     whole proposal and notifies members; cancelling a proposal cancels the
     whole proposal. ``held`` applies to exactly one meeting and is refused
-    for a proposal (schedule it first).
+    for a proposal (schedule it first) and before the meeting's start
+    (issue #1934), the same rule as the member ``Mark as held``.
     """
     now = now or timezone.now()
     pod = _lock_pod(meeting.pod)
@@ -620,6 +621,8 @@ def set_meeting_status(meeting, actor, status, *, now=None):
         # its own; marking one meeting of a proposed series would strand the
         # series' answers on it. Schedule it first, then mark it held.
         raise PodError(MSG_HELD_NEEDS_AGREEMENT, field='status')
+    if status == MEETING_STATUS_HELD and meeting.starts_at > now:
+        raise PodError(MSG_NOT_STARTED, field='status')
     state = meeting_state(pod, now)
     group = proposal_meetings(meeting) if status != MEETING_STATUS_HELD else [meeting]
     if status == MEETING_STATUS_SCHEDULED:

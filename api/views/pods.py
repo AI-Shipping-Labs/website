@@ -1104,7 +1104,7 @@ def pod_meetings(request, pod_id):
                       'example': {'error': 'Meeting not found', 'code': 'unknown_meeting'}},
                 409: {'description': 'Meeting cannot be moved, or the meeting limit is reached.',
                       'example': {'error': mtg.MSG_HAPPENED, 'code': mtg.CODE_NOT_MOVABLE}},
-                422: {'description': 'Validation error.',
+                422: {'description': 'Validation error, including status held before the meeting starts.',
                       'example': {'error': mtg.MSG_QUARTER, 'code': 'validation_error', 'details': {'field': 'start'}}},
             },
         },

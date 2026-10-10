@@ -399,7 +399,7 @@ def build_pod_page(pod, viewer, *, now=None):
     meetings = None
     if show_private:
         meetings = meetings_section(
-            pod, viewer, member_avail=member_avail, viewer_zone=viewer_zone, raw_slots=raw_slots,
+            pod, viewer, member_avail=member_avail, viewer_zone=viewer_zone,
             is_member=is_member, can_manage=manage, now=now,
         )
         _add_meeting_actions(pod, suggestions, meetings['state'], member_avail, viewer_zone,

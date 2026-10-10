@@ -15646,7 +15646,7 @@
                 }
               }
             },
-            "description": "Validation error."
+            "description": "Validation error, including status held before the meeting starts."
           }
         },
         "summary": "Move a meeting or set its status (staff-only)",

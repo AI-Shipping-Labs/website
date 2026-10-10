@@ -1683,6 +1683,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_phone_roster_shows_stacked_cards_with_override",
     })
 
+    issue_1934_owners = frozenset({
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_student_proposes_a_time_and_understands_what_confirms_it",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_quiet_member_answers_a_proposal_from_the_dashboard",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_student_who_already_answered_is_not_nagged_on_the_dashboard",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_student_who_cant_make_meeting_2_gets_an_offer_in_the_same_week",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_no_nearby_time_fits_and_the_student_is_told_so",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_pod_member_adds_then_changes_the_call_link_and_finds_it_on_the_next_meeting",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_members_in_other_timezones_read_clock_changes_correctly",
+        "playwright_tests/test_pod_meetings_polish_1934.py::"
+        "test_staff_can_only_mark_a_meeting_held_after_it_starts",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1908,8 +1927,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2821)
-        self.assertEqual(len(inventory.owners), 2617)
+        self.assertEqual(inventory.item_count, 2829)
+        self.assertEqual(len(inventory.owners), 2625)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1933,6 +1952,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1929_owners
             | self.issue_1933_owners
             | self.issue_1919_owners
+            | self.issue_1934_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

@@ -19,6 +19,9 @@
   {% endif %}
 {% elif dashboard_card_variant == "pod_meeting" %}
   <span class="text-xs font-medium uppercase tracking-wide text-accent">Pod meeting</span>
+  {% if pod_meeting.badge %}
+  {% member_status_badge pod_meeting.badge tone="info" size="sm" testid="dashboard-pod-meeting-needs-answer" %}
+  {% endif %}
 {% elif dashboard_card_variant == "book_deadline" %}
   <span class="text-xs font-medium uppercase tracking-wide text-accent">Book Club</span>
 {% endif %}

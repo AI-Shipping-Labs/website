@@ -2,14 +2,15 @@
 {% comment %}
 One optional call link per pod (issue #1919). Any member or staff sets or
 clears it; an empty save removes it. Errors come back through the session
-so the disclosure reopens with the message.
+so the disclosure reopens with the message. The toggle is a small secondary
+button (issue #1934), like the Cancel meeting disclosure on meeting rows.
 {% endcomment %}
 <div class="mt-4" data-testid="pod-call-link">
   {% if meetings.call_link_url %}
   <p class="text-sm text-foreground" data-testid="pod-call-link-line">Call link: <a href="{{ meetings.call_link_url }}" target="_blank" rel="noopener noreferrer" class="break-all font-medium text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-call-link-open">{{ meetings.call_link_label }}</a></p>
   {% endif %}
   <details data-testid="pod-call-link-disclosure"{% if call_link_error %} open{% endif %}>
-    <summary class="inline-flex min-h-[44px] cursor-pointer list-none items-center text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background [&::-webkit-details-marker]:hidden" data-testid="pod-call-link-toggle">{% if meetings.call_link_url %}Change{% else %}Add a call link{% endif %}</summary>
+    <summary class="{% button_classes 'secondary' size='sm' extra='mt-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden' %}" data-testid="pod-call-link-toggle">{% if meetings.call_link_url %}Change link{% else %}Add a call link{% endif %}</summary>
     <form method="post" action="{% url 'pod_call_link' slug=course.slug pod_id=pod.pk %}" class="mt-2 max-w-2xl" data-testid="pod-call-link-form">
       {% csrf_token %}
       <label for="pod-call-link-url" class="block text-sm font-medium text-foreground">Call link</label>

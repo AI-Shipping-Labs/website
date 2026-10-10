@@ -90,6 +90,31 @@ class StudioPodMeetingsTest(TestCase):
             dict(PodMeeting.objects.values_list('pk', 'status')), {past.pk: 'held', future.pk: 'cancelled'},
         )
 
+    def test_mark_held_only_after_the_start(self):
+        # Issue #1934: Studio matches the member page and the service rule.
+        started = make_meeting(self.pod, NOW - datetime.timedelta(days=1))
+        future = make_meeting(self.pod, NOW + datetime.timedelta(days=7))
+        response = self.detail()
+        rows = response.content.decode().split('data-testid="studio-pod-meeting"')[1:]
+        self.assertEqual(len(rows), 2)
+        self.assertIn('data-testid="studio-pod-meeting-held"', rows[0])
+        self.assertNotIn('data-testid="studio-pod-meeting-held"', rows[1])
+        for row in rows:
+            self.assertIn('data-testid="studio-pod-meeting-cancel"', row)
+        # A stale form posting held for the future meeting is refused.
+        response = self.client.post(
+            f'/studio/pods/{self.pod.pk}/meetings/{future.pk}/status', {'status': 'held'}, follow=True,
+        )
+        self.assertContains(response, 'This meeting has not started yet.')
+        self.assertNotContains(response, 'Meeting marked as held.')
+        future.refresh_from_db()
+        self.assertEqual(future.status, 'scheduled')
+        response = self.client.post(
+            f'/studio/pods/{self.pod.pk}/meetings/{started.pk}/status', {'status': 'held'}, follow=True,
+        )
+        self.assertContains(response, 'Meeting marked as held.')
+        self.assertEqual(texts(response, 'studio-pod-meeting-status'), ['Held', 'Scheduled'])
+
     def test_non_staff_cannot_schedule_or_change_meetings(self):
         meeting = make_meeting(self.pod, NOW + datetime.timedelta(days=3))
         self.client.force_login(self.member)

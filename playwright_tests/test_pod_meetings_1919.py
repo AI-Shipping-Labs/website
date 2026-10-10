@@ -115,7 +115,7 @@ def test_pod_member_proposes_a_weekly_meeting_from_a_suggested_time(django_serve
     expect(page.get_by_test_id('pod-meeting-title')).to_have_text(
         re.compile(r'^Proposed: \w+days at \d\d:\d\d Europe/Berlin, 4 meetings from \w{3} \d+$'),
     )
-    expect(page.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 can make it')
+    expect(page.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 needed')
     expect(page.get_by_test_id('pod-slot-propose')).to_have_count(0)
     expect(page.get_by_test_id('pod-times-propose-blocked')).to_have_text(
         'Confirm or cancel the proposed time before proposing another.',
@@ -138,7 +138,7 @@ def test_second_member_confirms_and_the_pod_gets_its_four_weekly_meetings(django
     context, page = _page(browser, 'raj@test.com')
     page.goto(f'{django_server}/notifications', wait_until='domcontentloaded')
     page.get_by_role('link', name=re.compile(f'Anna K. proposed a time for {POD_NAME}')).first.click()
-    expect(page.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 can make it')
+    expect(page.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 needed')
 
     page.get_by_test_id('pod-meeting-going').click()
     expect(_messages(page)).to_contain_text('Meeting confirmed.')
@@ -272,7 +272,10 @@ def test_pod_adds_its_call_link_and_joins_when_the_meeting_starts(django_server,
     join = now_row.get_by_test_id('pod-meeting-join')
     expect(join).to_have_attribute('href', 'https://meet.google.com/abc-defg-hij')
     expect(join).to_have_attribute('target', '_blank')
-    expect(tomorrow_row.get_by_test_id('pod-meeting-call-link')).to_have_text('Call link: meet.google.com/abc-defg-hij')
+    # Issue #1934: the Call link meta sits on the soonest upcoming row only,
+    # which here shows Join call instead; the section line keeps the link.
+    expect(page.get_by_test_id('pod-call-link-line')).to_have_text('Call link: meet.google.com/abc-defg-hij')
+    expect(tomorrow_row.get_by_test_id('pod-meeting-call-link')).to_have_count(0)
     expect(tomorrow_row.get_by_test_id('pod-meeting-join')).to_have_count(0)
     context.close()
 
@@ -384,7 +387,7 @@ def test_member_schedules_meeting_2_at_the_same_weekly_time_after_a_one_off_firs
     page.get_by_test_id('pod-meeting-form-submit').click()
     expect(_messages(page)).to_contain_text('Time proposed.')
     row = _row(page, 2)
-    expect(row.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 can make it')
+    expect(row.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 needed')
     expect(row.get_by_test_id('pod-meeting-time')).to_have_attribute('datetime', expected.isoformat())
     context.close()
 

@@ -186,6 +186,18 @@ class PodMeetingsApiTest(TestCase):
         response = self.call('patch', self.url(f'/{cancelled.pk}'), {'status': 'scheduled'})
         self.assertEqual((response.status_code, response.json()['code']), (409, 'meeting_limit_reached'))
 
+    def test_held_before_the_start_is_a_validation_error(self):
+        # Issue #1934: the staff API shares the member and Studio rule.
+        future = make_meeting(self.pod, NOW + datetime.timedelta(days=2))
+        response = self.call('patch', self.url(f'/{future.pk}'), {'status': 'held'})
+        self.assertEqual((response.status_code, response.json()['code']), (422, 'validation_error'))
+        self.assertEqual(response.json()['error'], 'This meeting has not started yet.')
+        self.assertEqual(response.json()['details'], {'field': 'status'})
+        future.refresh_from_db()
+        self.assertEqual(future.status, 'scheduled')
+        response = self.call('patch', self.url(f'/{future.pk}'), {'status': 'cancelled'})
+        self.assertEqual(response.json()['meetings'][0]['status'], 'cancelled')
+
     def test_held_on_a_proposal_is_a_validation_error(self):
         proposal = make_meeting(self.pod, NOW + datetime.timedelta(days=2), status='proposed')
         response = self.call('patch', self.url(f'/{proposal.pk}'), {'status': 'held'})

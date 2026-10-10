@@ -298,7 +298,7 @@
           </span>
           {% endif %}
         </div>
-        {% if has_override and active_override %}
+        {% if override_is_effective and active_override %}
         <p class="text-xs text-muted-foreground mt-1" data-testid="user-detail-tier-base">
           Base: {% if detail_user.membership.tier %}{{ detail_user.membership.tier.name }}{% else %}Free{% endif %}
           &middot; expires {{ active_override.expires_at|operator_datetime }} UTC
@@ -478,6 +478,11 @@
       Active override to <span class="font-medium">{{ active_override.override_tier.name }}</span>
       until {{ active_override.expires_at|operator_datetime }} UTC.
     </p>
+    {% if not override_is_effective %}
+    <p class="text-xs text-muted-foreground mb-3" data-testid="user-detail-tier-override-ineffective">
+      Not raising access: the stored tier ({% if detail_user.membership.tier %}{{ detail_user.membership.tier.name }}{% else %}Free{% endif %}) is already at or above {{ active_override.override_tier.name }}.
+    </p>
+    {% endif %}
     <p class="mb-3">
       <a href="{% url 'studio_user_tier_override_page' detail_user.pk %}"
          data-testid="user-detail-tier-override-page-link"

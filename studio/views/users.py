@@ -354,10 +354,13 @@ def _user_listing_counts():
       (``_active_subscription_q``), grouped by their base ``tier.level``
       (basic=10, main=20, premium=30). NOT ``effective_tier_level``, which
       folds in overrides and is the root cause of the old inflated count.
-    - ``override_{basic,main,premium}`` — users with an active, non-expired
-      ``TierOverride``, grouped by ``active_override_level``, EXCLUDING anyone
-      with an active subscription (a user with BOTH counts under Paid only,
-      never under Override — no double counting).
+    - ``override_{basic,main,premium}`` — users whose strongest active,
+      non-expired ``TierOverride`` is ABOVE their stored base tier (an
+      effective override, issue #1933), grouped by ``active_override_level``
+      (the strongest override's level), EXCLUDING anyone with an active
+      subscription (a user with BOTH counts under Paid only, never under
+      Override — no double counting). An override at or below the base tier
+      raises nothing, so it is not counted as comped.
     - ``total_paying`` = sum of the three Paid cells = all active-subscription
       users; ``total_comped`` = sum of the three Override cells.
 
@@ -365,8 +368,11 @@ def _user_listing_counts():
     semantics (unchanged) and drive the Main+ / Premium filter chips.
     """
     paid = _active_subscription_q()
-    # Override-only: an active override AND no active subscription.
-    override_only = Q(active_override_level__isnull=False) & ~paid
+    # Override-only: an effective override (strongest active override above
+    # the stored base tier) AND no active subscription.
+    override_only = (
+        Q(active_override_level__gt=F('base_tier_level')) & ~paid
+    )
 
     counts = _annotated_user_queryset().aggregate(
         total_users=Count('pk'),
@@ -486,7 +492,7 @@ def _user_rows_from_users(users):
             'email_verified': user.email_verified,
             'tier_name': effective_tier.name,
             'tier_slug': effective_tier.slug,
-            'tier_source': _tier_source(user, override is not None),
+            'tier_source': _tier_source(user, effective_tier.is_override),
             'status': _user_status(user),
             'tags': tags,
             'visible_tags': tags[:USER_LIST_TAG_LIMIT],
@@ -936,15 +942,17 @@ def user_create_done(request):
 # ---------------------------------------------------------------------------
 
 
-def _tier_source(user, has_override):
+def _tier_source(user, override_is_effective):
     """Classify the source of the displayed tier for the badge.
 
-    'override' wins when an active override exists, regardless of whether
-    the user also has a Stripe customer record. Otherwise 'stripe' if the
-    user is connected to Stripe, 'default' for users who never paid /
-    were created manually.
+    'override' wins when an active override actually raises the user above
+    their stored base tier (``EffectiveTier.is_override``), regardless of
+    whether the user also has a Stripe customer record. An override at or
+    below the base tier changes nothing (issue #1933), so it falls through
+    exactly as if no override existed: 'stripe' if the user is connected to
+    Stripe, 'default' for users who never paid / were created manually.
     """
-    if has_override:
+    if override_is_effective:
         return 'override'
     if user.membership.stripe_customer_id:
         return 'stripe'
@@ -1443,6 +1451,10 @@ def user_detail(request, user_id):
         'tier_slug': effective_tier.slug,
         'has_override': has_override,
         'active_override': override,
+        # Issue #1933: an active override at or below the stored tier is
+        # still listed (and revocable) in the override block, but it drives
+        # no Override badge / "Base: ... expires" line.
+        'override_is_effective': effective_tier.is_override,
         'is_subscribed': not user.unsubscribed,
         'tags': user_tags,
         'tag_chips': tag_chips,
@@ -1485,7 +1497,7 @@ def user_detail(request, user_id):
         'available_override_tiers': available_override_tiers,
         'is_highest_tier': is_highest_tier,
         'override_duration_labels': [label for label, _ in DURATION_CHOICES],
-        'tier_source': _tier_source(user, has_override),
+        'tier_source': _tier_source(user, effective_tier.is_override),
         'open_payment_mismatches': _payment_mismatch_rows(
             open_payment_mismatches,
             stripe_account_id,

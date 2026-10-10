@@ -141,6 +141,17 @@ curl -sL -H "Authorization: Token $API_TOKEN" \
 
 Returns email, tier, unsubscribed flag, bounce state, tags, and identity fields. 404 with `{"error": "User not found", "code": "user_not_found"}` for unknown emails.
 
+Tier fields (issue #1933):
+
+| Field | Meaning |
+|---|---|
+| `tier` | Effective tier: `max(base_tier, strongest active override)`. `source` is `override` only when the override is above the base tier, otherwise `subscription` (paid base) or `free`. |
+| `base_tier` | The stored, actually-paid tier (full payload only). |
+| `tier_override` | The strongest active, non-expired override: highest tier, then latest expiry. Several overrides can be active at once (for example a Maven grant next to a staff grant); this is the same one access checks use. `null` when none (full payload only). |
+| `tier_override_active` | `true` when any active, non-expired override exists, even one at or below the paid tier, so it can be `true` while `tier.source` is not `override`. |
+
+The list, activity, and CRM export endpoints use the same rule.
+
 ### Read: search / list
 
 ```bash

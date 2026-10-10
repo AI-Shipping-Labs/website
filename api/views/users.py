@@ -85,6 +85,7 @@ from api.utils import parse_json_body, require_methods
 from api.views._permissions import bearer_is_admin
 from community.models import CommunityAuditLog
 from community.tasks.slack_membership import check_user_slack_membership
+from content.access import get_active_overrides_by_user
 from content.models.course import (
     UNIT_KIND_CHECKLIST_ITEM,
     UNIT_KIND_EVENT,
@@ -318,7 +319,9 @@ _USER_EXAMPLE = {
                 "Matches the Studio user-search surface: email, first/last "
                 "name, ``stripe_customer_id``, ``slack_user_id``, and "
                 "substring matches inside tags. Empty ``q`` returns the "
-                "newest 50."
+                "newest 50. Each row's ``tier`` applies the strongest "
+                "active override (highest tier, then latest expiry), the "
+                "same rule as the single-user payload."
             ),
             "query": {
                 "q": {
@@ -425,8 +428,17 @@ def users_collection(request):
         tag_user_ids = user_ids_matching_tag_search(normalized)
         qs = qs.filter(scalar | Q(pk__in=tag_user_ids))
 
-    qs = qs.order_by(*_user_sort_expressions(sort_value))[:limit]
-    rows = [serialize_user_state(u, compact=True) for u in qs]
+    users = list(qs.order_by(*_user_sort_expressions(sort_value))[:limit])
+    # Issue #1933: resolve every row's strongest active override in one
+    # batched query (same rule as access checks and Studio) instead of one
+    # override query per row.
+    override_map = get_active_overrides_by_user(users)
+    rows = [
+        serialize_user_state(
+            u, compact=True, active_override=override_map.get(u.pk),
+        )
+        for u in users
+    ]
     return JsonResponse(
         {"users": rows, "count": len(rows), "limit": limit},
         status=200,
@@ -448,6 +460,17 @@ def users_collection(request):
     methods={
         "GET": {
             "summary": "Get user state",
+            "description": (
+                "``tier`` is the effective tier: ``max(base_tier, strongest "
+                "active override)``, with ``source`` ``override`` only when "
+                "the override is above the base tier. ``tier_override`` is "
+                "the strongest active, non-expired override (highest tier, "
+                "then latest expiry) -- the same one access checks use. "
+                "``tier_override_active`` is true whenever any active "
+                "override exists, so it can be true while ``tier.source`` "
+                "is ``subscription`` (an override at or below the paid "
+                "tier)."
+            ),
             "responses": {
                 200: {
                     "description": "User payload.",

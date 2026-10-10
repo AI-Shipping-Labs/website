@@ -1316,6 +1316,21 @@
     "description": "Hours before a scheduled pod meeting when members get the bell reminder (1-72). The hourly pods-meeting-reminders job sends one reminder per member and meeting, skipping members who can't make it; a moved meeting is reminded again. Defaults to 24.",
     "default": "24",
     "docs_url": "_docs/integrations/pods.md#pods_meeting_reminder_hours"
+   },
+   {
+    "key": "PODS_STUCK_PROPOSAL_HOURS",
+    "is_secret": false,
+    "description": "A live pod meeting proposal is stuck when some members have still not answered this many hours (1-336) after it was proposed or last moved. Studio shows a Stuck badge and the daily staff Slack alert lists it once. Defaults to 48.",
+    "default": "48",
+    "docs_url": "_docs/integrations/pods.md#pods_stuck_proposal_hours"
+   },
+   {
+    "key": "PODS_STUCK_PROPOSAL_ALERT_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "default": "true",
+    "description": "When on, the daily pods staff Slack message (09:00 UTC) also lists pod meeting proposals stuck longer than PODS_STUCK_PROPOSAL_HOURS that were not announced before, with who has not answered and their last sign-in. No-redeploy kill switch for that section only. Defaults on.",
+    "docs_url": "_docs/integrations/pods.md#pods_stuck_proposal_alert_enabled"
    }
   ]
  }

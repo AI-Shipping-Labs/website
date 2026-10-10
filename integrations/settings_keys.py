@@ -246,6 +246,8 @@ _KEY_ORDER = {
         "PODS_REREQUEST_COOLDOWN_DAYS",
         "PODS_STALE_REQUEST_ALERT_ENABLED",
         "PODS_MEETING_REMINDER_HOURS",
+        "PODS_STUCK_PROPOSAL_HOURS",
+        "PODS_STUCK_PROPOSAL_ALERT_ENABLED",
     ),
     "zoom": (
         "ZOOM_CLIENT_ID",
@@ -2186,4 +2188,24 @@ PODS_MEETING_REMINDER_HOURS = declare(
     default="24",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_meeting_reminder_hours",
+)
+PODS_STUCK_PROPOSAL_HOURS = declare(
+    key="PODS_STUCK_PROPOSAL_HOURS",
+    group="pods",
+    label="Pods Stuck Proposal Hours",
+    description="A live pod meeting proposal is stuck when some members have still not answered this many hours (1-336) after it was proposed or last moved. Studio shows a Stuck badge and the daily staff Slack alert lists it once. Defaults to 48.",
+    value_type="int",
+    default="48",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_stuck_proposal_hours",
+)
+PODS_STUCK_PROPOSAL_ALERT_ENABLED = declare(
+    key="PODS_STUCK_PROPOSAL_ALERT_ENABLED",
+    group="pods",
+    label="Pods Stuck Proposal Alert Enabled",
+    description="When on, the daily pods staff Slack message (09:00 UTC) also lists pod meeting proposals stuck longer than PODS_STUCK_PROPOSAL_HOURS that were not announced before, with who has not answered and their last sign-in. No-redeploy kill switch for that section only. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_stuck_proposal_alert_enabled",
 )

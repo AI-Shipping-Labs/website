@@ -42,6 +42,7 @@ from pods.services import membership as svc
 from pods.services.meeting_rules import meeting_state
 from pods.services.people import display_name, humanize_age
 from pods.services.stale_requests import is_stale
+from pods.services.stuck_proposals import pods_with_stuck_proposal, proposal_waits
 from pods.services.suggestions import load_member_availability, suggest_slots
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
@@ -124,6 +125,8 @@ def studio_pod_list(request):
         pods = pods.filter(cohort_id=int(cohort_filter))
     pager = studio_pagination_context(request, pods)
     stale_days = pods_config.stale_request_days()
+    # Issue #1935: same stuck rule as the daily staff Slack alert.
+    stuck_pod_ids = pods_with_stuck_proposal([pod.pk for pod in pager['page'].object_list], now=now)
     rows = []
     for pod in pager['page'].object_list:
         oldest = pod.oldest_open_request
@@ -135,6 +138,7 @@ def studio_pod_list(request):
             # Same rule as the daily staff Slack alert.
             'stale': is_stale(pod.oldest_pending_request, now, stale_days),
             'stale_age': humanize_age(pod.oldest_pending_request, now) if pod.oldest_pending_request else '',
+            'stuck': pod.pk in stuck_pod_ids,
         })
     cohort_options = [(str(c.pk), _cohort_label(c)) for c in _dated_cohorts()]
     return render(request, 'studio/pods/list.html', {
@@ -319,14 +323,16 @@ def _meetings_context(pod, users, schedule_form):
         pod, now, meetings=list(PodMeeting.objects.filter(pod=pod).select_related('moved_by')),
     )
     names = {u.pk: display_name(u) for u in users}
+    response_rows = list(PodMeetingResponse.objects.filter(meeting__pod=pod))
     responses = {}
-    for meeting_id, user_id, response in PodMeetingResponse.objects.filter(
-        meeting__pod=pod,
-    ).values_list('meeting_id', 'user_id', 'response'):
-        responses.setdefault(meeting_id, {})[user_id] = response
+    for row in response_rows:
+        responses.setdefault(row.meeting_id, {})[row.user_id] = row.response
+    # Issue #1935: who each live proposal waits on, and whether it is stuck.
+    waits = proposal_waits(pod, state, users, response_rows, hours=pods_config.stuck_proposal_hours())
     rows = []
     for meeting in state.meetings:
         answers = responses.get(meeting.pk, {})
+        wait = waits.get(meeting.pk)
         if state.is_expired(meeting):
             badge = ('expired', 'Not confirmed')
         else:
@@ -342,6 +348,8 @@ def _meetings_context(pod, users, schedule_form):
             'status_label': badge[1],
             'going': going,
             'cant': [names[uid] for uid, r in answers.items() if r == MEETING_RESPONSE_CANT and uid in names],
+            'no_answer': [display_name(u) for u in wait.waiting] if wait else [],
+            'stuck': bool(wait and wait.stuck),
             'moved_by': display_name(meeting.moved_by) if meeting.moved_by_id else '',
             'series_short': str(meeting.series_id)[:8] if meeting.series_id else '',
             # Same rule as the member page and ``set_meeting_status`` (issue #1934).

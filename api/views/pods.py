@@ -52,11 +52,13 @@ from pods.models import (
     PodMeeting,
     PodMembership,
 )
+from pods.services import config as pods_config
 from pods.services import meetings as mtg
 from pods.services import membership as svc
 from pods.services.availability import format_minute
 from pods.services.meeting_rules import meeting_end, meeting_state
 from pods.services.slack import clean_channel_url
+from pods.services.stuck_proposals import proposal_waits
 from pods.services.suggestions import load_member_availability, suggest_slots
 
 TAG = 'Pods'
@@ -122,6 +124,9 @@ _MEETING_EXAMPLE = {
     'previous_starts_at': None,
     'reminder_sent_at': None,
     'responses': [{'email': 'mike@example.com', 'response': 'cant_make_it'}],
+    'waiting_on': [],
+    'stuck': False,
+    'stuck_alerted_at': None,
 }
 
 _POD_DETAIL_EXAMPLE = {
@@ -326,7 +331,9 @@ def _meeting_queryset(pod):
     )
 
 
-def _serialize_meeting(meeting, state):
+def _serialize_meeting(meeting, state, waits):
+    # Issue #1935: ``waiting_on``/``stuck`` only for live proposal heads.
+    wait = waits.get(meeting.pk)
     return {
         'id': meeting.pk,
         'number': state.numbers.get(meeting.pk),
@@ -347,12 +354,20 @@ def _serialize_meeting(meeting, state):
             {'email': response.user.email, 'response': response.response}
             for response in sorted(meeting.responses.all(), key=lambda r: r.pk)
         ],
+        'waiting_on': [user.email for user in wait.waiting] if wait else [],
+        'stuck': bool(wait and wait.stuck),
+        'stuck_alerted_at': isoformat_or_none(meeting.stuck_alerted_at),
     }
 
 
 def _serialize_meetings(pod, *, exclude_cancelled=False, status=None, only_ids=None):
     meetings = list(_meeting_queryset(pod))
     state = meeting_state(pod, meetings=meetings)
+    members = [m.user for m in pod.memberships.select_related('user').order_by('joined_at', 'pk')]
+    waits = proposal_waits(
+        pod, state, members, [r for m in meetings for r in m.responses.all()],
+        hours=pods_config.stuck_proposal_hours(),
+    )
     rows = []
     for meeting in state.meetings:
         if exclude_cancelled and meeting.status == MEETING_STATUS_CANCELLED:
@@ -361,7 +376,7 @@ def _serialize_meetings(pod, *, exclude_cancelled=False, status=None, only_ids=N
             continue
         if only_ids is not None and meeting.pk not in only_ids:
             continue
-        rows.append(_serialize_meeting(meeting, state))
+        rows.append(_serialize_meeting(meeting, state, waits))
     return rows
 
 
@@ -1005,7 +1020,13 @@ def _create_meetings(request, pod):
                 'otherwise). A proposal is ``expired`` once its start passed '
                 'while it was still ``proposed``. ``responses`` hold the explicit '
                 'answers; after agreement a member without an answer counts as '
-                'going.'
+                'going. On a live proposal head (the first meeting of a weekly '
+                'proposal) ``waiting_on`` lists the member emails with no answer '
+                'yet and ``stuck`` is true once it waited more than '
+                '``PODS_STUCK_PROPOSAL_HOURS`` since it was proposed or last '
+                'moved on a non-archived pod; every other meeting has '
+                '``waiting_on: []`` and ``stuck: false``. ``stuck_alerted_at`` is '
+                'when the daily staff Slack alert announced it (cleared on move).'
             ),
             'query': {'status': {'type': 'string', 'enum': _MEETING_STATUS_VALUES}},
             'responses': {

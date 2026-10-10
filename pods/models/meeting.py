@@ -96,6 +96,9 @@ class PodMeeting(TimestampedModelMixin, models.Model):
     )
     status_changed_at = models.DateTimeField(null=True, blank=True)
     reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    # Issue #1935: set on a proposal's head meeting once the daily staff Slack
+    # alert announced it as stuck; cleared when the proposal is moved.
+    stuck_alerted_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['starts_at', 'pk']

@@ -1702,6 +1702,17 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_can_only_mark_a_meeting_held_after_it_starts",
     })
 
+    issue_1935_owners = frozenset({
+        "playwright_tests/test_pod_stuck_proposals_1935.py::"
+        "test_staff_spots_a_stuck_proposal_and_sees_who_has_not_answered",
+        "playwright_tests/test_pod_stuck_proposals_1935.py::"
+        "test_proposal_stops_being_stuck_once_the_quiet_member_answers",
+        "playwright_tests/test_pod_stuck_proposals_1935.py::"
+        "test_operator_lowers_the_stuck_threshold_in_studio_settings",
+        "playwright_tests/test_pod_stuck_proposals_1935.py::"
+        "test_a_moved_proposal_is_no_longer_stuck",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -1927,8 +1938,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2829)
-        self.assertEqual(len(inventory.owners), 2625)
+        self.assertEqual(inventory.item_count, 2833)
+        self.assertEqual(len(inventory.owners), 2629)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1953,6 +1964,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1933_owners
             | self.issue_1919_owners
             | self.issue_1934_owners
+            | self.issue_1935_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

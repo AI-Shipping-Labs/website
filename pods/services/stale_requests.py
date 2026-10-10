@@ -11,6 +11,14 @@ The daily job posts at most one message per run to the staff alert channel
 request has not been announced yet (``stale_alerted_at`` is empty). After
 Slack accepts the post every newly stale request is marked; on any failure
 nothing is marked, so the next day's run retries. The job never raises.
+
+Since issue #1935 the same message also carries stuck pod meeting
+proposals (rule in ``pods.services.stuck_proposals``) as their own section.
+Each stuck proposal is announced once (``PodMeeting.stuck_alerted_at`` on
+its head meeting, set only after Slack accepts the post and cleared when
+the proposal is moved). ``PODS_STALE_REQUEST_ALERT_ENABLED`` gates the
+requests section and ``PODS_STUCK_PROPOSAL_ALERT_ENABLED`` the proposals
+section; the job posts when either section has something new.
 """
 
 import logging
@@ -28,14 +36,26 @@ from notifications.services.staff_slack import (
     post_staff_slack_message,
     staff_alert_channel_id,
 )
-from pods.models import POD_STATUS_ARCHIVED, REQUEST_STATUS_PENDING, PodJoinRequest
+from pods.models import (
+    MEETING_STATUS_PROPOSED,
+    POD_STATUS_ARCHIVED,
+    REQUEST_STATUS_PENDING,
+    PodJoinRequest,
+    PodMeeting,
+)
 from pods.services import config as pods_config
+from pods.services.meetings import format_in_zone
 from pods.services.people import display_name, humanize_age
+from pods.services.stuck_proposals import stuck_proposals
 
 logger = logging.getLogger(__name__)
 
 MAX_LINES = 10
+# Slack rejects a section whose text is longer than 3000 characters.
+MAX_SECTION_CHARS = 3000
 FALLBACK_TEXT = 'Stale pod requests need attention'
+PROPOSALS_FALLBACK_TEXT = 'Stuck pod proposals need attention'
+BOTH_FALLBACK_TEXT = 'Pod requests and proposals need attention'
 BUTTON_LABEL = 'Open pods in Studio'
 
 
@@ -68,11 +88,24 @@ def _requests_label(count):
     return f'{count} pod {_plural(count, "request", "requests")}'
 
 
+def _proposals_label(count):
+    """``1 pod proposal`` / ``3 pod proposals``."""
+    return f'{count} pod {_plural(count, "proposal", "proposals")}'
+
+
 def headline(count, stale_days):
     return (
         f'{count} pod {_plural(count, "request", "requests")} '
         f'{_plural(count, "has", "have")} waited more than '
         f'{stale_days} {_plural(stale_days, "day", "days")}'
+    )
+
+
+def proposals_headline(count, hours):
+    """``1 pod proposal has had no answer for 48 hours``."""
+    return (
+        f'{_proposals_label(count)} {_plural(count, "has", "have")} had no answer for '
+        f'{hours} {_plural(hours, "hour", "hours")}'
     )
 
 
@@ -82,44 +115,129 @@ def earlier_line(count):
     )
 
 
-def request_line(join_request, base, now):
-    """``<url|Pod> (Course, Cohort) - Name (email) asked 6 days ago - owner Anna K.``"""
-    pod = join_request.pod
-    cohort = pod.cohort
+def earlier_proposals_line(count):
+    return (
+        f'{count} earlier {_plural(count, "proposal is", "proposals are")} still waiting.'
+    )
+
+
+def _pod_link(pod, base):
+    """``<url|Pod> (Course, Cohort)`` with every member-written part escaped."""
     pod_url = f'{base}{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}'
+    cohort = pod.cohort
     activity = ''
     if cohort is not None:
         activity = (
             f' ({escape_slack_text(cohort.course.title)}, '
             f'{escape_slack_text(cohort.name)})'
         )
+    return f'<{pod_url}|{escape_slack_text(pod.name)}>{activity}'
+
+
+def request_line(join_request, base, now):
+    """``<url|Pod> (Course, Cohort) - Name (email) asked 6 days ago - owner Anna K.``"""
+    pod = join_request.pod
     owner = escape_slack_text(display_name(pod.owner)) if pod.owner_id else 'no owner'
     requester = join_request.user
     return (
-        f'<{pod_url}|{escape_slack_text(pod.name)}>{activity} - '
+        f'{_pod_link(pod, base)} - '
         f'{escape_slack_text(display_name(requester))} '
         f'({escape_slack_text(requester.email)}) '
         f'asked {humanize_age(join_request.created_at, now)} - owner {owner}'
     )
 
 
-def build_stale_request_message(new_requests, earlier_count, *, stale_days, now=None):
-    """``chat.postMessage`` payload minus ``channel``; ``None`` when nothing is new."""
+def _last_sign_in(user, now):
+    if user.last_login is None:
+        return 'never signed in'
+    return f'last sign-in {humanize_age(user.last_login, now)}'
+
+
+def proposal_line(wait, base, now):
+    """One stuck proposal.
+
+    ``<url|Pod> (Course, Cohort) - Tue Oct 20, 18:00 UTC, proposed by Anna K.
+    3 days ago - waiting on Mike K. (mike@example.com, last sign-in 12 days
+    ago)``. A moved proposal reads ``moved by`` (its clock restarted then).
+    Members who answered ``Can't make it`` follow as ``- can't make it:
+    Raj P.``, which is the whole tail once nobody is left to answer.
+    """
+    head = wait.head
+    age = humanize_age(wait.waiting_since, now)
+    if head.moved_at:
+        origin = f'moved by {escape_slack_text(display_name(head.moved_by))} {age}'
+    else:
+        origin = f'proposed by {escape_slack_text(display_name(head.proposed_by))} {age}'
+    parts = [_pod_link(head.pod, base), f'{format_in_zone(head.starts_at, "UTC")}, {origin}']
+    if wait.waiting:
+        parts.append('waiting on ' + '; '.join(
+            f'{escape_slack_text(display_name(user))} '
+            f'({escape_slack_text(user.email)}, {_last_sign_in(user, now)})'
+            for user in wait.waiting
+        ))
+    if wait.cant:
+        parts.append("can't make it: " + ', '.join(escape_slack_text(display_name(u)) for u in wait.cant))
+    return ' - '.join(parts)
+
+
+def _line_sections(lines):
+    """Section blocks holding ``lines``, each under Slack's text limit."""
+    chunks = []
+    current = ''
+    for line in lines:
+        candidate = f'{current}\n{line}' if current else line
+        if current and len(candidate) > MAX_SECTION_CHARS:
+            chunks.append(current)
+            candidate = line
+        current = candidate[:MAX_SECTION_CHARS]
+    if current:
+        chunks.append(current)
+    return [{'type': 'section', 'text': mrkdwn(chunk)} for chunk in chunks]
+
+
+def _capped(lines):
+    extra = len(lines) - MAX_LINES
+    lines = lines[:MAX_LINES]
+    if extra > 0:
+        lines.append(f'and {extra} more')
+    return lines
+
+
+def _section(title, lines, earlier):
+    blocks = [{'type': 'section', 'text': mrkdwn(f'*{title}*')}, *_line_sections(_capped(lines))]
+    if earlier:
+        blocks.append({'type': 'context', 'elements': [mrkdwn(earlier)]})
+    return blocks
+
+
+def build_pods_alert_message(
+    new_requests, earlier_requests, new_proposals, earlier_proposals, *,
+    stale_days, stuck_hours, now=None,
+):
+    """``chat.postMessage`` payload minus ``channel``; ``None`` when nothing is new.
+
+    The requests section comes first, then the proposals section; each is
+    present only when it has something new.
+    """
     new_requests = list(new_requests)
-    if not new_requests:
+    new_proposals = list(new_proposals)
+    if not new_requests and not new_proposals:
         return None
     now = now or timezone.now()
     base = site_base_url().rstrip('/')
-    lines = [request_line(r, base, now) for r in new_requests[:MAX_LINES]]
-    extra = len(new_requests) - MAX_LINES
-    if extra > 0:
-        lines.append(f'and {extra} more')
-    blocks = [
-        {'type': 'section', 'text': mrkdwn(f'*{headline(len(new_requests), stale_days)}*')},
-        {'type': 'section', 'text': mrkdwn('\n'.join(lines))},
-    ]
-    if earlier_count:
-        blocks.append({'type': 'context', 'elements': [mrkdwn(earlier_line(earlier_count))]})
+    blocks = []
+    if new_requests:
+        blocks += _section(
+            headline(len(new_requests), stale_days),
+            [request_line(r, base, now) for r in new_requests],
+            earlier_line(earlier_requests) if earlier_requests else '',
+        )
+    if new_proposals:
+        blocks += _section(
+            proposals_headline(len(new_proposals), stuck_hours),
+            [proposal_line(w, base, now) for w in new_proposals],
+            earlier_proposals_line(earlier_proposals) if earlier_proposals else '',
+        )
     blocks.append({
         'type': 'actions',
         'elements': [{
@@ -128,14 +246,27 @@ def build_stale_request_message(new_requests, earlier_count, *, stale_days, now=
             'url': f'{base}{reverse("studio_pod_list")}',
         }],
     })
-    return message_payload(FALLBACK_TEXT, blocks)
+    if new_requests and new_proposals:
+        text = BOTH_FALLBACK_TEXT
+    elif new_proposals:
+        text = PROPOSALS_FALLBACK_TEXT
+    else:
+        text = FALLBACK_TEXT
+    return message_payload(text, blocks)
+
+
+def build_stale_request_message(new_requests, earlier_count, *, stale_days, now=None):
+    """The requests-only message (issue #1927); ``None`` when nothing is new."""
+    return build_pods_alert_message(
+        new_requests, earlier_count, [], 0, stale_days=stale_days, stuck_hours=0, now=now,
+    )
 
 
 def send_stale_request_alert(*, now=None):
-    """Post the daily stale-request alert; never raises.
+    """Post the daily pods staff alert; never raises.
 
-    Returns the number of requests newly announced (``0`` when nothing was
-    posted).
+    Returns the number of requests and proposals newly announced (``0``
+    when nothing was posted).
     """
     try:
         return _send_stale_request_alert(now=now)
@@ -144,50 +275,98 @@ def send_stale_request_alert(*, now=None):
         return 0
 
 
-def _send_stale_request_alert(*, now=None):
-    if not pods_config.stale_request_alert_enabled():
-        logger.info('Stale pod request alert skipped: PODS_STALE_REQUEST_ALERT_ENABLED is off')
-        return 0
-    now = now or timezone.now()
+def _new_stale_requests(now):
+    """``(new, earlier_count, stale_days)`` for the requests section."""
     stale_days = pods_config.stale_request_days()
     stale = list(stale_requests(now=now, stale_days=stale_days))
     new_requests = [r for r in stale if r.stale_alerted_at is None]
     if not new_requests:
         logger.info('Stale pod request alert: nothing new (%s still waiting)', len(stale))
-        return 0
-    if not slack_api_enabled():
-        logger.info(
-            'Stale pod request alert skipped for %s: Slack API disabled',
-            _requests_label(len(new_requests)),
+    return new_requests, len(stale) - len(new_requests), stale_days
+
+
+def _new_stuck_proposals(now):
+    """``(new, earlier_count, hours)`` for the proposals section."""
+    hours = pods_config.stuck_proposal_hours()
+    stuck = stuck_proposals(now=now, hours=hours)
+    new_proposals = [w for w in stuck if w.head.stuck_alerted_at is None]
+    if not new_proposals:
+        logger.info('Stuck pod proposal alert: nothing new (%s still stuck)', len(stuck))
+    return new_proposals, len(stuck) - len(new_proposals), hours
+
+
+def _subject(new_requests, new_proposals):
+    """``(alert name, counts)`` for log lines, e.g. ``1 pod request``."""
+    if new_requests and new_proposals:
+        return (
+            'Pod request and proposal',
+            f'{_requests_label(len(new_requests))} and {_proposals_label(len(new_proposals))}',
         )
+    if new_proposals:
+        return 'Stuck pod proposal', _proposals_label(len(new_proposals))
+    return 'Stale pod request', _requests_label(len(new_requests))
+
+
+def _mark_proposals_announced(new_proposals, now):
+    """Set ``stuck_alerted_at`` on each head unless it moved since it was read."""
+    for wait in new_proposals:
+        PodMeeting.objects.filter(
+            pk=wait.head.pk,
+            status=MEETING_STATUS_PROPOSED,
+            moved_at=wait.head.moved_at,
+            stuck_alerted_at__isnull=True,
+        ).update(stuck_alerted_at=now)
+
+
+def _send_stale_request_alert(*, now=None):
+    requests_on = pods_config.stale_request_alert_enabled()
+    proposals_on = pods_config.stuck_proposal_alert_enabled()
+    if not requests_on:
+        logger.info('Stale pod request alert skipped: PODS_STALE_REQUEST_ALERT_ENABLED is off')
+    if not proposals_on:
+        logger.info('Stuck pod proposal alert skipped: PODS_STUCK_PROPOSAL_ALERT_ENABLED is off')
+    if not requests_on and not proposals_on:
+        return 0
+    now = now or timezone.now()
+    new_requests, earlier_requests, stale_days = [], 0, pods_config.stale_request_days()
+    if requests_on:
+        new_requests, earlier_requests, stale_days = _new_stale_requests(now)
+    new_proposals, earlier_proposals, hours = [], 0, pods_config.stuck_proposal_hours()
+    if proposals_on:
+        new_proposals, earlier_proposals, hours = _new_stuck_proposals(now)
+    if not new_requests and not new_proposals:
+        return 0
+    name, subject = _subject(new_requests, new_proposals)
+    if not slack_api_enabled():
+        logger.info('%s alert skipped for %s: Slack API disabled', name, subject)
         return 0
     channel_id = staff_alert_channel_id()
     if not channel_id:
         logger.info(
-            'Stale pod request alert skipped for %s: no '
+            '%s alert skipped for %s: no '
             'STAFF_COMMENT_NOTIFY_CHANNEL_ID or STAFF_SIGNUP_NOTIFY_CHANNEL_ID',
-            _requests_label(len(new_requests)),
+            name, subject,
         )
         return 0
-    message = build_stale_request_message(
-        new_requests, len(stale) - len(new_requests), stale_days=stale_days, now=now,
+    message = build_pods_alert_message(
+        new_requests, earlier_requests, new_proposals, earlier_proposals,
+        stale_days=stale_days, stuck_hours=hours, now=now,
     )
-    subject = _requests_label(len(new_requests))
     result = post_staff_slack_message(channel_id, message)
     if result.exception is not None:
         logger.error(
-            'Stale pod request Slack alert failed for %s (channel=%s)',
-            subject, channel_id, exc_info=result.exception,
+            '%s Slack alert failed for %s (channel=%s)',
+            name, subject, channel_id, exc_info=result.exception,
         )
         return 0
     if not result.ok:
         logger.error(
-            'Stale pod request Slack alert rejected for %s (channel=%s): %s',
-            subject, channel_id, result.error,
+            '%s Slack alert rejected for %s (channel=%s): %s',
+            name, subject, channel_id, result.error,
         )
         return 0
-    PodJoinRequest.objects.filter(pk__in=[r.pk for r in new_requests]).update(stale_alerted_at=now)
-    logger.info(
-        'Posted stale pod request Slack alert for %s to channel=%s', subject, channel_id,
-    )
-    return len(new_requests)
+    if new_requests:
+        PodJoinRequest.objects.filter(pk__in=[r.pk for r in new_requests]).update(stale_alerted_at=now)
+    _mark_proposals_announced(new_proposals, now)
+    logger.info('Posted %s Slack alert for %s to channel=%s', name.lower(), subject, channel_id)
+    return len(new_requests) + len(new_proposals)

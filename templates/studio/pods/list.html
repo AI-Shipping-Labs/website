@@ -39,6 +39,7 @@
           <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-created">Created {{ row.pod.created_at|operator_date }}</div>
           <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-meetings">Meetings {{ row.pod.held_total }}/{{ row.pod.meeting_count }} held</div>
           <div class="text-xs text-muted-foreground whitespace-nowrap" data-testid="studio-pod-next-meeting">{% if row.pod.next_meeting_at %}Next {{ row.pod.next_meeting_at|operator_datetime }}{% else %}No meeting planned{% endif %}</div>
+          {% if row.stuck %}<div class="mt-1" data-testid="studio-pod-stuck">{% studio_status_badge 'stale' 'Stuck proposal' %}</div>{% endif %}
         </td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm" data-label="Activity" data-testid="studio-pod-activity">
           <span class="whitespace-nowrap text-foreground">{{ row.pod.cohort.name }}</span>

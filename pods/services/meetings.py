@@ -486,9 +486,12 @@ def move_meeting(meeting, actor, start, *, zone_name=None, move_later=False, now
         item.moved_by = actor
         item.moved_at = now
         item.reminder_sent_at = None
+        # Issue #1935: a moved proposal restarts its stuck clock, so it can
+        # be announced to staff again if it gets stuck once more.
+        item.stuck_alerted_at = None
         item.save(update_fields=[
             'previous_starts_at', 'starts_at', 'timezone', 'moved_by', 'moved_at',
-            'reminder_sent_at', 'updated_at',
+            'reminder_sent_at', 'stuck_alerted_at', 'updated_at',
         ])
     ids = [m.pk for m in group]
     if is_proposal:

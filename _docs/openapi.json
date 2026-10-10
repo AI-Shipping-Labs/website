@@ -14757,7 +14757,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ],
                   "member_count": 2,
@@ -14861,7 +14864,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ],
                   "member_count": 2,
@@ -15014,7 +15020,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ],
                   "member_count": 2,
@@ -15205,7 +15214,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ],
                   "member_count": 2,
@@ -15299,7 +15311,7 @@
     },
     "/api/pods/{pod_id}/meetings": {
       "get": {
-        "description": "Every meeting of the pod in start order, including cancelled ones; filter with ``status``. ``number`` is the 1-based position among meetings that are neither cancelled nor expired (``null`` otherwise). A proposal is ``expired`` once its start passed while it was still ``proposed``. ``responses`` hold the explicit answers; after agreement a member without an answer counts as going.",
+        "description": "Every meeting of the pod in start order, including cancelled ones; filter with ``status``. ``number`` is the 1-based position among meetings that are neither cancelled nor expired (``null`` otherwise). A proposal is ``expired`` once its start passed while it was still ``proposed``. ``responses`` hold the explicit answers; after agreement a member without an answer counts as going. On a live proposal head (the first meeting of a weekly proposal) ``waiting_on`` lists the member emails with no answer yet and ``stuck`` is true once it waited more than ``PODS_STUCK_PROPOSAL_HOURS`` since it was proposed or last moved on a non-archived pod; every other meeting has ``waiting_on: []`` and ``stuck: false``. ``stuck_alerted_at`` is when the daily staff Slack alert announced it (cleared on move).",
         "parameters": [
           {
             "in": "path",
@@ -15351,7 +15363,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ]
                 }
@@ -15457,7 +15472,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ]
                 }
@@ -15598,7 +15616,10 @@
                       "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                       "starts_at": "2026-10-13T16:00:00+00:00",
                       "status": "scheduled",
-                      "timezone": "Europe/Berlin"
+                      "stuck": false,
+                      "stuck_alerted_at": null,
+                      "timezone": "Europe/Berlin",
+                      "waiting_on": []
                     }
                   ]
                 }
@@ -15731,7 +15752,10 @@
                         "series_id": "6f1c2d4e-8a0b-4c3d-9e5f-1a2b3c4d5e6f",
                         "starts_at": "2026-10-13T16:00:00+00:00",
                         "status": "scheduled",
-                        "timezone": "Europe/Berlin"
+                        "stuck": false,
+                        "stuck_alerted_at": null,
+                        "timezone": "Europe/Berlin",
+                        "waiting_on": []
                       }
                     ],
                     "member_count": 2,

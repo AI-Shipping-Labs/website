@@ -44,8 +44,10 @@
 {% comment %}
   Membership breakdown (issue #923): tier x source decomposition. "Paid"
   rows are users with an active Stripe subscription grouped by their base
-  subscription tier; "Override" rows are comped users with an active tier
-  override (excluding anyone who also has a subscription). Totals: Total
+  subscription tier; "Override" rows are comped users whose strongest active
+  tier override is above their stored base tier (issue #1933: an override at
+  or below the base tier raises nothing and is not counted), grouped by that
+  override's tier and excluding anyone who also has a subscription. Totals: Total
   paying = sum of the three Paid cells (= all active-subscription users);
   Total comped = sum of the three Override cells. "Paid" here means an
   active Stripe subscription only — overrides are never counted as paid.

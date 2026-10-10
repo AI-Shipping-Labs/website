@@ -767,9 +767,9 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
             base_count = len(base_ctx.captured_queries)
 
             # Add three record-only members (no plans/notes/responses): the
-            # only extra cost is the per-user TierOverride lookup inherited
-            # from serialize_user_state (the same query GET /api/users pays
-            # per row).
+            # only extra cost is the small per-user cost inherited from
+            # serialize_user_state. The TierOverride lookup is batched once
+            # per page (issue #1933), so it adds nothing per member.
             for i in range(3):
                 self._give_crm_record(self._make_member(f"extra-{i}@test.com"))
 
@@ -777,8 +777,8 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
                 self.client.get(self.URL, {"scope": "all"}, **self._auth())
             grown_count = len(grown_ctx.captured_queries)
 
-        # Three record-only members add at most ~1 query each (the override
-        # lookup). A per-member aggregate fan-out would add many more.
+        # Three record-only members add at most ~1 query each. A per-member
+        # aggregate fan-out would add many more.
         self.assertLessEqual(grown_count - base_count, 6)
 
     def test_bounded_query_count_with_assert_num_queries(self):
@@ -792,8 +792,9 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
             self.client.get(self.URL, **self._auth())
             # Ordered prefetch caches are consumed directly by the shared plan
             # serializer (#1304), removing per-plan child and plan-note queries
-            # while preserving the JSON payload.
-            with self.assertNumQueries(33):
+            # while preserving the JSON payload. Issue #1933: the per-member
+            # TierOverride lookup is one batched query for the page.
+            with self.assertNumQueries(31):
                 response = self.client.get(self.URL, **self._auth())
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["count"], 3)

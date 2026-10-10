@@ -16,14 +16,13 @@ documented in the OpenAPI spec:
   bounced < complained``.
 """
 
-from django.utils import timezone
-
 from accounts.lifecycle import lifecycle_payload
 from accounts.services.subscription_summary import subscription_summary
 from accounts.utils.display import display_name
 from api.serializers.datetime import isoformat_or_none
+from content.access import get_active_override
 from email_app.services.ses_identity import event_identity_summary
-from payments.models import Membership, TierOverride
+from payments.models import Membership
 
 BOUNCE_STATE_NONE = "none"
 BOUNCE_STATE_SOFT = "soft"
@@ -60,7 +59,15 @@ def _bounce_state(user):
     return user.bounce_state or BOUNCE_STATE_NONE
 
 
-def serialize_user_state(user, *, compact=False):
+# Sentinel distinguishing "caller did not pre-resolve the override" from
+# "caller resolved it and there is none" (``None``). Same pattern as
+# ``content.access.get_user_level``'s ``active_override`` argument.
+_RESOLVE_OVERRIDE = object()
+
+
+def serialize_user_state(
+    user, *, compact=False, active_override=_RESOLVE_OVERRIDE,
+):
     """Serialize a ``User`` row to the API payload.
 
     The full payload is used by the single-user GET and the writes; the
@@ -69,6 +76,11 @@ def serialize_user_state(user, *, compact=False):
     preferences and tags are kept on the per-user payload because the
     common operator question after fetching a user is "what tags do they
     carry?" -- bouncing back to a list call would be silly.
+
+    ``active_override`` lets list callers pass the override they already
+    resolved in one batched ``content.access.get_active_overrides_by_user``
+    call (issue #1933). Omit it to resolve the single user here; pass
+    ``None`` explicitly for "no active override" (no query is issued).
     """
     # Base tier resolution: the user's actually-paid tier slug + level.
     # The membership ``tier_id`` can legitimately be NULL for the bare
@@ -83,25 +95,14 @@ def serialize_user_state(user, *, compact=False):
     else:
         base_tier_payload = {"slug": "free", "level": 0}
 
-    # Override resolution -- callers care about the BOOLEAN ("is there an
-    # active override?") and (full payload only) the override SUMMARY
-    # object. The model guarantees one active override per user, so the
-    # newest active non-expired row is THE override. We fetch that single
-    # row once and derive ``tier_override_active``, the ``tier_override``
-    # object, AND the effective tier from it -- no second query, no drift.
-    # ``content.access.get_active_override`` is the canonical helper but
-    # lives in the ``content`` app; replicating the predicate here keeps
-    # the API serializer free of that dependency.
-    active_override = (
-        TierOverride.objects.filter(
-            user=user,
-            is_active=True,
-            expires_at__gt=timezone.now(),
-        )
-        .select_related("override_tier", "granted_by")
-        .order_by("-created_at")
-        .first()
-    )
+    # Override resolution (issue #1933): several overrides can be active at
+    # once (a staff grant next to a Maven grant), so "the" override is the
+    # strongest one under ``content.access.ACTIVE_OVERRIDE_ORDERING``
+    # (highest tier, then latest expiry) -- the same pick ``get_user_level``
+    # grants access from and every Studio surface labels. ``tier_override``,
+    # ``tier_override_active`` and the effective tier all derive from it.
+    if active_override is _RESOLVE_OVERRIDE:
+        active_override = get_active_override(user)
     tier_override_active = active_override is not None
 
     # Effective tier = ``max(base, override)`` by level (issue #965). An

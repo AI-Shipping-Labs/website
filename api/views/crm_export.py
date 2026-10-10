@@ -73,6 +73,7 @@ from api.views._permissions import (
     visible_plans_for,
 )
 from community.models import STATUS_BOOKED, BookedCall
+from content.access import get_active_overrides_by_user
 from crm.models import CRMRecord
 from crm.services.activity_context import (
     build_complete_activity_context,
@@ -371,6 +372,7 @@ def _gated_plans_by_member(bearer, users):
 
 def _serialize_member(
     user, bearer, persona_by_questionnaire, notes_by_member, plans_by_member,
+    overrides_by_member,
 ):
     """Build one member's full CRM aggregate dict.
 
@@ -380,8 +382,14 @@ def _serialize_member(
     the staff bearer's full-fidelity view is unforgeable without an N+1
     across the member set. A non-staff token (which cannot reach this
     endpoint anyway) would see only its own external rows.
+
+    ``overrides_by_member`` is the page's batched
+    ``get_active_overrides_by_user`` map (issue #1933), so the core state
+    adds no per-member override query.
     """
-    payload = serialize_user_state(user)
+    payload = serialize_user_state(
+        user, active_override=overrides_by_member.get(user.pk),
+    )
 
     crm_record = getattr(user, "crm_record", None)
     payload["crm_record"] = serialize_crm_record_full(crm_record)
@@ -447,6 +455,7 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
         persona_map_by_questionnaire(),
         notes_by_member,
         plans_by_member,
+        get_active_overrides_by_user([user]),
     )
 
     # The #1079 course-enrollment serializer is intentionally identical to
@@ -812,6 +821,8 @@ def _export_response(
     # the unforgeable boundary without an N+1 across members.
     notes_by_member = _gated_notes_by_member(bearer, page)
     plans_by_member = _gated_plans_by_member(bearer, page)
+    # Issue #1933: one strongest-override query for the whole page.
+    overrides_by_member = get_active_overrides_by_user(page)
 
     members = [
         _serialize_member(
@@ -820,6 +831,7 @@ def _export_response(
             persona_by_questionnaire,
             notes_by_member,
             plans_by_member,
+            overrides_by_member,
         )
         for user in page
     ]

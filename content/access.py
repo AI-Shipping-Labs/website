@@ -186,7 +186,12 @@ ACTIVE_OVERRIDE_ORDERING = ('-override_tier__level', '-expires_at')
 
 
 def active_overrides_queryset(now=None):
-    """Return active, non-expired TierOverrides ordered strongest first."""
+    """Return active, non-expired TierOverrides ordered strongest first.
+
+    ``granted_by`` is joined alongside ``override_tier`` so surfaces that
+    show the granter (the member API's ``tier_override.granted_by``, issue
+    #1933) add no per-row query when reading a batched override map.
+    """
     # Deferred imports, matching the rest of this module: content models
     # import this module at class-definition time, before the app registry
     # can load ``payments.models``.
@@ -199,7 +204,7 @@ def active_overrides_queryset(now=None):
     return (
         TierOverride.objects
         .filter(is_active=True, expires_at__gt=now)
-        .select_related('override_tier')
+        .select_related('override_tier', 'granted_by')
         .order_by(*ACTIVE_OVERRIDE_ORDERING)
     )
 

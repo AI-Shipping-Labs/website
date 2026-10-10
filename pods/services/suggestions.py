@@ -226,17 +226,52 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
     now = now or timezone.now()
     horizon_days = horizon_days or pods_config.suggestion_horizon_days()
     count = count or pods_config.suggestion_count()
+    candidates = ranked_candidates(
+        members, meeting_minutes, now + SUGGESTION_LEAD, now + timedelta(days=horizon_days),
+    )
+    candidates.sort(key=lambda row: row[0])
+
+    chosen = []
+    used_dates = set()
+    used_weekly = []
     considered = [m for m in members if m.has_windows]
-    needed = required_attendance(len(considered))
+    everyone = list(all_members or members)
+    for _rank, slot_start, statuses in candidates:
+        weekly = minute_of_week(slot_start)
+        if slot_start.date() in used_dates:
+            continue
+        if any(weekly_gap(weekly, other) < MIN_WEEKLY_GAP_MINUTES for other in used_weekly):
+            continue
+        used_dates.add(slot_start.date())
+        used_weekly.append(weekly)
+        chosen.append(_make_slot(slot_start, meeting_minutes, statuses, considered, everyone))
+        if len(chosen) >= count:
+            break
+    return chosen
+
+
+def ranked_candidates(members, meeting_minutes, first_start, last_end, *, needed=None):
+    """Every 15-minute start in ``[first_start, last_end - length]`` that
+    at least ``needed`` members with windows can attend for the whole
+    meeting, as ``(rank, start, statuses)`` in start order.
+
+    ``needed`` defaults to the pod's required attendance among members with
+    windows. ``rank`` is the best-fit order shared by every caller: more
+    members attending, then fewer ``If needed``, then fewer members outside
+    08:00-22:00 local, then the earlier start. Pure evaluation, no variety
+    filter, so :func:`suggest_slots` and the next best time (issue #1934)
+    pick from the same pool.
+    """
+    considered = [m for m in members if m.has_windows]
     if needed is None:
+        needed = required_attendance(len(considered))
+    if needed is None or first_start >= last_end:
         return []
-    start = now + SUGGESTION_LEAD
-    grid = Grid(start, now + timedelta(days=horizon_days))
+    grid = Grid(first_start, last_end)
     length = max(int(meeting_minutes) // GRID_MINUTES, 1)
     cells = {id(m): grid.cells(m) for m in considered}
-    first_index = grid.index_at_or_after(start)
     candidates = []
-    for index in range(first_index, grid.size - length + 1):
+    for index in range(grid.index_at_or_after(first_start), grid.size - length + 1):
         statuses = [(m, _status(cells[id(m)], index, length)) for m in considered]
         attending = [(m, s) for m, s in statuses if s >= 1]
         if len(attending) < needed:
@@ -249,26 +284,14 @@ def suggest_slots(members, meeting_minutes, *, now=None, horizon_days=None, coun
             if local_start < SOCIAL_START_MINUTE or local_start + int(meeting_minutes) > SOCIAL_END_MINUTE:
                 unsocial += 1
         rank = (-len(attending), if_needed_count, unsocial, slot_start)
-        candidates.append((rank, index, statuses))
-    candidates.sort(key=lambda row: row[0])
+        candidates.append((rank, slot_start, statuses))
+    return candidates
 
-    chosen = []
-    used_dates = set()
-    used_weekly = []
-    everyone = list(all_members or members)
-    for _rank, index, statuses in candidates:
-        slot_start = grid.time_at(index)
-        weekly = minute_of_week(slot_start)
-        if slot_start.date() in used_dates:
-            continue
-        if any(weekly_gap(weekly, other) < MIN_WEEKLY_GAP_MINUTES for other in used_weekly):
-            continue
-        used_dates.add(slot_start.date())
-        used_weekly.append(weekly)
-        chosen.append(_make_slot(slot_start, meeting_minutes, statuses, considered, everyone))
-        if len(chosen) >= count:
-            break
-    return chosen
+
+def make_slot(slot_start, meeting_minutes, statuses, members, *, all_members=None):
+    """A :class:`Slot` from one :func:`ranked_candidates` row."""
+    considered = [m for m in members if m.has_windows]
+    return _make_slot(slot_start, meeting_minutes, statuses, considered, list(all_members or members))
 
 
 def _make_slot(slot_start, meeting_minutes, statuses, considered, everyone):

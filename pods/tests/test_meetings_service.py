@@ -24,7 +24,7 @@ from pods.models import (
 from pods.services import meetings as mtg
 from pods.services import membership as svc
 from pods.services.meeting_rules import meeting_state, used_meeting_count
-from pods.tests.fixtures import enroll, make_cohort, make_course, make_meeting, make_pod, make_user
+from pods.tests.fixtures import enroll, make_cohort, make_course, make_meeting, make_pod, make_user, set_windows
 
 BERLIN = ZoneInfo('Europe/Berlin')
 NOW = datetime.datetime(2026, 10, 9, 8, 0, tzinfo=UTC)  # date-rot-ok: frozen Friday
@@ -499,9 +499,15 @@ class StaffScheduleTest(MeetingFixture):
         make_meeting(pod, NOW + datetime.timedelta(days=4))
         with self.assertRaisesMessage(svc.PodError, 'All 1 meetings are planned.'):
             mtg.set_meeting_status(cancelled, self.staff, 'scheduled')
-        mtg.set_meeting_status(cancelled, self.staff, 'held')
+        # Issue #1934: a future meeting is never marked held, even by staff.
+        with self.assertRaisesMessage(svc.PodError, 'This meeting has not started yet.'):
+            mtg.set_meeting_status(cancelled, self.staff, 'held')
         cancelled.refresh_from_db()
-        self.assertEqual(cancelled.status, 'held')
+        self.assertEqual(cancelled.status, 'cancelled')
+        started = make_meeting(pod, NOW - datetime.timedelta(hours=2), status='cancelled')
+        mtg.set_meeting_status(started, self.staff, 'held')
+        started.refresh_from_db()
+        self.assertEqual(started.status, 'held')
 
 
 class MeetingMergeTest(MeetingFixture):
@@ -529,13 +535,17 @@ class MeetingMergeTest(MeetingFixture):
 @tag('core')
 @freeze_time(NOW)
 class NextBestSlotTest(MeetingFixture):
-    """The offer for a series meeting stays between its neighbours."""
+    """The offer for a meeting stays between its live neighbours (issue #1934:
+    any live pod meeting, not only series siblings)."""
 
-    def slot(self, start):
-        from pods.services.suggestions import Slot
+    def members(self, pod, weekdays):
+        from pods.services.suggestions import load_member_availability
 
-        return Slot(start=start, end=start + datetime.timedelta(minutes=60), available=[], if_needed=[],
-                    missing=[], local_starts=[], considered=2, member_total=2)
+        users = [m.user for m in pod.memberships.select_related('user').order_by('joined_at', 'pk')]
+        for user in users:
+            set_windows(user, 'UTC', [(d, '16:00', '17:30') for d in weekdays])
+        availability = load_member_availability(users)
+        return [availability[u.pk] for u in users]
 
     def test_candidates_skip_near_overlapping_and_out_of_order_slots(self):
         from pods.services.meeting_presentation import next_best_slot
@@ -545,17 +555,17 @@ class NextBestSlotTest(MeetingFixture):
         for day in (12, 19, 26):
             make_meeting(pod, utc(2026, 10, day, 16, 0), series_id=series)
         second = PodMeeting.objects.get(pod=pod, starts_at=utc(2026, 10, 19, 16, 0))
+        # A one-off meeting is a neighbour too: nothing at or after Oct 21 16:00.
         make_meeting(pod, utc(2026, 10, 21, 16, 0))
         state = meeting_state(pod)
-        candidates = [
-            self.slot(utc(2026, 10, 11, 16, 0)),   # before the previous meeting
-            self.slot(utc(2026, 10, 19, 16, 30)),  # within 60 minutes of this meeting
-            self.slot(utc(2026, 10, 21, 16, 30)),  # overlaps another meeting
-            self.slot(utc(2026, 10, 27, 16, 0)),   # after the next series meeting
-            self.slot(utc(2026, 10, 22, 16, 0)),   # fits
-        ]
-        self.assertEqual(next_best_slot(second, [second], state, candidates).start, utc(2026, 10, 22, 16, 0))
-        self.assertIsNone(next_best_slot(second, [second], state, candidates[:4]))
+        members = self.members(pod, range(7))
+        # Oct 19 starts are within 60 minutes of the meeting, Oct 21 and later
+        # pass the next meeting, so Tue Oct 20 16:00 (same week, 1 day) wins.
+        self.assertEqual(next_best_slot(second, [second], state, members, now=NOW).start, utc(2026, 10, 20, 16, 0))
+        # Mondays only: Oct 12 overlaps the previous meeting, Oct 19 is too
+        # close, Oct 26 is after the next one.
+        members = self.members(pod, [0])
+        self.assertIsNone(next_best_slot(second, [second], state, members, now=NOW))
 
 
 @tag('core')

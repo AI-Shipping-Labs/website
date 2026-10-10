@@ -12,6 +12,9 @@ is cheaper and clearer than layered annotations.
   neither cancelled nor expired, ordered by start.
 - Used meetings = scheduled + held + live (non-expired) proposals. This is
   what ``Pod.meeting_count`` limits.
+- A live proposal waits on the pod members with no answer on its head
+  meeting (issue #1934), counted from ``moved_at`` (a move resets the
+  answers) or else ``created_at``.
 """
 
 from dataclasses import dataclass, field
@@ -25,12 +28,15 @@ from pods.models import (
     MEETING_STATUS_PROPOSED,
     MEETING_STATUS_SCHEDULED,
     PodMeeting,
+    PodMeetingResponse,
 )
 
 __all__ = [
     'MeetingState',
     'meeting_end',
     'meeting_state',
+    'members_without_answer',
+    'proposal_waiting_since',
     'used_meeting_count',
 ]
 
@@ -112,3 +118,24 @@ def meeting_state(pod, now=None, meetings=None):
 
 def used_meeting_count(pod, now=None):
     return meeting_state(pod, now).used
+
+
+def members_without_answer(head, members, responses=None):
+    """The ``members`` (users, order kept) with no answer on ``head``.
+
+    ``head`` is a proposal's head meeting: answers to a weekly proposal are
+    stored on its first meeting. ``responses`` are the head's
+    ``PodMeetingResponse`` rows when the caller already loaded them;
+    otherwise one query. Any answer counts (``going`` or ``Can't make
+    it``), so the result is who the proposal is still waiting on.
+    """
+    if responses is None:
+        answered = set(PodMeetingResponse.objects.filter(meeting=head).values_list('user_id', flat=True))
+    else:
+        answered = {r.user_id for r in responses}
+    return [user for user in members if user.pk not in answered]
+
+
+def proposal_waiting_since(head):
+    """When ``head``'s current answers started: the last move, else creation."""
+    return head.moved_at or head.created_at

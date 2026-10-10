@@ -1,8 +1,9 @@
 {% load accounts_extras member_badges %}
 {% comment %}
 One pod meeting row (issue #1919): title, viewer-local time with a zone
-token, status badge, meta lines (member strip, proposer, mover, who can't
-make it, clock-change notes, call link), the next best time offer, then
+token, status badge, meta lines (member strip, proposer, who a proposal is
+waiting on, mover, who can't make it, clock-change notes, and the call link
+on the soonest upcoming row only), the next best time offer, then
 the actions below the meta. Every POST action is its own form.
 {% endcomment %}
 <li class="py-3" data-testid="pod-meeting" data-meeting-id="{{ row.meeting.pk }}" data-meeting-status="{{ row.meeting.status }}">
@@ -14,6 +15,7 @@ the actions below the meta. Every POST action is its own form.
     <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-meeting-strip">{% for local in row.strip %}<span data-testid="pod-meeting-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endfor %}</p>
     {% endif %}
     {% if row.proposed_by %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-proposed-by">Proposed by {{ row.proposed_by }}</p>{% endif %}
+    {% if row.waiting_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-waiting">{{ row.waiting_line }}</p>{% endif %}
     {% if row.moved_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-moved">{{ row.moved_line }}</p>{% endif %}
     {% if row.cant_names %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-cant">Can't make it: {{ row.cant_names }}</p>{% endif %}
     {% for line in row.dst_lines %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-dst">{{ line }}</p>{% endfor %}

@@ -77,6 +77,8 @@ How many days ahead suggested meeting times look.
 - Type: integer.
 - Default: `14`.
 - Suggestions start 12 hours from now and end this many days from now.
+- The next best time after `Can't make it` does not use this horizon: it
+  looks within a week either side of the meeting (see Pod meetings).
 
 ## PODS_SUGGESTION_COUNT
 
@@ -164,6 +166,17 @@ How agreed meetings work (issue #1919):
   (`scheduled`) once the members who can make it reach the pod's required
   attendance: 2 in a pod of 2 or 3, all but one in a pod of 4 or more. Staff,
   Studio and API meetings are scheduled directly.
+- The rule is visible (issue #1934): the propose page and the Change time
+  page for a proposal say `Confirmed once 2 of you can make it.`, and a
+  proposal's badge reads `Proposed - 1 of 2 needed`.
+- A live proposal shows `Waiting on you and Mike K. since Oct 7.`: the pod
+  members with no answer on it (the viewer as `you`, first), counted from its
+  last move or else its creation. The line goes once everyone has answered.
+  The helper is `members_without_answer` in `pods/services/meeting_rules.py`.
+- The dashboard `Your week` list shows a live proposal starting in the next 7
+  days that the member has not answered as `<pod> - Proposed time` with a
+  `Needs your answer` badge, linking to the pod's `#meetings`. Answering
+  removes it; once agreed it comes back as `<pod> - Meeting N of M`.
 - A pod has at most one open proposal. A proposal whose start passes before
   agreement is `Not confirmed`, does not count and does not block a new one.
 - Scheduled, held and live proposed meetings count toward `meeting_count`;
@@ -172,9 +185,26 @@ How agreed meetings work (issue #1919):
   meetings`. Repeats keep the same local wall-clock time in the proposer's
   timezone per date, so a clock change never moves the meeting for them; a
   member in a zone that changes clocks on another date sees a `Clock change`
-  line for that week. A nonexistent local time (spring-forward gap) moves
+  line. A shift that lasts to the end of the series is shown once, on the
+  first shifted meeting: `Clock change: 22:30 for Raj S. from this week (was
+  21:30).` A shift that reverts later in the series (or only affects the last
+  meeting) reads `this week (usually 12:00)` on each shifted meeting. A nonexistent local time (spring-forward gap) moves
   forward by the gap; an ambiguous one (fall-back) uses its first occurrence.
 - Any member or staff can move, cancel or record a meeting. A move clears
   `Can't make it` answers and notifies the others; no re-agreement.
-- One optional call link per pod (`Pod.meeting_url`, https only). The meeting
-  row shows `Join call` from 10 minutes before the start until the end.
+- After `Can't make it` the row offers the next best time: a start within 7
+  days either side of the meeting (and 12 hours to 6 months from now) that
+  the required attendance can make. It is never within 60 minutes of the
+  meeting, never overlaps a live meeting and never lands at or before the
+  previous or at or after the next live pod meeting, so meeting numbers stay
+  put. The same Monday-Sunday week (in the meeting's timezone) wins, then the
+  fewest days away, then the best fit, then the closest start. With none:
+  `No other time within a week of this meeting fits at least 2 of you.`
+- A meeting is marked held only after its start, by members, in Studio and
+  through the staff API (`This meeting has not started yet.`). Cancelling a
+  future meeting is always allowed.
+- One optional call link per pod (`Pod.meeting_url`, https only), set with
+  the `Add a call link` / `Change link` button under the Meetings heading.
+  Only the soonest upcoming meeting row repeats it as `Call link:`. A
+  scheduled meeting row shows `Join call` from 10 minutes before the start
+  until the end.

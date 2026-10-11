@@ -15072,6 +15072,7 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "last_message_at": "2026-10-05T18:30:00+00:00",
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
@@ -15115,6 +15116,7 @@
                       "timezone": "Europe/Berlin"
                     }
                   ],
+                  "message_count": 12,
                   "name": "Agents pod",
                   "open_requests": [
                     {
@@ -15179,6 +15181,7 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "last_message_at": "2026-10-05T18:30:00+00:00",
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
@@ -15222,6 +15225,7 @@
                       "timezone": "Europe/Berlin"
                     }
                   ],
+                  "message_count": 12,
                   "name": "Agents pod",
                   "open_requests": [
                     {
@@ -15314,7 +15318,7 @@
     },
     "/api/pods/{pod_id}": {
       "get": {
-        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
+        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``message_count`` and ``last_message_at`` (visible pod chat messages only; ``null`` without any), ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
         "parameters": [
           {
             "in": "path",
@@ -15335,6 +15339,7 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "last_message_at": "2026-10-05T18:30:00+00:00",
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
@@ -15378,6 +15383,7 @@
                       "timezone": "Europe/Berlin"
                     }
                   ],
+                  "message_count": 12,
                   "name": "Agents pod",
                   "open_requests": [
                     {
@@ -15529,6 +15535,7 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "last_message_at": "2026-10-05T18:30:00+00:00",
                   "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
@@ -15572,6 +15579,7 @@
                       "timezone": "Europe/Berlin"
                     }
                   ],
+                  "message_count": 12,
                   "name": "Agents pod",
                   "open_requests": [
                     {
@@ -16067,6 +16075,7 @@
                     "course_slug": "ai-buildcamp",
                     "created_at": "2026-10-01T09:00:00+00:00",
                     "id": 7,
+                    "last_message_at": "2026-10-05T18:30:00+00:00",
                     "max_members": 4,
                     "meeting_count": 3,
                     "meeting_minutes": 60,
@@ -16110,6 +16119,7 @@
                         "timezone": "Europe/Berlin"
                       }
                     ],
+                    "message_count": 12,
                     "name": "Agents pod",
                     "open_requests": [
                       {
@@ -16234,6 +16244,239 @@
           }
         },
         "summary": "Remove a member (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/messages": {
+      "get": {
+        "description": "Every chat message of the pod, oldest first, including messages hidden by staff (``hidden: true``). Plain text as posted. Page with ``limit`` and ``offset``; ``total`` counts every message. There is no create or delete endpoint: hide is the moderation tool.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "limit": 50,
+                  "messages": [
+                    {
+                      "author_email": "raj@example.com",
+                      "author_name": "Raj P.",
+                      "body": "Hi, I am building a RAG eval harness, Berlin time",
+                      "created_at": "2026-10-05T18:30:00+00:00",
+                      "hidden": false,
+                      "hidden_at": null,
+                      "hidden_by_email": null,
+                      "id": 41
+                    }
+                  ],
+                  "offset": 0,
+                  "total": 1
+                }
+              }
+            },
+            "description": "Message page."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "limit must be between 1 and 200; offset must be 0 or more"
+                }
+              }
+            },
+            "description": "Bad limit or offset."
+          }
+        },
+        "summary": "List pod chat messages (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/messages/{message_id}/hide": {
+      "post": {
+        "description": "Hides the message from pod members; it stays in Studio and this API. Sets ``hidden_at`` and ``hidden_by`` (the token owner). Idempotent: hiding a hidden message keeps the first hide.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author_email": "raj@example.com",
+                  "author_name": "Raj P.",
+                  "body": "Hi, I am building a RAG eval harness, Berlin time",
+                  "created_at": "2026-10-05T18:30:00+00:00",
+                  "hidden": true,
+                  "hidden_at": "2026-10-05T19:00:00+00:00",
+                  "hidden_by_email": "staff@example.com",
+                  "id": 41
+                }
+              }
+            },
+            "description": "The message."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_message",
+                  "error": "Message not found"
+                }
+              }
+            },
+            "description": "Unknown pod, or a message of another pod."
+          }
+        },
+        "summary": "Hide a pod chat message (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/messages/{message_id}/restore": {
+      "post": {
+        "description": "Shows a hidden message to pod members again and clears ``hidden_at`` and ``hidden_by``. Idempotent.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {},
+                "type": "object"
+              }
+            }
+          },
+          "required": false
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author_email": "raj@example.com",
+                  "author_name": "Raj P.",
+                  "body": "Hi, I am building a RAG eval harness, Berlin time",
+                  "created_at": "2026-10-05T18:30:00+00:00",
+                  "hidden": false,
+                  "hidden_at": null,
+                  "hidden_by_email": null,
+                  "id": 41
+                }
+              }
+            },
+            "description": "The message."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_message",
+                  "error": "Message not found"
+                }
+              }
+            },
+            "description": "Unknown pod, or a message of another pod."
+          }
+        },
+        "summary": "Restore a pod chat message (staff-only)",
         "tags": [
           "Pods"
         ]

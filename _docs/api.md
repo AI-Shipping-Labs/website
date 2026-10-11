@@ -456,7 +456,7 @@ non-staff token returns `401`.
 | GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
 | GET | `/api/pods` | Pod summaries; filters `course`, `cohort` (needs `course`), `status`; `limit`/`offset` |
 | POST | `/api/pods` | Create (`source=api`), `201`. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
-| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
+| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
 | PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count` (`422` below the meetings already planned or held), `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url`, `meeting_url` (the pod call link: https only, max 500, empty clears) |
 | POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
@@ -466,6 +466,9 @@ non-staff token returns `401`.
 | GET | `/api/pods/<id>/meetings` | Every meeting (issue #1919), optional `status` filter (`proposed`, `scheduled`, `held`, `cancelled`). Each has `id`, `number` (`null` when cancelled or expired), `starts_at`, `ends_at`, `duration_minutes`, `timezone`, `status`, `expired`, `series_id`, `created_via`, `proposed_by`, `moved_by`, `moved_at`, `previous_starts_at`, `reminder_sent_at`, `responses` (`email`, `response`) |
 | POST | `/api/pods/<id>/meetings` | Schedule agreed meetings (`created_via=api`), notifies members. `starts_at` (ISO 8601 with offset, quarter hour, 1 hour to 180 days ahead), `timezone` (IANA), `repeat_weekly` (default `false`), `count` (default 1, or every remaining meeting with `repeat_weekly`). `201`; `409 meeting_limit_reached`; `422 validation_error` for a bad time, an overlap or a bad field |
 | PATCH | `/api/pods/<id>/meetings/<meeting_id>` | Either `starts_at` (+ optional `timezone`, default the meeting's zone, and `move_later`) to move, or `status` (`scheduled`, `held`, `cancelled`) as a staff override. Returns the changed meetings. `409 meeting_not_movable` (past, held or cancelled), `409 meeting_limit_reached`, `404 unknown_meeting` (another pod's meeting), `422 validation_error` (including `status: held` before the meeting starts: `This meeting has not started yet.`, issue #1934) |
+| GET | `/api/pods/<id>/messages` | Pod chat transcript (issue #1920), oldest first, including hidden messages; `limit` (default 50, max 200, `422` above) and `offset`; `total` counts every message. Each has `id`, `author_email`, `author_name`, `body`, `created_at`, `hidden`, `hidden_at`, `hidden_by_email`. No create or delete endpoint |
+| POST | `/api/pods/<id>/messages/<message_id>/hide` | Hides the message from members (`hidden_by` = token owner); idempotent; returns the message. `404 unknown_message` for another pod's message |
+| POST | `/api/pods/<id>/messages/<message_id>/restore` | Shows a hidden message again; idempotent; returns the message. `404 unknown_message` for another pod's message |
 
 There is no pod DELETE: archive with `PATCH {"status": "archived"}` so the
 request history is kept. There is no meeting DELETE either: cancel with
@@ -515,6 +518,12 @@ curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: applica
 # Mark a past meeting as held
 curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
   -d '{"status": "held"}' "https://aishippinglabs.com/api/pods/7/meetings/30"
+
+# Read a pod chat transcript, then hide one message
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/messages?limit=200"
+curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/messages/41/hide"
 ```
 
 Settings live in the `Pods` IntegrationSetting group; see

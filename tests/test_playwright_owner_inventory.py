@@ -1709,6 +1709,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_can_only_mark_a_meeting_held_after_it_starts",
     })
 
+    issue_1920_owners = frozenset({
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_pod_member_introduces_themselves_in_an_empty_chat",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_pod_mate_catches_up_on_new_messages_from_the_pods_tab",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_member_replies_with_a_link_and_a_multi_line_message",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_member_who_is_not_in_the_pod_cannot_read_or_post",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_pod_that_moved_to_slack_still_lets_a_basic_member_chat",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_over_eager_member_hits_the_message_rate_limit",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_member_tries_to_send_an_empty_or_too_long_message",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_staff_moderator_hides_an_off_topic_message",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_staff_reads_a_pod_chat_from_the_member_page_without_posting",
+        "playwright_tests/test_pod_chat_1920.py::"
+        "test_operator_switches_chat_off_for_the_pilot",
+    })
+
     issue_1935_owners = frozenset({
         "playwright_tests/test_pod_stuck_proposals_1935.py::"
         "test_staff_spots_a_stuck_proposal_and_sees_who_has_not_answered",
@@ -2011,6 +2034,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1933_owners
             | self.issue_1919_owners
             | self.issue_1934_owners
+            | self.issue_1920_owners
             | self.issue_1935_owners
             | self.issue_1937_owners
             | self.issue_1942_owners

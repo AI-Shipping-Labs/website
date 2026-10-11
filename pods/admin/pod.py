@@ -8,6 +8,7 @@ from pods.models import (
     PodMeeting,
     PodMeetingResponse,
     PodMembership,
+    PodMessage,
 )
 
 __all__ = []
@@ -61,3 +62,19 @@ class PodMeetingAdmin(admin.ModelAdmin):
     list_filter = ('status', 'created_via')
     raw_id_fields = ('pod', 'proposed_by', 'moved_by', 'status_changed_by')
     inlines = [PodMeetingResponseInline]
+
+
+@admin.register(PodMessage)
+class PodMessageAdmin(admin.ModelAdmin):
+    """Read-only list of pod chat messages (issue #1920); Studio moderates."""
+
+    list_display = ('pod', 'author', 'created_at', 'hidden_at')
+    list_filter = ('hidden_at',)
+    search_fields = ('body',)
+    raw_id_fields = ('pod', 'author', 'hidden_by')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False

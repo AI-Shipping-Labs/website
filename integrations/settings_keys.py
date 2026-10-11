@@ -248,6 +248,8 @@ _KEY_ORDER = {
         "PODS_MEETING_REMINDER_HOURS",
         "PODS_STUCK_PROPOSAL_HOURS",
         "PODS_STUCK_PROPOSAL_ALERT_ENABLED",
+        "PODS_CHAT_ENABLED",
+        "PODS_CHAT_MESSAGES_PER_HOUR",
     ),
     "zoom": (
         "ZOOM_CLIENT_ID",
@@ -2208,4 +2210,24 @@ PODS_STUCK_PROPOSAL_ALERT_ENABLED = declare(
     default="true",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_stuck_proposal_alert_enabled",
+)
+PODS_CHAT_ENABLED = declare(
+    key="PODS_CHAT_ENABLED",
+    group="pods",
+    label="Pods Chat Enabled",
+    description="When on, pod members see a small plain-text Chat section on the pod page and an N new messages line on their Pods tab rows. Off hides the chat section and unread lines and makes posting return 404; Studio and the staff API keep showing and moderating messages. No-redeploy kill switch for the pilot. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_chat_enabled",
+)
+PODS_CHAT_MESSAGES_PER_HOUR = declare(
+    key="PODS_CHAT_MESSAGES_PER_HOUR",
+    group="pods",
+    label="Pods Chat Messages Per Hour",
+    description="How many pod chat messages one member may post in a rolling 60 minutes, counted across all pods (1-500). Invalid or out-of-range values fall back to 30. Defaults to 30.",
+    value_type="int",
+    default="30",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_chat_messages_per_hour",
 )

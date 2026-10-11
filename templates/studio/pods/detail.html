@@ -237,6 +237,54 @@
   </form>
 </section>
 
+<section id="chat" class="mb-8" aria-labelledby="studio-pod-chat-heading" data-testid="studio-pod-chat">
+  <h2 id="studio-pod-chat-heading" class="text-base font-semibold text-foreground" data-testid="studio-pod-chat-heading">Chat ({{ chat_total }} message{{ chat_total|pluralize }}, {{ chat_hidden }} hidden)</h2>
+  {% if chat_truncated %}<p class="mt-1 text-sm text-muted-foreground" data-testid="studio-pod-chat-truncated">Showing the latest {{ chat_limit }} of {{ chat_total }} messages. Use the staff API for the full transcript.</p>{% endif %}
+  {% if chat_rows %}
+  <div class="{% studio_list_class 'wrapper' %} mt-3">
+    <table class="{% studio_list_class 'table' %}">
+      <thead class="{% studio_list_class 'thead' %}">
+        <tr>
+          <th class="{% studio_list_class 'th' %}">Author</th>
+          <th class="{% studio_list_class 'th' %}">Posted</th>
+          <th class="{% studio_list_class 'th' %}">Message</th>
+          <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="{% studio_list_class 'tbody' %}">
+        {% for row in chat_rows %}
+        <tr class="{% studio_list_class 'row' %}" data-testid="studio-pod-chat-message" data-message-id="{{ row.message.pk }}"{% if row.message.hidden_at %} data-hidden="true"{% endif %}>
+          <td class="px-6 py-4 text-sm text-foreground" data-label="Author" data-testid="studio-pod-chat-author">{{ row.author_name }}<div class="text-xs text-muted-foreground break-all" data-testid="studio-pod-chat-email">{{ row.message.author.email }}</div></td>
+          <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Posted" data-testid="studio-pod-chat-time">{{ row.message.created_at|operator_datetime }} UTC</td>
+          <td class="px-6 py-4 text-sm text-foreground" data-label="Message">
+            {% if row.message.hidden_at %}<div class="mb-1 flex flex-wrap items-center gap-1.5" data-testid="studio-pod-chat-hidden">{% studio_status_badge 'hidden' 'Hidden' %}<span class="text-xs text-muted-foreground" data-testid="studio-pod-chat-hidden-by">Hidden by {{ row.hidden_by_name|default:"—" }} on {{ row.message.hidden_at|operator_datetime }} UTC</span></div>{% endif %}
+            <p class="whitespace-pre-line break-words [overflow-wrap:anywhere]" data-testid="studio-pod-chat-body">{{ row.message.body }}</p>
+          </td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+            <div class="{% studio_list_class 'action_group' %}">
+              {% if row.message.hidden_at %}
+              <form method="post" action="{% url 'studio_pod_message_restore' pod_id=pod.pk message_id=row.message.pk %}" class="{% studio_list_class 'action_form' %}">
+                {% csrf_token %}
+                <button type="submit" class="{% studio_action_class 'secondary' %}" data-testid="studio-pod-chat-restore">Restore</button>
+              </form>
+              {% else %}
+              <form method="post" action="{% url 'studio_pod_message_hide' pod_id=pod.pk message_id=row.message.pk %}" class="{% studio_list_class 'action_form' %}">
+                {% csrf_token %}
+                <button type="submit" class="{% studio_action_class 'destructive' %}" data-testid="studio-pod-chat-hide">Hide</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="mt-3" data-testid="studio-pod-chat-empty">{% studio_empty_state 'fresh' entity_label='message' entity_label_plural='messages' %}</div>
+  {% endif %}
+</section>
+
 <section class="mb-8 max-w-3xl" aria-labelledby="studio-pod-times-heading" data-testid="studio-pod-times">
   <h2 id="studio-pod-times-heading" class="text-base font-semibold text-foreground">Suggested times (UTC)</h2>
   {% if slot_rows %}

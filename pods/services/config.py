@@ -98,6 +98,16 @@ def stuck_proposal_alert_enabled():
     return _default_on('PODS_STUCK_PROPOSAL_ALERT_ENABLED')
 
 
+def chat_enabled():
+    """Default-on read of ``PODS_CHAT_ENABLED`` (issue #1920): the pilot kill switch."""
+    return _default_on('PODS_CHAT_ENABLED')
+
+
+def chat_messages_per_hour():
+    """Messages one member may post across all pods in a rolling hour (issue #1920)."""
+    return _int_config('PODS_CHAT_MESSAGES_PER_HOUR', 30, minimum=1, maximum=500)
+
+
 def meeting_reminder_hours():
     """Hours before a scheduled pod meeting when the bell reminder goes out (issue #1919)."""
     return _int_config('PODS_MEETING_REMINDER_HOURS', 24, minimum=1, maximum=72)

@@ -7,6 +7,7 @@ open any cohort's pages as an operator view. Anonymous visitors go to login.
 Writes are session POSTs that redirect back with a Django message.
 """
 
+import time
 from urllib.parse import urlencode
 
 from django.contrib import messages
@@ -21,6 +22,7 @@ from accounts.services.timezones import build_timezone_options, get_timezone_lab
 from content.models import Cohort, Course
 from content.services.course_schedule import select_display_cohort
 from pods.models import OPEN_REQUEST_STATUSES, POD_STATUS_ARCHIVED, Pod, PodJoinRequest
+from pods.services import chat as chat_svc
 from pods.services import config as pods_config
 from pods.services import membership as svc
 from pods.services.availability import (
@@ -34,12 +36,13 @@ from pods.services.availability import (
     summary_rows,
 )
 from pods.services.people import can_view_cohort_pods, is_cohort_participant, is_slack_eligible
-from pods.services.presentation import build_pod_page, build_pod_rows, pods_url
+from pods.services.presentation import STATE_MEMBER, build_pod_page, build_pod_rows, pods_url
 from pods.services.slack import clean_channel_url
 from pods.services.tab import course_header_context
 
 LOGIN_URL = '/accounts/login/'
 PAGE_SIZE = 25
+DRAFT_MAX_CHARS = 4000
 
 MSG_STARTED_NO_AVAILABILITY = 'Pod started. Add your availability so others can see if they fit.'
 
@@ -119,6 +122,7 @@ def pods_list(request, slug):
     course = _enabled_course(slug)
     cohort = _viewer_cohort(request, course)
     rows, viewer_availability = build_pod_rows(cohort, request.user)
+    _add_unread_lines(rows, request.user)
     total_pages = max((len(rows) + PAGE_SIZE - 1) // PAGE_SIZE, 1)
     page_number = _page_number(request.GET.get('page'), total_pages)
     base = pods_url(course, cohort)
@@ -236,7 +240,48 @@ def pod_detail(request, slug, pod_id):
     if call_link_error and page['show_private']:
         context['call_link_error'] = call_link_error.get('message', '')
         context['call_link_value'] = call_link_error.get('value', '')
+    context['chat'] = _chat_context(request, pod, page)
     return render(request, 'pods/detail.html', context)
+
+
+# --- Pod chat (issue #1920) ---------------------------------------------------
+
+def _chat_session_key(pod):
+    return f'pod_chat_error_{pod.pk}'
+
+
+def _chat_context(request, pod, page):
+    """The Chat section for members and staff while ``PODS_CHAT_ENABLED`` is on.
+
+    Opening the page as a member marks the chat read.
+    """
+    stored = request.session.pop(_chat_session_key(pod), None)
+    if not chat_svc.chat_enabled() or not (page['is_member'] or request.user.is_staff):
+        return None
+    chat = chat_svc.member_chat(
+        pod, request.user, is_member=page['is_member'], viewer_zone=page['viewer_zone'],
+    )
+    if stored and page['is_member']:
+        chat['error'] = stored.get('message', '')
+        chat['draft'] = stored.get('body', '')
+    # A link to the same URL plus ``#chat`` would only scroll, never reload,
+    # so Refresh carries the load time to force a fresh page.
+    pod_url = svc.pod_url(pod)
+    joiner = '&' if '?' in pod_url else '?'
+    chat['refresh_url'] = f'{pod_url}{joiner}refresh={int(time.time() * 1000)}#chat'
+    if page['is_member']:
+        chat_svc.mark_read(pod, request.user)
+    return chat
+
+
+def _add_unread_lines(rows, viewer):
+    """``N new messages`` on the viewer's own pod rows (one query)."""
+    if not chat_svc.chat_enabled():
+        return
+    member_pod_ids = [row['pod'].pk for row in rows if row['state'].key == STATE_MEMBER]
+    counts = chat_svc.unread_counts(member_pod_ids, viewer)
+    for row in rows:
+        row['unread_line'] = chat_svc.unread_label(counts.get(row['pod'].pk, 0))
 
 
 @login_required(login_url=LOGIN_URL)
@@ -364,3 +409,23 @@ def pod_slack(request, slug, pod_id):
     pod.save(update_fields=['slack_channel_url', 'updated_at'])
     messages.success(request, 'Slack channel saved.' if value else 'Slack channel link removed.')
     return redirect(f'{svc.pod_url(pod)}#slack')
+
+
+@require_POST
+@login_required(login_url=LOGIN_URL)
+def pod_message_create(request, slug, pod_id):
+    """POST ``/courses/<slug>/home/pods/<pod_id>/messages`` -- send a chat message."""
+    course = _enabled_course(slug)
+    pod = _pod_for_viewer(request, course, pod_id)
+    if not chat_svc.chat_enabled():
+        raise Http404('Pod chat is not available')
+    chat_url = f'{svc.pod_url(pod)}#chat'
+    raw_body = request.POST.get('body', '')
+    try:
+        chat_svc.post_message(pod, request.user, raw_body)
+    except chat_svc.ChatError as exc:
+        if exc.code not in chat_svc.DRAFT_CODES:
+            return HttpResponseForbidden(chat_svc.MSG_NOT_A_MEMBER)
+        # Keep the draft (capped) so the member can fix it after the redirect.
+        request.session[_chat_session_key(pod)] = {'message': exc.message, 'body': raw_body[:DRAFT_MAX_CHARS]}
+    return redirect(chat_url)

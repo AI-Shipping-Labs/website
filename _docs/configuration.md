@@ -347,6 +347,8 @@ Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_d
 | `PODS_STALE_REQUEST_ALERT_ENABLED` | `true` | Daily job `pods-stale-request-alert` (09:00 UTC) posts one staff Slack message about pending pod requests older than `PODS_STALE_REQUEST_DAYS`. The same daily message now also carries stuck pod meeting proposals (see `PODS_STUCK_PROPOSAL_ALERT_ENABLED`). Uses the staff comment channel (`STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`) plus `SLACK_ENABLED` and `SLACK_BOT_TOKEN`. Set `false` to drop the requests section; stuck proposals still post. |
 | `PODS_STUCK_PROPOSAL_HOURS` | `48` | A live pod meeting proposal is stuck once it has waited this many hours (1-336; invalid values fall back to `48`) since it was proposed or last moved. Studio `/studio/pods/` shows a `Stuck proposal` badge, the pod page a `Stuck` badge, and the staff API meeting payload `stuck: true`. |
 | `PODS_STUCK_PROPOSAL_ALERT_ENABLED` | `true` | Adds a stuck proposals section to the same daily `pods-stale-request-alert` message: each stuck proposal once, with who has not answered (email and last sign-in). Set `false` to drop that section; stale requests still post. |
+| `PODS_CHAT_ENABLED` | `true` | Pod chat kill switch (issue #1920). Off hides the member `Chat` section and the Pods tab `N new messages` lines and makes posting return 404; Studio and the staff API keep reading and moderating messages. |
+| `PODS_CHAT_MESSAGES_PER_HOUR` | `30` | Pod chat messages one member may post in a rolling 60 minutes across all pods (1-500; invalid values fall back to `30`). |
 
 ## 7. GitHub App (content sync)
 

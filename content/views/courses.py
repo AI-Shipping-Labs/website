@@ -8,6 +8,7 @@ from community_base.homework_steps.state import homework_state_for
 from community_base.homework_steps.views import handle_stepper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.db.models import Prefetch
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -26,6 +27,7 @@ from content.models import (
     Cohort,
     CohortEnrollment,
     Course,
+    CourseInstructor,
     Module,
     Unit,
     UserCourseProgress,
@@ -131,9 +133,6 @@ def courses_list(request):
     "External courses" section below — excluded from the tag-filter pool
     and never filtered out by the selected tag.
     """
-    from content.models.instructor import CourseInstructor
-    from django.db.models import Prefetch
-
     instructor_prefetch = Prefetch(
         'aisl_instructor_links',
         queryset=CourseInstructor.objects.select_related('instructor').order_by('position'),

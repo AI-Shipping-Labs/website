@@ -233,6 +233,34 @@ How many pod chat messages one member may post in a rolling 60 minutes
 - Over the limit: `You are sending messages quickly. Try again in a few
   minutes.` and the draft stays in the message box.
 
+## PODS_FIRST_MEETING_NUDGE_DAYS
+
+How many days after a pod's second member joins before the members see a
+`Plan your first meeting with <pod name>` row on the dashboard (issue #1928).
+
+- Type: integer, 0-30. Invalid or out-of-range values fall back to `3`.
+- Default: `3`. `0` shows the row as soon as the second member joins.
+- Where: the dashboard `Your week` list, after the dated rows (events and pod
+  meetings) and before the Book Club deadline row. Eyebrow `Pod`, body `No
+  meeting planned yet. Pick a time from your pod's suggested times.` The row
+  links to the pod page at `#suggested-times`. `Your week` shows even when
+  this row is its only content.
+- A pod gets the row, for each of its current members, when all of these
+  hold:
+  - The pod is not archived and its course is in `PODS_COURSE_SLUGS`.
+  - The pod has 2 or more current members, and the second earliest current
+    membership joined at least this many days ago.
+  - `Pod.slack_channel_url` is empty.
+  - The pod has no live meeting: no proposed (not expired), scheduled or held
+    meeting. Cancelled meetings and expired `Not confirmed` proposals do not
+    count, so a pod whose only proposal expired is nudged again.
+- Several eligible pods give one row each, oldest second join first.
+- The row goes away on the next dashboard load once anyone proposes a time,
+  staff schedules a meeting, a member saves the Slack channel link, the viewer
+  leaves, the pod is archived, or the pod drops below 2 members.
+- On-site only: no email, Slack message or bell notification, and no nudge on
+  the pod page itself.
+
 ## Pod meetings
 
 How agreed meetings work (issue #1919):

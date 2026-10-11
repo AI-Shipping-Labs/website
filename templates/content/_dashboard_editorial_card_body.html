@@ -38,6 +38,8 @@
       {{ pod_meeting.time_label }}
     </span>
   </div>
+{% elif dashboard_card_variant == "pod_nudge" %}
+  <p class="mt-2 text-sm leading-6 text-muted-foreground sm:text-base" data-testid="dashboard-pod-nudge-body">{{ pod_nudge.body }}</p>
 {% elif dashboard_card_variant == "book_deadline" %}
   <p class="mt-2 text-sm leading-6 text-muted-foreground sm:text-base">{{ dashboard_book_club.book.title }}</p>
   <div class="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">

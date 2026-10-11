@@ -57,6 +57,7 @@ from pods.services.suggestions import (
     required_attendance,
     slots_attendable,
     suggest_slots,
+    weekly_overlap,
     weekly_overlap_hours,
 )
 
@@ -268,9 +269,12 @@ def suggestions_context(pod, members_availability, viewer_zone, *, now=None):
         'based_on_line': '',
         'no_fit_line': '',
         'raw_slots': [],
+        'overlap': None,
     }
     if needed is None:
         return context
+    # Issue #1928: the read-only weekly overlap behind the accordion.
+    context['overlap'] = weekly_overlap(members_availability, viewer_zone, now=now)
     slots = suggest_slots(
         members_availability, pod.meeting_minutes, now=now, all_members=members_availability,
     )

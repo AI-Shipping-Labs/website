@@ -111,3 +111,9 @@ def chat_messages_per_hour():
 def meeting_reminder_hours():
     """Hours before a scheduled pod meeting when the bell reminder goes out (issue #1919)."""
     return _int_config('PODS_MEETING_REMINDER_HOURS', 24, minimum=1, maximum=72)
+
+
+def first_meeting_nudge_days():
+    """Days after the second member joins before the dashboard ``Plan your
+    first meeting`` row appears (issue #1928)."""
+    return _int_config('PODS_FIRST_MEETING_NUDGE_DAYS', 3, minimum=0, maximum=30)

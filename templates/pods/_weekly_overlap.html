@@ -1,0 +1,35 @@
+{% comment %}
+Weekly overlap table for a pod (issue #1928). Rendered as the body of the
+`See full weekly overlap` accordion in `pods/detail.html`, with
+`suggestions` and `viewer_zone` in context. New UI pattern with no indexed
+owner (a read-only heatmap table); keep its markup inside this partial.
+Counts are visible text and every cell has an sr-only label, so meaning is
+never colour-only. Intensity uses accent opacity steps.
+{% endcomment %}
+{% with overlap=suggestions.overlap %}
+{% if suggestions.based_on_line %}<p class="mb-3 text-sm text-muted-foreground" data-testid="pod-overlap-based-on">{{ suggestions.based_on_line }}</p>{% endif %}
+{% if overlap.rows %}
+<div class="overflow-x-auto" data-testid="pod-overlap-scroll">
+  <table class="min-w-full border-collapse text-sm" data-testid="pod-overlap-table">
+    <caption class="mb-2 text-left text-sm text-muted-foreground" data-testid="pod-overlap-caption">Who is free each hour, in your timezone: {{ viewer_zone }}</caption>
+    <thead>
+      <tr>
+        <th scope="col" class="w-14"><span class="sr-only">Time</span></th>
+        {% for column in overlap.columns %}<th scope="col" class="whitespace-nowrap px-1 pb-2 text-center text-xs font-medium text-muted-foreground" data-testid="pod-overlap-date">{{ column.header }}</th>{% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in overlap.rows %}
+      <tr data-testid="pod-overlap-row" data-hour="{{ row.hour }}">
+        <th scope="row" class="whitespace-nowrap pr-2 text-right text-xs font-normal tabular-nums text-muted-foreground" data-testid="pod-overlap-hour">{{ row.label }}</th>
+        {% for cell in row.cells %}<td class="h-8 min-w-[3.5rem] border border-border text-center text-xs font-medium tabular-nums{% if cell.level == 'full' %} bg-accent/70 text-foreground dark:text-accent-foreground{% elif cell.level == 'mid' %} bg-accent/35 text-foreground{% elif cell.level == 'low' %} bg-accent/15 text-foreground{% endif %}" data-testid="pod-overlap-cell" data-count="{{ cell.count }}">{% if cell.count %}<span aria-hidden="true" data-testid="pod-overlap-count">{{ cell.count }}</span>{% endif %}<span class="sr-only" data-testid="pod-overlap-label">{{ cell.label }}</span></td>{% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="mt-3 text-xs text-muted-foreground" data-testid="pod-overlap-legend">Numbers show how many of you are free for that whole hour. Darker means more of you. Times include "If needed" windows.</p>
+{% else %}
+<p class="text-sm text-muted-foreground" data-testid="pod-overlap-empty">No one is free for a whole hour in the next 7 days.</p>
+{% endif %}
+{% endwith %}

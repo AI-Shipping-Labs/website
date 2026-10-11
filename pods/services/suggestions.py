@@ -374,6 +374,113 @@ def slots_attendable(member, slots):
     return total
 
 
+OVERLAP_DAYS = 7
+OVERLAP_LEVEL_NONE = 'none'
+OVERLAP_LEVEL_LOW = 'low'
+OVERLAP_LEVEL_MID = 'mid'
+OVERLAP_LEVEL_FULL = 'full'
+
+
+def _overlap_level(count, considered):
+    """Intensity step of one overlap cell (issue #1928)."""
+    if count <= 0:
+        return OVERLAP_LEVEL_NONE
+    if count >= considered:
+        return OVERLAP_LEVEL_FULL
+    if count * 2 < considered:
+        return OVERLAP_LEVEL_LOW
+    return OVERLAP_LEVEL_MID
+
+
+def _local_hour_start(day, hour, zone):
+    """UTC start of the local hour ``hour`` on ``day`` in ``zone``.
+
+    ``None`` when that wall-clock hour does not exist (spring forward). A
+    repeated hour (fall back) resolves to its first occurrence (``fold=0``).
+    """
+    local = datetime(day.year, day.month, day.day, hour, tzinfo=zone)
+    utc = local.astimezone(UTC)
+    back = utc.astimezone(zone)
+    if (back.date(), back.hour) != (day, hour):
+        return None
+    return utc
+
+
+def weekly_overlap(members, viewer_zone, *, now=None):
+    """Who is free each whole local hour of the next 7 days (issue #1928).
+
+    Columns are 7 dates in ``viewer_zone`` starting with today there; rows
+    are whole local hours trimmed to the first-to-last hour where anyone is
+    free on any of those dates. A cell counts the members with availability
+    who are free (``Works well`` or ``If needed``) for the whole hour. Each
+    member's windows are expanded per date on the shared UTC :class:`Grid`,
+    so every member's own clock changes apply per date.
+
+    Returns ``None`` when fewer than two members have availability (the
+    same threshold as suggested times). Pure: no queries.
+    """
+    considered = [m for m in members if m.has_windows]
+    if required_attendance(len(considered)) is None:
+        return None
+    now = now or timezone.now()
+    try:
+        zone = ZoneInfo(viewer_zone or 'UTC')
+    except (KeyError, ValueError):
+        zone = ZoneInfo('UTC')
+    today = now.astimezone(zone).date()
+    dates = [today + timedelta(days=offset) for offset in range(OVERLAP_DAYS)]
+    first = datetime(today.year, today.month, today.day, tzinfo=zone).astimezone(UTC) - timedelta(hours=1)
+    last_day = dates[-1] + timedelta(days=1)
+    last = datetime(last_day.year, last_day.month, last_day.day, tzinfo=zone).astimezone(UTC) + timedelta(hours=1)
+    grid = Grid(first, last)
+    cells = [grid.cells(m) for m in considered]
+    length = 60 // GRID_MINUTES
+
+    counts = {}
+    for day in dates:
+        for hour in range(24):
+            start = _local_hour_start(day, hour, zone)
+            if start is None:
+                counts[(day, hour)] = 0
+                continue
+            index = grid.index_at_or_after(start)
+            if index + length > grid.size:
+                counts[(day, hour)] = 0
+                continue
+            counts[(day, hour)] = sum(1 for member_cells in cells if _status(member_cells, index, length) >= 1)
+
+    busy_hours = [hour for hour in range(24) if any(counts[(day, hour)] for day in dates)]
+    total = len(considered)
+    columns = [
+        {
+            'date': day,
+            'header': f'{day:%a} {day:%b} {day.day}',
+            'long': f'{day:%A} {day:%b} {day.day}',
+        }
+        for day in dates
+    ]
+    rows = []
+    if busy_hours:
+        for hour in range(busy_hours[0], busy_hours[-1] + 1):
+            label = f'{hour:02d}:00'
+            row_cells = []
+            for column in columns:
+                count = counts[(column['date'], hour)]
+                row_cells.append({
+                    'count': count,
+                    'level': _overlap_level(count, total),
+                    'label': f"{column['long']}, {label}, {count} of {total} free",
+                })
+            rows.append({'hour': hour, 'label': label, 'cells': row_cells})
+    return {
+        'columns': columns,
+        'rows': rows,
+        'considered': total,
+        'member_total': len(members),
+        'zone': zone.key,
+    }
+
+
 def weekly_overlap_hours(viewer, others, *, now=None):
     """Whole hours in the next 7 days where ``viewer`` and every member of
     ``others`` with availability are free. ``None`` when it cannot be

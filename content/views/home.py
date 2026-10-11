@@ -45,6 +45,7 @@ from plans.dashboard import (
     build_sprint_plan_card_context,
 )
 from plans.models import Sprint
+from pods.services.first_meeting_nudge import dashboard_pod_nudges
 from pods.services.meeting_presentation import dashboard_pod_meetings
 from questionnaires.onboarding import has_completed_onboarding
 
@@ -361,6 +362,10 @@ def _dashboard(request):
         + [{'kind': 'pod_meeting', 'pod_meeting': row, 'start': row['starts_at']} for row in dashboard_pod_meeting_rows],
         key=lambda row: row['start'],
     )
+    # Issue #1928: ``Plan your first meeting`` rows follow the dated rows
+    # (and come before the Book Club deadline row in the template).
+    dashboard_pod_nudge_rows = dashboard_pod_nudges(user, dashboard_now)
+    dashboard_week_rows += [{'kind': 'pod_nudge', 'pod_nudge': row} for row in dashboard_pod_nudge_rows]
 
     # --- Starting soon card (issue #705) ---
     # The same imminent event continues to appear in ``upcoming_events`` —
@@ -504,6 +509,7 @@ def _dashboard(request):
         'upcoming_events': upcoming_events,
         'dashboard_upcoming_events': dashboard_upcoming_events,
         'dashboard_pod_meetings': dashboard_pod_meeting_rows,
+        'dashboard_pod_nudges': dashboard_pod_nudge_rows,
         'dashboard_week_rows': dashboard_week_rows,
         'starting_soon': starting_soon,
         'recent_content': recent_content,

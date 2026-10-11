@@ -349,6 +349,7 @@ Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_d
 | `PODS_STUCK_PROPOSAL_ALERT_ENABLED` | `true` | Adds a stuck proposals section to the same daily `pods-stale-request-alert` message: each stuck proposal once, with who has not answered (email and last sign-in). Set `false` to drop that section; stale requests still post. |
 | `PODS_CHAT_ENABLED` | `true` | Pod chat kill switch (issue #1920). Off hides the member `Chat` section and the Pods tab `N new messages` lines and makes posting return 404; Studio and the staff API keep reading and moderating messages. |
 | `PODS_CHAT_MESSAGES_PER_HOUR` | `30` | Pod chat messages one member may post in a rolling 60 minutes across all pods (1-500; invalid values fall back to `30`). |
+| `PODS_FIRST_MEETING_NUDGE_DAYS` | `3` | Days (0-30; invalid values fall back to `3`) after a pod's second member joins before members see `Plan your first meeting with <pod name>` in the dashboard `Your week` list. Only while the pod has no live meeting and no Slack channel link. `0` shows it as soon as the second member joins. |
 
 ## 7. GitHub App (content sync)
 

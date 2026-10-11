@@ -1730,6 +1730,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_reads_a_pod_chat_from_the_member_page_without_posting",
         "playwright_tests/test_pod_chat_1920.py::"
         "test_operator_switches_chat_off_for_the_pilot",
+    issue_1928_owners = frozenset({
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_member_uses_the_weekly_overlap_to_spot_an_evening_across_timezones",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_overlap_is_honest_when_a_member_has_no_availability",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_pod_of_one_has_no_overlap_accordion",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_cohort_member_browsing_another_pod_cannot_see_its_overlap",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_phone_user_keeps_the_simple_suggested_times_list",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_member_is_prompted_to_plan_the_first_meeting_and_the_prompt_clears",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_pod_that_moved_to_slack_is_not_nagged",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_freshly_matched_pod_waits_until_staff_lowers_the_threshold",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_pod_whose_only_proposal_expired_is_nudged_again",
+        "playwright_tests/test_pod_overlap_nudge_1928.py::"
+        "test_member_with_nothing_else_this_week_still_sees_the_nudge",
     })
 
     issue_1935_owners = frozenset({
@@ -2008,8 +2029,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2862)
-        self.assertEqual(len(inventory.owners), 2658)
+        self.assertEqual(inventory.item_count, 2872)
+        self.assertEqual(len(inventory.owners), 2668)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2038,6 +2059,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1935_owners
             | self.issue_1937_owners
             | self.issue_1942_owners
+            | self.issue_1928_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

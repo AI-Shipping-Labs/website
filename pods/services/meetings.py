@@ -15,6 +15,7 @@ occurrence. Both follow from attaching the zone with ``fold=0`` (PEP 495).
 """
 
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from urllib.parse import urlsplit
@@ -41,7 +42,7 @@ from pods.models import (
     PodMeeting,
     PodMeetingResponse,
 )
-from pods.services.meeting_rules import meeting_end, meeting_state
+from pods.services.meeting_rules import meeting_end, meeting_state, proposal_can_be_confirmed
 from pods.services.membership import PodError, pod_url
 from pods.services.people import display_name, user_timezone_name
 from pods.services.suggestions import required_attendance
@@ -303,8 +304,8 @@ def _number_label(number):
 
 # --- Notifications ---------------------------------------------------------------
 
-def notify_members(pod, recipients, title_for, body=''):
-    url = pod_url(pod)
+def notify_members(pod, recipients, title_for, body='', url=None):
+    url = url or pod_url(pod)
     for user in recipients:
         Notification.objects.create(
             user=user,
@@ -420,9 +421,27 @@ def _ensure_changeable(meeting, state, now):
         raise PodError(MSG_HAPPENED, code=CODE_NOT_MOVABLE)
 
 
+@dataclass(frozen=True)
+class MeetingAnswer:
+    """What a member's answer did: ``agreed`` the proposal, or ``made_unconfirmable``."""
+
+    agreed: bool = False
+    made_unconfirmable: bool = False
+
+
+def _unconfirmable_title(name, pod, label):
+    return f"{name} can't make {pod.name} {label}, so this time can't be confirmed. Propose another time."
+
+
 @transaction.atomic
-def respond_to_meeting(meeting, actor, response, *, now=None):
-    """``going`` or ``cant_make_it``. Returns ``True`` when it agreed a proposal."""
+def answer_meeting(meeting, actor, response, *, now=None):
+    """``going`` or ``cant_make_it`` on a meeting. Returns a :class:`MeetingAnswer`.
+
+    A ``Can't make it`` that moves a live proposal from confirmable to
+    unconfirmable (issue #1937) notifies the other members that the time
+    can't be confirmed, linking to the pod's ``#meetings``; any other new
+    ``Can't make it`` keeps the plain notification.
+    """
     now = now or timezone.now()
     pod = _lock_pod(meeting.pod)
     meeting = _reload(meeting)
@@ -434,15 +453,33 @@ def respond_to_meeting(meeting, actor, response, *, now=None):
     state = meeting_state(pod, now)
     _ensure_changeable(meeting, state, now)
     target = proposal_meetings(meeting)[0]
-    previous = PodMeetingResponse.objects.filter(meeting=target, user=actor).values_list('response', flat=True).first()
+    is_proposal = target.status == MEETING_STATUS_PROPOSED
+    before = list(PodMeetingResponse.objects.filter(meeting=target))
+    previous = next((r.response for r in before if r.user_id == actor.pk), None)
     PodMeetingResponse.objects.update_or_create(meeting=target, user=actor, defaults={'response': response})
+    made_unconfirmable = False
     if response == MEETING_RESPONSE_CANT and previous != MEETING_RESPONSE_CANT:
+        if is_proposal and proposal_can_be_confirmed(members, before):
+            after = list(PodMeetingResponse.objects.filter(meeting=target))
+            made_unconfirmable = not proposal_can_be_confirmed(members, after)
         name = display_name(actor)
         label = _number_label(state.numbers.get(target.pk))
-        notify_members(pod, _others(members, actor), lambda _user: f"{name} can't make {pod.name} {label}")
-    if response == MEETING_RESPONSE_GOING and target.status == MEETING_STATUS_PROPOSED:
-        return _maybe_agree(pod, target, actor, members, now)
-    return False
+        if made_unconfirmable:
+            notify_members(
+                pod, _others(members, actor), lambda _user: _unconfirmable_title(name, pod, label),
+                url=f'{pod_url(pod)}#meetings',
+            )
+        else:
+            notify_members(pod, _others(members, actor), lambda _user: f"{name} can't make {pod.name} {label}")
+    agreed = False
+    if response == MEETING_RESPONSE_GOING and is_proposal:
+        agreed = _maybe_agree(pod, target, actor, members, now)
+    return MeetingAnswer(agreed=agreed, made_unconfirmable=made_unconfirmable)
+
+
+def respond_to_meeting(meeting, actor, response, *, now=None):
+    """``going`` or ``cant_make_it``. Returns ``True`` when it agreed a proposal."""
+    return answer_meeting(meeting, actor, response, now=now).agreed
 
 
 @transaction.atomic
@@ -654,6 +691,8 @@ __all__ = [
     'NOTIFICATION_POD_MEETING',
     'OUTCOME_HELD',
     'OUTCOME_NOT_HELD',
+    'MeetingAnswer',
+    'answer_meeting',
     'call_link_label',
     'cancel_meeting',
     'clean_call_link',

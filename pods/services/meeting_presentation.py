@@ -23,12 +23,14 @@ from pods.models import (
     Pod,
     PodMeeting,
     PodMeetingResponse,
+    PodMembership,
 )
 from pods.services import config as pods_config
 from pods.services.meeting_rules import (
     meeting_end,
     meeting_state,
     members_without_answer,
+    proposal_unconfirmable,
     proposal_waiting_since,
 )
 from pods.services.meetings import (
@@ -62,6 +64,14 @@ DASHBOARD_DAYS = 7
 MSG_ALL_DONE = 'All meetings done. Raise the number of meetings to keep going.'
 MSG_PROPOSAL_OPEN = 'Confirm or cancel the proposed time before proposing another.'
 DASHBOARD_NEEDS_ANSWER = 'Needs your answer'
+BADGE_UNCONFIRMABLE = "Can't be confirmed"
+MSG_UNCONFIRMABLE = "Too few of you can make this time, so it can't be confirmed. Propose another time."
+CHANGE_TIME = 'Change time'
+PROPOSE_ANOTHER_TIME = 'Propose another time'
+TAB_PROPOSAL_WAITING = 'Time proposed - waiting for confirmation'
+TAB_PROPOSAL_UNCONFIRMABLE = "Proposed time can't be confirmed - propose another time"
+TODAY = 'today'
+YESTERDAY = 'yesterday'
 
 
 def msg_all_planned(meeting_count):
@@ -81,6 +91,22 @@ def _compact_date(value, zone_name):
     """``Oct 9`` in ``zone_name`` (``member_compact_date`` vocabulary)."""
     local = value.astimezone(ZoneInfo(zone_name))
     return f'{local:%b} {local.day}'
+
+
+def relative_day(value, zone_name, now):
+    """``today``, ``yesterday`` or ``Oct 7`` for ``value`` (issue #1937).
+
+    Both days are taken in ``zone_name`` (the viewer's zone), so "today" is
+    the viewer's local day of ``now``, not the UTC day.
+    """
+    zone = ZoneInfo(zone_name)
+    day = value.astimezone(zone).date()
+    today = now.astimezone(zone).date()
+    if day == today:
+        return TODAY
+    if day == today - timedelta(days=1):
+        return YESTERDAY
+    return _compact_date(value, zone_name)
 
 
 def meetings_url(pod, name, **kwargs):
@@ -244,19 +270,28 @@ def next_best_slot(meeting, group, state, member_avail, *, now):
     return make_slot(best[1], minutes, best[2], member_avail)
 
 
-def _waiting_line(head, members, responses, viewer, viewer_zone):
-    """``Waiting on you and Mike K. since Oct 7.``, or ``''`` when everyone answered."""
+def _waiting_line(head, members, responses, viewer, viewer_zone, now):
+    """``Waiting on you and Mike K. since Oct 7.`` (or ``since today.`` /
+    ``since yesterday.``), or ``''`` when everyone answered."""
     waiting = members_without_answer(head, members, responses)
     if not waiting:
         return ''
     names = ['you' for u in waiting if u.pk == viewer.pk] + [display_name(u) for u in waiting if u.pk != viewer.pk]
     who = names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' and ' + names[-1]
-    return f'Waiting on {who} since {_compact_date(proposal_waiting_since(head), viewer_zone)}.'
+    return f'Waiting on {who} since {relative_day(proposal_waiting_since(head), viewer_zone, now)}.'
 
 
-def _badge(meeting, state, going, needed, now):
+def _moved_line(name, moved_at, viewer_zone, now):
+    """``Moved by Anna K. today`` / ``yesterday`` / ``on Oct 7``."""
+    day = relative_day(moved_at, viewer_zone, now)
+    return f'Moved by {name} {day}' if day in (TODAY, YESTERDAY) else f'Moved by {name} on {day}'
+
+
+def _badge(meeting, state, going, needed, now, unconfirmable=False):
     if state.is_expired(meeting):
         return 'Not confirmed', 'muted'
+    if unconfirmable:
+        return BADGE_UNCONFIRMABLE, 'warning'
     if meeting.status == MEETING_STATUS_PROPOSED:
         return f'Proposed - {going} of {needed} needed', 'info'
     if meeting.status == MEETING_STATUS_HELD:
@@ -305,7 +340,8 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
         viewer_response = next((r.response for r in head_responses if r.user_id == viewer.pk), '')
         cant_names = [names[r.user_id] for r in head_responses if r.response == MEETING_RESPONSE_CANT and r.user_id in names]
         going = _going_count(head, member_ids, responses)
-        badge, tone = _badge(head, state, going, needed, now)
+        unconfirmable = proposal_unconfirmable(head, state, member_ids, head_responses)
+        badge, tone = _badge(head, state, going, needed, now, unconfirmable)
         number = state.numbers.get(head.pk)
         is_series_proposal = head.status == MEETING_STATUS_PROPOSED and len(group) > 1
         if is_series_proposal:
@@ -317,7 +353,7 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
         moved_line = ''
         if head.moved_at and head.moved_by_id:
             mover = movers.get(head.moved_by_id) or head.moved_by
-            moved_line = f'Moved by {display_name(mover)} on {_compact_date(head.moved_at, viewer_zone)}'
+            moved_line = _moved_line(display_name(mover), head.moved_at, viewer_zone, now)
         row = {
             'meeting': head,
             'group_size': len(group),
@@ -329,31 +365,37 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
             'tone': tone,
             'strip': meeting_strip(head.starts_at, member_avail) if live_status or head.status == MEETING_STATUS_HELD else [],
             'proposed_by': display_name(head.proposed_by) if head.status == MEETING_STATUS_PROPOSED and head.proposed_by_id else '',
+            # Answers from the rest can no longer confirm an unconfirmable
+            # proposal, so it waits on nobody (issue #1937).
             'waiting_line': (
-                _waiting_line(head, member_users, head_responses, viewer, viewer_zone)
-                if live_status and head.status == MEETING_STATUS_PROPOSED else ''
+                _waiting_line(head, member_users, head_responses, viewer, viewer_zone, now)
+                if live_status and head.status == MEETING_STATUS_PROPOSED and not unconfirmable else ''
             ),
+            'unconfirmable_line': MSG_UNCONFIRMABLE if unconfirmable else '',
             'moved_line': moved_line,
             'cant_names': ', '.join(cant_names) if live_status else '',
             'dst_lines': dst_lines(head, state, member_avail) if live_status else [],
             'offer': None,
             'no_offer_line': '',
             'join_url': '',
-            'call_link_url': '',
-            'call_link_label': '',
         }
-        # Join call only once the time is agreed; the plain call-link meta
-        # goes on the soonest live, not-started row (set after sorting).
+        # Join call only once the time is agreed. The call link itself is
+        # shown once, under the Meetings heading (issue #1937).
         if live_status and pod.meeting_url and in_window and head.status == MEETING_STATUS_SCHEDULED:
             row['join_url'] = pod.meeting_url
         row['awaiting_start'] = live_status and not started
         actions = {
-            'going': '', 'cant': False, 'change': False, 'cancel': '', 'held': False, 'held_primary': False,
+            'going': '', 'going_primary': False, 'cant': False, 'change': False,
+            'change_label': CHANGE_TIME, 'change_primary': False,
+            'cancel': '', 'held': False, 'held_primary': False,
         }
         if live_status and not started:
             if head.status == MEETING_STATUS_PROPOSED:
                 if is_member and viewer_response != MEETING_RESPONSE_GOING:
                     actions['going'] = 'I can make it'
+                    # On an unconfirmable proposal the way forward is
+                    # another time, so I can make it steps back (issue #1937).
+                    actions['going_primary'] = not unconfirmable
                 actions['cant'] = is_member and viewer_response != MEETING_RESPONSE_CANT
                 actions['cancel'] = 'plain'
             else:
@@ -362,6 +404,9 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
                 actions['cant'] = is_member and viewer_response != MEETING_RESPONSE_CANT
                 actions['cancel'] = 'confirm'
             actions['change'] = True
+            if unconfirmable:
+                # Moving a proposal resets its answers: proposing another time.
+                actions['change_label'] = PROPOSE_ANOTHER_TIME
             if cant_names:
                 slot = next_best_slot(head, group, state, member_avail, now=now)
                 if slot is not None:
@@ -373,13 +418,13 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
                         'start_iso': slot.start.isoformat(),
                         'button': f'Move to {short}' if head.status == MEETING_STATUS_SCHEDULED else f'Propose {short} instead',
                         'propose': head.status == MEETING_STATUS_PROPOSED,
-                        # One primary action per row: Join call or I can make it win.
-                        'primary': not row['join_url'] and not (
-                            head.status == MEETING_STATUS_PROPOSED and actions['going']
-                        ),
+                        # One primary action per row: Join call or I can make it
+                        # win, except on an unconfirmable proposal.
+                        'primary': not row['join_url'] and not actions['going_primary'],
                     }
                 else:
                     row['no_offer_line'] = msg_no_offer(offer_needed)
+            actions['change_primary'] = unconfirmable and row['offer'] is None
         elif head.status == MEETING_STATUS_SCHEDULED and started:
             actions['held'] = True
             actions['held_primary'] = not row['join_url']
@@ -391,10 +436,6 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
         is_upcoming = not expired and (meeting_end(head) > now) and head.status != MEETING_STATUS_HELD
         (upcoming if is_upcoming else past).append(row)
     upcoming.sort(key=lambda r: (r['meeting'].starts_at, r['meeting'].pk))
-    soonest = next((r for r in upcoming if r['awaiting_start']), None)
-    if soonest is not None and pod.meeting_url and not soonest['join_url']:
-        soonest['call_link_url'] = pod.meeting_url
-        soonest['call_link_label'] = call_link_label(pod.meeting_url)
     past.sort(key=lambda r: (r['meeting'].starts_at, r['meeting'].pk), reverse=True)
     return upcoming + past[:PAST_LIMIT]
 
@@ -464,6 +505,24 @@ def meetings_section(pod, viewer, *, member_avail, viewer_zone, is_member, can_m
 
 # --- Pods tab and dashboard ------------------------------------------------------
 
+def _members_by_pod(pods):
+    """``{pod_id: {user_id, ...}}`` for the pods' current members (one query)."""
+    members = {}
+    for pod_id, user_id in PodMembership.objects.filter(pod__in=pods).values_list('pod_id', 'user_id'):
+        members.setdefault(pod_id, set()).add(user_id)
+    return members
+
+
+def _responses_by_meeting(meeting_ids):
+    """``{meeting_id: [PodMeetingResponse, ...]}`` (one query, none when empty)."""
+    responses = {}
+    if not meeting_ids:
+        return responses
+    for response in PodMeetingResponse.objects.filter(meeting_id__in=meeting_ids):
+        responses.setdefault(response.meeting_id, []).append(response)
+    return responses
+
+
 def next_meeting_lines(pods, viewer_zone, now):
     """``{pod_id: line}`` for the viewer's own pods on the Pods tab."""
     pods = list(pods)
@@ -472,17 +531,29 @@ def next_meeting_lines(pods, viewer_zone, now):
     by_pod = {}
     for meeting in PodMeeting.objects.filter(pod__in=pods).order_by('starts_at', 'pk'):
         by_pod.setdefault(meeting.pod_id, []).append(meeting)
+    states = {pod.pk: meeting_state(pod, now, meetings=by_pod.get(pod.pk, [])) for pod in pods}
+    heads = {
+        pod_id: {_proposal_head(state, m) for m in state.open_proposals}
+        for pod_id, state in states.items()
+    }
+    waiting_pods = [pod for pod in pods if heads[pod.pk]]
+    members = _members_by_pod(waiting_pods) if waiting_pods else {}
+    responses = _responses_by_meeting([h.pk for pod in waiting_pods for h in heads[pod.pk]])
     lines = {}
     for pod in pods:
-        state = meeting_state(pod, now, meetings=by_pod.get(pod.pk, []))
+        state = states[pod.pk]
         upcoming = [
             m for m in state.meetings
             if m.status == MEETING_STATUS_SCHEDULED and meeting_end(m) > now
         ]
         if upcoming:
             lines[pod.pk] = f'Next meeting: {format_in_zone(upcoming[0].starts_at, viewer_zone)}'
-        elif state.has_open_proposal:
-            lines[pod.pk] = 'Time proposed - waiting for confirmation'
+        elif heads[pod.pk]:
+            dead = all(
+                proposal_unconfirmable(h, state, members.get(pod.pk, ()), responses.get(h.pk, []))
+                for h in heads[pod.pk]
+            )
+            lines[pod.pk] = TAB_PROPOSAL_UNCONFIRMABLE if dead else TAB_PROPOSAL_WAITING
     return lines
 
 
@@ -494,6 +565,8 @@ def dashboard_pod_meetings(user, now):
     out. Live proposals (the head meeting of a weekly one) the member has
     not answered yet are listed as ``{pod} - Proposed time`` with the
     ``Needs your answer`` badge (issue #1934); once they answer, the row goes away.
+    A proposal that can no longer be confirmed is left out (issue #1937):
+    no answer can confirm it.
     """
     slugs = pods_config.enabled_course_slugs()
     if not slugs or not getattr(user, 'is_authenticated', False):
@@ -514,10 +587,25 @@ def dashboard_pod_meetings(user, now):
     )
     zone = zone_for(user)
     horizon = now + timedelta(days=DASHBOARD_DAYS)
+    states = {pod.pk: meeting_state(pod, now, meetings=[m for m in meetings if m.pod_id == pod.pk]) for pod in pods}
+    # Only heads this member still has to answer in the window can be listed.
+    candidates = {
+        pod_id: {
+            head for head in (_proposal_head(state, m) for m in state.open_proposals)
+            if head.pk not in answers and meeting_end(head) > now and head.starts_at <= horizon
+        }
+        for pod_id, state in states.items()
+    }
+    asking = [pod for pod in pods if candidates[pod.pk]]
+    members = _members_by_pod(asking) if asking else {}
+    responses = _responses_by_meeting([h.pk for pod in asking for h in candidates[pod.pk]])
     rows = []
     for pod in pods:
-        state = meeting_state(pod, now, meetings=[m for m in meetings if m.pod_id == pod.pk])
-        heads = {_proposal_head(state, m).pk for m in state.open_proposals}
+        state = states[pod.pk]
+        heads = {
+            h.pk for h in candidates[pod.pk]
+            if not proposal_unconfirmable(h, state, members.get(pod.pk, ()), responses.get(h.pk, []))
+        }
         for meeting in state.meetings:
             if meeting_end(meeting) <= now or meeting.starts_at > horizon:
                 continue

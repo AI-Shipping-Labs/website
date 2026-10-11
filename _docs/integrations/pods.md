@@ -223,6 +223,35 @@ How agreed meetings work (issue #1919):
   members with no answer on it (the viewer as `you`, first), counted from its
   last move or else its creation. The line goes once everyone has answered.
   The helper is `members_without_answer` in `pods/services/meeting_rules.py`.
+- Dates on the `Waiting on` and `Moved by` lines are relative in the viewer's
+  timezone (issue #1937): the viewer's local day reads `since today.` /
+  `Moved by Anna K. today`, the previous local day `since yesterday.` /
+  `Moved by Anna K. yesterday`, older days `since Oct 7.` /
+  `Moved by Anna K. on Oct 7`.
+- A live proposal can no longer be confirmed (issue #1937) when the pod's
+  members minus those who answered `Can't make it` on it are fewer than the
+  required attendance (pod of 3 with 2 `Can't make it`, pod of 4 with 2).
+  Only current members' answers count. It is derived, not stored, and
+  nothing is cancelled: a member switching back to `I can make it`, or a move
+  (which clears answers), brings the normal proposed state back. The helpers
+  are `proposal_can_be_confirmed` / `proposal_unconfirmable` in
+  `pods/services/meeting_rules.py`. Such a proposal:
+  - shows the badge `Can't be confirmed` and the line `Too few of you can
+    make this time, so it can't be confirmed. Propose another time.` instead
+    of `Proposed - N of M needed` and the `Waiting on` line;
+  - makes `Propose <time> instead` (the next best time) the row's one primary
+    action, and relabels `Change time` to `Propose another time` (primary
+    only when there is no next best time);
+  - reads `Proposed time can't be confirmed - propose another time` on the
+    Pods tab (when no confirmed meeting is upcoming) and is left out of the
+    dashboard `Your week` list.
+- The `Can't make it` answer that makes a proposal unconfirmable notifies
+  every other member (proposer included) in the bell with `Raj S. can't make
+  Pod A meeting 2, so this time can't be confirmed. Propose another time.`,
+  linking to the pod's `#meetings`, and the responder sees `Marked that you
+  can't make it. This time can't be confirmed, so propose another time.`
+  Every other `Can't make it` keeps the plain `Raj S. can't make Pod A
+  meeting 2` notification. No email or Slack.
 - The dashboard `Your week` list shows a live proposal starting in the next 7
   days that the member has not answered as `<pod> - Proposed time` with a
   `Needs your answer` badge, linking to the pod's `#meetings`. Answering
@@ -240,7 +269,9 @@ How agreed meetings work (issue #1919):
   21:30).` A shift that reverts later in the series (or only affects the last
   meeting) reads `this week (usually 12:00)` on each shifted meeting. A nonexistent local time (spring-forward gap) moves
   forward by the gap; an ambiguous one (fall-back) uses its first occurrence.
-- Any member or staff can move, cancel or record a meeting. A move clears
+- Any member or staff can move, cancel or record a meeting. Both proposal
+  and confirmed rows offer `Cancel meeting`: a proposal cancels in one tap, a
+  confirmed meeting asks first (`Yes, cancel meeting`). A move clears
   `Can't make it` answers and notifies the others; no re-agreement.
 - After `Can't make it` the row offers the next best time: a start within 7
   days either side of the meeting (and 12 hours to 6 months from now) that
@@ -254,7 +285,6 @@ How agreed meetings work (issue #1919):
   through the staff API (`This meeting has not started yet.`). Cancelling a
   future meeting is always allowed.
 - One optional call link per pod (`Pod.meeting_url`, https only), set with
-  the `Add a call link` / `Change link` button under the Meetings heading.
-  Only the soonest upcoming meeting row repeats it as `Call link:`. A
-  scheduled meeting row shows `Join call` from 10 minutes before the start
-  until the end.
+  the `Add a call link` / `Change link` button under the Meetings heading,
+  where it is shown once as `Call link:`. A scheduled meeting row shows
+  `Join call` from 10 minutes before the start until the end.

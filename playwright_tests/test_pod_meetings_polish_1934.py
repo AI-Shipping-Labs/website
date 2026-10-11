@@ -43,11 +43,6 @@ def _broad_windows(users, keys):
         _windows(users[key], zone, [(d, start, end, 'preferred') for d in WEEKDAYS])
 
 
-def _compact(value, zone):
-    local = value.astimezone(ZoneInfo(zone))
-    return f'{local:%b} {local.day}'
-
-
 def _next_tuesday_berlin(min_days=2):
     """A Tuesday at 18:00 Berlin at least ``min_days`` days from now."""
     today = timezone.now().astimezone(BERLIN).date() + datetime.timedelta(days=min_days)
@@ -79,8 +74,8 @@ def test_student_proposes_a_time_and_understands_what_confirms_it(django_server,
     page.get_by_test_id('pod-meeting-form-submit').click()
     expect(_messages(page)).to_contain_text('Time proposed.')
     expect(page.get_by_test_id('pod-meeting-badge')).to_have_text('Proposed - 1 of 2 needed')
-    today = _compact(timezone.now(), 'Europe/Berlin')
-    expect(page.get_by_test_id('pod-meeting-waiting')).to_have_text(f'Waiting on Mike K. since {today}.')
+    # Issue #1937: a proposal made today reads ``since today.``
+    expect(page.get_by_test_id('pod-meeting-waiting')).to_have_text('Waiting on Mike K. since today.')
     context.close()
 
 
@@ -103,8 +98,7 @@ def test_quiet_member_answers_a_proposal_from_the_dashboard(django_server, brows
 
     card.get_by_test_id('dashboard-pod-meeting-link').click()
     expect(page).to_have_url(re.compile(rf'/home/pods/{pod.pk}#meetings$'))
-    since = _compact(timezone.now(), 'America/New_York')
-    expect(page.get_by_test_id('pod-meeting-waiting')).to_have_text(f'Waiting on you since {since}.')
+    expect(page.get_by_test_id('pod-meeting-waiting')).to_have_text('Waiting on you since today.')
 
     page.get_by_test_id('pod-meeting-going').click()
     expect(_messages(page)).to_contain_text('Meeting confirmed.')
@@ -194,7 +188,7 @@ def test_no_nearby_time_fits_and_the_student_is_told_so(django_server, browser):
 
 
 @browser_journey
-def test_pod_member_adds_then_changes_the_call_link_and_finds_it_on_the_next_meeting(django_server, browser):
+def test_pod_member_adds_then_changes_the_call_link_under_the_meetings_heading(django_server, browser):
     _course, cohort, users = _seed()
     pod = _meeting_pod(cohort, [users['anna'], users['raj']])
     for days in (2, 3, 4):
@@ -210,19 +204,15 @@ def test_pod_member_adds_then_changes_the_call_link_and_finds_it_on_the_next_mee
     expect(_messages(page)).to_contain_text('Call link saved.')
     expect(page.get_by_test_id('pod-call-link-line')).to_have_text('Call link: meet.google.com/abc-defg-hij')
     expect(page.get_by_test_id('pod-call-link-toggle')).to_have_text('Change link')
-    expect(page.get_by_test_id('pod-meeting-call-link')).to_have_count(1)
-    expect(_row(page, 1).get_by_test_id('pod-meeting-call-link')).to_have_text(
-        'Call link: meet.google.com/abc-defg-hij',
-    )
-    for number in (2, 3):
-        expect(_row(page, number).get_by_test_id('pod-meeting-call-link')).to_have_count(0)
+    # Issue #1937: the link is shown once, under the heading, never on a row.
+    expect(page.get_by_test_id('pod-meeting-call-link')).to_have_count(0)
 
     page.get_by_test_id('pod-call-link-toggle').click()
     page.get_by_test_id('pod-call-link-input').fill('https://zoom.us/j/123456789')
     page.get_by_test_id('pod-call-link-save').click()
     expect(_messages(page)).to_contain_text('Call link saved.')
     expect(page.get_by_test_id('pod-call-link-line')).to_have_text('Call link: zoom.us/j/123456789')
-    expect(_row(page, 1).get_by_test_id('pod-meeting-call-link')).to_have_text('Call link: zoom.us/j/123456789')
+    expect(page.get_by_test_id('pod-meeting-call-link')).to_have_count(0)
     context.close()
 
 

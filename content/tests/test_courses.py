@@ -511,6 +511,30 @@ class CoursesListViewTest(TestCase):
         self.assertNotContains(response, 'data-testid="course-card-preview-fallback"')
         self.assertContains(response, 'data-testid="course-access-badge"')
 
+    def test_courses_list_query_count_does_not_scale_with_course_count(self):
+        """Query count for /courses must remain constant (O(1)) as course count grows."""
+        # Initial request to warm caches / session
+        self.client.get('/courses')
+
+        with self.assertNumQueries(4):
+            response = self.client.get('/courses')
+            self.assertContains(response, 'Published Course')
+
+        # Add 5 more published courses with instructors
+        for i in range(5):
+            extra = Course.objects.create(
+                title=f'Extra Course {i}',
+                slug=f'extra-course-{i}',
+                status='published',
+                tags=['extra'],
+            )
+            _attach_course_instructor(extra, f'Instructor {i}')
+
+        # The query count must be identical even with 5 additional courses and instructors
+        with self.assertNumQueries(4):
+            response = self.client.get('/courses')
+            self.assertContains(response, 'Extra Course 4')
+
 
 # ============================================================
 # View Tests: /courses/{slug} detail

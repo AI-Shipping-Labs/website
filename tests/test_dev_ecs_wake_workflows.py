@@ -80,6 +80,7 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
 
         self.assertEqual(playwright_job["needs"], ["wake-dev"])
         self.assertEqual(notify_job["needs"], ["wake-dev", "playwright-dev"])
+        self.assertEqual(wake_job["timeout-minutes"], 15)
         self.assertEqual(wake_job["permissions"]["contents"], "read")
         self.assertEqual(wake_job["permissions"]["id-token"], "write")
 
@@ -104,10 +105,19 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
         self.assertEqual(wake_step["with"]["ecs-service"], "ai-shipping-labs-dev")
         self.assertEqual(wake_step["with"]["desired-count"], "1")
         self.assertEqual(wake_step["with"]["ping-url"], "https://dev.aishippinglabs.com/ping")
-        self.assertEqual(wake_step["with"]["timeout-seconds"], "300")
+        self.assertEqual(wake_step["with"]["timeout-seconds"], "540")
         self.assertEqual(wake_step["with"]["poll-seconds"], "10")
-        self.assertEqual(wake_step["with"]["max-attempts"], "30")
+        self.assertEqual(wake_step["with"]["max-attempts"], "60")
         self.assertEqual(wake_step["with"]["required-consecutive"], "3")
+
+        warm_step = next(
+            step
+            for step in wake_job["steps"]
+            if step.get("name") == "Warm dev application endpoints"
+        )
+        self.assertEqual(warm_step["timeout-minutes"], 5)
+        self.assertIn("/courses", warm_step["run"])
+        self.assertIn("/sitemap.xml", warm_step["run"])
 
     def test_playwright_matrix_and_marker_filter_remain_unchanged(self):
         workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)

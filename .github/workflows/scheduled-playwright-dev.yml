@@ -25,7 +25,7 @@ jobs:
   wake-dev:
     name: Wake Dev ECS Service
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
@@ -48,10 +48,34 @@ jobs:
           ecs-service: ai-shipping-labs-dev
           desired-count: "1"
           ping-url: https://dev.aishippinglabs.com/ping
-          timeout-seconds: "300"
+          timeout-seconds: "540"
           poll-seconds: "10"
-          max-attempts: "30"
+          max-attempts: "60"
           required-consecutive: "3"
+
+      - name: Warm dev application endpoints
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          echo "Warming dev endpoints after service wake..."
+          endpoints=(
+            "/"
+            "/courses"
+            "/blog"
+            "/projects"
+            "/about"
+            "/faq"
+            "/workshops"
+            "/sitemap.xml"
+          )
+          for endpoint in "${endpoints[@]}"; do
+            url="https://dev.aishippinglabs.com${endpoint}"
+            echo "Warming ${url}..."
+            curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused --max-time 30 "${url}" > /dev/null || {
+              echo "Warning: warming ${url} returned non-zero status"
+            }
+          done
+          echo "Dev application endpoints warmed successfully."
 
   playwright-dev:
     name: Playwright Dev Suite (${{ matrix.shard_name }})

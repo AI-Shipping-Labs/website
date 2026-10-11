@@ -40,8 +40,11 @@ class StubPage:
         self._responses = list(responses)
         self.calls = []
 
-    def goto(self, url, wait_until=None):
-        self.calls.append((url, wait_until))
+    def goto(self, url, wait_until=None, **kwargs):
+        if kwargs:
+            self.calls.append((url, wait_until, kwargs))
+        else:
+            self.calls.append((url, wait_until))
         # If the script runs short, keep returning the last scripted value so a
         # "persistent" sequence of length 1 still represents every attempt.
         index = min(len(self.calls) - 1, len(self._responses) - 1)
@@ -165,3 +168,17 @@ class GotoWithRetryTest(SimpleTestCase):
                     response = goto_with_retry(page, "/x")
                 self.assertEqual(response.status, status)
                 self.assertEqual(len(page.calls), 1)
+
+    def test_timeout_parameter_passed_to_page_goto(self):
+        page = StubPage([FakeResponse(200)])
+        with _no_sleep():
+            response = goto_with_retry(page, "/", timeout=45000)
+        self.assertEqual(response.status, 200)
+        self.assertEqual(page.calls, [("/", "domcontentloaded", {"timeout": 45000})])
+
+    def test_remote_base_url_defaults_to_dev_timeout(self):
+        page = StubPage([FakeResponse(200)])
+        with _no_sleep(), mock.patch("playwright_tests.conftest.base_url_is_local", return_value=False):
+            response = goto_with_retry(page, "/")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(page.calls, [("/", "domcontentloaded", {"timeout": 45000})])

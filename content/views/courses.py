@@ -131,24 +131,40 @@ def courses_list(request):
     "External courses" section below — excluded from the tag-filter pool
     and never filtered out by the selected tag.
     """
-    published = Course.objects.filter(status='published')
+    from content.models.instructor import CourseInstructor
+    from django.db.models import Prefetch
+
+    instructor_prefetch = Prefetch(
+        'aisl_instructor_links',
+        queryset=CourseInstructor.objects.select_related('instructor').order_by('position'),
+    )
+    published = (
+        Course.objects.filter(status='published')
+        .select_related('aisl_extension')
+        .prefetch_related(instructor_prefetch)
+    )
     standard_courses = published.filter(aisl_extension__access_mode='tier')
     entitlement_courses = list(
         published.filter(aisl_extension__access_mode='entitlement').order_by('-created_at')
     )
     selected_tags = _get_selected_tags(request)
 
-    # Collect tags from standard (tier-gated) published courses only —
-    # entitlement courses don't feed the filter facet pool.
-    all_tags = set()
-    for course in standard_courses:
-        if course.tags:
-            all_tags.update(course.tags)
-    all_tags = sorted(all_tags)
-
     # Filter standard courses by tag if provided (AND logic). Entitlement
     # courses are never filtered — they always show in their own section.
     courses = list(_filter_by_tags(standard_courses, selected_tags))
+
+    # Collect tags from standard (tier-gated) published courses only —
+    # entitlement courses don't feed the filter facet pool.
+    all_tags = set()
+    if selected_tags:
+        for tags in standard_courses.values_list('tags', flat=True):
+            if tags:
+                all_tags.update(tags)
+    else:
+        for course in courses:
+            if course.tags:
+                all_tags.update(course.tags)
+    all_tags = sorted(all_tags)
 
     course_grid_classes = _course_grid_classes(len(courses))
     entitlement_course_grid_classes = _course_grid_classes(len(entitlement_courses))

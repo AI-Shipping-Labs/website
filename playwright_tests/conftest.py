@@ -718,6 +718,7 @@ def page(browser):
 # response, while persistent navigation timeouts re-raise their final error.
 GOTO_RETRY_ATTEMPTS = 3
 GOTO_RETRY_BACKOFF_SECONDS = 2.0
+DEV_GOTO_TIMEOUT_MS = 45_000
 
 
 def _is_retryable_status(status):
@@ -746,6 +747,7 @@ def goto_with_retry(
     *,
     expected_status=200,
     wait_until="domcontentloaded",
+    timeout=None,
     attempts=GOTO_RETRY_ATTEMPTS,
     backoff_seconds=GOTO_RETRY_BACKOFF_SECONDS,
 ):
@@ -768,10 +770,16 @@ def goto_with_retry(
     the retry decision: only 5xx / ``None`` are retried, never the expected
     status itself.
     """
+    goto_kwargs = {"wait_until": wait_until}
+    if timeout is not None:
+        goto_kwargs["timeout"] = timeout
+    elif not base_url_is_local():
+        goto_kwargs["timeout"] = DEV_GOTO_TIMEOUT_MS
+
     response = None
     for attempt in range(attempts):
         try:
-            response = page.goto(url, wait_until=wait_until)
+            response = page.goto(url, **goto_kwargs)
         except PlaywrightTimeoutError:
             if attempt == attempts - 1:
                 raise

@@ -393,6 +393,11 @@ def _install_course_methods() -> None:
 
         if not self.pk:
             return []
+        if (
+            hasattr(self, '_prefetched_objects_cache')
+            and 'aisl_instructor_links' in self._prefetched_objects_cache
+        ):
+            return [link.instructor for link in self.aisl_instructor_links.all()]
         return [
             link.instructor
             for link in CourseInstructor.objects.filter(

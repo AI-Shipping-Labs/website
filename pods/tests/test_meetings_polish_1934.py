@@ -285,12 +285,12 @@ class WaitingOnTest(PolishFixture):
         [proposal] = mtg.propose_meeting(pod, self.anna, berlin(2026, 10, 13, 18, 0))
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on Mike K. since Oct 9.'])
+        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on Mike K. since today.'])
         html = response.content.decode()
         self.assertLess(html.index('data-testid="pod-meeting-proposed-by"'), html.index('data-testid="pod-meeting-waiting"'))
         self.client.force_login(self.mike)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you since Oct 9.'])
+        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you since today.'])
         response = self.client.post(
             self.meetings_url(pod, f'/{proposal.pk}/respond'), {'response': 'cant_make_it'}, follow=True,
         )
@@ -302,12 +302,13 @@ class WaitingOnTest(PolishFixture):
         mtg.respond_to_meeting(proposal, self.basic, MEETING_RESPONSE_GOING)
         self.client.force_login(self.mike)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you and Raj S. since Oct 9.'])
+        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you and Raj S. since today.'])
         with freeze_time(NOW + datetime.timedelta(days=2)):
             mtg.move_meeting(proposal, self.anna, berlin(2026, 10, 14, 18, 0))
             response = self.client.get(self.pod_url(pod))
-        # A move resets the answers to the mover alone.
-        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you, Raj S. and Bea S. since Oct 11.'])
+        # A move resets the answers to the mover alone, and the date follows
+        # the move (Oct 11), not the creation two days earlier (Oct 9).
+        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on you, Raj S. and Bea S. since today.'])
 
     def test_staff_viewer_sees_names_and_expired_or_confirmed_proposals_have_no_line(self):
         pod = self.pod_of([self.anna, self.mike])
@@ -318,7 +319,7 @@ class WaitingOnTest(PolishFixture):
         self.assertEqual(texts(response, 'pod-meeting-waiting'), [])
         [proposal] = mtg.propose_meeting(pod, self.anna, berlin(2026, 10, 13, 18, 0))
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on Mike K. since Oct 9.'])
+        self.assertEqual(texts(response, 'pod-meeting-waiting'), ['Waiting on Mike K. since today.'])
         mtg.respond_to_meeting(proposal, self.mike, MEETING_RESPONSE_GOING)
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(texts(response, 'pod-meeting-waiting'), [])
@@ -411,24 +412,26 @@ class CallLinkAffordanceTest(PolishFixture):
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(texts(response, 'pod-call-link-toggle'), ['Change link'])
 
-    def test_only_the_soonest_upcoming_row_shows_the_call_link(self):
+    def test_call_link_shows_once_under_the_heading_and_on_no_row(self):
+        # Issue #1937 dropped the soonest row's duplicate ``Call link:`` line.
         pod = self.pod_of([self.anna, self.mike], meeting_url='https://meet.google.com/abc-defg-hij')
         make_meeting(pod, NOW - datetime.timedelta(days=2), status='held')
         meetings = self.series(pod, count=3)
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(texts(response, 'pod-call-link-line'), ['Call link: meet.google.com/abc-defg-hij'])
-        self.assertEqual(texts(response, 'pod-meeting-call-link'), ['Call link: meet.google.com/abc-defg-hij'])
-        self.assertIn('data-testid="pod-meeting-call-link"', row_html(response, meetings[0]))
+        self.assertEqual(texts(response, 'pod-meeting-call-link'), [])
+        self.assertNotIn('meet.google.com', row_html(response, meetings[0]))
 
-    def test_a_proposal_can_be_the_soonest_row(self):
+    def test_a_proposal_soonest_row_has_no_call_link_line_either(self):
         pod = self.pod_of([self.anna, self.mike], meeting_url='https://zoom.us/j/123')
         make_meeting(pod, berlin(2026, 10, 20, 18, 0), zone='Europe/Berlin')
         [proposal] = mtg.propose_meeting(pod, self.anna, berlin(2026, 10, 13, 18, 0))
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-call-link'), ['Call link: zoom.us/j/123'])
-        self.assertIn('data-testid="pod-meeting-call-link"', row_html(response, proposal))
+        self.assertEqual(texts(response, 'pod-call-link-line'), ['Call link: zoom.us/j/123'])
+        self.assertEqual(texts(response, 'pod-meeting-call-link'), [])
+        self.assertNotIn('zoom.us', row_html(response, proposal))
 
 
 # --- 6. Clock change wording -----------------------------------------------------------------

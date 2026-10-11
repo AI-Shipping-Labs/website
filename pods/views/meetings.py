@@ -41,6 +41,7 @@ MSG_PROPOSED = 'Time proposed. It is confirmed once {needed} of you can make it.
 MSG_CONFIRMED = 'Meeting confirmed.'
 MSG_GOING = 'Marked that you can make it.'
 MSG_CANT = "Marked that you can't make it. The pod sees the next best time."
+MSG_CANT_UNCONFIRMABLE = "Marked that you can't make it. This time can't be confirmed, so propose another time."
 MSG_MOVED = 'Meeting moved.'
 MSG_CANCELLED = 'Meeting cancelled.'
 MSG_HELD = 'Marked as held.'
@@ -250,13 +251,13 @@ def meeting_respond(request, slug, pod_id, meeting_id):
     meeting = _meeting(pod, meeting_id)
     response = request.POST.get('response', '')
     try:
-        agreed = mtg.respond_to_meeting(meeting, request.user, response)
+        answer = mtg.answer_meeting(meeting, request.user, response)
     except svc.PodError as exc:
         return _error(request, pod, exc)
     if response == MEETING_RESPONSE_CANT:
-        messages.success(request, MSG_CANT)
+        messages.success(request, MSG_CANT_UNCONFIRMABLE if answer.made_unconfirmable else MSG_CANT)
     else:
-        messages.success(request, MSG_CONFIRMED if agreed else MSG_GOING)
+        messages.success(request, MSG_CONFIRMED if answer.agreed else MSG_GOING)
     return _back(pod)
 
 

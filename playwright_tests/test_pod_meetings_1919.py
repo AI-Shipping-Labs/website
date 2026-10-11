@@ -197,7 +197,7 @@ def test_member_cant_make_it_and_the_pod_moves_it_to_the_next_best_time(django_s
     expect(_messages(page)).to_contain_text('Meeting moved.')
     row = _row(page, 2)
     expect(row.get_by_test_id('pod-meeting-time')).to_have_text(offer)
-    expect(row.get_by_test_id('pod-meeting-moved')).to_have_text(re.compile(r'^Moved by Anna K\. on \w{3} \d+$'))
+    expect(row.get_by_test_id('pod-meeting-moved')).to_have_text('Moved by Anna K. today')
     expect(row.get_by_test_id('pod-meeting-cant')).to_have_count(0)
     assert [_row(page, n).get_by_test_id('pod-meeting-time').inner_text() for n in (3, 4)] == later_before
     context.close()
@@ -272,8 +272,8 @@ def test_pod_adds_its_call_link_and_joins_when_the_meeting_starts(django_server,
     join = now_row.get_by_test_id('pod-meeting-join')
     expect(join).to_have_attribute('href', 'https://meet.google.com/abc-defg-hij')
     expect(join).to_have_attribute('target', '_blank')
-    # Issue #1934: the Call link meta sits on the soonest upcoming row only,
-    # which here shows Join call instead; the section line keeps the link.
+    # Issue #1937: no row repeats the call link; the section line keeps it
+    # and the meeting in its join window shows Join call.
     expect(page.get_by_test_id('pod-call-link-line')).to_have_text('Call link: meet.google.com/abc-defg-hij')
     expect(tomorrow_row.get_by_test_id('pod-meeting-call-link')).to_have_count(0)
     expect(tomorrow_row.get_by_test_id('pod-meeting-join')).to_have_count(0)

@@ -188,7 +188,7 @@ class MeetingsSectionTest(MeetingViewFixture):
             [
                 "Can't make it Change time Cancel meeting Cancel this meeting? Everyone in the pod gets a "
                 'notification. Yes, cancel meeting',
-                "I can make it Can't make it Change time Cancel",
+                "I can make it Can't make it Change time Cancel meeting",
                 "Mark as held Didn't happen",
             ],
         )
@@ -200,7 +200,7 @@ class MeetingsSectionTest(MeetingViewFixture):
         [proposal] = mtg.propose_meeting(pod, self.anna, berlin(2026, 10, 13, 18, 0))
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(texts(response, 'pod-meeting-actions'), ["Can't make it Change time Cancel"])
+        self.assertEqual(texts(response, 'pod-meeting-actions'), ["Can't make it Change time Cancel meeting"])
         self.assertEqual(proposal.status, 'proposed')
 
     def test_times_render_in_the_viewers_zone_with_the_member_strip(self):
@@ -383,7 +383,7 @@ class ChangeFlowTest(MeetingViewFixture):
         self.assertLess(offer_start, meetings[2].starts_at)
         response = self.client.post(self.meetings_url(pod, f'/{meetings[1].pk}/move'), {'start': start}, follow=True)
         self.assertIn('Meeting moved.', message_texts(response))
-        self.assertEqual(texts(response, 'pod-meeting-moved'), ['Moved by Anna K. on Oct 9'])
+        self.assertEqual(texts(response, 'pod-meeting-moved'), ['Moved by Anna K. today'])
         self.assertEqual(texts(response, 'pod-meeting-cant'), [])
         for later in meetings[2:]:
             self.assertEqual(PodMeeting.objects.get(pk=later.pk).starts_at, later.starts_at)
@@ -537,11 +537,13 @@ class ProposeBlockedTest(MeetingViewFixture):
 @ENABLED
 @freeze_time(NOW)
 class ProposalJoinWindowTest(MeetingViewFixture):
-    def test_a_proposal_in_the_join_window_shows_the_call_link_not_join_call(self):
+    def test_a_proposal_in_the_join_window_has_no_join_call_and_the_link_stays_in_the_section(self):
         pod = self.make_pod(meeting_url='https://meet.google.com/abc-defg-hij')
         make_meeting(pod, NOW + datetime.timedelta(minutes=5), status='proposed', created_via='member')
         self.client.force_login(self.anna)
         response = self.client.get(self.pod_url(pod))
         self.assertEqual(texts(response, 'pod-meeting-badge'), ['Proposed - 0 of 2 needed'])
         self.assertEqual(texts(response, 'pod-meeting-join'), [])
-        self.assertEqual(texts(response, 'pod-meeting-call-link'), ['Call link: meet.google.com/abc-defg-hij'])
+        # Issue #1937: the call link is shown once, under the heading, never on a row.
+        self.assertEqual(texts(response, 'pod-call-link-line'), ['Call link: meet.google.com/abc-defg-hij'])
+        self.assertEqual(texts(response, 'pod-meeting-call-link'), [])

@@ -1695,7 +1695,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_pod_meetings_polish_1934.py::"
         "test_no_nearby_time_fits_and_the_student_is_told_so",
         "playwright_tests/test_pod_meetings_polish_1934.py::"
-        "test_pod_member_adds_then_changes_the_call_link_and_finds_it_on_the_next_meeting",
+        "test_pod_member_adds_then_changes_the_call_link_under_the_meetings_heading",
         "playwright_tests/test_pod_meetings_polish_1934.py::"
         "test_members_in_other_timezones_read_clock_changes_correctly",
         "playwright_tests/test_pod_meetings_polish_1934.py::"
@@ -1711,6 +1711,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_operator_lowers_the_stuck_threshold_in_studio_settings",
         "playwright_tests/test_pod_stuck_proposals_1935.py::"
         "test_a_moved_proposal_is_no_longer_stuck",
+    })
+
+    issue_1937_owners = frozenset({
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_pod_learns_a_proposed_time_is_dead_and_moves_on_with_the_next_best_time",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_proposer_is_told_by_the_bell_that_their_time_cant_be_confirmed",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_member_proposes_another_time_when_no_next_best_time_exists",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_member_changes_their_mind_and_the_proposal_is_back_on_track",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_one_absence_in_a_larger_pod_does_not_raise_a_false_alarm",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_member_checking_their_week_is_not_nagged_about_a_dead_proposal",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_student_cancels_a_proposal_and_a_confirmed_meeting_with_the_same_wording",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_member_finds_the_call_link_once_not_twice",
+        "playwright_tests/test_pod_unconfirmable_1937.py::"
+        "test_member_sees_how_fresh_a_proposal_is_in_their_own_words",
     })
 
     youtube_referrer_owners = frozenset({
@@ -1938,8 +1959,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2833)
-        self.assertEqual(len(inventory.owners), 2629)
+        self.assertEqual(inventory.item_count, 2842)
+        self.assertEqual(len(inventory.owners), 2638)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1965,6 +1986,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1919_owners
             | self.issue_1934_owners
             | self.issue_1935_owners
+            | self.issue_1937_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

@@ -15,6 +15,11 @@ is cheaper and clearer than layered annotations.
 - A live proposal waits on the pod members with no answer on its head
   meeting (issue #1934), counted from ``moved_at`` (a move resets the
   answers) or else ``created_at``.
+- A live proposal can no longer be confirmed (issue #1937) once too many
+  current members answered ``Can't make it`` on its head: members minus
+  those answers is below the required attendance. It is derived, never
+  stored: a member switching back or a move (which clears answers) brings
+  the normal proposed state back.
 """
 
 from dataclasses import dataclass, field
@@ -23,6 +28,7 @@ from datetime import timedelta
 from django.utils import timezone
 
 from pods.models import (
+    MEETING_RESPONSE_CANT,
     MEETING_STATUS_CANCELLED,
     MEETING_STATUS_HELD,
     MEETING_STATUS_PROPOSED,
@@ -30,12 +36,15 @@ from pods.models import (
     PodMeeting,
     PodMeetingResponse,
 )
+from pods.services.suggestions import required_attendance
 
 __all__ = [
     'MeetingState',
     'meeting_end',
     'meeting_state',
     'members_without_answer',
+    'proposal_can_be_confirmed',
+    'proposal_unconfirmable',
     'proposal_waiting_since',
     'used_meeting_count',
 ]
@@ -139,3 +148,34 @@ def members_without_answer(head, members, responses=None):
 def proposal_waiting_since(head):
     """When ``head``'s current answers started: the last move, else creation."""
     return head.moved_at or head.created_at
+
+
+def proposal_can_be_confirmed(members, responses, needed=None):
+    """Whether enough ``members`` can still make a proposal (issue #1937).
+
+    ``members`` are the pod's current members (users or user ids);
+    ``responses`` are the ``PodMeetingResponse`` rows on the proposal's head
+    meeting. Only current members' ``Can't make it`` answers count. It can
+    no longer be confirmed once ``len(members) - can't make it < needed``.
+    ``needed`` defaults to ``required_attendance(len(members))``; a pod too
+    small to need anyone (``None``) never reads as unconfirmable.
+    """
+    member_ids = {getattr(m, 'pk', m) for m in members}
+    if needed is None:
+        needed = required_attendance(len(member_ids))
+    if needed is None:
+        return True
+    cant = sum(1 for r in responses if r.response == MEETING_RESPONSE_CANT and r.user_id in member_ids)
+    return len(member_ids) - cant >= needed
+
+
+def proposal_unconfirmable(head, state, members, responses):
+    """``True`` for a live proposal head that can no longer be confirmed.
+
+    ``head`` is the proposal's head meeting (a weekly proposal's first
+    meeting); scheduled, held, cancelled and expired meetings are never
+    unconfirmable.
+    """
+    if head.status != MEETING_STATUS_PROPOSED or not state.is_live(head):
+        return False
+    return not proposal_can_be_confirmed(members, responses)

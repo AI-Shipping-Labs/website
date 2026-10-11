@@ -2,9 +2,10 @@
 {% comment %}
 One pod meeting row (issue #1919): title, viewer-local time with a zone
 token, status badge, meta lines (member strip, proposer, who a proposal is
-waiting on, mover, who can't make it, clock-change notes, and the call link
-on the soonest upcoming row only), the next best time offer, then
-the actions below the meta. Every POST action is its own form.
+waiting on or why it can't be confirmed, mover, who can't make it,
+clock-change notes), the next best time offer, then the actions below the
+meta. The call link is shown once, under the Meetings heading, not on a row
+(issue #1937). Every POST action is its own form.
 {% endcomment %}
 <li class="py-3" data-testid="pod-meeting" data-meeting-id="{{ row.meeting.pk }}" data-meeting-status="{{ row.meeting.status }}">
   <div class="min-w-0">
@@ -16,10 +17,10 @@ the actions below the meta. Every POST action is its own form.
     {% endif %}
     {% if row.proposed_by %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-proposed-by">Proposed by {{ row.proposed_by }}</p>{% endif %}
     {% if row.waiting_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-waiting">{{ row.waiting_line }}</p>{% endif %}
+    {% if row.unconfirmable_line %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-unconfirmable">{{ row.unconfirmable_line }}</p>{% endif %}
     {% if row.moved_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-moved">{{ row.moved_line }}</p>{% endif %}
     {% if row.cant_names %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-cant">Can't make it: {{ row.cant_names }}</p>{% endif %}
     {% for line in row.dst_lines %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-dst">{{ line }}</p>{% endfor %}
-    {% if row.call_link_url %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-call-link">Call link: <a href="{{ row.call_link_url }}" target="_blank" rel="noopener noreferrer" class="break-all font-medium text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ row.call_link_label }}</a></p>{% endif %}
     {% if row.offer %}
     <div class="mt-2 flex flex-wrap items-center gap-2" data-testid="pod-meeting-offer">
       <p class="text-sm text-foreground">Next best time: <time datetime="{{ row.offer.start_iso }}" data-testid="pod-meeting-offer-time">{{ row.offer.label }}</time></p>
@@ -53,7 +54,7 @@ the actions below the meta. Every POST action is its own form.
     <form method="post" action="{% url 'pod_meeting_respond' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="response" value="going">
-      <button type="submit" class="{% if row.meeting.status == 'proposed' %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-going">{{ row.actions.going }}</button>
+      <button type="submit" class="{% if row.actions.going_primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-going">{{ row.actions.going }}</button>
     </form>
     {% endif %}
     {% if row.actions.cant %}
@@ -65,13 +66,13 @@ the actions below the meta. Every POST action is its own form.
     {% endif %}
     {% if row.actions.change %}
     <form method="get" action="{% url 'pod_meeting_move' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
-      <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-change">Change time</button>
+      <button type="submit" class="{% if row.actions.change_primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-change">{{ row.actions.change_label }}</button>
     </form>
     {% endif %}
     {% if row.actions.cancel == 'plain' %}
     <form method="post" action="{% url 'pod_meeting_cancel' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
       {% csrf_token %}
-      <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-cancel">Cancel</button>
+      <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-cancel">Cancel meeting</button>
     </form>
     {% elif row.actions.cancel == 'confirm' %}
     <details class="w-full sm:w-auto" data-testid="pod-meeting-cancel-disclosure">

@@ -1,4 +1,9 @@
-# Skill: ai-shipping-labs-zoom-resync
+---
+name: ai-shipping-labs-zoom-resync
+description: Sync rescheduled Zoom meetings to the AI Shipping Labs platform. Use when the user reschedules Zoom meetings and wants the platform updated to match — compare upcoming Zoom meetings against platform events in a series and patch start/end times plus a move note via the production API.
+metadata:
+  short-description: Sync rescheduled Zoom meetings to platform events
+---
 
 # Sync Rescheduled Zoom Meetings to the Platform
 

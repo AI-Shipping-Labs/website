@@ -1,18 +1,25 @@
 {% load homework_review_tags %}
 <ol class="homework-review-rows"{% if test_id %} data-testid="{{ test_id }}"{% endif %}>
   {% for row in rows %}
+    {% homework_review_row_is_option row stepper.assignment as is_option %}
     <li class="homework-review-row">
       <div class="homework-review-answer">
         <strong>{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</strong>
         {% if row.answer|length > 240 %}
           <details>
             <summary>{{ row.answer|truncatechars:160 }}</summary>
+            {% if is_option %}
+            <div>{{ row.answer|linebreaksbr }}</div>
+            {% else %}
             <div class="prose max-w-none">{{ row.answer|homework_answer_html }}</div>
+            {% endif %}
           </details>
-        {% elif row.answer %}
-          <div class="prose max-w-none">{{ row.answer|homework_answer_html }}</div>
-        {% else %}
+        {% elif not row.answer %}
           <span>Not answered</span>
+        {% elif is_option %}
+          <span>{{ row.answer|linebreaksbr }}</span>
+        {% else %}
+          <div class="prose max-w-none">{{ row.answer|homework_answer_html }}</div>
         {% endif %}
         {% if row.result %}{% include "homework_steps/_question_result.html" with result=row.result %}{% endif %}
       </div>

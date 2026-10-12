@@ -6,7 +6,7 @@
   <span class="inline-flex items-center gap-1.5">
     <i data-lucide="globe-2" class="h-4 w-4" aria-hidden="true"></i>
     {% firstof timezone_notice_subject "Event times" as notice_subject %}
-    {% comment %}One inline text run: the zone span must not become a flex item (#1795).{% endcomment %}
+    {% comment %}One inline text run: the zone span must not become a flex item (#1795). Only live course-schedule notices wrap the zone in a span; every other caller keeps plain text.{% endcomment %}
     <span data-timezone-notice-text>
     {% if timezone_notice_lead %}
       {% if viewer.is_authenticated and not timezone_notice_explicit %}
@@ -14,14 +14,14 @@
       {% elif anonymous_uses_event_timezone and not timezone_notice_explicit %}
       Shown in each event's timezone.
       {% else %}
-      Shown in <span{% if timezone_notice_live_zone %} data-schedule-zone-label{% endif %}>{{ display_timezone }}</span>.
+      Shown in {% if timezone_notice_live_zone %}<span data-schedule-zone-label>{{ display_timezone }}</span>{% else %}{{ display_timezone }}{% endif %}.
       {% endif %}
     {% elif viewer.is_authenticated and not timezone_notice_explicit %}
     Shown in your timezone.
     {% elif anonymous_uses_event_timezone and not timezone_notice_explicit %}
     {{ notice_subject }} are shown in each event's timezone.
     {% else %}
-    {{ notice_subject }} are shown in <span{% if timezone_notice_live_zone %} data-schedule-zone-label{% endif %}>{{ display_timezone }}</span>.
+    {{ notice_subject }} are shown in {% if timezone_notice_live_zone %}<span data-schedule-zone-label>{{ display_timezone }}</span>{% else %}{{ display_timezone }}{% endif %}.
     {% endif %}
     </span>
   </span>

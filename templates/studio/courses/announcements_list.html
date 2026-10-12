@@ -9,7 +9,10 @@
 {% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
 {% url 'studio_course_announcement_create' course_id=course.pk as create_url %}
 {% studio_header_actions title="Announcements" subtitle=course.title back_url=course_edit_url back_label=course.title testid='announcement-list-header' %}
-  <a href="{{ create_url }}" class="{% studio_action_class 'primary' %}" data-testid="announcement-new">New announcement</a>
+  <a href="{{ create_url }}" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="announcement-new">
+    <i data-lucide="plus" class="h-4 w-4"></i>
+    <span>New announcement</span>
+  </a>
 {% endstudio_header_actions %}
 
 <form method="get" class="mb-6 flex flex-wrap items-end gap-3">

@@ -36,6 +36,7 @@ Studio so ownership and sync rules stay explicit.
 | `api/views/enrollments.py` (`sprint_enrollment_detail`) | `sprint_enrollment_delete_not_available` |
 | `api/views/books.py` (`book_detail`) | `book_delete_not_available` |
 | `api/views/books.py` (`book_chapter_detail`) | `chapter_delete_not_available` |
+| `api/views/course_announcements.py` (`course_announcements_collection`, `course_announcement_detail`) | `course_announcement_delete_not_available` |
 
 The last five were added per the human decision (Alexey, 2026-06-13, issue #864)
 to block delete on all five previously-pending endpoints. See the rationale
@@ -119,7 +120,7 @@ be changed with `PATCH status=...`); only the hard-`DELETE` is blocked.
 Current classification (issue #864, after the 2026-06-13 human decision, plus
 issue #1045's singleton week-note clear route, issue #1123's accountability
 partner assignment removal, and issue #1404's guarded Call profile removal):
-14 forbidden (405-protected) + 12 legitimate = 26 `DELETE` handlers in
+18 forbidden (405-protected) + 14 legitimate = 32 `DELETE` handlers in
 `api/views/`.
 
 When you add or change a `DELETE` handler, update both this document and the

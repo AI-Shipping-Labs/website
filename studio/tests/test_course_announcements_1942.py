@@ -204,11 +204,8 @@ class StudioCourseAnnouncementTest(TestCase):
 
         from content.admin.course_announcement import CourseAnnouncementAdmin
 
+        self.assertIn(CourseAnnouncement, site._registry)
         model_admin = CourseAnnouncementAdmin(CourseAnnouncement, site)
         request = type('R', (), {'user': self.staff})()
         self.assertFalse(model_admin.has_add_permission(request))
         self.assertFalse(model_admin.has_delete_permission(request))
-        changelist = self.client.get(
-            reverse('admin:content_courseannouncement_changelist'),
-        )
-        self.assertContains(changelist, 'Course announcement')

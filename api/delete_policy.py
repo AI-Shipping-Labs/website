@@ -35,6 +35,9 @@ FORBIDDEN_DELETE_HANDLERS = {
     # operator to Studio. Cancellation/hiding via PATCH stays where it exists.
     "sprints.sprint_detail": "sprint_delete_not_available",
     "course_certificates.course_certificate_detail": "certificate_delete_not_available",
+    # Course announcements (issue #1942): authoring is Studio; unpublish via PATCH.
+    "course_announcements.course_announcements_collection": "course_announcement_delete_not_available",
+    "course_announcements.course_announcement_detail": "course_announcement_delete_not_available",
     "redirects.redirect_detail": "redirect_delete_not_available",
     "interview_notes.interview_note_detail": "interview_note_delete_not_available",
     "enrollments.sprint_enrollment_detail": "sprint_enrollment_delete_not_available",

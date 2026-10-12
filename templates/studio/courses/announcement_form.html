@@ -5,11 +5,7 @@
 
 {% block studio_content %}
 {% url 'studio_course_announcement_list' course_id=course.pk as list_url %}
-{% if is_create %}
-{% studio_header_actions title="New announcement" subtitle=course.title back_url=list_url back_label='Announcements' %}{% endstudio_header_actions %}
-{% else %}
-{% studio_header_actions title="Edit announcement" subtitle=course.title back_url=list_url back_label='Announcements' %}{% endstudio_header_actions %}
-{% endif %}
+{% studio_header_actions title=is_create|yesno:'New announcement,Edit announcement' subtitle=course.title back_url=list_url back_label='Announcements' %}{% endstudio_header_actions %}
 
 {% if errors %}
 <div class="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-4" data-testid="form-errors">

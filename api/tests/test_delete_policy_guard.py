@@ -202,6 +202,20 @@ class ForbiddenDeleteRoutesTest(TestCase):
                 ),
                 "sprint_enrollment_delete_not_available",
             ),
+            (
+                reverse(
+                    "api_course_announcements_collection",
+                    args=["any-course"],
+                ),
+                "course_announcement_delete_not_available",
+            ),
+            (
+                reverse(
+                    "api_course_announcement_detail",
+                    args=["any-course", 1],
+                ),
+                "course_announcement_delete_not_available",
+            ),
         ]
 
         for path, expected_code in routes:

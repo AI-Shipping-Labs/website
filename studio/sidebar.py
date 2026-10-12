@@ -367,6 +367,8 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_pod_request_decline',
         'studio_pod_meeting_schedule',
         'studio_pod_meeting_status',
+        'studio_pod_message_hide',
+        'studio_pod_message_restore',
     )),
     ('planning', 'books', (
         'studio_book_list',

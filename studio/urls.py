@@ -266,6 +266,8 @@ from studio.views.pods import (
     studio_pod_meeting_status,
     studio_pod_member_add,
     studio_pod_member_remove,
+    studio_pod_message_hide,
+    studio_pod_message_restore,
     studio_pod_request_approve,
     studio_pod_request_decline,
 )
@@ -1218,6 +1220,17 @@ urlpatterns = [
         'pods/<int:pod_id>/meetings/<int:meeting_id>/status',
         studio_pod_meeting_status,
         name='studio_pod_meeting_status',
+    ),
+    # Issue #1920: pod chat moderation.
+    path(
+        'pods/<int:pod_id>/messages/<int:message_id>/hide',
+        studio_pod_message_hide,
+        name='studio_pod_message_hide',
+    ),
+    path(
+        'pods/<int:pod_id>/messages/<int:message_id>/restore',
+        studio_pod_message_restore,
+        name='studio_pod_message_restore',
     ),
 
     # Sprints (issue #432). Members section.

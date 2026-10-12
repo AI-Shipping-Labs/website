@@ -35,7 +35,9 @@ from pods.models import (
     PodJoinRequest,
     PodMeeting,
     PodMeetingResponse,
+    PodMessage,
 )
+from pods.services import chat as chat_svc
 from pods.services import config as pods_config
 from pods.services import meetings as mtg
 from pods.services import membership as svc
@@ -289,6 +291,8 @@ def studio_pod_detail(request, pod_id):
         'pod': pod,
         'error': error,
         **_meetings_context(pod, users, request.session.pop(SCHEDULE_FORM_SESSION_KEY, None)),
+        # Issue #1920: the chat transcript, hidden messages included.
+        **chat_svc.studio_chat(pod),
         'activity': _cohort_label(pod.cohort),
         'memberships': memberships,
         'member_rows': [
@@ -460,3 +464,30 @@ def studio_pod_request_approve(request, pod_id, request_id):
 @require_POST
 def studio_pod_request_decline(request, pod_id, request_id):
     return _decide(request, pod_id, request_id, svc.decline_request, 'Declined')
+
+
+# --- Pod chat moderation (issue #1920) ---------------------------------------
+
+def _moderate(request, pod_id, message_id, action, success_message):
+    pod = get_object_or_404(Pod, pk=pod_id)
+    message = get_object_or_404(PodMessage, pk=message_id, pod=pod)
+    action(message)
+    messages.success(request, success_message)
+    return redirect(f'{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}#chat')
+
+
+@staff_required
+@require_POST
+def studio_pod_message_hide(request, pod_id, message_id):
+    """Hide a chat message from members (idempotent)."""
+    return _moderate(
+        request, pod_id, message_id,
+        lambda message: chat_svc.hide_message(message, request.user), 'Message hidden.',
+    )
+
+
+@staff_required
+@require_POST
+def studio_pod_message_restore(request, pod_id, message_id):
+    """Show a hidden chat message to members again (idempotent)."""
+    return _moderate(request, pod_id, message_id, chat_svc.restore_message, 'Message restored.')

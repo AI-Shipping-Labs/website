@@ -8,6 +8,7 @@ the action sits under the meta below sm and is pinned right from sm.
     <div class="flex flex-wrap items-center gap-2">
       <h3 class="break-words text-base font-semibold leading-snug text-foreground" data-testid="pod-row-name">{{ row.pod.name }}</h3>
       {% member_status_badge row.state.badge tone=row.state.tone testid="pod-row-badge" %}
+      {% if row.unread_line %}{% member_label_badge row.unread_line tone='info' testid='pod-row-unread' %}{% endif %}
     </div>
     <p class="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">{{ row.pod.purpose }}</p>
     <p class="mt-1 text-xs text-muted-foreground" data-testid="pod-row-meta">{{ row.meta }}{% if row.zones %} · {{ row.zones }}{% endif %}</p>

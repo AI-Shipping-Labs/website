@@ -187,6 +187,9 @@ from api.views.pods import (
     pod_meetings,
     pod_member_detail,
     pod_members,
+    pod_message_hide,
+    pod_message_restore,
+    pod_messages,
     pod_request_approve,
     pod_request_decline,
     pod_requests,
@@ -906,6 +909,18 @@ urlpatterns = [
     # Issue #1919: agreed pod meetings (no DELETE: cancel keeps history).
     path("pods/<int:pod_id>/meetings", pod_meetings, name="api_pod_meetings"),
     path("pods/<int:pod_id>/meetings/<int:meeting_id>", pod_meeting_detail, name="api_pod_meeting_detail"),
+    # Issue #1920: pod chat (read and moderate; no create, no delete).
+    path("pods/<int:pod_id>/messages", pod_messages, name="api_pod_messages"),
+    path(
+        "pods/<int:pod_id>/messages/<int:message_id>/hide",
+        pod_message_hide,
+        name="api_pod_message_hide",
+    ),
+    path(
+        "pods/<int:pod_id>/messages/<int:message_id>/restore",
+        pod_message_restore,
+        name="api_pod_message_restore",
+    ),
     # ---- Course coursework inventory (issue #1696) --------------------
     path(
         "courses/<slug:slug>/coursework-inventory",

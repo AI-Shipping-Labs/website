@@ -163,6 +163,10 @@
     {% include "pods/_availability_summary.html" with summary=availability_summary %}
   </section>
   {% endif %}
+
+  {% if chat %}
+  {% include "pods/_chat.html" %}
+  {% endif %}
 </article>
 {% endblock %}
 

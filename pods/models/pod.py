@@ -200,6 +200,9 @@ class PodMembership(models.Model):
         related_name='+',
     )
     source = models.CharField(max_length=20, choices=MEMBERSHIP_SOURCE_CHOICES)
+    # Issue #1920: when this member last opened the pod chat. Null means
+    # nothing read yet; unread counting then starts from ``joined_at``.
+    chat_read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['joined_at', 'pk']

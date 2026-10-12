@@ -208,6 +208,31 @@ How many hours before a scheduled pod meeting members get the bell reminder
 - Reminders are on-site only (the bell and the dashboard `Your week` list).
   There is no email and no Slack message.
 
+## PODS_CHAT_ENABLED
+
+Kill switch for the pod chat (issue #1920).
+
+- Type: boolean.
+- Default: `true`.
+- Off: no `Chat` section on the member pod page, no `N new messages` line on
+  the Pods tab, and `POST /courses/<slug>/home/pods/<pod_id>/messages`
+  returns 404.
+- Studio (`/studio/pods/<id>/#chat`) and the staff API
+  (`GET /api/pods/<id>/messages`, hide and restore) keep working, so staff can
+  still read and moderate.
+
+## PODS_CHAT_MESSAGES_PER_HOUR
+
+How many pod chat messages one member may post in a rolling 60 minutes
+(issue #1920).
+
+- Type: integer, 1-500. Invalid or out-of-range values (for example `abc` or
+  `0`) fall back to `30`.
+- Default: `30`.
+- Counted per member across all pods, including messages staff later hid.
+- Over the limit: `You are sending messages quickly. Try again in a few
+  minutes.` and the draft stays in the message box.
+
 ## Pod meetings
 
 How agreed meetings work (issue #1919):
@@ -288,3 +313,44 @@ How agreed meetings work (issue #1919):
   the `Add a call link` / `Change link` button under the Meetings heading,
   where it is shown once as `Call link:`. A scheduled meeting row shows
   `Join call` from 10 minutes before the start until the end.
+
+## Pod chat
+
+A small plain-text chat on the pod page (issue #1920). It is a starting
+point; the pod page recommends Slack for ongoing conversation.
+
+- Who: current pod members read and post, on any tier (the Slack tier gate
+  does not apply). Staff who are not members read it on the member page but
+  cannot post (`You can read this chat. Only pod members can post.`).
+  Non-members, requesters, waitlisted members and former members see no chat
+  section and get `403` on POST.
+- Where: the `Chat` section (`#chat`) is the last section on the pod page.
+  Archived pods are 404 for members; staff still read their chat. Closed
+  pods keep their chat.
+- Notice, always shown above the message box and not dismissible:
+  `Admins can read this chat. Do not share private details. Slack is better
+  for ongoing conversation.`
+- With a Slack channel link saved the section also says `This pod has moved
+  to Slack.` with `Open in Slack`. The message box stays, because members
+  below Main cannot join Slack.
+- Messages: plain text, 1-1000 characters after trimming, escaped, line breaks
+  kept, URLs become `rel="nofollow"` links. No markdown, no editing, no
+  deleting. Authors show as `Anna K.` (never the email), the viewer's own as
+  `(you)`, with the time in the viewer's timezone. A former member's
+  messages stay under their name.
+- The page shows the latest 50 visible messages, oldest first
+  (`Showing the latest 50 messages.` when there are more). No live updates:
+  `Refresh` reloads the section.
+- Errors keep the draft: `Write a message first.`, `Messages can be up to
+  1000 characters.`, and the hourly limit message
+  (`PODS_CHAT_MESSAGES_PER_HOUR`).
+- Unread: opening the pod page as a member sets `PodMembership.chat_read_at`.
+  The member's own rows on the Pods tab show `N new messages` for visible
+  messages by others after that time (or after `joined_at` when never read).
+  The Pods tab badge still counts only pending requests. There are no bell,
+  email or Slack notifications per message.
+- Moderation: staff hide or restore a message in Studio (the pod's `Chat`
+  section shows the latest 200 messages including hidden ones, with author
+  name and email) or with `POST /api/pods/<id>/messages/<message_id>/hide`
+  and `/restore`. Hidden messages disappear from the member page and never
+  count as unread. `GET /api/pods/<id>/messages` returns the full transcript.

@@ -466,9 +466,15 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         intro = self.client.get(self.unit_url)
         question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
 
-        self.assertContains(intro, 'Shown in your timezone.')
+        # Issue #1795: an empty saved preference renders the explicit
+        # fallback zone, which the client localizes in place on first visit.
+        self.assertContains(
+            intro,
+            'Deadline times are shown in '
+            '<span data-schedule-zone-label>Europe/Berlin</span>.',
+        )
         self.assertContains(question, 'data-testid="homework-due-date"')
-        self.assertNotContains(question, 'Shown in your timezone.')
+        self.assertNotContains(question, 'Deadline times are shown in')
 
     def test_short_text_question_uses_one_line_input(self):
         response = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')

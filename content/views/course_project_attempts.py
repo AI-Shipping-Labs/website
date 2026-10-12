@@ -7,6 +7,9 @@ from django.utils import timezone
 from content.models import Course, CourseCertificate, PeerReview, ProjectSubmission
 from content.models.cohort import CohortEnrollment
 from content.models.peer_review import CourseProject
+from content.services.course_schedule import (
+    schedule_timezone_name,
+)
 from content.services.peer_review_service import PeerReviewService
 from content.services.project_form_adapter import (
     REMOVAL_UNAVAILABLE_MESSAGE,
@@ -16,6 +19,15 @@ from content.services.project_form_adapter import (
     submission_cohort,
 )
 from content.views.peer_review import _require_course_access
+from events.services.display_time import should_use_browser_timezone
+
+
+def _schedule_zone_context(course, user):
+    """Display zone for attempt dates, shared with the syllabus (#1795)."""
+    return {
+        'schedule_timezone': schedule_timezone_name(course, user),
+        'schedule_can_localize': should_use_browser_timezone(user),
+    }
 
 
 def _attempt(request, slug, attempt_slug):
@@ -55,6 +67,7 @@ def attempt_submit(request, slug, attempt_slug):
             enrollment=enrollment, user=request.user,
             certificate_cohort=cert_cohort,
         ),
+        **_schedule_zone_context(course, request.user),
     }
     if request.method == 'POST':
         if readonly:
@@ -101,6 +114,7 @@ def attempt_reviews(request, slug, attempt_slug):
         'received_reviews': received_reviews, 'certificate': certificate,
         'waiting_for_batch': bool(submission and submission.status == 'submitted' and not assigned_reviews),
         'deadline_passed': timezone.now() >= project.submission_due_at,
+        **_schedule_zone_context(course, request.user),
     })
 
 
@@ -117,6 +131,7 @@ def attempt_review_form(request, slug, attempt_slug, submission_id):
         'course': course, 'course_project': project,
         'submission': submission, 'review': review,
         'deadline_passed': timezone.now() >= project.review_due_at,
+        **_schedule_zone_context(course, request.user),
     }
     if request.method == 'POST' and not review.is_complete:
         if timezone.now() >= project.review_due_at:

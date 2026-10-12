@@ -30,7 +30,7 @@
       </span>
       {% endif %}
       {% with deadline_summary=module_deadline_summaries|dict_get:module.id %}
-      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">Due {{ deadline_summary.next_due|schedule_datetime_local:schedule_timezone }}</span>{% endif %}
+      {% if deadline_summary %}<span class="mt-0.5 block text-xs font-normal text-muted-foreground" data-testid="syllabus-module-deadline">Due <time datetime="{{ deadline_summary.next_due|schedule_instant }}" data-schedule-instant>{{ deadline_summary.next_due|schedule_datetime_local:schedule_timezone }}</time></span>{% endif %}
       {% endwith %}
     </span>
     <span class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">

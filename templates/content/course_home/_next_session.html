@@ -12,7 +12,7 @@
       {% if session.status and session.status != 'Upcoming' %}{% member_label_badge session.status tone=session.status_tone size="xs" %}{% endif %}
     </div>
     {% if session.when or session.module_label or session.position_label %}
-    <p class="mt-1 text-sm text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when or session.module_label %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}">{{ session.when_label_without_timezone }}</time>{% endif %}{% if session.module_label %}{% if session.when %} · {% endif %}<span data-testid="course-home-next-session-module">{{ session.module_label }}</span>{% endif %}</p>
+    <p class="mt-1 text-sm text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when or session.module_label %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}" data-schedule-instant data-schedule-format="long">{{ session.when_label_without_timezone }}</time>{% endif %}{% if session.module_label %}{% if session.when %} · {% endif %}<span data-testid="course-home-next-session-module">{{ session.module_label }}</span>{% endif %}</p>
     {% endif %}
     {% with public_description=session.event.description_html|strip_internal_notes %}
     {% if public_description %}<p class="mt-2 line-clamp-2 text-sm text-muted-foreground" data-testid="course-home-next-session-description">{{ public_description|striptags|truncatechars:160 }}</p>{% endif %}

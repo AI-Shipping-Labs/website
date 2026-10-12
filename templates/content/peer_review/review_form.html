@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load accounts_extras date_formatting %}
+{% load accounts_extras date_formatting schedule_tags %}
 
 {% block title %}Review submission - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -8,7 +8,7 @@
   {% include "includes/header.html" with studio_obj=course %}
 
   <section class="pt-16 pb-12 sm:pb-16">
-    <div class="mx-auto max-w-2xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8">
+    <div class="mx-auto max-w-2xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8"{% if course_project %} data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}"{% endif %}>
 
   <a href="{% if course_project %}{% url 'course_project_reviews' slug=course.slug attempt_slug=course_project.slug %}{% else %}{% url 'peer_review_dashboard' slug=course.slug %}{% endif %}" class="mb-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-review-back-link">
     <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
@@ -16,8 +16,8 @@
   </a>
 
   <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Peer review</h1>
-  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if course_project %}{{ course_project.title }} · Due {% user_event_datetime course_project.review_due_at request.user "%b %d, %Y, %H:%M" %}{% else %}{{ course.title }}{% endif %}</p>
-  {% if course_project %}{% include "includes/timezone_notice.html" with viewer=request.user timezone_login_next=request.get_full_path timezone_notice_class="mt-1" only %}{% endif %}
+  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{% if course_project %}{{ course_project.title }} · Due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>{% else %}{{ course.title }}{% endif %}</p>
+  {% if course_project %}{% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}{% endif %}
 
   {% if error %}
   <p class="mt-6 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert">{{ error }}</p>
@@ -103,4 +103,9 @@
 
   {% include "includes/footer.html" %}
 </main>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/course_schedule_script.html" %}
 {% endblock %}

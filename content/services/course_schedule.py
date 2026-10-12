@@ -4,6 +4,8 @@ The cohort is selected from an enrollment or a validated public preview. Nothing
 in this module grants course access or changes submission permissions.
 """
 
+from datetime import UTC
+
 from django.utils import timezone
 
 from accounts.services.timezones import is_valid_timezone
@@ -91,6 +93,19 @@ def schedule_timezone_name(course, user):
     if preferred and is_valid_timezone(preferred):
         return preferred
     return 'Europe/Berlin' if course.slug == 'ai-buildcamp' else 'UTC'
+
+
+def schedule_instant_iso(value):
+    """UTC ``...Z`` instant behind a schedule label (issue #1795).
+
+    Feeds semantic ``<time datetime>`` markup and the first-visit client
+    re-formatting in ``static/js/course-schedule.js``. Whether the client may
+    replace the server fallback zone is decided by the event-page policy,
+    ``events.services.display_time.should_use_browser_timezone``.
+    """
+    if value is None:
+        return ''
+    return value.astimezone(UTC).isoformat().replace('+00:00', 'Z')
 
 
 def cohort_projects(course, cohort):

@@ -55,10 +55,10 @@
   {% endif %}
 
   {% if homework and not homework_stepper %}
-  <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission">
+  <div class="{% if unit.homework_html %}mt-6 border-t border-border pt-6{% endif %}" data-testid="homework-submission" data-course-schedule data-server-timezone="{{ homework_display_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
     {% if homework_due_date_display and not homework_is_self_paced %}
-    <p class="mb-1 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} {{ homework_due_date_display }}</p>
-    {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4 mt-0" only %}
+    <p class="mb-1 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} <time datetime="{{ homework_due_instant }}" data-schedule-instant data-schedule-format="zone">{{ homework_due_date_display }}</time></p>
+    {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-4 mt-0" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
     {% endif %}
 
     {% if not user_authenticated %}

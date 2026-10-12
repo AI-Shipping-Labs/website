@@ -16,7 +16,7 @@ only from ``sm`` up; below ``sm`` it sits under the meta
     {% if session.date_to_be_announced %}
     <p class="mt-0.5 text-xs text-muted-foreground" data-testid="course-home-live-session-tba">{% if session.position_label %}{{ session.position_label }} · {% endif %}Date to be announced</p>
     {% elif session.position_label or session.when or session.contents_label %}
-    <p class="mt-0.5 text-xs text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when or session.contents_label %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}" data-testid="course-home-live-session-time">{{ session.when_short_label|default:session.when_label_without_timezone }}</time>{% if session.contents_label %} · {% endif %}{% endif %}{% if session.contents_label %}<span data-testid="course-home-live-session-contents">{{ session.contents_label }}</span>{% endif %}</p>
+    <p class="mt-0.5 text-xs text-muted-foreground">{% if session.position_label %}{{ session.position_label }}{% if session.when or session.contents_label %} · {% endif %}{% endif %}{% if session.when %}<time datetime="{{ session.when.isoformat }}" data-schedule-instant data-schedule-format="short" data-testid="course-home-live-session-time">{{ session.when_short_label|default:session.when_label_without_timezone }}</time>{% if session.contents_label %} · {% endif %}{% endif %}{% if session.contents_label %}<span data-testid="course-home-live-session-contents">{{ session.contents_label }}</span>{% endif %}</p>
     {% endif %}
   </div>
   {% with action=session.actions.0 %}{% if action %}

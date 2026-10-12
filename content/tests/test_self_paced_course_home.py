@@ -113,4 +113,10 @@ class SelfPacedCourseHomeTests(CurrentModuleFixture):
         self.assertContains(response, f'/courses/{self.course.slug}/home/sessions')
         self.assertContains(response, 'data-testid="course-home-next-session"')
         self.assertContains(response, 'Due <time')
-        self.assertContains(response, TIMEZONE_NOTE)
+        # Issue #1795: an empty saved preference renders the explicit
+        # fallback zone; the client localizes it in place on first visit.
+        self.assertContains(
+            response,
+            'Event times are shown in '
+            '<span data-schedule-zone-label>Europe/Berlin</span>.',
+        )

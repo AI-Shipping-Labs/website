@@ -33,6 +33,12 @@
 </section>
 {% endif %}
 
+{% comment %}
+Issue #1795: session rows, work rows, and the zone notice share one
+data-course-schedule container so the first-visit browser-zone localization
+rewrites every course-surface instant and the zone label together.
+{% endcomment %}
+<div data-course-schedule data-server-timezone="{{ commitment_timezone|default:schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
 {% if module_session_rows %}
 <div class="mb-10" data-testid="module-session-details">
   {% include "content/course_home/_live_sessions.html" with live_session_schedule=module_session_rows section="module" %}
@@ -46,8 +52,9 @@
 {% endif %}
 
 {% if module_show_timezone_notice %}
-  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-10" only %}
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=commitment_timezone timezone_login_next=request.get_full_path timezone_notice_class="mb-10" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
 {% endif %}
+</div>
 
 {% if cta_message %}
   {% if gated_entitlement %}

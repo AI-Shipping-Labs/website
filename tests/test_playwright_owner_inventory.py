@@ -1491,6 +1491,19 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_moderates_lesson_thread_and_homework_thread_stays_intact",
     })
 
+    issue_1795_owners = frozenset({
+        "playwright_tests/test_course_schedule_timezone_1795.py::"
+        "test_first_visit_localizes_in_place_and_matches_linked_pages",
+        "playwright_tests/test_course_schedule_timezone_1795.py::"
+        "test_failed_backfill_still_localizes_attempt_header_consistently",
+        "playwright_tests/test_course_schedule_timezone_1795.py::"
+        "test_saved_preference_wins_over_browser_zone",
+        "playwright_tests/test_course_schedule_timezone_1795.py::"
+        "test_anonymous_preview_localizes_without_preference_save",
+        "playwright_tests/test_course_schedule_timezone_1795.py::"
+        "test_no_javascript_or_invalid_detection_keeps_labeled_fallback",
+    })
+
     issue_1926_owners = frozenset({
         "playwright_tests/test_staff_comment_alerts_1926.py::"
         "test_admin_hears_about_lesson_question_and_answers_it",
@@ -2069,8 +2082,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2888)
-        self.assertEqual(len(inventory.owners), 2684)
+        self.assertEqual(inventory.item_count, 2893)
+        self.assertEqual(len(inventory.owners), 2689)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2089,6 +2102,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1924_owners
             | self.issue_1925_owners
             | self.issue_1926_owners
+            | self.issue_1795_owners
             | self.issue_1918_owners
             | self.issue_1927_owners
             | self.issue_1929_owners

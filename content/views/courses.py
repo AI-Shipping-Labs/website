@@ -104,6 +104,7 @@ from content.services.module_home import (
     module_tree_units,
 )
 from content.views.pages import _filter_by_tags, _get_selected_tags
+from events.services.display_time import should_use_browser_timezone
 from events.services.timeline import group_timeline_days
 from pods.services.tab import pods_tab_context
 
@@ -406,6 +407,7 @@ def course_detail(request, slug):
         'schedule_cohort': viewer_cohort,
         'schedule_is_preview': schedule_is_preview,
         'schedule_timezone': schedule_timezone_name(course, user),
+        'schedule_can_localize': should_use_browser_timezone(user),
         'unit_deadlines': unit_deadlines,
         'module_deadline_summaries': module_deadline_summaries,
         'user_enrolled_cohort_ids': user_enrolled_cohort_ids,
@@ -738,6 +740,7 @@ def course_home(request, slug, section='home'):
         'schedule_cohort': schedule_cohort,
         'schedule_is_preview': context['is_cohort_preview'],
         'schedule_timezone': schedule_timezone_name(course, request.user),
+        'schedule_can_localize': should_use_browser_timezone(request.user),
     })
     if section == 'announcements':
         page, paginator = paginate_member_announcements(
@@ -1095,6 +1098,7 @@ def _render_module_overview(request, course, module):
         'course_projects': course_projects,
         'preview_project_ids': preview_project_ids,
         'schedule_timezone': schedule_timezone_name(course, user),
+        'schedule_can_localize': should_use_browser_timezone(user),
         'has_access': has_access,
         'user_authenticated': user.is_authenticated,
         'completed_unit_ids': completed_unit_ids,

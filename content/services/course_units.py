@@ -33,6 +33,7 @@ from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus_units
 from content.models.homework import Homework, QuestionType, Submission
 from content.services.course_navigation import course_entry_url
+from content.services.course_schedule import schedule_instant_iso
 from content.services.homework_reveal import locked_after_submit, question_results
 from content.services.session_join import build_session_join_context
 from content.templatetags.video_utils import get_video_thumbnail_url
@@ -43,6 +44,7 @@ from events.services.display_time import (
     build_event_time_display,
     format_event_time_range,
     resolve_event_display_timezone,
+    should_use_browser_timezone,
 )
 from events.services.public_copy import strip_internal_description_notes
 from events.services.series_entitlement import is_entitled_for_series
@@ -893,10 +895,14 @@ def build_homework_submission_context(user, unit, *, cohort=None):
     display_timezone = resolve_event_display_timezone(user)
 
     homework_due_date_display = ''
+    homework_due_instant = ''
     if homework.due_date is not None:
         homework_due_date_display = format_event_time_range(
             homework.due_date, None, display_timezone,
         )
+        # Issue #1795: the UTC instant behind the fallback label so the
+        # homework reader can localize it in place on a first visit.
+        homework_due_instant = schedule_instant_iso(homework.due_date)
 
     return {
         'homework': homework,
@@ -912,5 +918,11 @@ def build_homework_submission_context(user, unit, *, cohort=None):
         # ever gating the form.
         'homework_is_past_due': homework.is_past_due,
         'homework_due_date_display': homework_due_date_display,
+        'homework_due_instant': homework_due_instant,
         'homework_display_timezone': display_timezone,
+        # Issue #1795: same display-zone policy as the course syllabus — a
+        # valid saved preference renders locally and blocks the client; an
+        # empty or invalid one renders the explicit fallback and lets the
+        # browser zone rewrite the reader's due line on that first visit.
+        'schedule_can_localize': should_use_browser_timezone(user),
     }

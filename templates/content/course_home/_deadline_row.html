@@ -16,7 +16,7 @@ title: stored dates are not this learner's deadlines.
     <h4 class="break-words text-sm font-semibold text-foreground">{{ item.title }}</h4>
     {% if not deadline_preview %}
     <p class="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs leading-5 text-muted-foreground" data-testid="course-home-deadline-meta">
-      {% if cohort and item.when %}<span class="whitespace-nowrap">Due <time datetime="{{ item.when.isoformat }}">{{ item.when_short_label|default:item.when_label_without_timezone }}</time></span>{% endif %}
+      {% if cohort and item.when %}<span class="whitespace-nowrap">Due <time datetime="{{ item.when.isoformat }}" data-schedule-instant data-schedule-format="short">{{ item.when_short_label|default:item.when_label_without_timezone }}</time></span>{% endif %}
       {% if item.question_label %}{% if cohort and item.when %}<span aria-hidden="true">·</span>{% endif %}<span data-testid="course-home-deadline-questions">{{ item.question_label }}</span>{% endif %}
       {% if item.status %}{% member_label_badge item.status tone=item.status_tone size="xs" testid="course-home-deadline-status" %}{% endif %}
     </p>

@@ -1,0 +1,11 @@
+{% load static %}
+{% comment %}
+Course schedule first-visit timezone localization (issue #1795). Include
+this from any template whose body renders a ``[data-course-schedule]``
+container. The script self-guards: it exits immediately unless the
+container says ``data-localize="true"`` (a valid saved preferred_timezone
+disables it) and there are ``[data-schedule-instant]`` marks to rewrite.
+It never persists anything — the base template's passive timezone backfill
+stays one-shot and never overwrites a non-empty stored value.
+{% endcomment %}
+<script src="{% static 'js/course-schedule.js' %}" defer></script>

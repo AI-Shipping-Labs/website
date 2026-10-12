@@ -6,7 +6,7 @@
 {% load tz %}
 {% load curriculum_tags %}
 
-<section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper">
+<section class="homework-steps" aria-label="{{ stepper.assignment.title }} homework" data-testid="homework-stepper" data-course-schedule data-server-timezone="{{ homework_display_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}">
   <nav class="mb-3 lg:hidden" aria-label="Homework progress" data-testid="homework-step-pills">
     {% for title, url, current in stepper.nav_steps %}{% if current %}<p class="mb-2 text-sm font-medium text-foreground" data-testid="homework-step-position">Step {{ forloop.counter }} of {{ stepper.step_count }}<span class="text-muted-foreground"> · {{ title }}</span></p>{% endif %}{% endfor %}
     <ol class="flex gap-1 overflow-x-auto [scrollbar-width:none]">
@@ -17,12 +17,12 @@
   </nav>
   <div class="mb-4 flex items-start justify-between gap-3" data-testid="homework-deadline-status">
     {% if homework_due_date_display and not homework_is_self_paced %}
-    <span class="min-w-0 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} {{ homework_due_date_display }}</span>
+    <span class="min-w-0 text-sm text-muted-foreground" data-testid="homework-due-date">{% if homework_is_past_due %}Was due{% else %}Due{% endif %} <time datetime="{{ homework_due_instant }}" data-schedule-instant data-schedule-format="zone">{{ homework_due_date_display }}</time></span>
     {% endif %}
     <span class="inline-flex flex-shrink-0 items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" data-testid="homework-page-state">{% include "homework_steps/_state_label.html" with homework_state=stepper.homework_state %}</span>
   </div>
   {% if stepper.step == 'intro' and homework_due_date_display and not homework_is_self_paced %}
-  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="-mt-3 mb-4" only %}
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=homework_display_timezone timezone_login_next=request.get_full_path timezone_notice_class="-mt-3 mb-4" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
   {% endif %}
   {% if stepper.has_pending_changes %}
   <p class="mb-4 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-900 dark:text-amber-200" role="status" data-testid="homework-pending-draft-status">Your previous submission is still accepted. These saved changes are a draft and have not been submitted.</p>

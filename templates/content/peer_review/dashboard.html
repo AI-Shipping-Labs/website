@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% load course_links %}
-{% load accounts_extras member_badges member_empty_state date_formatting %}
+{% load accounts_extras member_badges member_empty_state date_formatting schedule_tags %}
 
 {% block title %}Peer reviews{% if course_project %}: {{ course_project.title }}{% endif %} - {{ course.title }} | {{ site_name }}{% endblock %}
 
@@ -9,7 +9,7 @@
   {% include "includes/header.html" with studio_obj=course %}
 
   <section class="pt-16 pb-12 sm:pb-16">
-    <div class="mx-auto max-w-3xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8">
+    <div class="mx-auto max-w-3xl px-4 pt-4 sm:px-6 sm:pt-10 lg:px-8"{% if course_project %} data-course-schedule data-server-timezone="{{ schedule_timezone }}" data-localize="{% if schedule_can_localize %}true{% else %}false{% endif %}"{% endif %}>
 
   <a href="{% course_entry_url course cohort=request.GET.cohort section='projects' %}" class="mb-2 inline-flex min-h-[44px] max-w-full items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="peer-review-back-link">
     <i data-lucide="arrow-left" class="h-4 w-4 flex-shrink-0" aria-hidden="true"></i>
@@ -18,8 +18,8 @@
 
   <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{% if course_project %}Peer reviews{% else %}Peer review dashboard{% endif %}</h1>
   {% if course_project %}
-  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Reviews due {% user_event_datetime course_project.review_due_at request.user "%b %d, %Y, %H:%M" %}</p>
-  {% include "includes/timezone_notice.html" with viewer=request.user timezone_login_next=request.get_full_path timezone_notice_class="mt-1" only %}
+  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Reviews due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
+  {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
   {% endif %}
 
   {% if certificate %}
@@ -83,7 +83,7 @@
     {% if waiting_for_batch %}
     <p class="mt-4 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground">
       {% if course_project %}
-      Your project is saved. Peer reviews will be assigned after the submission deadline on {% user_event_datetime course_project.submission_due_at request.user "%b %d, %Y, %H:%M" %}. We'll notify you when they're ready.
+      Your project is saved. Peer reviews will be assigned after the submission deadline on <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>. We'll notify you when they're ready.
       {% elif submission.cohort.mode == 'cohort' %}
       Your project is saved. Peer reviews will be assigned after your cohort ends on {{ submission.cohort.end_date|member_full_date }}. We'll notify you when they're ready.
       {% else %}
@@ -143,4 +143,9 @@
 
   {% include "includes/footer.html" %}
 </main>
+{% endblock %}
+
+{% block extra_scripts %}
+{{ block.super }}
+{% include "_partials/course_schedule_script.html" %}
 {% endblock %}

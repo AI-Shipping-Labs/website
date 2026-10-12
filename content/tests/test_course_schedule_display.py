@@ -107,7 +107,9 @@ class CourseScheduleDisplayTest(TestCase):
         self.assertNotContains(response, 'Feb 1, 2027 18:00')
         self.assertContains(
             response,
-            'data-testid="syllabus-module-deadline">Due Oct 1, 2026 20:00</span>',
+            'data-testid="syllabus-module-deadline">Due <time '
+            'datetime="2026-10-01T18:00:00Z" data-schedule-instant>'
+            'Oct 1, 2026 20:00</time></span>',
         )
         self.assertNotContains(response, 'Next due')
         self.assertNotContains(response, 'Last due')

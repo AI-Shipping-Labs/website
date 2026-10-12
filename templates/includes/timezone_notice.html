@@ -6,21 +6,24 @@
   <span class="inline-flex items-center gap-1.5">
     <i data-lucide="globe-2" class="h-4 w-4" aria-hidden="true"></i>
     {% firstof timezone_notice_subject "Event times" as notice_subject %}
+    {% comment %}One inline text run: the zone span must not become a flex item (#1795).{% endcomment %}
+    <span data-timezone-notice-text>
     {% if timezone_notice_lead %}
-      {% if viewer.is_authenticated %}
+      {% if viewer.is_authenticated and not timezone_notice_explicit %}
       Shown in your timezone.
-      {% elif anonymous_uses_event_timezone %}
+      {% elif anonymous_uses_event_timezone and not timezone_notice_explicit %}
       Shown in each event's timezone.
       {% else %}
-      Shown in {{ display_timezone }}.
+      Shown in <span{% if timezone_notice_live_zone %} data-schedule-zone-label{% endif %}>{{ display_timezone }}</span>.
       {% endif %}
-    {% elif viewer.is_authenticated %}
+    {% elif viewer.is_authenticated and not timezone_notice_explicit %}
     Shown in your timezone.
-    {% elif anonymous_uses_event_timezone %}
+    {% elif anonymous_uses_event_timezone and not timezone_notice_explicit %}
     {{ notice_subject }} are shown in each event's timezone.
     {% else %}
-    {{ notice_subject }} are shown in {{ display_timezone }}.
+    {{ notice_subject }} are shown in <span{% if timezone_notice_live_zone %} data-schedule-zone-label{% endif %}>{{ display_timezone }}</span>.
     {% endif %}
+    </span>
   </span>
   {% if viewer.is_authenticated %}
   <a href="/account/#display-preferences-section" class="inline-flex min-h-[44px] items-center font-medium text-accent hover:underline{% if timezone_notice_link_class %} {{ timezone_notice_link_class }}{% endif %}">Change timezone</a>

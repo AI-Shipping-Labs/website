@@ -1766,6 +1766,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_moved_proposal_is_no_longer_stuck",
     })
 
+    issue_1944_owners = frozenset({
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_staff_walks_free_text_answers_one_by_one",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_presentation_keeps_learner_emails_blurred",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_talked_about_persists_and_skips_the_marked_answer",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_accordion_can_unmark_talked_about",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_new_submission_appears_without_reload_and_keeps_current_item",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_markdown_renders_in_studio_accordion_and_presentation",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_member_review_preview_renders_markdown",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_multiple_choice_homework_shows_empty_presentation",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_talked_marks_are_per_homework",
+        "playwright_tests/test_studio_homework_presentation_1944.py::"
+        "test_empty_submissions_wait_for_the_first_free_text",
+    })
+
     issue_1942_owners = frozenset({
         "playwright_tests/test_course_announcements_1942.py::"
         "test_enrolled_learner_reads_a_new_course_announcement",
@@ -2046,8 +2069,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2878)
-        self.assertEqual(len(inventory.owners), 2674)
+        self.assertEqual(inventory.item_count, 2888)
+        self.assertEqual(len(inventory.owners), 2684)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2076,6 +2099,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1935_owners
             | self.issue_1937_owners
             | self.issue_1942_owners
+            | self.issue_1944_owners
             | self.issue_1928_owners
             | self.issue_1940_owners
             | self.youtube_referrer_owners
@@ -2192,6 +2216,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1781_owners
             | self.issue_1782_owners
             | self.issue_1802_owners
+            | self.issue_1944_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
         ):

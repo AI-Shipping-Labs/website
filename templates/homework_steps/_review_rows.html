@@ -1,0 +1,22 @@
+{% load homework_review_tags %}
+<ol class="homework-review-rows"{% if test_id %} data-testid="{{ test_id }}"{% endif %}>
+  {% for row in rows %}
+    <li class="homework-review-row">
+      <div class="homework-review-answer">
+        <strong>{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</strong>
+        {% if row.answer|length > 240 %}
+          <details>
+            <summary>{{ row.answer|truncatechars:160 }}</summary>
+            <div class="prose max-w-none">{{ row.answer|homework_answer_html }}</div>
+          </details>
+        {% elif row.answer %}
+          <div class="prose max-w-none">{{ row.answer|homework_answer_html }}</div>
+        {% else %}
+          <span>Not answered</span>
+        {% endif %}
+        {% if row.result %}{% include "homework_steps/_question_result.html" with result=row.result %}{% endif %}
+      </div>
+      {% if editable %}<a href="{{ row.url }}">Edit <span class="sr-only">{% if row.has_semantic_label %}{{ row.step_label }}{% else %}question {{ row.question_number }}{% endif %}</span></a>{% endif %}
+    </li>
+  {% endfor %}
+</ol>

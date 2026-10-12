@@ -470,6 +470,7 @@ class RuleChainTest(SimpleTestCase):
             [
                 "content/services/homework_review.py",
                 "content/services/homework_step_sections.py",
+                "content/templatetags/homework_review_tags.py",
             ]
         )
         self.assertNotIn("content", plan.django_labels)
@@ -478,8 +479,37 @@ class RuleChainTest(SimpleTestCase):
             collapsed(
                 "content.tests.test_homework_review",
                 "content.tests.test_homework_step_reader",
+                "studio.tests.test_homework_presentation",
                 "studio.tests.test_homework_studio",
                 *PYTHON_GUARD_LABELS,
+            ),
+        )
+        self.assertEqual(plan.unmapped, [])
+        self.assertEqual(plan.playwright, "core")
+
+    def test_homework_presentation_surfaces_do_not_select_the_whole_studio_app(self):
+        plan = plan_for(
+            [
+                "studio/views/homeworks.py",
+                "templates/studio/courses/homework_submissions.html",
+                "templates/studio/courses/_homework_submissions_list.html",
+                "templates/homework_steps/_review_rows.html",
+            ]
+        )
+        self.assertNotIn("studio", plan.django_labels)
+        self.assertNotIn("content", plan.django_labels)
+        self.assertEqual(
+            plan.django_labels,
+            collapsed(
+                "content.tests.test_homework_review",
+                "studio.tests.test_homework_presentation",
+                "studio.tests.test_homework_studio",
+                *guards(
+                    "studio/views/homeworks.py",
+                    "templates/studio/courses/homework_submissions.html",
+                    "templates/studio/courses/_homework_submissions_list.html",
+                    "templates/homework_steps/_review_rows.html",
+                ),
             ),
         )
         self.assertEqual(plan.unmapped, [])

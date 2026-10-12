@@ -1,0 +1,68 @@
+{% load studio_filters %}
+{% comment %}
+Fragment for GET /studio/homeworks/<id>/submissions?fragment=submissions.
+Self-contained: the page poller swaps this inner HTML in place.
+{% endcomment %}
+<div data-testid="homework-submissions-fragment" data-submission-count="{{ submission_items|length }}">
+{% if submission_items %}
+<div class="bg-card border border-border rounded-lg overflow-hidden">
+  <div class="divide-y divide-border">
+    {% for item in submission_items %}
+    <details class="group" data-testid="homework-submission-row" data-submission-row data-student-email="{{ item.submission.student.email }}"{% if item.submission.homework_link %} data-homework-link="{{ item.submission.homework_link }}"{% endif %}>
+      <summary class="flex flex-col gap-2 px-4 sm:px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
+        <span class="text-sm text-foreground break-all" data-testid="homework-submission-student">{{ item.submission.student.email }}</span>
+        <span class="text-xs text-muted-foreground" data-testid="homework-submission-submitted-at">{{ item.submission.submitted_at|operator_datetime }}</span>
+      </summary>
+      <div class="px-4 sm:px-6 pb-5 border-t border-border bg-background/40">
+        {% if item.submission.homework_link %}
+        <div class="mt-3 mb-3">
+          <span class="text-sm text-muted-foreground">Homework link:</span>
+          <a href="{{ item.submission.homework_link }}" target="_blank" rel="noopener"
+             class="text-accent hover:underline text-sm ml-2 break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+             data-testid="homework-submission-link">{{ item.submission.homework_link }}</a>
+        </div>
+        {% endif %}
+        {% if item.review_rows %}
+        <div class="space-y-3">
+          {% for row in item.review_rows %}
+          <div data-testid="homework-submission-answer" data-question-id="{{ row.question.pk }}" data-submission-id="{{ item.submission.pk }}"{% if row.presentable %} class="js-presentable" data-presentable="true"{% endif %}>
+            <p class="text-sm font-medium text-foreground js-answer-heading" data-testid="homework-submission-answer-heading">{{ row.heading }}</p>
+            {% if row.supporting_text %}
+            <p class="mt-1 text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-prompt">{{ row.supporting_text }}</p>
+            {% endif %}
+            <div class="mt-1 space-y-2">
+              {% if row.unanswered %}
+              <p class="text-sm text-muted-foreground whitespace-pre-line js-answer-body" data-testid="homework-submission-answer-text">No answer</p>
+              {% elif row.presentable %}
+              <div class="prose prose-sm max-w-none text-muted-foreground js-answer-body" data-testid="homework-submission-answer-text">{{ row.answer_html }}</div>
+              {% else %}
+              <p class="text-sm text-muted-foreground whitespace-pre-line js-answer-body" data-testid="homework-submission-answer-text">{{ row.answer.answer_text }}</p>
+              {% endif %}
+              <div class="flex flex-wrap items-center gap-2">
+                {% if not row.unanswered %}
+                {% if row.answer.is_correct %}
+                <span data-testid="homework-submission-answer-correct">{% studio_status_badge 'published' 'Correct' %}</span>
+                {% else %}
+                <span data-testid="homework-submission-answer-incorrect">{% studio_status_badge 'reviewed' 'Incorrect' %}</span>
+                {% endif %}
+                {% endif %}
+                {% if row.presentable %}
+                <button type="button" hidden data-testid="homework-talked-toggle" data-talked-key="{{ item.submission.pk }}:{{ row.question.pk }}" class="hidden inline-flex min-h-[44px] items-center rounded-lg border border-transparent px-1 py-1 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" aria-pressed="true">{% studio_status_badge 'completed' 'Talked about' %}</button>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="mt-3 text-sm text-muted-foreground">No answers on record.</p>
+        {% endif %}
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='submission' entity_label_plural='submissions' empty_message='No submissions for this homework yet.' %}
+{% endif %}
+</div>

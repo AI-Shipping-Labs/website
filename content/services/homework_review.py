@@ -7,15 +7,45 @@ order with ``Question N: {short name} ({score} point/points)`` headings.
 
 import re
 
+from django.utils.safestring import mark_safe
+
 from content.models import Unit
+from content.models.homework import QuestionType
 from content.services.homework_step_sections import (
     QUESTION_ID,
     question_heading_names,
 )
+from content.utils.linkify import linkify_urls
+from content.utils.markdown import render_markdown, sanitize_html
 
 _ALREADY_NUMBERED = re.compile(
     r'^Question\s+(\d+)(?:[.:-]|\s|$)', re.IGNORECASE,
 )
+_FREE_TEXT_TYPES = {QuestionType.FREE_FORM, QuestionType.FREE_FORM_LONG}
+
+
+def render_student_answer_html(text):
+    """Render untrusted student free-text with the homework-prompt pipeline.
+
+    Mermaid and event widgets stay off: those run on authored course copy,
+    not on a student's answer. ``<script>`` is stripped by ``sanitize_html``.
+    """
+    if not (text or '').strip():
+        return ''
+    return mark_safe(sanitize_html(linkify_urls(render_markdown(
+        text,
+        include_mermaid=False,
+        include_event_widget=False,
+    ))))
+
+
+def is_presentable_answer(question, answer):
+    """True when this answer is a free-text slide with non-empty text."""
+    if answer is None or question is None:
+        return False
+    if question.question_type not in _FREE_TEXT_TYPES:
+        return False
+    return bool((answer.answer_text or '').strip())
 
 
 def authored_question_number(question):
@@ -106,11 +136,22 @@ def bind_review_rows(question_rows, submission):
     }
     rows = []
     for item in question_rows:
-        answer = answers.get(item['question'].pk)
+        question = item['question']
+        answer = answers.get(question.pk)
+        unanswered = answer is None
+        presentable = is_presentable_answer(question, answer)
+        if unanswered:
+            answer_html = ''
+        elif question.question_type in _FREE_TEXT_TYPES:
+            answer_html = render_student_answer_html(answer.answer_text or '')
+        else:
+            answer_html = ''
         rows.append({
             **item,
             'answer': answer,
-            'unanswered': answer is None,
+            'unanswered': unanswered,
+            'presentable': presentable,
+            'answer_html': answer_html,
         })
     return rows
 

@@ -296,10 +296,13 @@ def suggestions_context(pod, members_availability, viewer_zone, *, now=None):
     return context
 
 
-def _add_meeting_actions(pod, suggestions, state, member_avail, viewer_zone, *, is_member, count, now):
+def _add_meeting_actions(pod, suggestions, state, member_avail, viewer_zone, *, is_member, count, now,
+                         proposal_unconfirmable=False):
     """Issue #1919: ``Propose this time`` on each slot, the leading ``Same
     weekly time`` row, and the line explaining why proposing is blocked."""
-    can_propose, blocked = propose_state(pod, state, is_member=is_member, member_count=count)
+    can_propose, blocked = propose_state(
+        pod, state, is_member=is_member, member_count=count, proposal_unconfirmable=proposal_unconfirmable,
+    )
     same = same_week_slot(pod, state, member_avail, now)
     if same is not None:
         rows = slot_rows([same], viewer_zone, member_avail)
@@ -407,7 +410,8 @@ def build_pod_page(pod, viewer, *, now=None):
             is_member=is_member, can_manage=manage, now=now,
         )
         _add_meeting_actions(pod, suggestions, meetings['state'], member_avail, viewer_zone,
-                             is_member=is_member, count=count, now=now)
+                             is_member=is_member, count=count, now=now,
+                             proposal_unconfirmable=meetings['proposal_unconfirmable'])
     if manage and not raw_slots:
         raw_slots = suggest_slots(member_avail, pod.meeting_minutes, now=now) if len(
             [m for m in member_avail if m.has_windows]) >= 2 else []

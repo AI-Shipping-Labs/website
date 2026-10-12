@@ -18,6 +18,7 @@ move-later checkbox; then submit and a quiet way back.
   {% endif %}
   <form method="post" action="{{ form_action }}" class="mt-6" data-testid="pod-meeting-form">
     {% csrf_token %}
+    {% if mode == 'new' and replaces_id %}<input type="hidden" name="replaces" value="{{ replaces_id }}">{% endif %}
     {% if mode == 'new' and slot %}
     <input type="hidden" name="start" value="{{ slot.start_iso }}">
     <div data-testid="pod-meeting-form-slot">

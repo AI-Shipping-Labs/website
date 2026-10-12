@@ -364,11 +364,16 @@ def _maybe_agree(pod, head, actor, members, now):
 # --- Member actions ------------------------------------------------------------------
 
 @transaction.atomic
-def propose_meeting(pod, actor, start, *, repeat_weekly=False, zone_name=None, now=None):
+def propose_meeting(pod, actor, start, *, repeat_weekly=False, zone_name=None, now=None, replaces=None):
     """A member proposes ``start`` (one meeting, or the weekly series).
 
     Returns the created meetings (``proposed``, sharing a ``series_id`` when
     more than one). The proposer is recorded as ``going``.
+
+    ``replaces`` (issue #1940) is the head of a proposal cancelled by
+    ``Propose <time> instead``: every meeting of that cancelled proposal
+    gets ``replaced_by`` = the new head. A ``replaces`` that is not a
+    cancelled, unlinked meeting of this pod is ignored.
     """
     now = now or timezone.now()
     pod = _lock_pod(pod)
@@ -405,9 +410,34 @@ def propose_meeting(pod, actor, start, *, repeat_weekly=False, zone_name=None, n
         for value in starts
     ]
     PodMeetingResponse.objects.create(meeting=meetings[0], user=actor, response=MEETING_RESPONSE_GOING)
+    _link_replaced(pod, replaces, meetings[0])
     _notify_proposed(pod, meetings, actor, members)
     _maybe_agree(pod, meetings[0], actor, members, now)
     return meetings
+
+
+def _link_replaced(pod, replaces, new_head):
+    """Point the cancelled proposal ``replaces`` belongs to at ``new_head``.
+
+    Re-checked under the pod lock: only a cancelled, not yet linked meeting
+    of ``pod`` counts. A weekly proposal is cancelled in one update, so its
+    group is the cancelled meetings sharing its ``series_id`` and
+    ``status_changed_at``.
+    """
+    if replaces is None:
+        return
+    head = PodMeeting.objects.filter(
+        pk=replaces.pk, pod_id=pod.pk, status=MEETING_STATUS_CANCELLED, replaced_by__isnull=True,
+    ).first()
+    if head is None:
+        return
+    group = PodMeeting.objects.filter(pk=head.pk)
+    if head.series_id:
+        group = PodMeeting.objects.filter(
+            pod_id=pod.pk, series_id=head.series_id, status=MEETING_STATUS_CANCELLED,
+            status_changed_at=head.status_changed_at, replaced_by__isnull=True,
+        )
+    group.update(replaced_by=new_head)
 
 
 def _reload(meeting):

@@ -25,7 +25,12 @@ from pods.models import (
 )
 from pods.services import meetings as mtg
 from pods.services import membership as svc
-from pods.services.meeting_presentation import msg_rule, propose_state, propose_url
+from pods.services.meeting_presentation import (
+    msg_rule,
+    open_proposal_unconfirmable,
+    propose_state,
+    propose_url,
+)
 from pods.services.meeting_rules import meeting_state
 from pods.services.suggestions import (
     evaluate_slot,
@@ -105,6 +110,18 @@ def _form_base(request, course, pod, zone_name):
     return context
 
 
+def _replaced_meeting(pod, raw):
+    """The cancelled, unlinked meeting of ``pod`` a ``replaces`` value names,
+    else ``None`` (issue #1940): a bad value is ignored, never an error."""
+    raw = (raw or '').strip()
+    # Digits only, and short enough for a bigint column on every backend.
+    if not raw.isascii() or not raw.isdigit() or len(raw) > 18:
+        return None
+    return PodMeeting.objects.filter(
+        pk=int(raw), pod=pod, status=MEETING_STATUS_CANCELLED, replaced_by__isnull=True,
+    ).first()
+
+
 def _slot_context(pod, start, members, zone_name):
     slot = evaluate_slot(members, start, pod.meeting_minutes, all_members=members)
     return {
@@ -125,13 +142,18 @@ def meeting_new(request, slug, pod_id):
     state = meeting_state(pod)
     remaining = pod.meeting_count - state.used
     if request.method == 'GET':
-        can_propose, blocked = propose_state(pod, state, is_member=True, member_count=len(members))
+        can_propose, blocked = propose_state(
+            pod, state, is_member=True, member_count=len(members),
+            proposal_unconfirmable=open_proposal_unconfirmable(state, [m.user for m in members]),
+        )
         if not can_propose:
             messages.error(request, blocked or mtg.MSG_NEEDS_TWO)
             return _back(pod)
     context = _form_base(request, course, pod, zone_name)
     needed = required_attendance(len(members)) or 2
-    raw_start = (request.POST.get('start') if request.method == 'POST' else request.GET.get('start')) or ''
+    data = request.POST if request.method == 'POST' else request.GET
+    raw_start = data.get('start') or ''
+    replaces = _replaced_meeting(pod, data.get('replaces'))
     slot = None
     if raw_start.strip():
         try:
@@ -143,7 +165,9 @@ def meeting_new(request, slug, pod_id):
         repeat_checked = remaining >= 2 and bool(request.POST.get('repeat_weekly'))
         try:
             start = _start_from_post(request, zone_name)
-            mtg.propose_meeting(pod, request.user, start, repeat_weekly=repeat_checked, zone_name=zone_name)
+            mtg.propose_meeting(
+                pod, request.user, start, repeat_weekly=repeat_checked, zone_name=zone_name, replaces=replaces,
+            )
         except svc.PodError as exc:
             context['error'] = exc.message
         else:
@@ -160,6 +184,7 @@ def meeting_new(request, slug, pod_id):
         'repeat_checked': repeat_checked,
         'rule_line': msg_rule(needed),
         'form_action': propose_url(pod),
+        'replaces_id': replaces.pk if replaces is not None else '',
     })
     return render(request, 'pods/meeting_form.html', context, status=400 if context['error'] else 200)
 
@@ -273,12 +298,13 @@ def meeting_cancel(request, slug, pod_id, meeting_id):
         next_start = mtg.parse_instant(then_propose) if then_propose else None
         if next_start is not None and meeting.status != MEETING_STATUS_PROPOSED:
             next_start = None
-        mtg.cancel_meeting(meeting, request.user)
+        group = mtg.cancel_meeting(meeting, request.user)
     except svc.PodError as exc:
         return _error(request, pod, exc)
     messages.success(request, MSG_CANCELLED)
     if next_start is not None:
-        return redirect(propose_url(pod, next_start))
+        # The new proposal links back to this one (issue #1940).
+        return redirect(propose_url(pod, next_start, replaces=group[0].pk))
     return _back(pod)
 
 

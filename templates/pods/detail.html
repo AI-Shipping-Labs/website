@@ -59,7 +59,7 @@
   {% endif %}
 
   {% if suggestions %}
-  <section class="mt-10" aria-labelledby="pod-times-heading" data-testid="pod-suggested-times">
+  <section class="mt-10" id="suggested-times" aria-labelledby="pod-times-heading" data-testid="pod-suggested-times">
     {% with times_subtitle="Shown in your timezone: "|add:viewer_zone %}
     {% section_header "Suggested times" heading_id="pod-times-heading" subtitle=times_subtitle extra="mb-3" %}
     {% endwith %}
@@ -87,6 +87,11 @@
     {% elif not suggestions.needs_more %}
     <p class="text-sm text-foreground" data-testid="pod-times-no-fit">{{ suggestions.no_fit_line }}</p>
     <a href="{{ availability_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-edit-availability">Edit my availability <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+    {% endif %}
+    {% if suggestions.overlap %}
+    <div class="mt-4 hidden md:block" data-testid="pod-weekly-overlap-wrapper">
+      {% include "includes/_accordion.html" with summary="See full weekly overlap" testid="pod-weekly-overlap" body_template="pods/_weekly_overlap.html" %}
+    </div>
     {% endif %}
     {% if suggestions.custom_propose_url %}
     <a href="{{ suggestions.custom_propose_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-times-propose-custom">Propose another time <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>

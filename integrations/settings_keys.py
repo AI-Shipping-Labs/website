@@ -250,6 +250,7 @@ _KEY_ORDER = {
         "PODS_STUCK_PROPOSAL_ALERT_ENABLED",
         "PODS_CHAT_ENABLED",
         "PODS_CHAT_MESSAGES_PER_HOUR",
+        "PODS_FIRST_MEETING_NUDGE_DAYS",
     ),
     "zoom": (
         "ZOOM_CLIENT_ID",
@@ -2230,4 +2231,14 @@ PODS_CHAT_MESSAGES_PER_HOUR = declare(
     default="30",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_chat_messages_per_hour",
+)
+PODS_FIRST_MEETING_NUDGE_DAYS = declare(
+    key="PODS_FIRST_MEETING_NUDGE_DAYS",
+    group="pods",
+    label="Pods First Meeting Nudge Days",
+    description="Days after a pod's second member joins before members see a 'Plan your first meeting with <pod>' row in the dashboard Your week list (0-30; invalid values fall back to 3). Shown only while the pod has no live meeting and no Slack channel link. 0 shows it as soon as the second member joins. Defaults to 3.",
+    value_type="int",
+    default="3",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_first_meeting_nudge_days",
 )

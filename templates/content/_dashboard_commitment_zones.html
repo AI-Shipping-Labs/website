@@ -63,7 +63,9 @@
     {% if dashboard_week_rows or dashboard_book_club.next_deadline_is_soon %}
     <div class="border-t border-border/70" data-testid="dashboard-commitment-list">
       {% for week_row in dashboard_week_rows %}
-      {% if week_row.kind == 'pod_meeting' %}
+      {% if week_row.kind == 'pod_nudge' %}
+      {% include "content/_content_card.html" with card_url=week_row.pod_nudge.url card_testid="dashboard-pod-nudge-row" card_anchor_testid="dashboard-pod-nudge-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=week_row.pod_nudge.title card_title_testid="dashboard-pod-nudge-title" card_heading_tag="h3" card_aria_label=week_row.pod_nudge.title dashboard_card_variant="pod_nudge" pod_nudge=week_row.pod_nudge %}
+      {% elif week_row.kind == 'pod_meeting' %}
       {% include "content/_content_card.html" with card_url=week_row.pod_meeting.url card_testid="dashboard-pod-meeting-row" card_anchor_testid="dashboard-pod-meeting-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_editorial=True card_title=week_row.pod_meeting.title card_title_testid="dashboard-pod-meeting-title" card_heading_tag="h3" card_aria_label=week_row.pod_meeting.title dashboard_card_variant="pod_meeting" pod_meeting=week_row.pod_meeting %}
       {% else %}
       {% include "content/_content_card.html" with event=week_row.event card_url=week_row.event.get_absolute_url card_testid="dashboard-upcoming-event-row" card_anchor_testid="dashboard-upcoming-event-link" card_body_template="content/_dashboard_editorial_card_body.html" card_badge_template="content/_dashboard_editorial_card_badges.html" card_trailing_badge_template="content/_dashboard_editorial_card_trailing_badges.html" card_editorial=True card_title=week_row.event.title card_heading_tag="h3" card_aria_label=week_row.event.title dashboard_card_variant="registered_event" %}

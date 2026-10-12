@@ -1227,6 +1227,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry",
     })
 
+    issue_1777_owners = frozenset({
+        "playwright_tests/test_project_submission_form_1777.py::"
+        "test_dated_attempt_submit_shows_shared_form_and_round_trips",
+        "playwright_tests/test_project_submission_form_1777.py::"
+        "test_undated_submit_shows_shared_form_and_round_trips",
+    })
+
     issue_1778_owners = frozenset({
         "playwright_tests/test_homework_steps_1778.py::"
         "test_failed_autosave_blocks_step_link_without_losing_choice",
@@ -1959,8 +1966,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2842)
-        self.assertEqual(len(inventory.owners), 2638)
+        self.assertEqual(inventory.item_count, 2844)
+        self.assertEqual(len(inventory.owners), 2640)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2032,6 +2039,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1737_owners
             | self.issue_1745_owners
             | self.issue_1770_owners
+            | self.issue_1777_owners
             | self.issue_1696_owners
             | self.onboarding_edit_answers_owners
             | self.issue_1778_owners
@@ -2093,6 +2101,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1737_owners
             | self.issue_1745_owners
             | self.issue_1770_owners
+            | self.issue_1777_owners
             | self.issue_1696_owners
             | self.onboarding_edit_answers_owners
             | self.issue_1778_owners

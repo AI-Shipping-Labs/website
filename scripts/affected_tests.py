@@ -261,6 +261,15 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "content.tests.test_homework_review",
             "studio.tests.test_homework_studio",
+            "studio.tests.test_homework_presentation",
+        ),
+    ),
+    (
+        "content/templatetags/homework_review_tags.py",
+        (
+            "content.tests.test_homework_review",
+            "studio.tests.test_homework_studio",
+            "studio.tests.test_homework_presentation",
         ),
     ),
     (
@@ -269,6 +278,33 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "content.tests.test_homework_review",
             "content.tests.test_homework_step_reader",
             "studio.tests.test_homework_studio",
+        ),
+    ),
+    (
+        "studio/views/homeworks.py",
+        (
+            "studio.tests.test_homework_studio",
+            "studio.tests.test_homework_presentation",
+        ),
+    ),
+    (
+        "templates/studio/courses/homework_submissions.html",
+        (
+            "studio.tests.test_homework_studio",
+            "studio.tests.test_homework_presentation",
+        ),
+    ),
+    (
+        "templates/studio/courses/_homework_submissions_list.html",
+        (
+            "studio.tests.test_homework_studio",
+            "studio.tests.test_homework_presentation",
+        ),
+    ),
+    (
+        "templates/homework_steps/_review_rows.html",
+        (
+            "content.tests.test_homework_review",
         ),
     ),
 )

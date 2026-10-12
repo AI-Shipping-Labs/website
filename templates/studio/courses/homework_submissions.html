@@ -6,7 +6,9 @@
 
 {% block studio_content %}
 {% url 'studio_homework_list' course_id=course.pk as homework_list_url %}
+{% url 'studio_homework_submissions' homework_id=homework.pk as submissions_url %}
 {% studio_header_actions title="Submissions" subtitle=homework.title back_url=homework_list_url back_label='Back to homeworks' testid='homework-submissions-title' %}
+  <button type="button" data-testid="homework-presentation-toggle" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"><i data-lucide="presentation" class="h-4 w-4"></i><span data-testid="homework-presentation-toggle-label">Presentation mode</span></button>
   {% if public_url %}<a href="{{ public_url }}" target="_blank" rel="noopener noreferrer" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="view-on-site"><i data-lucide="external-link" class="h-4 w-4"></i><span>View on site</span></a>{% endif %}
 {% endstudio_header_actions %}
 
@@ -27,61 +29,59 @@
   }
 </style>
 
-{% if submission_items %}
-<div class="bg-card border border-border rounded-lg overflow-hidden">
-  <div class="divide-y divide-border">
-    {% for item in submission_items %}
-    <details class="group" data-testid="homework-submission-row">
-      <summary class="flex flex-col gap-2 px-4 sm:px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
-        <span class="text-sm text-foreground break-all" data-testid="homework-submission-student">{{ item.submission.student.email }}</span>
-        <span class="text-xs text-muted-foreground" data-testid="homework-submission-submitted-at">{{ item.submission.submitted_at|operator_datetime }}</span>
-      </summary>
-      <div class="px-4 sm:px-6 pb-5 border-t border-border bg-background/40">
-        {% if item.submission.homework_link %}
-        <div class="mt-3 mb-3">
-          <span class="text-sm text-muted-foreground">Homework link:</span>
-          <a href="{{ item.submission.homework_link }}" target="_blank" rel="noopener"
-             class="text-accent hover:underline text-sm ml-2 break-all"
-             data-testid="homework-submission-link">{{ item.submission.homework_link }}</a>
-        </div>
-        {% endif %}
-        {% if item.review_rows %}
-        <div class="space-y-3">
-          {% for row in item.review_rows %}
-          <div data-testid="homework-submission-answer" data-question-id="{{ row.question.pk }}">
-            <p class="text-sm font-medium text-foreground" data-testid="homework-submission-answer-heading">{{ row.heading }}</p>
-            {% if row.supporting_text %}
-            <p class="mt-1 text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-prompt">{{ row.supporting_text }}</p>
-            {% endif %}
-            <div class="mt-1 flex flex-wrap items-center gap-2">
-              {% if row.unanswered %}
-              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">No answer</p>
-              {% else %}
-              <p class="text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-answer-text">{{ row.answer.answer_text }}</p>
-              {% if row.answer.is_correct %}
-              <span data-testid="homework-submission-answer-correct">{% studio_status_badge 'published' 'Correct' %}</span>
-              {% else %}
-              <span data-testid="homework-submission-answer-incorrect">{% studio_status_badge 'reviewed' 'Incorrect' %}</span>
-              {% endif %}
-              {% endif %}
-            </div>
-          </div>
-          {% endfor %}
-        </div>
-        {% else %}
-        <p class="mt-3 text-sm text-muted-foreground">No answers on record.</p>
-        {% endif %}
-      </div>
-    </details>
-    {% endfor %}
+<div id="homework-submissions-list" data-testid="homework-submissions-list" data-homework-id="{{ homework.pk }}" data-fragment-url="{{ submissions_url }}?fragment=submissions">
+  {% include "studio/courses/_homework_submissions_list.html" %}
+</div>
+
+<div id="homework-presentation" hidden data-testid="homework-presentation" class="space-y-4" role="region" aria-label="Homework presentation">
+  <p hidden data-testid="homework-presentation-empty" class="text-sm text-muted-foreground">No free-text answers to present yet.</p>
+  <div hidden data-testid="homework-presentation-card" class="bg-card border border-border rounded-lg p-6 space-y-4">
+    <p class="text-sm text-foreground break-all" data-presentation-student></p>
+    <h2 class="text-xl font-semibold text-foreground" data-testid="homework-presentation-heading"></h2>
+    <div class="prose max-w-none text-foreground" data-testid="homework-presentation-answer"></div>
+    <div hidden data-testid="homework-presentation-link-wrap">
+      <span class="text-sm text-muted-foreground">Homework link:</span>
+      <a href="#" target="_blank" rel="noopener" class="text-accent hover:underline text-sm ml-2 break-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" data-testid="homework-presentation-link"></a>
+    </div>
+    <div data-testid="homework-presentation-correctness"></div>
+  </div>
+  <div class="flex flex-wrap items-center gap-2" data-testid="homework-presentation-controls">
+    <button type="button" data-testid="homework-presentation-prev" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">Previous</button>
+    <span data-testid="homework-presentation-position" class="text-sm text-muted-foreground" aria-live="polite"></span>
+    <button type="button" data-testid="homework-presentation-next" class="inline-flex min-h-[44px] items-center rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">Next</button>
+    <button type="button" data-testid="homework-presentation-talked" class="inline-flex min-h-[44px] items-center rounded-lg bg-accent text-accent-foreground px-4 py-2 text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50">Mark as talked about</button>
   </div>
 </div>
-{% else %}
-{% studio_empty_state 'fresh' entity_label='submission' entity_label_plural='submissions' empty_message='No submissions for this homework yet.' %}
-{% endif %}
+
 <script>
 (function () {
   var toggle = document.querySelector('[data-testid="homework-privacy-toggle"]');
+  var listRoot = document.getElementById('homework-submissions-list');
+  var presentationRoot = document.getElementById('homework-presentation');
+  var presentationToggle = document.querySelector('[data-testid="homework-presentation-toggle"]');
+  var presentationToggleLabel = document.querySelector('[data-testid="homework-presentation-toggle-label"]');
+  var emptyEl = document.querySelector('[data-testid="homework-presentation-empty"]');
+  var cardEl = document.querySelector('[data-testid="homework-presentation-card"]');
+  var studentEl = document.querySelector('[data-presentation-student]');
+  var headingEl = document.querySelector('[data-testid="homework-presentation-heading"]');
+  var answerEl = document.querySelector('[data-testid="homework-presentation-answer"]');
+  var linkWrapEl = document.querySelector('[data-testid="homework-presentation-link-wrap"]');
+  var linkEl = document.querySelector('[data-testid="homework-presentation-link"]');
+  var correctnessEl = document.querySelector('[data-testid="homework-presentation-correctness"]');
+  var prevBtn = document.querySelector('[data-testid="homework-presentation-prev"]');
+  var nextBtn = document.querySelector('[data-testid="homework-presentation-next"]');
+  var positionEl = document.querySelector('[data-testid="homework-presentation-position"]');
+  var talkedBtn = document.querySelector('[data-testid="homework-presentation-talked"]');
+  var countEl = document.querySelector('[data-testid="homework-submissions-count"]');
+  var homeworkId = listRoot ? listRoot.getAttribute('data-homework-id') : '';
+  var fragmentUrl = listRoot ? listRoot.getAttribute('data-fragment-url') : '';
+  var presenting = false;
+  var currentIndex = 0;
+  var currentKey = '';
+  var items = [];
+  var POLL_INTERVAL_MS = 5000;
+  var timer = null;
+
   function emails() {
     return document.querySelectorAll('[data-testid="homework-submission-student"]');
   }
@@ -102,16 +102,264 @@
   try {
     on = window.localStorage.getItem('studio-homework-privacy') === '1';
   } catch (e) {}
-  apply(on);
+  function applyPrivacy() {
+    apply(presenting || on);
+  }
+  applyPrivacy();
   if (toggle) {
     toggle.addEventListener('click', function () {
+      if (presenting) return;
       on = document.documentElement.getAttribute('data-studio-homework-privacy') !== 'on';
       try {
         window.localStorage.setItem('studio-homework-privacy', on ? '1' : '0');
       } catch (e) {}
-      apply(on);
+      applyPrivacy();
     });
   }
+
+  function talkedStorageKey() {
+    return 'studio-homework-talked:' + homeworkId;
+  }
+  function loadTalked() {
+    try {
+      var raw = window.localStorage.getItem(talkedStorageKey());
+      var parsed = JSON.parse(raw);
+      return new Set(Array.isArray(parsed) ? parsed : []);
+    } catch (e) {
+      return new Set();
+    }
+  }
+  function saveTalked(set) {
+    try {
+      window.localStorage.setItem(talkedStorageKey(), JSON.stringify(Array.from(set)));
+    } catch (e) {}
+  }
+  function syncTalkedBadges() {
+    if (!listRoot) return;
+    var talked = loadTalked();
+    listRoot.querySelectorAll('[data-testid="homework-talked-toggle"]').forEach(function (btn) {
+      var key = btn.getAttribute('data-talked-key');
+      var marked = talked.has(key);
+      btn.hidden = !marked;
+      btn.classList.toggle('hidden', !marked);
+      btn.setAttribute('aria-pressed', marked ? 'true' : 'false');
+    });
+  }
+  function setTalked(key, marked) {
+    var talked = loadTalked();
+    if (marked) {
+      talked.add(key);
+    } else {
+      talked.delete(key);
+    }
+    saveTalked(talked);
+    syncTalkedBadges();
+    if (presenting) renderSlide();
+  }
+
+  function collectItems() {
+    if (!listRoot) return [];
+    var collected = [];
+    listRoot.querySelectorAll('.js-presentable').forEach(function (el) {
+      var row = el.closest('[data-submission-row]');
+      var answer = el.querySelector('.js-answer-body');
+      var heading = el.querySelector('.js-answer-heading');
+      var correct = el.querySelector('[data-testid="homework-submission-answer-correct"]');
+      var incorrect = el.querySelector('[data-testid="homework-submission-answer-incorrect"]');
+      collected.push({
+        key: el.getAttribute('data-submission-id') + ':' + el.getAttribute('data-question-id'),
+        email: row ? (row.getAttribute('data-student-email') || '') : '',
+        heading: heading ? heading.textContent : '',
+        answerHtml: answer ? answer.innerHTML : '',
+        link: row ? (row.getAttribute('data-homework-link') || '') : '',
+        correctnessHtml: correct ? correct.innerHTML : (incorrect ? incorrect.innerHTML : '')
+      });
+    });
+    return collected;
+  }
+
+  function firstUntalkedIndex(list) {
+    var talked = loadTalked();
+    for (var i = 0; i < list.length; i++) {
+      if (!talked.has(list[i].key)) return i;
+    }
+    return 0;
+  }
+
+  function updateCount() {
+    var fragment = listRoot ? listRoot.querySelector('[data-testid="homework-submissions-fragment"]') : null;
+    var n = fragment ? parseInt(fragment.getAttribute('data-submission-count') || '0', 10) : 0;
+    if (countEl) {
+      countEl.textContent = n + ' submission' + (n === 1 ? '' : 's');
+    }
+  }
+
+  function renderSlide() {
+    items = collectItems();
+    if (currentKey) {
+      var found = -1;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].key === currentKey) {
+          found = i;
+          break;
+        }
+      }
+      currentIndex = found === -1 ? Math.min(currentIndex, Math.max(items.length - 1, 0)) : found;
+    }
+    var total = items.length;
+    var hasItems = total > 0;
+    if (emptyEl) emptyEl.hidden = hasItems;
+    if (cardEl) cardEl.hidden = !hasItems;
+    if (positionEl) {
+      positionEl.hidden = !hasItems;
+      positionEl.textContent = hasItems ? ((currentIndex + 1) + ' of ' + total) : '';
+    }
+    if (prevBtn) prevBtn.disabled = !hasItems || currentIndex <= 0;
+    if (nextBtn) nextBtn.disabled = !hasItems || currentIndex >= total - 1;
+    if (talkedBtn) talkedBtn.disabled = !hasItems;
+    if (!hasItems) {
+      currentKey = '';
+      if (studentEl) {
+        studentEl.textContent = '';
+        studentEl.removeAttribute('data-testid');
+      }
+      return;
+    }
+    var item = items[currentIndex];
+    currentKey = item.key;
+    if (studentEl) {
+      studentEl.textContent = item.email;
+      studentEl.setAttribute('data-testid', 'homework-submission-student');
+    }
+    if (headingEl) headingEl.textContent = item.heading;
+    if (answerEl) answerEl.innerHTML = item.answerHtml;
+    if (linkWrapEl && linkEl) {
+      if (item.link) {
+        linkWrapEl.hidden = false;
+        linkEl.href = item.link;
+        linkEl.textContent = item.link;
+      } else {
+        linkWrapEl.hidden = true;
+        linkEl.removeAttribute('href');
+        linkEl.textContent = '';
+      }
+    }
+    if (correctnessEl) correctnessEl.innerHTML = item.correctnessHtml;
+    var talked = loadTalked();
+    if (talkedBtn) talkedBtn.textContent = talked.has(item.key) ? 'Talked about' : 'Mark as talked about';
+    applyPrivacy();
+  }
+
+  function setPresenting(next) {
+    presenting = next;
+    if (listRoot) listRoot.hidden = presenting;
+    if (presentationRoot) presentationRoot.hidden = !presenting;
+    if (presentationToggleLabel) {
+      presentationToggleLabel.textContent = presenting ? 'Exit presentation' : 'Presentation mode';
+    }
+    if (!presenting && studentEl) {
+      studentEl.removeAttribute('data-testid');
+    }
+    if (presenting) {
+      items = collectItems();
+      currentIndex = firstUntalkedIndex(items);
+      currentKey = items[currentIndex] ? items[currentIndex].key : '';
+      renderSlide();
+    }
+    applyPrivacy();
+  }
+
+  if (presentationToggle) {
+    presentationToggle.addEventListener('click', function () {
+      setPresenting(!presenting);
+    });
+  }
+  if (prevBtn) {
+    prevBtn.addEventListener('click', function () {
+      if (currentIndex <= 0) return;
+      currentIndex -= 1;
+      currentKey = items[currentIndex] ? items[currentIndex].key : '';
+      renderSlide();
+    });
+  }
+  if (nextBtn) {
+    nextBtn.addEventListener('click', function () {
+      if (currentIndex >= items.length - 1) return;
+      currentIndex += 1;
+      currentKey = items[currentIndex] ? items[currentIndex].key : '';
+      renderSlide();
+    });
+  }
+  if (talkedBtn) {
+    talkedBtn.addEventListener('click', function () {
+      if (!currentKey) return;
+      var talked = loadTalked();
+      setTalked(currentKey, !talked.has(currentKey));
+    });
+  }
+  if (listRoot) {
+    listRoot.addEventListener('click', function (event) {
+      var btn = event.target.closest('[data-testid="homework-talked-toggle"]');
+      if (!btn || !listRoot.contains(btn)) return;
+      event.preventDefault();
+      var key = btn.getAttribute('data-talked-key');
+      if (!key) return;
+      var talked = loadTalked();
+      setTalked(key, !talked.has(key));
+    });
+  }
+  document.addEventListener('keydown', function (event) {
+    if (!presenting) return;
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      if (prevBtn && !prevBtn.disabled) prevBtn.click();
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      if (nextBtn && !nextBtn.disabled) nextBtn.click();
+    }
+  });
+
+  function refresh() {
+    if (!fragmentUrl || !listRoot) return;
+    fetch(fragmentUrl, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(function (resp) {
+        if (!resp.ok) return null;
+        return resp.text();
+      })
+      .then(function (html) {
+        if (html === null || html === undefined) return;
+        listRoot.innerHTML = html;
+        updateCount();
+        syncTalkedBadges();
+        if (presenting) renderSlide();
+        applyPrivacy();
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+        }
+      })
+      .catch(function () {});
+  }
+  function shouldPoll() {
+    return document.visibilityState === 'visible';
+  }
+  function start() {
+    if (timer !== null) return;
+    timer = setInterval(refresh, POLL_INTERVAL_MS);
+  }
+  function stop() {
+    if (timer === null) return;
+    clearInterval(timer);
+    timer = null;
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (shouldPoll()) {
+      start();
+    } else {
+      stop();
+    }
+  });
+  if (shouldPoll()) start();
+  syncTalkedBadges();
 })();
 </script>
 {% endblock %}

@@ -234,9 +234,14 @@ def homework_submissions(request, homework_id):
         [homework.content_id] if homework.content_id else [],
     )
     unit = units.get(homework.content_id) if homework.content_id else None
-    return render(request, 'studio/courses/homework_submissions.html', {
+    context = {
         'homework': homework,
         'course': course,
         'submission_items': submission_review_items(homework, submissions),
         'public_url': _public_homework_url(course, homework, unit),
-    })
+    }
+    if request.GET.get('fragment') == 'submissions':
+        return render(
+            request, 'studio/courses/_homework_submissions_list.html', context,
+        )
+    return render(request, 'studio/courses/homework_submissions.html', context)

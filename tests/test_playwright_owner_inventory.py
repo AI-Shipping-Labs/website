@@ -1720,6 +1720,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_moved_proposal_is_no_longer_stuck",
     })
 
+    issue_1942_owners = frozenset({
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_enrolled_learner_reads_a_new_course_announcement",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_enrolled_learner_finds_empty_announcements_tab",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_instructor_publishes_from_studio_and_learner_sees_it",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_non_enrolled_member_cannot_find_course_announcements",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_anonymous_visitor_is_asked_to_sign_in",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_staff_previews_announcements_without_enrolling",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_learner_sees_newest_announcement_first",
+        "playwright_tests/test_course_announcements_1942.py::"
+        "test_instructor_edits_published_announcement_without_reemail_confirm",
+    })
+
     issue_1937_owners = frozenset({
         "playwright_tests/test_pod_unconfirmable_1937.py::"
         "test_pod_learns_a_proposed_time_is_dead_and_moves_on_with_the_next_best_time",
@@ -1966,8 +1985,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2844)
-        self.assertEqual(len(inventory.owners), 2640)
+        self.assertEqual(inventory.item_count, 2852)
+        self.assertEqual(len(inventory.owners), 2648)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -1994,6 +2013,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1934_owners
             | self.issue_1935_owners
             | self.issue_1937_owners
+            | self.issue_1942_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

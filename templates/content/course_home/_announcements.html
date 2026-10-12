@@ -1,0 +1,31 @@
+{% load accounts_extras layout_components member_empty_state %}
+<section aria-labelledby="course-announcements-heading" data-testid="course-announcements">
+  {% section_header "Announcements" heading_id="course-announcements-heading" size='lg' extra="mb-3" %}
+  {% if announcements %}
+  <div class="flex flex-col gap-6">
+    {% for announcement in announcements %}
+    <article class="{% include 'content/_info_card_classes.html' %} bg-card" data-testid="course-announcement-card">
+      <h3 class="text-lg font-semibold text-foreground">{{ announcement.title }}</h3>
+      <p class="mt-1 text-sm text-muted-foreground">{{ announcement.author|display_name }} · {{ announcement.published_at|member_short_datetime }}</p>
+      <div class="prose mt-3">{{ announcement.body_html }}</div>
+    </article>
+    {% endfor %}
+  </div>
+  {% if announcements_total_pages > 1 %}
+  <nav class="mt-12 flex flex-wrap items-center justify-center gap-2" aria-label="Announcements pages" data-testid="course-announcements-pager">
+    {% if announcements_prev_url %}<a href="{{ announcements_prev_url }}" class="{% button_classes 'secondary' %}"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i>Previous</a>{% endif %}
+    <span class="text-sm text-muted-foreground">Page {{ announcements_page.number }} of {{ announcements_total_pages }}</span>
+    {% if announcements_next_url %}<a href="{{ announcements_next_url }}" class="{% button_classes 'secondary' %}">Next<i data-lucide="chevron-right" class="h-4 w-4" aria-hidden="true"></i></a>{% endif %}
+  </nav>
+  {% endif %}
+  {% else %}
+  <div class="mt-6">
+    {% if request.user.is_staff %}
+    {% button_classes 'primary' as write_cta_class %}
+    {% member_empty_state title='No announcements yet' body='When the instructor posts an update, it will show up here.' icon='megaphone' kind='fresh' primary_cta_label='Write an announcement' primary_cta_url=announcements_studio_url primary_cta_class=write_cta_class testid='course-announcements-empty' %}
+    {% else %}
+    {% member_empty_state title='No announcements yet' body='When the instructor posts an update, it will show up here.' icon='megaphone' kind='fresh' testid='course-announcements-empty' %}
+    {% endif %}
+  </div>
+  {% endif %}
+</section>

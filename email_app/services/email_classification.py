@@ -125,6 +125,10 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # carries no unsubscribe footer; bounce/complaint suppression still
     # applies.
     "content_comment",
+    # Issue #1942: first-publish notice to actively enrolled learners.
+    # Transactional because enrollment is an explicit sign-up; newsletter
+    # unsubscribed does not suppress; bounce/complaint still do.
+    "course_announcement",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

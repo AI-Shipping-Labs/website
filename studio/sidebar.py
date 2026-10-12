@@ -182,6 +182,12 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_course_cohort_list',
         'studio_course_cohort_create',
         'studio_course_cohort_edit',
+        # Issue #1942: course-scoped announcements, same nesting as
+        # enrollments and cohorts above.
+        'studio_course_announcement_list',
+        'studio_course_announcement_create',
+        'studio_course_announcement_edit',
+        'studio_course_announcement_publish',
     )),
     ('content', 'projects', (
         'studio_project_list',

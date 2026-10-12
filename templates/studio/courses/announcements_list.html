@@ -1,0 +1,96 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+{% load date_formatting %}
+{% load accounts_extras %}
+
+{% block studio_title %}Announcements - {{ course.title }}{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_course_edit' course_id=course.pk as course_edit_url %}
+{% url 'studio_course_announcement_create' course_id=course.pk as create_url %}
+{% studio_header_actions title="Announcements" subtitle=course.title back_url=course_edit_url back_label=course.title testid='announcement-list-header' %}
+  <a href="{{ create_url }}" class="{% studio_action_class 'primary' %}" data-testid="announcement-new">New announcement</a>
+{% endstudio_header_actions %}
+
+<form method="get" class="mb-6 flex flex-wrap items-end gap-3">
+  <div>
+    <label class="block text-xs font-medium text-muted-foreground mb-1" for="announcement-status-filter">Status</label>
+    <select id="announcement-status-filter" name="status" onchange="this.form.submit()" class="studio-select bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="announcement-status-filter">
+      <option value="" {% if not status %}selected{% endif %}>All statuses</option>
+      <option value="draft" {% if status == 'draft' %}selected{% endif %}>Draft</option>
+      <option value="published" {% if status == 'published' %}selected{% endif %}>Published</option>
+    </select>
+  </div>
+  {% if status %}
+  <a href="{% url 'studio_course_announcement_list' course_id=course.pk %}" class="text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Reset</a>
+  {% endif %}
+</form>
+
+{% if page.object_list %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Author</th>
+        <th class="{% studio_list_class 'th' %}">Published</th>
+        <th class="{% studio_list_class 'th' %}">Email</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for announcement in page.object_list %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="announcement-row">
+        <td class="px-6 py-4 text-sm font-medium text-foreground" data-testid="announcement-title">{{ announcement.title }}</td>
+        <td class="px-6 py-4" data-testid="announcement-status">
+          {% if announcement.status == 'published' %}
+          {% studio_status_badge 'published' 'Published' %}
+          {% else %}
+          {% studio_status_badge 'draft' 'Draft' %}
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ announcement.author|display_name }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground">{{ announcement.published_at|operator_datetime }}</td>
+        <td class="px-6 py-4 text-sm text-muted-foreground" data-testid="announcement-email-state">{% if announcement.email_queued_at %}Queued{% else %}Not sent{% endif %}</td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+          <div class="{% studio_list_class 'action_group' %}">
+            {% url 'studio_course_announcement_edit' course_id=course.pk announcement_id=announcement.pk as edit_url %}
+            {% studio_list_action edit_url 'Edit' 'secondary' %}
+            {% if announcement.status == 'draft' %}
+            <form method="post" action="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="{% studio_list_class 'action_form' %}">
+              {% csrf_token %}
+              <button type="submit" formaction="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="{% studio_action_class 'primary' %}" data-confirm="{{ publish_confirm }}" data-testid="announcement-publish">Publish</button>
+            </form>
+            {% endif %}
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "studio/includes/list_pager.html" with pager_testid_prefix="announcement-list-pager" %}
+</div>
+{% elif status %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Title</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' %}">Author</th>
+        <th class="{% studio_list_class 'th' %}">Published</th>
+        <th class="{% studio_list_class 'th' %}">Email</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% url 'studio_course_announcement_list' course_id=course.pk as list_clear_url %}
+      {% studio_empty_state 'filter' entity_label='announcement' entity_label_plural='announcements' clear_url=list_clear_url colspan=6 %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='announcement' entity_label_plural='announcements' create_url=create_url cta_label='New announcement' %}
+{% endif %}
+{% endblock %}

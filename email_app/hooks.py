@@ -341,6 +341,32 @@ def _resolve_event_reminder_context(delivery, context):
     )
 
 
+def _resolve_course_announcement_context(delivery, context):
+    """Mint course-announcement copy and the member-tab path from the row."""
+
+    from django.urls import reverse  # noqa: PLC0415
+
+    if delivery.related_object_type != "content.courseannouncement":
+        raise PermanentJobError("course_announcement_content_missing")
+    from content.models.course_announcement import CourseAnnouncement  # noqa: PLC0415
+
+    announcement = (
+        CourseAnnouncement.objects
+        .select_related("course")
+        .filter(pk=delivery.related_object_id)
+        .first()
+    )
+    if announcement is None:
+        raise PermanentJobError("course_announcement_content_missing")
+    _member_greeting(delivery, context)
+    context["announcement_title"] = announcement.title
+    context["course_title"] = announcement.course.title
+    context["announcement_body"] = announcement.body
+    context["course_url"] = reverse(
+        "course_announcements", kwargs={"slug": announcement.course.slug},
+    )
+
+
 def _resolve_workshop_announcement_context(delivery, context):
     """Mint the whole workshop-announcement context from the Workshop.
 
@@ -1082,6 +1108,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_event_reminder_context(delivery, context)
     elif delivery.purpose == "workshop_announcement":
         _resolve_workshop_announcement_context(delivery, context)
+    elif delivery.purpose == "course_announcement":
+        _resolve_course_announcement_context(delivery, context)
     elif delivery.purpose == "plan_shared":
         _resolve_plan_shared_context(delivery, context)
     elif delivery.purpose == "content_comment":

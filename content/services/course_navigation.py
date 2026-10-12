@@ -22,6 +22,7 @@ from content.services.enrollment import is_enrolled
 
 HOME_SECTION_URL_NAMES = {
     'home': 'course_home',
+    'announcements': 'course_announcements',
     'syllabus': 'course_syllabus',
     'sessions': 'course_office_hours',
     'homework': 'course_homework',

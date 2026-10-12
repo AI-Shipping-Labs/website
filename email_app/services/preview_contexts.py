@@ -267,6 +267,14 @@ PREVIEW_CONTEXTS = {
             '#qa-section'
         ),
     },
+    'course_announcement': {
+        'user_name': 'Ada',
+        'course_title': 'AI Dev Tools',
+        'announcement_title': 'Week 2 office hours moved',
+        'announcement_body': '**Tomorrow** we meet at 18:00 CET.',
+        'course_url': '/courses/ai-dev-tools/home/announcements',
+        'site_url': 'https://aishippinglabs.com',
+    },
     'event_reminder': {
         'user_name': 'Ada',
         'event_title': 'AI Shipping Workshop',

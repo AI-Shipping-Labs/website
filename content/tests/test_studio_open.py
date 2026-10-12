@@ -92,6 +92,18 @@ class StudioOpenCoursePageTest(TestCase):
             reverse('studio_homework_list', kwargs={'course_id': self.course.pk}),
         )
 
+    def test_course_home_announcements_opens_announcement_list(self):
+        response = self.client.get(
+            f'/courses/{self.course.slug}/home/announcements',
+        )
+        self.assertEqual(
+            _button_href(response),
+            reverse(
+                'studio_course_announcement_list',
+                kwargs={'course_id': self.course.pk},
+            ),
+        )
+
     def test_course_home_projects_opens_peer_reviews(self):
         response = self.client.get(f'/courses/{self.course.slug}/home/projects')
         self.assertEqual(

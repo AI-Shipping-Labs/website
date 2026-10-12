@@ -96,6 +96,12 @@ from studio.views.content_sources import (
     content_source_create,
     content_source_refresh,
 )
+from studio.views.course_announcements import (
+    announcement_create,
+    announcement_edit,
+    announcement_list,
+    announcement_publish,
+)
 from studio.views.courses import (
     course_access_grant,
     course_access_list,
@@ -525,6 +531,28 @@ urlpatterns = [
         'courses/<int:course_id>/cohorts/<int:cohort_id>/edit',
         cohort_edit,
         name='studio_course_cohort_edit',
+    ),
+
+    # Course announcements (issue #1942)
+    path(
+        'courses/<int:course_id>/announcements/',
+        announcement_list,
+        name='studio_course_announcement_list',
+    ),
+    path(
+        'courses/<int:course_id>/announcements/new',
+        announcement_create,
+        name='studio_course_announcement_create',
+    ),
+    path(
+        'courses/<int:course_id>/announcements/<int:announcement_id>/edit',
+        announcement_edit,
+        name='studio_course_announcement_edit',
+    ),
+    path(
+        'courses/<int:course_id>/announcements/<int:announcement_id>/publish',
+        announcement_publish,
+        name='studio_course_announcement_publish',
     ),
 
     # Articles

@@ -336,6 +336,12 @@
         <span class="ml-2 inline-flex items-center justify-center min-w-[1.5rem] px-2 py-0.5 rounded-full bg-muted text-xs text-muted-foreground"
               data-testid="panel-cohort-count">{{ cohort_count|default:0 }}</span>
       </a>
+      <a href="{% url 'studio_course_announcement_list' course_id=course.pk %}"
+         class="inline-flex items-center justify-center rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground hover:bg-muted"
+         data-testid="panel-manage-announcements">
+        <i data-lucide="megaphone" class="mr-2 h-4 w-4"></i>
+        <span>Manage announcements</span>
+      </a>
     </div>
   </div>
 

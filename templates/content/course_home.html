@@ -42,6 +42,8 @@
       </section>
       {% endif %}
     </div>
+    {% elif section == 'announcements' %}
+      {% include "content/course_home/_announcements.html" %}
     {% elif section == 'syllabus' %}
       {% include "content/_course_syllabus.html" %}
     {% elif section == 'sessions' %}

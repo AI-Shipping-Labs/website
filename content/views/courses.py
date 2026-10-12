@@ -11,6 +11,7 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Prefetch
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_POST
@@ -36,6 +37,13 @@ from content.models.homework import Submission
 from content.models.peer_review import CourseProject, ProjectSubmission
 from content.services import completion as completion_service
 from content.services import course_units as course_unit_service
+from content.services.course_announcements import (
+    attach_rendered_bodies,
+    can_view_announcements,
+    paginate_member_announcements,
+    published_queryset,
+    show_announcements_tab,
+)
 from content.services.course_cohorts import apply_cohort_enrollment_tags
 from content.services.course_commitments import build_course_commitments, is_self_paced_view
 from content.services.course_home import build_course_home
@@ -445,6 +453,8 @@ def course_home(request, slug, section='home'):
     course = get_object_or_404(Course, slug=slug, status='published')
     if not can_access(request.user, course):
         return redirect(course.get_absolute_url())
+    if section == 'announcements' and not can_view_announcements(request.user, course):
+        raise Http404('Announcements not found')
 
     ensure_self_paced_cohort_enrollment(request.user, course)
     requested = request.GET.get('cohort', '')
@@ -472,6 +482,9 @@ def course_home(request, slug, section='home'):
     # Issue #1918: the Pods tab shows for dated-cohort viewers of a course
     # listed in PODS_COURSE_SLUGS, with the owner's pending-request count.
     context.update(pods_tab_context(course, request.user, cohort))
+    context['show_announcements_tab'] = show_announcements_tab(
+        request.user, course,
+    )
     # Header badge beside the cohort label: a dated cohort shows its own
     # member count; a self-paced (or missing) cohort shows the course's.
     if cohort is not None and cohort.mode == 'cohort':
@@ -726,6 +739,28 @@ def course_home(request, slug, section='home'):
         'schedule_is_preview': context['is_cohort_preview'],
         'schedule_timezone': schedule_timezone_name(course, request.user),
     })
+    if section == 'announcements':
+        page, paginator = paginate_member_announcements(
+            published_queryset(course), request.GET.get('page'),
+        )
+        announcements = attach_rendered_bodies(list(page.object_list))
+        context['announcements'] = announcements
+        context['announcements_page'] = page
+        context['announcements_paginator'] = paginator
+        context['announcements_total_pages'] = paginator.num_pages
+        joiner = '&' if context['cohort_query'] else '?'
+        base = reverse(
+            'course_announcements', kwargs={'slug': course.slug},
+        ) + context['cohort_query']
+        context['announcements_prev_url'] = (
+            f'{base}{joiner}page={page.number - 1}' if page.has_previous() else ''
+        )
+        context['announcements_next_url'] = (
+            f'{base}{joiner}page={page.number + 1}' if page.has_next() else ''
+        )
+        context['announcements_studio_url'] = reverse(
+            'studio_course_announcement_list', kwargs={'course_id': course.pk},
+        )
     return render(request, 'content/course_home.html', context)
 
 

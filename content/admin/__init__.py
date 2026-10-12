@@ -1,6 +1,7 @@
 from .article import *
 from .cohort import *
 from .course import *
+from .course_announcement import *
 from .curated_link import *
 from .download import *
 from .enrollment import *

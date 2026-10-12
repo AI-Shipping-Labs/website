@@ -31,6 +31,9 @@ context from ``pods.services.tab.pods_tab_context``.
     <div class="relative -mx-4 mb-3 sm:mx-0 sm:mb-6" data-course-tabs>
     <nav class="flex gap-4 overflow-x-auto border-b border-border px-4 text-sm font-medium [scrollbar-width:none] sm:gap-5 sm:px-0 [&::-webkit-scrollbar]:hidden" aria-label="Course pages" data-course-tabs-scroller>
       <a href="{% url 'course_home' slug=course.slug %}{{ cohort_query }}" {% if section == 'home' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'home' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Home</a>
+      {% if show_announcements_tab %}
+      <a href="{% url 'course_announcements' slug=course.slug %}{{ cohort_query }}" {% if section == 'announcements' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'announcements' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}" data-testid="course-tab-announcements">Announcements</a>
+      {% endif %}
       <a href="{% url 'course_syllabus' slug=course.slug %}{{ cohort_query }}" {% if section == 'syllabus' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'syllabus' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Syllabus</a>
       {% if not self_paced_view %}
       <a href="{% url 'course_office_hours' slug=course.slug %}{{ cohort_query }}" {% if section == 'sessions' %}aria-current="page"{% endif %} class="inline-flex min-h-[44px] shrink-0 items-center border-b-2 {% if section == 'sessions' %}border-accent text-foreground{% else %}border-transparent text-muted-foreground hover:text-foreground{% endif %}">Live sessions</a>

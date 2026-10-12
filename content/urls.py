@@ -173,6 +173,12 @@ urlpatterns = [
     path('courses', courses_list, name='courses_list'),
     path('courses/<slug:slug>', course_detail, name='course_detail'),
     path('courses/<slug:slug>/home', course_home, name='course_home'),
+    path(
+        'courses/<slug:slug>/home/announcements',
+        course_home,
+        {'section': 'announcements'},
+        name='course_announcements',
+    ),
     path('courses/<slug:slug>/home/syllabus', course_home, {'section': 'syllabus'}, name='course_syllabus'),
     path('courses/<slug:slug>/home/sessions', course_home, {'section': 'sessions'}, name='course_office_hours'),
     path('courses/<slug:slug>/home/homework', course_home, {'section': 'homework'}, name='course_homework'),

@@ -4194,6 +4194,347 @@
         ]
       }
     },
+    "/api/courses/{slug}/announcements": {
+      "delete": {
+        "description": "Course announcement deletion is not available through the API; unpublish in Studio instead.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "course_announcement_delete_not_available",
+                  "error": "Course announcement deletion is not available through the API; unpublish in Studio instead."
+                }
+              }
+            },
+            "description": "Announcement deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Course Announcements"
+        ]
+      },
+      "get": {
+        "description": "Announcements for this course (any course status), newest first. Optional ``status=draft|published`` filters the list.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "Filter by announcement status.",
+              "enum": [
+                "draft",
+                "published"
+              ],
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "announcements": [
+                    {
+                      "author_email": "admin@test.com",
+                      "body": "**Tomorrow** we meet at 18:00 CET.",
+                      "course": "ai-dev-tools",
+                      "created_at": "2026-10-12T11:50:00+00:00",
+                      "email_queued_at": "2026-10-12T12:00:01+00:00",
+                      "id": 12,
+                      "published_at": "2026-10-12T12:00:00+00:00",
+                      "status": "published",
+                      "title": "Week 2 office hours moved",
+                      "updated_at": "2026-10-12T12:00:00+00:00"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Announcements for the course."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_course",
+                  "error": "Course not found"
+                }
+              }
+            },
+            "description": "Course not found."
+          }
+        },
+        "summary": "List course announcements (staff-only)",
+        "tags": [
+          "Course Announcements"
+        ]
+      },
+      "post": {
+        "description": "Body: ``title``, ``body``, optional ``status`` (``draft`` default). ``status=published`` uses the same first-publish email path as Studio.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "**Tomorrow** we meet at 18:00 CET.",
+                "status": "published",
+                "title": "Week 2 office hours moved"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "draft",
+                      "published"
+                    ],
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author_email": "admin@test.com",
+                  "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "course": "ai-dev-tools",
+                  "created_at": "2026-10-12T11:50:00+00:00",
+                  "email_queued_at": "2026-10-12T12:00:01+00:00",
+                  "id": 12,
+                  "published_at": "2026-10-12T12:00:00+00:00",
+                  "status": "published",
+                  "title": "Week 2 office hours moved",
+                  "updated_at": "2026-10-12T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Created announcement."
+          },
+          "404": {
+            "description": "Course not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Create a course announcement (staff-only)",
+        "tags": [
+          "Course Announcements"
+        ]
+      }
+    },
+    "/api/courses/{slug}/announcements/{announcement_id}": {
+      "delete": {
+        "description": "Course announcement deletion is not available through the API; unpublish in Studio instead.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "405": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "course_announcement_delete_not_available",
+                  "error": "Course announcement deletion is not available through the API; unpublish in Studio instead."
+                }
+              }
+            },
+            "description": "Announcement deletion is not available."
+          }
+        },
+        "summary": "DELETE is not available on this route",
+        "tags": [
+          "Course Announcements"
+        ]
+      },
+      "get": {
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author_email": "admin@test.com",
+                  "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "course": "ai-dev-tools",
+                  "created_at": "2026-10-12T11:50:00+00:00",
+                  "email_queued_at": "2026-10-12T12:00:01+00:00",
+                  "id": 12,
+                  "published_at": "2026-10-12T12:00:00+00:00",
+                  "status": "published",
+                  "title": "Week 2 office hours moved",
+                  "updated_at": "2026-10-12T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Announcement detail."
+          },
+          "404": {
+            "description": "Course or announcement not found."
+          }
+        },
+        "summary": "Get a course announcement (staff-only)",
+        "tags": [
+          "Course Announcements"
+        ]
+      },
+      "patch": {
+        "description": "Partial update of ``title``, ``body``, and ``status``. The first ``draft`` to ``published`` transition emails enrolled learners; later publishes do not.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "announcement_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "body": "Updated body",
+                "title": "Updated title"
+              },
+              "schema": {
+                "properties": {
+                  "body": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "enum": [
+                      "draft",
+                      "published"
+                    ],
+                    "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "author_email": "admin@test.com",
+                  "body": "**Tomorrow** we meet at 18:00 CET.",
+                  "course": "ai-dev-tools",
+                  "created_at": "2026-10-12T11:50:00+00:00",
+                  "email_queued_at": "2026-10-12T12:00:01+00:00",
+                  "id": 12,
+                  "published_at": "2026-10-12T12:00:00+00:00",
+                  "status": "published",
+                  "title": "Week 2 office hours moved",
+                  "updated_at": "2026-10-12T12:00:00+00:00"
+                }
+              }
+            },
+            "description": "Updated announcement."
+          },
+          "404": {
+            "description": "Course or announcement not found."
+          },
+          "422": {
+            "description": "Validation error."
+          }
+        },
+        "summary": "Update a course announcement (staff-only)",
+        "tags": [
+          "Course Announcements"
+        ]
+      }
+    },
     "/api/courses/{slug}/certificates": {
       "get": {
         "description": "Staff-only. Lists certificates for a published course, ordered by ``-issued_at``.",

@@ -14,6 +14,7 @@ from content.services.course_units import resolve_homework_for_unit
 # Explicit ``section`` argument wins over the request URL name.
 _SECTION_DESTINATIONS = {
     'home': 'homework',
+    'announcements': 'announcements',
     'homework': 'homework',
     'projects': 'peer_reviews',
     'sessions': 'cohorts',
@@ -23,6 +24,7 @@ _SECTION_DESTINATIONS = {
 _URL_NAME_DESTINATIONS = {
     'course_detail': 'homework',
     'course_home': 'homework',
+    'course_announcements': 'announcements',
     'course_homework': 'homework',
     'course_projects': 'peer_reviews',
     'course_project_submit': 'peer_reviews',
@@ -146,6 +148,10 @@ def _course_open_url(request, course, section):
         )
     if destination == 'edit':
         return reverse('studio_course_edit', kwargs={'course_id': course_id})
+    if destination == 'announcements':
+        return reverse(
+            'studio_course_announcement_list', kwargs={'course_id': course_id},
+        )
     return reverse('studio_homework_list', kwargs={'course_id': course_id})
 
 

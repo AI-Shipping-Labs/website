@@ -24,6 +24,12 @@ class WorkshopAnnouncementClassificationTest(SimpleTestCase):
     def test_workshop_announcement_in_promotional_set(self):
         self.assertIn('workshop_announcement', PROMOTIONAL_EMAIL_TYPES)
 
+    def test_course_announcement_classified_as_transactional(self):
+        self.assertEqual(
+            classify_email_type('course_announcement'),
+            EMAIL_KIND_TRANSACTIONAL,
+        )
+
     def test_payment_grace_and_maven_notices_remain_transactional(self):
         email_types = (
             'payment_grace_failure_member',

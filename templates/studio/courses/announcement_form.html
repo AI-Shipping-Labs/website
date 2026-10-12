@@ -1,0 +1,45 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{% if is_create %}New announcement{% else %}Edit announcement{% endif %} - {{ course.title }}{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_course_announcement_list' course_id=course.pk as list_url %}
+{% if is_create %}
+{% studio_header_actions title="New announcement" subtitle=course.title back_url=list_url back_label='Announcements' %}{% endstudio_header_actions %}
+{% else %}
+{% studio_header_actions title="Edit announcement" subtitle=course.title back_url=list_url back_label='Announcements' %}{% endstudio_header_actions %}
+{% endif %}
+
+{% if errors %}
+<div class="mb-6 rounded-lg border border-destructive/40 bg-destructive/10 p-4" data-testid="form-errors">
+  <p class="text-sm font-medium text-foreground">Could not save announcement.</p>
+  <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+    {% for field, message in errors.items %}
+    <li>{{ message }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<form id="announcement-form" method="post" class="space-y-6 max-w-3xl" data-testid="announcement-form">
+  {% csrf_token %}
+  <div class="bg-card border border-border rounded-lg p-6 space-y-4">
+    {% include "studio/includes/forms/title.html" with value=values.title %}
+    {% include "studio/includes/forms/textarea.html" with label="Body (Markdown)" name="body" rows=12 value=values.body monospace=True %}
+  </div>
+  <div class="flex flex-wrap items-center gap-2 pt-2" data-testid="announcement-form-actions">
+    {% if is_create %}
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="announcement-save-draft">Save as draft</button>
+    <button type="submit" name="publish" value="1" formaction="{% url 'studio_course_announcement_create' course_id=course.pk %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-confirm="{{ publish_confirm }}" data-testid="announcement-publish">Publish</button>
+    {% elif announcement.status == 'draft' %}
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="announcement-save">Save as draft</button>
+    <button type="submit" formaction="{% url 'studio_course_announcement_publish' course_id=course.pk announcement_id=announcement.pk %}" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-confirm="{{ publish_confirm }}" data-testid="announcement-publish">Publish</button>
+    {% else %}
+    <button type="submit" class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="announcement-save">Save</button>
+    <button type="submit" name="unpublish" value="1" class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="announcement-unpublish">Unpublish</button>
+    {% endif %}
+    <a href="{{ list_url }}" class="text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Cancel</a>
+  </div>
+</form>
+{% endblock %}

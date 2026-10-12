@@ -434,6 +434,41 @@ class NotificationWorkerMintTest(TestCase):
         delivery.refresh_from_db()
         self.assertEqual(delivery.context_data, {})
 
+    def test_course_announcement_worker_mints_context_from_related_row(self):
+        from django.urls import reverse
+
+        from content.models import Course
+        from content.models.course_announcement import CourseAnnouncement
+        from integrations.config import site_base_url
+
+        course = Course.objects.create(
+            title="Mint Course", slug="mint-course-1942", status="published",
+        )
+        announcement = CourseAnnouncement.objects.create(
+            course=course,
+            title="Week 2 office hours moved",
+            body="**Tomorrow** we meet at 18:00 CET.",
+            status=CourseAnnouncement.STATUS_PUBLISHED,
+        )
+        delivery = self._send("course_announcement", announcement)
+
+        self.assertEqual(delivery.context_data, {})
+        self.assertEqual(
+            delivery.related_object_type, "content.courseannouncement",
+        )
+
+        (html,) = _drain([delivery])
+        tab_url = reverse(
+            "course_announcements", kwargs={"slug": course.slug},
+        )
+        self.assertIn("Mint Course", html)
+        self.assertIn("Week 2 office hours moved", html)
+        self.assertIn("<strong>Tomorrow</strong>", html)
+        self.assertIn(f'href="{site_base_url()}{tab_url}"', html)
+        self.assertIn("There's a new announcement in Mint Course.", html)
+        delivery.refresh_from_db()
+        self.assertEqual(delivery.context_data, {})
+
     def test_plan_shared_worker_mints_context_from_related_plan(self):
         import datetime as dt
 
@@ -466,6 +501,7 @@ class NotificationWorkerMintTest(TestCase):
         cases = [
             ("event_reminder", "events.event"),
             ("workshop_announcement", "content.workshop"),
+            ("course_announcement", "content.courseannouncement"),
             ("plan_shared", "plans.plan"),
         ]
         for purpose, related_type in cases:

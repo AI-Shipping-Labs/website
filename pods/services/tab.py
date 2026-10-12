@@ -2,6 +2,7 @@
 
 from urllib.parse import urlencode
 
+from content.services.course_announcements import show_announcements_tab
 from pods.services.config import pods_enabled_for_course
 from pods.services.people import can_view_cohort_pods, is_dated_cohort
 from pods.services.presentation import pending_count_for_owner
@@ -36,4 +37,5 @@ def course_header_context(course, user, cohort):
             mode='cohort', is_active=True,
         ).order_by('start_date')
     context.update(pods_tab_context(course, user, cohort))
+    context['show_announcements_tab'] = show_announcements_tab(user, course)
     return context

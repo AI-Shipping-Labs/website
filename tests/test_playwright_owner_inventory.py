@@ -1730,6 +1730,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_reads_a_pod_chat_from_the_member_page_without_posting",
         "playwright_tests/test_pod_chat_1920.py::"
         "test_operator_switches_chat_off_for_the_pilot",
+    })
+
     issue_1928_owners = frozenset({
         "playwright_tests/test_pod_overlap_nudge_1928.py::"
         "test_member_uses_the_weekly_overlap_to_spot_an_evening_across_timezones",

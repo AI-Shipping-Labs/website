@@ -1806,6 +1806,21 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_member_sees_how_fresh_a_proposal_is_in_their_own_words",
     })
 
+    issue_1940_owners = frozenset({
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_with_a_dead_proposal_is_pointed_back_to_the_meeting",
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_with_a_live_proposal_still_sees_the_confirm_or_cancel_rule",
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_replaces_a_dead_proposal_and_sees_what_happened_to_the_old_one",
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_who_cancels_by_hand_sees_a_plain_cancelled_row",
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_reads_a_moved_dead_proposal_top_to_bottom",
+        "playwright_tests/test_pod_unconfirmable_followup_1940.py::"
+        "test_student_reads_a_moved_proposal_still_waiting_on_answers",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2031,8 +2046,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2872)
-        self.assertEqual(len(inventory.owners), 2668)
+        self.assertEqual(inventory.item_count, 2878)
+        self.assertEqual(len(inventory.owners), 2674)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2062,6 +2077,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1937_owners
             | self.issue_1942_owners
             | self.issue_1928_owners
+            | self.issue_1940_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

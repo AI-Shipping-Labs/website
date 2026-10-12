@@ -63,6 +63,10 @@ NEXT_BEST_WINDOW = timedelta(days=7)
 DASHBOARD_DAYS = 7
 MSG_ALL_DONE = 'All meetings done. Raise the number of meetings to keep going.'
 MSG_PROPOSAL_OPEN = 'Confirm or cancel the proposed time before proposing another.'
+# Issue #1940: the open proposal can no longer be confirmed, so the way out
+# is the meeting row above (its next best time or Propose another time).
+MSG_PROPOSAL_UNCONFIRMABLE = "The proposed time can't be confirmed. Propose another time from the meeting above."
+MSG_REPLACED = 'Replaced by a new proposed time.'
 DASHBOARD_NEEDS_ANSWER = 'Needs your answer'
 BADGE_UNCONFIRMABLE = "Can't be confirmed"
 MSG_UNCONFIRMABLE = "Too few of you can make this time, so it can't be confirmed. Propose another time."
@@ -113,9 +117,16 @@ def meetings_url(pod, name, **kwargs):
     return reverse(name, kwargs={'slug': pod.cohort.course.slug, 'pod_id': pod.pk, **kwargs})
 
 
-def propose_url(pod, start=None):
+def propose_url(pod, start=None, replaces=None):
+    """The confirm page URL; ``replaces`` (issue #1940) carries the head of
+    the proposal ``Propose <time> instead`` just cancelled."""
     url = meetings_url(pod, 'pod_meeting_new')
-    return f'{url}?{urlencode({"start": start.isoformat()})}' if start is not None else url
+    params = {}
+    if start is not None:
+        params['start'] = start.isoformat()
+    if replaces is not None:
+        params['replaces'] = replaces
+    return f'{url}?{urlencode(params)}' if params else url
 
 
 def _member_zone(member):
@@ -371,7 +382,12 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
                 _waiting_line(head, member_users, head_responses, viewer, viewer_zone, now)
                 if live_status and head.status == MEETING_STATUS_PROPOSED and not unconfirmable else ''
             ),
+            'unconfirmable': unconfirmable,
             'unconfirmable_line': MSG_UNCONFIRMABLE if unconfirmable else '',
+            # Only ``Propose <time> instead`` links meetings (issue #1940).
+            'replaced_line': (
+                MSG_REPLACED if head.status == MEETING_STATUS_CANCELLED and head.replaced_by_id else ''
+            ),
             'moved_line': moved_line,
             'cant_names': ', '.join(cant_names) if live_status else '',
             'dst_lines': dst_lines(head, state, member_avail) if live_status else [],
@@ -466,15 +482,36 @@ def without_near(slots, anchor):
     return [s for s in slots if weekly_gap(minute_of_week(s.start), weekly) >= MIN_WEEKLY_GAP_MINUTES]
 
 
-def propose_state(pod, state, *, is_member, member_count):
-    """``(can_propose, blocked_line)`` for the Suggested times section."""
+def propose_state(pod, state, *, is_member, member_count, proposal_unconfirmable=False):
+    """``(can_propose, blocked_line)`` for the Suggested times section.
+
+    ``proposal_unconfirmable`` (issue #1940): the caller's answer to whether
+    the open proposal can no longer be confirmed (the pod page reads it off
+    the meeting rows, the confirm page from
+    :func:`open_proposal_unconfirmable`). Proposing stays blocked either way;
+    only the sentence changes.
+    """
     if not is_member or member_count < 2 or pod.status == POD_STATUS_ARCHIVED:
         return False, ''
     if state.has_open_proposal:
-        return False, MSG_PROPOSAL_OPEN
+        return False, MSG_PROPOSAL_UNCONFIRMABLE if proposal_unconfirmable else MSG_PROPOSAL_OPEN
     if state.used >= pod.meeting_count:
         return False, msg_all_planned(pod.meeting_count)
     return True, ''
+
+
+def open_proposal_unconfirmable(state, members):
+    """Whether the pod's open proposal can no longer be confirmed (issue #1940).
+
+    ``members`` are the pod's current members (users or ids). Only one
+    proposal is open at a time; its head carries the answers. One query,
+    none when nothing is open.
+    """
+    if not state.has_open_proposal:
+        return False
+    head = _proposal_head(state, state.open_proposals[0])
+    responses = list(PodMeetingResponse.objects.filter(meeting_id=head.pk))
+    return proposal_unconfirmable(head, state, {getattr(m, 'pk', m) for m in members}, responses)
 
 
 def meetings_section(pod, viewer, *, member_avail, viewer_zone, is_member, can_manage, now):
@@ -496,6 +533,9 @@ def meetings_section(pod, viewer, *, member_avail, viewer_zone, is_member, can_m
         'held': state.held,
         'total': pod.meeting_count,
         'all_done_line': MSG_ALL_DONE if state.held >= pod.meeting_count else '',
+        # The open proposal is always an upcoming row, so the rows already
+        # know whether it can be confirmed (issue #1940, no extra query).
+        'proposal_unconfirmable': any(row['unconfirmable'] for row in rows),
         'empty': empty,
         'call_link_url': pod.meeting_url,
         'call_link_label': call_link_label(pod.meeting_url),

@@ -297,7 +297,21 @@ How agreed meetings work (issue #1919):
     only when there is no next best time);
   - reads `Proposed time can't be confirmed - propose another time` on the
     Pods tab (when no confirmed meeting is upcoming) and is left out of the
-    dashboard `Your week` list.
+    dashboard `Your week` list;
+  - still blocks proposing from Suggested times (no `Propose this time`
+    links, no custom propose link), but the blocked line reads `The proposed
+    time can't be confirmed. Propose another time from the meeting above.`
+    (issue #1940) instead of `Confirm or cancel the proposed time before
+    proposing another.`, which stays for a proposal that can still be
+    confirmed. The same sentence is the error flash when a member opens
+    `/meetings/new` directly. The pod page reads it off the meeting rows; the
+    confirm page uses `open_proposal_unconfirmable` in
+    `pods/services/meeting_presentation.py`.
+- A proposal row's meta lines read top to bottom (issue #1940): `Proposed
+  by`, `Moved by`, then `Waiting on ...` or the can't-be-confirmed line (never
+  both), then `Can't make it: ...`, the `Clock change` lines, and the next
+  best time (or the no-offer line). Who proposed and who moved it, and when,
+  stay together.
 - The `Can't make it` answer that makes a proposal unconfirmable notifies
   every other member (proposer included) in the bell with `Raj S. can't make
   Pod A meeting 2, so this time can't be confirmed. Propose another time.`,
@@ -326,6 +340,19 @@ How agreed meetings work (issue #1919):
   and confirmed rows offer `Cancel meeting`: a proposal cancels in one tap, a
   confirmed meeting asks first (`Yes, cancel meeting`). A move clears
   `Can't make it` answers and notifies the others; no re-agreement.
+- `Propose <time> instead` on a proposal row cancels the proposal and opens
+  the confirm page for that time with `replaces=<cancelled head id>` (issue
+  #1940), carried in a hidden `replaces` input. Submitting it sets
+  `PodMeeting.replaced_by` to the new proposal's head on every meeting of the
+  cancelled proposal (a weekly proposal's whole series), and the old row
+  keeps its `Cancelled` badge with the line `Replaced by a new proposed time.`
+  under it. A `replaces` value that is not a number, not a meeting of the
+  pod, not cancelled or already linked is ignored; the proposal is still
+  made. `Cancel meeting`, `Didn't happen`, and leaving the confirm page
+  without proposing link nothing, so those rows stay a plain `Cancelled`.
+  Proposals cancelled before #1940 are not backfilled. `replaced_by` is a
+  member-page hint only: the staff API, the OpenAPI schema and Studio do not
+  show it.
 - After `Can't make it` the row offers the next best time: a start within 7
   days either side of the meeting (and 12 hours to 6 months from now) that
   the required attendance can make. It is never within 60 minutes of the

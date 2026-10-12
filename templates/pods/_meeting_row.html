@@ -1,10 +1,12 @@
 {% load accounts_extras member_badges %}
 {% comment %}
 One pod meeting row (issue #1919): title, viewer-local time with a zone
-token, status badge, meta lines (member strip, proposer, who a proposal is
-waiting on or why it can't be confirmed, mover, who can't make it,
-clock-change notes), the next best time offer, then the actions below the
-meta. The call link is shown once, under the Meetings heading, not on a row
+token, status badge, then the meta lines in this order (issue #1940): the
+"Replaced by a new proposed time." hint on a cancelled proposal that
+Propose <time> instead replaced, member strip, proposer, mover (who and when
+stay together), who a proposal is waiting on or why it can't be confirmed
+(never both), who can't make it, clock-change notes; then the next best time
+offer or the no-offer line, then the actions below the meta. The call link is shown once, under the Meetings heading, not on a row
 (issue #1937). Every POST action is its own form.
 {% endcomment %}
 <li class="py-3" data-testid="pod-meeting" data-meeting-id="{{ row.meeting.pk }}" data-meeting-status="{{ row.meeting.status }}">
@@ -12,13 +14,14 @@ meta. The call link is shown once, under the Meetings heading, not on a row
     <h3 class="break-words text-sm font-semibold text-foreground" data-testid="pod-meeting-title">{{ row.title }}</h3>
     <p class="mt-0.5 text-sm text-foreground"><time datetime="{{ row.start_iso }}" data-testid="pod-meeting-time">{{ row.time_label }}</time> <span class="text-muted-foreground">· {{ row.duration }} min</span></p>
     <div class="mt-1">{% member_status_badge row.badge tone=row.tone testid="pod-meeting-badge" %}</div>
+    {% if row.replaced_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-replaced">{{ row.replaced_line }}</p>{% endif %}
     {% if row.strip %}
     <p class="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="pod-meeting-strip">{% for local in row.strip %}<span data-testid="pod-meeting-strip-item">{{ local.name }} {{ local.time }} {{ local.city }}</span>{% endfor %}</p>
     {% endif %}
     {% if row.proposed_by %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-proposed-by">Proposed by {{ row.proposed_by }}</p>{% endif %}
+    {% if row.moved_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-moved">{{ row.moved_line }}</p>{% endif %}
     {% if row.waiting_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-waiting">{{ row.waiting_line }}</p>{% endif %}
     {% if row.unconfirmable_line %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-unconfirmable">{{ row.unconfirmable_line }}</p>{% endif %}
-    {% if row.moved_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-moved">{{ row.moved_line }}</p>{% endif %}
     {% if row.cant_names %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-cant">Can't make it: {{ row.cant_names }}</p>{% endif %}
     {% for line in row.dst_lines %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-dst">{{ line }}</p>{% endfor %}
     {% if row.offer %}

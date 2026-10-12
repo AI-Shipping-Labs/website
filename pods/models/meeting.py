@@ -99,6 +99,16 @@ class PodMeeting(TimestampedModelMixin, models.Model):
     # Issue #1935: set on a proposal's head meeting once the daily staff Slack
     # alert announced it as stuck; cleared when the proposal is moved.
     stuck_alerted_at = models.DateTimeField(null=True, blank=True)
+    # Issue #1940: on a proposal cancelled by ``Propose <time> instead``,
+    # the head meeting of the proposal that replaced it (member-surface
+    # history hint only; not exposed in the staff API or Studio).
+    replaced_by = models.ForeignKey(
+        'self',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='replaces',
+    )
 
     class Meta:
         ordering = ['starts_at', 'pk']

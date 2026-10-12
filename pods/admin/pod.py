@@ -60,7 +60,7 @@ class PodMeetingAdmin(admin.ModelAdmin):
 
     list_display = ('pod', 'starts_at', 'timezone', 'status', 'created_via', 'series_id')
     list_filter = ('status', 'created_via')
-    raw_id_fields = ('pod', 'proposed_by', 'moved_by', 'status_changed_by')
+    raw_id_fields = ('pod', 'proposed_by', 'moved_by', 'status_changed_by', 'replaced_by')
     inlines = [PodMeetingResponseInline]
 
 

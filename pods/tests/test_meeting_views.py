@@ -444,8 +444,11 @@ class ChangeFlowTest(MeetingViewFixture):
         self.assertTrue(button.startswith('Propose ') and button.endswith(' instead'))
         start = re.search(r'name="then_propose" value="([^"]+)"', page.content.decode()).group(1)
         response = self.client.post(self.meetings_url(pod, f'/{proposal.pk}/cancel'), {'then_propose': start})
+        # Issue #1940: the confirm page also learns which proposal it replaces.
         self.assertRedirects(
-            response, f'{self.meetings_url(pod, "/new")}?start={start.replace("+", "%2B").replace(":", "%3A")}',
+            response,
+            f'{self.meetings_url(pod, "/new")}?start={start.replace("+", "%2B").replace(":", "%3A")}'
+            f'&replaces={proposal.pk}',
             fetch_redirect_response=False,
         )
         proposal.refresh_from_db()

@@ -176,6 +176,8 @@ def _form_data_from_post(request):
         'description': (request.POST.get('description') or '').strip(),
         'outcomes': (request.POST.get('outcomes') or '').strip(),
         'audience': (request.POST.get('audience') or '').strip(),
+        # Issue #1921: ``Show pods to enrolled members`` checkbox.
+        'pods_enabled': bool(request.POST.get('pods_enabled')),
     }
 
 
@@ -193,6 +195,7 @@ def _form_data_from_sprint(sprint):
         'description': sprint.description,
         'outcomes': sprint.outcomes,
         'audience': sprint.audience,
+        'pods_enabled': sprint.pods_enabled,
     }
 
 
@@ -334,6 +337,7 @@ def sprint_create(request):
                 'description': '',
                 'outcomes': '',
                 'audience': '',
+                'pods_enabled': False,
             },
         )
 
@@ -409,6 +413,7 @@ def sprint_create(request):
         description=form_data['description'],
         outcomes=form_data['outcomes'],
         audience=form_data['audience'],
+        pods_enabled=form_data['pods_enabled'],
     )
     messages.success(request, f'Sprint "{sprint.name}" created.')
     return redirect('studio_sprint_detail', sprint_id=sprint.pk)
@@ -1212,6 +1217,7 @@ def sprint_edit(request, sprint_id):
     sprint.description = form_data['description']
     sprint.outcomes = form_data['outcomes']
     sprint.audience = form_data['audience']
+    sprint.pods_enabled = form_data['pods_enabled']
     sprint.save()
 
     messages.success(request, f'Sprint "{sprint.name}" updated.')

@@ -1,4 +1,4 @@
-{% load accounts_extras %}
+{% load accounts_extras pod_urls %}
 {% comment %}
 One optional call link per pod (issue #1919). Any member or staff sets or
 clears it; an empty save removes it. Errors come back through the session
@@ -11,7 +11,7 @@ button (issue #1934), like the Cancel meeting disclosure on meeting rows.
   {% endif %}
   <details data-testid="pod-call-link-disclosure"{% if call_link_error %} open{% endif %}>
     <summary class="{% button_classes 'secondary' size='sm' extra='mt-2 cursor-pointer list-none [&::-webkit-details-marker]:hidden' %}" data-testid="pod-call-link-toggle">{% if meetings.call_link_url %}Change link{% else %}Add a call link{% endif %}</summary>
-    <form method="post" action="{% url 'pod_call_link' slug=course.slug pod_id=pod.pk %}" class="mt-2 max-w-2xl" data-testid="pod-call-link-form">
+    <form method="post" action="{% pod_action_url 'pod_call_link' pod %}" class="mt-2 max-w-2xl" data-testid="pod-call-link-form">
       {% csrf_token %}
       <label for="pod-call-link-url" class="block text-sm font-medium text-foreground">Call link</label>
       <p id="pod-call-link-help" class="mt-0.5 text-xs text-muted-foreground">Bring your own Google Meet, Zoom or other link. Pod members and admins can see it.</p>

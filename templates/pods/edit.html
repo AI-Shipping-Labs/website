@@ -17,7 +17,7 @@
       <div class="mt-2 space-y-2">
         <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
           <input type="radio" name="status" value="open"{% if form.status != 'closed' %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-form-status-open">
-          Open: members of the cohort can ask to join
+          {{ pods_copy.open_label }}
         </label>
         <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
           <input type="radio" name="status" value="closed"{% if form.status == 'closed' %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-form-status-closed">

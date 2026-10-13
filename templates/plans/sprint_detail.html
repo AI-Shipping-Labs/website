@@ -51,6 +51,9 @@
             <li class="flex gap-3"><i data-lucide="clipboard-list" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>A personal sprint plan</span></li>
             <li class="flex gap-3"><i data-lucide="users" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>Accountability partners</span></li>
             <li class="flex gap-3"><i data-lucide="layout-dashboard" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>The cohort board</span></li>
+            {% if sprint.pods_enabled %}
+            <li class="flex gap-3" data-testid="sprint-landing-includes-pods"><i data-lucide="users-round" class="mt-0.5 h-5 w-5 shrink-0 text-accent"></i><span>Pods: small groups that meet to work on one thing</span></li>
+            {% endif %}
           </ul>
         </section>
 
@@ -196,6 +199,10 @@
         </p>
         {% endif %}
       </section>
+      {% endif %}
+
+      {% if pods_section %}
+      {% include "plans/_sprint_pods_section.html" %}
       {% endif %}
 
       <section class="mb-6 rounded-lg border border-border bg-card p-6" data-testid="sprint-meeting-schedule">

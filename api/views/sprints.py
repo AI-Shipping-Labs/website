@@ -87,6 +87,7 @@ _SPRINT_EXAMPLE = {
     "status": "active",
     "lifecycle_badge": {"state": "active", "label": "Active"},
     "event_series": None,
+    "pods_enabled": False,
     "created_at": "2026-04-15T12:00:00+00:00",
     "updated_at": "2026-04-15T12:00:00+00:00",
 }
@@ -260,6 +261,27 @@ _EVENT_SERIES_PROPERTY = {
         "``unknown_series``."
     ),
 }
+
+# Issue #1921: show pods to enrolled members of the sprint.
+_PODS_ENABLED_PROPERTY = {
+    "type": "boolean",
+    "description": (
+        "Show pods to enrolled members (``/sprints/<slug>/pods``). "
+        "Default ``false``."
+    ),
+}
+
+
+def _pods_enabled_error(data):
+    """422 ``invalid_type`` when ``pods_enabled`` is present and not a bool."""
+    if "pods_enabled" in data and not isinstance(data["pods_enabled"], bool):
+        return error_response(
+            "pods_enabled must be a boolean",
+            "invalid_type",
+            details={"field": "pods_enabled", "expected": "boolean"},
+        )
+    return None
+
 
 # Shared 422 ``unknown_series`` response documentation.
 _UNKNOWN_SERIES_RESPONSE = {
@@ -776,6 +798,7 @@ def _validation_error_response(exc):
                         "default": "draft",
                     },
                     "event_series": _EVENT_SERIES_PROPERTY,
+                    "pods_enabled": {**_PODS_ENABLED_PROPERTY, "default": False},
                 },
                 "example": {
                     "name": "May 2026",
@@ -881,6 +904,10 @@ def sprints_collection(request):
                 details={"field": field, "expected": "string"},
             )
 
+    pods_error = _pods_enabled_error(data)
+    if pods_error is not None:
+        return pods_error
+
     status_value = data.get("status", "draft")
     if status_value not in VALID_SPRINT_STATUSES:
         return error_response(
@@ -918,6 +945,7 @@ def sprints_collection(request):
         description=data.get("description", ""),
         outcomes=data.get("outcomes", ""),
         audience=data.get("audience", ""),
+        pods_enabled=data.get("pods_enabled", False),
     )
     return JsonResponse(serialize_sprint(sprint), status=201)
 
@@ -1032,6 +1060,7 @@ def sprint_roster_activity(request, slug):
                         "enum": _SPRINT_STATUS_ENUM,
                     },
                     "event_series": _EVENT_SERIES_PROPERTY,
+                    "pods_enabled": _PODS_ENABLED_PROPERTY,
                 },
                 "example": {"event_series": 2},
             },
@@ -1130,6 +1159,9 @@ def sprint_detail(request, slug):
                 "invalid_type",
                 details={"field": field, "expected": "string"},
             )
+    pods_error = _pods_enabled_error(data)
+    if pods_error is not None:
+        return pods_error
     if "name" in data:
         sprint.name = data["name"]
         update_fields.append("name")
@@ -1175,6 +1207,9 @@ def sprint_detail(request, slug):
         if new_series_id != sprint.event_series_id:
             sprint.event_series = new_series
             update_fields.append("event_series")
+    if "pods_enabled" in data:
+        sprint.pods_enabled = data["pods_enabled"]
+        update_fields.append("pods_enabled")
 
     if update_fields:
         sprint.save(update_fields=update_fields + ["updated_at"])

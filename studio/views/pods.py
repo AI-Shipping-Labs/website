@@ -1,6 +1,7 @@
 """Studio pages for pods (issue #1918).
 
-Planning -> Pods. Staff can create pods for students paired by external
+Planning -> Pods. Pods live in a dated course cohort or a community sprint
+(issue #1921). Staff can create pods for students paired by external
 tooling, edit any pod (including archive and owner changes), add or remove
 members by email, and approve or decline requests as an override. Every
 write goes through ``pods.services.membership`` so the capacity, waiting
@@ -18,6 +19,7 @@ from django.views.decorators.http import require_POST
 
 from accounts.services.timezones import build_timezone_options
 from content.models import Cohort
+from plans.models import Sprint
 from pods.models import (
     MEETING_MINUTES_CHOICES,
     MEETING_RESPONSE_CANT,
@@ -43,6 +45,7 @@ from pods.services import chat as chat_svc
 from pods.services import config as pods_config
 from pods.services import meetings as mtg
 from pods.services import membership as svc
+from pods.services.activity import activity_for_pod, cohort_activity, sprint_activity
 from pods.services.meeting_rules import meeting_state
 from pods.services.people import display_name, humanize_age
 from pods.services.stale_requests import is_stale
@@ -63,6 +66,10 @@ RESULT_BUCKET_LABELS = (
 
 def _cohort_label(cohort):
     return f'{cohort.course.title} - {cohort.name}'
+
+
+def _sprints():
+    return Sprint.objects.order_by('-start_date', 'name', 'pk')
 
 
 def _dated_cohorts(active_only=False):
@@ -95,11 +102,12 @@ def studio_pod_list(request):
     search = (request.GET.get('q') or '').strip()
     status_filter = (request.GET.get('status') or '').strip()
     cohort_filter = (request.GET.get('cohort') or '').strip()
+    sprint_filter = (request.GET.get('sprint') or '').strip()
     now = timezone.now()
     open_filter = Q(join_requests__status__in=OPEN_REQUEST_STATUSES)
     pods = (
-        Pod.objects.filter(cohort__isnull=False)
-        .select_related('cohort__course', 'owner')
+        Pod.objects.all()
+        .select_related('cohort__course', 'sprint', 'owner')
         .annotate(
             member_total=Count('memberships', distinct=True),
             pending_total=Count(
@@ -127,6 +135,8 @@ def studio_pod_list(request):
         pods = pods.filter(status=status_filter)
     if cohort_filter.isdigit():
         pods = pods.filter(cohort_id=int(cohort_filter))
+    if sprint_filter.isdigit():
+        pods = pods.filter(sprint_id=int(sprint_filter))
     pager = studio_pagination_context(request, pods)
     stale_days = pods_config.stale_request_days()
     # Issue #1935: same stuck rule as the daily staff Slack alert.
@@ -150,15 +160,20 @@ def studio_pod_list(request):
             'proposals_waiting': proposal_counts.get(pod.pk, 0),
         })
     cohort_options = [(str(c.pk), _cohort_label(c)) for c in _dated_cohorts()]
+    sprint_options = [(str(sprint.pk), sprint.name) for sprint in _sprints()]
     return render(request, 'studio/pods/list.html', {
         'rows': rows,
         'search': search,
         'status_filter': status_filter,
         'cohort_filter': cohort_filter,
-        'filters_active': bool(search or status_filter or cohort_filter),
+        'sprint_filter': sprint_filter,
+        'filters_active': bool(search or status_filter or cohort_filter or sprint_filter),
         'extra_filters': [{
             'name': 'cohort', 'label': 'Cohort', 'all_label': 'All cohorts',
             'value': cohort_filter, 'options': cohort_options,
+        }, {
+            'name': 'sprint', 'label': 'Sprint', 'all_label': 'All sprints',
+            'value': sprint_filter, 'options': sprint_options,
         }],
         'stale_days': stale_days,
         **pager,
@@ -167,7 +182,7 @@ def studio_pod_list(request):
 
 def _form_defaults():
     return {
-        'cohort': '', 'name': '', 'purpose': '',
+        'activity': '', 'name': '', 'purpose': '',
         'max_members': str(pods_config.default_max_members()),
         'meeting_count': str(pods_config.default_meeting_count()),
         'meeting_minutes': str(pods_config.default_meeting_minutes()),
@@ -175,24 +190,57 @@ def _form_defaults():
     }
 
 
+ACTIVITY_COHORT_PREFIX = 'cohort:'
+ACTIVITY_SPRINT_PREFIX = 'sprint:'
+
+
+def _activity_value(data):
+    """The ``Activity`` select value: ``cohort:<id>`` or ``sprint:<id>``.
+
+    ``?cohort=<id>`` / ``?sprint=<id>`` (and the older ``cohort`` POST
+    field) preselect it.
+    """
+    value = (data.get('activity') or '').strip()
+    if value:
+        return value
+    for key, prefix in (('sprint', ACTIVITY_SPRINT_PREFIX), ('cohort', ACTIVITY_COHORT_PREFIX)):
+        raw = (data.get(key) or '').strip()
+        if raw.isdigit():
+            return f'{prefix}{raw}'
+    return ''
+
+
+def _resolve_activity(value):
+    """``PodActivity`` for an ``Activity`` select value, else ``None``."""
+    kind, _sep, raw_id = value.partition(':')
+    if not raw_id.isdigit():
+        return None
+    if kind == 'cohort':
+        cohort = Cohort.objects.select_related('course').filter(pk=int(raw_id)).first()
+        return cohort_activity(cohort) if cohort else None
+    if kind == 'sprint':
+        sprint = Sprint.objects.filter(pk=int(raw_id)).first()
+        return sprint_activity(sprint) if sprint else None
+    return None
+
+
 @staff_required
 def studio_pod_create(request):
-    """Create a pod in a dated cohort, optionally with an owner and members."""
+    """Create a pod in a dated cohort or a sprint, optionally with an owner
+    and members."""
     form = _form_defaults()
-    if request.GET.get('cohort', '').isdigit():
-        form['cohort'] = request.GET['cohort']
+    form['activity'] = _activity_value(request.GET)
     error = ''
     if request.method == 'POST':
         form = {key: request.POST.get(key, '') for key in form}
-        cohort = None
-        if form['cohort'].isdigit():
-            cohort = Cohort.objects.select_related('course').filter(pk=int(form['cohort'])).first()
-        if cohort is None:
-            error = 'Choose a cohort.'
+        form['activity'] = _activity_value(request.POST)
+        activity = _resolve_activity(form['activity'])
+        if activity is None:
+            error = 'Choose a cohort or a sprint.'
         else:
             try:
                 pod, results, created = svc.create_staff_pod(
-                    cohort=cohort,
+                    activity=activity,
                     data=form,
                     owner_email=form['owner_email'],
                     member_emails=form['member_emails'],
@@ -208,14 +256,20 @@ def studio_pod_create(request):
                 else:
                     messages.info(
                         request,
-                        f'Pod "{pod.name}" already exists in this cohort; '
+                        f'Pod "{pod.name}" already exists in this {activity.noun}; '
                         'new emails were added to it.',
                     )
                 return redirect('studio_pod_detail', pod_id=pod.pk)
     return render(request, 'studio/pods/new.html', {
         'form': form,
         'error': error,
-        'cohort_options': [(str(c.pk), _cohort_label(c)) for c in _dated_cohorts(active_only=True)],
+        'cohort_options': [
+            (f'{ACTIVITY_COHORT_PREFIX}{c.pk}', _cohort_label(c)) for c in _dated_cohorts(active_only=True)
+        ],
+        'sprint_options': [
+            (f'{ACTIVITY_SPRINT_PREFIX}{sprint.pk}', sprint.name)
+            for sprint in _sprints().exclude(status='cancelled')
+        ],
         'meeting_minute_choices': MEETING_MINUTES_CHOICES,
     }, status=400 if error else 200)
 
@@ -227,7 +281,8 @@ def _member_url(pod):
 @staff_required
 def studio_pod_detail(request, pod_id):
     """Settings form (POST saves), members, requests and suggested times."""
-    pod = get_object_or_404(Pod.objects.select_related('cohort__course', 'owner'), pk=pod_id)
+    pod = get_object_or_404(Pod.objects.select_related('cohort__course', 'sprint', 'owner'), pk=pod_id)
+    activity = activity_for_pod(pod)
     error = ''
     if request.method == 'POST':
         data = {key: request.POST.get(key, '') for key in (
@@ -302,7 +357,9 @@ def studio_pod_detail(request, pod_id):
         **chat_svc.studio_chat(pod),
         # Issue #1922: notes and transcripts (shown whatever PODS_ARTIFACTS_ENABLED says).
         'artifact_rows': artifact_svc.studio_rows(pod, meeting_state(pod, now).numbers),
-        'activity': _cohort_label(pod.cohort),
+        'activity': activity.label,
+        'activity_kind': activity.kind,
+        'activity_noun': activity.noun,
         'memberships': memberships,
         'member_rows': [
             {'membership': m, 'timezone': availability[m.user_id].timezone_name,
@@ -316,7 +373,10 @@ def studio_pod_detail(request, pod_id):
         'meeting_minute_choices': MEETING_MINUTES_CHOICES,
         'add_results': _pop_results(request, pod),
         'member_view_url': _member_url(pod),
-        'enabled_for_members': pods_config.pods_enabled_for_course(pod.cohort.course),
+        'enabled_for_members': activity.member_pages_enabled(),
+        'sprint_edit_url': (
+            reverse('studio_sprint_edit', kwargs={'sprint_id': pod.sprint_id}) if pod.sprint_id else ''
+        ),
     }, status=400 if error else 200)
 
 

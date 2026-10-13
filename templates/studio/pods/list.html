@@ -4,8 +4,8 @@
 {% block studio_title %}Pods{% endblock %}
 
 {% block studio_content %}
-{% studio_header_actions title="Pods" subtitle="Small groups inside a dated course cohort. Members start pods and send join requests; staff can create pods and step in on stale requests." testid="pods-header" %}
-  <a href="{% url 'studio_pod_create' %}{% if cohort_filter %}?cohort={{ cohort_filter }}{% endif %}"
+{% studio_header_actions title="Pods" subtitle="Small groups inside a dated course cohort or a community sprint. Members start pods and send join requests; staff can create pods and step in on stale requests." testid="pods-header" %}
+  <a href="{% url 'studio_pod_create' %}{% if sprint_filter %}?sprint={{ sprint_filter }}{% elif cohort_filter %}?cohort={{ cohort_filter }}{% endif %}"
      class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="pods-new">
     <i data-lucide="plus" class="h-4 w-4"></i>
@@ -42,8 +42,13 @@
           {% if row.stuck %}<div class="mt-1" data-testid="studio-pod-stuck">{% studio_status_badge 'stale' 'Stuck proposal' %}</div>{% endif %}
         </td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm" data-label="Activity" data-testid="studio-pod-activity">
+          {% if row.pod.sprint_id %}
+          <span class="whitespace-nowrap text-foreground">{{ row.pod.sprint.name }}</span>
+          <div class="text-xs text-muted-foreground">Sprint</div>
+          {% else %}
           <span class="whitespace-nowrap text-foreground">{{ row.pod.cohort.name }}</span>
           <div class="text-xs text-muted-foreground">{{ row.pod.cohort.course.title }}</div>
+          {% endif %}
         </td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Members" data-testid="studio-pod-members">{{ row.pod.member_total }}/{{ row.pod.max_members }}</td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} whitespace-nowrap text-sm text-muted-foreground" data-label="Requests" data-testid="studio-pod-requests"><span data-testid="studio-pod-pending">{{ row.pod.pending_total }} pending</span><div data-testid="studio-pod-waiting">{{ row.pod.waiting_total }} waiting</div></td>

@@ -5,7 +5,7 @@
 
 {% block pods_content %}
 <section aria-labelledby="pods-heading" data-testid="pods-list">
-  {% section_header "Pods" heading_id="pods-heading" size="lg" subtitle="Small groups in your cohort that meet to work on one thing together." %}
+  {% section_header "Pods" heading_id="pods-heading" size="lg" subtitle=pods_copy.list_subtitle %}
   {% if rows %}
   {% if can_start %}
   <div class="mt-4 flex flex-wrap gap-3" data-testid="pods-actions">
@@ -33,9 +33,9 @@
     {% if can_start %}
     {% button_classes 'primary' as start_cta_class %}
     {% button_classes 'secondary' as availability_cta_class %}
-    {% member_empty_state title='No pods yet' body='Start a pod with a purpose and others in your cohort can ask to join.' icon='users' kind='fresh' primary_cta_label='Start a pod' primary_cta_url=new_pod_url primary_cta_class=start_cta_class secondary_cta_label='Edit my availability' secondary_cta_url=availability_url secondary_cta_class=availability_cta_class testid='pods-empty' %}
+    {% member_empty_state title='No pods yet' body=pods_copy.empty_body icon='users' kind='fresh' primary_cta_label='Start a pod' primary_cta_url=new_pod_url primary_cta_class=start_cta_class secondary_cta_label='Edit my availability' secondary_cta_url=availability_url secondary_cta_class=availability_cta_class testid='pods-empty' %}
     {% else %}
-    {% member_empty_state title='No pods yet' body='Start a pod with a purpose and others in your cohort can ask to join.' icon='users' kind='fresh' testid='pods-empty' %}
+    {% member_empty_state title='No pods yet' body=pods_copy.empty_body icon='users' kind='fresh' testid='pods-empty' %}
     {% endif %}
   </div>
   {% endif %}

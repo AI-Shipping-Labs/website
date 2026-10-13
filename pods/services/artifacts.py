@@ -21,7 +21,6 @@ import os
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
-from django.urls import reverse
 from django.utils import timezone
 
 from pods.models import (
@@ -37,6 +36,7 @@ from pods.models import (
 )
 from pods.services import config as pods_config
 from pods.services import meetings as mtg
+from pods.services.activity import activity_for_pod
 from pods.services.meeting_rules import meeting_end, meeting_state
 from pods.services.membership import PodError, pod_url
 from pods.services.people import display_name
@@ -271,7 +271,8 @@ def staff_delete(artifact):
 # --- Presentation ----------------------------------------------------------------
 
 def _url(pod, name, **kwargs):
-    return reverse(name, kwargs={'slug': pod.cohort.course.slug, 'pod_id': pod.pk, **kwargs})
+    """A per-pod notes route under the pod's course or sprint (issue #1921)."""
+    return activity_for_pod(pod).action_url(pod, name, **kwargs)
 
 
 def notes_anchor_url(pod):

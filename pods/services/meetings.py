@@ -213,7 +213,7 @@ def set_call_link(pod, actor, raw):
 def _lock_pod(pod):
     # ``of=('self',)``: ``Pod.cohort`` is nullable, so ``select_related``
     # is a LEFT OUTER JOIN and PostgreSQL refuses FOR UPDATE on it.
-    return Pod.objects.select_for_update(of=('self',)).select_related('cohort__course').get(pk=pod.pk)
+    return Pod.objects.select_for_update(of=('self',)).select_related('cohort__course', 'sprint').get(pk=pod.pk)
 
 
 def members_with_zones(pod):

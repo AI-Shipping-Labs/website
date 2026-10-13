@@ -84,7 +84,7 @@ class SprintsListTest(SprintApiTestBase):
                 "slug", "name", "start_date", "end_date",
                 "description", "outcomes", "audience",
                 "duration_weeks", "status", "lifecycle_badge", "event_series",
-                "created_at", "updated_at",
+                "pods_enabled", "created_at", "updated_at",
             },
         )
 

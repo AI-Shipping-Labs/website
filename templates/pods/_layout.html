@@ -1,19 +1,25 @@
 {% extends "base.html" %}
 {% comment %}
-Shared frame for the member Pods pages (issue #1918): the course Home
-header and tab strip with the Pods tab active, the Django messages queue,
-then the page body in the course Home Reader-width column.
+Shared frame for the member Pods pages (issues #1918, #1921). Cohort pods:
+the course Home header and tab strip with the Pods tab active. Sprint pods:
+the sprint header (``Sprint`` eyebrow, sprint name linking back) and no
+course tabs. Then the Django messages queue and the page body in the
+Reader-width column.
 {% endcomment %}
 
-{% block title %}{% block pods_title %}Pods{% endblock %} · {{ course.title }} | AI Shipping Labs{% endblock %}
+{% block title %}{% block pods_title %}Pods{% endblock %} · {{ pods_frame_title }} | AI Shipping Labs{% endblock %}
 
 {% block messages %}{% endblock %}
 
 {% block body %}
-{% include "includes/header.html" with studio_obj=course %}
+{% include "includes/header.html" with studio_obj=pods_frame_studio_obj %}
 <main class="min-h-screen pt-20 sm:pt-24" id="main-content" data-testid="pods-page">
   <div class="mx-auto max-w-3xl px-4 pb-16 pt-2 sm:px-6 sm:pt-8 lg:px-8">
+    {% if pods_frame_sprint %}
+    {% include "pods/_sprint_header.html" %}
+    {% else %}
     {% include "content/course_home/_header_tabs.html" %}
+    {% endif %}
     {% include "_partials/messages.html" %}
     {% block pods_content %}{% endblock %}
   </div>
@@ -22,6 +28,8 @@ then the page body in the course Home Reader-width column.
 {% endblock %}
 
 {% block extra_scripts %}
+{% if not pods_frame_sprint %}
 {% include "content/course_home/_tabs_script.html" %}
+{% endif %}
 {% block pods_scripts %}{% endblock %}
 {% endblock %}

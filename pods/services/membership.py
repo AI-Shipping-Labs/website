@@ -16,7 +16,6 @@ from django.urls import reverse
 from django.utils import timezone
 
 from accounts.services.email_resolution import normalize_email, resolve_users_by_emails
-from content.models import CohortEnrollment
 from notifications.models import Notification
 from pods.models import (
     ACTIVE_MEETING_STATUSES,
@@ -46,8 +45,9 @@ from pods.models import (
     PodMembership,
 )
 from pods.services import config as pods_config
+from pods.services.activity import activity_for_pod, as_activity, cohort_activity
 from pods.services.meeting_rules import used_meeting_count
-from pods.services.people import is_cohort_participant, is_dated_cohort, user_timezone_name
+from pods.services.people import user_timezone_name
 
 NOTIFICATION_POD_REQUEST = 'pod_request'
 NOTIFICATION_POD_REQUEST_DECIDED = 'pod_request_decided'
@@ -57,6 +57,7 @@ MSG_NOT_OPEN = 'This pod is not accepting requests right now.'
 MSG_ALREADY_MEMBER = 'You are already in this pod.'
 MSG_ALREADY_REQUESTED = 'You already asked to join this pod.'
 MSG_NOT_ELIGIBLE = 'Only members of this cohort can join its pods.'
+MSG_NOT_ELIGIBLE_SPRINT = 'Only members of this sprint can join its pods.'
 MSG_REQUEST_NOT_OPEN = 'This request has already been answered.'
 MSG_NOT_A_MEMBER = 'That person is not a member of this pod.'
 MSG_REQUEST_DECLINED_FINAL = "You can't ask to join this pod again."
@@ -87,15 +88,23 @@ def msg_pod_full(pod, count=None):
     return f'This pod is full ({count} of {pod.max_members}). Raise the size limit first.'
 
 
-def msg_open_request_limit(limit):
+def msg_not_eligible(noun='cohort'):
+    return MSG_NOT_ELIGIBLE_SPRINT if noun == 'sprint' else MSG_NOT_ELIGIBLE
+
+
+def msg_open_request_limit(limit, noun='cohort'):
     return (
-        f'You already have {limit} open requests in this cohort. '
+        f'You already have {limit} open requests in this {noun}. '
         'Withdraw one to request another pod.'
     )
 
 
-def msg_created_limit(limit):
-    return f'You can start up to {limit} pods in this cohort.'
+def msg_created_limit(limit, noun='cohort'):
+    return f'You can start up to {limit} pods in this {noun}.'
+
+
+def msg_owner_not_enrolled(email, noun='cohort'):
+    return f'{email} is not enrolled in this {noun}.'
 
 
 def msg_request_cooldown(date_label):
@@ -116,12 +125,18 @@ def msg_count_below_used(used):
 # --- URLs -----------------------------------------------------------------
 
 def pod_url(pod):
-    return reverse('pod_detail', kwargs={'slug': pod.cohort.course.slug, 'pod_id': pod.pk})
+    """The member pod page, under the course or the sprint (issue #1921)."""
+    return activity_for_pod(pod).pod_url(pod)
 
 
 def pods_tab_url(cohort):
     url = reverse('course_pods', kwargs={'slug': cohort.course.slug})
     return f'{url}?{urlencode({"cohort": cohort.external_key})}' if cohort.external_key else url
+
+
+def pods_list_url(pod):
+    """The pods list of ``pod``'s activity (course Pods tab or sprint pods)."""
+    return activity_for_pod(pod).list_url()
 
 
 # --- Counts ---------------------------------------------------------------
@@ -352,34 +367,44 @@ def _lock(pod):
     # ``of=('self',)``: ``Pod.cohort`` and ``Pod.owner`` are nullable, so
     # ``select_related`` is a LEFT OUTER JOIN and PostgreSQL refuses FOR
     # UPDATE on it (issue #1919). Only the pod row needs the lock.
-    return Pod.objects.select_for_update(of=('self',)).select_related('cohort__course', 'owner').get(pk=pod.pk)
+    return Pod.objects.select_for_update(of=('self',)).select_related('cohort__course', 'sprint', 'owner').get(pk=pod.pk)
 
 
 # --- Creating pods --------------------------------------------------------
 
 def ensure_dated_cohort(cohort):
-    if not is_dated_cohort(cohort):
+    ensure_can_have_pods(cohort_activity(cohort))
+
+
+def ensure_can_have_pods(activity):
+    """A self-paced cohort cannot have pods; sprints always can."""
+    if not activity.can_have_pods():
         raise PodError(MSG_SELF_PACED, code='validation_error', field='cohort')
 
 
 @transaction.atomic
-def start_member_pod(user, cohort, data):
-    """A member starts a pod of one: owner and first member."""
-    ensure_dated_cohort(cohort)
-    if not is_cohort_participant(user, cohort):
-        raise PodError(MSG_NOT_ELIGIBLE, code='not_eligible')
+def start_member_pod(user, activity, data):
+    """A member starts a pod of one: owner and first member.
+
+    ``activity`` is a dated ``Cohort``, a ``Sprint`` or a ``PodActivity``;
+    the created-pods limit counts within that activity (issue #1921).
+    """
+    activity = as_activity(activity)
+    ensure_can_have_pods(activity)
+    if not activity.is_participant(user):
+        raise PodError(msg_not_eligible(activity.noun), code='not_eligible')
     cleaned, errors = clean_pod_fields(data)
     if errors:
         first_field = next(iter(errors))
         raise PodError(errors[first_field], field=first_field)
     limit = pods_config.max_created_per_member()
     created = Pod.objects.filter(
-        cohort=cohort, created_by=user, source=POD_SOURCE_MEMBER,
+        created_by=user, source=POD_SOURCE_MEMBER, **activity.pod_filter(),
     ).exclude(status=POD_STATUS_ARCHIVED).count()
     if created >= limit:
-        raise PodError(msg_created_limit(limit), code='pod_limit')
+        raise PodError(msg_created_limit(limit, activity.noun), code='pod_limit')
     pod = Pod.objects.create(
-        cohort=cohort,
+        **activity.pod_filter(),
         owner=user,
         created_by=user,
         source=POD_SOURCE_MEMBER,
@@ -429,18 +454,21 @@ def normalize_email_list(raw):
 
 
 @transaction.atomic
-def create_staff_pod(*, cohort, data, owner_email='', member_emails=None, actor=None, source):
+def create_staff_pod(*, data, cohort=None, sprint=None, activity=None, owner_email='', member_emails=None,
+                     actor=None, source):
     """Studio/API create. Returns ``(pod, AddResults, created)``.
 
-    The owner (when given) must be enrolled and becomes the first member.
+    The pod goes into ``cohort`` (dated), ``sprint`` or ``activity``. The
+    owner (when given) must be enrolled and becomes the first member.
 
-    Idempotent: a non-archived pod in the same cohort with the same name
+    Idempotent: a non-archived pod in the same activity with the same name
     (case-insensitive) is the same pod. It is returned unchanged with
     ``created=False``; only emails not yet in it are added, so a retried or
     double-submitted create never puts the same people in two pods. Change
     settings or the owner of an existing pod with an update instead.
     """
-    ensure_dated_cohort(cohort)
+    activity = as_activity(activity or sprint or cohort)
+    ensure_can_have_pods(activity)
     cleaned, errors = clean_pod_fields(data)
     if errors:
         first_field = next(iter(errors))
@@ -451,9 +479,9 @@ def create_staff_pod(*, cohort, data, owner_email='', member_emails=None, actor=
         owner = resolve_users_by_emails([owner_email]).get(owner_email)
         if owner is None:
             raise PodError(f'No user with email {owner_email}.', code='unknown_user', field='owner_email')
-        if not CohortEnrollment.objects.filter(cohort=cohort, user=owner).exists():
+        if not activity.is_enrolled(owner):
             raise PodError(
-                f'{owner_email} is not enrolled in this cohort.',
+                msg_owner_not_enrolled(owner_email, activity.noun),
                 code='owner_not_enrolled',
                 field='owner_email',
             )
@@ -462,7 +490,7 @@ def create_staff_pod(*, cohort, data, owner_email='', member_emails=None, actor=
         emails = [owner_email] + [e for e in emails if e != owner_email]
     existing = (
         Pod.objects.select_for_update()
-        .filter(cohort=cohort, name__iexact=cleaned['name'])
+        .filter(name__iexact=cleaned['name'], **activity.pod_filter())
         .exclude(status=POD_STATUS_ARCHIVED)
         .order_by('pk')
         .first()
@@ -470,7 +498,7 @@ def create_staff_pod(*, cohort, data, owner_email='', member_emails=None, actor=
     if existing is not None:
         return existing, add_members_by_email(existing, emails, actor=actor, source=source), False
     pod = Pod.objects.create(
-        cohort=cohort,
+        **activity.pod_filter(),
         owner=owner,
         created_by=actor if getattr(actor, 'is_authenticated', False) else None,
         source=source,
@@ -488,11 +516,7 @@ def add_members_by_email(pod, emails, *, actor=None, source):
     emails = normalize_email_list(emails)
     users_by_email = resolve_users_by_emails(emails) if emails else {}
     count = member_count(pod)
-    enrolled_ids = set(
-        CohortEnrollment.objects.filter(
-            cohort=pod.cohort, user__in=[u.pk for u in users_by_email.values()],
-        ).values_list('user_id', flat=True)
-    )
+    enrolled_ids = activity_for_pod(pod).enrolled_user_ids(u.pk for u in users_by_email.values())
     for email in emails:
         user = users_by_email.get(email)
         if user is None:
@@ -546,8 +570,9 @@ def request_to_join(pod, user, message=''):
     pod = _lock(pod)
     if pod.status != POD_STATUS_OPEN:
         raise PodError(MSG_NOT_OPEN, code='pod_not_open')
-    if not is_cohort_participant(user, pod.cohort):
-        raise PodError(MSG_NOT_ELIGIBLE, code='not_eligible')
+    activity = activity_for_pod(pod)
+    if not activity.is_participant(user):
+        raise PodError(msg_not_eligible(activity.noun), code='not_eligible')
     if pod.memberships.filter(user=user).exists():
         raise PodError(MSG_ALREADY_MEMBER, code='already_member')
     if pod.join_requests.filter(user=user, status__in=OPEN_REQUEST_STATUSES).exists():
@@ -561,11 +586,11 @@ def request_to_join(pod, user, message=''):
             code='request_cooldown',
         )
     limit = pods_config.max_open_requests_per_member()
-    open_in_cohort = PodJoinRequest.objects.filter(
-        user=user, pod__cohort=pod.cohort, status__in=OPEN_REQUEST_STATUSES,
+    open_in_activity = PodJoinRequest.objects.filter(
+        user=user, status__in=OPEN_REQUEST_STATUSES, **activity.pod_filter('pod__'),
     ).count()
-    if open_in_cohort >= limit:
-        raise PodError(msg_open_request_limit(limit), code='request_limit')
+    if open_in_activity >= limit:
+        raise PodError(msg_open_request_limit(limit, activity.noun), code='request_limit')
     message = (message or '').strip()
     if len(message) > 300:
         raise PodError('Keep your message to 300 characters or fewer.', field='message')
@@ -630,7 +655,7 @@ def decline_request(join_request, actor):
     _notify(
         join_request.user,
         f'Your request to join {pod.name} was not accepted',
-        pods_tab_url(pod.cohort),
+        pods_list_url(pod),
         NOTIFICATION_POD_REQUEST_DECIDED,
         body='Browse other pods or start your own.',
     )
@@ -683,13 +708,20 @@ def remove_member(pod, user, *, actor=None):
     return pod
 
 
-def remove_user_from_cohort(user, cohort):
-    """Unenrollment: leave every pod of ``cohort`` and cancel open requests."""
-    for pod in Pod.objects.filter(cohort=cohort, memberships__user=user).distinct():
+def remove_user_from_activity(user, activity):
+    """Unenrollment: leave every pod of the activity and cancel open
+    requests there; other cohorts and sprints are untouched."""
+    activity = as_activity(activity)
+    for pod in Pod.objects.filter(memberships__user=user, **activity.pod_filter()).distinct():
         remove_member(pod, user)
     PodJoinRequest.objects.filter(
-        user=user, pod__cohort=cohort, status__in=OPEN_REQUEST_STATUSES,
+        user=user, status__in=OPEN_REQUEST_STATUSES, **activity.pod_filter('pod__'),
     ).update(status=REQUEST_STATUS_CANCELLED, decided_at=timezone.now())
+
+
+def remove_user_from_cohort(user, cohort):
+    """Unenrollment: leave every pod of ``cohort`` and cancel open requests."""
+    remove_user_from_activity(user, cohort_activity(cohort))
 
 
 # --- Settings -------------------------------------------------------------
@@ -770,8 +802,10 @@ __all__ = [
     'msg_pod_full',
     'open_request_for',
     'pod_url',
+    'pods_list_url',
     'pods_tab_url',
     'remove_member',
+    'remove_user_from_activity',
     'remove_user_from_cohort',
     'request_to_join',
     'start_member_pod',

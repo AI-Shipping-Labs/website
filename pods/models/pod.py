@@ -1,9 +1,9 @@
 """Pod, membership and join-request models (issue #1918).
 
-A pod belongs to exactly one community activity. Phase 1 wires dated
-course cohorts only; the ``sprint`` link is reserved for #1921 so sprint
-pods need no schema change. The DB check constraint enforces that exactly
-one activity link is set.
+A pod belongs to exactly one community activity: a dated course cohort or
+a community sprint (issue #1921). The DB check constraint enforces that
+exactly one activity link is set; ``pods.services.activity`` answers every
+activity question (participants, URLs, labels).
 
 ``PodJoinRequest`` is the one mechanism for both approval and the waiting
 list: a request is ``pending`` while the pod has a free seat and
@@ -117,7 +117,7 @@ class Pod(TimestampedModelMixin, models.Model):
         blank=True,
         on_delete=models.CASCADE,
         related_name='pods',
-        help_text='Reserved for sprint pods (#1921); never set in phase 1.',
+        help_text='Community sprint this pod belongs to (issue #1921).',
     )
     name = models.CharField(max_length=80)
     purpose = models.TextField(max_length=500)
@@ -180,6 +180,13 @@ class Pod(TimestampedModelMixin, models.Model):
     @property
     def course(self):
         return self.cohort.course if self.cohort_id else None
+
+    @property
+    def activity(self):
+        """The cohort or sprint this pod belongs to (``PodActivity``)."""
+        from pods.services.activity import activity_for_pod  # noqa: PLC0415 -- services import models
+
+        return activity_for_pod(self)
 
 
 class PodMembership(models.Model):

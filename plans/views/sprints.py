@@ -45,6 +45,7 @@ from plans.models import (
     SprintFeedbackRequest,
 )
 from plans.services.accountability import accountability_partners_by_user
+from pods.services.sprint_section import sprint_pods_section
 from questionnaires.models import Response
 from questionnaires.onboarding import get_onboarding_response
 from questionnaires.services import (
@@ -185,6 +186,8 @@ def sprint_detail(request, sprint_slug):
     ]
 
     feedback_response = _viewer_feedback_response(sprint, user)
+    # Issue #1921: enrolled members (and staff) see their sprint pods.
+    pods_section = sprint_pods_section(sprint, user)
 
     return render(
         request,
@@ -204,6 +207,7 @@ def sprint_detail(request, sprint_slug):
             'sprint_audience': sprint_audience,
             'feedback_response': feedback_response,
             'accountability_partners': accountability_partners,
+            'pods_section': pods_section,
         },
     )
 

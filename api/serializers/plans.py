@@ -56,6 +56,7 @@ def serialize_sprint(sprint):
         "event_series": (
             {"id": series.id, "slug": series.slug} if series else None
         ),
+        "pods_enabled": sprint.pods_enabled,
         "created_at": isoformat_or_none(sprint.created_at),
         "updated_at": isoformat_or_none(sprint.updated_at),
     }

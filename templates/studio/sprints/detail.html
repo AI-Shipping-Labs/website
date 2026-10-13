@@ -134,6 +134,24 @@
   {% endif %}
 </div>
 
+{% comment %}Issue #1921: sprint pods. Count links to the filtered Studio pods list.{% endcomment %}
+<h2 class="text-lg font-semibold text-foreground mb-4">Pods</h2>
+<div class="bg-card border border-border rounded-lg p-6 mb-8" data-testid="sprint-pods-card">
+  {% url 'studio_pod_list' as studio_pods_url %}
+  {% url 'studio_pod_create' as studio_pod_create_url %}
+  {% with pod_total=sprint.pods.count %}
+  <a href="{{ studio_pods_url }}?sprint={{ sprint.pk }}" class="text-accent hover:underline text-base font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-pods-count">{{ pod_total }} pod{{ pod_total|pluralize }}</a>
+  {% endwith %}
+  {% if not sprint.pods_enabled %}
+  <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-pods-off">Pods are off for this sprint. Turn them on in <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit</a>.</p>
+  {% endif %}
+  <div class="mt-4 flex flex-wrap items-center gap-2" data-testid="sprint-pods-actions">
+    {% with sprint_id_str=sprint.pk|stringformat:"d" %}{% with create_pod_url=studio_pod_create_url|add:"?sprint="|add:sprint_id_str %}
+    {% studio_list_action create_pod_url 'Create pod' 'secondary' %}
+    {% endwith %}{% endwith %}
+  </div>
+</div>
+
 <section id="pending-requests" class="mb-8" data-testid="sprint-pending-requests-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">
     Pending plan requests ({{ pending_plan_requests|length }})

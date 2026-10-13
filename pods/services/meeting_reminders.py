@@ -37,7 +37,7 @@ def send_meeting_reminders(*, now=None):
             reminder_sent_at__isnull=True,
         )
         .exclude(pod__status=POD_STATUS_ARCHIVED)
-        .select_related('pod__cohort__course')
+        .select_related('pod__cohort__course', 'pod__sprint')
         .order_by('starts_at', 'pk')
     )
     meetings = notifications = 0

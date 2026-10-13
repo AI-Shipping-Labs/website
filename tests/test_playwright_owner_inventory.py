@@ -1491,6 +1491,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_staff_moderates_lesson_thread_and_homework_thread_stays_intact",
     })
 
+    issue_1716_owners = frozenset({
+        "playwright_tests/test_skill_gap_1716.py::"
+        "test_free_member_maps_background_to_next_steps",
+        "playwright_tests/test_skill_gap_1716.py::"
+        "test_anonymous_visitor_is_asked_to_sign_in",
+    })
+
     issue_1795_owners = frozenset({
         "playwright_tests/test_course_schedule_timezone_1795.py::"
         "test_first_visit_localizes_in_place_and_matches_linked_pages",
@@ -2122,8 +2129,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2910)
-        self.assertEqual(len(inventory.owners), 2706)
+        self.assertEqual(inventory.item_count, 2912)
+        self.assertEqual(len(inventory.owners), 2708)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2143,6 +2150,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1925_owners
             | self.issue_1926_owners
             | self.issue_1795_owners
+            | self.issue_1716_owners
             | self.issue_1918_owners
             | self.issue_1927_owners
             | self.issue_1929_owners

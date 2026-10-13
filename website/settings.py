@@ -233,6 +233,8 @@ INSTALLED_APPS = [
     'api',
     'member_api',
     'triggers.apps.TriggersConfig',
+    # #1716: skill-gap page (no models; data in skill_gap/data/).
+    'skill_gap.apps.SkillGapConfig',
 ]
 
 # v0.5.3 curriculum.0001 pins package events 0003_provisional_integration_attempt.

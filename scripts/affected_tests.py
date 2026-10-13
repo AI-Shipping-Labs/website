@@ -114,6 +114,7 @@ APP_LABELS: tuple[str, ...] = (
     "plans",
     "pods",
     "questionnaires",
+    "skill_gap",
     "studio",
     "topics",
     "triggers",

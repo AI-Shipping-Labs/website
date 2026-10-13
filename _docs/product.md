@@ -226,6 +226,7 @@ This taxonomy is the source of truth for public navigation, page copy, and futur
 |---------|-----|-------------|--------|-------|
 | About page | `/about` | Community introduction, founders (Alexey Grigorev and Valeriia Kuka) with bios and LinkedIn links, "Why AI Shipping Labs?" CTA | Everyone | Shipped |
 | Community sprints index | `/sprints` | Public discovery page for current, future, and past community sprint cohorts with tier requirements and next-step CTAs | Everyone (joining requires authentication/tier access) | Shipped |
+| Skill-gap analysis | `/skill-gap` | Pick one of five backgrounds; get strengths, ordered gaps, suggested path, timeline, and 3 platform next steps | Any signed-in member (anonymous: sign-in card) | Shipped |
 | Sitemap | `/sitemap.xml` | XML sitemap for search engines | Everyone | Shipped |
 | Django admin | `/admin/` | Unlinked low-level framework and forensic model surface; routine operator actions live in Studio | Superusers/staff | Shipped |
 

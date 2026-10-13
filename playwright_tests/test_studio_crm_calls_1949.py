@@ -25,6 +25,7 @@ import uuid
 
 import pytest
 
+from scripts.browser_journey_policy import browser_journey
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -164,6 +165,7 @@ def _mobile_auth_context(browser, email):
 @pytest.mark.django_db(transaction=True)
 class TestCRMOneHopNav:
     @pytest.mark.core
+    @browser_journey
     def test_desktop_account_menu_links_to_crm(self, django_server, browser):
         _ensure_tiers()
         _wipe_state()
@@ -184,6 +186,7 @@ class TestCRMOneHopNav:
         context.close()
 
     @pytest.mark.core
+    @browser_journey
     def test_mobile_menu_links_to_crm(self, django_server, browser):
         _ensure_tiers()
         _wipe_state()
@@ -200,6 +203,7 @@ class TestCRMOneHopNav:
         context.close()
 
     @pytest.mark.core
+    @browser_journey
     def test_non_staff_menu_has_no_crm_item(self, django_server, browser):
         _ensure_tiers()
         _wipe_state()
@@ -223,6 +227,7 @@ class TestCRMOneHopNav:
 @pytest.mark.django_db(transaction=True)
 class TestLogCallFlow:
     @pytest.mark.core
+    @browser_journey
     def test_log_call_from_contact_detail_round_trip(
         self, django_server, browser,
     ):
@@ -267,6 +272,7 @@ class TestLogCallFlow:
 @pytest.mark.django_db(transaction=True)
 class TestCallsListAndEdit:
     @pytest.mark.core
+    @browser_journey
     def test_list_shows_row_and_edit_round_trip(
         self, django_server, browser,
     ):
@@ -324,6 +330,7 @@ class TestCallsListAndEdit:
 @pytest.mark.django_db(transaction=True)
 class TestRecentQASection:
     @pytest.mark.core
+    @browser_journey
     def test_qa_entries_with_links_and_empty_state(
         self, django_server, browser,
     ):
@@ -368,6 +375,7 @@ class TestRecentQASection:
 
 @pytest.mark.django_db(transaction=True)
 class TestCallsAccessControl:
+    @browser_journey
     def test_anonymous_redirects_to_login(self, django_server, browser):
         _ensure_tiers()
         _wipe_state()

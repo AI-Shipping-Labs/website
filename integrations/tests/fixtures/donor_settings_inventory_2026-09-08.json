@@ -1353,6 +1353,21 @@
     "description": "Days after a pod's second member joins before members see a 'Plan your first meeting with <pod>' row in the dashboard Your week list (0-30; invalid values fall back to 3). Shown only while the pod has no live meeting and no Slack channel link. 0 shows it as soon as the second member joins. Defaults to 3.",
     "default": "3",
     "docs_url": "_docs/integrations/pods.md#pods_first_meeting_nudge_days"
+   },
+   {
+    "key": "PODS_ARTIFACTS_ENABLED",
+    "is_secret": false,
+    "is_boolean": true,
+    "default": "true",
+    "description": "When on, pod members can add meeting notes or a transcript (pasted, or a .txt, .md or .vtt file read as text) and read them in a Notes and transcripts section on the pod page, with a recording tip on the next meeting and Add notes on past meetings. Off hides the section, the tip and every Add notes action and makes the member notes URLs return 404; Studio and the staff API keep listing artifacts. No-redeploy kill switch. Defaults on.",
+    "docs_url": "_docs/integrations/pods.md#pods_artifacts_enabled"
+   },
+   {
+    "key": "PODS_ARTIFACT_MAX_KB",
+    "is_secret": false,
+    "description": "Largest pod note or transcript a member may save, in KB of UTF-8 text, for pasted text and uploaded files alike (1-2048). Invalid or out-of-range values fall back to 500. Defaults to 500.",
+    "default": "500",
+    "docs_url": "_docs/integrations/pods.md#pods_artifact_max_kb"
    }
   ]
  }

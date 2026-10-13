@@ -350,6 +350,8 @@ Studio path: `Studio > Settings > Pods`. Every `PODS_*` key is documented in `_d
 | `PODS_CHAT_ENABLED` | `true` | Pod chat kill switch (issue #1920). Off hides the member `Chat` section and the Pods tab `N new messages` lines and makes posting return 404; Studio and the staff API keep reading and moderating messages. |
 | `PODS_CHAT_MESSAGES_PER_HOUR` | `30` | Pod chat messages one member may post in a rolling 60 minutes across all pods (1-500; invalid values fall back to `30`). |
 | `PODS_FIRST_MEETING_NUDGE_DAYS` | `3` | Days (0-30; invalid values fall back to `3`) after a pod's second member joins before members see `Plan your first meeting with <pod name>` in the dashboard `Your week` list. Only while the pod has no live meeting and no Slack channel link. `0` shows it as soon as the second member joins. |
+| `PODS_ARTIFACTS_ENABLED` | `true` | Pod notes and transcripts kill switch (issue #1922). Off hides the member `Notes and transcripts` section, the recording tip and every `Add notes` action and makes the member notes URLs return 404; Studio and the staff API keep listing artifacts. |
+| `PODS_ARTIFACT_MAX_KB` | `500` | Largest pod note or transcript in KB of UTF-8 text, pasted or uploaded (1-2048; invalid values fall back to `500`). |
 
 ## 7. GitHub App (content sync)
 

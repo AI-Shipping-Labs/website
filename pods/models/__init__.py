@@ -1,3 +1,4 @@
+from .artifact import *  # noqa: F401, F403
 from .availability import *  # noqa: F401, F403
 from .chat import *  # noqa: F401, F403
 from .meeting import *  # noqa: F401, F403

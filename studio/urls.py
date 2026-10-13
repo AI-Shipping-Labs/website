@@ -259,6 +259,7 @@ from studio.views.plans import (
     plan_visibility_update,
 )
 from studio.views.pods import (
+    studio_pod_artifact_delete,
     studio_pod_create,
     studio_pod_detail,
     studio_pod_list,
@@ -1220,6 +1221,12 @@ urlpatterns = [
         'pods/<int:pod_id>/meetings/<int:meeting_id>/status',
         studio_pod_meeting_status,
         name='studio_pod_meeting_status',
+    ),
+    # Issue #1922: pod notes and transcripts.
+    path(
+        'pods/<int:pod_id>/notes/<int:artifact_id>/delete',
+        studio_pod_artifact_delete,
+        name='studio_pod_artifact_delete',
     ),
     # Issue #1920: pod chat moderation.
     path(

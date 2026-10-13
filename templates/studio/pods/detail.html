@@ -237,6 +237,50 @@
   </form>
 </section>
 
+<section id="notes" class="mb-8" aria-labelledby="studio-pod-notes-heading" data-testid="studio-pod-notes">
+  <h2 id="studio-pod-notes-heading" class="text-base font-semibold text-foreground" data-testid="studio-pod-notes-heading">Notes and transcripts ({{ artifact_rows|length }})</h2>
+  {% if artifact_rows %}
+  <div class="{% studio_list_class 'wrapper' %} mt-3">
+    <table class="{% studio_list_class 'table' %}">
+      <thead class="{% studio_list_class 'thead' %}">
+        <tr>
+          <th class="{% studio_list_class 'th' %}">Title</th>
+          <th class="{% studio_list_class 'th' %}">Kind</th>
+          <th class="{% studio_list_class 'th' %}">Meeting</th>
+          <th class="{% studio_list_class 'th' %}">Added by</th>
+          <th class="{% studio_list_class 'th' %}">Added</th>
+          <th class="{% studio_list_class 'th' %}">Size</th>
+          <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="{% studio_list_class 'tbody' %}">
+        {% for row in artifact_rows %}
+        <tr class="{% studio_list_class 'row' %}" data-testid="studio-pod-note" data-artifact-id="{{ row.artifact.pk }}">
+          <td class="px-6 py-4 text-sm text-foreground break-words [overflow-wrap:anywhere]" data-label="Title" data-testid="studio-pod-note-title">{{ row.artifact.title }}{% if row.artifact.original_filename %}<div class="text-xs text-muted-foreground break-all" data-testid="studio-pod-note-filename">{{ row.artifact.original_filename }}</div>{% endif %}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground" data-label="Kind" data-testid="studio-pod-note-kind">{{ row.kind_label }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Meeting" data-testid="studio-pod-note-meeting">{{ row.meeting_label|default:"-" }}</td>
+          <td class="px-6 py-4 text-sm text-foreground" data-label="Added by" data-testid="studio-pod-note-author">{{ row.added_by_name|default:"-" }}{% if row.added_by_email %}<div class="text-xs text-muted-foreground break-all" data-testid="studio-pod-note-email">{{ row.added_by_email }}</div>{% endif %}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Added" data-testid="studio-pod-note-added">{{ row.artifact.created_at|operator_date }}</td>
+          <td class="px-6 py-4 text-sm text-muted-foreground whitespace-nowrap" data-label="Size" data-testid="studio-pod-note-size">{{ row.size }}</td>
+          <td class="px-6 py-4 {% studio_list_class 'action_cell' %}" data-label="Actions">
+            <div class="{% studio_list_class 'action_group' %}">
+              {% studio_list_action row.view_url 'View' 'secondary' %}
+              <form method="post" action="{% url 'studio_pod_artifact_delete' pod_id=pod.pk artifact_id=row.artifact.pk %}" class="{% studio_list_class 'action_form' %}" onsubmit="return confirm('Delete these notes? This can\'t be undone.');">
+                {% csrf_token %}
+                <button type="submit" class="{% studio_action_class 'destructive' %}" data-testid="studio-pod-note-delete">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="mt-3" data-testid="studio-pod-notes-empty">{% studio_empty_state 'fresh' entity_label='note' entity_label_plural='notes' %}</div>
+  {% endif %}
+</section>
+
 <section id="chat" class="mb-8" aria-labelledby="studio-pod-chat-heading" data-testid="studio-pod-chat">
   <h2 id="studio-pod-chat-heading" class="text-base font-semibold text-foreground" data-testid="studio-pod-chat-heading">Chat ({{ chat_total }} message{{ chat_total|pluralize }}, {{ chat_hidden }} hidden)</h2>
   {% if chat_truncated %}<p class="mt-1 text-sm text-muted-foreground" data-testid="studio-pod-chat-truncated">Showing the latest {{ chat_limit }} of {{ chat_total }} messages. Use the staff API for the full transcript.</p>{% endif %}

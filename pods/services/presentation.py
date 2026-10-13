@@ -22,6 +22,7 @@ from pods.models import (
     Pod,
     PodJoinRequest,
 )
+from pods.services import artifacts as artifact_svc
 from pods.services import config as pods_config
 from pods.services.availability import freshness_line, summary_rows
 from pods.services.meeting_presentation import (
@@ -404,11 +405,20 @@ def build_pod_page(pod, viewer, *, now=None):
     suggestions = suggestions_context(pod, member_avail, viewer_zone, now=now) if show_private else None
     raw_slots = suggestions['raw_slots'] if suggestions else []
     meetings = None
+    notes = None
+    # Issue #1922: notes and transcripts for members and staff, unless the
+    # kill switch is off.
+    artifacts = artifact_svc.pod_artifacts(pod) if show_private and artifact_svc.artifacts_enabled() else None
     if show_private:
         meetings = meetings_section(
             pod, viewer, member_avail=member_avail, viewer_zone=viewer_zone,
-            is_member=is_member, can_manage=manage, now=now,
+            is_member=is_member, can_manage=manage, now=now, artifacts=artifacts,
         )
+        if artifacts is not None:
+            notes = artifact_svc.member_section(
+                pod, viewer, artifacts, numbers=meetings['state'].numbers,
+                is_member=is_member, viewer_zone=viewer_zone,
+            )
         _add_meeting_actions(pod, suggestions, meetings['state'], member_avail, viewer_zone,
                              is_member=is_member, count=count, now=now,
                              proposal_unconfirmable=meetings['proposal_unconfirmable'])
@@ -488,6 +498,7 @@ def build_pod_page(pod, viewer, *, now=None):
         'show_private': show_private,
         'suggestions': suggestions,
         'meetings': meetings,
+        'notes': notes,
         'call_link_value': pod.meeting_url if show_private else '',
         'viewer_zone': viewer_zone,
         'member_rows': member_rows,

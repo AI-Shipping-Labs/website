@@ -1832,6 +1832,27 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_empty_submissions_wait_for_the_first_free_text",
     })
 
+    issue_1922_owners = frozenset({
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_member_sees_the_recording_tip_before_the_pods_next_meeting",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_member_pastes_notes_after_a_meeting_and_the_meeting_counts_as_held",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_member_uploads_a_zoom_transcript_file",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_member_gets_clear_help_when_the_upload_is_wrong",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_podmate_reads_the_notes_another_member_added",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_member_removes_notes_they_shared_by_mistake",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_someone_outside_the_pod_cannot_read_its_notes",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_staff_review_a_pods_transcripts_in_studio",
+        "playwright_tests/test_pod_artifacts_1922.py::"
+        "test_pods_without_the_notes_feature_keep_the_plain_held_flow",
+    })
+
     issue_1942_owners = frozenset({
         "playwright_tests/test_course_announcements_1942.py::"
         "test_enrolled_learner_reads_a_new_course_announcement",
@@ -2129,8 +2150,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2912)
-        self.assertEqual(len(inventory.owners), 2708)
+        self.assertEqual(inventory.item_count, 2921)
+        self.assertEqual(len(inventory.owners), 2717)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2161,6 +2182,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1920_owners
             | self.issue_1935_owners
             | self.issue_1937_owners
+            | self.issue_1922_owners
             | self.issue_1942_owners
             | self.issue_1944_owners
             | self.issue_1928_owners

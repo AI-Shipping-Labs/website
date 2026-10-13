@@ -58,6 +58,10 @@
   {% include "pods/_meetings.html" %}
   {% endif %}
 
+  {% if notes %}
+  {% include "pods/_notes.html" %}
+  {% endif %}
+
   {% if suggestions %}
   <section class="mt-10" id="suggested-times" aria-labelledby="pod-times-heading" data-testid="pod-suggested-times">
     {% with times_subtitle="Shown in your timezone: "|add:viewer_zone %}

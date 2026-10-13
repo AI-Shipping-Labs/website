@@ -32,11 +32,13 @@ from pods.models import (
     REQUEST_STATUS_PENDING,
     REQUEST_STATUS_WAITLISTED,
     Pod,
+    PodArtifact,
     PodJoinRequest,
     PodMeeting,
     PodMeetingResponse,
     PodMessage,
 )
+from pods.services import artifacts as artifact_svc
 from pods.services import chat as chat_svc
 from pods.services import config as pods_config
 from pods.services import meetings as mtg
@@ -298,6 +300,8 @@ def studio_pod_detail(request, pod_id):
         **_meetings_context(pod, users, request.session.pop(SCHEDULE_FORM_SESSION_KEY, None)),
         # Issue #1920: the chat transcript, hidden messages included.
         **chat_svc.studio_chat(pod),
+        # Issue #1922: notes and transcripts (shown whatever PODS_ARTIFACTS_ENABLED says).
+        'artifact_rows': artifact_svc.studio_rows(pod, meeting_state(pod, now).numbers),
         'activity': _cohort_label(pod.cohort),
         'memberships': memberships,
         'member_rows': [
@@ -498,3 +502,16 @@ def studio_pod_message_hide(request, pod_id, message_id):
 def studio_pod_message_restore(request, pod_id, message_id):
     """Show a hidden chat message to members again (idempotent)."""
     return _moderate(request, pod_id, message_id, chat_svc.restore_message, 'Message restored.')
+
+
+# --- Pod notes and transcripts (issue #1922) ----------------------------------
+
+@staff_required
+@require_POST
+def studio_pod_artifact_delete(request, pod_id, artifact_id):
+    """Hard delete a pod note or transcript. The meeting status never changes."""
+    pod = get_object_or_404(Pod, pk=pod_id)
+    artifact = get_object_or_404(PodArtifact, pk=artifact_id, pod=pod)
+    artifact_svc.staff_delete(artifact)
+    messages.success(request, artifact_svc.MSG_DELETED)
+    return redirect(f'{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}#notes')

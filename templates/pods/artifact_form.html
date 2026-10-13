@@ -1,0 +1,66 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras layout_components %}
+
+{% block pods_title %}Add notes{% endblock %}
+
+{% block pods_content %}
+{% comment %}
+Add notes form (issue #1922), same narrow column as the meeting forms. Fields
+in order: meeting, kind, title, text (paste first), optional file. Each error
+sits under its field and the typed values stay (a chosen file never does).
+The privacy line is always shown above the submit button.
+{% endcomment %}
+<section class="max-w-2xl" aria-labelledby="pod-artifact-form-heading" data-testid="pod-artifact-form-page">
+  {% section_header "Add notes" heading_id="pod-artifact-form-heading" size="lg" subtitle=pod.name %}
+  <form method="post" enctype="multipart/form-data" action="{% url 'pod_artifact_new' slug=course.slug pod_id=pod.pk %}" class="mt-6" data-testid="pod-artifact-form" novalidate>
+    {% csrf_token %}
+    <div>
+      <label for="pod-artifact-meeting" class="block text-sm font-medium text-foreground">Meeting</label>
+      {% if errors.meeting %}<p id="pod-artifact-meeting-error" class="mt-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-artifact-error-meeting">{{ errors.meeting }}</p>{% endif %}
+      <select id="pod-artifact-meeting" name="meeting" class="app-select mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-artifact-meeting"{% if errors.meeting %} aria-invalid="true" aria-describedby="pod-artifact-meeting-error"{% endif %}>
+        <option value=""{% if not form.meeting %} selected{% endif %}>{{ no_meeting_label }}</option>
+        {% for option in meeting_options %}
+        <option value="{{ option.value }}"{% if option.value == form.meeting %} selected{% endif %}>{{ option.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <fieldset class="mt-5">
+      <legend class="block text-sm font-medium text-foreground">Kind</legend>
+      <div class="mt-1 flex flex-wrap gap-x-6">
+        {% for value, label in kind_choices %}
+        <label class="flex min-h-[44px] items-center gap-3 text-sm text-foreground">
+          <input type="radio" name="kind" value="{{ value }}"{% if form.kind == value %} checked{% endif %} class="h-4 w-4 accent-accent" data-testid="pod-artifact-kind-{{ value }}">
+          {{ label }}
+        </label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <div class="mt-5">
+      <label for="pod-artifact-title" class="block text-sm font-medium text-foreground">Title</label>
+      {% if errors.title %}<p id="pod-artifact-title-error" class="mt-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-artifact-error-title">{{ errors.title }}</p>{% endif %}
+      <input id="pod-artifact-title" name="title" type="text" value="{{ form.title }}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-artifact-title"{% if errors.title %} aria-invalid="true" aria-describedby="pod-artifact-title-error"{% endif %}>
+    </div>
+
+    <div class="mt-5">
+      <label for="pod-artifact-text" class="block text-sm font-medium text-foreground">Text</label>
+      <p id="pod-artifact-text-help" class="mt-0.5 text-xs text-muted-foreground">Paste the notes or the transcript. Plain text, up to {{ max_kb }} KB.</p>
+      {% if errors.body %}<p id="pod-artifact-body-error" class="mt-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-artifact-error-body">{{ errors.body }}</p>{% endif %}
+      <textarea id="pod-artifact-text" name="text" rows="10" aria-describedby="pod-artifact-text-help{% if errors.body %} pod-artifact-body-error{% endif %}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-artifact-text"{% if errors.body %} aria-invalid="true"{% endif %}>{{ form.text }}</textarea>
+    </div>
+
+    <div class="mt-5">
+      <label for="pod-artifact-file" class="block text-sm font-medium text-foreground">Or upload a file</label>
+      <p id="pod-artifact-file-help" class="mt-0.5 text-xs text-muted-foreground">Optional. A .txt, .md or .vtt file. Pasted text wins when you add both.</p>
+      <input id="pod-artifact-file" name="file" type="file" accept="{{ upload_accept }}" aria-describedby="pod-artifact-file-help" class="mt-2 block w-full text-sm text-muted-foreground file:mr-4 file:rounded-md file:border file:border-border file:bg-secondary file:px-3 file:py-2 file:text-sm file:font-medium file:text-foreground hover:file:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-artifact-file">
+    </div>
+
+    <p class="mt-6 text-sm text-foreground" data-testid="pod-artifact-privacy">{{ privacy_line }}</p>
+    <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <button type="submit" class="{% button_classes 'primary' %}" data-testid="pod-artifact-submit">Save notes</button>
+      <a href="{{ cancel_url }}" class="inline-flex min-h-[44px] items-center text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-artifact-cancel">Cancel</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

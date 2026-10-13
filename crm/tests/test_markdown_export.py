@@ -510,3 +510,64 @@ class CRMMarkdownRendererSafetyTest(TestCase):
         self.assertIn("Žluťoučký", document)
         self.assertNotIn("\r", document)
         self.assertIn("`````json", document)
+
+
+class CRMMarkdownCallsAndQATest(TestCase):
+    """Issue #1949: the archive gains Calls and Member Q&A sections."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.staff = User.objects.create_user(
+            email='mdcalls-staff@example.com', password='pw', is_staff=True,
+        )
+        cls.member = User.objects.create_user(
+            email='mdcalls-member@example.com', password='pw',
+        )
+        cls.record = CRMRecord.objects.create(
+            user=cls.member, created_by=cls.staff,
+        )
+
+    def test_markdown_renders_calls_and_member_qa_sections(self):
+        import uuid
+
+        from comments.models import Comment
+        from content.models import Course, Module, Unit
+        from crm.services.calls import record_call
+
+        course = Course.objects.create(
+            content_id=uuid.uuid4(), title='MD Hero', slug='md-hero',
+            status='published', required_level=0,
+        )
+        module = Module.objects.create(
+            course=course, title='MD Day 1', slug='md-day-1', sort_order=1,
+        )
+        unit = Unit.objects.create(
+            content_id=uuid.uuid4(), module=module,
+            title='MD Frontmatter', slug='md-frontmatter', sort_order=1,
+        )
+        Comment.objects.create(
+            content_id=unit.content_id,
+            user=self.member,
+            body='What does the markdown export include?',
+        )
+        call = record_call(
+            email=self.member.email,
+            occurred_at=timezone.make_aware(
+                datetime.datetime(2026, 10, 13, 16, 0),
+            ),
+            summary='Walked through the study plan together',
+            source='booking',
+            source_ref='BK-MD-1',
+        )
+
+        aggregate = build_single_crm_record_aggregate(
+            self.record, bearer=self.staff,
+        )
+        document = render_crm_record_markdown(aggregate)
+
+        self.assertIn('## Calls', document)
+        self.assertIn('## Member Q&A', document)
+        self.assertIn('Walked through the study plan together', document)
+        self.assertIn('What does the markdown export include?', document)
+        self.assertIn("source: booking", document)
+        self.assertIsNotNone(call.pk)

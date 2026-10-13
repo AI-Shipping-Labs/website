@@ -12,9 +12,13 @@ exists for them. Staff create the row via the ``Track in CRM`` button on
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -34,10 +38,11 @@ from content.access import (
     resolve_effective_tier,
 )
 from crm.models import (
-    STATUS_CHOICES,
     AppliedProgressChange,
     CRMRecord,
+    Call,
     IngestedProgressEvent,
+    STATUS_CHOICES,
     SlackChannelIngest,
 )
 from crm.services.activity_context import (
@@ -48,10 +53,12 @@ from crm.services.activity_context import (
     build_activity_context,
     normalize_activity_category,
 )
+from crm.services.calls import SOURCE_MANUAL, calls_for_member, record_call
 from crm.services.markdown_export import (
     markdown_filename_for_crm_record,
     render_crm_record_markdown,
 )
+from crm.services.member_qa import recent_member_qa
 from crm.services.slack_updates import unmatched_threads
 from crm.tasks.apply_plan_sprint_progress import reverse_change, reverse_event
 from plans.models import InterviewNote, Plan
@@ -377,6 +384,41 @@ def _record_detail_context(record, request):
         .order_by('scheduled_at', 'created_at')
     )
 
+    # Merged Calls section (issue #1949): CRM-owned logged calls (manual /
+    # booking / calendly) plus the member's active Calendly BookedCall rows
+    # (#884), interleaved by date descending. Booked entries keep the host
+    # and scheduled-time display and carry a Calendly source label.
+    logged_calls = list(calls_for_member(record.user))
+    call_entries = [
+        {
+            'kind': 'logged',
+            'occurred_at': call.occurred_at,
+            'source': call.source,
+            'source_label': call.get_source_display(),
+            'summary': call.summary,
+            'detail_url': reverse(
+                'studio_crm_call_detail', args=[call.pk],
+            ),
+            'edit_url': reverse('studio_crm_call_edit', args=[call.pk]),
+            'logged_by': (
+                call.created_by.email if call.created_by_id else ''
+            ),
+            'host_name': '',
+        }
+        for call in logged_calls
+    ]
+    dated_entries = [
+        entry for entry in call_entries if entry['occurred_at'] is not None
+    ]
+    undated_entries = [
+        entry for entry in call_entries if entry['occurred_at'] is None
+    ]
+    dated_entries.sort(key=lambda entry: entry['occurred_at'], reverse=True)
+    call_entries = dated_entries + undated_entries
+
+    # Member Q&A across shared comment threads (issue #1949), read-only.
+    qa_context = recent_member_qa(record.user)
+
     return {
         'record': record,
         'detail_user': record.user,
@@ -386,7 +428,10 @@ def _record_detail_context(record, request):
         'account_lifecycle': account_lifecycle,
         'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'member_plans': member_plans,
+        'crm_call_entries': call_entries,
         'booked_calls': booked_calls,
+        'recent_qa_rows': qa_context['rows'],
+        'recent_qa_total': qa_context['total'],
         'activities': activity_context['activities'],
         'activity_total': activity_context['activity_total'],
         'activity_limit': activity_context['activity_limit'],
@@ -538,3 +583,175 @@ def crm_reactivate(request, crm_id):
     record.save(update_fields=['status', 'updated_at'])
     messages.success(request, 'CRM record reactivated.')
     return redirect('studio_crm_detail', crm_id=record.pk)
+
+
+CRM_CALLS_PAGE_SIZE = 50
+
+
+def _parse_occurred_at(raw):
+    """Parse a ``datetime-local`` form value into an aware datetime.
+
+    Returns ``None`` when the value is missing or unparseable so the
+    caller can re-render the form with an error.
+    """
+    value = (raw or '').strip()
+    parsed = parse_datetime(value) if value else None
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+    return parsed
+
+
+def _get_call(call_id):
+    return get_object_or_404(
+        Call.objects.select_related('contact__user', 'created_by'),
+        pk=call_id,
+    )
+
+
+@staff_required
+def crm_calls(request):
+    """All logged calls across the CRM, most recent first (issue #1949).
+
+    Search filters on the stored email. Each row links to the call
+    detail and, when matched, to the contact's CRM record.
+    """
+    search = (request.GET.get('q', '') or '').strip()
+    calls_qs = (
+        Call.objects
+        .select_related('contact__user', 'created_by')
+        .order_by('-occurred_at', '-created_at')
+    )
+    if search:
+        calls_qs = calls_qs.filter(email__icontains=search)
+
+    paginator = Paginator(calls_qs, CRM_CALLS_PAGE_SIZE)
+    try:
+        page_number = int(request.GET.get('page', '1'))
+    except (TypeError, ValueError):
+        page_number = 1
+    page_number = max(1, min(page_number, paginator.num_pages))
+    page = paginator.page(page_number)
+
+    rows = [
+        {
+            'pk': call.pk,
+            'contact_id': call.contact_id,
+            'email': call.email,
+            'occurred_at': call.occurred_at,
+            'source': call.source,
+            'snippet': call.summary,
+        }
+        for call in page.object_list
+    ]
+
+    def pager_url(target_page):
+        params = request.GET.copy()
+        params['page'] = target_page
+        query = params.urlencode()
+        return f'?{query}' if query else request.path
+
+    return render(request, 'studio/crm/calls_list.html', {
+        'rows': rows,
+        'search': search,
+        'paginator': paginator,
+        'page': page,
+        'crm_calls_pager_previous_url': (
+            pager_url(page.previous_page_number())
+            if page.has_previous() else None
+        ),
+        'crm_calls_pager_next_url': (
+            pager_url(page.next_page_number())
+            if page.has_next() else None
+        ),
+    })
+
+
+@staff_required
+def crm_call_detail(request, call_id):
+    """One call: contact, when it was, and the full discussion summary."""
+    call = _get_call(call_id)
+    return render(request, 'studio/crm/call_detail.html', {
+        'call': call,
+        'record': call.contact,
+    })
+
+
+@staff_required
+def crm_call_new(request, crm_id):
+    """Log a new call for a CRM contact (the ``Log call`` action).
+
+    GET renders the empty form (date/time prefilled to now); POST
+    validates and creates a ``manual``-source call via the shared
+    :func:`crm.services.calls.record_call` service, then redirects back
+    to the contact detail where the Calls section lists it.
+    """
+    record = _get_record(crm_id)
+    raw_occurred = ''
+    summary = ''
+    form_error = ''
+    if request.method == 'POST':
+        raw_occurred = request.POST.get('occurred_at', '')
+        summary = (request.POST.get('summary') or '').strip()
+        occurred_at = _parse_occurred_at(raw_occurred)
+        if occurred_at is None:
+            form_error = 'Enter the date and time of the call.'
+        else:
+            call = record_call(
+                email=record.user.email,
+                occurred_at=occurred_at,
+                summary=summary,
+                source=SOURCE_MANUAL,
+                created_by=request.user,
+            )
+            messages.success(request, 'Call logged.')
+            return redirect('studio_crm_detail', crm_id=record.pk)
+    return render(request, 'studio/crm/call_form.html', {
+        'record': record,
+        'call': None,
+        'occurred_at_value': (
+            raw_occurred
+            or timezone.localtime().strftime('%Y-%m-%dT%H:%M')
+        ),
+        'summary_value': summary,
+        'source_value': SOURCE_MANUAL,
+        'form_error': form_error,
+    })
+
+
+@staff_required
+def crm_call_edit(request, call_id):
+    """Edit when a call was, what was discussed, and its source."""
+    call = _get_call(call_id)
+    form_error = ''
+    summary = call.summary
+    if request.method == 'POST':
+        raw_occurred = request.POST.get('occurred_at', '')
+        summary = (request.POST.get('summary') or '').strip()
+        source = (request.POST.get('source') or '').strip() or call.source
+        occurred_at = _parse_occurred_at(raw_occurred)
+        if occurred_at is None:
+            form_error = 'Enter the date and time of the call.'
+            occurred_at_value = raw_occurred
+        else:
+            call.occurred_at = occurred_at
+            call.summary = summary
+            call.source = source
+            call.save(
+                update_fields=['occurred_at', 'summary', 'source', 'updated_at'],
+            )
+            messages.success(request, 'Call updated.')
+            return redirect('studio_crm_call_detail', call_id=call.pk)
+    else:
+        occurred_at_value = timezone.localtime(
+            call.occurred_at,
+        ).strftime('%Y-%m-%dT%H:%M')
+    return render(request, 'studio/crm/call_form.html', {
+        'record': call.contact,
+        'call': call,
+        'occurred_at_value': occurred_at_value,
+        'summary_value': summary,
+        'source_value': call.source,
+        'form_error': form_error,
+    })

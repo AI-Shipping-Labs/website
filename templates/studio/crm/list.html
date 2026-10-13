@@ -5,7 +5,11 @@
 {% block studio_title %}CRM{% endblock %}
 
 {% block studio_content %}
-{% studio_header_actions title="CRM" subtitle="The engaged subset of members. Staff opt in to tracking from a user profile." %}{% endstudio_header_actions %}
+{% studio_header_actions title="CRM" subtitle="The engaged subset of members. Staff opt in to tracking from a user profile." %}<a href="{% url 'studio_crm_calls' %}"
+   data-testid="crm-list-calls-link"
+   class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+  Calls
+</a>{% endstudio_header_actions %}
 
 <!-- Filter chips and search -->
 <form method="get" class="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-list-controls">

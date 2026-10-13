@@ -1,0 +1,98 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}CRM calls{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_crm_list' as crm_list_url %}
+{% studio_header_actions title="Calls" subtitle="Every logged call: when it was and what was discussed." back_url=crm_list_url back_label="Back to CRM" testid='crm-calls-header' %}{% endstudio_header_actions %}
+
+<form method="get" class="mb-6 flex items-center gap-2" data-testid="crm-calls-controls">
+  <input type="text"
+         name="q"
+         value="{{ search }}"
+         placeholder="Search email..."
+         autocomplete="off"
+         data-testid="crm-calls-search-input"
+         class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full sm:w-64 focus:outline-none focus:ring-1 focus:ring-accent">
+  <button type="submit"
+          data-testid="crm-calls-search-submit"
+          class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+    Search
+  </button>
+</form>
+
+{% if rows %}
+<div class="studio-responsive-table bg-card border border-border rounded-lg overflow-x-auto" data-testid="crm-calls-table">
+  <table class="min-w-full divide-y divide-border">
+    <thead class="bg-secondary">
+      <tr class="text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        <th class="px-4 py-3">Contact</th>
+        <th class="px-4 py-3">When</th>
+        <th class="px-4 py-3">Source</th>
+        <th class="px-4 py-3">Summary</th>
+        <th class="px-4 py-3 text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-border">
+      {% for row in rows %}
+      <tr data-testid="crm-calls-row-{{ row.pk }}" class="text-sm">
+        <td class="px-4 py-3">
+          {% if row.crm_pk %}
+          <a href="{% url 'studio_crm_detail' crm_id=row.crm_pk %}"
+             data-testid="crm-calls-contact-link"
+             class="text-accent hover:underline font-medium">{{ row.email }}</a>
+          {% else %}
+          <span class="font-medium text-foreground" data-testid="crm-calls-contact-plain">{{ row.email }}</span>
+          {% endif %}
+          {% if row.full_name %}
+          <div class="text-xs text-muted-foreground">{{ row.full_name }}</div>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3">
+          <a href="{% url 'studio_crm_call_detail' call_id=row.pk %}"
+             data-testid="crm-calls-row-link"
+             class="text-foreground hover:underline">{{ row.occurred_at|operator_datetime }}</a>
+        </td>
+        <td class="px-4 py-3">
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs bg-secondary text-muted-foreground border border-border"
+                data-testid="crm-calls-row-source">{{ row.source }}</span>
+        </td>
+        <td class="px-4 py-3 text-muted-foreground" data-testid="crm-calls-row-snippet">
+          {% if row.snippet %}{{ row.snippet|truncatechars:120 }}{% else %}&mdash;{% endif %}
+        </td>
+        <td class="studio-actions-cell text-right">
+          <div class="studio-action-group inline-flex flex-nowrap items-center justify-end gap-2">
+            <a href="{% url 'studio_crm_call_edit' call_id=row.pk %}"
+               class="{% studio_action_class 'secondary' %}">Edit</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if paginator.num_pages > 1 %}
+<div class="mt-4 flex items-center justify-between text-sm text-muted-foreground" data-testid="crm-calls-pager">
+  <span>Showing {{ page.start_index }}-{{ page.end_index }} of {{ paginator.count }}</span>
+  <div class="flex items-center gap-2">
+    {% if crm_calls_pager_previous_url %}
+    <a href="{{ crm_calls_pager_previous_url }}"
+       class="px-3 py-1 rounded border border-border hover:bg-secondary">Previous</a>
+    {% endif %}
+    <span>Page {{ page.number }} of {{ paginator.num_pages }}</span>
+    {% if crm_calls_pager_next_url %}
+    <a href="{{ crm_calls_pager_next_url }}"
+       class="px-3 py-1 rounded border border-border hover:bg-secondary">Next</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+{% elif search %}
+  {% url 'studio_crm_calls' as crm_calls_clear_url %}
+  {% studio_empty_state 'filter' entity_label='call' entity_label_plural='calls' clear_url=crm_calls_clear_url colspan=5 testid_suffix='crm-calls-filter-empty' %}
+{% else %}
+  {% studio_empty_state 'fresh' entity_label='call' entity_label_plural='calls' testid_suffix='crm-calls-empty' %}
+{% endif %}
+{% endblock %}

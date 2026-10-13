@@ -85,6 +85,7 @@ from api.views.course_enrollments import (
     course_enrollments_collection,
 )
 from api.views.course_instructors import course_instructors
+from api.views.crm_calls import crm_calls
 from api.views.crm_export import crm_export, crm_record_markdown_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list
@@ -1372,6 +1373,14 @@ urlpatterns = [
         "crm/<path:email>/export.md",
         crm_record_markdown_export,
         name="api_crm_record_markdown_export",
+    ),
+    # Record a call in the CRM (issue #1949). Staff-token POST that
+    # writes through the shared crm.services.calls.record_call service
+    # (the same path the Studio form and the booking app use).
+    path(
+        "crm/calls",
+        crm_calls,
+        name="api_crm_calls",
     ),
     # ---- Event triggers (issue #1070) ---------------------------------
     # Staff-token-gated management + observability. No DELETE: deactivate

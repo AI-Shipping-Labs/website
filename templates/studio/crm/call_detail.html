@@ -1,0 +1,57 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}CRM call{% endblock %}
+
+{% block studio_content %}
+{% url 'studio_crm_calls' as calls_list_url %}
+{% studio_header_actions eyebrow='CRM call' title=contact_label back_url=calls_list_url back_label='Back to calls' testid='crm-call-detail-header' actions_testid='crm-call-detail-actions' %}
+    {% if record %}
+    <a href="{% url 'studio_crm_detail' crm_id=record.pk %}"
+       data-testid="crm-call-detail-contact"
+       class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      Open contact
+    </a>
+    {% endif %}
+    <a href="{% url 'studio_crm_call_edit' call_id=call.pk %}"
+       data-testid="crm-call-detail-edit"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      Edit call
+    </a>
+{% endstudio_header_actions %}
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-call-detail-section">
+  <dl class="space-y-4">
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Contact</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-detail-contact-email">
+        {% if record %}
+        <a href="{% url 'studio_crm_detail' crm_id=record.pk %}" class="text-accent hover:underline">{{ contact_label }}</a>
+        {% else %}
+        {{ contact_label }}
+        {% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">When</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-detail-time">{{ call.occurred_at|operator_datetime }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Source</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-detail-source">{{ call.source }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Logged by</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-detail-created-by">
+        {% if call.created_by %}{{ call.created_by.email }}{% else %}&mdash;{% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">What we discussed</dt>
+      <dd class="mt-1 text-sm text-foreground whitespace-pre-line" data-testid="crm-call-detail-summary">
+        {% if call.summary %}{{ call.summary }}{% else %}<span class="italic text-muted-foreground/70">No notes recorded.</span>{% endif %}
+      </dd>
+    </div>
+  </dl>
+</section>
+{% endblock %}

@@ -1,0 +1,55 @@
+{% extends "studio/base.html" %}
+{% load studio_filters %}
+
+{% block studio_title %}{% if call %}Edit call{% else %}Log call{% endif %}{% endblock %}
+
+{% block studio_content %}
+{% if record %}
+{% url 'studio_crm_detail' crm_id=record.pk as call_back_url %}
+{% else %}
+{% url 'studio_crm_calls' as call_back_url %}
+{% endif %}
+{% if call %}
+{% studio_header_actions eyebrow='CRM call' title='Edit call' back_url=call_back_url back_label='Back' testid='crm-call-form-header' %}{% endstudio_header_actions %}
+{% else %}
+{% studio_header_actions eyebrow='CRM call' title='Log call' back_url=call_back_url back_label='Back' testid='crm-call-form-header' %}{% endstudio_header_actions %}
+{% endif %}
+
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-call-form-section">
+  <h2 class="text-lg font-semibold text-foreground mb-4">{% if call %}Edit call{% else %}Log call{% endif %}</h2>
+  {% if form_error %}
+  <p class="mb-4 text-sm text-red-600 dark:text-red-400" data-testid="crm-call-form-error">{{ form_error }}</p>
+  {% endif %}
+  <form method="post" class="space-y-4">
+    {% csrf_token %}
+    <div>
+      <label for="call-occurred-at" class="block text-xs font-medium text-muted-foreground mb-1">Date and time</label>
+      <input id="call-occurred-at"
+             type="datetime-local"
+             name="occurred_at"
+             value="{{ occurred_at_value }}"
+             required
+             data-testid="crm-call-occurred-at-input"
+             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <div>
+      <label for="call-summary" class="block text-xs font-medium text-muted-foreground mb-1">What we discussed</label>
+      <textarea id="call-summary"
+                name="summary"
+                rows="6"
+                placeholder="What did you talk about? Decisions, follow-ups, context..."
+                data-testid="crm-call-summary-input"
+                class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">{{ summary_value }}</textarea>
+    </div>
+    {% if call %}
+    {% endif %}
+    <div>
+      <button type="submit"
+              data-testid="crm-call-form-submit"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90">
+        {% if call %}Save changes{% else %}Log call{% endif %}
+      </button>
+    </div>
+  </form>
+</section>
+{% endblock %}

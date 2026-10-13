@@ -174,6 +174,73 @@ class CrmExportAuthTest(CrmExportTestBase):
                 self.assertEqual(response.status_code, 405)
 
 
+class CrmExportCallsTest(CrmExportTestBase):
+    """Issue #1949: the per-user aggregate gains ``calls``."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.member = cls._make_member("calls-export@test.com")
+        cls.other = cls._make_member("calls-other@test.com")
+        cls.crm = cls._give_crm_record(cls.member)
+        from crm.models.call import Call
+
+        Call.objects.create(
+            contact=cls.crm,
+            email=cls.member.email,
+            occurred_at=timezone.make_aware(
+                datetime.datetime(2026, 10, 13, 15, 0),
+            ),
+            summary="Exported call notes",
+            source="booking",
+            source_ref="BK-EXPORT-JSON-1",
+            created_by=cls.staff,
+        )
+        # An unlinked call for someone else's email must not leak in.
+        Call.objects.create(
+            email="calls-other@test.com",
+            occurred_at=timezone.make_aware(
+                datetime.datetime(2026, 10, 13, 16, 0),
+            ),
+            summary="Unlinked call",
+        )
+
+    def _payload(self):
+        response = self.client.get(
+            self.URL, {"email": "calls-export@test.com"}, **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["total"], 1)
+        return body["members"][0]
+
+    def test_member_aggregate_includes_calls(self):
+        calls = self._payload()["calls"]
+        self.assertEqual(len(calls), 1)
+        entry = calls[0]
+        self.assertEqual(entry["email"], "calls-export@test.com")
+        self.assertEqual(entry["summary"], "Exported call notes")
+        self.assertEqual(entry["source"], "booking")
+        self.assertEqual(entry["source_ref"], "BK-EXPORT-JSON-1")
+        self.assertEqual(entry["created_by_email"], "staff@test.com")
+        self.assertIn("occurred_at", entry)
+        self.assertIn("created_at", entry)
+
+    def test_email_match_surfaces_pre_tracking_call_and_scopes_others(self):
+        # The contact=NULL row for the other member's email surfaces on
+        # THEIR aggregate (the email matches), never on the tracked
+        # member's one.
+        self._give_crm_record(self.other)
+        response = self.client.get(
+            self.URL, {"email": "calls-other@test.com"}, **self._auth(),
+        )
+        self.assertEqual(response.status_code, 200)
+        calls = response.json()["members"][0]["calls"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0]["summary"], "Unlinked call")
+        self.assertIsNone(calls[0]["contact_id"])
+
+
 class CrmExportEnvelopeTest(CrmExportTestBase):
     @classmethod
     def setUpTestData(cls):

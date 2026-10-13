@@ -311,6 +311,12 @@ SIDEBAR_ROUTE_FAMILIES = (
         # "Track in CRM" is posted from the user detail page and redirects
         # to the CRM record it creates, so CRM is its logical home.
         'studio_crm_track',
+        # Calls (issue #1949): list/detail/edit pages plus the
+        # per-contact "Log call" form.
+        'studio_crm_calls',
+        'studio_crm_call_detail',
+        'studio_crm_call_edit',
+        'studio_crm_call_new',
     )),
     ('people', 'assistant', ('studio_assistant',)),
 

@@ -1,0 +1,28 @@
+npm ci --ignore-scripts
+
+added 74 packages, and audited 75 packages in 1s
+
+19 packages are looking for funding
+  run `npm fund` for details
+
+8 vulnerabilities (2 moderate, 6 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm run css:build
+
+> css:build
+> tailwindcss -c tailwind.config.js -i assets/css/tailwind.css -o static/css/tailwind.css --minify
+
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+Rebuilding...
+
+Done in 4390ms.

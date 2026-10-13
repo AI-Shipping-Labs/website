@@ -125,6 +125,7 @@ once here and shown as the desktop pill (lg+), an account-dropdown item
             {% endif %}
             {% if user.is_staff %}
             <a href="{% url 'studio_dashboard' %}" role="menuitem" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">Studio</a>
+            <a href="{% url 'studio_crm_list' %}" role="menuitem" data-testid="header-account-crm-link" class="block rounded-sm px-3 py-2 text-sm text-accent hover:bg-secondary focus:bg-secondary focus:outline-none">CRM</a>
             {% endif %}
             <button type="button"
                     role="menuitem"
@@ -235,6 +236,9 @@ once here and shown as the desktop pill (lg+), an account-dropdown item
         {% if user.is_staff %}
         <a href="{% url 'studio_dashboard' %}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
           Studio
+        </a>
+        <a href="{% url 'studio_crm_list' %}" data-testid="mobile-crm-link" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-accent bg-transparent px-4 py-2 text-center text-sm font-medium text-accent transition-colors hover:bg-secondary mb-2">
+          CRM
         </a>
         {% endif %}
         <a href="{{ header_logout_url }}" class="flex min-h-[44px] w-full items-center justify-center rounded-md border border-border bg-transparent px-4 py-2 text-center text-sm font-medium text-foreground transition-colors hover:bg-secondary">

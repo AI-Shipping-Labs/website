@@ -159,6 +159,7 @@ class CRMActivityResponsiveTest(TestCase):
             'crm-snapshot-card',
             'crm-plans-section',
             'crm-booked-calls-section',
+            'crm-calls-section',
             'crm-onboarding-section',
             'crm-notes-section',
         ):

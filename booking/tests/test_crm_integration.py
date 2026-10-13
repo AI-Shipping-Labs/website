@@ -110,3 +110,92 @@ class BookingCrmIntegrationTest(TestCase):
         booked_call.refresh_from_db()
         self.assertEqual(booked_call.status, "canceled")
         self.assertIsNotNone(booked_call.canceled_at)
+
+
+class BookingCrmCallRecordTest(TestCase):
+    """A confirmed booking records a crm.Call through record_call (#1949)."""
+
+    def setUp(self):
+        self.host, _ = BookingHost.objects.update_or_create(
+            slug="alexey",
+            defaults={
+                "name": "Alexey Grigorev",
+                "email": "alexey@datatalks.club",
+                "timezone": "UTC",
+                "notice_hours": 0.0,
+                "horizon_days": 30,
+                "slot_duration_minutes": 30,
+                "is_active": True,
+            },
+        )
+        self.host.weekly_windows.all().delete()
+        BookingWeeklyWindow.objects.create(
+            host=self.host,
+            weekday=0,
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            is_active=True,
+        )
+        CallHost.objects.update_or_create(
+            slug="alexey",
+            defaults={
+                "name": "Alexey Grigorev",
+                "booking_url": "/book/alexey",
+                "is_active": True,
+            },
+        )
+        self.user = User.objects.create_user(
+            email="member@example.com",
+            first_name="Member",
+            last_name="User",
+        )
+
+    @patch("booking.services.booking_service.create_booking_zoom_meeting")
+    @patch("booking.services.booking_service.create_calendar_event")
+    @patch("booking.services.booking_service.query_busy")
+    def test_confirmed_booking_creates_crm_call(self, mock_busy, mock_gcal, mock_zoom):
+        from crm.models import Call
+
+        mock_busy.return_value = []
+        mock_zoom.return_value = {"meeting_id": "zm", "join_url": "https://zoom.test/j/zm"}
+        mock_gcal.return_value = {"id": "gcal-1"}
+
+        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        booking = create_booking(
+            host=self.host,
+            invitee_name="Member User",
+            invitee_email="member@example.com",
+            start_datetime=slot_start,
+            discussion_topic="Sprint Plan Discussion",
+        )
+
+        call = Call.objects.get(source="booking", source_ref=str(booking.id))
+        self.assertEqual(call.email, "member@example.com")
+        self.assertEqual(call.occurred_at, slot_start)
+        self.assertIn("Sprint Plan Discussion", call.summary)
+        # No CRMRecord exists for the member: the call stores the raw
+        # email with contact=NULL and never auto-creates a record.
+        self.assertIsNone(call.contact)
+
+    @patch("booking.services.booking_service.create_booking_zoom_meeting")
+    @patch("booking.services.booking_service.create_calendar_event")
+    @patch("booking.services.booking_service.query_busy")
+    def test_booking_call_links_tracked_contact(self, mock_busy, mock_gcal, mock_zoom):
+        from crm.models import CRMRecord, Call
+
+        mock_busy.return_value = []
+        mock_zoom.return_value = {"meeting_id": "zm", "join_url": "https://zoom.test/j/zm"}
+        mock_gcal.return_value = {"id": "gcal-1"}
+
+        CRMRecord.objects.create(user=self.user)
+        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        booking = create_booking(
+            host=self.host,
+            invitee_name="Member User",
+            invitee_email="MEMBER@example.com",
+            start_datetime=slot_start,
+        )
+
+        call = Call.objects.get(source="booking", source_ref=str(booking.id))
+        self.assertEqual(call.contact, CRMRecord.objects.get(user=self.user))
+        self.assertEqual(call.email, "MEMBER@example.com")

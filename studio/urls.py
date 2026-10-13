@@ -123,6 +123,10 @@ from studio.views.courses import (
 )
 from studio.views.crm import (
     crm_archive,
+    crm_call_detail,
+    crm_call_edit,
+    crm_call_new,
+    crm_calls,
     crm_detail,
     crm_edit,
     crm_list,
@@ -1140,6 +1144,26 @@ urlpatterns = [
         name='studio_crm_track',
     ),
     path('crm/', crm_list, name='studio_crm_list'),
+    # Calls in the CRM (issue #1949): every logged call, plus the
+    # per-contact "Log call" flow and per-call detail/edit. `crm/calls/`
+    # cannot collide with `crm/<int:crm_id>/` (the int converter does
+    # not match the literal "calls").
+    path('crm/calls/', crm_calls, name='studio_crm_calls'),
+    path(
+        'crm/calls/<int:call_id>/',
+        crm_call_detail,
+        name='studio_crm_call_detail',
+    ),
+    path(
+        'crm/calls/<int:call_id>/edit/',
+        crm_call_edit,
+        name='studio_crm_call_edit',
+    ),
+    path(
+        'crm/<int:crm_id>/calls/new/',
+        crm_call_new,
+        name='studio_crm_call_new',
+    ),
     path(
         'crm/slack-ingest',
         crm_slack_ingest_review,

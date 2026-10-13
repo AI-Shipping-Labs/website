@@ -100,6 +100,7 @@ APP_LABELS: tuple[str, ...] = (
     "analytics",
     "api",
     "bookclub",
+    "booking",
     "comments",
     "community",
     "content",

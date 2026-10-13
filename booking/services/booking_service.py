@@ -299,35 +299,28 @@ def _record_crm_booked_call(booking: Booking, reschedule_url: str, cancel_url: s
     except Exception as exc:
         logger.exception("Failed to record BookedCall for booking %s: %s", booking.id, exc)
 
-    # CRM call integration seam (issue #1949)
+    # CRM call integration seam (issue #1949). The canonical
+    # record_call(*, email, occurred_at, summary, source, source_ref)
+    # contract upserts on (source, source_ref), so booking retries never
+    # duplicate the CRM call. Failures must not break the booking
+    # confirmation, but they are logged, never swallowed silently.
     try:
         from crm.services.calls import record_call
 
         summary = booking.discussion_topic or f"30-min meeting with {booking.host.name}"
         if booking.discussion_notes:
             summary = f"{summary}\n{booking.discussion_notes}"
-        try:
-            record_call(
-                user=booking.member,
-                contact_email=booking.invitee_email,
-                occurred_at=booking.start_datetime,
-                summary=summary,
-                source="booking",
-                source_ref=booking.manage_token,
-                created_by=booking.member,
-            )
-        except TypeError:
-            # Fallback for alternative draft signatures
-            record_call(
-                user=booking.member,
-                scheduled_at=booking.start_datetime,
-                summary=summary,
-                source="booking",
-                external_key=booking.manage_token,
-                created_by=booking.member,
-            )
-    except Exception:
-        pass
+        record_call(
+            email=booking.invitee_email,
+            occurred_at=booking.start_datetime,
+            summary=summary,
+            source="booking",
+            source_ref=str(booking.id),
+        )
+    except Exception as exc:
+        logger.exception(
+            "Failed to record CRM Call for booking %s: %s", booking.id, exc,
+        )
 
 
 @transaction.atomic

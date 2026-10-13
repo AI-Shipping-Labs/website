@@ -15,6 +15,8 @@ SECTION_TITLES = (
     "Sprint enrollments",
     "Course enrollments",
     "Booked calls",
+    "Calls",
+    "Member Q&A",
     "Member notes",
 )
 
@@ -80,6 +82,13 @@ def render_crm_record_markdown(aggregate):
     lines.extend(_course_enrollment_lines(aggregate.get("course_enrollments") or []))
     lines.extend(["", "## Booked calls"])
     lines.extend(_booked_call_lines(aggregate.get("booked_calls") or []))
+    lines.extend(["", "## Calls"])
+    lines.extend(_call_lines(aggregate.get("calls") or []))
+    lines.extend(["", "## Member Q&A"])
+    lines.extend(_member_qa_lines(
+        aggregate.get("member_qa") or [],
+        aggregate.get("member_qa_total") or 0,
+    ))
     lines.extend(["", "## Member notes"])
     lines.extend(_member_note_lines(aggregate.get("notes") or []))
     return "\n".join(lines).rstrip("\n") + "\n"
@@ -353,6 +362,65 @@ def _booked_call_lines(calls):
             _bullet("Created at", call.get("created_at")),
             _bullet("Updated at", call.get("updated_at")),
         ])
+    return lines
+
+
+def _absolute_thread_url(url):
+    """Absolute https URL for a site-relative thread link, else None.
+
+    Thread deep links from the shared resolver are site-relative paths
+    with a ``#qa-section`` anchor (e.g.
+    ``/courses/x/modules/y/units/z#qa-section``); the portable archive
+    links them through the configured site base URL.
+    """
+    if not url:
+        return None
+    raw = str(url).strip()
+    if raw.startswith("http://") or raw.startswith("https://"):
+        return raw
+    if raw.startswith("/") and not raw.startswith("//"):
+        from integrations.config import site_base_url
+
+        return f"{site_base_url().rstrip('/')}{raw}"
+    return None
+
+
+def _call_lines(calls):
+    """One bullet per CRM call: when, source, and the discussion summary."""
+    if not calls:
+        return ["_No calls._"]
+    lines = []
+    for call in calls:
+        occurred = _value(call.get("occurred_at")) or "time not set"
+        source = call.get("source") or "manual"
+        lines.append(
+            _bullet(
+                f"Call ({occurred}, source: {source})",
+                call.get("summary") or "No notes recorded.",
+            )
+        )
+    return lines
+
+
+def _member_qa_lines(rows, total):
+    """The member's visible Q&A across shared content threads."""
+    if not rows:
+        return ["_No questions or answers yet._"]
+    lines = []
+    for row in rows:
+        kind = row.get("kind") or "Thread"
+        indicator = "Question" if row.get("is_question") else "Answer"
+        title = row.get("thread_title") or "Thread"
+        when = _value(row.get("created_at")) or ""
+        heading = f"{indicator} on {title} ({kind})"
+        if when:
+            heading = f"{heading} — {when}"
+        body = _escape(row.get("snippet") or "")
+        link = _safe_link("Open thread", _absolute_thread_url(row.get("thread_url")))
+        rendered = f"{body}\n  {link}" if link else body
+        lines.append(f"- {heading}\n  {rendered}")
+    if total > len(rows):
+        lines.append(f"- ...and {total - len(rows)} more earlier comments.")
     return lines
 
 

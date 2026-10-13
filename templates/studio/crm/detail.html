@@ -32,6 +32,11 @@
 {% endstudio_header_title_meta %}
 {% url 'studio_crm_list' as crm_list_url %}
 {% studio_header_actions eyebrow='CRM record' title=detail_user.email title_meta=crm_header_meta back_url=crm_list_url back_label='Back to CRM' testid='crm-detail-header' actions_testid='crm-detail-actions' %}
+    <a href="{% url 'studio_crm_call_new' crm_id=record.pk %}"
+       data-testid="crm-detail-log-call"
+       class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      Log call
+    </a>
     <form method="post" action="{% url 'studio_impersonate' detail_user.pk %}"
           onsubmit="return confirm('Log in as {{ detail_user.email|escapejs }}? Your Studio session will be paused until you stop impersonating.');">
       {% csrf_token %}
@@ -247,27 +252,108 @@
   {% endif %}
 </section>
 
-<!-- Booked calls from Calendly (issue #884) -->
+<!-- Upcoming booked calls from Calendly (issue #884) -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-booked-calls-section">
   <h2 class="text-lg font-semibold text-foreground mb-4">Upcoming booked calls</h2>
   {% if booked_calls %}
   <ul class="divide-y divide-border" data-testid="crm-booked-calls-list">
     {% for call in booked_calls %}
-    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"
-        data-testid="crm-booked-call-item">
+    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between" data-testid="crm-booked-call-item">
       <div class="min-w-0">
-        <p class="text-sm font-medium text-foreground" data-testid="crm-booked-call-host">
-          {% if call.host %}With {{ call.host.name }}{% else %}Calendly host needs matching{% endif %}
-        </p>
-        <p class="text-xs text-muted-foreground" data-testid="crm-booked-call-time">
-          {% if call.scheduled_at %}{{ call.scheduled_at|operator_datetime }}{% else %}Time not set{% endif %}
-        </p>
+        <p class="text-sm font-medium text-foreground" data-testid="crm-booked-call-host">{% if call.host %}With {{ call.host.name }}{% else %}Calendly host needs matching{% endif %}</p>
+        <p class="text-xs text-muted-foreground" data-testid="crm-booked-call-time">{% if call.scheduled_at %}{{ call.scheduled_at|operator_datetime }}{% else %}Time not set{% endif %}</p>
       </div>
     </li>
     {% endfor %}
   </ul>
   {% else %}
   <p class="text-sm text-muted-foreground" data-testid="crm-booked-calls-empty">No booked calls yet.</p>
+  {% endif %}
+</section>
+
+<!-- Calls (issue #1949): CRM-owned logged calls plus active Calendly
+     bookings, interleaved by date descending. The pre-#1949 separate
+     "Upcoming booked calls" section is replaced by this merged one. -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-calls-section">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Calls</h2>
+    <a href="{% url 'studio_crm_calls' %}"
+       data-testid="crm-calls-view-all"
+       class="text-xs text-muted-foreground hover:text-foreground hover:underline">View all calls</a>
+  </div>
+  {% if crm_call_entries %}
+  <ul class="divide-y divide-border" data-testid="crm-calls-list">
+    {% for entry in crm_call_entries %}
+    <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"
+        data-testid="crm-call-item"
+        data-call-kind="{{ entry.kind }}"
+        data-call-source="{{ entry.source }}">
+      <div class="min-w-0">
+        {% if entry.detail_url %}
+        <a href="{{ entry.detail_url }}"
+           data-testid="crm-call-link"
+           class="text-sm font-medium text-accent hover:underline">{{ entry.occurred_at|operator_datetime }}</a>
+        {% else %}
+        <span class="text-sm font-medium text-foreground" data-testid="crm-call-when">{{ entry.occurred_at|operator_datetime }}</span>
+        {% endif %}
+        <p class="text-xs text-muted-foreground" data-testid="crm-call-source">
+          <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+                data-testid="crm-call-source-label">{{ entry.source_label }}</span>
+          {% if entry.kind == 'booked' %}
+          {% if entry.host_name %} &middot; With {{ entry.host_name }}{% else %} &middot; Calendly host needs matching{% endif %}
+          {% if not entry.occurred_at %} &middot; Time not set{% endif %}
+          {% elif entry.logged_by %} &middot; logged by {{ entry.logged_by }}{% endif %}
+        </p>
+        {% if entry.summary %}
+        <p class="mt-1 text-sm text-muted-foreground" data-testid="crm-call-snippet">{{ entry.summary|truncatechars:140 }}</p>
+        {% endif %}
+      </div>
+      {% if entry.edit_url %}
+      <a href="{{ entry.edit_url }}"
+         data-testid="crm-call-edit-link"
+         class="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline">Edit</a>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-calls-empty">No calls logged yet. Use &ldquo;Log call&rdquo; to record one.</p>
+  {% endif %}
+</section>
+
+<!-- Member Q&A across shared threads (issue #1949) -->
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-qna-section">
+  <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+    <h2 class="text-lg font-semibold text-foreground">Member Q&amp;A</h2>
+    {% if recent_qa_total %}
+    <span class="text-xs text-muted-foreground" data-testid="crm-qna-total">Showing {{ recent_qa_rows|length }} of {{ recent_qa_total }}</span>
+    {% endif %}
+  </div>
+  {% if recent_qa_rows %}
+  <ul class="divide-y divide-border" data-testid="crm-qna-list">
+    {% for qa in recent_qa_rows %}
+    <li class="py-3 flex flex-col gap-1" data-testid="crm-qna-item">
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium {% if qa.is_question %}bg-accent/15 text-accent{% else %}bg-secondary text-muted-foreground border border-border{% endif %}"
+              data-testid="crm-qna-kind">{% if qa.is_question %}Question{% else %}Answer{% endif %}</span>
+        <span class="inline-flex w-fit items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
+              data-testid="crm-qna-context">{{ qa.kind_label }}</span>
+        <span class="ml-auto shrink-0 font-mono text-xs tabular-nums text-muted-foreground"
+              data-testid="crm-qna-date">{{ qa.created_at|operator_datetime }}</span>
+      </div>
+      <p class="text-sm text-foreground [overflow-wrap:anywhere]" data-testid="crm-qna-snippet">{{ qa.snippet|truncatechars:200 }}</p>
+      <p class="text-xs text-muted-foreground">
+        {% if qa.thread_url %}
+        <a href="{{ qa.thread_url }}" data-testid="crm-qna-thread-link" class="text-accent hover:underline">{{ qa.thread_title|default:"View thread" }}</a>
+        {% else %}
+        <span data-testid="crm-qna-thread-title">{{ qa.thread_title|default:"Thread" }}</span>
+        {% endif %}
+      </p>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-qna-empty">No questions or answers from this member yet.</p>
   {% endif %}
 </section>
 

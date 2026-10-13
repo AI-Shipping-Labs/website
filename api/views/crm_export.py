@@ -75,6 +75,8 @@ from api.views._permissions import (
 from community.models import STATUS_BOOKED, BookedCall
 from content.access import get_active_overrides_by_user
 from crm.models import CRMRecord
+from crm.services.calls import calls_for_member
+from crm.services.member_qa import recent_member_qa
 from crm.services.activity_context import (
     build_complete_activity_context,
     serialize_activity_for_api,
@@ -212,6 +214,20 @@ _MEMBER_EXAMPLE = {
     ],
     "course_enrollments": [],
     "onboarding_responses": [],
+    "calls": [
+        {
+            "id": 12,
+            "email": "alice@example.com",
+            "occurred_at": "2026-06-01T15:00:00+00:00",
+            "summary": "Discussed sprint goals.",
+            "source": "manual",
+            "source_ref": "",
+            "created_by_email": "staff@example.com",
+            "created_at": "2026-06-01T16:00:00+00:00",
+        },
+    ],
+    "member_qa": [],
+    "member_qa_total": 0,
 }
 
 _EXPORT_EXAMPLE = {
@@ -403,6 +419,38 @@ def _serialize_member(
         serialize_plan_detail(plan, viewer=bearer)
         for plan in plans_by_member.get(user.id, [])
     ]
+    # Issue #1949: per-member calls (union of contact-linked and
+    # pre-tracking email matches) and member Q&A context.
+    payload["calls"] = [
+        {
+            "id": call.pk,
+            "email": call.email,
+            "contact_id": call.contact_id,
+            "occurred_at": call.occurred_at.isoformat(),
+            "summary": call.summary,
+            "source": call.source,
+            "source_ref": call.source_ref,
+            "created_by_email": (
+                call.created_by.email if call.created_by else None
+            ),
+            "created_at": call.created_at.isoformat(),
+        }
+        for call in calls_for_member(user)
+    ]
+    qa_context = recent_member_qa(user)
+    payload["member_qa"] = [
+        {
+            "id": row["comment"].pk,
+            "is_question": row["is_question"],
+            "snippet": row["snippet"],
+            "kind": row["kind_label"],
+            "thread_title": row["thread_title"],
+            "thread_url": row["thread_url"],
+            "created_at": row["created_at"].isoformat(),
+        }
+        for row in qa_context["rows"]
+    ]
+    payload["member_qa_total"] = qa_context["total"]
 
     payload["sprint_enrollments"] = [
         {
@@ -501,6 +549,44 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
             )
         )
     ]
+    # CRM calls (issue #1949): the CRM-owned conversation log, matched
+    # through the member's record or their raw email. Calendly bookings
+    # stay in ``booked_calls`` above.
+    payload["calls"] = [
+        {
+            "id": call.pk,
+            "email": call.email,
+            "contact_id": call.contact_id,
+            "occurred_at": isoformat_or_none(call.occurred_at),
+            "summary": call.summary,
+            "source": call.source,
+            "source_ref": call.source_ref,
+            "created_by_email": (
+                call.created_by.email if call.created_by else None
+            ),
+            "created_at": isoformat_or_none(call.created_at),
+        }
+        for call in calls_for_member(user)
+    ]
+
+    # Member Q&A (issue #1949): the member's visible comments across the
+    # shared content threads, resolved with the same batch resolver the
+    # operator comments API uses.
+    qa_context = recent_member_qa(user)
+    payload["member_qa"] = [
+        {
+            "id": row["comment"].pk,
+            "is_question": row["is_question"],
+            "snippet": row["snippet"],
+            "kind": row["kind_label"],
+            "thread_title": row["thread_title"],
+            "thread_url": row["thread_url"],
+            "created_at": isoformat_or_none(row["created_at"]),
+        }
+        for row in qa_context["rows"]
+    ]
+    payload["member_qa_total"] = qa_context["total"]
+
     payload["export_metadata"] = {
         "studio_url": f"https://aishippinglabs.com{reverse('studio_crm_detail', kwargs={'crm_id': crm_record.pk})}",
         "crm_record_id": crm_record.pk,

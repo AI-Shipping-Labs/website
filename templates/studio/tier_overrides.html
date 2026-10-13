@@ -14,14 +14,27 @@
   {% include "studio/includes/_people_picker.html" with name="user_id" id_prefix="tier-override-user" search_url="/studio/api/users/search/" placeholder="Search by name or email..." on_select_action="navigate" navigate_url_template="/studio/users/{id}/tier_override/" %}
 </div>
 
+{% comment %}
+  Issue #1936: status filter chips (built by the view as status_chips).
+  Sibling pattern: the CRM list chip row (templates/studio/crm/list.html,
+  crm-filter-chips) plus the canonical focus ring. Counts are always the
+  unfiltered totals so the default view shows how many leftover grants
+  exist.
+{% endcomment %}
 <div class="{% studio_list_class 'wrapper' %} mb-8"
      data-testid="active-overrides-section">
   <div class="px-6 py-4 border-b border-border space-y-1">
     <h2 class="text-lg font-semibold text-foreground">Active overrides</h2>
-    {% if active_overrides %}
+    {% if override_counts.total %}
     <span class="text-xs text-muted-foreground" data-testid="active-overrides-count">
-      {{ active_overrides|length }} active
+      {{ override_counts.total }} active{% if override_counts.ineffective %} · {{ override_counts.ineffective }} not raising access{% endif %}
     </span>
+    <div class="flex flex-wrap items-center gap-2 pt-2" data-testid="active-overrides-filter">
+      {% for chip in status_chips %}
+      <a href="{{ chip.url }}" data-testid="active-overrides-filter-{{ chip.key }}"{% if chip.selected %} aria-current="page"{% endif %}
+         class="px-3 py-1.5 rounded-full text-xs font-medium border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if chip.selected %}bg-accent text-accent-foreground border-accent{% else %}border-border text-muted-foreground hover:text-foreground hover:border-foreground{% endif %}">{{ chip.label }} ({{ chip.count }})</a>
+      {% endfor %}
+    </div>
     {% else %}
     <span class="text-xs text-muted-foreground" data-testid="active-overrides-count">
       No active overrides
@@ -29,12 +42,12 @@
     {% endif %}
   </div>
 
-  {% if active_overrides %}
+  {% if override_counts.total %}
   <table class="w-full" data-testid="active-overrides-table">
     <thead class="bg-secondary">
       <tr>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">User</th>
-        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Effective tier</th>
+        <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Override tier</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Base tier</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Set at</th>
         <th class="text-left px-6 py-3 text-xs font-medium text-muted-foreground uppercase tracking-wider">Expires</th>
@@ -46,7 +59,8 @@
       {% for override in active_overrides %}
       <tr class="hover:bg-secondary/50 transition-colors"
           data-testid="active-override-row"
-          data-user-email="{{ override.user.email }}">
+          data-user-email="{{ override.user.email }}"
+          data-raises-access="{% if override.raises_access %}true{% else %}false{% endif %}">
         <td class="px-6 py-4 text-sm">
           <a href="{% url 'studio_user_detail' override.user.pk %}"
              class="text-accent hover:underline"
@@ -59,20 +73,22 @@
         </td>
         <td class="px-6 py-4 text-sm text-foreground"
             data-testid="active-override-effective-tier"
-            data-label="Effective tier">
+            data-label="Override tier">
           <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.override_tier.slug|studio_tier_pill_classes }}"
                 data-testid="active-override-effective-tier-pill"
                 data-tier="{{ override.override_tier.slug }}">{{ override.override_tier.name }}</span>
+          {% if not override.raises_access %}
+          <div class="text-xs text-muted-foreground mt-0.5" data-testid="active-override-ineffective">Not raising access</div>
+          {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
             data-testid="active-override-base-tier"
             data-label="Base tier">
-          {% if override.original_tier %}
-          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.original_tier.slug|studio_tier_pill_classes }}"
+          <span class="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium {{ override.stored_tier_slug|studio_tier_pill_classes }}"
                 data-testid="active-override-base-tier-pill"
-                data-tier="{{ override.original_tier.slug }}">{{ override.original_tier.name }}</span>
-          {% else %}
-          -
+                data-tier="{{ override.stored_tier_slug }}">{{ override.stored_tier_name }}</span>
+          {% if override.tier_at_grant_name %}
+          <div class="text-xs text-muted-foreground mt-0.5" data-testid="active-override-base-tier-at-grant">{{ override.tier_at_grant_name }} when granted</div>
           {% endif %}
         </td>
         <td class="px-6 py-4 text-sm text-muted-foreground"
@@ -93,6 +109,7 @@
             {% csrf_token %}
             <input type="hidden" name="override_id" value="{{ override.pk }}">
             <input type="hidden" name="next" value="tier_overrides_list">
+            {% if status_filter %}<input type="hidden" name="status" value="{{ status_filter }}">{% endif %}
             <button type="submit"
                     class="text-sm text-red-400 hover:text-red-300 hover:underline"
                     data-testid="active-override-revoke">
@@ -101,6 +118,8 @@
           </form>
         </td>
       </tr>
+      {% empty %}
+      {% studio_empty_state 'filter' entity_label='override' entity_label_plural='overrides' clear_url='/studio/tier_overrides/' colspan=7 %}
       {% endfor %}
     </tbody>
   </table>

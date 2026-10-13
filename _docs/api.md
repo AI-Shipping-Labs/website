@@ -262,6 +262,46 @@ curl -sL -X POST \
 
 Grants a long-lived `TierOverride` (10-year expiry) to each listed email, deactivating any existing active override for that user (issue #833). `tier` is optional and defaults to `main`. Staff token required. This mirrors the Studio contact-import override but is an explicitly-named endpoint so the privileged grant is discoverable and cannot be triggered by accident. Route: `api/urls.py` `tier-overrides` -> `api_tier_overrides_grant`.
 
+### Read: list active tier overrides
+
+```bash
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/tier-overrides?status=ineffective"
+```
+
+Lists every active, non-expired `TierOverride`, ordered by `expires_at` ascending (the same order as `/studio/tier_overrides/`), issue #1936. Staff token required (same auth as the grant and revoke endpoints). `GET` and `POST` share the path; `POST` is the grant above and is unchanged.
+
+A grant raises access when its tier level is above the member's current stored tier (`membership.tier`, `free` when unset). Otherwise it is not raising access: a leftover grant. A weaker grant shadowed by a stronger grant still raises access when it is above the stored tier, because it takes over when the stronger one expires. Status is computed at request time, so a grant moves back to raising access when the stored tier drops.
+
+| Query param | Meaning |
+|---|---|
+| `status` | `all` (default), `effective` (raising access) or `ineffective` (not raising access). Any other value returns 422 `invalid_status`. |
+| `limit` | Maximum rows, default 200, clamped to 1000. A non-positive or non-integer value returns 422 `validation_error`. |
+
+| Response key | Meaning |
+|---|---|
+| `count` | Number of rows returned |
+| `total` | All active overrides |
+| `effective_count` | Active overrides raising access |
+| `ineffective_count` | Active overrides not raising access |
+| `overrides` | Rows, each with `id`, `email`, `tier` (override tier slug), `stored_tier` (current stored tier slug, `free` when unset), `tier_at_grant` (tier slug at grant time or `null`), `raises_access`, `source` (`manual` when blank), `created_at`, `expires_at`, `granted_by` (email or `null`) |
+
+The counts are always the unfiltered totals. CLI: `asl tier-overrides list --status ineffective`.
+
+### Write: revoke tier overrides
+
+```bash
+curl -sL -X POST \
+  -H "Authorization: Token $API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"emails": ["leftover@example.com"], "ineffective_only": true, "dry_run": true}' \
+  https://aishippinglabs.com/api/tier-overrides/revoke
+```
+
+Revokes each member's active overrides through the same service as the Studio revoke button and writes one `tier_override_revoked` audit row per revoked override. Per-email `status` is `revoked` (`would_revoke` with `dry_run: true`, which writes nothing), `no_active_override`, `user_not_found` or `malformed`.
+
+`ineffective_only` (default `false`) limits the revoke to the member's active overrides that do not raise access, using the same rule as `GET /api/tier-overrides`. Grants that raise access stay active, and a member whose active overrides all raise access reports `no_active_override` with no audit row. Without the flag every active override is revoked. CLI: `asl tier-overrides revoke leftover@example.com --ineffective-only [--dry-run]`.
+
 ## Subscription reconciliation API
 
 Staff-token-only endpoints that compare live Stripe subscription truth with

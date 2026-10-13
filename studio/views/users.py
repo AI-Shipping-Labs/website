@@ -107,7 +107,10 @@ from studio.utils import (
     studio_listing_querystring,
     studio_pagination_context,
 )
-from studio.views.tier_overrides import DURATION_CHOICES
+from studio.views.tier_overrides import (
+    DURATION_CHOICES,
+    normalize_override_status_filter,
+)
 
 User = get_user_model()
 
@@ -1632,7 +1635,13 @@ def _tier_override_redirect_url(request, user):
     if request.POST.get('next') == 'tier_override':
         return reverse('studio_user_tier_override_page', args=[user.pk])
     if request.POST.get('next') == 'tier_overrides_list':
-        return reverse('studio_tier_overrides_list')
+        # Issue #1936: return to the same status filter. Only the
+        # whitelisted values reach the URL; anything else is the full list.
+        url = reverse('studio_tier_overrides_list')
+        status = normalize_override_status_filter(
+            request.POST.get('status', ''),
+        )
+        return f'{url}?status={status}' if status else url
     return reverse('studio_user_detail', args=[user.pk])
 
 

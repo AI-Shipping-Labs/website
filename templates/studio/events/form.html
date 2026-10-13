@@ -47,8 +47,16 @@
 </div>
 
 {% url 'studio_event_list' as event_cancel_url %}
-<div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start">
-<div class="min-w-0 pb-24 md:pb-0">
+{% comment %}
+  Issue #1936: at lg and up the main column and the side panel sit in grid
+  row 1, and the Registered attendees and Feedback panels (edit only) span
+  both columns below them, so the roster table gets the full content width.
+  Below lg the DOM order (main column, roster, feedback, side panel) is the
+  reading order. The bottom padding that clears the mobile sticky action bar
+  lives on the grid so it stays at the very end of the page.
+{% endcomment %}
+<div class="grid gap-6 lg:grid-cols-[minmax(0,48rem)_20rem] lg:items-start pb-24 md:pb-0">
+<div class="min-w-0 lg:col-start-1 lg:row-start-1">
 {% if event %}
 {% if is_synced %}
 {% include "studio/includes/sticky_action_bar.html" with form_id="event-edit-form" obj=event title="Event operational fields" subtitle="Source content is read-only; status and delivery settings can still be updated." can_save=True primary_label="Save Operational Fields" cancel_url=event_cancel_url show_save_status=True save_status=save_status clean_status_label="No unsaved changes" %}
@@ -367,13 +375,17 @@
   placeholder otherwise, and a working/disabled Regenerate control.
 {% endcomment %}
 {% include "studio/includes/banner_generator_section.html" with banner_url=banner_url banner_regenerate_url=banner_regenerate_url banner_generator_enabled=banner_generator_enabled banner_last_task=banner_last_task banner_source=banner_source custom_banner_url=custom_banner_url banner_upload_url=banner_upload_url banner_remove_url=banner_remove_url banner_upload_enabled=banner_upload_enabled %}
+{% endif %}
+</div>
+
+{% if form_action == 'edit' %}
 {% comment %}
   Issue #701: Registered attendees panel. Renders only on edit (the
   create form has no event yet and therefore no roster). The panel
   surfaces count + table + client-side email filter + a "Download CSV"
   link to the new studio_event_registrations_csv endpoint.
 {% endcomment %}
-<section class="mt-6 bg-card border border-border rounded-lg p-6"
+<section class="min-w-0 bg-card border border-border rounded-lg p-6 lg:col-span-2"
          data-testid="event-registrations-panel">
   <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <div class="flex items-center gap-3">
@@ -405,19 +417,20 @@
              class="w-full sm:w-80 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">
     </div>
     {% comment %}
-      Issue #1144: responsive roster. Desktop/tablet (md+) keeps the
-      existing 5-column table (issue #1933: column widths sum to 100%,
-      timestamps render as separate no-wrap date and time parts so a narrow
-      cell wraps to two lines, and a 34rem minimum width keeps every date
-      inside its column; where the edit page's main column is narrower, at
-      lg with the side panel, the wrapper scrolls sideways instead of
-      overprinting); below md we render one stacked card per
-      attendee so full names and emails wrap instead of clipping and the
-      metadata columns cannot overprint. The filter JS toggles both
+      Issue #1144: responsive roster. Issue #1936: the panel spans the full
+      page width below the form and side panel at lg and up, so the
+      5-column table (issue #1933: column widths sum to 100%, timestamps
+      render as separate no-wrap date and time parts so a narrow cell wraps
+      to two lines, and a 34rem minimum width keeps every date inside its
+      column) has room at every lg+ width and no longer scrolls sideways;
+      overflow-x-auto stays as a safety net. Below lg (where even the full
+      width is narrower than the table floor) we render one stacked card
+      per attendee so full names and emails wrap instead of clipping and
+      the metadata columns cannot overprint. The filter JS toggles both
       presentations by a shared data-email attribute.
     {% endcomment %}
-    <!-- Desktop / tablet table (md and up) -->
-    <div class="hidden md:block border border-border rounded-lg overflow-x-auto max-h-96 overflow-y-auto"
+    <!-- Desktop table (lg and up) -->
+    <div class="hidden lg:block border border-border rounded-lg overflow-x-auto max-h-96 overflow-y-auto"
          data-testid="registrations-table-wrapper">
       <table class="w-full min-w-[34rem] table-fixed text-sm" data-testid="registrations-table">
         <thead class="bg-secondary/50 sticky top-0">
@@ -469,8 +482,8 @@
       </table>
     </div>
 
-    <!-- Mobile cards (below md) -->
-    <ul class="md:hidden border border-border rounded-lg divide-y divide-border max-h-96 overflow-y-auto"
+    <!-- Phone and tablet cards (below lg) -->
+    <ul class="lg:hidden border border-border rounded-lg divide-y divide-border max-h-96 overflow-y-auto"
         data-testid="registrations-cards">
       {% for reg in registrations %}
       <li class="p-4 space-y-2"
@@ -540,7 +553,7 @@
   counts non-empty comments. The empty state replaces the whole table
   when no rows exist.
 {% endcomment %}
-<section class="mt-6 bg-card border border-border rounded-lg p-6"
+<section class="min-w-0 bg-card border border-border rounded-lg p-6 lg:col-span-2"
          data-testid="event-feedback-panel">
   <header class="flex flex-wrap items-center justify-between gap-3 mb-4">
     <div class="flex items-center gap-3">
@@ -627,10 +640,9 @@
   {% endif %}
 </section>
 {% endif %}
-</div>
 
 {% if event %}
-<aside class="space-y-4 lg:sticky lg:top-8" data-testid="studio-meta-actions-panel">
+<aside class="space-y-4 lg:sticky lg:top-8 lg:col-start-2 lg:row-start-1" data-testid="studio-meta-actions-panel">
   {% if is_synced %}
   {% studio_origin_panel event %}
   {% endif %}

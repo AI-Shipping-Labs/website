@@ -22,6 +22,8 @@ from community_base.kernel.access import (  # noqa: F401 -- re-exported for the 
     LEVEL_PREMIUM,
     LEVEL_REGISTERED,
 )
+from django.db.models import BooleanField, Case, F, Value, When
+from django.db.models.functions import Coalesce
 
 # Choices for the required_level field on content models
 VISIBILITY_CHOICES = [
@@ -280,6 +282,38 @@ def resolve_effective_tier(user, override):
         return EffectiveTier(name='Free', slug='free', level=0, source='base')
     return EffectiveTier(
         name=tier.name, slug=tier.slug, level=tier.level, source='base',
+    )
+
+
+def annotate_override_raises_access(queryset):
+    """Annotate ``TierOverride`` rows with whether each grant raises access.
+
+    Issue #1936: the single definition of "this grant raises access", used by
+    the Studio tier overrides list, ``GET /api/tier-overrides`` and the
+    ``ineffective_only`` revoke flag. It is the per-row form of the rule in
+    :func:`resolve_effective_tier`: a grant raises access when its tier level
+    is above the member's current stored tier level (``membership.tier``,
+    level 0 when unset). A weaker grant shadowed by a stronger one still
+    raises access when it is above the stored tier, because it takes over
+    when the stronger grant expires. Staff escalation is not applied.
+
+    Adds ``stored_tier_level`` (int) and ``raises_access`` (bool). Computed
+    in the database at query time, so a grant moves back to raising access
+    as soon as the stored tier drops; nothing is persisted.
+    """
+    return queryset.annotate(
+        stored_tier_level=Coalesce(
+            F('user__membership__tier__level'), Value(0),
+        ),
+    ).annotate(
+        raises_access=Case(
+            When(
+                override_tier__level__gt=F('stored_tier_level'),
+                then=Value(True),
+            ),
+            default=Value(False),
+            output_field=BooleanField(),
+        ),
     )
 
 

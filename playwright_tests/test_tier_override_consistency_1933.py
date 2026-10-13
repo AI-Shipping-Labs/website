@@ -40,8 +40,10 @@ EVENT_SLUG = "roster-columns-1933"
 ROSTER_VIEWPORTS = (
     {"width": 1280, "height": 800},
     {"width": 1024, "height": 768},
-    {"width": 800, "height": 900},
 )
+# Issue #1936: below lg the roster deliberately renders as cards (the full
+# page width at 800px is still narrower than the table's 34rem floor).
+TABLET_VIEWPORT = {"width": 800, "height": 900}
 MOBILE_VIEWPORT = {"width": 390, "height": 844}
 
 
@@ -471,6 +473,17 @@ def test_roster_columns_stay_inside_their_cells_at_laptop_widths(
     page.get_by_test_id("registrations-filter").fill("averyveryvery")
     expect(rows.filter(visible=True)).to_have_count(1)
     expect(rows.filter(visible=True)).to_contain_text(LONG_EMAIL)
+
+    page.set_viewport_size(TABLET_VIEWPORT)
+    page.goto(
+        f"{django_server}/studio/events/{event.pk}/edit",
+        wait_until="domcontentloaded",
+    )
+    expect(page.get_by_test_id("registrations-table")).to_be_hidden()
+    cards = page.get_by_test_id("registration-card")
+    expect(cards).to_have_count(4)
+    cards.first.scroll_into_view_if_needed()
+    expect(cards.first).to_be_visible()
     context.close()
 
 

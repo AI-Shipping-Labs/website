@@ -9,8 +9,8 @@ LIMIT_DEFAULT = 50
 LIMIT_MAX = 200
 
 
-def parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit"):
-    """Parse a positive page size, capped at the API-wide maximum."""
+def parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit", maximum=LIMIT_MAX):
+    """Parse a positive page size, capped at ``maximum`` (API-wide default)."""
     if raw is None or raw == "":
         return default, None
     try:
@@ -29,7 +29,7 @@ def parse_limit(raw, *, default=LIMIT_DEFAULT, field="limit"):
             status=422,
             details={"field": field, "value": raw},
         )
-    return min(value, LIMIT_MAX), None
+    return min(value, maximum), None
 
 
 def parse_offset(raw, *, field="offset"):

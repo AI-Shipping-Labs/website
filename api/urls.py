@@ -232,7 +232,7 @@ from api.views.sync_sources import (
     sync_source_webhook_secret,
     sync_sources_collection,
 )
-from api.views.tier_overrides import tier_overrides_grant, tier_overrides_revoke
+from api.views.tier_overrides import tier_overrides_collection, tier_overrides_revoke
 from api.views.tier_reconcile import (
     tier_reconcile_apply,
     tier_reconcile_diagnostics,
@@ -753,9 +753,11 @@ urlpatterns = [
     # non-paying members. Mirrors the Studio contact-import override but is
     # an explicitly-named endpoint so the privileged action is discoverable
     # and impossible to trigger by accident from the contacts surface.
+    # Issue #1936: GET on the same path lists active overrides with a
+    # raises-access status so scripts can find leftover grants.
     path(
         "tier-overrides",
-        tier_overrides_grant,
+        tier_overrides_collection,
         name="api_tier_overrides_grant",
     ),
     # Revoke every active override for each email through the same service

@@ -5518,6 +5518,29 @@
         ]
       }
     },
+    "/api/crm/calls": {
+      "post": {
+        "description": "Creates (or, with ``source_ref``, upserts) one CRM call for an email: when the call was (``occurred_at``, ISO 8601), what was discussed (``summary``), and where the row came from (``source``, default ``manual``; the booking app passes ``booking`` plus its confirmation id as ``source_ref``). The email resolves to a user case-insensitively; an unmatched email still records the call with the raw email snapshot and a null ``contact_id``. Delegates to ``crm.services.calls.record_call`` -- the same write path as the Studio form. Staff-token only.",
+        "responses": {
+          "201": {
+            "description": "Call recorded (created or upserted)."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "405": {
+            "description": "Only POST is supported."
+          },
+          "422": {
+            "description": "Missing email, unparseable ``occurred_at``, or invalid ``source``."
+          }
+        },
+        "summary": "Record a logged CRM call",
+        "tags": [
+          "CRM"
+        ]
+      }
+    },
     "/api/crm/export": {
       "get": {
         "description": "Returns the complete per-user CRM aggregate (core user state, ``crm_record``, ``notes``, nested ``plans``, sprint and course enrollments, and ``onboarding_responses``) in a single response, reusing the per-resource serializers so the shapes are identical. Staff-token only. Internal-visibility notes ARE included (this is the staff CRM surface). Defaults to ``scope=crm`` (only members carrying CRM signal); pass ``scope=all`` for the full user table. Ordered by ``User.id``; ``count`` is the page size, ``total`` the full match before slicing. Operator automation that needs one user should pass ``email=`` for an exact, case-insensitive lookup; this constrains the queryset before aggregate serialization instead of scanning a broad export. When ``email`` and ``q`` are both supplied, ``email`` wins.",
@@ -5616,6 +5639,18 @@
                     {
                       "account_activated": true,
                       "account_lifecycle": "full_account",
+                      "calls": [
+                        {
+                          "created_at": "2026-06-01T16:00:00+00:00",
+                          "created_by_email": "staff@example.com",
+                          "email": "alice@example.com",
+                          "id": 12,
+                          "occurred_at": "2026-06-01T15:00:00+00:00",
+                          "source": "manual",
+                          "source_ref": "",
+                          "summary": "Discussed sprint goals."
+                        }
+                      ],
                       "course_enrollments": [],
                       "crm_record": {
                         "created_at": "2026-04-15T12:00:00+00:00",
@@ -5628,6 +5663,8 @@
                       },
                       "display_name": "Alice Doe",
                       "email": "alice@example.com",
+                      "member_qa": [],
+                      "member_qa_total": 0,
                       "notes": [],
                       "onboarding_responses": [],
                       "plans": [],

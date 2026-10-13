@@ -198,4 +198,6 @@ class BookingCrmCallRecordTest(TestCase):
 
         call = Call.objects.get(source="booking", source_ref=str(booking.id))
         self.assertEqual(call.contact, CRMRecord.objects.get(user=self.user))
-        self.assertEqual(call.email, booking.invitee_email)
+        # create_booking stores invitee_email lowercased; the
+        # case-insensitive contact match above is what matters.
+        self.assertEqual(call.email, "member@example.com")

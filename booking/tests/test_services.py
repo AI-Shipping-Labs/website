@@ -110,8 +110,8 @@ class BookingServicesTest(TestCase):
         rescheduled = reschedule_booking(booking, slot2)
         self.assertEqual(rescheduled.start_datetime, slot2)
         self.assertEqual(rescheduled.end_datetime, slot2 + timedelta(minutes=30))
-        mock_up_zoom.assert_called_once()
-        mock_up_cal.assert_called_once()
+        self.assertEqual(mock_up_zoom.call_count, 1)
+        self.assertEqual(mock_up_cal.call_count, 1)
 
     @patch("booking.services.booking_service.create_booking_zoom_meeting")
     @patch("booking.services.booking_service.create_calendar_event")

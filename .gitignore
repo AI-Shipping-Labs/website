@@ -40,3 +40,4 @@ playwright_tests/screenshots/
 .claude/worktrees
 .claude/scheduled_tasks.lock
 *.sqlite3-journal
+.tmp-css-build.log

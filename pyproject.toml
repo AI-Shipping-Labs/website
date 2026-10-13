@@ -63,6 +63,7 @@ source = [
     "analytics",
     "api",
     "bookclub",
+    "booking",
     "comments",
     "community",
     "content",

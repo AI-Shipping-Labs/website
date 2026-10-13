@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load accounts_extras %}
+{% load accounts_extras date_formatting %}
 
 {% block title %}Cancel Meeting | AI Shipping Labs{% endblock %}
 {% block meta_description %}Cancel your meeting with {{ booking.host.name }}.{% endblock %}
@@ -9,7 +9,7 @@
   {% include "includes/header.html" %}
 
   <section class="px-4 pt-28 pb-16 sm:px-6 lg:px-8 lg:pt-36 lg:pb-24">
-    <div class="mx-auto max-w-xl">
+    <div class="mx-auto max-w-2xl">
       <a href="{% url 'booking_confirmed' token=booking.manage_token %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-6" data-testid="cancel-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to meeting details
@@ -22,7 +22,7 @@
 
         <h1 class="text-xl font-semibold text-foreground">Cancel Meeting?</h1>
         <p class="text-sm text-muted-foreground mt-2">
-          Are you sure you want to cancel your meeting with <strong>{{ booking.host.name }}</strong> on <strong>{{ booking.start_datetime|date:"l, F j, Y, H:i" }} UTC</strong>?
+          Are you sure you want to cancel your meeting with <strong>{{ booking.host.name }}</strong> on <strong>{{ booking.start_datetime|event_source_full_datetime }} UTC</strong>?
         </p>
 
         <form method="post" action="{% url 'booking_cancel' token=booking.manage_token %}" class="mt-8 space-y-3">

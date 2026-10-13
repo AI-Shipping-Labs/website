@@ -17,6 +17,13 @@
   // renders no Reply toggle, reply form, or vote button (the vote count
   // stays visible). Staff moderation still renders. UI-level only: the
   // write endpoints are unchanged.
+  //
+  // Homework answer guideline (issue #1896): a wrapper with
+  // `data-answer-guideline` (homework-kind course units only) gets a hidden
+  // helper caption under the top-level composer and every reply composer.
+  // The caption shows only while its own field is non-empty and hides again
+  // when the field is cleared or a post empties it. Guideline, not a filter:
+  // posting is unchanged.
   (function() {
     var sections = document.querySelectorAll('.qa-thread');
     if (!sections.length) return;
@@ -120,18 +127,39 @@
         '<span class="qa-vote-count text-sm font-medium">' + comment.vote_count + '</span>';
     }
 
-    function renderReplyControls(comment, readOnly) {
+    function renderGuideline(copy) {
+      // The role="status" region is always in the DOM so revealing the
+      // caption inside it is announced politely; the caption itself is
+      // hidden (not merely faded) while the field is empty.
+      if (!copy) return '';
+      return '<div role="status"><p class="qa-answer-guideline mt-1 text-xs text-muted-foreground" data-testid="qa-answer-guideline" hidden>' +
+        escapeHtml(copy) + '</p></div>';
+    }
+
+    function syncGuideline(textarea) {
+      var composer = textarea.closest('.qa-composer');
+      var caption = composer && composer.querySelector('.qa-answer-guideline');
+      if (!caption) return;
+      if (textarea.value.length > 0) {
+        caption.removeAttribute('hidden');
+      } else {
+        caption.setAttribute('hidden', '');
+      }
+    }
+
+    function renderReplyControls(comment, readOnly, guidelineCopy) {
       if (readOnly) return { toggle: '', form: '' };
       return {
         toggle: '<button class="qa-reply-toggle text-xs text-accent hover:underline" data-comment-id="' + comment.id + '">Reply</button>',
-        form: '<div class="qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
-          '<textarea rows="2" placeholder="Write a reply..." class="w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
+        form: '<div class="qa-composer qa-reply-form hidden mt-2" data-comment-id="' + comment.id + '">' +
+          '<textarea rows="2" placeholder="Write a reply..." class="qa-reply-textarea w-full rounded-lg border border-border bg-card p-2 text-sm text-foreground placeholder:text-muted-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"></textarea>' +
+          renderGuideline(guidelineCopy) +
           '<button class="{% button_classes 'primary' size='sm' extra='qa-reply-btn mt-1' %}" data-comment-id="' + comment.id + '">Post reply</button>' +
         '</div>',
       };
     }
 
-    function renderComment(comment, canModerate, readOnly) {
+    function renderComment(comment, canModerate, readOnly, guidelineCopy) {
       var modButtons = canModerate ? renderModerationButtons(comment.id) : '';
       var editForm = canModerate ? renderEditForm(comment.id, comment.body) : '';
 
@@ -156,7 +184,7 @@
       }
 
       var hasReplies = comment.replies && comment.replies.length > 0;
-      var reply = renderReplyControls(comment, readOnly);
+      var reply = renderReplyControls(comment, readOnly, guidelineCopy);
       var actionsHtml = reply.toggle + modButtons;
       var voteHtml = renderVoteControl(comment, readOnly);
 
@@ -187,7 +215,21 @@
       var postBtn = section.querySelector('.qa-post-btn');
       var textarea = section.querySelector('.qa-new-question');
       var readOnly = section.dataset.readOnly === 'true';
+      var guidelineCopy = readOnly ? '' : (section.dataset.answerGuideline || '');
       if (!listEl) return;
+
+      if (guidelineCopy) {
+        if (textarea) textarea.insertAdjacentHTML('afterend', renderGuideline(guidelineCopy));
+        // One delegated listener covers the top-level composer and every
+        // reply composer, including ones re-rendered by loadComments().
+        // `input` fires for typing, paste, and cut alike.
+        section.addEventListener('input', function(event) {
+          var target = event.target;
+          if (target.matches && target.matches('.qa-new-question, .qa-reply-textarea')) {
+            syncGuideline(target);
+          }
+        });
+      }
 
       function loadComments() {
         fetch('/api/comments/' + contentId, { credentials: 'same-origin' })
@@ -219,7 +261,7 @@
             }
             var html = '';
             for (var i = 0; i < comments.length; i++) {
-              html += renderComment(comments[i], canModerate, readOnly);
+              html += renderComment(comments[i], canModerate, readOnly, guidelineCopy);
             }
             listEl.innerHTML = html;
             bindEvents();
@@ -296,6 +338,7 @@
             .then(function(data) {
               if (data.error) return;
               ta.value = '';
+              syncGuideline(ta);
               form.classList.add('hidden');
               loadComments();
             });
@@ -387,6 +430,7 @@
           .then(function(data) {
             if (data.error) return;
             textarea.value = '';
+            syncGuideline(textarea);
             loadComments();
           });
         });

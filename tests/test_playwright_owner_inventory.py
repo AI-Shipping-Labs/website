@@ -1809,6 +1809,15 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_moved_proposal_is_no_longer_stuck",
     })
 
+    issue_1896_owners = frozenset({
+        "playwright_tests/test_homework_answer_guideline_1896.py::"
+        "test_homework_learner_sees_guideline_only_while_typing_and_can_still_post",
+        "playwright_tests/test_homework_answer_guideline_1896.py::"
+        "test_stepper_and_all_questions_homework_both_show_the_guideline",
+        "playwright_tests/test_homework_answer_guideline_1896.py::"
+        "test_lesson_learner_is_not_shown_the_homework_guideline",
+    })
+
     issue_1944_owners = frozenset({
         "playwright_tests/test_studio_homework_presentation_1944.py::"
         "test_staff_walks_free_text_answers_one_by_one",
@@ -2173,8 +2182,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2931)
-        self.assertEqual(len(inventory.owners), 2727)
+        self.assertEqual(inventory.item_count, 2934)
+        self.assertEqual(len(inventory.owners), 2730)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2208,6 +2217,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1922_owners
             | self.issue_1942_owners
             | self.issue_1944_owners
+            | self.issue_1896_owners
             | self.issue_1928_owners
             | self.issue_1940_owners
             | self.issue_1938_owners
@@ -2327,6 +2337,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1782_owners
             | self.issue_1802_owners
             | self.issue_1944_owners
+            | self.issue_1896_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
         ):

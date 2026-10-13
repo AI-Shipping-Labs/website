@@ -72,6 +72,7 @@ urlpatterns = [
     path('', include('community.urls')),
     # #1716: skill-gap page (/skill-gap, any signed-in member).
     path('', include('skill_gap.urls')),
+    path('', include('booking.urls')),
     path('studio/', include('studio.urls')),
     # A2.3: package content-sync Studio routes (list/edit/history/worker/manual sync).
     path('studio/', include('community_base.content_sync.studio_urls')),

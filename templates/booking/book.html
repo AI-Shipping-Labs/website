@@ -1,0 +1,403 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Book 30 min with {{ host.name }} | AI Shipping Labs{% endblock %}
+{% block meta_description %}Schedule a 30-minute 1:1 meeting with {{ host.name }}.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-4 pt-28 pb-16 sm:px-6 lg:px-8 lg:pt-36 lg:pb-24">
+    <div class="mx-auto max-w-5xl">
+      <!-- Back link -->
+      <a href="/request-a-call" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-6" data-testid="booking-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to Request a call
+      </a>
+
+      {% if messages %}
+      <div class="mb-6 space-y-2">
+        {% for message in messages %}
+        <div class="p-4 rounded-lg text-sm {% if message.tags == 'error' %}bg-destructive/15 text-destructive border border-destructive/30{% else %}bg-accent/15 text-accent border border-accent/30{% endif %}">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Booking Container Card -->
+      <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden" data-testid="booking-container" data-host-slug="{{ host.slug }}">
+        <div class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border">
+          
+          <!-- Column 1: Host Profile & Meeting Specs (4 cols) -->
+          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col justify-between bg-card/60">
+            <div>
+              <div class="flex items-center gap-4">
+                {% if host.photo_url %}
+                <img src="{{ host.photo_url }}" alt="{{ host.name }}" class="h-16 w-16 rounded-full object-cover border border-border" />
+                {% else %}
+                <div class="h-16 w-16 rounded-full bg-accent/20 border border-accent/30 text-accent font-semibold flex items-center justify-center text-xl">
+                  {{ host.name|slice:":2"|upper }}
+                </div>
+                {% endif %}
+                <div>
+                  <h1 class="text-xl font-bold text-foreground">{{ host.name }}</h1>
+                  <p class="text-sm text-muted-foreground">{{ host.role_label|default:"30-minute meeting" }}</p>
+                </div>
+              </div>
+
+              <div class="mt-8 space-y-4">
+                <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                  <i data-lucide="clock" class="h-4 w-4 text-accent shrink-0"></i>
+                  <span>{{ host.slot_duration_minutes }} min meeting</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                  <i data-lucide="video" class="h-4 w-4 text-accent shrink-0"></i>
+                  <span>Zoom video call</span>
+                </div>
+                <div class="flex items-center gap-3 text-sm text-muted-foreground">
+                  <i data-lucide="globe" class="h-4 w-4 text-accent shrink-0"></i>
+                  <span id="tz-display-label">Host timezone: {{ host.timezone }}</span>
+                </div>
+              </div>
+
+              <div class="mt-8 pt-6 border-t border-border">
+                <p class="text-xs text-muted-foreground leading-relaxed">
+                  Select a date and time to schedule directly. A calendar invite with your Zoom meeting link will be created automatically.
+                </p>
+              </div>
+            </div>
+
+            <div class="mt-8 pt-4">
+              <label for="tz-select" class="block text-xs font-medium text-muted-foreground mb-1.5">
+                Timezone:
+              </label>
+              <select id="tz-select" class="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="timezone-select">
+                {% for tz in common_timezones %}
+                <option value="{{ tz }}" {% if tz == initial_tz %}selected{% endif %}>{{ tz }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Column 2: Date & Slot Picker (4 cols) -->
+          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col">
+            <h2 class="text-base font-semibold text-foreground mb-4">Select Date & Time</h2>
+            
+            <!-- Month navigation -->
+            <div class="flex items-center justify-between mb-4">
+              <span id="month-label" class="font-medium text-sm text-foreground">Loading...</span>
+              <div class="flex gap-1">
+                <button type="button" id="prev-month-btn" class="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" aria-label="Previous month" data-testid="prev-month-button">
+                  <i data-lucide="chevron-left" class="h-4 w-4"></i>
+                </button>
+                <button type="button" id="next-month-btn" class="p-1.5 rounded hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors" aria-label="Next month" data-testid="next-month-button">
+                  <i data-lucide="chevron-right" class="h-4 w-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <!-- Calendar Days Header -->
+            <div class="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground font-medium mb-2">
+              <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+            </div>
+
+            <!-- Calendar Grid -->
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-xs mb-6" data-testid="calendar-grid">
+              <!-- Rendered via JS -->
+            </div>
+
+            <!-- Slots Section for Selected Day -->
+            <div id="slots-container" class="mt-auto pt-4 border-t border-border">
+              <div class="flex items-center justify-between mb-3">
+                <h3 id="selected-day-label" class="text-xs font-semibold text-foreground uppercase tracking-wider">Available Times</h3>
+                <span id="slots-count-badge" class="text-xs text-muted-foreground"></span>
+              </div>
+              <div id="slots-list" class="max-h-52 overflow-y-auto space-y-1.5 pr-1" data-testid="slots-list">
+                <p class="text-xs text-muted-foreground text-center py-4" id="slots-placeholder">
+                  Select an available date above to see times
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Column 3: Booking Form (4 cols) -->
+          <div class="p-6 sm:p-8 lg:col-span-4 bg-card/40 flex flex-col">
+            <h2 class="text-base font-semibold text-foreground mb-4">Enter Details</h2>
+
+            <div id="form-placeholder" class="my-auto text-center py-12 text-muted-foreground text-sm">
+              <i data-lucide="calendar" class="h-8 w-8 mx-auto mb-3 opacity-40"></i>
+              <p>Select a date and time on the left to complete your booking.</p>
+            </div>
+
+            <form id="booking-form" method="post" action="{% url 'booking_confirm' slug=host.slug %}" class="hidden space-y-4" data-testid="booking-form">
+              {% csrf_token %}
+              <input type="hidden" name="start_iso" id="input-start-iso" />
+              <input type="hidden" name="invitee_timezone" id="input-invitee-tz" />
+
+              <div class="p-3 rounded-lg bg-accent/10 border border-accent/20 text-xs">
+                <span class="font-medium text-accent">Selected Meeting:</span>
+                <p id="selected-summary-time" class="text-foreground font-semibold mt-0.5" data-testid="selected-summary-time"></p>
+              </div>
+
+              <div>
+                <label for="invitee_name" class="block text-xs font-medium text-foreground mb-1">Your Name *</label>
+                <input type="text" name="invitee_name" id="invitee_name" required
+                       class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                       placeholder="e.g. Alexey Grigorev"
+                       value="{% if user.is_authenticated %}{{ user.name|default:user.email }}{% endif %}"
+                       data-testid="input-invitee-name" />
+              </div>
+
+              <div>
+                <label for="invitee_email" class="block text-xs font-medium text-foreground mb-1">Your Email *</label>
+                <input type="email" name="invitee_email" id="invitee_email" required
+                       class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                       placeholder="you@example.com"
+                       value="{% if user.is_authenticated %}{{ user.email }}{% endif %}"
+                       data-testid="input-invitee-email" />
+              </div>
+
+              <div>
+                <label for="discussion_topic" class="block text-xs font-medium text-foreground mb-1">Topic</label>
+                <select name="discussion_topic" id="discussion_topic"
+                        class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        data-testid="select-discussion-topic">
+                  {% for topic in topic_choices %}
+                  <option value="{{ topic }}">{{ topic }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div>
+                <label for="company" class="block text-xs font-medium text-foreground mb-1">Company / Project (optional)</label>
+                <input type="text" name="company" id="company"
+                       class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                       placeholder="Company or repo"
+                       data-testid="input-company" />
+              </div>
+
+              <div>
+                <label for="discussion_notes" class="block text-xs font-medium text-foreground mb-1">Notes / Context (optional)</label>
+                <textarea name="discussion_notes" id="discussion_notes" rows="2"
+                          class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                          placeholder="Anything specific you'd like to discuss?"
+                          data-testid="input-discussion-notes"></textarea>
+              </div>
+
+              <div class="pt-2">
+                <button type="submit" id="submit-booking-btn" class="{% button_classes 'primary' extra='w-full justify-center' %}" data-testid="submit-booking-button">
+                  <i data-lucide="check" class="h-4 w-4"></i>
+                  Confirm booking
+                </button>
+              </div>
+            </form>
+
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+
+<script>
+(function() {
+  const hostSlug = "{{ host.slug }}";
+  let currentTz = document.getElementById("tz-select").value || "{{ host.timezone }}";
+  
+  // Try to detect user's browser timezone if not manually set
+  try {
+    const detectedTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (detectedTz) {
+      const select = document.getElementById("tz-select");
+      for (let i = 0; i < select.options.length; i++) {
+        if (select.options[i].value === detectedTz) {
+          select.selectedIndex = i;
+          currentTz = detectedTz;
+          break;
+        }
+      }
+    }
+  } catch (e) {}
+
+  let viewDate = new Date();
+  let availableSlots = [];
+  let availableDays = new Set();
+  let selectedSlot = null;
+
+  const monthLabel = document.getElementById("month-label");
+  const prevMonthBtn = document.getElementById("prev-month-btn");
+  const nextMonthBtn = document.getElementById("next-month-btn");
+  const calendarGrid = document.getElementById("calendar-grid");
+  const slotsList = document.getElementById("slots-list");
+  const slotsPlaceholder = document.getElementById("slots-placeholder");
+  const selectedDayLabel = document.getElementById("selected-day-label");
+  const formPlaceholder = document.getElementById("form-placeholder");
+  const bookingForm = document.getElementById("booking-form");
+  const inputStartIso = document.getElementById("input-start-iso");
+  const inputInviteeTz = document.getElementById("input-invitee-tz");
+  const selectedSummaryTime = document.getElementById("selected-summary-time");
+  const tzSelect = document.getElementById("tz-select");
+
+  tzSelect.addEventListener("change", function() {
+    currentTz = this.value;
+    inputInviteeTz.value = currentTz;
+    fetchSlots();
+  });
+
+  prevMonthBtn.addEventListener("click", function() {
+    viewDate.setMonth(viewDate.getMonth() - 1);
+    fetchSlots();
+  });
+
+  nextMonthBtn.addEventListener("click", function() {
+    viewDate.setMonth(viewDate.getMonth() + 1);
+    fetchSlots();
+  });
+
+  function formatMonthHeader(date) {
+    return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  }
+
+  function getMonthBounds(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    return {
+      from: firstDay.toISOString().slice(0, 10),
+      to: lastDay.toISOString().slice(0, 10)
+    };
+  }
+
+  function fetchSlots() {
+    monthLabel.textContent = formatMonthHeader(viewDate);
+    const bounds = getMonthBounds(viewDate);
+    
+    calendarGrid.innerHTML = '<div class="col-span-7 py-6 text-center text-muted-foreground text-xs">Loading availability...</div>';
+    
+    fetch(`/book/${hostSlug}/slots?from=${bounds.from}&to=${bounds.to}&tz=${encodeURIComponent(currentTz)}`)
+      .then(res => res.json())
+      .then(data => {
+        availableSlots = data.slots || [];
+        availableDays = new Set(data.days || []);
+        renderCalendar();
+      })
+      .catch(err => {
+        calendarGrid.innerHTML = '<div class="col-span-7 py-6 text-center text-destructive text-xs">Could not load schedule</div>';
+      });
+  }
+
+  function renderCalendar() {
+    calendarGrid.innerHTML = "";
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    // Monday is 0, Sunday is 6
+    let startingDay = (firstDay.getDay() + 6) % 7;
+    for (let i = 0; i < startingDay; i++) {
+      const emptyCell = document.createElement("div");
+      emptyCell.className = "py-2";
+      calendarGrid.appendChild(emptyCell);
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const isAvailable = availableDays.has(dayStr);
+      
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = day;
+      btn.dataset.date = dayStr;
+      btn.dataset.testid = isAvailable ? "calendar-day-available" : "calendar-day-unavailable";
+      
+      let baseClass = "h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium transition-all text-xs ";
+      if (isAvailable) {
+        baseClass += "bg-accent/15 text-accent font-semibold hover:bg-accent hover:text-accent-foreground cursor-pointer ";
+      } else {
+        baseClass += "text-muted-foreground/40 cursor-not-allowed ";
+      }
+      
+      if (dayStr === todayStr) {
+        baseClass += "ring-1 ring-border ";
+      }
+
+      btn.className = baseClass;
+      
+      if (isAvailable) {
+        btn.addEventListener("click", () => selectDate(dayStr));
+      }
+      
+      calendarGrid.appendChild(btn);
+    }
+  }
+
+  function selectDate(dateStr) {
+    // Highlight selected button
+    calendarGrid.querySelectorAll("button").forEach(b => {
+      if (b.dataset.date === dateStr) {
+        b.classList.add("ring-2", "ring-accent", "bg-accent", "text-accent-foreground");
+      } else if (availableDays.has(b.dataset.date)) {
+        b.classList.remove("ring-2", "ring-accent");
+      }
+    });
+
+    const daySlots = availableSlots.filter(s => s.date === dateStr);
+    const dateObj = new Date(dateStr + "T12:00:00Z");
+    selectedDayLabel.textContent = dateObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    
+    slotsList.innerHTML = "";
+    if (daySlots.length === 0) {
+      slotsList.innerHTML = '<p class="text-xs text-muted-foreground text-center py-4">No slots available on this date</p>';
+      return;
+    }
+
+    daySlots.forEach(slot => {
+      const slotBtn = document.createElement("button");
+      slotBtn.type = "button";
+      slotBtn.className = "w-full py-2 px-3 text-center text-xs font-semibold rounded-lg border border-accent/30 bg-accent/5 text-accent hover:bg-accent hover:text-accent-foreground transition-all cursor-pointer";
+      slotBtn.textContent = slot.time_display;
+      slotBtn.dataset.startIso = slot.start_iso;
+      slotBtn.dataset.timeDisplay = slot.time_display;
+      slotBtn.dataset.date = slot.date;
+      slotBtn.setAttribute("data-testid", "slot-option-button");
+
+      slotBtn.addEventListener("click", () => selectSlot(slot, slotBtn));
+      slotsList.appendChild(slotBtn);
+    });
+  }
+
+  function selectSlot(slot, btnElement) {
+    selectedSlot = slot;
+    slotsList.querySelectorAll("button").forEach(b => {
+      b.classList.remove("bg-accent", "text-accent-foreground");
+      b.classList.add("bg-accent/5", "text-accent");
+    });
+    btnElement.classList.remove("bg-accent/5", "text-accent");
+    btnElement.classList.add("bg-accent", "text-accent-foreground");
+
+    // Populate form
+    inputStartIso.value = slot.start_iso;
+    inputInviteeTz.value = currentTz;
+
+    const dt = new Date(slot.start_iso);
+    const dateFormatted = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: currentTz });
+    const timeFormatted = dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: currentTz });
+    selectedSummaryTime.textContent = `${dateFormatted} at ${timeFormatted} (${currentTz})`;
+
+    formPlaceholder.classList.add("hidden");
+    bookingForm.classList.remove("hidden");
+  }
+
+  fetchSlots();
+})();
+</script>
+{% endblock %}

@@ -21,9 +21,11 @@ _HTTP_URL_VALIDATOR = URLValidator(schemes=['http', 'https'])
 
 
 def is_usable_http_url(value):
-    """Return whether a stored value is a non-whitespace HTTP(S) URL."""
+    """Return whether a stored value is a non-whitespace HTTP(S) URL or relative path."""
     if not isinstance(value, str) or not value or value != value.strip():
         return False
+    if value.startswith('/'):
+        return True
     try:
         _HTTP_URL_VALIDATOR(value)
     except ValidationError:
@@ -46,7 +48,7 @@ class CallHost(models.Model):
         blank=True,
         help_text='Optional profile photo URL.',
     )
-    booking_url = models.URLField(
+    booking_url = models.CharField(
         max_length=500,
         blank=True,
         help_text="The profile's scheduler link.",

@@ -1,0 +1,10 @@
+{% load member_badges %}
+{% comment %}
+Next-step card badge cluster: the canonical access badge (when the linked
+course/workshop/project exists; the /sprints program index has no single
+level) followed by the muted type label.
+{% endcomment %}
+{% if action.access_level is not None %}
+{% member_access_badge action.access_level testid="skill-gap-next-step-access" %}
+{% endif %}
+{% member_label_badge action.type_label tone="muted" icon=action.type_icon testid="skill-gap-next-step-type" %}

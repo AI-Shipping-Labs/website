@@ -1,0 +1,191 @@
+# Skill-gap analyzer data (issue #1716).
+#
+# The single source of truth for /skill-gap. Each background is adapted
+# (condensed, not verbatim) from the AI Engineering Field Guide learning
+# paths: github.com/alexeygrigorev/ai-engineering-field-guide,
+# learning-paths/from-*.md.
+#
+# Per background:
+#   label, hook           - the picker option ("Data Engineer" + one line)
+#   already_have          - "Your strengths"
+#   need_to_learn         - "Your gaps", in the order to close them
+#   suggested_order       - "Your suggested path", numbered steps
+#   timeline              - one sentence
+#   next_actions          - exactly 3 platform links: title, type
+#                           (course | workshop | sprint | project), a
+#                           platform-relative url, and a one-line why
+#
+# skill_gap/tests/test_backgrounds.py GETs every next_actions url against
+# the real detail views, so a renamed route or slug fails the build. When
+# you swap an asset, confirm the url returns 200 on production and use the
+# asset's exact title.
+
+backgrounds:
+  data-engineer:
+    label: Data Engineer
+    hook: Smoothest transition, 3-4 months
+    already_have:
+      - Python, SQL, and data pipelines - the ingestion backbone every RAG system needs
+      - CI/CD, testing, monitoring, and log collection
+      - Cloud platforms (AWS, GCP, Azure) and production infrastructure
+    need_to_learn:
+      - LLM provider APIs (OpenAI, Anthropic) and structured outputs
+      - Prompt engineering and prompt tuning
+      - Evaluation of AI systems - the key new skill
+      - RAG patterns - add retrieval and generation to the pipelines you already build
+      - Agent patterns (LLMs with tools) and AI-specific monitoring
+    suggested_order:
+      - Call LLM APIs and get structured outputs working
+      - Build a RAG system - your natural entry point
+      - Learn evaluation - test sets, retrieval quality, LLM-as-judge
+      - Add agents - LLMs with tools and orchestration
+      - Extend your existing monitoring to AI outputs
+    timeline: About 3-4 months of AI-specific learning on top of the engineering base you already have.
+    next_actions:
+      - title: Build Your Own Search Engine
+        type: workshop
+        url: /workshops/build-your-own-search-engine
+        why: RAG starts with retrieval - build the search layer on top of the pipeline skills you already have.
+      - title: Build an Agent Evaluation Framework with OpenAI Batch and Flex
+        type: workshop
+        url: /workshops/eval-framework-batch-flex
+        why: Evaluation is the key new skill - test sets, quality metrics, and LLM-as-judge.
+      - title: Community sprints
+        type: sprint
+        url: /sprints
+        why: Ship a RAG project over your own data in a time-boxed cohort with accountability.
+
+  data-scientist:
+    label: Data Scientist
+    hook: Evaluation is your superpower, add engineering
+    already_have:
+      - Evaluation, metrics, and experiment design - a core AI engineering skill
+      - Model understanding (embeddings, fine-tuning concepts)
+      - Python and data analysis
+    need_to_learn:
+      - Engineering rigor - tests, CI/CD, code review, Git workflows
+      - Production deployment - Docker, FastAPI, REST APIs
+      - LLM APIs (different from training your own models)
+      - RAG patterns and agent patterns
+      - Production monitoring instead of notebook metrics
+    suggested_order:
+      - Pick up software engineering fundamentals (testing, CI/CD, Git)
+      - Learn Docker and deployment basics
+      - Start with LLM APIs and structured outputs
+      - Build a RAG system with proper evaluation
+      - Add production skills, then agents
+    timeline: A couple of months to add the engineering side - your evaluation skills carry the rest.
+    next_actions:
+      - title: Python for AI Engineering
+        type: course
+        url: /courses/python
+        why: Move from notebook Python to tested, production-ready code.
+      - title: End-to-End Agent Deployment
+        type: workshop
+        url: /workshops/end-to-end-agent-deployment
+        why: Learn the deployment side - take an agent from prototype to a running service.
+      - title: User Satisfaction Analyst Agent
+        type: project
+        url: /projects/user-satisfaction-analyst-agent
+        why: An evaluation-minded agent project that plays to your strengths.
+
+  ml-engineer:
+    label: ML Engineer
+    hook: Fastest transition, replace the model call with an API call
+    already_have:
+      - Production ML systems - deployment, serving, monitoring
+      - Python, PyTorch or TensorFlow, Docker, Kubernetes, CI/CD
+      - Model evaluation and MLOps practices
+    need_to_learn:
+      - LLM provider APIs (you are used to hosting models yourself)
+      - Prompt engineering and prompt versioning
+      - RAG patterns - vector databases, retrieval strategies
+      - Agent patterns - tool use, orchestration loops, step limits
+      - LLM-specific evaluation - hallucination detection, answer quality
+    suggested_order:
+      - Call LLM APIs - structured outputs, function calling
+      - Learn prompt engineering (it works like the experiment tracking you know)
+      - Build a RAG system - embeddings are already familiar
+      - Build an agent with tool use and multi-step evaluation
+      - Learn LLM-as-judge and golden datasets for generation quality
+    timeline: The fastest transition of all - weeks, not months, to become productive.
+    next_actions:
+      - title: "The Agentic Loop: Building a Mini Agent Framework from Scratch"
+        type: workshop
+        url: /workshops/agentic-loop-from-scratch
+        why: Swap your model call for an LLM API and build the tool-calling loop yourself.
+      - title: Build an Agent Evaluation Framework with OpenAI Batch and Flex
+        type: workshop
+        url: /workshops/eval-framework-batch-flex
+        why: Extend your evaluation practice to generation quality with LLM-as-judge.
+      - title: Cybersecurity Disclosure Agent
+        type: project
+        url: /projects/cybersecurity-disclosure-agent
+        why: A production-style RAG agent with cost and context monitoring to model your portfolio piece on.
+
+  backend-engineer:
+    label: Backend Engineer
+    hook: 2-3 months, add AI on top of engineering
+    already_have:
+      - Python or TypeScript, APIs, and REST frameworks
+      - Testing, CI/CD, code quality, and Docker
+      - Databases, cloud platforms, and production deployment
+    need_to_learn:
+      - LLM APIs - structured outputs, function calling
+      - Prompt engineering - iteration, testing, versioning
+      - RAG patterns - vector databases, embeddings, retrieval
+      - Evaluation - LLM-as-judge, golden datasets (the key new skill)
+      - Basic ML concepts - embeddings, fine-tuning concepts
+    suggested_order:
+      - Start with LLM APIs and structured outputs
+      - Build something simple - a chatbot or an extraction pipeline
+      - Learn RAG - add vector search to your stack
+      - Learn evaluation properly - this is where most engineers stumble
+      - Build an agent, then round out basic ML concepts
+    timeline: About 2-3 months to become a productive AI engineer on your existing base.
+    next_actions:
+      - title: "AI Hero: 7-Day AI Agents Crash-Course"
+        type: course
+        url: /courses/aihero
+        why: Call LLM APIs and ship your first agent on the stack you already know.
+      - title: Build Your Own Search Engine
+        type: workshop
+        url: /workshops/build-your-own-search-engine
+        why: Add retrieval to your stack - the foundation of every RAG system.
+      - title: Build an Agent Evaluation Framework with OpenAI Batch and Flex
+        type: workshop
+        url: /workshops/eval-framework-batch-flex
+        why: Evaluation is where most engineers stumble - learn it properly.
+
+  frontend-engineer:
+    label: Frontend Engineer
+    hook: Backend first, then AI, for a full-stack advantage
+    already_have:
+      - TypeScript or JavaScript, React, Next.js
+      - API consumption and integration
+      - UI/UX sensibility and product sense - valuable for AI products
+    need_to_learn:
+      - Backend development - Python and FastAPI (or stay in TypeScript)
+      - Databases - PostgreSQL, Redis, and vector databases for RAG
+      - Deployment - Docker, CI/CD, cloud platforms
+      - LLM APIs, prompt engineering, RAG, agents, and evaluation
+    suggested_order:
+      - Learn backend basics - Python and FastAPI are the mainstream AI stack
+      - Learn SQL and database design, then Docker
+      - Call LLM APIs from your backend
+      - Build a full-stack AI app - a chatbot, RAG, or extraction tool
+      - Add evaluation and agents last
+    timeline: Longer than for other engineers because the backend comes first - your full-stack range is the payoff.
+    next_actions:
+      - title: Python for AI Engineering
+        type: course
+        url: /courses/python
+        why: Backend first - Python is the mainstream AI stack.
+      - title: Build and Deploy a Full-Stack App with AI Coding Assistants
+        type: workshop
+        url: /workshops/full-stack-vibe-coding
+        why: Build and deploy a full-stack app end to end, backend included.
+      - title: Community sprints
+        type: sprint
+        url: /sprints
+        why: Build your first full-stack AI app in a time-boxed cohort with accountability.

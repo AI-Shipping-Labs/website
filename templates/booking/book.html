@@ -28,10 +28,10 @@
 
       <!-- Booking Container Card -->
       <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden" data-testid="booking-container" data-host-slug="{{ host.slug }}">
-        <div class="grid grid-cols-1 lg:grid-cols-12 divide-y lg:divide-y-0 lg:divide-x divide-border">
+        <div class="grid grid-cols-1 lg:grid-cols-12">
           
           <!-- Column 1: Host Profile & Meeting Specs (4 cols) -->
-          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col justify-between bg-card/60">
+          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col justify-between bg-card/60 border-b lg:border-b-0 lg:border-r border-border">
             <div>
               <div class="flex items-center gap-4">
                 {% if host.photo_url %}
@@ -82,7 +82,7 @@
           </div>
 
           <!-- Column 2: Date & Slot Picker (4 cols) -->
-          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col">
+          <div class="p-6 sm:p-8 lg:col-span-4 flex flex-col border-b lg:border-b-0 lg:border-r border-border">
             <h2 class="text-base font-semibold text-foreground mb-4">Select Date & Time</h2>
             
             <!-- Month navigation -->

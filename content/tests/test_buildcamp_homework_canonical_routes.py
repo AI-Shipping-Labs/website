@@ -167,7 +167,7 @@ class BuildcampHomeworkCanonicalRoutesTest(TestCase):
             question_type=QuestionType.FREE_FORM,
         )
 
-        response = self.client.get(self.foundation_main.get_absolute_url())
+        response = self.client.get(self.foundation_main.get_absolute_url(), follow=True)
         self.assertContains(response, 'data-testid="homework-step-nav"')
         self.assertContains(response, 'data-testid="homework-step-current"')
         sidebar = response.content.decode().split(

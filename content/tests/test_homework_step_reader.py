@@ -54,31 +54,25 @@ def checked_radio_values(response):
 
 
 class StepPillsParser(HTMLParser):
-    """Collect the mobile step position line and the step pill links."""
+    """Collect the mobile step-pill links and every text node in that nav."""
 
     def __init__(self):
         super().__init__()
-        self.position = ''
+        self.nav_text = ''
         self.pill_labels = []
         self.current_pills = []
-        self._in_position = False
         self._in_pills = False
         self._pill = None
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
-        testid = attributes.get('data-testid')
-        if testid == 'homework-step-position':
-            self._in_position = True
-        elif testid == 'homework-step-pills':
+        if attributes.get('data-testid') == 'homework-step-pills':
             self._in_pills = True
         elif self._in_pills and tag == 'a':
             self._pill = {'text': '', 'current': attributes.get('aria-current') == 'step'}
 
     def handle_endtag(self, tag):
-        if tag == 'p' and self._in_position:
-            self._in_position = False
-        elif tag == 'a' and self._pill is not None:
+        if tag == 'a' and self._pill is not None:
             label = self._pill['text'].strip()
             self.pill_labels.append(label)
             if self._pill['current']:
@@ -88,9 +82,9 @@ class StepPillsParser(HTMLParser):
             self._in_pills = False
 
     def handle_data(self, data):
-        if self._in_position:
-            self.position += data
-        elif self._pill is not None:
+        if self._in_pills:
+            self.nav_text += data
+        if self._pill is not None:
             self._pill['text'] += data
 
 
@@ -199,7 +193,7 @@ class HomeworkSidebarRowConsistencyTest(HomeworkUnitSetupMixin, TestCase):
             with self.subTest(scope=scope):
                 self.course.reader_navigation_scope = scope
                 self.course.save(update_fields=['reader_navigation_scope'])
-                current_page = self.client.get(self.unit_url)
+                current_page = self.client.get(self.unit_url, follow=True)
                 other_page = self.client.get(self.lesson.get_absolute_url())
                 current_attrs, current = sidebar_row_parts(
                     current_page, self.unit_url,
@@ -260,7 +254,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
 
     def test_reader_preserves_unit_url_and_renders_one_rich_prompt(self):
-        intro = self.client.get(self.unit_url)
+        intro = self.client.get(self.unit_url, follow=True)
         self.assertContains(intro, 'homework-stepper')
         self.assertContains(intro, 'Download the books first.')
         self.assertContains(intro, 'data-testid="homework-due-date"')
@@ -268,7 +262,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertContains(intro, 'data-homework-state="not_submitted"', count=1)
         self.assertNotContains(intro, 'What was difficult?')
         self.assertNotContains(intro, 'homework-submission-form')
-        question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+        question = self.client.get(f'{self.unit_url}/q1-lines')
         self.assertContains(question, 'Use <code>wc -l</code>')
         self.assertContains(question, 'the file')
         self.assertNotContains(question, 'What was difficult?')
@@ -281,7 +275,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
 
         def assert_state(expected):
-            response = self.client.get(f'{self.unit_url}?homework_step=review')
+            response = self.client.get(f'{self.unit_url}/review')
             self.assertEqual(response.context['homework_state'].value, expected)
             self.assertEqual(response.context['stepper']['homework_state'].value, expected)
             page_state = re.search(
@@ -300,7 +294,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             )
             self.assertContains(response, f'data-homework-state="{expected}"', count=2)
 
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         assert_state('not_submitted')
         self.assertEqual(self.save_answer('q1-lines', 0, '2').json(), {
             'revision': 1, 'saved': True,
@@ -341,14 +335,14 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
         submission.submitted_at = timezone.now() - datetime.timedelta(days=2)
         submission.save(update_fields=['submitted_at'])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.assertEqual(self.save_answer('q1-lines', 0, '1').json(), {
             'revision': 1, 'saved': True,
         })
         self.homework.state = HomeworkState.CLOSED
         self.homework.save(update_fields=['state'])
 
-        response = self.client.get(f'{self.unit_url}?homework_step=review')
+        response = self.client.get(f'{self.unit_url}/review')
 
         self.assertContains(response, 'data-testid="homework-accepted-snapshot"')
         self.assertContains(response, 'data-testid="homework-unsent-draft"')
@@ -373,22 +367,13 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             f'{response.context["homework_display_timezone"]}',
         )
 
-    def test_canonical_path_steps_and_query_bookmarks_are_both_readable(self):
+    def test_canonical_path_step_renders_that_step_with_path_action(self):
         canonical_url = f'{self.unit_url}/q2-reflect'
         canonical = self.client.get(canonical_url)
-        bookmark = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
 
         self.assertContains(canonical, 'What was difficult?')
         self.assertEqual(canonical.context['stepper']['step'], 'q2-reflect')
         self.assertEqual(canonical.context['stepper']['action'], canonical_url)
-        self.assertContains(bookmark, 'What was difficult?')
-        self.assertEqual(bookmark.context['stepper']['step'], 'q2-reflect')
-        self.assertContains(bookmark, f'href="{self.unit_url}/q2-reflect"')
-
-    def test_unknown_canonical_homework_step_is_not_rendered_as_another_unit(self):
-        response = self.client.get(f'{self.unit_url}/not-a-question')
-
-        self.assertEqual(response.status_code, 404)
 
     def test_submodule_unit_four_segment_url_still_resolves(self):
         nested_course = Course.objects.create(
@@ -449,22 +434,25 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(response.context['stepper']['step'], 'q1-nested')
         self.assertEqual(response.context['stepper']['action'], canonical_url)
 
-    def test_step_pills_show_position_and_mark_only_the_current_step(self):
-        response = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+    def test_step_pills_mark_only_the_current_step_without_step_counter(self):
+        response = self.client.get(f'{self.unit_url}/q1-lines')
 
         parser = StepPillsParser()
         parser.feed(response.content.decode())
         step_count = response.context['stepper']['step_count']
+        # Issue #1827: the visible "Step N of M" line is gone; the pills
+        # (and the sidebar) carry position and the current step.
         self.assertEqual(
-            ' '.join(parser.position.split()),
-            f'Step 2 of {step_count} · Question 1',
+            ' '.join(parser.nav_text.split()),
+            ' '.join(str(n) for n in range(1, step_count + 1)),
         )
+        self.assertNotContains(response, 'data-testid="homework-step-position"')
         self.assertEqual(parser.pill_labels, [str(n) for n in range(1, step_count + 1)])
         self.assertEqual(parser.current_pills, ['2'])
 
     def test_timezone_notice_renders_on_intro_step_only(self):
-        intro = self.client.get(self.unit_url)
-        question = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+        intro = self.client.get(self.unit_url, follow=True)
+        question = self.client.get(f'{self.unit_url}/q1-lines')
 
         # Issue #1795: an empty saved preference renders the explicit
         # fallback zone, which the client localizes in place on first visit.
@@ -477,7 +465,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertNotContains(question, 'Deadline times are shown in')
 
     def test_short_text_question_uses_one_line_input(self):
-        response = self.client.get(f'{self.unit_url}?homework_step=q2-reflect')
+        response = self.client.get(f'{self.unit_url}/q2-reflect')
 
         self.assertContains(response, 'id="homework-answer" name="answer" type="text"')
         self.assertNotContains(response, '<textarea id="homework-answer"')
@@ -492,7 +480,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         ])
 
         assignment = build_assignment(self.homework, self.unit, self.student)
-        response = self.client.get(f'{self.unit_url}?homework_step={LEARNING_IN_PUBLIC_KEY}')
+        response = self.client.get(f'{self.unit_url}/{LEARNING_IN_PUBLIC_KEY}')
 
         self.assertEqual(assignment.questions[-1].key, LEARNING_IN_PUBLIC_KEY)
         self.assertEqual(assignment.questions[-1].step_label, 'Learning in Public')
@@ -522,7 +510,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
 
         self.assertNotIn(LEARNING_IN_PUBLIC_KEY, [q.key for q in assignment.questions])
         self.assertIn('Learning in Public', assignment.instructions)
-        response = self.client.get(self.unit_url)
+        response = self.client.get(self.unit_url, follow=True)
         self.assertNotContains(response, 'data-learning-public-links')
 
     def test_capstone_form_shape_has_three_links_and_only_homework_url(self):
@@ -544,9 +532,9 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(assignment.final_fields[0].label, 'Homework URL')
 
     def test_required_homework_url_allows_draft_save_but_blocks_submit(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
-        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        review = self.client.get(f'{self.unit_url}/review')
 
         self.assertContains(review, 'Homework URL')
         self.assertContains(review, '(required)')
@@ -584,7 +572,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'learning_in_public_cap', 'time_spent_lectures_field',
             'time_spent_homework_field',
         ])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         public_links = 'https://example.com/progress\nhttps://github.com/student/demo'
         saved = self.save_answer(LEARNING_IN_PUBLIC_KEY, draft.revision, public_links)
@@ -601,7 +589,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         })
 
         self.assertEqual(response.status_code, 302)
-        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        review = self.client.get(f'{self.unit_url}/review')
         self.assertContains(review, 'Homework URL')
         self.assertContains(review, '(required)')
         self.assertContains(review, 'type="number"')
@@ -617,7 +605,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
     def test_invalid_public_link_submission_keeps_the_draft(self):
         self.homework.learning_in_public_cap = 1
         self.homework.save(update_fields=['learning_in_public_cap'])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         self.save_answer(
             LEARNING_IN_PUBLIC_KEY, draft.revision,
@@ -656,7 +644,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             'learning_in_public_cap', 'homework_url_field',
             'time_spent_lectures_field', 'time_spent_homework_field',
         ])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
 
         response = self.client.post(self.unit_url, {
@@ -675,7 +663,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
     def test_negative_time_value_keeps_draft_and_does_not_submit(self):
         self.homework.time_spent_lectures_field = True
         self.homework.save(update_fields=['time_spent_lectures_field'])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
 
         response = self.client.post(self.unit_url, {
@@ -694,7 +682,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.due_date = None
         self.homework.save(update_fields=['due_date'])
 
-        response = self.client.get(self.unit_url)
+        response = self.client.get(self.unit_url, follow=True)
 
         self.assertEqual(response.context['homework_due_date_display'], '')
         self.assertNotContains(response, 'data-testid="homework-due-date"')
@@ -705,13 +693,13 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.state = HomeworkState.CLOSED
         self.homework.save(update_fields=['due_date', 'state'])
 
-        response = self.client.get(self.unit_url)
+        response = self.client.get(self.unit_url, follow=True)
 
         self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
         self.assertNotContains(response, 'deadline has passed')
 
     def test_one_answer_saves_without_submission_and_resumes(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.assertFalse(completion_service.is_completed(self.student, self.unit))
         response = self.save_answer(self.mc_question.source_question_id, 0, '2')
         self.assertEqual(response.json(), {'revision': 1, 'saved': True})
@@ -721,14 +709,14 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             HomeworkDraft.objects.get(user=self.student).answers,
             {'q1-lines': option_key('14')},
         )
-        resumed = self.client.get(self.unit_url)
+        resumed = self.client.get(self.unit_url, follow=True)
         self.assertEqual(resumed.context['stepper']['step'], 'q2-reflect')
 
     def test_step_navigation_preserves_cohort_query_on_unit_url(self):
         self.cohort.external_key = 'cohort-4'
         self.cohort.save(update_fields=['external_key'])
         CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
-        page = self.client.get(f'{self.unit_url}?cohort=cohort-4&homework_step=q1-lines')
+        page = self.client.get(f'{self.unit_url}/q1-lines?cohort=cohort-4')
         self.assertEqual(
             page.context['stepper']['nav_steps'][2][1],
             f'{self.unit_url}/q2-reflect?cohort=cohort-4',
@@ -753,7 +741,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             homework_link='https://example.com/accepted',
             answers_by_question_id={self.mc_question.pk: '2'},
         )
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
 
         changed = self.save_answer('q1-lines', 0, '1')
         page = self.client.get(f'{self.unit_url}/q1-lines')
@@ -764,7 +752,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertNotContains(page, 'Your homework was submitted.', status_code=200)
 
     def test_unsent_saved_answers_are_labeled_as_a_draft(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '1')
 
         response = self.client.get(f'{self.unit_url}/q1-lines')
@@ -799,7 +787,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
             )
 
         selected_url = f'{self.unit_url}?cohort=selected'
-        response = self.client.get(selected_url)
+        response = self.client.get(selected_url, follow=True)
         self.assertEqual(response.context['homework'], second_homework)
         draft = HomeworkDraft.objects.get(
             user=self.student, assignment_key=f'aisl:homework:{second_homework.pk}',
@@ -857,7 +845,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         ).exists())
 
     def test_save_rejects_stale_revision_and_question_from_another_assignment(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.assertEqual(self.save_answer('q1-lines', 0, '1').json()['revision'], 1)
         self.assertEqual(self.save_answer('q1-lines', 0, '2').status_code, 409)
         wrong = self.client.post(
@@ -870,7 +858,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
 
     def test_clear_one_answer_keeps_other_saved_answer(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '2')
         self.save_answer('q2-reflect', 1, 'A detail')
         cleared = self.save_answer('q1-lines', 2, '')
@@ -889,7 +877,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(csrf_client.post(url, {'revision': '0', 'answer': '2'}).status_code, 403)
         self.homework.due_date = timezone.now() - datetime.timedelta(minutes=1)
         self.homework.save(update_fields=['due_date'])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         response = self.client.post(url, {
             'draft_token': str(draft.token), 'revision': str(draft.revision),
@@ -905,10 +893,10 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(closed.status_code, 403)
 
     def test_review_submits_complete_snapshot_through_existing_service(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '2')
         old_token = str(HomeworkDraft.objects.get(user=self.student).token)
-        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        review = self.client.get(f'{self.unit_url}/review')
         self.assertContains(review, 'Share your work.')
         self.assertContains(review, 'Not answered')
         response = self.client.post(
@@ -938,9 +926,9 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         deadline can still complete and submit while the form is OPEN."""
         self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
         self.homework.save(update_fields=['due_date'])
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '2')
-        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        review = self.client.get(f'{self.unit_url}/review')
         self.assertContains(review, 'Was due')
         self.assertContains(review, 'homework-submit-button')
         self.assertNotContains(review, 'This homework is closed')
@@ -966,13 +954,13 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.due_date = timezone.now() - datetime.timedelta(days=1)
         self.homework.save(update_fields=['due_date'])
 
-        review = self.client.get(f'{self.unit_url}?homework_step=review')
+        review = self.client.get(f'{self.unit_url}/review')
 
         self.assertContains(review, 'homework-submit-button')
         self.assertContains(review, 'Update submission')
         self.assertContains(review, 'You can update it while submissions are open.')
         self.assertNotContains(review, 'The submission window is closed.')
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         response = self.client.post(self.unit_url, {
             'assignment_key': f'aisl:homework:{self.homework.pk}',
@@ -988,7 +976,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertEqual(submission.homework_link, 'https://example.com/after')
 
     def test_closed_submit_keeps_draft_without_creating_submission(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '2')
         self.homework.state = HomeworkState.CLOSED
         self.homework.save(update_fields=['state'])
@@ -1014,7 +1002,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.state = HomeworkState.CLOSED
         self.homework.save(update_fields=['due_date', 'state'])
 
-        response = self.client.get(self.unit_url)
+        response = self.client.get(self.unit_url, follow=True)
 
         self.assertContains(response, 'This homework is closed. Your saved answers are still available.')
         self.assertContains(response, "This homework is closed. Sorry, it's too late to submit.")
@@ -1042,7 +1030,7 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         )
 
     def test_existing_submission_seeds_draft_without_changing_submission(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.client.post(self.unit_url, {
             'assignment_key': f'aisl:homework:{self.homework.pk}',
             'draft_token': str(HomeworkDraft.objects.get(user=self.student).token),
@@ -1053,12 +1041,12 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         Answer.objects.create(
             submission=submission, question=self.mc_question, answer_text='1',
         )
-        opened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+        opened = self.client.get(f'{self.unit_url}/q1-lines')
         self.assertIn(option_key('12'), checked_radio_values(opened))
         self.assertEqual(submission.answers.get(question=self.mc_question).answer_text, '1')
 
     def test_stale_all_in_one_post_still_submits_and_clears_stepper_draft(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '1')
         self.assertFalse(completion_service.is_completed(self.student, self.unit))
 
@@ -1075,14 +1063,14 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         self.assertTrue(completion_service.is_completed(self.student, self.unit))
 
     def test_reordered_options_preserve_draft_choice_and_submit_current_index(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         self.save_answer('q1-lines', 0, '2')
         saved_key = HomeworkDraft.objects.get(user=self.student).answers['q1-lines']
 
         self.mc_question.possible_answers = '16\n12\n14'
         self.mc_question.save(update_fields=['possible_answers'])
 
-        reopened = self.client.get(f'{self.unit_url}?homework_step=q1-lines')
+        reopened = self.client.get(f'{self.unit_url}/q1-lines')
         self.assertIn(saved_key, checked_radio_values(reopened))
         self.assertEqual(HomeworkDraft.objects.get(user=self.student).answers['q1-lines'], saved_key)
         response = self.client.post(self.unit_url, {

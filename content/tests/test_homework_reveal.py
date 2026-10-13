@@ -177,7 +177,7 @@ class SelfPacedStepperRevealViewTest(RevealFixtureMixin, TestCase):
         self.client.force_login(self.student)
 
     def submit_review(self):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         return self.client.post(self.unit_url, {
             'assignment_key': f'aisl:homework:{self.homework.pk}',
@@ -225,7 +225,7 @@ class SelfPacedStepperRevealViewTest(RevealFixtureMixin, TestCase):
 
     def test_draft_autosave_is_refused_after_submit(self):
         self.submit_review()
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
 
         response = self.client.post(

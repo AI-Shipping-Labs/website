@@ -129,8 +129,9 @@ class QuestionStepMountsItsOwnThreadTest(StepperQaBindingSetupMixin, TestCase):
 
     def test_query_param_step_mounts_the_same_thread_as_the_path(self):
         self.client.force_login(self.member)
+        # Issue #1827: the legacy query bookmark redirects to the path.
         response = self.client.get(
-            f'{self.base_path}?homework_step=q1-first&cohort=4',
+            f'{self.base_path}?homework_step=q1-first&cohort=4', follow=True,
         )
 
         self.assertContains(response, 'data-testid="homework-stepper"')
@@ -163,7 +164,7 @@ class IntroAndFixedStepsTest(StepperQaBindingSetupMixin, TestCase):
         """First visit lands on intro; the unit thread (pre-#1897 spoilers)
         is not mounted there."""
         self.client.force_login(self.member)
-        response = self.client.get(self.base_path)
+        response = self.client.get(self.base_path, follow=True)
 
         self.assertEqual(mounted_qa_content_ids(response), [self.step_intro_id])
 
@@ -175,7 +176,7 @@ class IntroAndFixedStepsTest(StepperQaBindingSetupMixin, TestCase):
             f'{self.base_path}?homework_step=intro',
             f'{self.base_path}?homework_step=intro&cohort=4',
         ):
-            response = self.client.get(url)
+            response = self.client.get(url, follow=True)
             self.assertEqual(
                 mounted_qa_content_ids(response), [self.step_intro_id], url,
             )

@@ -15079,6 +15079,7 @@
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15188,6 +15189,7 @@
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15346,6 +15348,7 @@
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15542,6 +15545,7 @@
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15660,7 +15664,7 @@
     },
     "/api/pods/{pod_id}/meetings": {
       "get": {
-        "description": "Every meeting of the pod in start order, including cancelled ones; filter with ``status``. ``number`` is the 1-based position among meetings that are neither cancelled nor expired (``null`` otherwise). A proposal is ``expired`` once its start passed while it was still ``proposed``. ``responses`` hold the explicit answers; after agreement a member without an answer counts as going. On a live proposal head (the first meeting of a weekly proposal) ``waiting_on`` lists the member emails with no answer yet and ``stuck`` is true once it waited more than ``PODS_STUCK_PROPOSAL_HOURS`` since it was proposed or last moved on a non-archived pod; every other meeting has ``waiting_on: []`` and ``stuck: false``. ``stuck_alerted_at`` is when the daily staff Slack alert announced it (cleared on move).",
+        "description": "Every meeting of the pod in start order, including cancelled ones; filter with ``status``. ``number`` is the 1-based position among meetings that are neither cancelled nor expired (``null`` otherwise). A proposal is ``expired`` once its start passed while it was still ``proposed``. ``responses`` hold the explicit answers; after agreement a member without an answer counts as going. On a live proposal head (the first meeting of a weekly proposal) ``waiting_on`` lists the member emails with no answer yet, ``stuck`` is true once it waited more than ``PODS_STUCK_PROPOSAL_HOURS`` or half the time from when it was proposed or last moved to its start, whichever is shorter, on a non-archived pod, and ``confirmable`` is false once too many current members answered ``cant_make_it`` for it to reach the required attendance (Studio shows ``Can't be confirmed``); every other meeting has ``waiting_on: []``, ``stuck: false`` and ``confirmable: null``. ``stuck_alerted_at`` is when the daily staff Slack alert announced it (cleared on move).",
         "parameters": [
           {
             "in": "path",
@@ -15692,6 +15696,7 @@
                 "example": {
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15801,6 +15806,7 @@
                 "example": {
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -15945,6 +15951,7 @@
                 "example": {
                   "meetings": [
                     {
+                      "confirmable": null,
                       "created_via": "member",
                       "duration_minutes": 60,
                       "ends_at": "2026-10-13T17:00:00+00:00",
@@ -16082,6 +16089,7 @@
                     "meeting_url": "https://meet.google.com/abc-defg-hij",
                     "meetings": [
                       {
+                        "confirmable": null,
                         "created_via": "member",
                         "duration_minutes": 60,
                         "ends_at": "2026-10-13T17:00:00+00:00",

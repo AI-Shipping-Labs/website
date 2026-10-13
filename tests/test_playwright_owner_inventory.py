@@ -1880,6 +1880,23 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_student_reads_a_moved_proposal_still_waiting_on_answers",
     })
 
+    issue_1938_owners = frozenset({
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_staff_sees_a_pod_waiting_on_a_proposal_not_idle",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_staff_spots_a_short_notice_proposal_before_it_expires",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_a_far_ahead_proposal_is_not_flagged_too_early",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_staff_sees_a_proposal_that_can_no_longer_be_confirmed",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_the_unconfirmable_label_clears_once_the_pod_recovers",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_staff_sees_two_open_proposals_counted_once_per_series",
+        "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
+        "test_a_pod_with_a_confirmed_meeting_still_shows_its_next_meeting",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2105,8 +2122,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2903)
-        self.assertEqual(len(inventory.owners), 2699)
+        self.assertEqual(inventory.item_count, 2910)
+        self.assertEqual(len(inventory.owners), 2706)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2140,6 +2157,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1944_owners
             | self.issue_1928_owners
             | self.issue_1940_owners
+            | self.issue_1938_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

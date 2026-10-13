@@ -10,9 +10,8 @@
 {% url 'studio_crm_calls' as call_back_url %}
 {% endif %}
 {% if call %}
-{% studio_header_actions eyebrow='CRM call' title='Edit call' back_url=call_back_url back_label='Back' testid='crm-call-form-header' %}{% endstudio_header_actions %}
 {% else %}
-{% studio_header_actions eyebrow='CRM call' title='Log call' back_url=call_back_url back_label='Back' testid='crm-call-form-header' %}{% endstudio_header_actions %}
+{% studio_header_actions eyebrow='CRM call' title=form_title back_url=call_back_url back_label='Back' testid='crm-call-form-header' %}{% endstudio_header_actions %}
 {% endif %}
 
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-call-form-section">

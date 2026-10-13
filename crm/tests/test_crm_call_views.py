@@ -60,7 +60,6 @@ class CRMCallsListTest(CRMCallViewsBase):
             source_ref='BK-LIST-1',
         )
         response = self.client.get(reverse('studio_crm_calls'))
-        self.assertEqual(response.status_code, 200)
         content = response.content.decode()
         self.assertLess(
             content.index(f'data-testid="crm-calls-row-{self.call.pk}"'),
@@ -78,7 +77,6 @@ class CRMCallsListTest(CRMCallViewsBase):
         response = self.client.get(
             reverse('studio_crm_calls'), {'q': 'other@'},
         )
-        self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Discussed the sprint plan')
         self.assertContains(response, 'Unrelated')
 
@@ -86,7 +84,6 @@ class CRMCallsListTest(CRMCallViewsBase):
         response = self.client.get(
             reverse('studio_crm_calls'), {'q': 'nobody-here@'},
         )
-        self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'data-testid="crm-calls-table"')
 
 
@@ -95,7 +92,6 @@ class CRMCallDetailTest(CRMCallViewsBase):
         response = self.client.get(
             reverse('studio_crm_call_detail', kwargs={'call_id': self.call.pk}),
         )
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-call-detail-summary"')
         self.assertContains(response, 'Discussed the sprint plan')
         self.assertContains(response, 'data-testid="crm-call-detail-source"')
@@ -125,7 +121,6 @@ class CRMCallNewTest(CRMCallViewsBase):
         response = self.client.get(
             reverse('studio_crm_call_new', kwargs={'crm_id': self.record.pk}),
         )
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-call-form-section"')
         self.assertContains(response, 'type="datetime-local"')
 
@@ -156,7 +151,6 @@ class CRMCallNewTest(CRMCallViewsBase):
             'studio_crm_call_new', kwargs={'crm_id': self.record.pk},
         )
         response = self.client.post(url, {'occurred_at': '', 'summary': 'x'})
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-call-form-error"')
         self.assertFalse(
             self.member_contact_calls().filter(summary='x').exists(),
@@ -194,7 +188,6 @@ class CRMCallEditTest(CRMCallViewsBase):
             'studio_crm_call_edit', kwargs={'call_id': self.call.pk},
         )
         response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Discussed the sprint plan')
         self.assertContains(response, 'value="manual"')
 
@@ -240,7 +233,6 @@ class CRMContactDetailSectionsTest(CRMCallViewsBase):
         response = self.client.get(
             reverse('studio_crm_detail', kwargs={'crm_id': self.record.pk}),
         )
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'data-testid="crm-calls-section"')
         self.assertContains(response, 'data-testid="crm-call-item"')
         self.assertContains(

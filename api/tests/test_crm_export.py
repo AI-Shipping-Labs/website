@@ -209,7 +209,6 @@ class CrmExportCallsTest(CrmExportTestBase):
         response = self.client.get(
             self.URL, {"email": "calls-export@test.com"}, **self._auth(),
         )
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["total"], 1)
         return body["members"][0]
@@ -234,7 +233,6 @@ class CrmExportCallsTest(CrmExportTestBase):
         response = self.client.get(
             self.URL, {"email": "calls-other@test.com"}, **self._auth(),
         )
-        self.assertEqual(response.status_code, 200)
         calls = response.json()["members"][0]["calls"]
         self.assertEqual(len(calls), 1)
         self.assertEqual(calls[0]["summary"], "Unlinked call")

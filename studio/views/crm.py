@@ -685,6 +685,8 @@ def crm_call_new(request, crm_id):
             "occurred_at_value": (raw_occurred or timezone.localtime().strftime("%Y-%m-%dT%H:%M")),
             "summary_value": summary,
             "source_value": SOURCE_MANUAL,
+            "form_title": "Log call",
+            "form_title": "Edit call",
             "form_error": form_error,
             "source_choices": CALL_SOURCE_CHOICES,
         },

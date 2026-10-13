@@ -146,22 +146,39 @@ Kill switch for the daily staff Slack alert about stale pod requests.
 ## PODS_STUCK_PROPOSAL_HOURS
 
 How long a pod meeting proposal may wait for answers before it is stuck
-(issue #1935).
+(issue #1935), or half the time to the meeting when that is shorter (issue
+#1938).
 
 - Type: integer, 1-336. Invalid or out-of-range values fall back to `48`.
 - Default: `48`.
 - Stuck proposal: `proposed`, start still in the future and not expired, pod
-  not archived, and more than this many hours since it was proposed or last
-  moved (`moved_at`, else `created_at`; a move resets the answers, so the
-  clock restarts). A weekly proposal counts once, on its first meeting, where
-  the answers live.
+  not archived, and it has waited more than its threshold since it was
+  proposed or last moved (`moved_at`, else `created_at`; a move resets the
+  answers, so the clock restarts). A weekly proposal counts once, on its first
+  meeting, where the answers live.
+- Threshold (halfway rule): the smaller of this many hours and half the time
+  from when it was proposed or last moved to its start. With `48`: proposed
+  10 days ahead is stuck after more than 48 hours, 72 hours ahead after more
+  than 36 hours, 20 hours ahead after more than 10 hours; a move to a time 30
+  hours away restarts the clock and is stuck after more than 15 hours. The
+  daily alert then flags a short-notice proposal while there is still time to
+  nudge the pod.
+- Can't be confirmed: a live proposal whose current members minus the
+  `Can't make it` answers fall below the required attendance (the same rule
+  as the member page, issue #1937). It is a label only and does not change the
+  stuck clock; it clears when a member switches back or the proposal moves.
 - Waiting on: pod members with no answer on that meeting, the same rule as
   the member-side `Waiting on` line.
 - Studio: the pod's Meetings table shows `No answer: Mike K.` under a live
-  proposal's status and a `Stuck` badge on a stuck one; `/studio/pods/` shows
-  a `Stuck proposal` badge on pods with a stuck proposal.
-- Staff API: each meeting has `waiting_on` (emails), `stuck` and
-  `stuck_alerted_at`.
+  proposal's status, a `Can't be confirmed` badge on one that can no longer
+  be confirmed, and a `Stuck` badge on a stuck one. `/studio/pods/` shows a
+  `Stuck proposal` badge on pods with a stuck proposal, and a pod with no
+  scheduled meeting but live proposals reads `1 proposal waiting` /
+  `2 proposals waiting` (a weekly proposal counts once) instead of
+  `No meeting planned`.
+- Staff API: each meeting has `waiting_on` (emails), `stuck`, `confirmable`
+  and `stuck_alerted_at`. `confirmable` is `true`/`false` on a live proposal
+  head and `null` on every other meeting.
 
 ## PODS_STUCK_PROPOSAL_ALERT_ENABLED
 
@@ -173,13 +190,17 @@ message.
 - Job: the same `pods-stale-request-alert` (daily at 09:00 UTC). One message
   per run covers stale requests and stuck proposals; it posts only when at
   least one of them is new.
-- Section: `*3 pod proposals have had no answer for 48 hours*`, then up to 10
+- Section: `*3 pod proposals have waited more than 48 hours or half the time
+  to the meeting*`, then up to 10
   lines, oldest first, then `and N more`:
   `Pod name (Course, Cohort) - Tue Oct 20, 18:00 UTC, proposed by Anna K. 3
   days ago - waiting on Mike K. (mike@example.com, last sign-in 12 days ago)`.
   A moved proposal reads `moved by`. Members who answered `Can't make it`
-  follow as `- can't make it: Raj P.`; a member who never signed in reads
-  `never signed in`. Already announced proposals still stuck are counted in
+  follow as `- can't make it: Raj P.`; a proposal that can no longer be
+  confirmed ends with `- can't be confirmed, needs another time`. A member
+  who never signed in reads `never signed in`. A line longer than Slack's
+  3000-character limit drops whole names from the end of its `waiting on`
+  (then `can't make it`) list, ending it with `and N more`. Already announced proposals still stuck are counted in
   `N earlier proposals are still waiting.`
 - Each stuck proposal is announced once: `PodMeeting.stuck_alerted_at` is set
   on its first meeting after Slack accepts the post, and cleared when the

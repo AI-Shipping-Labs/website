@@ -16,7 +16,9 @@ Since issue #1935 the same message also carries stuck pod meeting
 proposals (rule in ``pods.services.stuck_proposals``) as their own section.
 Each stuck proposal is announced once (``PodMeeting.stuck_alerted_at`` on
 its head meeting, set only after Slack accepts the post and cleared when
-the proposal is moved). ``PODS_STALE_REQUEST_ALERT_ENABLED`` gates the
+the proposal is moved). Since issue #1938 a proposal line also says when the
+proposal can no longer be confirmed, and an over-long line is shortened on
+whole names instead of being cut mid-entity. ``PODS_STALE_REQUEST_ALERT_ENABLED`` gates the
 requests section and ``PODS_STUCK_PROPOSAL_ALERT_ENABLED`` the proposals
 section; the job posts when either section has something new.
 """
@@ -57,6 +59,8 @@ FALLBACK_TEXT = 'Stale pod requests need attention'
 PROPOSALS_FALLBACK_TEXT = 'Stuck pod proposals need attention'
 BOTH_FALLBACK_TEXT = 'Pod requests and proposals need attention'
 BUTTON_LABEL = 'Open pods in Studio'
+UNCONFIRMABLE_TEXT = "can't be confirmed, needs another time"
+ELLIPSIS = '...'
 
 
 def is_stale(created_at, now, stale_days):
@@ -102,10 +106,10 @@ def headline(count, stale_days):
 
 
 def proposals_headline(count, hours):
-    """``1 pod proposal has had no answer for 48 hours``."""
+    """``1 pod proposal has waited more than 48 hours or half the time to the meeting``."""
     return (
-        f'{_proposals_label(count)} {_plural(count, "has", "have")} had no answer for '
-        f'{hours} {_plural(hours, "hour", "hours")}'
+        f'{_proposals_label(count)} {_plural(count, "has", "have")} waited more than '
+        f'{hours} {_plural(hours, "hour", "hours")} or half the time to the meeting'
     )
 
 
@@ -160,7 +164,13 @@ def proposal_line(wait, base, now):
     3 days ago - waiting on Mike K. (mike@example.com, last sign-in 12 days
     ago)``. A moved proposal reads ``moved by`` (its clock restarted then).
     Members who answered ``Can't make it`` follow as ``- can't make it:
-    Raj P.``, which is the whole tail once nobody is left to answer.
+    Raj P.``, which is the whole tail once nobody is left to answer. A
+    proposal that can no longer be confirmed (issue #1938) ends with ``-
+    can't be confirmed, needs another time``.
+
+    A line longer than ``MAX_SECTION_CHARS`` drops whole ``waiting on``
+    entries from the end (then whole ``can't make it`` names), ending that
+    list with ``and N more``; :func:`_cut_line` handles whatever is left.
     """
     head = wait.head
     age = humanize_age(wait.waiting_since, now)
@@ -168,16 +178,78 @@ def proposal_line(wait, base, now):
         origin = f'moved by {escape_slack_text(display_name(head.moved_by))} {age}'
     else:
         origin = f'proposed by {escape_slack_text(display_name(head.proposed_by))} {age}'
-    parts = [_pod_link(head.pod, base), f'{format_in_zone(head.starts_at, "UTC")}, {origin}']
-    if wait.waiting:
-        parts.append('waiting on ' + '; '.join(
-            f'{escape_slack_text(display_name(user))} '
-            f'({escape_slack_text(user.email)}, {_last_sign_in(user, now)})'
-            for user in wait.waiting
-        ))
-    if wait.cant:
-        parts.append("can't make it: " + ', '.join(escape_slack_text(display_name(u)) for u in wait.cant))
-    return ' - '.join(parts)
+    lead = [_pod_link(head.pod, base), f'{format_in_zone(head.starts_at, "UTC")}, {origin}']
+    waiting = [
+        f'{escape_slack_text(display_name(user))} '
+        f'({escape_slack_text(user.email)}, {_last_sign_in(user, now)})'
+        for user in wait.waiting
+    ]
+    cant = [escape_slack_text(display_name(user)) for user in wait.cant]
+
+    def build(waiting_shown, cant_shown):
+        parts = list(lead)
+        if waiting:
+            parts.append('waiting on ' + '; '.join(_shortened(waiting, waiting_shown)))
+        if cant:
+            parts.append("can't make it: " + ', '.join(_shortened(cant, cant_shown)))
+        if wait.unconfirmable:
+            parts.append(UNCONFIRMABLE_TEXT)
+        return ' - '.join(parts)
+
+    waiting_shown, cant_shown = len(waiting), len(cant)
+    line = build(waiting_shown, cant_shown)
+    while len(line) > MAX_SECTION_CHARS and waiting_shown > 1:
+        waiting_shown -= 1
+        line = build(waiting_shown, cant_shown)
+    while len(line) > MAX_SECTION_CHARS and cant_shown > 1:
+        cant_shown -= 1
+        line = build(waiting_shown, cant_shown)
+    return line
+
+
+def _shortened(entries, shown):
+    """The first ``shown`` ``entries``, then ``and N more`` for the rest."""
+    if shown >= len(entries):
+        return entries
+    return [*entries[:shown], f'and {len(entries) - shown} more']
+
+
+def _drop_partial_entity(text):
+    """``text`` without a trailing, unfinished ``&amp;``/``&lt;``/``&gt;``."""
+    amp = text.rfind('&')
+    if amp != -1 and ';' not in text[amp:]:
+        return text[:amp]
+    return text
+
+
+def _cut_before(text, limit):
+    """``text[:limit]`` ending at the last space before ``limit`` if any."""
+    space = text.rfind(' ', 0, limit + 1)
+    return text[:space] if space > 0 else text[:limit]
+
+
+def _cut_line(line, limit=MAX_SECTION_CHARS):
+    """``line`` cut to at most ``limit`` characters, ending in ``...``.
+
+    Cut at the last space before ``limit - 3``, never inside an escaped
+    entity. A cut that lands inside a ``<url|label>`` link keeps the link
+    whole with a shortened label (``<url|Long pod>...``), or drops it when
+    even its label cannot start.
+    """
+    if len(line) <= limit:
+        return line
+    budget = limit - len(ELLIPSIS)
+    kept = _drop_partial_entity(_cut_before(line, budget))
+    link_at = kept.rfind('<')
+    if link_at > kept.rfind('>'):
+        label_at = kept.find('|', link_at) + 1
+        if label_at:
+            # Room for the closing ``>`` of the link.
+            kept = _drop_partial_entity(_cut_before(kept, budget - 1))
+        if label_at and len(kept) > label_at:
+            return f'{kept.rstrip()}>{ELLIPSIS}'
+        kept = kept[:link_at]
+    return f'{kept.rstrip()}{ELLIPSIS}'
 
 
 def _line_sections(lines):
@@ -185,11 +257,12 @@ def _line_sections(lines):
     chunks = []
     current = ''
     for line in lines:
+        line = _cut_line(line)
         candidate = f'{current}\n{line}' if current else line
         if current and len(candidate) > MAX_SECTION_CHARS:
             chunks.append(current)
             candidate = line
-        current = candidate[:MAX_SECTION_CHARS]
+        current = candidate
     if current:
         chunks.append(current)
     return [{'type': 'section', 'text': mrkdwn(chunk)} for chunk in chunks]

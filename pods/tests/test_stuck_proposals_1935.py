@@ -211,7 +211,7 @@ class StuckProposalAlertTest(StuckFixture):
         self.assertEqual(payload['channel'], 'C_STAFF')
         self.assertEqual(payload['text'], 'Stuck pod proposals need attention')
         self.assertEqual(_section_texts(payload), [
-            '*1 pod proposal has had no answer for 48 hours*',
+            '*1 pod proposal has waited more than 48 hours or half the time to the meeting*',
             f'<{BASE_URL}/studio/pods/{pod.pk}/|Evening builders> (AI Buildcamp, Cohort 4) - '
             'Tue Oct 13, 08:00 UTC, proposed by Anna K. 3 days ago - '
             'waiting on Mike K. (mike@example.com, never signed in)',
@@ -256,7 +256,11 @@ class StuckProposalAlertTest(StuckFixture):
         self.post.reset_mock()
         send_stale_request_alert(now=NOW)
         line = _section_texts(_payload(self.post))[1]
-        self.assertTrue(line.endswith(", proposed by Anna K. 3 days ago - can't make it: Mike K., Raj P."))
+        # Issue #1938: two of three can't make it, so it can't be confirmed.
+        self.assertTrue(line.endswith(
+            ", proposed by Anna K. 3 days ago - can't make it: Mike K., Raj P."
+            " - can't be confirmed, needs another time",
+        ))
         self.assertNotIn('waiting on', line)
 
     def test_moved_proposal_reads_moved_by_with_the_age_of_the_move(self):
@@ -280,7 +284,7 @@ class StuckProposalAlertTest(StuckFixture):
         self.assertEqual(send_stale_request_alert(now=NOW), 2)
         payload = _payload(self.post)
         headline, lines = _section_texts(payload)
-        self.assertEqual(headline, '*2 pod proposals have had no answer for 48 hours*')
+        self.assertEqual(headline, '*2 pod proposals have waited more than 48 hours or half the time to the meeting*')
         self.assertEqual([line.split('|')[1].split('>')[0] for line in lines.split('\n')], ['Second', 'Third'])
         self.assertEqual(_context_texts(payload), ['1 earlier proposal is still waiting.'])
         for meeting in (second, third):
@@ -294,7 +298,7 @@ class StuckProposalAlertTest(StuckFixture):
         self.assertEqual(send_stale_request_alert(now=NOW), 12)
         headline, lines = _section_texts(_payload(self.post))
         rows = lines.split('\n')
-        self.assertEqual(headline, '*12 pod proposals have had no answer for 24 hours*')
+        self.assertEqual(headline, '*12 pod proposals have waited more than 24 hours or half the time to the meeting*')
         self.assertEqual(len(rows), 11)
         self.assertIn('|Pod 11>', rows[0])
         self.assertEqual(rows[-1], 'and 2 more')
@@ -358,7 +362,7 @@ class CombinedAlertTest(StuckFixture):
         sections = _section_texts(payload)
         self.assertEqual(
             [sections[0], sections[2]],
-            ['*1 pod request has waited more than 5 days*', '*1 pod proposal has had no answer for 48 hours*'],
+            ['*1 pod request has waited more than 5 days*', '*1 pod proposal has waited more than 48 hours or half the time to the meeting*'],
         )
         self.assertIn('Raj P. (raj@example.com) asked 8 days ago', sections[1])
         self.assertIn('|Proposal pod>', sections[3])

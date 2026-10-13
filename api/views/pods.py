@@ -132,6 +132,7 @@ _MEETING_EXAMPLE = {
     'responses': [{'email': 'mike@example.com', 'response': 'cant_make_it'}],
     'waiting_on': [],
     'stuck': False,
+    'confirmable': None,
     'stuck_alerted_at': None,
 }
 
@@ -368,6 +369,8 @@ def _serialize_meeting(meeting, state, waits):
         ],
         'waiting_on': [user.email for user in wait.waiting] if wait else [],
         'stuck': bool(wait and wait.stuck),
+        # Issue #1938: the shared #1937 rule; ``None`` off a live proposal head.
+        'confirmable': (not wait.unconfirmable) if wait else None,
         'stuck_alerted_at': isoformat_or_none(meeting.stuck_alerted_at),
     }
 
@@ -1036,11 +1039,15 @@ def _create_meetings(request, pod):
                 'answers; after agreement a member without an answer counts as '
                 'going. On a live proposal head (the first meeting of a weekly '
                 'proposal) ``waiting_on`` lists the member emails with no answer '
-                'yet and ``stuck`` is true once it waited more than '
-                '``PODS_STUCK_PROPOSAL_HOURS`` since it was proposed or last '
-                'moved on a non-archived pod; every other meeting has '
-                '``waiting_on: []`` and ``stuck: false``. ``stuck_alerted_at`` is '
-                'when the daily staff Slack alert announced it (cleared on move).'
+                'yet, ``stuck`` is true once it waited more than '
+                '``PODS_STUCK_PROPOSAL_HOURS`` or half the time from when it was '
+                'proposed or last moved to its start, whichever is shorter, on a '
+                'non-archived pod, and ``confirmable`` is false once too many '
+                'current members answered ``cant_make_it`` for it to reach the '
+                'required attendance (Studio shows ``Can\'t be confirmed``); '
+                'every other meeting has ``waiting_on: []``, ``stuck: false`` '
+                'and ``confirmable: null``. ``stuck_alerted_at`` is when the '
+                'daily staff Slack alert announced it (cleared on move).'
             ),
             'query': {'status': {'type': 'string', 'enum': _MEETING_STATUS_VALUES}},
             'responses': {

@@ -1,16 +1,40 @@
 """R1 migration probes for the per-channel Slack ingest lease."""
 
+import sys
+
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 from django.test import TransactionTestCase
+
+
+def _drop_orphaned_migration_modules():
+    """Evict imported ``<app>.migrations`` modules whose parent is gone.
+
+    Under the parallel runner another test may have pruned a parent app
+    package (e.g. ``booking``) from ``sys.modules`` while its
+    ``migrations`` submodule stayed imported. Django's MigrationLoader
+    then ``reload()``s the orphaned submodule at executor construction
+    and dies with ``ImportError: parent ... not in sys.modules``.
+    Dropping the orphaned entries first makes the loader re-import them
+    fresh from disk.
+    """
+    for name in list(sys.modules):
+        if name.endswith('.migrations') or '.migrations.' in name:
+            parent = name.rpartition('.')[0]
+            if parent and parent not in sys.modules:
+                del sys.modules[name]
 
 
 class SlackIngestLeaseMigrationTest(TransactionTestCase):
     migrate_from = [('crm', '0007_slackthread_interview_note')]
     migrate_to = [('crm', '0008_slack_ingest_lease_and_refresh_count')]
 
+    def _fresh_executor(self):
+        _drop_orphaned_migration_modules()
+        return MigrationExecutor(connection)
+
     def test_duplicate_legacy_running_rows_survive_r1_expand(self):
-        executor = MigrationExecutor(connection)
+        executor = self._fresh_executor()
         latest_targets = executor.loader.graph.leaf_nodes()
 
         try:
@@ -41,7 +65,7 @@ class SlackIngestLeaseMigrationTest(TransactionTestCase):
                 error='Historical success metadata',
             )
 
-            executor = MigrationExecutor(connection)
+            executor = self._fresh_executor()
             executor.migrate(self.migrate_to)
             new_apps = executor.loader.project_state(self.migrate_to).apps
             NewIngest = new_apps.get_model('crm', 'SlackChannelIngest')
@@ -75,5 +99,5 @@ class SlackIngestLeaseMigrationTest(TransactionTestCase):
                 'Historical success metadata',
             )
         finally:
-            executor = MigrationExecutor(connection)
+            executor = self._fresh_executor()
             executor.migrate(latest_targets)

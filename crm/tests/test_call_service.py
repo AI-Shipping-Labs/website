@@ -124,7 +124,26 @@ class RecordCallServiceTest(TestCase):
         )
 
     def test_import_safe_without_any_booking_app(self):
-        sys.modules.pop('booking', None)
+        # Remove the whole ``booking`` package family for the probe and
+        # restore the exact module objects afterwards. Popping only the
+        # parent (or leaving entries popped) orphans ``booking.models``
+        # / ``booking.migrations`` submodules in ``sys.modules``, which
+        # breaks every later MigrationExecutor reload in this process
+        # (the lease-migration probe reloads them under parallel
+        # sharding). Restoring keeps process-global state intact.
+        booking_keys = [
+            name for name in list(sys.modules)
+            if name == 'booking' or name.startswith('booking.')
+        ]
+        probe_keys = booking_keys + ['crm.services.calls']
+        saved = {
+            name: sys.modules[name]
+            for name in probe_keys if name in sys.modules
+        }
+        self.addCleanup(sys.modules.update, saved)
+        for name in probe_keys:
+            sys.modules.pop(name, None)
+
         module = importlib.import_module('crm.services.calls')
         self.assertTrue(callable(module.record_call))
         self.assertNotIn('booking', sys.modules)

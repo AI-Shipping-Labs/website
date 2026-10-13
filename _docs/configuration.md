@@ -494,6 +494,8 @@ do not test against a real event or meeting.
 
 ## 10.1. Booking & Calendar
 
+### Booking and Calendar
+
 Studio path: `Studio > Settings > Booking & Calendar`.
 
 Configures self-hosted public 30-minute booking and calendar availability, replacing external Calendly links. Availability is computed against Google Calendar busy intervals via Dapier, combined with local booking buffer policies and weekly host availability windows.

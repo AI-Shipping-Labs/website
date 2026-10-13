@@ -10,9 +10,9 @@ Covers:
 """
 
 import os
+from datetime import time
+
 import pytest
-from datetime import date, datetime, time, timedelta, timezone
-from unittest.mock import patch
 
 from playwright_tests.conftest import (
     auth_context,
@@ -67,7 +67,6 @@ def _ensure_host():
 
 @pytest.mark.django_db(transaction=True)
 class TestPublicBookingFlow:
-
     @browser_journey
     def test_public_booking_and_management(self, django_server, browser):
         _ensure_host()
@@ -146,6 +145,7 @@ class TestPublicBookingFlow:
         create_user("callmember@example.com", tier_slug="main", email_verified=True)
 
         from questionnaires.models import Questionnaire, Response
+
         q, _ = Questionnaire.objects.get_or_create(
             slug="onboarding",
             defaults={"title": "Onboarding", "purpose": "onboarding"},
@@ -154,6 +154,7 @@ class TestPublicBookingFlow:
             q.purpose = "onboarding"
             q.save(update_fields=["purpose"])
         from accounts.models import User
+
         u = User.objects.get(email="callmember@example.com")
         Response.objects.create(questionnaire=q, respondent=u, status="submitted")
 

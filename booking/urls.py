@@ -1,8 +1,8 @@
 from django.urls import path
 
 from booking.views.public import (
-    booking_confirmed,
     booking_cancel,
+    booking_confirmed,
     booking_ics,
     booking_index,
     booking_reschedule,

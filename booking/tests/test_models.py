@@ -1,13 +1,14 @@
 from datetime import datetime, time, timezone
+
 from django.test import TestCase
 
 from booking.models import (
+    STATUS_CANCELED,
+    STATUS_CONFIRMED,
     Booking,
     BookingDateOverride,
     BookingHost,
     BookingWeeklyWindow,
-    STATUS_CANCELED,
-    STATUS_CONFIRMED,
 )
 
 

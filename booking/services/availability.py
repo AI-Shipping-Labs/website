@@ -254,7 +254,7 @@ def generate_slots(
     effective_busy = subtract_own_event(busy, own_event_interval)
 
     usage: dict[str, dict] = {}
-    for booking in (existing_bookings or []):
+    for booking in existing_bookings or []:
         if booking.get("status") not in ("confirmed", "pending_confirmation"):
             continue
         if exclude_booking_id and str(booking.get("id")) == str(exclude_booking_id):
@@ -289,7 +289,10 @@ def generate_slots(
                 used = usage.get(day_key, {"count": 0, "minutes": 0})
                 if policy.daily_count_limit is not None and used["count"] + 1 > policy.daily_count_limit:
                     continue
-                if policy.daily_minutes_limit is not None and used["minutes"] + duration_min > policy.daily_minutes_limit:
+                if (
+                    policy.daily_minutes_limit is not None
+                    and used["minutes"] + duration_min > policy.daily_minutes_limit
+                ):
                     continue
                 slots.append(SlotOffer(start=start, end=end))
         day += timedelta(days=1)
@@ -314,9 +317,9 @@ def expand_viewer_range(
     viewer = _tz(viewer_tz)
     host = _tz(host_tz)
     start_utc = datetime.combine(viewer_from, time(0, 0)).replace(tzinfo=viewer).astimezone(timezone.utc)
-    end_utc = datetime.combine(viewer_to + timedelta(days=1), time(0, 0)).replace(
-        tzinfo=viewer
-    ).astimezone(timezone.utc) - timedelta(seconds=1)
+    end_utc = datetime.combine(viewer_to + timedelta(days=1), time(0, 0)).replace(tzinfo=viewer).astimezone(
+        timezone.utc
+    ) - timedelta(seconds=1)
     return (
         start_utc.astimezone(host).date() - timedelta(days=1),
         end_utc.astimezone(host).date() + timedelta(days=1),

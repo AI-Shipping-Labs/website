@@ -1,9 +1,10 @@
 from datetime import datetime, time, timezone
 from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from booking.models import Booking, BookingHost, BookingWeeklyWindow
+from booking.models import BookingHost, BookingWeeklyWindow
 from booking.services.booking_service import cancel_booking, create_booking, reschedule_booking
 from community.models import BookedCall, CallHost
 

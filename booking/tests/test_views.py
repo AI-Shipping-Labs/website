@@ -1,14 +1,14 @@
-from datetime import date, datetime, time, timezone
+from datetime import datetime, time, timezone
 from unittest.mock import patch
+
 from django.test import TestCase
-from django.urls import reverse
 
 from booking.models import (
+    STATUS_CANCELED,
+    STATUS_CONFIRMED,
     Booking,
     BookingHost,
     BookingWeeklyWindow,
-    STATUS_CANCELED,
-    STATUS_CONFIRMED,
 )
 
 
@@ -49,11 +49,14 @@ class BookingViewsTest(TestCase):
     @patch("booking.services.booking_service.query_busy")
     def test_host_slots_api(self, mock_busy):
         mock_busy.return_value = []
-        resp = self.client.get("/book/alexey/slots", {
-            "from": "2026-10-19",
-            "to": "2026-10-19",
-            "tz": "UTC",
-        })
+        resp = self.client.get(
+            "/book/alexey/slots",
+            {
+                "from": "2026-10-19",
+                "to": "2026-10-19",
+                "tz": "UTC",
+            },
+        )
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
         self.assertIn("slots", data)
@@ -67,15 +70,18 @@ class BookingViewsTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-view", "join_url": "https://zoom.test/j/view"}
         mock_gcal.return_value = {"id": "gcal-view"}
 
-        resp = self.client.post("/book/alexey/confirm", {
-            "start_iso": "2026-10-19T10:00:00+00:00",
-            "invitee_name": "Test User",
-            "invitee_email": "test@example.com",
-            "invitee_timezone": "UTC",
-            "discussion_topic": "AI Project Advice",
-            "discussion_notes": "Want feedback on architecture",
-            "company": "TestCorp",
-        })
+        resp = self.client.post(
+            "/book/alexey/confirm",
+            {
+                "start_iso": "2026-10-19T10:00:00+00:00",
+                "invitee_name": "Test User",
+                "invitee_email": "test@example.com",
+                "invitee_timezone": "UTC",
+                "discussion_topic": "AI Project Advice",
+                "discussion_notes": "Want feedback on architecture",
+                "company": "TestCorp",
+            },
+        )
         self.assertEqual(resp.status_code, 302)
         booking = Booking.objects.get(invitee_email="test@example.com")
         self.assertRedirects(resp, f"/book/confirmed/{booking.manage_token}")
@@ -121,9 +127,12 @@ class BookingViewsTest(TestCase):
         self.assertContains(resp_get, "Reschedule Meeting")
 
         # POST reschedule
-        resp_post = self.client.post(f"/book/reschedule/{booking.manage_token}", {
-            "start_iso": "2026-10-19T10:30:00+00:00",
-        })
+        resp_post = self.client.post(
+            f"/book/reschedule/{booking.manage_token}",
+            {
+                "start_iso": "2026-10-19T10:30:00+00:00",
+            },
+        )
         self.assertRedirects(resp_post, f"/book/confirmed/{booking.manage_token}")
         booking.refresh_from_db()
         self.assertEqual(booking.start_datetime, datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc))

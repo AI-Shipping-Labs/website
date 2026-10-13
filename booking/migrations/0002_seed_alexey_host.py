@@ -1,4 +1,5 @@
 from datetime import time
+
 from django.db import migrations
 
 
@@ -40,7 +41,6 @@ def noop_reverse(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("booking", "0001_initial"),
     ]

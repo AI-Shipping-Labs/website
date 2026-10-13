@@ -1,13 +1,14 @@
 from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
+
 from django.test import TestCase
 
 from booking.models import (
+    STATUS_CANCELED,
+    STATUS_CONFIRMED,
     Booking,
     BookingHost,
     BookingWeeklyWindow,
-    STATUS_CANCELED,
-    STATUS_CONFIRMED,
 )
 from booking.services.booking_service import (
     SlotUnavailableError,

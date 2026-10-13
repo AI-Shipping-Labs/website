@@ -62,10 +62,12 @@ def get_calendar_access_token(*, force_refresh: bool = False, timeout: int = 10)
         raise DapierNotConfigured("DAPIER_API_TOKEN is not configured.")
 
     url = f"{base_url}/api/agent/token"
-    payload = json.dumps({
-        "connection_id": CALENDAR_CONNECTION_ID,
-        "agent": agent,
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "connection_id": CALENDAR_CONNECTION_ID,
+            "agent": agent,
+        }
+    ).encode("utf-8")
 
     req = Request(
         url,

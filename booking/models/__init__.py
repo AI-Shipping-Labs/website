@@ -1,16 +1,16 @@
-from booking.models.host import (
-    BookingHost,
-    BookingWeeklyWindow,
-    BookingDateOverride,
-    WEEKDAY_CHOICES,
-)
 from booking.models.booking import (
+    STATUS_CANCELED,
+    STATUS_CHOICES,
+    STATUS_CONFIRMED,
+    STATUS_RESCHEDULED,
     Booking,
     generate_manage_token,
-    STATUS_CONFIRMED,
-    STATUS_CANCELED,
-    STATUS_RESCHEDULED,
-    STATUS_CHOICES,
+)
+from booking.models.host import (
+    WEEKDAY_CHOICES,
+    BookingDateOverride,
+    BookingHost,
+    BookingWeeklyWindow,
 )
 
 __all__ = [

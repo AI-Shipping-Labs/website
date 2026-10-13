@@ -1,9 +1,9 @@
 """Zoom meeting integration for 1:1 public bookings."""
 
-import json
 import logging
 import urllib.parse
 from datetime import datetime, timezone
+
 import requests
 
 from integrations.services.zoom import (

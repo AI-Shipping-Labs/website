@@ -1,20 +1,18 @@
 """Public booking views."""
 
-from datetime import date, datetime, timedelta
 import urllib.parse
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
 from django.views.decorators.http import require_GET, require_POST
 
 from booking.models import (
+    STATUS_CANCELED,
     Booking,
     BookingHost,
-    STATUS_CANCELED,
-    STATUS_CONFIRMED,
 )
 from booking.services.booking_service import (
     SlotUnavailableError,

@@ -9,14 +9,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.urls import reverse
 from django.utils import timezone as dj_timezone
 
 from booking.models import (
-    Booking,
-    BookingHost,
     STATUS_CANCELED,
     STATUS_CONFIRMED,
+    Booking,
+    BookingHost,
 )
 from booking.services.availability import (
     Policy,
@@ -106,7 +105,9 @@ def get_available_slots(
         host_tz = ZoneInfo("UTC")
 
     span_start = datetime(host_from.year, host_from.month, host_from.day, tzinfo=host_tz).astimezone(timezone.utc)
-    span_end = (datetime(host_to.year, host_to.month, host_to.day, tzinfo=host_tz) + timedelta(days=1)).astimezone(timezone.utc)
+    span_end = (datetime(host_to.year, host_to.month, host_to.day, tzinfo=host_tz) + timedelta(days=1)).astimezone(
+        timezone.utc
+    )
 
     # 1. Query busy times from Google Calendar via Dapier
     busy_spans = query_busy(span_start, span_end)
@@ -150,16 +151,17 @@ def get_available_slots(
     results = []
     for offer in offers["slots"]:
         viewer_start = offer.start.astimezone(viewer_tz)
-        viewer_end = offer.end.astimezone(viewer_tz)
         slot_date = viewer_start.date()
 
         if from_date <= slot_date <= to_date:
-            results.append({
-                "start_iso": offer.start.isoformat(),
-                "end_iso": offer.end.isoformat(),
-                "time_display": viewer_start.strftime("%H:%M"),
-                "date": slot_date.isoformat(),
-            })
+            results.append(
+                {
+                    "start_iso": offer.start.isoformat(),
+                    "end_iso": offer.end.isoformat(),
+                    "time_display": viewer_start.strftime("%H:%M"),
+                    "date": slot_date.isoformat(),
+                }
+            )
 
     return results
 
@@ -300,6 +302,7 @@ def _record_crm_booked_call(booking: Booking, reschedule_url: str, cancel_url: s
     # CRM call integration seam (issue #1949)
     try:
         from crm.services.calls import record_call
+
         summary = booking.discussion_topic or f"30-min meeting with {booking.host.name}"
         if booking.discussion_notes:
             summary = f"{summary}\n{booking.discussion_notes}"
@@ -406,10 +409,7 @@ def generate_ics(booking: Booking) -> str:
     dt_end = booking.end_datetime.strftime("%Y%m%dT%H%M%SZ")
     uid = f"booking-{booking.manage_token}@aishippinglabs.com"
     summary = f"30-min meeting: {booking.invitee_name} and {booking.host.name}"
-    description = (
-        f"Topic: {booking.discussion_topic}\\n"
-        f"Zoom Link: {booking.zoom_join_url}\\n"
-    )
+    description = f"Topic: {booking.discussion_topic}\\nZoom Link: {booking.zoom_join_url}\\n"
 
     lines = [
         "BEGIN:VCALENDAR",

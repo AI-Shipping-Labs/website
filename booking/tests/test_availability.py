@@ -1,10 +1,10 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo
+
 from django.test import SimpleTestCase
 
 from booking.services.availability import (
     Policy,
-    SlotOffer,
     expand_viewer_range,
     generate_slots,
     local_to_utc,
@@ -12,7 +12,6 @@ from booking.services.availability import (
     overlaps,
     parse_hhmm,
     subtract_own_event,
-    weekly_windows_for_date,
 )
 
 
@@ -94,10 +93,12 @@ class AvailabilityEngineTest(SimpleTestCase):
         self.assertEqual(len(result["slots"]), 4)
 
         # With busy time at 10:30 - 11:00
-        busy_span = [(
-            datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
-            datetime(2026, 10, 19, 11, 0, tzinfo=timezone.utc),
-        )]
+        busy_span = [
+            (
+                datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+                datetime(2026, 10, 19, 11, 0, tzinfo=timezone.utc),
+            )
+        ]
         result_busy = generate_slots(
             schedule=schedule,
             policy=policy,

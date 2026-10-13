@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from integrations.config import get_config
 from booking.services.dapier import DapierError, get_calendar_access_token
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,9 @@ def get_selected_calendar_id() -> str:
     return get_config("GOOGLE_CALENDAR_ID", "primary")
 
 
-def _google_request(method: str, path: str, payload: dict | None = None, params: dict | None = None, timeout: int = 15) -> dict:
+def _google_request(
+    method: str, path: str, payload: dict | None = None, params: dict | None = None, timeout: int = 15
+) -> dict:
     """Execute authenticated Google Calendar API HTTP request."""
     try:
         token = get_calendar_access_token()
@@ -129,7 +131,9 @@ def create_calendar_event(
 
     quoted_cal = urllib.parse.quote(cal_id, safe="")
     try:
-        return _google_request("POST", f"/calendars/{quoted_cal}/events", payload=payload, params={"sendUpdates": "all"})
+        return _google_request(
+            "POST", f"/calendars/{quoted_cal}/events", payload=payload, params={"sendUpdates": "all"}
+        )
     except CalendarError as exc:
         logger.error("Failed to create Google Calendar event: %s", exc)
         return {}
@@ -166,7 +170,9 @@ def update_calendar_event(
     quoted_cal = urllib.parse.quote(cal_id, safe="")
     quoted_event = urllib.parse.quote(event_id, safe="")
     try:
-        return _google_request("PATCH", f"/calendars/{quoted_cal}/events/{quoted_event}", payload=payload, params={"sendUpdates": "all"})
+        return _google_request(
+            "PATCH", f"/calendars/{quoted_cal}/events/{quoted_event}", payload=payload, params={"sendUpdates": "all"}
+        )
     except CalendarError as exc:
         logger.error("Failed to update Google Calendar event %s: %s", event_id, exc)
         return {}

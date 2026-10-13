@@ -140,10 +140,10 @@
   {% url 'studio_pod_list' as studio_pods_url %}
   {% url 'studio_pod_create' as studio_pod_create_url %}
   {% with pod_total=sprint.pods.count %}
-  <a href="{{ studio_pods_url }}?sprint={{ sprint.pk }}" class="text-accent hover:underline text-base font-medium" data-testid="sprint-pods-count">{{ pod_total }} pod{{ pod_total|pluralize }}</a>
+  <a href="{{ studio_pods_url }}?sprint={{ sprint.pk }}" class="text-accent hover:underline text-base font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-pods-count">{{ pod_total }} pod{{ pod_total|pluralize }}</a>
   {% endwith %}
   {% if not sprint.pods_enabled %}
-  <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-pods-off">Pods are off for this sprint. Turn them on in <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-accent hover:underline">Edit</a>.</p>
+  <p class="text-sm text-muted-foreground mt-1" data-testid="sprint-pods-off">Pods are off for this sprint. Turn them on in <a href="{% url 'studio_sprint_edit' sprint_id=sprint.pk %}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Edit</a>.</p>
   {% endif %}
   <div class="mt-4 flex flex-wrap items-center gap-2" data-testid="sprint-pods-actions">
     {% with sprint_id_str=sprint.pk|stringformat:"d" %}{% with create_pod_url=studio_pod_create_url|add:"?sprint="|add:sprint_id_str %}

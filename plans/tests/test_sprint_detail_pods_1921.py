@@ -79,6 +79,15 @@ class SprintDetailPodsSectionTest(TestCase):
         self.assertIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}#requests"', html)
         self.assertIn('1 of 4 members', html)
 
+    def test_member_who_does_not_own_the_pod_sees_no_waiting_link(self):
+        pod = self.pod('Agents', [self.anna, self.mike], owner=self.anna)
+        PodJoinRequest.objects.create(pod=pod, user=self.outsider)
+        self.client.force_login(self.mike)
+        html = section(self.client.get(self.url()), 'sprint-pods')
+        self.assertIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}"', html)
+        self.assertNotIn('waiting for you', html)
+        self.assertNotIn('data-testid="sprint-pod-requests"', html)
+
     def test_non_enrolled_and_anonymous_see_no_section_but_the_bullet(self):
         for login in (self.outsider, None):
             self.client.logout()

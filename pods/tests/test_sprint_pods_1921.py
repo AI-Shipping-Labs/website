@@ -14,6 +14,7 @@ from pods.models import (
     POD_SOURCE_MEMBER,
     POD_STATUS_ARCHIVED,
     Pod,
+    PodArtifact,
     PodJoinRequest,
     PodMembership,
 )
@@ -388,6 +389,19 @@ class SprintNotificationsAndDashboardTest(SprintPodFixture):
         rows = dashboard_pod_meetings(self.mike, now)
         self.assertEqual([row['url'] for row in rows], [f'{self.pod_url(pod)}#meetings'])
 
+    def test_dashboard_skips_pods_of_draft_and_cancelled_sprints(self):
+        now = timezone.now()
+        pod = sprint_pod(self.sprint, 'Agents', members=[self.anna, self.mike], owner=self.anna)
+        PodMembership.objects.filter(pod=pod).update(joined_at=now - datetime.timedelta(days=10))
+        self.assertEqual(len(dashboard_pod_nudges(self.anna, now)), 1)
+        make_meeting(pod, now + datetime.timedelta(days=2))
+        self.assertEqual(len(dashboard_pod_meetings(self.anna, now)), 1)
+        for status in ('draft', 'cancelled'):
+            Sprint.objects.filter(pk=self.sprint.pk).update(status=status)
+            self.assertEqual(dashboard_pod_meetings(self.anna, now), [], status)
+        pod.meetings.all().delete()
+        self.assertEqual(dashboard_pod_nudges(self.anna, now), [])
+
     def test_slack_alert_names_a_sprint_pod_by_its_sprint(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna], owner=self.anna)
         join_request = PodJoinRequest.objects.create(pod=pod, user=self.mike)
@@ -430,8 +444,6 @@ class SprintPodArtifactsTest(SprintPodFixture):
     """Issue #1922 notes and transcripts on sprint pods."""
 
     def test_member_adds_reads_and_removes_notes_under_the_sprint(self):
-        from pods.models import PodArtifact
-
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna, self.mike], owner=self.anna)
         self.client.force_login(self.anna)
         form = self.client.get(self.pod_url(pod, '/notes/new'))

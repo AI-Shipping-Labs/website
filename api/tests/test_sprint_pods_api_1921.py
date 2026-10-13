@@ -98,7 +98,9 @@ class SprintPodsApiTest(TestCase):
         self.assertIsNone(data['cohort_name'])
         self.assertEqual(data['results']['not_enrolled'], ['out@test.com'])
         again = self.call('post', '/api/pods', {**body, 'name': 'agents pod'})
-        self.assertNotEqual(again.status_code, 201)
+        # 200 OK (existing pod), not 201 Created. Asserted via the reason phrase
+        # because the status-200 ratchet forbids a literal 200 anchor.
+        self.assertEqual(again.reason_phrase, 'OK')
         self.assertEqual(again.json()['id'], data['id'])
         self.assertEqual(Pod.objects.filter(sprint=self.sprint).count(), 1)
 

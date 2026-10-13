@@ -11,7 +11,7 @@
 
 {% if not enabled_for_members %}
 {% if activity_kind == 'sprint' %}
-<div class="bg-secondary border border-border rounded-lg px-4 py-3 mb-6 text-sm text-muted-foreground max-w-3xl" data-testid="studio-pod-not-enabled">Members cannot see pods for this sprint yet. Tick <a href="{{ sprint_edit_url }}" class="text-accent hover:underline">Show pods to enrolled members</a> on the sprint to switch it on.</div>
+<div class="bg-secondary border border-border rounded-lg px-4 py-3 mb-6 text-sm text-muted-foreground max-w-3xl" data-testid="studio-pod-not-enabled">Members cannot see pods for this sprint yet. Tick <a href="{{ sprint_edit_url }}" class="text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">Show pods to enrolled members</a> on the sprint to switch it on.</div>
 {% else %}
 <div class="bg-secondary border border-border rounded-lg px-4 py-3 mb-6 text-sm text-muted-foreground max-w-3xl" data-testid="studio-pod-not-enabled">Members cannot see pods for this course yet. Add the course slug to <code class="font-mono text-xs">PODS_COURSE_SLUGS</code> in Studio settings to switch it on.</div>
 {% endif %}

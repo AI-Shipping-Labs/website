@@ -251,6 +251,8 @@ _KEY_ORDER = {
         "PODS_CHAT_ENABLED",
         "PODS_CHAT_MESSAGES_PER_HOUR",
         "PODS_FIRST_MEETING_NUDGE_DAYS",
+        "PODS_ARTIFACTS_ENABLED",
+        "PODS_ARTIFACT_MAX_KB",
     ),
     "zoom": (
         "ZOOM_CLIENT_ID",
@@ -2241,4 +2243,24 @@ PODS_FIRST_MEETING_NUDGE_DAYS = declare(
     default="3",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_first_meeting_nudge_days",
+)
+PODS_ARTIFACTS_ENABLED = declare(
+    key="PODS_ARTIFACTS_ENABLED",
+    group="pods",
+    label="Pods Artifacts Enabled",
+    description="When on, pod members can add meeting notes or a transcript (pasted, or a .txt, .md or .vtt file read as text) and read them in a Notes and transcripts section on the pod page, with a recording tip on the next meeting and Add notes on past meetings. Off hides the section, the tip and every Add notes action and makes the member notes URLs return 404; Studio and the staff API keep listing artifacts. No-redeploy kill switch. Defaults on.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_artifacts_enabled",
+)
+PODS_ARTIFACT_MAX_KB = declare(
+    key="PODS_ARTIFACT_MAX_KB",
+    group="pods",
+    label="Pods Artifact Max KB",
+    description="Largest pod note or transcript a member may save, in KB of UTF-8 text, for pasted text and uploaded files alike (1-2048). Invalid or out-of-range values fall back to 500. Defaults to 500.",
+    value_type="int",
+    default="500",
+    secret=False,
+    docs_url="_docs/integrations/pods.md#pods_artifact_max_kb",
 )

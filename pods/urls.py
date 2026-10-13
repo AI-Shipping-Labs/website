@@ -8,6 +8,7 @@ submodule routes).
 
 from django.urls import path
 
+from pods.views.artifacts import artifact_delete, artifact_detail, artifact_new
 from pods.views.meetings import (
     meeting_cancel,
     meeting_held,
@@ -53,6 +54,18 @@ urlpatterns = [
     path('courses/<slug:slug>/home/pods/<int:pod_id>/slack', pod_slack, name='pod_slack'),
     # Issue #1920: the pod chat.
     path('courses/<slug:slug>/home/pods/<int:pod_id>/messages', pod_message_create, name='pod_message_create'),
+    # Issue #1922: meeting notes and transcripts.
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/notes/new', artifact_new, name='pod_artifact_new'),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/notes/<int:artifact_id>',
+        artifact_detail,
+        name='pod_artifact_detail',
+    ),
+    path(
+        'courses/<slug:slug>/home/pods/<int:pod_id>/notes/<int:artifact_id>/delete',
+        artifact_delete,
+        name='pod_artifact_delete',
+    ),
     # Issue #1919: agreed pod meetings and the pod call link.
     path('courses/<slug:slug>/home/pods/<int:pod_id>/call-link', pod_call_link, name='pod_call_link'),
     path('courses/<slug:slug>/home/pods/<int:pod_id>/meetings/new', meeting_new, name='pod_meeting_new'),

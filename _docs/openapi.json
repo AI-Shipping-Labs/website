@@ -15067,6 +15067,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "artifact_count": 2,
                   "cohort_key": "4",
                   "cohort_name": "Cohort 4",
                   "course_slug": "ai-buildcamp",
@@ -15177,6 +15178,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "artifact_count": 2,
                   "cohort_key": "4",
                   "cohort_name": "Cohort 4",
                   "course_slug": "ai-buildcamp",
@@ -15320,7 +15322,7 @@
     },
     "/api/pods/{pod_id}": {
       "get": {
-        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``message_count`` and ``last_message_at`` (visible pod chat messages only; ``null`` without any), ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
+        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``message_count`` and ``last_message_at`` (visible pod chat messages only; ``null`` without any), ``artifact_count`` (meeting notes and transcripts), ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
         "parameters": [
           {
             "in": "path",
@@ -15336,6 +15338,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "artifact_count": 2,
                   "cohort_key": "4",
                   "cohort_name": "Cohort 4",
                   "course_slug": "ai-buildcamp",
@@ -15533,6 +15536,7 @@
             "content": {
               "application/json": {
                 "example": {
+                  "artifact_count": 2,
                   "cohort_key": "4",
                   "cohort_name": "Cohort 4",
                   "course_slug": "ai-buildcamp",
@@ -15657,6 +15661,186 @@
           }
         },
         "summary": "Update a pod (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/artifacts": {
+      "get": {
+        "description": "Meeting notes and transcripts pod members added, newest first, without ``body`` (fetch one artifact for the text). ``meeting_number`` is the meeting's number in the pod, or ``null`` when the artifact names no meeting or the meeting has no number (cancelled). ``size_bytes`` is the UTF-8 size of the body. Filter with ``kind`` and ``meeting_id``; page with ``limit`` and ``offset``; ``total`` counts every match. Works whatever ``PODS_ARTIFACTS_ENABLED`` and ``PODS_COURSE_SLUGS`` say. There is no create or delete endpoint.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "enum": [
+                "notes",
+                "transcript"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "meeting_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "artifacts": [
+                    {
+                      "added_by_email": "raj@example.com",
+                      "added_by_name": "Raj P.",
+                      "created_at": "2026-10-14T19:05:00+00:00",
+                      "id": 5,
+                      "kind": "transcript",
+                      "meeting_id": 30,
+                      "meeting_number": 2,
+                      "original_filename": "meeting-2.vtt",
+                      "pod_id": 7,
+                      "size_bytes": 48211,
+                      "source": "uploaded",
+                      "title": "Meeting 2 - Oct 14"
+                    }
+                  ],
+                  "limit": 50,
+                  "offset": 0,
+                  "total": 1
+                }
+              }
+            },
+            "description": "Artifact page."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_pod",
+                  "error": "Pod not found"
+                }
+              }
+            },
+            "description": "Unknown pod."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "limit must be between 1 and 200; offset must be 0 or more"
+                }
+              }
+            },
+            "description": "Bad kind, meeting_id, limit or offset."
+          }
+        },
+        "summary": "List pod notes and transcripts (staff-only)",
+        "tags": [
+          "Pods"
+        ]
+      }
+    },
+    "/api/pods/{pod_id}/artifacts/{artifact_id}": {
+      "get": {
+        "description": "The same fields as the list plus ``body``: the plain text as saved (trimmed, no markdown). An uploaded ``.vtt`` transcript keeps its WebVTT text. ``404 unknown_artifact`` for an artifact of another pod.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "pod_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "path",
+            "name": "artifact_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "added_by_email": "raj@example.com",
+                  "added_by_name": "Raj P.",
+                  "body": "WEBVTT\n\n00:00:01.000 --> 00:00:04.000\nAnna: Let us start with the demo.",
+                  "created_at": "2026-10-14T19:05:00+00:00",
+                  "id": 5,
+                  "kind": "transcript",
+                  "meeting_id": 30,
+                  "meeting_number": 2,
+                  "original_filename": "meeting-2.vtt",
+                  "pod_id": 7,
+                  "size_bytes": 48211,
+                  "source": "uploaded",
+                  "title": "Meeting 2 - Oct 14"
+                }
+              }
+            },
+            "description": "The artifact with its body."
+          },
+          "401": {
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_artifact",
+                  "error": "Artifact not found"
+                }
+              }
+            },
+            "description": "Unknown pod, or an artifact of another pod."
+          }
+        },
+        "summary": "Read one pod note or transcript (staff-only)",
         "tags": [
           "Pods"
         ]
@@ -16077,6 +16261,7 @@
               "application/json": {
                 "example": {
                   "pod": {
+                    "artifact_count": 2,
                     "cohort_key": "4",
                     "cohort_name": "Cohort 4",
                     "course_slug": "ai-buildcamp",

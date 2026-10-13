@@ -117,3 +117,13 @@ def first_meeting_nudge_days():
     """Days after the second member joins before the dashboard ``Plan your
     first meeting`` row appears (issue #1928)."""
     return _int_config('PODS_FIRST_MEETING_NUDGE_DAYS', 3, minimum=0, maximum=30)
+
+
+def artifacts_enabled():
+    """Default-on read of ``PODS_ARTIFACTS_ENABLED`` (issue #1922): the member-side kill switch."""
+    return _default_on('PODS_ARTIFACTS_ENABLED')
+
+
+def artifact_max_kb():
+    """Largest pod note or transcript in KB of UTF-8 text (issue #1922)."""
+    return _int_config('PODS_ARTIFACT_MAX_KB', 500, minimum=1, maximum=2048)

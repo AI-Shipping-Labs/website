@@ -189,7 +189,9 @@ class MeetingsSectionTest(MeetingViewFixture):
                 "Can't make it Change time Cancel meeting Cancel this meeting? Everyone in the pod gets a "
                 'notification. Yes, cancel meeting',
                 "I can make it Can't make it Change time Cancel meeting",
-                "Mark as held Didn't happen",
+                # Issue #1922: after the end Add notes leads; held rows offer it too.
+                "Add notes Mark as held Didn't happen",
+                'Add notes',
             ],
         )
         self.assertEqual(texts(response, 'pod-meeting-proposed-by'), ['Proposed by Raj S.'])
@@ -461,7 +463,8 @@ class ChangeFlowTest(MeetingViewFixture):
         response = self.client.post(self.meetings_url(pod, f'/{started.pk}/held'), {'outcome': 'held'}, follow=True)
         self.assertIn('Marked as held.', message_texts(response))
         self.assertEqual(texts(response, 'pod-meeting-badge'), ['Held'])
-        self.assertEqual(texts(response, 'pod-meeting-actions'), [])
+        # Issue #1922: a held meeting keeps only the secondary Add notes.
+        self.assertEqual(texts(response, 'pod-meeting-actions'), ['Add notes'])
         self.assertEqual(texts(response, 'pod-meetings-progress-summary'), ['1 of 4 held'])
 
     def test_call_link_rejects_http_then_saves_and_clears(self):

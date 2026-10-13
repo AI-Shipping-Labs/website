@@ -25,6 +25,7 @@ from pods.models import (
     PodMeetingResponse,
     PodMembership,
 )
+from pods.services import artifacts as artifact_svc
 from pods.services import config as pods_config
 from pods.services.meeting_rules import (
     meeting_end,
@@ -314,9 +315,17 @@ def _badge(meeting, state, going, needed, now, unconfirmable=False):
     return 'Confirmed', 'success'
 
 
-def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now, state=None):
-    """Upcoming rows (soonest first) then past rows (newest first, last 10)."""
+def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now, state=None, artifacts=None):
+    """Upcoming rows (soonest first) then past rows (newest first, last 10).
+
+    ``artifacts`` (issue #1922) is the pod's notes and transcripts while
+    ``PODS_ARTIFACTS_ENABLED`` is on, else ``None``: then no row shows the
+    recording tip, ``Add notes`` or the ``Notes: <title>`` lines.
+    """
     state = state or meeting_state(pod, now)
+    notes_on = artifacts is not None
+    artifact_lines = artifact_svc.meeting_lines(pod, artifacts) if notes_on else {}
+    tip_id = artifact_svc.tip_meeting_id(state) if notes_on and is_member else None
     member_ids = {m.user.pk for m in member_avail}
     needed = required_attendance(len(member_avail)) or 2
     responses = {}
@@ -394,6 +403,12 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
             'offer': None,
             'no_offer_line': '',
             'join_url': '',
+            # Issue #1922: the recording tip on the next scheduled meeting
+            # only, and the notes attached to this meeting.
+            'tip_line': artifact_svc.TIP if head.pk == tip_id else '',
+            'artifact_lines': artifact_lines.get(head.pk, []),
+            'add_notes': '',
+            'add_notes_url': '',
         }
         # Join call only once the time is agreed. The call link itself is
         # shown once, under the Meetings heading (issue #1937).
@@ -444,10 +459,17 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
         elif head.status == MEETING_STATUS_SCHEDULED and started:
             actions['held'] = True
             actions['held_primary'] = not row['join_url']
+        if notes_on and not expired:
+            row['add_notes'] = artifact_svc.add_notes_state(head, is_member=is_member, now=now)
+            if row['add_notes']:
+                row['add_notes_url'] = artifact_svc.new_artifact_url(pod, head.pk)
+            if row['add_notes'] == 'primary':
+                # One primary action per row: Add notes after the end.
+                actions['held_primary'] = False
         row['actions'] = actions
         row['has_actions'] = bool(
             row['join_url'] or row['offer'] or actions['going'] or actions['cant'] or actions['change']
-            or actions['cancel'] or actions['held']
+            or actions['cancel'] or actions['held'] or row['add_notes']
         )
         is_upcoming = not expired and (meeting_end(head) > now) and head.status != MEETING_STATUS_HELD
         (upcoming if is_upcoming else past).append(row)
@@ -514,12 +536,12 @@ def open_proposal_unconfirmable(state, members):
     return proposal_unconfirmable(head, state, {getattr(m, 'pk', m) for m in members}, responses)
 
 
-def meetings_section(pod, viewer, *, member_avail, viewer_zone, is_member, can_manage, now):
+def meetings_section(pod, viewer, *, member_avail, viewer_zone, is_member, can_manage, now, artifacts=None):
     """Context for the pod page Meetings section."""
     state = meeting_state(pod, now)
     rows = build_meeting_rows(
         pod, viewer, member_avail=member_avail, viewer_zone=viewer_zone,
-        is_member=is_member, now=now, state=state,
+        is_member=is_member, now=now, state=state, artifacts=artifacts,
     )
     empty = None
     if not rows:

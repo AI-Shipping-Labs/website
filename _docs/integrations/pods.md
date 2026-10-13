@@ -282,6 +282,33 @@ How many days after a pod's second member joins before the members see a
 - On-site only: no email, Slack message or bell notification, and no nudge on
   the pod page itself.
 
+## PODS_ARTIFACTS_ENABLED
+
+Kill switch for pod meeting notes and transcripts (issue #1922).
+
+- Type: boolean.
+- Default: `true`.
+- Off: no `Notes and transcripts` section on the member pod page, no
+  recording tip and no `Add notes` action on meeting rows (a past scheduled
+  meeting offers `Mark as held` as its primary action again), and every member
+  notes URL (`.../pods/<pod_id>/notes/new`, `.../notes/<artifact_id>` and
+  `.../notes/<artifact_id>/delete`) returns 404.
+- Studio (`/studio/pods/<id>/#notes`) and the staff API
+  (`GET /api/pods/<id>/artifacts`) keep working, so staff can still read and
+  delete what members added.
+
+## PODS_ARTIFACT_MAX_KB
+
+Largest pod note or transcript a member may save, in KB of UTF-8 text
+(issue #1922).
+
+- Type: integer, 1-2048. Invalid or out-of-range values (for example `abc`,
+  `0` or `4096`) fall back to `500`.
+- Default: `500`.
+- Applies to pasted text and to an uploaded file alike. Over the limit the
+  form says `Notes can be up to 500 KB. Trim the text or split it into two.`
+  (the number follows the setting) and keeps the typed values.
+
 ## Pod meetings
 
 How agreed meetings work (issue #1919):
@@ -430,3 +457,63 @@ point; the pod page recommends Slack for ongoing conversation.
   name and email) or with `POST /api/pods/<id>/messages/<message_id>/hide`
   and `/restore`. Hidden messages disappear from the member page and never
   count as unread. `GET /api/pods/<id>/messages` returns the full transcript.
+
+## Pod notes and transcripts
+
+After a meeting, pod members add the meeting notes or the call transcript as
+a pod artifact (issue #1922). Plain text only: nothing goes to file storage.
+
+- Who: current pod members add and read. Staff who are not members read them
+  (on the pod page and the artifact page) but do not add them (`403`). Non-members,
+  requesters, waitlisted and former members see nothing and get 404 on every
+  notes URL. Archived pods stay 404 for members. The course must be in
+  `PODS_COURSE_SLUGS`.
+- Meeting rows: the next upcoming `scheduled` meeting that has not started
+  (only that one row, never a proposal) shows `Tip: record the call and add
+  the transcript or notes here afterwards.` From start to end a scheduled
+  meeting is unchanged (`Join call`, `Mark as held`, `Didn't happen`). After
+  its scheduled end, `Add notes` is the row's primary action with `Mark as
+  held` and `Didn't happen` as secondary; a `held` meeting shows a secondary
+  `Add notes`. Cancelled meetings and proposals never offer it. Notes are
+  never required for a meeting to count. Each artifact attached to a meeting
+  shows on its row as `Notes: <title>` or `Transcript: <title>`, linking to
+  the artifact page.
+- Section: `Notes and transcripts` (`#notes`) sits directly after Meetings,
+  subtitle `Pod members and admins can read these.`, with `Add notes` below
+  the heading for members. Rows are newest first: title link, `Notes` or
+  `Transcript` badge, and `Meeting 2 · Added by Anna K. on Oct 14` (viewer
+  timezone, `(you)` for the viewer's own, no meeting part when none, display
+  names only). Empty: `No notes yet`.
+- Form (`/courses/<slug>/home/pods/<pod_id>/notes/new`, optional
+  `?meeting=<meeting_id>`): `Meeting` (this pod's meetings that are `held` or
+  `scheduled` with a past start, labelled `Meeting 2 - Oct 14`, plus `Not
+  tied to a meeting`), `Kind` (`Notes` / `Transcript`), `Title` (prefilled
+  `Meeting 2 - Oct 14`, or `Notes - <today>`), `Text`, and `Or upload a file`
+  (`.txt`, `.md` or `.vtt`, read as UTF-8). The privacy line `Pod members and
+  admins can read this. Remove anything private before uploading.` is always
+  shown above `Save notes`.
+- Validation (typed values stay, a chosen file does not): `Paste the notes or
+  choose a file.`, `Upload a .txt, .md or .vtt file.`, `This file is not
+  plain text. Paste the text instead.`, the `PODS_ARTIFACT_MAX_KB` message,
+  `Add a title.`, `Titles can be up to 200 characters.` and `Choose a meeting
+  that has already happened.` (another pod's, cancelled, proposed or
+  not-started meeting). Pasted text wins when both text and a file are sent.
+- Saving notes for a `scheduled` meeting past its start marks it `held` in
+  the same transaction (`status_changed_by` = the member, same as `Mark as
+  held`) and says `Notes saved and meeting marked as held.`; otherwise
+  `Notes saved.`
+- Artifact page (`.../notes/<artifact_id>`): `Back to pod`, title, kind
+  badge, the meta line, then the body as escaped plain text with line breaks
+  kept. No markdown. The author sees `Remove` behind a confirm (`Remove these
+  notes? This can't be undone.` / `Yes, remove`): a hard delete with `Notes
+  removed.`; anyone else gets `403` on the POST. Removing never changes the
+  meeting status.
+- Studio: `/studio/pods/<id>/` has `Notes and transcripts (N)` after
+  Meetings with title, kind, meeting, author name and email, date and size,
+  plus `View` (the member artifact page) and `Delete` (`Notes deleted.`).
+- Staff API: `GET /api/pods/<id>/artifacts` (metadata, no body; `kind`,
+  `meeting_id`, `limit`, `offset`) and `GET /api/pods/<id>/artifacts/<artifact_id>`
+  (with `body`); `GET /api/pods/<id>` has `artifact_count`. No API create or
+  delete. Both work whatever `PODS_ARTIFACTS_ENABLED` and `PODS_COURSE_SLUGS`
+  say.
+- No notifications (bell, email or Slack) when notes are added.

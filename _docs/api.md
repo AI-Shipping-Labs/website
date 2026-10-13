@@ -496,7 +496,7 @@ non-staff token returns `401`.
 | GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
 | GET | `/api/pods` | Pod summaries; filters `course`, `cohort` (needs `course`), `status`; `limit`/`offset` |
 | POST | `/api/pods` | Create (`source=api`), `201`. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
-| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
+| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `artifact_count` (notes and transcripts, issue #1922), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
 | PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count` (`422` below the meetings already planned or held), `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url`, `meeting_url` (the pod call link: https only, max 500, empty clears) |
 | POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
@@ -509,6 +509,8 @@ non-staff token returns `401`.
 | GET | `/api/pods/<id>/messages` | Pod chat transcript (issue #1920), oldest first, including hidden messages; `limit` (default 50, max 200, `422` above) and `offset`; `total` counts every message. Each has `id`, `author_email`, `author_name`, `body`, `created_at`, `hidden`, `hidden_at`, `hidden_by_email`. No create or delete endpoint |
 | POST | `/api/pods/<id>/messages/<message_id>/hide` | Hides the message from members (`hidden_by` = token owner); idempotent; returns the message. `404 unknown_message` for another pod's message |
 | POST | `/api/pods/<id>/messages/<message_id>/restore` | Shows a hidden message again; idempotent; returns the message. `404 unknown_message` for another pod's message |
+| GET | `/api/pods/<id>/artifacts` | Pod meeting notes and transcripts (issue #1922), newest first, without `body`; optional `kind` (`notes`, `transcript`) and `meeting_id` filters; `limit` (default 50, max 200, `422` above) and `offset`; `total` counts every match. Each has `id`, `pod_id`, `meeting_id`, `meeting_number` (`null` when no meeting or the meeting has no number), `kind`, `title`, `source` (`pasted`, `uploaded`), `original_filename`, `added_by_email`, `added_by_name`, `created_at`, `size_bytes`. Works whatever `PODS_ARTIFACTS_ENABLED` and `PODS_COURSE_SLUGS` say. No create or delete endpoint |
+| GET | `/api/pods/<id>/artifacts/<artifact_id>` | The same fields plus `body` (plain text as saved). `404 unknown_artifact` for another pod's artifact |
 
 There is no pod DELETE: archive with `PATCH {"status": "archived"}` so the
 request history is kept. There is no meeting DELETE either: cancel with
@@ -564,6 +566,12 @@ curl -sL -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/pods/7/messages?limit=200"
 curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/pods/7/messages/41/hide"
+
+# List a pod's transcripts, then fetch one with its text
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/artifacts?kind=transcript"
+curl -sL -H "Authorization: Token $API_TOKEN" \
+  "https://aishippinglabs.com/api/pods/7/artifacts/5"
 ```
 
 Settings live in the `Pods` IntegrationSetting group; see

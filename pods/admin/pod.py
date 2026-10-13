@@ -4,6 +4,7 @@ from pods.models import (
     AvailabilityProfile,
     AvailabilityWindow,
     Pod,
+    PodArtifact,
     PodJoinRequest,
     PodMeeting,
     PodMeetingResponse,
@@ -77,4 +78,17 @@ class PodMessageAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(PodArtifact)
+class PodArtifactAdmin(admin.ModelAdmin):
+    """Pod meeting notes and transcripts (issue #1922); members add them."""
+
+    list_display = ('title', 'pod', 'kind', 'source', 'added_by', 'created_at')
+    list_filter = ('kind', 'source')
+    search_fields = ('title', 'body')
+    raw_id_fields = ('pod', 'meeting', 'added_by')
+
+    def has_add_permission(self, request):
         return False

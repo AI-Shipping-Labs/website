@@ -182,6 +182,8 @@ from api.views.plans import (
 )
 from api.views.pods import (
     cohort_roster,
+    pod_artifact_detail,
+    pod_artifacts,
     pod_detail,
     pod_meeting_detail,
     pod_meetings,
@@ -922,6 +924,13 @@ urlpatterns = [
         "pods/<int:pod_id>/messages/<int:message_id>/restore",
         pod_message_restore,
         name="api_pod_message_restore",
+    ),
+    # Issue #1922: pod notes and transcripts (read only; no create, no delete).
+    path("pods/<int:pod_id>/artifacts", pod_artifacts, name="api_pod_artifacts"),
+    path(
+        "pods/<int:pod_id>/artifacts/<int:artifact_id>",
+        pod_artifact_detail,
+        name="api_pod_artifact_detail",
     ),
     # ---- Course coursework inventory (issue #1696) --------------------
     path(

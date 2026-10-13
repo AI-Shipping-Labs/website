@@ -294,7 +294,8 @@ def test_pod_records_whether_past_meetings_happened(django_server, browser):
     row.get_by_test_id('pod-meeting-held').click()
     expect(_messages(page)).to_contain_text('Marked as held.')
     expect(_row(page, 1).get_by_test_id('pod-meeting-badge')).to_have_text('Held')
-    expect(_row(page, 1).get_by_test_id('pod-meeting-actions')).to_have_count(0)
+    # Issue #1922: a held meeting keeps only the secondary Add notes.
+    expect(_row(page, 1).get_by_test_id('pod-meeting-actions')).to_have_text('Add notes')
     expect(page.get_by_test_id('pod-meetings-progress-summary')).to_have_text('1 of 4 held')
     context.close()
 

@@ -1,0 +1,38 @@
+{% extends "pods/_layout.html" %}
+{% load accounts_extras member_badges %}
+
+{% block pods_title %}{{ artifact.title }}{% endblock %}
+
+{% block pods_content %}
+{% comment %}
+One pod note or transcript (issue #1922). The course title is the page h1
+(course Home header), so the artifact title takes the pod page's top
+heading role. The body is escaped plain text with its line breaks kept; no
+markdown. Only the author sees Remove, behind a confirm disclosure like
+Cancel meeting.
+{% endcomment %}
+<article data-testid="pod-artifact" data-artifact-id="{{ artifact.pk }}">
+  <a href="{{ back_url }}" class="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-artifact-back"><i data-lucide="chevron-left" class="h-4 w-4" aria-hidden="true"></i>Back to pod</a>
+
+  <header class="mt-2">
+    <h2 class="break-words text-2xl font-semibold tracking-tight text-foreground sm:text-3xl" data-testid="pod-artifact-title">{{ artifact.title }}</h2>
+    <div class="mt-2 flex flex-wrap items-center gap-2">{% member_label_badge kind_label tone='neutral' testid='pod-artifact-kind' %}</div>
+    <p class="mt-2 text-sm text-muted-foreground" data-testid="pod-artifact-meta">{{ meta }}</p>
+  </header>
+
+  <div class="mt-6 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground" data-testid="pod-artifact-body">{{ artifact.body }}</div>
+
+  {% if can_remove %}
+  <details class="mt-8 w-full sm:w-auto" data-testid="pod-artifact-remove-disclosure">
+    <summary class="{% button_classes 'secondary' extra='cursor-pointer list-none [&::-webkit-details-marker]:hidden' %}" data-testid="pod-artifact-remove-toggle">Remove</summary>
+    <div class="mt-2 rounded-lg border border-border bg-card p-4">
+      <p class="text-sm text-foreground">Remove these notes? This can't be undone.</p>
+      <form method="post" action="{{ delete_url }}" class="mt-3">
+        {% csrf_token %}
+        <button type="submit" class="{% button_classes 'destructive' %}" data-testid="pod-artifact-remove-confirm">Yes, remove</button>
+      </form>
+    </div>
+  </details>
+  {% endif %}
+</article>
+{% endblock %}

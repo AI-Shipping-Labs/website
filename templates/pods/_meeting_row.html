@@ -5,7 +5,8 @@ token, status badge, then the meta lines in this order (issue #1940): the
 "Replaced by a new proposed time." hint on a cancelled proposal that
 Propose <time> instead replaced, member strip, proposer, mover (who and when
 stay together), who a proposal is waiting on or why it can't be confirmed
-(never both), who can't make it, clock-change notes; then the next best time
+(never both), who can't make it, clock-change notes, the recording tip and
+the notes attached to the meeting (issue #1922); then the next best time
 offer or the no-offer line, then the actions below the meta. The call link is shown once, under the Meetings heading, not on a row
 (issue #1937). Every POST action is its own form.
 {% endcomment %}
@@ -24,6 +25,8 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
     {% if row.unconfirmable_line %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-unconfirmable">{{ row.unconfirmable_line }}</p>{% endif %}
     {% if row.cant_names %}<p class="mt-1 text-xs text-foreground" data-testid="pod-meeting-cant">Can't make it: {{ row.cant_names }}</p>{% endif %}
     {% for line in row.dst_lines %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-dst">{{ line }}</p>{% endfor %}
+    {% if row.tip_line %}<p class="mt-1 text-xs text-muted-foreground" data-testid="pod-meeting-tip">{{ row.tip_line }}</p>{% endif %}
+    {% for line in row.artifact_lines %}<p class="mt-1 break-words text-xs text-muted-foreground" data-testid="pod-meeting-artifact">{{ line.label }}: <a href="{{ line.url }}" class="font-medium text-accent underline underline-offset-4 hover:text-accent/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-meeting-artifact-link">{{ line.title }}</a></p>{% endfor %}
     {% if row.offer %}
     <div class="mt-2 flex flex-wrap items-center gap-2" data-testid="pod-meeting-offer">
       <p class="text-sm text-foreground">Next best time: <time datetime="{{ row.offer.start_iso }}" data-testid="pod-meeting-offer-time">{{ row.offer.label }}</time></p>
@@ -37,6 +40,9 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
   <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1" data-testid="pod-meeting-actions">
     {% if row.join_url %}
     <a href="{{ row.join_url }}" target="_blank" rel="noopener noreferrer" class="{% button_classes 'primary' size='sm' %}" data-testid="pod-meeting-join">Join call <i data-lucide="external-link" class="h-3.5 w-3.5" aria-hidden="true"></i></a>
+    {% endif %}
+    {% if row.add_notes %}
+    <a href="{{ row.add_notes_url }}" class="{% if row.add_notes == 'primary' %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-add-notes">Add notes</a>
     {% endif %}
     {% if row.offer %}
     {% if row.offer.propose %}

@@ -1,0 +1,28 @@
+{% load accounts_extras layout_components member_badges member_empty_state %}
+{% comment %}
+Pod notes and transcripts (issue #1922), members and staff only, directly
+after the Meetings section. Divider-led rows like the meeting rows: title
+link, kind badge, then the meta line. Rows have no actions; Add notes sits
+below the heading and only members see it.
+{% endcomment %}
+<section class="mt-10" id="notes" aria-labelledby="pod-notes-heading" data-testid="pod-notes">
+  {% section_header "Notes and transcripts" heading_id="pod-notes-heading" subtitle=notes.subtitle extra="mb-3" %}
+  {% if notes.can_add %}
+  <a href="{{ notes.new_url }}" class="{% button_classes 'secondary' extra='mb-4' %}" data-testid="pod-notes-add">Add notes</a>
+  {% endif %}
+  {% if notes.rows %}
+  <ol class="divide-y divide-border border-y border-border" data-testid="pod-note-rows">
+    {% for row in notes.rows %}
+    <li class="py-3" data-testid="pod-note" data-artifact-id="{{ row.artifact.pk }}">
+      <div class="flex flex-wrap items-center gap-2">
+        <h3 class="min-w-0 break-words text-sm font-semibold text-foreground"><a href="{{ row.url }}" class="hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-note-title">{{ row.artifact.title }}</a></h3>
+        {% member_label_badge row.kind_label tone='neutral' testid='pod-note-kind' %}
+      </div>
+      <p class="mt-0.5 text-xs text-muted-foreground" data-testid="pod-note-meta">{{ row.meta }}</p>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  {% member_empty_state title=notes.empty_title body=notes.empty_body icon='file-text' kind='fresh' testid='pod-notes-empty' %}
+  {% endif %}
+</section>

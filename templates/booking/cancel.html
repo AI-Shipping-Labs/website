@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Cancel Meeting | AI Shipping Labs{% endblock %}
+{% block meta_description %}Cancel your meeting with {{ booking.host.name }}.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-4 pt-28 pb-16 sm:px-6 lg:px-8 lg:pt-36 lg:pb-24">
+    <div class="mx-auto max-w-xl">
+      <a href="{% url 'booking_confirmed' token=booking.manage_token %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-6" data-testid="cancel-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to meeting details
+      </a>
+
+      <div class="rounded-xl border border-border bg-card p-6 sm:p-8 shadow-sm text-center" data-testid="cancel-container">
+        <div class="h-14 w-14 rounded-full bg-destructive/10 text-destructive flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="alert-triangle" class="h-7 w-7"></i>
+        </div>
+
+        <h1 class="text-xl font-bold text-foreground">Cancel Meeting?</h1>
+        <p class="text-sm text-muted-foreground mt-2">
+          Are you sure you want to cancel your meeting with <strong>{{ booking.host.name }}</strong> on <strong>{{ booking.start_datetime|date:"l, F j, Y, H:i" }} UTC</strong>?
+        </p>
+
+        <form method="post" action="{% url 'booking_cancel' token=booking.manage_token %}" class="mt-8 space-y-3">
+          {% csrf_token %}
+          <button type="submit" class="w-full py-2.5 px-4 rounded-lg bg-destructive text-destructive-foreground font-semibold text-sm hover:bg-destructive/90 transition-colors shadow-sm" data-testid="confirm-cancel-button">
+            Yes, cancel meeting
+          </button>
+          <a href="{% url 'booking_confirmed' token=booking.manage_token %}" class="{% button_classes 'secondary' extra='w-full justify-center' %}" data-testid="keep-meeting-button">
+            Never mind, keep meeting
+          </a>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+{% endblock %}

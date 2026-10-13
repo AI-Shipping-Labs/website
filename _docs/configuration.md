@@ -56,7 +56,7 @@ fallbacks used when no DB override exists.
 3. Sign in at `{SITE_BASE_URL}/accounts/login/` with the superuser email + password.
 4. Open `{SITE_BASE_URL}/studio/settings/`. The package `community_base.config` view renders every declared integration group and shows each setting's source (`db`, `environment`, `django_settings`, or `default`).
 
-Test: visit `/studio/settings/` and confirm the declared groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers, Pods). Save one non-secret value and confirm its source changes to `db`.
+Test: visit `/studio/settings/` and confirm the declared groups are listed (Stripe, Zoom, Email (SES), S3 Recordings, S3 Content Images, S3 Downloads, Calendly, Booking & Calendar, GitHub App, Slack, Site, Analytics, Auth, Banner Generator, LLM Provider, Observability, Maven, Event triggers, Pods). Save one non-secret value and confirm its source changes to `db`.
 
 Runtime settings are stored in the package `cb_config.Setting` table after the A0.2 migration. Secret values use the package Fernet format and are never displayed or exported in plaintext. The compatibility resolver in `integrations.config` still reads donor `IntegrationSetting` rows that have not been rewritten; this is a read-only fallback and package rows always win. The donor table remains read-only until the second A0.2 pull request.
 
@@ -491,6 +491,25 @@ Test: use the guide's
 [disposable lifecycle and recording smoke checklist](integrations/zoom.md#disposable-lifecycle-and-recording-smoke-checklist).
 It requires an isolated non-production Zoom workspace and disposable storage;
 do not test against a real event or meeting.
+
+## 10.1. Booking & Calendar
+
+Studio path: `Studio > Settings > Booking & Calendar`.
+
+Configures self-hosted public 30-minute booking and calendar availability, replacing external Calendly links. Availability is computed against Google Calendar busy intervals via Dapier, combined with local booking buffer policies and weekly host availability windows.
+
+Keys to set in Studio:
+
+| Key | Source | Notes |
+|-----|--------|-------|
+| `DAPIER_BASE_URL` | non-secret | Base URL of Dapier instance (e.g. `http://localhost:8000` or production Dapier URL). |
+| `DAPIER_API_TOKEN` | secret | Bearer token for Dapier `/api/agent/token` endpoint to mint Google Calendar OAuth access tokens. |
+| `DAPIER_AGENT_NAME` | non-secret | Agent name registered in Dapier with google-calendar permissions (default `alexey-calendar`). |
+| `GOOGLE_CALENDAR_ID` | non-secret | Calendar ID to check busy times and create booked events (default `primary`). |
+
+Zoom meeting links for booked 1:1 calls are generated automatically via the Server-to-Server OAuth Zoom integration configured in Section 10.
+
+Test: visit `/book/alexey`, verify available time slots load from the schedule, and book a test slot. Confirm the booking creates a Zoom meeting and Google Calendar event, and redirects to the confirmation page.
 
 ## 11. End-to-end smoke test
 

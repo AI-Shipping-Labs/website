@@ -28,6 +28,7 @@ GROUP_LABELS = {
     "analytics": "Analytics",
     "auth": "Auth",
     "banner_generator": "Banner Generator",
+    "booking": "Booking & Calendar",
     "calendly": "Calendly",
     "github": "GitHub App",
     "llm": "LLM Provider",
@@ -53,6 +54,7 @@ _GROUP_ORDER = (
     "s3_content",
     "s3_downloads",
     "calendly",
+    "booking",
     "github",
     "slack",
     "site",
@@ -99,6 +101,12 @@ _KEY_ORDER = {
         "CALENDLY_WEBHOOK_SUBSCRIPTION_URI",
         "CALENDLY_WEBHOOK_TOLERANCE_SECONDS",
         "CALENDLY_WEBHOOK_RETENTION_DAYS",
+    ),
+    "booking": (
+        "DAPIER_BASE_URL",
+        "DAPIER_API_TOKEN",
+        "DAPIER_AGENT_NAME",
+        "GOOGLE_CALENDAR_ID",
     ),
     "github": (
         "GITHUB_APP_ID",
@@ -2263,4 +2271,48 @@ PODS_ARTIFACT_MAX_KB = declare(
     default="500",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_artifact_max_kb",
+)
+DAPIER_BASE_URL = declare(
+    key="DAPIER_BASE_URL",
+    group="booking",
+    label="Dapier Base URL",
+    description="Base URL for the Dapier integration server used to obtain Google Calendar access tokens for availability checks and event creation.",
+    value_type="str",
+    default="http://localhost:8000",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#booking-and-calendar",
+)
+DAPIER_API_TOKEN = declare(
+    key="DAPIER_API_TOKEN",
+    group="booking",
+    label="Dapier API Token",
+    description="Bearer authorization token for calling Dapier /api/agent/token endpoint to mint Google Calendar OAuth access tokens.",
+    value_type="str",
+    default="",
+    secret=True,
+    optional=True,
+    docs_url="_docs/configuration.md#booking-and-calendar",
+)
+DAPIER_AGENT_NAME = declare(
+    key="DAPIER_AGENT_NAME",
+    group="booking",
+    label="Dapier Agent Name",
+    description="Agent name registered with Dapier that holds the google-calendar scope integration (defaults to alexey-calendar).",
+    value_type="str",
+    default="alexey-calendar",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#booking-and-calendar",
+)
+GOOGLE_CALENDAR_ID = declare(
+    key="GOOGLE_CALENDAR_ID",
+    group="booking",
+    label="Google Calendar ID",
+    description="Google Calendar ID for host availability queries and event scheduling (typically 'primary' or the host's email).",
+    value_type="str",
+    default="primary",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#booking-and-calendar",
 )

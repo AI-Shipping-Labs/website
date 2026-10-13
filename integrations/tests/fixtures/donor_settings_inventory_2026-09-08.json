@@ -477,6 +477,39 @@
   ]
  },
  {
+  "name": "booking",
+  "label": "Booking & Calendar",
+  "keys": [
+   {
+    "key": "DAPIER_BASE_URL",
+    "is_secret": false,
+    "default": "http://localhost:8000",
+    "description": "Base URL for the Dapier integration server used to obtain Google Calendar access tokens for availability checks and event creation.",
+    "docs_url": "_docs/configuration.md#booking-and-calendar"
+   },
+   {
+    "key": "DAPIER_API_TOKEN",
+    "is_secret": true,
+    "description": "Bearer authorization token for calling Dapier /api/agent/token endpoint to mint Google Calendar OAuth access tokens.",
+    "docs_url": "_docs/configuration.md#booking-and-calendar"
+   },
+   {
+    "key": "DAPIER_AGENT_NAME",
+    "is_secret": false,
+    "default": "alexey-calendar",
+    "description": "Agent name registered with Dapier that holds the google-calendar scope integration (defaults to alexey-calendar).",
+    "docs_url": "_docs/configuration.md#booking-and-calendar"
+   },
+   {
+    "key": "GOOGLE_CALENDAR_ID",
+    "is_secret": false,
+    "default": "primary",
+    "description": "Google Calendar ID for host availability queries and event scheduling (typically 'primary' or the host's email).",
+    "docs_url": "_docs/configuration.md#booking-and-calendar"
+   }
+  ]
+ },
+ {
   "name": "github",
   "label": "GitHub App",
   "keys": [

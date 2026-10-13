@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% load accounts_extras %}
+
+{% block title %}Reschedule Meeting | AI Shipping Labs{% endblock %}
+{% block meta_description %}Reschedule your meeting with {{ host.name }}.{% endblock %}
+
+{% block body %}
+<main class="min-h-screen">
+  {% include "includes/header.html" %}
+
+  <section class="px-4 pt-28 pb-16 sm:px-6 lg:px-8 lg:pt-36 lg:pb-24">
+    <div class="mx-auto max-w-4xl">
+      <a href="{% url 'booking_confirmed' token=booking.manage_token %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-6" data-testid="reschedule-back-link">
+        <i data-lucide="arrow-left" class="h-4 w-4"></i>
+        Back to meeting details
+      </a>
+
+      {% if messages %}
+      <div class="mb-6 space-y-2">
+        {% for message in messages %}
+        <div class="p-4 rounded-lg text-sm bg-destructive/15 text-destructive border border-destructive/30">
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden" data-testid="reschedule-container">
+        <!-- Current meeting banner -->
+        <div class="p-6 bg-secondary/50 border-b border-border">
+          <h1 class="text-xl font-bold text-foreground">Reschedule Meeting</h1>
+          <p class="text-sm text-muted-foreground mt-1">
+            Current time: <span class="font-medium text-foreground">{{ booking.start_datetime|date:"l, F j, Y, H:i" }} UTC</span>
+          </p>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-border p-6 sm:p-8 gap-8">
+          <!-- Calendar & Picker -->
+          <div>
+            <div class="flex items-center justify-between mb-4">
+              <span id="month-label" class="font-medium text-sm text-foreground">Loading...</span>
+              <div class="flex gap-1">
+                <button type="button" id="prev-month-btn" class="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
+                  <i data-lucide="chevron-left" class="h-4 w-4"></i>
+                </button>
+                <button type="button" id="next-month-btn" class="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
+                  <i data-lucide="chevron-right" class="h-4 w-4"></i>
+                </button>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground font-medium mb-2">
+              <span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span>
+            </div>
+
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center text-xs mb-6"></div>
+
+            <div>
+              <label for="tz-select" class="block text-xs font-medium text-muted-foreground mb-1">Timezone:</label>
+              <select id="tz-select" class="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none">
+                {% for tz in common_timezones %}
+                <option value="{{ tz }}" {% if tz == initial_tz %}selected{% endif %}>{{ tz }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <!-- Slots & Form Submission -->
+          <div class="flex flex-col justify-between">
+            <div>
+              <div class="flex items-center justify-between mb-3">
+                <h3 id="selected-day-label" class="text-xs font-semibold text-foreground uppercase tracking-wider">Available Times</h3>
+              </div>
+              <div id="slots-list" class="max-h-60 overflow-y-auto space-y-1.5 pr-1">
+                <p class="text-xs text-muted-foreground text-center py-4" id="slots-placeholder">
+                  Select a date on the left to see times
+                </p>
+              </div>
+            </div>
+
+            <form id="reschedule-form" method="post" action="{% url 'booking_reschedule' token=booking.manage_token %}" class="mt-6 pt-4 border-t border-border hidden">
+              {% csrf_token %}
+              <input type="hidden" name="start_iso" id="input-start-iso" />
+
+              <div class="p-3 rounded-lg bg-accent/10 border border-accent/20 text-xs mb-4">
+                <span class="font-medium text-accent">New Time:</span>
+                <p id="selected-summary-time" class="text-foreground font-semibold mt-0.5" data-testid="reschedule-selected-time"></p>
+              </div>
+
+              <button type="submit" class="{% button_classes 'primary' extra='w-full justify-center' %}" data-testid="confirm-reschedule-button">
+                <i data-lucide="check" class="h-4 w-4"></i>
+                Confirm reschedule
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {% include "includes/footer.html" %}
+</main>
+
+<script>
+(function() {
+  const hostSlug = "{{ host.slug }}";
+  let currentTz = document.getElementById("tz-select").value || "{{ host.timezone }}";
+  let viewDate = new Date();
+  let availableSlots = [];
+  let availableDays = new Set();
+
+  const monthLabel = document.getElementById("month-label");
+  const prevMonthBtn = document.getElementById("prev-month-btn");
+  const nextMonthBtn = document.getElementById("next-month-btn");
+  const calendarGrid = document.getElementById("calendar-grid");
+  const slotsList = document.getElementById("slots-list");
+  const selectedDayLabel = document.getElementById("selected-day-label");
+  const rescheduleForm = document.getElementById("reschedule-form");
+  const inputStartIso = document.getElementById("input-start-iso");
+  const selectedSummaryTime = document.getElementById("selected-summary-time");
+  const tzSelect = document.getElementById("tz-select");
+
+  tzSelect.addEventListener("change", function() {
+    currentTz = this.value;
+    fetchSlots();
+  });
+
+  prevMonthBtn.addEventListener("click", function() {
+    viewDate.setMonth(viewDate.getMonth() - 1);
+    fetchSlots();
+  });
+
+  nextMonthBtn.addEventListener("click", function() {
+    viewDate.setMonth(viewDate.getMonth() + 1);
+    fetchSlots();
+  });
+
+  function getMonthBounds(date) {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const lastDay = new Date(year, month + 1, 0);
+    return {
+      from: firstDay.toISOString().slice(0, 10),
+      to: lastDay.toISOString().slice(0, 10)
+    };
+  }
+
+  function fetchSlots() {
+    monthLabel.textContent = viewDate.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+    const bounds = getMonthBounds(viewDate);
+    
+    calendarGrid.innerHTML = '<div class="col-span-7 py-6 text-center text-muted-foreground text-xs">Loading availability...</div>';
+    
+    fetch(`/book/${hostSlug}/slots?from=${bounds.from}&to=${bounds.to}&tz=${encodeURIComponent(currentTz)}&exclude_booking_id={{ booking.id }}`)
+      .then(res => res.json())
+      .then(data => {
+        availableSlots = data.slots || [];
+        availableDays = new Set(data.days || []);
+        renderCalendar();
+      })
+      .catch(err => {
+        calendarGrid.innerHTML = '<div class="col-span-7 py-6 text-center text-destructive text-xs">Could not load schedule</div>';
+      });
+  }
+
+  function renderCalendar() {
+    calendarGrid.innerHTML = "";
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const firstDay = new Date(year, month, 1);
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    
+    let startingDay = (firstDay.getDay() + 6) % 7;
+    for (let i = 0; i < startingDay; i++) {
+      const emptyCell = document.createElement("div");
+      emptyCell.className = "py-2";
+      calendarGrid.appendChild(emptyCell);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dayStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const isAvailable = availableDays.has(dayStr);
+      
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = day;
+      btn.dataset.date = dayStr;
+      btn.dataset.testid = isAvailable ? "calendar-day-available" : "calendar-day-unavailable";
+      
+      let baseClass = "h-8 w-8 mx-auto rounded-full flex items-center justify-center font-medium transition-all text-xs ";
+      if (isAvailable) {
+        baseClass += "bg-accent/15 text-accent font-semibold hover:bg-accent hover:text-accent-foreground cursor-pointer ";
+      } else {
+        baseClass += "text-muted-foreground/40 cursor-not-allowed ";
+      }
+
+      btn.className = baseClass;
+      
+      if (isAvailable) {
+        btn.addEventListener("click", () => selectDate(dayStr));
+      }
+      
+      calendarGrid.appendChild(btn);
+    }
+  }
+
+  function selectDate(dateStr) {
+    calendarGrid.querySelectorAll("button").forEach(b => {
+      if (b.dataset.date === dateStr) {
+        b.classList.add("ring-2", "ring-accent", "bg-accent", "text-accent-foreground");
+      } else if (availableDays.has(b.dataset.date)) {
+        b.classList.remove("ring-2", "ring-accent");
+      }
+    });
+
+    const daySlots = availableSlots.filter(s => s.date === dateStr);
+    const dateObj = new Date(dateStr + "T12:00:00Z");
+    selectedDayLabel.textContent = dateObj.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+    
+    slotsList.innerHTML = "";
+    if (daySlots.length === 0) {
+      slotsList.innerHTML = '<p class="text-xs text-muted-foreground text-center py-4">No slots available on this date</p>';
+      return;
+    }
+
+    daySlots.forEach(slot => {
+      const slotBtn = document.createElement("button");
+      slotBtn.type = "button";
+      slotBtn.className = "w-full py-2 px-3 text-center text-xs font-semibold rounded-lg border border-accent/30 bg-accent/5 text-accent hover:bg-accent hover:text-accent-foreground transition-all cursor-pointer";
+      slotBtn.textContent = slot.time_display;
+      slotBtn.setAttribute("data-testid", "slot-option-button");
+
+      slotBtn.addEventListener("click", () => {
+        slotsList.querySelectorAll("button").forEach(b => {
+          b.classList.remove("bg-accent", "text-accent-foreground");
+          b.classList.add("bg-accent/5", "text-accent");
+        });
+        slotBtn.classList.remove("bg-accent/5", "text-accent");
+        slotBtn.classList.add("bg-accent", "text-accent-foreground");
+
+        inputStartIso.value = slot.start_iso;
+        const dt = new Date(slot.start_iso);
+        const dateFormatted = dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: currentTz });
+        const timeFormatted = dt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: currentTz });
+        selectedSummaryTime.textContent = `${dateFormatted} at ${timeFormatted} (${currentTz})`;
+        rescheduleForm.classList.remove("hidden");
+      });
+      slotsList.appendChild(slotBtn);
+    });
+  }
+
+  fetchSlots();
+})();
+</script>
+{% endblock %}

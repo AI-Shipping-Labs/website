@@ -31,11 +31,11 @@ class CallProfileForm(forms.ModelForm):
             'placeholder': 'https://example.com/photo.jpg',
         }),
     )
-    booking_url = forms.URLField(
+    booking_url = forms.CharField(
         required=False,
-        widget=forms.URLInput(attrs={
+        widget=forms.TextInput(attrs={
             'class': INPUT_CLASSES,
-            'placeholder': 'https://calendar.app.google/...',
+            'placeholder': '/book/alexey or https://calendar.app.google/...',
         }),
     )
     order = forms.IntegerField(

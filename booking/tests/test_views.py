@@ -1,0 +1,165 @@
+from datetime import date, datetime, time, timezone
+from unittest.mock import patch
+from django.test import TestCase
+from django.urls import reverse
+
+from booking.models import (
+    Booking,
+    BookingHost,
+    BookingWeeklyWindow,
+    STATUS_CANCELED,
+    STATUS_CONFIRMED,
+)
+
+
+class BookingViewsTest(TestCase):
+    def setUp(self):
+        self.host, _ = BookingHost.objects.update_or_create(
+            slug="alexey",
+            defaults={
+                "name": "Alexey Test",
+                "email": "alexey.test@example.com",
+                "timezone": "UTC",
+                "notice_hours": 0.0,
+                "horizon_days": 30,
+                "slot_duration_minutes": 30,
+                "is_active": True,
+            },
+        )
+        self.host.weekly_windows.all().delete()
+        # Monday (0) 10:00 - 12:00
+        BookingWeeklyWindow.objects.create(
+            host=self.host,
+            weekday=0,
+            start_time=time(10, 0),
+            end_time=time(12, 0),
+            is_active=True,
+        )
+
+    def test_booking_index_redirects(self):
+        resp = self.client.get("/book")
+        self.assertRedirects(resp, "/book/alexey", fetch_redirect_response=False)
+
+    def test_host_booking_view(self):
+        resp = self.client.get("/book/alexey")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Alexey Test")
+        self.assertContains(resp, "booking-container")
+
+    @patch("booking.services.booking_service.query_busy")
+    def test_host_slots_api(self, mock_busy):
+        mock_busy.return_value = []
+        resp = self.client.get("/book/alexey/slots", {
+            "from": "2026-10-19",
+            "to": "2026-10-19",
+            "tz": "UTC",
+        })
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertIn("slots", data)
+        self.assertEqual(len(data["slots"]), 4)
+
+    @patch("booking.services.booking_service.create_booking_zoom_meeting")
+    @patch("booking.services.booking_service.create_calendar_event")
+    @patch("booking.services.booking_service.query_busy")
+    def test_host_confirm_post(self, mock_busy, mock_gcal, mock_zoom):
+        mock_busy.return_value = []
+        mock_zoom.return_value = {"meeting_id": "zm-view", "join_url": "https://zoom.test/j/view"}
+        mock_gcal.return_value = {"id": "gcal-view"}
+
+        resp = self.client.post("/book/alexey/confirm", {
+            "start_iso": "2026-10-19T10:00:00+00:00",
+            "invitee_name": "Test User",
+            "invitee_email": "test@example.com",
+            "invitee_timezone": "UTC",
+            "discussion_topic": "AI Project Advice",
+            "discussion_notes": "Want feedback on architecture",
+            "company": "TestCorp",
+        })
+        self.assertEqual(resp.status_code, 302)
+        booking = Booking.objects.get(invitee_email="test@example.com")
+        self.assertRedirects(resp, f"/book/confirmed/{booking.manage_token}")
+
+    def test_booking_confirmed_view(self):
+        booking = Booking.objects.create(
+            host=self.host,
+            invitee_name="Test User",
+            invitee_email="test@example.com",
+            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            zoom_join_url="https://zoom.test/j/view",
+            status=STATUS_CONFIRMED,
+        )
+        resp = self.client.get(f"/book/confirmed/{booking.manage_token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "Scheduled!")
+        self.assertContains(resp, "https://zoom.test/j/view")
+        self.assertContains(resp, f"/book/reschedule/{booking.manage_token}")
+        self.assertContains(resp, f"/book/cancel/{booking.manage_token}")
+
+    @patch("booking.services.booking_service.create_booking_zoom_meeting")
+    @patch("booking.services.booking_service.create_calendar_event")
+    @patch("booking.services.booking_service.update_booking_zoom_meeting")
+    @patch("booking.services.booking_service.update_calendar_event")
+    @patch("booking.services.booking_service.query_busy")
+    def test_booking_reschedule_flow(self, mock_busy, mock_up_cal, mock_up_zoom, mock_gcal, mock_zoom):
+        mock_busy.return_value = []
+        mock_zoom.return_value = {"meeting_id": "zm-view", "join_url": "https://zoom.test/j/view"}
+        mock_gcal.return_value = {"id": "gcal-view"}
+
+        booking = Booking.objects.create(
+            host=self.host,
+            invitee_name="Test User",
+            invitee_email="test@example.com",
+            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            status=STATUS_CONFIRMED,
+        )
+        # GET reschedule page
+        resp_get = self.client.get(f"/book/reschedule/{booking.manage_token}")
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, "Reschedule Meeting")
+
+        # POST reschedule
+        resp_post = self.client.post(f"/book/reschedule/{booking.manage_token}", {
+            "start_iso": "2026-10-19T10:30:00+00:00",
+        })
+        self.assertRedirects(resp_post, f"/book/confirmed/{booking.manage_token}")
+        booking.refresh_from_db()
+        self.assertEqual(booking.start_datetime, datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc))
+
+    @patch("booking.services.booking_service.delete_booking_zoom_meeting")
+    @patch("booking.services.booking_service.delete_calendar_event")
+    def test_booking_cancel_flow(self, mock_del_cal, mock_del_zoom):
+        booking = Booking.objects.create(
+            host=self.host,
+            invitee_name="Test User",
+            invitee_email="test@example.com",
+            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            status=STATUS_CONFIRMED,
+        )
+        # GET cancel page
+        resp_get = self.client.get(f"/book/cancel/{booking.manage_token}")
+        self.assertEqual(resp_get.status_code, 200)
+        self.assertContains(resp_get, "Cancel Meeting?")
+
+        # POST cancel
+        resp_post = self.client.post(f"/book/cancel/{booking.manage_token}")
+        self.assertRedirects(resp_post, f"/book/confirmed/{booking.manage_token}")
+        booking.refresh_from_db()
+        self.assertEqual(booking.status, STATUS_CANCELED)
+
+    def test_booking_ics_download(self):
+        booking = Booking.objects.create(
+            host=self.host,
+            invitee_name="Test User",
+            invitee_email="test@example.com",
+            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            status=STATUS_CONFIRMED,
+        )
+        resp = self.client.get(f"/book/ics/{booking.manage_token}")
+        self.assertEqual(resp.status_code, 200)
+        self.assertTrue(resp["Content-Type"].startswith("text/calendar"))
+        self.assertIn("BEGIN:VCALENDAR", resp.content.decode("utf-8"))

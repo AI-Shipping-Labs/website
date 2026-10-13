@@ -78,7 +78,7 @@ def stale_requests(*, now=None, stale_days=None):
             created_at__lt=now - timedelta(days=stale_days),
         )
         .exclude(pod__status=POD_STATUS_ARCHIVED)
-        .select_related('pod__cohort__course', 'pod__owner', 'user')
+        .select_related('pod__cohort__course', 'pod__sprint', 'pod__owner', 'user')
         .order_by('created_at', 'pk')
     )
 
@@ -126,11 +126,14 @@ def earlier_proposals_line(count):
 
 
 def _pod_link(pod, base):
-    """``<url|Pod> (Course, Cohort)`` with every member-written part escaped."""
+    """``<url|Pod> (Course, Cohort)``, or ``<url|Pod> (Sprint name)`` for a
+    sprint pod (issue #1921), with every member-written part escaped."""
     pod_url = f'{base}{reverse("studio_pod_detail", kwargs={"pod_id": pod.pk})}'
     cohort = pod.cohort
     activity = ''
-    if cohort is not None:
+    if pod.sprint_id:
+        activity = f' ({escape_slack_text(pod.sprint.name)})'
+    elif cohort is not None:
         activity = (
             f' ({escape_slack_text(cohort.course.title)}, '
             f'{escape_slack_text(cohort.name)})'

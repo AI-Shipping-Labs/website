@@ -220,6 +220,15 @@ class Sprint(TimestampedModelMixin, models.Model):
             'unlinks the sprint; the sprint itself is preserved.'
         ),
     )
+    # Issue #1921: show pods to enrolled members. A per-sprint data field,
+    # not an IntegrationSetting, because sprints are Studio-sourced records
+    # (same reasoning as ``min_tier_level``). ``PODS_COURSE_SLUGS`` stays
+    # course-only.
+    pods_enabled = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text='Show pods to enrolled members of this sprint.',
+    )
 
     class Meta:
         ordering = ['-start_date']

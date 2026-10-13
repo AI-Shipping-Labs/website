@@ -1,7 +1,8 @@
 """Member pod notes and transcripts (issue #1922).
 
-Same access rules as the pod page: the course must be in
-``PODS_COURSE_SLUGS``, users outside the cohort get 404, archived pods are
+Same access rules as the pod page (cohort or sprint pods, issue #1921): the
+course must be in ``PODS_COURSE_SLUGS`` or the sprint must have
+``pods_enabled``, users outside the cohort or sprint get 404, archived pods are
 404 for members. On top of that every URL is 404 while
 ``PODS_ARTIFACTS_ENABLED`` is off, and for anyone who is neither a pod member
 nor staff (requesters, waitlisted and former members included). Staff who
@@ -20,23 +21,23 @@ from pods.models import ARTIFACT_KIND_CHOICES, ARTIFACT_KIND_NOTES, PodArtifact
 from pods.services import artifacts as artifact_svc
 from pods.services import meetings as mtg
 from pods.services import membership as svc
+from pods.services.activity import activity_for_pod
 from pods.services.meeting_rules import meeting_state
-from pods.services.tab import course_header_context
-from pods.views.member import LOGIN_URL, _enabled_course, _pod_for_viewer
+from pods.services.tab import pods_frame_context
+from pods.views.member import LOGIN_URL, _pod_for_viewer
 
 DRAFT_MAX_CHARS = 2 * 1024 * 1024 + 1
 
 
-def _artifact_pod(request, slug, pod_id):
-    """``(course, pod, is_member)`` for a member or staff, else 404."""
-    course = _enabled_course(slug)
-    pod = _pod_for_viewer(request, course, pod_id)
+def _artifact_pod(request, pod_id, slug=None, sprint_slug=None):
+    """``(pod, is_member)`` for a member or staff, else 404."""
+    pod = _pod_for_viewer(request, pod_id, slug, sprint_slug)
     if not artifact_svc.artifacts_enabled():
         raise Http404('Pod notes are not available')
     member = svc.is_member(pod, request.user)
     if not member and not request.user.is_staff:
         raise Http404('Pod not found')
-    return course, pod, member
+    return pod, member
 
 
 def _forbidden_for_staff():
@@ -44,9 +45,9 @@ def _forbidden_for_staff():
 
 
 @login_required(login_url=LOGIN_URL)
-def artifact_new(request, slug, pod_id):
+def artifact_new(request, pod_id, slug=None, sprint_slug=None):
     """GET/POST ``.../pods/<id>/notes/new`` (optional ``?meeting=<id>``)."""
-    course, pod, member = _artifact_pod(request, slug, pod_id)
+    pod, member = _artifact_pod(request, pod_id, slug, sprint_slug)
     if not member:
         return _forbidden_for_staff()
     now = timezone.now()
@@ -84,7 +85,7 @@ def artifact_new(request, slug, pod_id):
             ),
             'text': '',
         }
-    context = course_header_context(course, request.user, pod.cohort)
+    context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
         'pod': pod,
         'form': form,
@@ -107,13 +108,13 @@ def _artifact(pod, artifact_id):
 
 
 @login_required(login_url=LOGIN_URL)
-def artifact_detail(request, slug, pod_id, artifact_id):
+def artifact_detail(request, pod_id, artifact_id, slug=None, sprint_slug=None):
     """GET ``.../pods/<id>/notes/<artifact_id>`` -- read one artifact."""
-    course, pod, _member = _artifact_pod(request, slug, pod_id)
+    pod, _member = _artifact_pod(request, pod_id, slug, sprint_slug)
     artifact = _artifact(pod, artifact_id)
     zone_name = mtg.zone_for(request.user)
     numbers = meeting_state(pod).numbers
-    context = course_header_context(course, request.user, pod.cohort)
+    context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
         'pod': pod,
         'artifact': artifact,
@@ -128,9 +129,9 @@ def artifact_detail(request, slug, pod_id, artifact_id):
 
 @require_POST
 @login_required(login_url=LOGIN_URL)
-def artifact_delete(request, slug, pod_id, artifact_id):
+def artifact_delete(request, pod_id, artifact_id, slug=None, sprint_slug=None):
     """POST ``.../pods/<id>/notes/<artifact_id>/delete`` -- the author removes it."""
-    _course, pod, _member = _artifact_pod(request, slug, pod_id)
+    pod, _member = _artifact_pod(request, pod_id, slug, sprint_slug)
     artifact = _artifact(pod, artifact_id)
     try:
         artifact_svc.remove_own_artifact(artifact, request.user)

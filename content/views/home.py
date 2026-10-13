@@ -46,7 +46,7 @@ from plans.dashboard import (
 )
 from plans.models import Sprint
 from pods.services.first_meeting_nudge import dashboard_pod_nudges
-from pods.services.meeting_presentation import dashboard_pod_meetings
+from pods.services.meeting_presentation import dashboard_member_pods, dashboard_pod_meetings
 from questionnaires.onboarding import has_completed_onboarding
 
 DASHBOARD_EVENT_DATETIME_FORMAT = '%a, %b %d, %Y, %H:%M'
@@ -356,7 +356,10 @@ def _dashboard(request):
     )
     # Issue #1919: the member's scheduled pod meetings in the next 7 days
     # join the Your week list, sorted with the events by start time.
-    dashboard_pod_meeting_rows = dashboard_pod_meetings(user, dashboard_now)
+    # Issue #1921: one query for the member's cohort and sprint pods, shared
+    # by the meeting rows and the first-meeting nudge.
+    dashboard_pods = dashboard_member_pods(user)
+    dashboard_pod_meeting_rows = dashboard_pod_meetings(user, dashboard_now, pods=dashboard_pods)
     dashboard_week_rows = sorted(
         [{'kind': 'event', 'event': event, 'start': event.start_datetime} for event in dashboard_upcoming_events]
         + [{'kind': 'pod_meeting', 'pod_meeting': row, 'start': row['starts_at']} for row in dashboard_pod_meeting_rows],
@@ -364,7 +367,7 @@ def _dashboard(request):
     )
     # Issue #1928: ``Plan your first meeting`` rows follow the dated rows
     # (and come before the Book Club deadline row in the template).
-    dashboard_pod_nudge_rows = dashboard_pod_nudges(user, dashboard_now)
+    dashboard_pod_nudge_rows = dashboard_pod_nudges(user, dashboard_now, pods=dashboard_pods)
     dashboard_week_rows += [{'kind': 'pod_nudge', 'pod_nudge': row} for row in dashboard_pod_nudge_rows]
 
     # --- Starting soon card (issue #705) ---

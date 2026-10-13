@@ -1925,6 +1925,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_a_pod_with_a_confirmed_meeting_still_shows_its_next_meeting",
     })
 
+    issue_1921_owners = frozenset({
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_enrolled_member_finds_pods_on_the_sprint_page_and_starts_one",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_second_member_asks_to_join_and_the_owner_approves_from_the_sprint_page",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_pod_members_agree_a_meeting_time_on_a_sprint_pod",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_pod_members_chat_on_a_sprint_pod",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_member_who_leaves_the_sprint_is_removed_from_its_pods",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_visitor_who_is_not_in_the_sprint_cannot_see_its_pods",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_sprint_with_pods_turned_off_shows_nothing",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_member_enrolled_below_the_sprint_tier_uses_pods_but_not_slack",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_staff_turn_on_pods_for_a_sprint_and_prepare_a_pod_in_studio",
+        "playwright_tests/test_sprint_pods_1921.py::"
+        "test_cohort_pods_keep_working_unchanged",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2150,8 +2173,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2921)
-        self.assertEqual(len(inventory.owners), 2717)
+        self.assertEqual(inventory.item_count, 2931)
+        self.assertEqual(len(inventory.owners), 2727)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2188,6 +2211,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1928_owners
             | self.issue_1940_owners
             | self.issue_1938_owners
+            | self.issue_1921_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

@@ -23,7 +23,7 @@ class PodMembershipInline(admin.TabularInline):
 
 @admin.register(Pod)
 class PodAdmin(admin.ModelAdmin):
-    list_display = ('name', 'cohort', 'status', 'max_members', 'owner', 'source', 'created_at')
+    list_display = ('name', 'cohort', 'sprint', 'status', 'max_members', 'owner', 'source', 'created_at')
     list_filter = ('status', 'source')
     search_fields = ('name', 'purpose')
     raw_id_fields = ('cohort', 'sprint', 'owner', 'created_by')

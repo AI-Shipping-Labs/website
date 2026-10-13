@@ -1,4 +1,4 @@
-{% load accounts_extras member_badges %}
+{% load accounts_extras member_badges pod_urls %}
 {% comment %}
 One pod meeting row (issue #1919): title, viewer-local time with a zone
 token, status badge, then the meta lines in this order (issue #1940): the
@@ -46,13 +46,13 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
     {% endif %}
     {% if row.offer %}
     {% if row.offer.propose %}
-    <form method="post" action="{% url 'pod_meeting_cancel' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_cancel' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="then_propose" value="{{ row.offer.start_iso }}">
       <button type="submit" class="{% if row.offer.primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-offer-propose">{{ row.offer.button }}</button>
     </form>
     {% else %}
-    <form method="post" action="{% url 'pod_meeting_move' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_move' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="start" value="{{ row.offer.start_iso }}">
       <button type="submit" class="{% if row.offer.primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-offer-move">{{ row.offer.button }}</button>
@@ -60,26 +60,26 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
     {% endif %}
     {% endif %}
     {% if row.actions.going %}
-    <form method="post" action="{% url 'pod_meeting_respond' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_respond' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="response" value="going">
       <button type="submit" class="{% if row.actions.going_primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-going">{{ row.actions.going }}</button>
     </form>
     {% endif %}
     {% if row.actions.cant %}
-    <form method="post" action="{% url 'pod_meeting_respond' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_respond' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="response" value="cant_make_it">
       <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-cant-make-it">Can't make it</button>
     </form>
     {% endif %}
     {% if row.actions.change %}
-    <form method="get" action="{% url 'pod_meeting_move' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="get" action="{% pod_action_url 'pod_meeting_move' pod meeting_id=row.meeting.pk %}">
       <button type="submit" class="{% if row.actions.change_primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-change">{{ row.actions.change_label }}</button>
     </form>
     {% endif %}
     {% if row.actions.cancel == 'plain' %}
-    <form method="post" action="{% url 'pod_meeting_cancel' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_cancel' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-cancel">Cancel meeting</button>
     </form>
@@ -88,7 +88,7 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
       <summary class="{% button_classes 'secondary' size='sm' extra='cursor-pointer list-none [&::-webkit-details-marker]:hidden' %}" data-testid="pod-meeting-cancel-toggle">Cancel meeting</summary>
       <div class="mt-2 rounded-lg border border-border bg-card p-4">
         <p class="text-sm text-foreground">Cancel this meeting? Everyone in the pod gets a notification.</p>
-        <form method="post" action="{% url 'pod_meeting_cancel' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}" class="mt-3">
+        <form method="post" action="{% pod_action_url 'pod_meeting_cancel' pod meeting_id=row.meeting.pk %}" class="mt-3">
           {% csrf_token %}
           <button type="submit" class="{% button_classes 'destructive' size='sm' %}" data-testid="pod-meeting-cancel-confirm">Yes, cancel meeting</button>
         </form>
@@ -96,12 +96,12 @@ offer or the no-offer line, then the actions below the meta. The call link is sh
     </details>
     {% endif %}
     {% if row.actions.held %}
-    <form method="post" action="{% url 'pod_meeting_held' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_held' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="outcome" value="held">
       <button type="submit" class="{% if row.actions.held_primary %}{% button_classes 'primary' size='sm' %}{% else %}{% button_classes 'secondary' size='sm' %}{% endif %}" data-testid="pod-meeting-held">Mark as held</button>
     </form>
-    <form method="post" action="{% url 'pod_meeting_held' slug=course.slug pod_id=pod.pk meeting_id=row.meeting.pk %}">
+    <form method="post" action="{% pod_action_url 'pod_meeting_held' pod meeting_id=row.meeting.pk %}">
       {% csrf_token %}
       <input type="hidden" name="outcome" value="not_held">
       <button type="submit" class="{% button_classes 'secondary' size='sm' %}" data-testid="pod-meeting-not-held">Didn't happen</button>

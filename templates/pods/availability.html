@@ -22,7 +22,7 @@
 
   <form method="post" class="mt-6" data-availability-form data-testid="availability-form">
     {% csrf_token %}
-    <input type="hidden" name="cohort" value="{{ cohort.external_key }}">
+    {% if not pods_frame_sprint %}<input type="hidden" name="cohort" value="{{ cohort.external_key }}">{% endif %}
     {% if next_value %}<input type="hidden" name="next" value="{{ next_value }}">{% endif %}
 
     <div class="rounded-lg border border-border bg-card p-6">

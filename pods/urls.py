@@ -1,9 +1,14 @@
-"""Member pod URLs under course Home (issue #1918).
+"""Member pod URLs under course Home (issue #1918) and sprints (issue #1921).
 
 Included from ``website/urls.py`` ahead of ``content.urls`` so these
 specific paths win over the course unit catch-alls
 (``courses/<course>/<module>/<unit>`` and the four/five-segment homework and
-submodule routes).
+submodule routes), and ahead of ``plans.urls`` so the sprint pod paths are
+registered before the generic ``sprints/<slug:sprint_slug>`` route.
+
+Every course route has a sprint twin under ``sprints/<sprint_slug>/pods``
+named ``sprint_<name>`` (the list is ``sprint_pods``); the same views serve
+both and read ``slug`` or ``sprint_slug`` from the URL.
 """
 
 from django.urls import path
@@ -88,5 +93,35 @@ urlpatterns = [
         'courses/<slug:slug>/home/pods/<int:pod_id>/meetings/<int:meeting_id>/held',
         meeting_held,
         name='pod_meeting_held',
+    ),
+    # Issue #1921: sprint pods, the same views under the sprint.
+    path('sprints/<slug:sprint_slug>/pods', pods_list, name='sprint_pods'),
+    path('sprints/<slug:sprint_slug>/pods/new', pod_new, name='sprint_pod_new'),
+    path('sprints/<slug:sprint_slug>/pods/availability', availability_edit, name='sprint_pod_availability'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>', pod_detail, name='sprint_pod_detail'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/request', pod_request, name='sprint_pod_request'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/withdraw', pod_withdraw, name='sprint_pod_withdraw'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/leave', pod_leave, name='sprint_pod_leave'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/edit', pod_edit, name='sprint_pod_edit'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/approve', pod_request_approve, name='sprint_pod_request_approve'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/decline', pod_request_decline, name='sprint_pod_request_decline'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/slack', pod_slack, name='sprint_pod_slack'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/messages', pod_message_create, name='sprint_pod_message_create'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/call-link', pod_call_link, name='sprint_pod_call_link'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/meetings/new', meeting_new, name='sprint_pod_meeting_new'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/meetings/<int:meeting_id>/respond', meeting_respond, name='sprint_pod_meeting_respond'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/meetings/<int:meeting_id>/move', meeting_move, name='sprint_pod_meeting_move'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/meetings/<int:meeting_id>/cancel', meeting_cancel, name='sprint_pod_meeting_cancel'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/meetings/<int:meeting_id>/held', meeting_held, name='sprint_pod_meeting_held'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/notes/new', artifact_new, name='sprint_pod_artifact_new'),
+    path(
+        'sprints/<slug:sprint_slug>/pods/<int:pod_id>/notes/<int:artifact_id>',
+        artifact_detail,
+        name='sprint_pod_artifact_detail',
+    ),
+    path(
+        'sprints/<slug:sprint_slug>/pods/<int:pod_id>/notes/<int:artifact_id>/delete',
+        artifact_delete,
+        name='sprint_pod_artifact_delete',
     ),
 ]

@@ -1,12 +1,13 @@
 """Staff API for pods (issue #1918).
 
 Pairing logic stays in the operator's own tooling: this API gives it the
-cohort roster (CRM fields, availability, current pods) and lets it create
-pods, add or remove members, and approve or decline requests as an
+cohort or sprint roster (CRM fields, availability, current pods) and lets
+it create pods in a dated cohort or a sprint (issue #1921), add or remove members, and approve or decline requests as an
 override. Every write goes through ``pods.services.membership`` so the
 rules match the member pages and Studio. Staff-only, so emails are fine.
 
 - ``GET  /api/courses/<slug>/cohorts/<key>/members`` -- pairing roster
+- ``GET  /api/sprints/<slug>/members`` -- sprint pairing roster (issue #1921)
 - ``GET  /api/pods`` / ``POST /api/pods``
 - ``GET  /api/pods/<id>`` / ``PATCH /api/pods/<id>``
 - ``POST /api/pods/<id>/members`` / ``DELETE /api/pods/<id>/members/<email>``
@@ -43,6 +44,7 @@ from content.models import CohortEnrollment, Course
 from content.services.course_cohorts import get_course_cohort_by_key
 from crm.models import CRMRecord
 from payments.models import Membership, TierOverride
+from plans.models import Sprint, SprintEnrollment
 from pods.models import (
     ARTIFACT_KIND_CHOICES,
     MEETING_STATUS_CANCELLED,
@@ -65,6 +67,7 @@ from pods.services import chat as chat_svc
 from pods.services import config as pods_config
 from pods.services import meetings as mtg
 from pods.services import membership as svc
+from pods.services.activity import cohort_activity, sprint_activity
 from pods.services.availability import format_minute
 from pods.services.meeting_rules import meeting_end, meeting_state
 from pods.services.people import display_name
@@ -103,6 +106,8 @@ _POD_SUMMARY_EXAMPLE = {
     'course_slug': 'ai-buildcamp',
     'cohort_key': '4',
     'cohort_name': 'Cohort 4',
+    'sprint_slug': None,
+    'sprint_name': None,
     'name': 'Agents pod',
     'purpose': 'Ship an agent demo',
     'status': 'open',
@@ -215,6 +220,7 @@ _ROSTER_EXAMPLE = {
 }
 
 _ERR_UNKNOWN_POD = {'error': 'Pod not found', 'code': 'unknown_pod'}
+_ERR_UNKNOWN_SPRINT = {'error': 'Sprint not found', 'code': 'unknown_sprint'}
 _ERR_LIMIT = {'error': mtg.msg_limit(4), 'code': mtg.CODE_LIMIT}
 
 
@@ -236,7 +242,7 @@ def _parse_limit(request, default, maximum):
 
 
 def _pod_queryset():
-    return Pod.objects.filter(cohort__isnull=False).select_related('cohort__course', 'owner').annotate(
+    return Pod.objects.select_related('cohort__course', 'sprint', 'owner').annotate(
         member_total=Count('memberships', distinct=True),
         pending_total=Count('join_requests', filter=Q(join_requests__status=REQUEST_STATUS_PENDING), distinct=True),
         waiting_total=Count('join_requests', filter=Q(join_requests__status=REQUEST_STATUS_WAITLISTED), distinct=True),
@@ -251,13 +257,21 @@ def _unknown_pod():
     return error_response('Pod not found', 'unknown_pod', status=404)
 
 
+def _unknown_sprint():
+    return error_response('Sprint not found', 'unknown_sprint', status=404)
+
+
 def _serialize_summary(pod):
     """``pod`` must come from ``_pod_queryset`` (count annotations)."""
+    cohort, sprint = pod.cohort, pod.sprint
     return {
         'id': pod.pk,
-        'course_slug': pod.cohort.course.slug,
-        'cohort_key': pod.cohort.external_key,
-        'cohort_name': pod.cohort.name,
+        # Issue #1921: cohort fields are null for sprint pods and vice versa.
+        'course_slug': cohort.course.slug if cohort else None,
+        'cohort_key': cohort.external_key if cohort else None,
+        'cohort_name': cohort.name if cohort else None,
+        'sprint_slug': sprint.slug if sprint else None,
+        'sprint_name': sprint.name if sprint else None,
         'name': pod.name,
         'purpose': pod.purpose,
         'status': pod.status,
@@ -482,6 +496,22 @@ def cohort_roster(request, slug, key):
     if error is not None:
         return error
     enrollments = CohortEnrollment.objects.filter(cohort=cohort).select_related('user').order_by('enrolled_at', 'pk')
+    total, members = _roster_page(enrollments, cohort_activity(cohort), limit, offset)
+    return JsonResponse({
+        'course': course.slug,
+        'cohort_key': cohort.external_key,
+        'total': total,
+        'limit': limit,
+        'offset': offset,
+        'members': members,
+    })
+
+
+def _roster_page(enrollments, activity, limit, offset):
+    """``(total, members)`` for one roster page (cohort or sprint enrollments).
+
+    ``pod_ids`` / ``open_request_pod_ids`` are restricted to ``activity``.
+    """
     total = enrollments.count()
     page = list(enrollments[offset:offset + limit])
     user_ids = [e.user_id for e in page]
@@ -492,11 +522,11 @@ def cohort_roster(request, slug, key):
     }
     pod_ids, request_pod_ids = {}, {}
     for user_id, pod_id in PodMembership.objects.filter(
-        user_id__in=user_ids, pod__cohort=cohort,
+        user_id__in=user_ids, **activity.pod_filter('pod__'),
     ).values_list('user_id', 'pod_id').order_by('pod_id'):
         pod_ids.setdefault(user_id, []).append(pod_id)
     for user_id, pod_id in PodJoinRequest.objects.filter(
-        user_id__in=user_ids, pod__cohort=cohort, status__in=OPEN_REQUEST_STATUSES,
+        user_id__in=user_ids, status__in=OPEN_REQUEST_STATUSES, **activity.pod_filter('pod__'),
     ).values_list('user_id', 'pod_id').order_by('pod_id'):
         request_pod_ids.setdefault(user_id, []).append(pod_id)
 
@@ -534,9 +564,59 @@ def cohort_roster(request, slug, key):
             'pod_ids': pod_ids.get(user.pk, []),
             'open_request_pod_ids': request_pod_ids.get(user.pk, []),
         })
+    return total, members
+
+
+@token_required(structured_errors=True)
+@csrf_exempt
+@require_methods('GET', structured_errors=True)
+@openapi_spec(
+    tag=TAG,
+    summary='Sprint roster for pairing (staff-only)',
+    methods={
+        'GET': {
+            'summary': 'List a sprint roster with CRM, availability and pods (staff-only)',
+            'description': (
+                'Every user with a ``SprintEnrollment`` in the sprint (and only '
+                'them), ordered by enrollment time, in the same member shape as '
+                'the cohort roster (``GET /api/courses/<slug>/cohorts/<key>/members``). '
+                '``enrolled_at`` comes from the sprint enrollment. ``pod_ids`` are '
+                'the sprint pods the user is in; ``open_request_pod_ids`` the '
+                'sprint pods with a pending or waitlisted request.'
+            ),
+            'query': {
+                'limit': {'type': 'integer', 'minimum': 1, 'maximum': MAX_LIMIT, 'default': DEFAULT_LIMIT},
+                'offset': {'type': 'integer', 'minimum': 0, 'default': 0},
+            },
+            'responses': {
+                200: {
+                    'description': 'Roster page.',
+                    'example': {
+                        'sprint': 'may-2026', 'total': 1,
+                        'limit': DEFAULT_LIMIT, 'offset': 0, 'members': [_ROSTER_EXAMPLE],
+                    },
+                },
+                401: {'description': 'Missing or invalid staff token.',
+                      'example': {'error': 'Authentication token required', 'code': 'authentication_required'}},
+                404: {'description': 'Unknown sprint.', 'example': _ERR_UNKNOWN_SPRINT},
+                422: {'description': 'Bad limit or offset.',
+                      'example': {'error': 'limit must be between 1 and 500; offset must be 0 or more', 'code': 'validation_error'}},
+            },
+        },
+    },
+)
+def sprint_roster(request, slug):
+    """``GET /api/sprints/<slug>/members`` (issue #1921)."""
+    sprint = Sprint.objects.filter(slug=slug).first()
+    if sprint is None:
+        return _unknown_sprint()
+    limit, offset, error = _parse_limit(request, DEFAULT_LIMIT, MAX_LIMIT)
+    if error is not None:
+        return error
+    enrollments = SprintEnrollment.objects.filter(sprint=sprint).select_related('user').order_by('enrolled_at', 'pk')
+    total, members = _roster_page(enrollments, sprint_activity(sprint), limit, offset)
     return JsonResponse({
-        'course': course.slug,
-        'cohort_key': cohort.external_key,
+        'sprint': sprint.slug,
         'total': total,
         'limit': limit,
         'offset': offset,
@@ -552,25 +632,39 @@ def _create_pod(request):
         return parse_error
     if not isinstance(data, dict):
         return body_must_be_object_response()
-    for field in ('course_slug', 'cohort_key', 'name', 'purpose'):
+    sprint_slug = str(data.get('sprint_slug') or '').strip()
+    has_course = bool(str(data.get('course_slug') or '').strip() or str(data.get('cohort_key') or '').strip())
+    if sprint_slug and has_course:
+        return validation_response(
+            {'field': 'sprint_slug'}, message='Give sprint_slug or course_slug and cohort_key, not both',
+        )
+    required = ('name', 'purpose') if sprint_slug else ('course_slug', 'cohort_key', 'name', 'purpose')
+    for field in required:
         if not str(data.get(field) or '').strip():
             return validation_response({'field': field}, message=f'{field} is required')
     member_emails = data.get('member_emails') or []
     if not isinstance(member_emails, list):
         return validation_response({'field': 'member_emails', 'expected': 'array of strings'},
                                    message='member_emails must be a list')
-    course = Course.objects.filter(slug=str(data['course_slug']).strip()).first()
-    if course is None:
-        return error_response('Course not found', 'unknown_course', status=404)
-    cohort = get_course_cohort_by_key(course, data['cohort_key'])
-    if cohort is None:
-        return error_response(
-            f"Unknown cohort {data['cohort_key']!r} for course {course.slug!r}", 'unknown_cohort', status=404,
-        )
+    if sprint_slug:
+        sprint = Sprint.objects.filter(slug=sprint_slug).first()
+        if sprint is None:
+            return _unknown_sprint()
+        activity = sprint_activity(sprint)
+    else:
+        course = Course.objects.filter(slug=str(data['course_slug']).strip()).first()
+        if course is None:
+            return error_response('Course not found', 'unknown_course', status=404)
+        cohort = get_course_cohort_by_key(course, data['cohort_key'])
+        if cohort is None:
+            return error_response(
+                f"Unknown cohort {data['cohort_key']!r} for course {course.slug!r}", 'unknown_cohort', status=404,
+            )
+        activity = cohort_activity(cohort)
     fields = {key: data.get(key) for key in ('name', 'purpose', 'max_members', 'meeting_count', 'meeting_minutes')}
     try:
         pod, results, created = svc.create_staff_pod(
-            cohort=cohort,
+            activity=activity,
             data=fields,
             owner_email=data.get('owner_email') or '',
             member_emails=member_emails,
@@ -593,10 +687,17 @@ def _create_pod(request):
     methods={
         'GET': {
             'summary': 'List pods (staff-only)',
-            'description': 'Pod summaries, newest first. Filter by ``course`` slug, ``cohort`` key (needs ``course``) and ``status``.',
+            'description': (
+                'Pod summaries (cohort and sprint pods), newest first. Filter by '
+                '``course`` slug, ``cohort`` key (needs ``course``), ``sprint`` '
+                'slug and ``status``. ``sprint`` cannot be combined with '
+                '``course`` or ``cohort`` (422). Sprint pods carry ``sprint_slug`` '
+                'and ``sprint_name`` with null cohort fields; cohort pods the reverse.'
+            ),
             'query': {
                 'course': {'type': 'string'},
                 'cohort': {'type': 'string'},
+                'sprint': {'type': 'string'},
                 'status': {'type': 'string', 'enum': _STATUS_VALUES},
                 'limit': {'type': 'integer', 'minimum': 1, 'maximum': POD_LIST_MAX_LIMIT, 'default': POD_LIST_DEFAULT_LIMIT},
                 'offset': {'type': 'integer', 'minimum': 0, 'default': 0},
@@ -605,30 +706,35 @@ def _create_pod(request):
                 200: {'description': 'Pod page.',
                       'example': {'total': 1, 'limit': POD_LIST_DEFAULT_LIMIT, 'offset': 0, 'pods': [_POD_SUMMARY_EXAMPLE]}},
                 401: {'description': 'Missing or invalid staff token.'},
-                404: {'description': 'Unknown course or cohort filter.',
+                404: {'description': 'Unknown course, cohort or sprint filter.',
                       'example': {'error': 'Course not found', 'code': 'unknown_course'}},
-                422: {'description': 'Bad status, limit or offset.'},
+                422: {'description': 'Bad status, limit or offset, or ``sprint`` combined with ``course``.'},
             },
         },
         'POST': {
             'summary': 'Create a pod (staff-only)',
             'description': (
-                'Creates a pod in a dated cohort with ``source=api``. The '
-                'optional ``owner_email`` must be enrolled in the cohort and '
-                'becomes the first member. ``member_emails`` are added up to '
+                'Creates a pod in a dated cohort (``course_slug`` + '
+                '``cohort_key``) or a sprint (``sprint_slug``) with '
+                '``source=api``. Giving both ``sprint_slug`` and a course '
+                'returns 422 with ``field: sprint_slug``; giving neither returns '
+                '422 with ``field: course_slug``. The optional ``owner_email`` '
+                'must be enrolled in the cohort or sprint and becomes the '
+                'first member. ``member_emails`` are added up to '
                 'the size limit; ``results`` sorts every email into ``added``, '
                 '``not_enrolled``, ``unknown_user``, ``already_member`` and '
                 '``over_capacity``. A self-paced cohort returns 422. '
                 'Idempotent: when a non-archived pod with the same name '
-                '(case-insensitive) already exists in the cohort, it is '
+                '(case-insensitive) already exists in the cohort or sprint, it is '
                 'returned with 200 and only new emails are added; its '
                 'settings and owner are left unchanged (use PATCH).'
             ),
             'request_body': {
-                'required': ['course_slug', 'cohort_key', 'name', 'purpose'],
+                'required': ['name', 'purpose'],
                 'properties': {
-                    'course_slug': {'type': 'string'},
+                    'course_slug': {'type': 'string', 'description': 'With ``cohort_key``; omit for a sprint pod.'},
                     'cohort_key': {'type': 'string'},
+                    'sprint_slug': {'type': 'string', 'description': 'Create a sprint pod instead of a cohort pod.'},
                     'name': {'type': 'string', 'maxLength': 80},
                     'purpose': {'type': 'string', 'maxLength': 500},
                     'max_members': {'type': 'integer', 'minimum': 1, 'maximum': 12},
@@ -644,15 +750,18 @@ def _create_pod(request):
                 },
             },
             'responses': {
-                200: {'description': 'A pod with this name already exists in the cohort; new emails were added.',
+                200: {'description': 'A pod with this name already exists in the cohort or sprint; new emails were added.',
                       'example': {**_POD_DETAIL_EXAMPLE, 'results': {**_RESULTS_EXAMPLE,
                                   'added': [], 'already_member': ['anna@example.com', 'raj@example.com']}}},
                 201: {'description': 'Pod created.', 'example': {**_POD_DETAIL_EXAMPLE, 'results': _RESULTS_EXAMPLE}},
                 400: {'description': 'Invalid JSON or non-object body.'},
                 401: {'description': 'Missing or invalid staff token.'},
-                404: {'description': 'Unknown course or cohort.',
+                404: {'description': 'Unknown course, cohort or sprint.',
                       'example': {'error': "Unknown cohort '9' for course 'ai-buildcamp'", 'code': 'unknown_cohort'}},
-                422: {'description': 'Validation error, including a self-paced cohort or an owner who is not enrolled.',
+                422: {'description': (
+                    'Validation error, including a self-paced cohort, an owner who is not enrolled, '
+                    'or both ``sprint_slug`` and ``course_slug``.'
+                ),
                       'example': {'error': 'Pods need a dated cohort. A self-paced cohort cannot have pods.', 'code': 'validation_error'}},
             },
         },
@@ -664,8 +773,16 @@ def pods_collection(request):
     pods = _pod_queryset().order_by('-created_at', '-pk')
     course_slug = (request.GET.get('course') or '').strip()
     cohort_key = (request.GET.get('cohort') or '').strip()
+    sprint_slug = (request.GET.get('sprint') or '').strip()
     status = (request.GET.get('status') or '').strip()
-    if course_slug:
+    if sprint_slug:
+        if course_slug or cohort_key:
+            return validation_response({'field': 'sprint'}, message='sprint cannot be combined with course or cohort')
+        sprint = Sprint.objects.filter(slug=sprint_slug).first()
+        if sprint is None:
+            return _unknown_sprint()
+        pods = pods.filter(sprint=sprint)
+    elif course_slug:
         course = Course.objects.filter(slug=course_slug).first()
         if course is None:
             return error_response('Course not found', 'unknown_course', status=404)
@@ -825,7 +942,7 @@ def pod_detail(request, pod_id):
         'POST': {
             'summary': 'Add members by email (staff-only)',
             'description': (
-                'Idempotent. Adds enrolled cohort members up to the size limit '
+                'Idempotent. Adds enrolled cohort (or sprint) members up to the size limit '
                 'and closes their open requests on this pod as ``approved``. '
                 'Returns the same ``results`` buckets as pod create.'
             ),

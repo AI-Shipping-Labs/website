@@ -112,6 +112,17 @@
       <p class="text-xs text-muted-foreground mt-1">Default Main. Lower per-sprint for free pilots; raise to Premium for high-touch sprints.</p>
     </div>
 
+    <div class="mb-6" id="pods-field">
+      <p class="block text-sm font-medium text-foreground mb-1">Pods</p>
+      <label class="flex items-center space-x-2 cursor-pointer">
+        <input type="checkbox" name="pods_enabled" value="1" {% if form_data.pods_enabled %}checked{% endif %}
+               class="rounded border-border text-accent focus:ring-accent"
+               data-testid="sprint-pods-enabled">
+        <span class="text-sm text-foreground">Show pods to enrolled members</span>
+      </label>
+      <p class="text-xs text-muted-foreground mt-1">Enrolled members can start and join small groups under /sprints/&lt;slug&gt;/pods.</p>
+    </div>
+
   </form>
 </div>
 

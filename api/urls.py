@@ -196,6 +196,7 @@ from api.views.pods import (
     pod_request_decline,
     pod_requests,
     pods_collection,
+    sprint_roster,
 )
 from api.views.questionnaire_responses import (
     questionnaire_response_detail as questionnaire_response_by_id,
@@ -842,6 +843,12 @@ urlpatterns = [
         "sprints/<slug:slug>/enrollments/<path:email>",
         sprint_enrollment_detail,
         name="api_sprint_enrollment_detail",
+    ),
+    # ---- Sprint pods roster (issue #1921) -----------------------------
+    path(
+        "sprints/<slug:slug>/members",
+        sprint_roster,
+        name="api_sprint_roster",
     ),
     # ---- Course enrollments (issue #445) ------------------------------
     # Register the collection BEFORE the per-email detail so the

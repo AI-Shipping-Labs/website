@@ -9,7 +9,8 @@ suggested time into an agreed pod meeting (propose, confirm, `Can't make it`
 with the next best time, move, cancel, held, a weekly series and one pod call
 link), with bell notifications and a reminder before each meeting. Staff
 manage pods in Studio (`Planning -> Pods`) and through the staff API
-(`_docs/api.md`, `Pods API`).
+(`_docs/api.md`, `Pods API`). Since issue #1921 a community sprint is a second
+pod activity with the same member experience; see [Sprint pods](#sprint-pods).
 
 Every key below is set in Studio (`Operations -> Settings`, `Pods` group). An
 environment variable with the same name is an optional fallback.
@@ -17,7 +18,8 @@ environment variable with the same name is an optional fallback.
 ## PODS_COURSE_SLUGS
 
 Comma-separated course slugs whose dated-cohort members see Pods, for example
-`ai-buildcamp`.
+`ai-buildcamp`. Course-only: sprint pods are switched on per sprint with
+`Sprint.pods_enabled` (see [Sprint pods](#sprint-pods)).
 
 - Type: string.
 - Default: empty.
@@ -308,6 +310,74 @@ Largest pod note or transcript a member may save, in KB of UTF-8 text
 - Applies to pasted text and to an uploaded file alike. Over the limit the
   form says `Notes can be up to 500 KB. Trim the text or split it into two.`
   (the number follows the setting) and keeps the typed values.
+
+## Sprint pods
+
+Issue #1921 makes a community sprint a second pod activity. One helper,
+`pods/services/activity.py` (`PodActivity`), answers for either activity who
+is a participant, who may view, whether member pages are on, the member URLs,
+the display label and the noun used in copy (`cohort` or `sprint`). Cohort pod
+URLs and copy are unchanged.
+
+### Enablement
+
+- `Sprint.pods_enabled` (Studio sprint form: `Show pods to enrolled members`;
+  API: `pods_enabled` on `/api/sprints` and `/api/sprints/<slug>`). Default off.
+- It is a per-sprint data field, not an IntegrationSetting, because sprints are
+  Studio-sourced records (same reasoning as `Sprint.min_tier_level`).
+- Off: every `/sprints/<slug>/pods...` URL returns 404 for everyone, staff
+  included (staff use Studio), the sprint page has no `Pods` section, and the
+  first-meeting nudge and dashboard pod rows skip the sprint's pods.
+
+### URLs
+
+All under the sprint, named `sprint_<course route name>`:
+
+| URL | Purpose |
+|---|---|
+| `/sprints/<slug>/pods` | Pods list |
+| `/sprints/<slug>/pods/new` | Start a pod |
+| `/sprints/<slug>/pods/availability` | Availability editor (the same single profile as cohort pods) |
+| `/sprints/<slug>/pods/<id>` | Pod page |
+| `/sprints/<slug>/pods/<id>/...` | `notes/new`, `notes/<id>`, `notes/<id>/delete` (issue #1922), `request`, `withdraw`, `leave`, `edit`, `requests/<id>/approve`, `requests/<id>/decline`, `slack`, `messages`, `call-link`, `meetings/new`, `meetings/<id>/respond`, `meetings/<id>/move`, `meetings/<id>/cancel`, `meetings/<id>/held` |
+
+Sprint pod pages show a sprint header (`Sprint` eyebrow, the sprint name
+linking to `/sprints/<slug>`) instead of the course tab strip.
+
+### Access
+
+- Anonymous: login redirect with `next`.
+- Draft or cancelled sprint: 404 for non-staff.
+- Logged in without a `SprintEnrollment`: 404.
+- Enrolled member: full access. No extra tier check; staff can enroll a member
+  below `min_tier_level`. The Slack hand-off keeps its Main-or-above rule.
+- Staff not enrolled: operator view (read, no `Start a pod`, no request form).
+- A pod id from another sprint or from a cohort: 404.
+- Ended sprints keep their pods usable.
+
+### Rules that differ only by activity
+
+- `PODS_MAX_OPEN_REQUESTS_PER_MEMBER` and `PODS_MAX_CREATED_PER_MEMBER` count
+  per sprint, and the messages say `in this sprint`. Every other `PODS_*`
+  default and limit applies unchanged.
+- Unenrollment: deleting a `SprintEnrollment` (`sprint_leave` or Studio
+  unenroll; the API has no enrollment delete) removes the user from that
+  sprint's pods with the normal leave rules and cancels their open requests
+  there. Cohort pods and other sprints' pods are untouched.
+- Bell notifications, dashboard `Your week` rows and the first-meeting nudge
+  link to `/sprints/<slug>/pods/<id>`.
+- The daily staff Slack alert names a sprint pod `Pod name (Sprint name)`.
+- Accountability partners are separate: pods never read, create or replace
+  partner pairs.
+
+### Studio and API
+
+- `/studio/pods/` lists cohort and sprint pods; `?sprint=<id>` filters.
+- `/studio/pods/new?sprint=<id>` preselects the sprint in the `Activity`
+  select; owner and member emails must be enrolled in the sprint.
+- Studio sprint detail has a `Pods` card with the pod count and `Create pod`.
+- `GET /api/sprints/<slug>/members`, `POST /api/pods` with `sprint_slug`,
+  `GET /api/pods?sprint=<slug>`; see `_docs/api.md`.
 
 ## Pod meetings
 

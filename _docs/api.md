@@ -484,7 +484,7 @@ one row returns `409 content_id_ambiguous` with a `matches` list of `type`,
 ## Pods API
 
 Staff-token endpoints for pods (issue #1918): small groups inside a dated
-course cohort. Pairing logic stays in your own tooling; the site never pairs
+course cohort or, since issue #1921, a community sprint. Pairing logic stays in your own tooling; the site never pairs
 people automatically. Every write follows the same rules as the member pages
 and Studio: capacity, the waiting list (a freed seat moves the oldest
 waitlisted request back to `pending`, nobody is auto-approved), and the leave
@@ -494,11 +494,12 @@ non-staff token returns `401`.
 | Method | Path | Notes |
 |--------|------|-------|
 | GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
-| GET | `/api/pods` | Pod summaries; filters `course`, `cohort` (needs `course`), `status`; `limit`/`offset` |
-| POST | `/api/pods` | Create (`source=api`), `201`. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
-| GET | `/api/pods/<id>` | Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `artifact_count` (notes and transcripts, issue #1922), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
+| GET | `/api/sprints/<slug>/members` | Sprint pairing roster (issue #1921): every user with a `SprintEnrollment`, in the same member shape as the cohort roster; `enrolled_at` comes from the sprint enrollment and `pod_ids` / `open_request_pod_ids` are limited to this sprint's pods. Response carries `sprint` (slug) instead of `course` / `cohort_key`. Same pagination. `404 unknown_sprint` |
+| GET | `/api/pods` | Pod summaries (cohort and sprint pods); filters `course`, `cohort` (needs `course`), `sprint` (slug), `status`; `limit`/`offset`. `sprint` with `course` or `cohort`: `422 validation_error`; unknown sprint: `404 unknown_sprint` |
+| POST | `/api/pods` | Create (`source=api`), `201`, in a dated cohort (`course_slug` + `cohort_key`) or a sprint (`sprint_slug`). Both: `422 validation_error` with `field: sprint_slug`; neither: `422` with `field: course_slug`; unknown sprint: `404 unknown_sprint`. The owner and member emails must be enrolled in the cohort or sprint. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort or sprint is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
+| GET | `/api/pods/<id>` | Every pod payload (list and detail) carries `course_slug`, `cohort_key`, `cohort_name`, `sprint_slug` and `sprint_name`; the cohort fields are `null` for sprint pods and the sprint fields `null` for cohort pods (issue #1921). Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `artifact_count` (notes and transcripts, issue #1922), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
 | PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count` (`422` below the meetings already planned or held), `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url`, `meeting_url` (the pod call link: https only, max 500, empty clears) |
-| POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets; closes added users' open requests as `approved` |
+| POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets (eligibility is enrollment in the pod's cohort or sprint); closes added users' open requests as `approved` |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
 | GET | `/api/pods/<id>/requests` | Every request, optional `status` filter. Each request has `status`, `decided_at`, `decided_by`, and `stale_alerted_at` (when the daily staff Slack alert first reported it as stale, else `null`) |
 | POST | `/api/pods/<id>/requests/<request_id>/approve` | Staff override; `409 pod_full`, `409 request_not_open` |
@@ -573,6 +574,10 @@ curl -sL -H "Authorization: Token $API_TOKEN" \
 curl -sL -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/pods/7/artifacts/5"
 ```
+
+Sprint pods are switched on per sprint, not by a setting: `GET`, `POST` and
+`PATCH` on `/api/sprints` and `/api/sprints/<slug>` read and write the boolean
+`pods_enabled` (default `false`; a non-boolean returns `400 invalid_type`).
 
 Settings live in the `Pods` IntegrationSetting group; see
 [`_docs/integrations/pods.md`](integrations/pods.md).

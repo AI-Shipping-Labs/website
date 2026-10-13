@@ -1,0 +1,28 @@
+{% load layout_components member_empty_state %}
+{% comment %}
+Sprint page Pods section (issue #1921): the viewer's own pods in this sprint,
+each with its size and next scheduled meeting, plus the pending-request link
+on pods the viewer owns. Needs ``pods_section`` from
+``pods.services.sprint_section.sprint_pods_section``. Never shows emails.
+{% endcomment %}
+      <section class="mb-6 rounded-lg border border-border bg-card p-6" aria-labelledby="sprint-pods-heading" data-testid="sprint-pods">
+        {% section_header "Pods" heading_id="sprint-pods-heading" subtitle=pods_section.subtitle see_all_url=pods_section.browse_url see_all_label="Browse pods" see_all_testid="sprint-pods-browse" %}
+        {% if pods_section.rows %}
+        <ul class="mt-4 divide-y divide-border border-y border-border" data-testid="sprint-pods-rows">
+          {% for row in pods_section.rows %}
+          <li class="py-3" data-testid="sprint-pod-row" data-pod-id="{{ row.pod.pk }}">
+            <h3 class="break-words text-base font-semibold leading-snug text-foreground"><a href="{{ row.url }}" class="hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-pod-name">{{ row.pod.name }}</a></h3>
+            <p class="mt-1 text-xs text-muted-foreground" data-testid="sprint-pod-meta">{{ row.members_label }}</p>
+            {% if row.meeting_line %}<p class="mt-1 text-xs text-foreground" data-testid="sprint-pod-meeting">{{ row.meeting_line }}</p>{% endif %}
+            {% if row.waiting_label %}
+            <a href="{{ row.waiting_url }}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-pod-requests">{{ row.waiting_label }} <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="mt-4">
+          {% member_empty_state title="You're not in a pod yet" body='Start one or ask to join a pod in this sprint.' icon='users' kind='fresh' testid='sprint-pods-empty' %}
+        </div>
+        {% endif %}
+      </section>

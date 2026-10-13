@@ -1,4 +1,5 @@
-"""The course Home ``Pods`` tab and the shared course header context."""
+"""The course Home ``Pods`` tab, the shared course header context, and the
+pods page frame for cohort and sprint pods."""
 
 from urllib.parse import urlencode
 
@@ -38,4 +39,36 @@ def course_header_context(course, user, cohort):
         ).order_by('start_date')
     context.update(pods_tab_context(course, user, cohort))
     context['show_announcements_tab'] = show_announcements_tab(user, course)
+    return context
+
+
+def pods_frame_context(activity, user):
+    """The page frame for a pods page (issue #1921).
+
+    Cohort pods keep the course Home header and tab strip. Sprint pods get a
+    sprint header (``Sprint`` eyebrow, the sprint name linking back to the
+    sprint page) and no course tabs. Both carry ``pod_activity`` so the
+    templates read URLs and copy from one place.
+    """
+    if activity.is_sprint:
+        context = {
+            'sprint': activity.sprint,
+            'section': 'pods',
+            'pods_frame_sprint': True,
+            'pods_frame_title': activity.sprint.name,
+            'pods_frame_studio_obj': activity.sprint,
+            'sprint_url': activity.home_url(),
+        }
+    else:
+        cohort = activity.cohort
+        context = course_header_context(cohort.course, user, cohort)
+        context.update({
+            'pods_frame_sprint': False,
+            'pods_frame_title': cohort.course.title,
+            'pods_frame_studio_obj': cohort.course,
+        })
+    context.update({
+        'pod_activity': activity,
+        'pods_copy': activity.copy,
+    })
     return context

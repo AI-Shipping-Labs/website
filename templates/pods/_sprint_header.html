@@ -1,0 +1,10 @@
+{% comment %}
+Sprint pods page header (issue #1921): the frame sprint pod pages use instead
+of the course Home header and tab strip. The eyebrow names the activity and
+the sprint name links back to the sprint page. Needs ``sprint`` and
+``sprint_url`` from ``pods.services.tab.pods_frame_context``.
+{% endcomment %}
+    <header class="mb-4 sm:mb-6" data-testid="sprint-pods-header">
+      <p class="text-sm font-medium uppercase tracking-widest text-accent">Sprint</p>
+      <h1 class="mt-1 break-words text-xl font-semibold tracking-tight text-foreground sm:text-3xl"><a href="{{ sprint_url }}" class="hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="sprint-pods-sprint-link">{{ sprint.name }}</a></h1>
+    </header>

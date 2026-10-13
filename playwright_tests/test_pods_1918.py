@@ -419,7 +419,7 @@ def test_admin_creates_a_pod_in_studio_for_paired_students(django_server, browse
     context, page = _page(browser, 'admin@test.com')
     page.goto(f'{django_server}/studio/pods/', wait_until='domcontentloaded')
     page.get_by_test_id('pods-new').click()
-    page.get_by_label('Cohort').select_option(label='Pods Buildcamp - Cohort 4')
+    page.get_by_label('Activity').select_option(label='Pods Buildcamp - Cohort 4')
     page.get_by_label('Name').fill('Agents pod')
     page.get_by_label('Purpose').fill('Ship an agent demo')
     page.get_by_label('Owner email').fill('anna@test.com')

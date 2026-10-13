@@ -157,7 +157,7 @@ def _proposed_by_pod(now, pod_ids=None, *, include_archived=False):
     )
     if not include_archived:
         meetings = meetings.exclude(pod__status=POD_STATUS_ARCHIVED)
-    meetings = meetings.select_related('pod__cohort__course', 'proposed_by', 'moved_by').order_by('starts_at', 'pk')
+    meetings = meetings.select_related('pod__cohort__course', 'pod__sprint', 'proposed_by', 'moved_by').order_by('starts_at', 'pk')
     grouped = defaultdict(list)
     for meeting in meetings:
         grouped[meeting.pod_id].append(meeting)

@@ -1,5 +1,5 @@
 {% extends "pods/_layout.html" %}
-{% load accounts_extras layout_components %}
+{% load accounts_extras layout_components pod_urls %}
 
 {% block pods_title %}Add notes{% endblock %}
 
@@ -12,7 +12,7 @@ The privacy line is always shown above the submit button.
 {% endcomment %}
 <section class="max-w-2xl" aria-labelledby="pod-artifact-form-heading" data-testid="pod-artifact-form-page">
   {% section_header "Add notes" heading_id="pod-artifact-form-heading" size="lg" subtitle=pod.name %}
-  <form method="post" enctype="multipart/form-data" action="{% url 'pod_artifact_new' slug=course.slug pod_id=pod.pk %}" class="mt-6" data-testid="pod-artifact-form" novalidate>
+  <form method="post" enctype="multipart/form-data" action="{% pod_action_url 'pod_artifact_new' pod %}" class="mt-6" data-testid="pod-artifact-form" novalidate>
     {% csrf_token %}
     <div>
       <label for="pod-artifact-meeting" class="block text-sm font-medium text-foreground">Meeting</label>

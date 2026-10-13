@@ -1,7 +1,7 @@
 """Member pod meeting pages and actions (issue #1919).
 
-Same access rules as the pod page: pods switched off for the course, users
-outside the cohort and non-members get 404; anonymous users go to login.
+Same access rules as the pod page: pods switched off for the course (or
+sprint), users outside the cohort (or sprint) and non-members get 404; anonymous users go to login.
 Staff may move, cancel and record meetings and set the call link as an
 operator; proposing and answering are for pod members. A meeting id from
 another pod is a 404. Writes are session POSTs that redirect back with a
@@ -25,6 +25,7 @@ from pods.models import (
 )
 from pods.services import meetings as mtg
 from pods.services import membership as svc
+from pods.services.activity import activity_for_pod
 from pods.services.meeting_presentation import (
     msg_rule,
     open_proposal_unconfirmable,
@@ -39,8 +40,8 @@ from pods.services.suggestions import (
     required_attendance,
     suggest_slots,
 )
-from pods.services.tab import course_header_context
-from pods.views.member import LOGIN_URL, _enabled_course, _pod_for_viewer
+from pods.services.tab import pods_frame_context
+from pods.views.member import LOGIN_URL, _pod_for_viewer
 
 MSG_PROPOSED = 'Time proposed. It is confirmed once {needed} of you can make it.'
 MSG_CONFIRMED = 'Meeting confirmed.'
@@ -56,14 +57,13 @@ MSG_LINK_REMOVED = 'Call link removed.'
 CALL_LINK_ERROR_KEY = 'pod_call_link_error_{pod_id}'
 
 
-def _meeting_pod(request, slug, pod_id, *, allow_staff):
+def _meeting_pod(request, pod_id, slug=None, sprint_slug=None, *, allow_staff):
     """The pod for a member (or, when ``allow_staff``, staff), else 404."""
-    course = _enabled_course(slug)
-    pod = _pod_for_viewer(request, course, pod_id)
+    pod = _pod_for_viewer(request, pod_id, slug, sprint_slug)
     member = svc.is_member(pod, request.user)
     if not member and not (allow_staff and request.user.is_staff):
         raise Http404('Pod not found')
-    return course, pod
+    return pod
 
 
 def _meeting(pod, meeting_id):
@@ -96,8 +96,8 @@ def _start_from_post(request, zone_name):
     return mtg.parse_local(request.POST.get('date'), request.POST.get('time'), zone_name)
 
 
-def _form_base(request, course, pod, zone_name):
-    context = course_header_context(course, request.user, pod.cohort)
+def _form_base(request, pod, zone_name):
+    context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
         'pod': pod,
         'pod_url': svc.pod_url(pod),
@@ -134,9 +134,9 @@ def _slot_context(pod, start, members, zone_name):
 
 
 @login_required(login_url=LOGIN_URL)
-def meeting_new(request, slug, pod_id):
+def meeting_new(request, pod_id, slug=None, sprint_slug=None):
     """GET/POST ``.../pods/<id>/meetings/new`` -- confirm a proposal."""
-    course, pod = _meeting_pod(request, slug, pod_id, allow_staff=False)
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=False)
     zone_name = mtg.zone_for(request.user)
     members = _members(pod)
     state = meeting_state(pod)
@@ -149,7 +149,7 @@ def meeting_new(request, slug, pod_id):
         if not can_propose:
             messages.error(request, blocked or mtg.MSG_NEEDS_TWO)
             return _back(pod)
-    context = _form_base(request, course, pod, zone_name)
+    context = _form_base(request, pod, zone_name)
     needed = required_attendance(len(members)) or 2
     data = request.POST if request.method == 'POST' else request.GET
     raw_start = data.get('start') or ''
@@ -200,13 +200,13 @@ def _later_series_meetings(meeting, state):
 
 
 @login_required(login_url=LOGIN_URL)
-def meeting_move(request, slug, pod_id, meeting_id):
+def meeting_move(request, pod_id, meeting_id, slug=None, sprint_slug=None):
     """GET/POST ``.../meetings/<id>/move`` -- the Change time form.
 
     A POST with only ``start`` (the one-tap ``Move to`` offer) moves this
     meeting alone and returns to the pod page.
     """
-    course, pod = _meeting_pod(request, slug, pod_id, allow_staff=True)
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=True)
     meeting = _meeting(pod, meeting_id)
     zone_name = mtg.zone_for(request.user)
     one_tap = request.method == 'POST' and 'choice' not in request.POST and 'date' not in request.POST
@@ -224,7 +224,7 @@ def meeting_move(request, slug, pod_id, meeting_id):
         messages.error(request, message)
         return _back(pod)
     members = _members(pod)
-    context = _form_base(request, course, pod, zone_name)
+    context = _form_base(request, pod, zone_name)
     show_move_later = bool(_later_series_meetings(meeting, state))
     move_later = show_move_later and bool(request.POST.get('move_later'))
     choice = request.POST.get('choice', '') if request.method == 'POST' else ''
@@ -271,8 +271,8 @@ def meeting_move(request, slug, pod_id, meeting_id):
 
 @require_POST
 @login_required(login_url=LOGIN_URL)
-def meeting_respond(request, slug, pod_id, meeting_id):
-    _course, pod = _meeting_pod(request, slug, pod_id, allow_staff=False)
+def meeting_respond(request, pod_id, meeting_id, slug=None, sprint_slug=None):
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=False)
     meeting = _meeting(pod, meeting_id)
     response = request.POST.get('response', '')
     try:
@@ -288,10 +288,10 @@ def meeting_respond(request, slug, pod_id, meeting_id):
 
 @require_POST
 @login_required(login_url=LOGIN_URL)
-def meeting_cancel(request, slug, pod_id, meeting_id):
+def meeting_cancel(request, pod_id, meeting_id, slug=None, sprint_slug=None):
     """Cancel; with ``then_propose`` (the proposal's next best time) open the
     confirm page for that time right after."""
-    _course, pod = _meeting_pod(request, slug, pod_id, allow_staff=True)
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=True)
     meeting = _meeting(pod, meeting_id)
     then_propose = (request.POST.get('then_propose') or '').strip()
     try:
@@ -310,8 +310,8 @@ def meeting_cancel(request, slug, pod_id, meeting_id):
 
 @require_POST
 @login_required(login_url=LOGIN_URL)
-def meeting_held(request, slug, pod_id, meeting_id):
-    _course, pod = _meeting_pod(request, slug, pod_id, allow_staff=True)
+def meeting_held(request, pod_id, meeting_id, slug=None, sprint_slug=None):
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=True)
     meeting = _meeting(pod, meeting_id)
     outcome = request.POST.get('outcome', '')
     try:
@@ -324,9 +324,9 @@ def meeting_held(request, slug, pod_id, meeting_id):
 
 @require_POST
 @login_required(login_url=LOGIN_URL)
-def pod_call_link(request, slug, pod_id):
+def pod_call_link(request, pod_id, slug=None, sprint_slug=None):
     """Set or clear the pod call link (members and staff)."""
-    _course, pod = _meeting_pod(request, slug, pod_id, allow_staff=True)
+    pod = _meeting_pod(request, pod_id, slug, sprint_slug, allow_staff=True)
     try:
         value = mtg.set_call_link(pod, request.user, request.POST.get('meeting_url', ''))
     except svc.PodError as exc:

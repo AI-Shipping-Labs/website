@@ -8,7 +8,6 @@ named through ``people.display_name``.
 from dataclasses import dataclass
 from types import SimpleNamespace
 
-from django.urls import reverse
 from django.utils import timezone
 
 from accounts.services.timezones import format_user_datetime
@@ -24,6 +23,7 @@ from pods.models import (
 )
 from pods.services import artifacts as artifact_svc
 from pods.services import config as pods_config
+from pods.services.activity import activity_for_pod, as_activity, cohort_activity
 from pods.services.availability import freshness_line, summary_rows
 from pods.services.meeting_presentation import (
     meetings_section,
@@ -39,14 +39,12 @@ from pods.services.membership import (
     REREQUEST_RETRY,
     can_manage,
     pod_url,
-    pods_tab_url,
     rerequest_state,
     user_date_label,
 )
 from pods.services.people import (
     display_name,
     humanize_age,
-    is_cohort_participant,
     is_slack_eligible,
     offset_range_label,
     timezone_label,
@@ -93,8 +91,8 @@ def meta_line(pod, count):
 
 
 def pods_url(course, cohort):
-    url = reverse('course_pods', kwargs={'slug': course.slug})
-    return f'{url}?cohort={cohort.external_key}' if cohort.external_key else url
+    """The course Pods tab for ``cohort`` (kept for cohort callers)."""
+    return cohort_activity(cohort).list_url()
 
 
 def viewer_state(pod, viewer, *, count, is_member, open_request, last_request, can_request):
@@ -145,13 +143,17 @@ def fit_line(hours):
     return f'Overlaps with you {hours} h a week'
 
 
-def build_pod_rows(cohort, viewer, *, now=None):
-    """Rows for the Pods tab, ordered: yours, open by fit, full, closed."""
+def build_pod_rows(activity, viewer, *, now=None):
+    """Rows for the Pods tab, ordered: yours, open by fit, full, closed.
+
+    ``activity`` is a ``Cohort``, a ``Sprint`` or a ``PodActivity``.
+    """
     now = now or timezone.now()
+    activity = as_activity(activity)
     pods = list(
-        Pod.objects.filter(cohort=cohort)
+        Pod.objects.filter(**activity.pod_filter())
         .exclude(status=POD_STATUS_ARCHIVED)
-        .select_related('owner', 'cohort__course')
+        .select_related('owner', 'cohort__course', 'sprint')
         .prefetch_related('memberships__user')
         .order_by('-created_at', '-pk')
     )
@@ -162,7 +164,7 @@ def build_pod_rows(cohort, viewer, *, now=None):
     availability = load_member_availability(users.values())
     viewer_availability = availability.get(viewer.pk)
     open_requests, last_requests = _requests_by_pod(pods, viewer)
-    can_request = is_cohort_participant(viewer, cohort)
+    can_request = activity.is_participant(viewer)
     own_pods = [pod for pod in pods if any(m.user_id == viewer.pk for m in pod.memberships.all())]
     meeting_lines = next_meeting_lines(own_pods, _viewer_zone(viewer_availability, viewer), now)
     rows = []
@@ -208,11 +210,15 @@ def build_pod_rows(cohort, viewer, *, now=None):
 
 
 def pending_count_for_owner(cohort, user):
-    """Pending requests on the pods ``user`` owns in ``cohort`` (tab badge)."""
+    """Pending requests on the pods ``user`` owns in ``cohort`` (tab badge).
+
+    ``cohort`` may also be a ``Sprint`` or a ``PodActivity`` (issue #1921).
+    """
     if not getattr(user, 'is_authenticated', False) or cohort is None:
         return 0
+    activity = as_activity(cohort)
     return PodJoinRequest.objects.filter(
-        pod__cohort=cohort, pod__owner=user, status=REQUEST_STATUS_PENDING,
+        pod__owner=user, status=REQUEST_STATUS_PENDING, **activity.pod_filter('pod__'),
     ).exclude(pod__status=POD_STATUS_ARCHIVED).count()
 
 
@@ -367,7 +373,8 @@ def build_pod_page(pod, viewer, *, now=None):
     viewer_availability = availability.get(viewer.pk)
     viewer_zone = _viewer_zone(viewer_availability, viewer)
     open_requests, last_requests = _requests_by_pod([pod], viewer)
-    can_request = is_cohort_participant(viewer, pod.cohort)
+    activity = activity_for_pod(pod)
+    can_request = activity.is_participant(viewer)
     state = viewer_state(
         pod, viewer, count=count, is_member=is_member,
         open_request=open_requests.get(pod.pk), last_request=last_requests.get(pod.pk),
@@ -382,7 +389,7 @@ def build_pod_page(pod, viewer, *, now=None):
             # A later withdrawn request: no "last request was not accepted".
             notice = None
         if notice and notice.get('link_label'):
-            notice['link_url'] = pods_tab_url(pod.cohort)
+            notice['link_url'] = activity.list_url()
     show_private = is_member or is_staff
     viewer_slack_ok = is_slack_eligible(viewer)
 

@@ -10,7 +10,7 @@ from datetime import timedelta
 from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
-from django.urls import reverse
+from django.db.models import Q
 
 from pods.models import (
     MEETING_RESPONSE_CANT,
@@ -27,6 +27,7 @@ from pods.models import (
 )
 from pods.services import artifacts as artifact_svc
 from pods.services import config as pods_config
+from pods.services.activity import HIDDEN_SPRINT_STATUSES, activity_for_pod
 from pods.services.meeting_rules import (
     meeting_end,
     meeting_state,
@@ -115,7 +116,18 @@ def relative_day(value, zone_name, now):
 
 
 def meetings_url(pod, name, **kwargs):
-    return reverse(name, kwargs={'slug': pod.cohort.course.slug, 'pod_id': pod.pk, **kwargs})
+    """A per-pod meeting route under the pod's course or sprint (issue #1921)."""
+    return activity_for_pod(pod).action_url(pod, name, **kwargs)
+
+
+def member_pages_on_filter(slugs, prefix=''):
+    """``Q`` selecting pods whose member pages are on: a course in
+    ``PODS_COURSE_SLUGS`` or a visible sprint with ``pods_enabled``."""
+    return (
+        Q(**{f'{prefix}cohort__course__slug__in': slugs})
+        | (Q(**{f'{prefix}sprint__pods_enabled': True})
+           & ~Q(**{f'{prefix}sprint__status__in': HIDDEN_SPRINT_STATUSES}))
+    )
 
 
 def propose_url(pod, start=None, replaces=None):
@@ -619,26 +631,37 @@ def next_meeting_lines(pods, viewer_zone, now):
     return lines
 
 
-def dashboard_pod_meetings(user, now):
+def dashboard_member_pods(user):
+    """The user's non-archived pods whose member pages are on (one query).
+
+    The dashboard loads this once and passes it to ``dashboard_pod_meetings``
+    and ``dashboard_pod_nudges`` (issue #1921), so sprint pods add no query.
+    """
+    if not getattr(user, 'is_authenticated', False):
+        return []
+    slugs = pods_config.enabled_course_slugs()
+    return list(
+        Pod.objects.filter(member_pages_on_filter(slugs), memberships__user=user)
+        .exclude(status=POD_STATUS_ARCHIVED)
+        .select_related('cohort__course', 'sprint')
+        .distinct()
+    )
+
+
+def dashboard_pod_meetings(user, now, pods=None):
     """Pod meeting rows for ``user``'s ``Your week`` list (next 7 days).
 
-    Only pods the member belongs to, in courses with pods switched on, not
-    archived. Scheduled meetings the member said they can't make are left
+    Only pods the member belongs to, in courses (or sprints) with pods
+    switched on, not archived. Scheduled meetings the member said they can't make are left
     out. Live proposals (the head meeting of a weekly one) the member has
     not answered yet are listed as ``{pod} - Proposed time`` with the
     ``Needs your answer`` badge (issue #1934); once they answer, the row goes away.
     A proposal that can no longer be confirmed is left out (issue #1937):
     no answer can confirm it.
     """
-    slugs = pods_config.enabled_course_slugs()
-    if not slugs or not getattr(user, 'is_authenticated', False):
+    if not getattr(user, 'is_authenticated', False):
         return []
-    pods = list(
-        Pod.objects.filter(memberships__user=user, cohort__course__slug__in=slugs)
-        .exclude(status=POD_STATUS_ARCHIVED)
-        .select_related('cohort__course')
-        .distinct()
-    )
+    pods = dashboard_member_pods(user) if pods is None else pods
     if not pods:
         return []
     meetings = list(PodMeeting.objects.filter(pod__in=pods).order_by('starts_at', 'pk'))

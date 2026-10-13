@@ -1,5 +1,5 @@
-{% load accounts_extras %}
-<form method="post" action="{% url 'pod_slack' slug=course.slug pod_id=pod.pk %}" class="mt-4" data-testid="pod-slack-form">
+{% load accounts_extras pod_urls %}
+<form method="post" action="{% pod_action_url 'pod_slack' pod %}" class="mt-4" data-testid="pod-slack-form">
   {% csrf_token %}
   <label for="pod-slack-url" class="block text-sm font-medium text-foreground">Slack channel link</label>
   {% if slack_error %}<p id="pod-slack-error" class="mt-1 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-700 dark:text-red-400" role="alert" data-testid="pod-slack-error">{{ slack_error }}</p>{% endif %}

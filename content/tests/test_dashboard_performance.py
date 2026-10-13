@@ -378,7 +378,7 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         - Template-level queries (poll vote/option counts, etc.)
 
         The home-feed, Book Club, and cumulative activation additions bring
-        the steady-state count to 30. The cap remains exact (assertLess(31))
+        the steady-state count to 30. The cap remains exact
         so any additional query still fails. Before #181 fix, N+1 on
         courses alone could cause 5+ extra queries per in-progress course;
         #346 added a single batched CourseAccess query to eliminate a
@@ -393,6 +393,12 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         #1163 keeps the downloads navigation flag off authenticated
         dashboard renders so the header does not spend a query deciding
         whether to show the Downloads link.
+
+        #1921 (sprint pods) adds one query: the member's pods with member
+        pages on, shared by the pod meeting rows and the first-meeting
+        nudge. It used to be skipped only when ``PODS_COURSE_SLUGS`` was
+        empty; sprints switch pods on per record, so it now always runs,
+        bringing the steady state to 31 and the exact cap to 32.
         """
         self.client.login(email='totalq@example.com', password='testpass')
 
@@ -407,8 +413,8 @@ class DashboardTotalQueryCountTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'content/dashboard.html')
         self.assertLess(
-            len(ctx), 31,
-            f"Dashboard used {len(ctx)} queries (limit: 31). "
+            len(ctx), 32,
+            f"Dashboard used {len(ctx)} queries (limit: 32). "
             f"Possible N+1 regression.",
         )
         download_queries = [

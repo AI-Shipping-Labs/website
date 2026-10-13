@@ -8,10 +8,9 @@ only: no email, Slack message or bell notification.
 
 from datetime import timedelta
 
-from django.db.models import Prefetch
-
-from pods.models import POD_STATUS_ARCHIVED, Pod, PodMeeting, PodMembership
+from pods.models import PodMeeting, PodMembership
 from pods.services import config as pods_config
+from pods.services.meeting_presentation import dashboard_member_pods
 from pods.services.meeting_rules import meeting_state
 from pods.services.membership import pod_url
 
@@ -22,34 +21,33 @@ def nudge_title(pod):
     return f'Plan your first meeting with {pod.name}'
 
 
-def dashboard_pod_nudges(user, now):
+def dashboard_pod_nudges(user, now, pods=None):
     """``Plan your first meeting`` rows for ``user``'s eligible pods.
 
     Eligible: the user is a current member; the pod is not archived and its
-    course has pods switched on; it has 2+ members and the second earliest
+    course has pods switched on (``PODS_COURSE_SLUGS``) or its sprint has
+    ``pods_enabled`` (issue #1921); it has 2+ members and the second earliest
     member joined at least ``PODS_FIRST_MEETING_NUDGE_DAYS`` days ago; it has
     no Slack channel link; and it has no live meeting (cancelled meetings
     and expired proposals do not count). Rows are ordered by that second
-    join, oldest first. Three queries however many pods the user is in.
+    join, oldest first. Three queries however many pods the user is in;
+    ``pods`` (from ``dashboard_member_pods``) saves the first one.
     """
-    slugs = pods_config.enabled_course_slugs()
-    if not slugs or not getattr(user, 'is_authenticated', False):
+    if not getattr(user, 'is_authenticated', False):
+        return []
+    pods = dashboard_member_pods(user) if pods is None else pods
+    pods = [pod for pod in pods if not pod.slack_channel_url]
+    if not pods:
         return []
     cutoff = now - timedelta(days=pods_config.first_meeting_nudge_days())
-    pods = list(
-        Pod.objects.filter(memberships__user=user, cohort__course__slug__in=slugs, slack_channel_url='')
-        .exclude(status=POD_STATUS_ARCHIVED)
-        .select_related('cohort__course')
-        .prefetch_related(Prefetch(
-            'memberships',
-            queryset=PodMembership.objects.only('pk', 'pod_id', 'joined_at').order_by('joined_at', 'pk'),
-            to_attr='nudge_memberships',
-        ))
-        .distinct()
-    )
+    joined = {}
+    for membership in PodMembership.objects.filter(pod__in=pods).only('pk', 'pod_id', 'joined_at').order_by(
+        'joined_at', 'pk',
+    ):
+        joined.setdefault(membership.pod_id, []).append(membership)
     candidates = []
     for pod in pods:
-        memberships = pod.nudge_memberships
+        memberships = joined.get(pod.pk, [])
         if len(memberships) < 2:
             continue
         second_joined = memberships[1].joined_at

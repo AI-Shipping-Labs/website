@@ -14875,7 +14875,7 @@
     },
     "/api/pods": {
       "get": {
-        "description": "Pod summaries, newest first. Filter by ``course`` slug, ``cohort`` key (needs ``course``) and ``status``.",
+        "description": "Pod summaries (cohort and sprint pods), newest first. Filter by ``course`` slug, ``cohort`` key (needs ``course``), ``sprint`` slug and ``status``. ``sprint`` cannot be combined with ``course`` or ``cohort`` (422). Sprint pods carry ``sprint_slug`` and ``sprint_name`` with null cohort fields; cohort pods the reverse.",
         "parameters": [
           {
             "in": "query",
@@ -14888,6 +14888,14 @@
           {
             "in": "query",
             "name": "cohort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sprint",
             "required": false,
             "schema": {
               "type": "string"
@@ -14952,6 +14960,8 @@
                       "purpose": "Ship an agent demo",
                       "slack_channel_url": "",
                       "source": "api",
+                      "sprint_name": null,
+                      "sprint_slug": null,
                       "status": "open",
                       "waitlisted_count": 0
                     }
@@ -14974,10 +14984,10 @@
                 }
               }
             },
-            "description": "Unknown course or cohort filter."
+            "description": "Unknown course, cohort or sprint filter."
           },
           "422": {
-            "description": "Bad status, limit or offset."
+            "description": "Bad status, limit or offset, or ``sprint`` combined with ``course``."
           }
         },
         "summary": "List pods (staff-only)",
@@ -14986,7 +14996,7 @@
         ]
       },
       "post": {
-        "description": "Creates a pod in a dated cohort with ``source=api``. The optional ``owner_email`` must be enrolled in the cohort and becomes the first member. ``member_emails`` are added up to the size limit; ``results`` sorts every email into ``added``, ``not_enrolled``, ``unknown_user``, ``already_member`` and ``over_capacity``. A self-paced cohort returns 422. Idempotent: when a non-archived pod with the same name (case-insensitive) already exists in the cohort, it is returned with 200 and only new emails are added; its settings and owner are left unchanged (use PATCH).",
+        "description": "Creates a pod in a dated cohort (``course_slug`` + ``cohort_key``) or a sprint (``sprint_slug``) with ``source=api``. Giving both ``sprint_slug`` and a course returns 422 with ``field: sprint_slug``; giving neither returns 422 with ``field: course_slug``. The optional ``owner_email`` must be enrolled in the cohort or sprint and becomes the first member. ``member_emails`` are added up to the size limit; ``results`` sorts every email into ``added``, ``not_enrolled``, ``unknown_user``, ``already_member`` and ``over_capacity``. A self-paced cohort returns 422. Idempotent: when a non-archived pod with the same name (case-insensitive) already exists in the cohort or sprint, it is returned with 200 and only new emails are added; its settings and owner are left unchanged (use PATCH).",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15008,6 +15018,7 @@
                     "type": "string"
                   },
                   "course_slug": {
+                    "description": "With ``cohort_key``; omit for a sprint pod.",
                     "type": "string"
                   },
                   "max_members": {
@@ -15048,11 +15059,13 @@
                   "purpose": {
                     "maxLength": 500,
                     "type": "string"
+                  },
+                  "sprint_slug": {
+                    "description": "Create a sprint pod instead of a cohort pod.",
+                    "type": "string"
                   }
                 },
                 "required": [
-                  "course_slug",
-                  "cohort_key",
                   "name",
                   "purpose"
                 ],
@@ -15148,6 +15161,8 @@
                   },
                   "slack_channel_url": "",
                   "source": "api",
+                  "sprint_name": null,
+                  "sprint_slug": null,
                   "status": "open",
                   "suggested_slots": [
                     {
@@ -15172,7 +15187,7 @@
                 }
               }
             },
-            "description": "A pod with this name already exists in the cohort; new emails were added."
+            "description": "A pod with this name already exists in the cohort or sprint; new emails were added."
           },
           "201": {
             "content": {
@@ -15259,6 +15274,8 @@
                   },
                   "slack_channel_url": "",
                   "source": "api",
+                  "sprint_name": null,
+                  "sprint_slug": null,
                   "status": "open",
                   "suggested_slots": [
                     {
@@ -15300,7 +15317,7 @@
                 }
               }
             },
-            "description": "Unknown course or cohort."
+            "description": "Unknown course, cohort or sprint."
           },
           "422": {
             "content": {
@@ -15311,7 +15328,7 @@
                 }
               }
             },
-            "description": "Validation error, including a self-paced cohort or an owner who is not enrolled."
+            "description": "Validation error, including a self-paced cohort, an owner who is not enrolled, or both ``sprint_slug`` and ``course_slug``."
           }
         },
         "summary": "Create a pod (staff-only)",
@@ -15407,6 +15424,8 @@
                   "purpose": "Ship an agent demo",
                   "slack_channel_url": "",
                   "source": "api",
+                  "sprint_name": null,
+                  "sprint_slug": null,
                   "status": "open",
                   "suggested_slots": [
                     {
@@ -15605,6 +15624,8 @@
                   "purpose": "Ship an agent demo",
                   "slack_channel_url": "",
                   "source": "api",
+                  "sprint_name": null,
+                  "sprint_slug": null,
                   "status": "open",
                   "suggested_slots": [
                     {
@@ -16218,7 +16239,7 @@
     },
     "/api/pods/{pod_id}/members": {
       "post": {
-        "description": "Idempotent. Adds enrolled cohort members up to the size limit and closes their open requests on this pod as ``approved``. Returns the same ``results`` buckets as pod create.",
+        "description": "Idempotent. Adds enrolled cohort (or sprint) members up to the size limit and closes their open requests on this pod as ``approved``. Returns the same ``results`` buckets as pod create.",
         "parameters": [
           {
             "in": "path",
@@ -16330,6 +16351,8 @@
                     "purpose": "Ship an agent demo",
                     "slack_channel_url": "",
                     "source": "api",
+                    "sprint_name": null,
+                    "sprint_slug": null,
                     "status": "open",
                     "suggested_slots": [
                       {
@@ -18009,6 +18032,7 @@
                       },
                       "name": "May 2026",
                       "outcomes": "A working prototype\nA documented launch",
+                      "pods_enabled": false,
                       "slug": "may-2026",
                       "start_date": "2026-05-01",
                       "status": "active",
@@ -18077,6 +18101,11 @@
                     "default": "",
                     "type": "string"
                   },
+                  "pods_enabled": {
+                    "default": false,
+                    "description": "Show pods to enrolled members (``/sprints/<slug>/pods``). Default ``false``.",
+                    "type": "boolean"
+                  },
                   "slug": {
                     "type": "string"
                   },
@@ -18123,6 +18152,7 @@
                   },
                   "name": "May 2026",
                   "outcomes": "A working prototype\nA documented launch",
+                  "pods_enabled": false,
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",
@@ -18226,6 +18256,7 @@
                   },
                   "name": "May 2026",
                   "outcomes": "A working prototype\nA documented launch",
+                  "pods_enabled": false,
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",
@@ -18299,6 +18330,10 @@
                   "outcomes": {
                     "type": "string"
                   },
+                  "pods_enabled": {
+                    "description": "Show pods to enrolled members (``/sprints/<slug>/pods``). Default ``false``.",
+                    "type": "boolean"
+                  },
                   "start_date": {
                     "format": "date",
                     "type": "string"
@@ -18335,6 +18370,7 @@
                   },
                   "name": "May 2026",
                   "outcomes": "A working prototype\nA documented launch",
+                  "pods_enabled": false,
                   "slug": "may-2026",
                   "start_date": "2026-05-01",
                   "status": "active",
@@ -18849,6 +18885,135 @@
         "summary": "DELETE is not available on this route",
         "tags": [
           "Sprint Enrollments"
+        ]
+      }
+    },
+    "/api/sprints/{slug}/members": {
+      "get": {
+        "description": "Every user with a ``SprintEnrollment`` in the sprint (and only them), ordered by enrollment time, in the same member shape as the cohort roster (``GET /api/courses/<slug>/cohorts/<key>/members``). ``enrolled_at`` comes from the sprint enrollment. ``pod_ids`` are the sprint pods the user is in; ``open_request_pod_ids`` the sprint pods with a pending or waitlisted request.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 200,
+              "maximum": 500,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "limit": 200,
+                  "members": [
+                    {
+                      "availability": {
+                        "timezone": "Europe/Berlin",
+                        "updated_at": "2026-09-20T12:00:00+00:00",
+                        "windows": [
+                          {
+                            "end": "21:00",
+                            "preference": "preferred",
+                            "start": "18:00",
+                            "weekday": 1
+                          }
+                        ]
+                      },
+                      "crm": {
+                        "next_steps": "Pair with someone in Asia.",
+                        "persona": "Builder",
+                        "status": "active",
+                        "summary": "Ships RAG apps at work."
+                      },
+                      "email": "anna@example.com",
+                      "enrolled_at": "2026-09-10T08:00:00+00:00",
+                      "first_name": "Anna",
+                      "has_slack_user_id": true,
+                      "last_name": "Klein",
+                      "open_request_pod_ids": [
+                        9
+                      ],
+                      "pod_ids": [
+                        7
+                      ],
+                      "preferred_timezone": "Europe/Berlin",
+                      "slack_member": true,
+                      "tags": [
+                        "maven",
+                        "ai-buildcamp",
+                        "ai-buildcamp-4"
+                      ],
+                      "tier": "main"
+                    }
+                  ],
+                  "offset": 0,
+                  "sprint": "may-2026",
+                  "total": 1
+                }
+              }
+            },
+            "description": "Roster page."
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "authentication_required",
+                  "error": "Authentication token required"
+                }
+              }
+            },
+            "description": "Missing or invalid staff token."
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "unknown_sprint",
+                  "error": "Sprint not found"
+                }
+              }
+            },
+            "description": "Unknown sprint."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "validation_error",
+                  "error": "limit must be between 1 and 500; offset must be 0 or more"
+                }
+              }
+            },
+            "description": "Bad limit or offset."
+          }
+        },
+        "summary": "List a sprint roster with CRM, availability and pods (staff-only)",
+        "tags": [
+          "Pods"
         ]
       }
     },

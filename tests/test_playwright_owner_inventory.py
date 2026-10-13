@@ -1227,6 +1227,30 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_python_and_buildcamp_use_shared_top_level_syllabus_row_geometry",
     })
 
+    issue_1949_owners = frozenset({
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestCallsListAndEdit::"
+        "test_list_shows_row_and_edit_round_trip",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestCRMOneHopNav::"
+        "test_non_staff_menu_has_no_crm_item",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestCRMOneHopNav::"
+        "test_mobile_menu_links_to_crm",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestLogCallFlow::"
+        "test_log_call_from_contact_detail_round_trip",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestCRMOneHopNav::"
+        "test_desktop_account_menu_links_to_crm",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestRecentQASection::"
+        "test_qa_entries_with_links_and_empty_state",
+        "playwright_tests/test_studio_crm_calls_1949.py::"
+        "TestCallsAccessControl::"
+        "test_anonymous_redirects_to_login",
+    })
+
     issue_1777_owners = frozenset({
         "playwright_tests/test_project_submission_form_1777.py::"
         "test_dated_attempt_submit_shows_shared_form_and_round_trips",
@@ -2189,8 +2213,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2936)
-        self.assertEqual(len(inventory.owners), 2732)
+        self.assertEqual(inventory.item_count, 2943)
+        self.assertEqual(len(inventory.owners), 2739)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2228,6 +2252,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1928_owners
             | self.issue_1940_owners
             | self.issue_1948_owners
+            | self.issue_1949_owners
             | self.issue_1938_owners
             | self.issue_1921_owners
             | self.youtube_referrer_owners
@@ -2347,6 +2372,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1944_owners
             | self.issue_1896_owners
             | self.issue_1948_owners
+            | self.issue_1949_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
         ):

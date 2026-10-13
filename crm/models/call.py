@@ -28,6 +28,31 @@ CALL_SOURCE_CHOICES = [
 ]
 
 
+class CallManager(models.Manager):
+    """Default manager that widens related ``calls`` access (issue #1949).
+
+    Django derives a CRM record's ``calls`` related manager from this
+    class; there ``instance`` is the CRMRecord, and the queryset grows
+    to include pre-tracking rows -- calls logged under the member's
+    email before they were tracked (stored with ``contact=NULL`` by the
+    opt-in matching rule). The plain ``Call.objects`` manager is
+    unaffected (no ``instance``).
+    """
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        instance = getattr(self, 'instance', None)
+        if instance is not None and instance.pk is not None:
+            qs = qs.filter(
+                models.Q(contact=instance)
+                | models.Q(
+                    contact__isnull=True,
+                    email__iexact=instance.user.email,
+                ),
+            )
+        return qs
+
+
 class Call(models.Model):
     """One logged conversation with a member.
 
@@ -42,6 +67,8 @@ class Call(models.Model):
     database-level impossibility. Rows with a blank ``source_ref``
     (manual entries) never deduplicate against each other.
     """
+
+    objects = CallManager()
 
     contact = models.ForeignKey(
         CRMRecord,

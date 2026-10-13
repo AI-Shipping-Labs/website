@@ -198,4 +198,4 @@ class BookingCrmCallRecordTest(TestCase):
 
         call = Call.objects.get(source="booking", source_ref=str(booking.id))
         self.assertEqual(call.contact, CRMRecord.objects.get(user=self.user))
-        self.assertEqual(call.email, "MEMBER@example.com")
+        self.assertEqual(call.email, booking.invitee_email)

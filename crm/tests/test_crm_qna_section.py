@@ -81,10 +81,10 @@ class RecentMemberQATest(TestCase):
         question = self._comment(
             self.unit.content_id, 'How do I ship the checkpoint?',
         )
-        answer = self._comment(
+        self._comment(
             self.unit.content_id, 'Found it in the docs.', parent=question,
         )
-        workshop_note = self._comment(
+        self._comment(
             self.page.content_id, 'Workshop setup worked for me.',
         )
         self._comment(self.plan.comment_content_id, 'Plan note')

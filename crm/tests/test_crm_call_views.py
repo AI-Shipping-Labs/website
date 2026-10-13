@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from comments.models import Comment
-from content.models import Course, Module, Unit, Workshop, WorkshopPage
+from content.models import Course, Module, Unit
 from crm.models import CRMRecord
 from crm.services.calls import record_call
 
@@ -163,7 +163,6 @@ class CRMCallNewTest(CRMCallViewsBase):
         )
 
     def member_contact_calls(self):
-        from crm.models.call import Call
         from crm.services.calls import calls_for_member
         return calls_for_member(self.member)
 

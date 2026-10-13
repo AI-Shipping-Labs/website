@@ -844,9 +844,10 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
                 self.client.get(self.URL, {"scope": "all"}, **self._auth())
             grown_count = len(grown_ctx.captured_queries)
 
-        # Three record-only members add at most ~1 query each. A per-member
-        # aggregate fan-out would add many more.
-        self.assertLessEqual(grown_count - base_count, 6)
+        # Three record-only members add a bounded shared cost each
+        # (#1949: one logged-calls query plus the member Q&A reads).
+        # A per-row aggregate fan-out would add many more.
+        self.assertLessEqual(grown_count - base_count, 12)
 
     def test_bounded_query_count_with_assert_num_queries(self):
         # Fixed-budget regression guard over the 3-member / 3-plan fixture.
@@ -861,7 +862,9 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
             # serializer (#1304), removing per-plan child and plan-note queries
             # while preserving the JSON payload. Issue #1933: the per-member
             # TierOverride lookup is one batched query for the page.
-            with self.assertNumQueries(31):
+            # Issue #1949: each member gains one logged-calls query plus
+            # the Member Q&A reads.
+            with self.assertNumQueries(40):
                 response = self.client.get(self.URL, **self._auth())
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["count"], 3)

@@ -46,6 +46,9 @@ def record_call(
     :class:`~crm.models.CRMRecord` -- the CRM stays opt-in, so no record
     is ever auto-created. The raw ``email`` is stored either way, so
     calls whose email matches nobody (yet) still render everywhere.
+    When a contact does resolve, the member's earlier still-unlinked
+    calls for the same email are adopted by that record, so
+    pre-tracking history shows up on the contact page too.
 
     Idempotency: with a non-blank ``source_ref`` the call upserts on
     ``(source, source_ref)`` -- a repeated delivery for the same key
@@ -87,6 +90,13 @@ def record_call(
     }
 
     with transaction.atomic():
+        if contact is not None:
+            # Adopt pre-tracking rows: calls stored for this email while
+            # the member was untracked keep contact=NULL until any later
+            # recorded call re-resolves the record (#1949).
+            Call.objects.filter(
+                contact__isnull=True, email__iexact=email,
+            ).update(contact=contact)
         if source_ref:
             existing = Call.objects.filter(
                 source=source, source_ref=source_ref,
@@ -129,3 +139,4 @@ def calls_for_member(user):
         .select_related('contact__user', 'created_by')
         .order_by('-occurred_at', '-created_at')
     )
+

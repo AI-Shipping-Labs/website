@@ -12,13 +12,11 @@ exists for them. Staff create the row via the ``Track in CRM`` button on
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
-from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
-from django.urls import reverse
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
@@ -38,11 +36,12 @@ from content.access import (
     resolve_effective_tier,
 )
 from crm.models import (
-    AppliedProgressChange,
-    CRMRecord,
-    Call,
-    IngestedProgressEvent,
+    CALL_SOURCE_CHOICES,
     STATUS_CHOICES,
+    AppliedProgressChange,
+    Call,
+    CRMRecord,
+    IngestedProgressEvent,
     SlackChannelIngest,
 )
 from crm.services.activity_context import (
@@ -384,37 +383,10 @@ def _record_detail_context(record, request):
         .order_by('scheduled_at', 'created_at')
     )
 
-    # Merged Calls section (issue #1949): CRM-owned logged calls (manual /
-    # booking / calendly) plus the member's active Calendly BookedCall rows
-    # (#884), interleaved by date descending. Booked entries keep the host
-    # and scheduled-time display and carry a Calendly source label.
+    # Logged CRM calls (issue #1949): manual / booking / calendly rows
+    # matched to this member. Active Calendly bookings keep their own
+    # pre-existing section below (issue #884, AC10) -- never merged.
     logged_calls = list(calls_for_member(record.user))
-    call_entries = [
-        {
-            'kind': 'logged',
-            'occurred_at': call.occurred_at,
-            'source': call.source,
-            'source_label': call.get_source_display(),
-            'summary': call.summary,
-            'detail_url': reverse(
-                'studio_crm_call_detail', args=[call.pk],
-            ),
-            'edit_url': reverse('studio_crm_call_edit', args=[call.pk]),
-            'logged_by': (
-                call.created_by.email if call.created_by_id else ''
-            ),
-            'host_name': '',
-        }
-        for call in logged_calls
-    ]
-    dated_entries = [
-        entry for entry in call_entries if entry['occurred_at'] is not None
-    ]
-    undated_entries = [
-        entry for entry in call_entries if entry['occurred_at'] is None
-    ]
-    dated_entries.sort(key=lambda entry: entry['occurred_at'], reverse=True)
-    call_entries = dated_entries + undated_entries
 
     # Member Q&A across shared comment threads (issue #1949), read-only.
     qa_context = recent_member_qa(record.user)
@@ -428,7 +400,7 @@ def _record_detail_context(record, request):
         'account_lifecycle': account_lifecycle,
         'account_lifecycle_label': lifecycle_label(account_lifecycle),
         'member_plans': member_plans,
-        'crm_call_entries': call_entries,
+        'crm_call_entries': logged_calls,
         'booked_calls': booked_calls,
         'recent_qa_rows': qa_context['rows'],
         'recent_qa_total': qa_context['total'],
@@ -638,7 +610,13 @@ def crm_calls(request):
         {
             'pk': call.pk,
             'contact_id': call.contact_id,
+            'crm_pk': call.contact_id,
             'email': call.email,
+            'full_name': (
+                f'{call.contact.user.first_name} '
+                f'{call.contact.user.last_name}'.strip()
+                if call.contact_id else ''
+            ),
             'occurred_at': call.occurred_at,
             'source': call.source,
             'snippet': call.summary,
@@ -675,6 +653,9 @@ def crm_call_detail(request, call_id):
     return render(request, 'studio/crm/call_detail.html', {
         'call': call,
         'record': call.contact,
+        'contact_label': (
+            call.contact.user.email if call.contact_id else call.email
+        ),
     })
 
 
@@ -698,7 +679,7 @@ def crm_call_new(request, crm_id):
         if occurred_at is None:
             form_error = 'Enter the date and time of the call.'
         else:
-            call = record_call(
+            record_call(
                 email=record.user.email,
                 occurred_at=occurred_at,
                 summary=summary,
@@ -717,6 +698,7 @@ def crm_call_new(request, crm_id):
         'summary_value': summary,
         'source_value': SOURCE_MANUAL,
         'form_error': form_error,
+        'source_choices': CALL_SOURCE_CHOICES,
     })
 
 
@@ -754,4 +736,5 @@ def crm_call_edit(request, call_id):
         'summary_value': summary,
         'source_value': call.source,
         'form_error': form_error,
+        'source_choices': CALL_SOURCE_CHOICES,
     })

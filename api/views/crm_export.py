@@ -75,16 +75,16 @@ from api.views._permissions import (
 from community.models import STATUS_BOOKED, BookedCall
 from content.access import get_active_overrides_by_user
 from crm.models import CRMRecord
-from crm.services.calls import calls_for_member
-from crm.services.member_qa import recent_member_qa
 from crm.services.activity_context import (
     build_complete_activity_context,
     serialize_activity_for_api,
 )
+from crm.services.calls import calls_for_member
 from crm.services.markdown_export import (
     markdown_filename_for_crm_record,
     render_crm_record_markdown,
 )
+from crm.services.member_qa import recent_member_qa
 from integrations.config import get_config
 from plans.models import (
     Checkpoint,

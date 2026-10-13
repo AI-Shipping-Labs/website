@@ -40,6 +40,17 @@
                 placeholder="What did you talk about? Decisions, follow-ups, context..."
                 data-testid="crm-call-summary-input"
                 class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground placeholder-muted-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">{{ summary_value }}</textarea>
+
+  <div class="mb-4">
+    <label class="block text-sm font-medium text-foreground mb-1" for="call-source">Source</label>
+    <select id="call-source" name="source"
+            data-testid="crm-call-source-input"
+            class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">
+      {% for value, label in source_choices %}
+      <option value="{{ value }}" {% if value == source_value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
     </div>
     {% if call %}
     {% endif %}

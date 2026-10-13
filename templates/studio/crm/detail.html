@@ -271,48 +271,43 @@
   {% endif %}
 </section>
 
-<!-- Calls (issue #1949): CRM-owned logged calls plus active Calendly
-     bookings, interleaved by date descending. The pre-#1949 separate
-     "Upcoming booked calls" section is replaced by this merged one. -->
+<!-- Calls (issue #1949): the CRM-owned logged-call history for this
+     contact. Upcoming Calendly bookings keep their own section above
+     (issue #884, AC10) -- never merged into this list. -->
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-calls-section">
   <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
     <h2 class="text-lg font-semibold text-foreground">Calls</h2>
-    <a href="{% url 'studio_crm_calls' %}"
-       data-testid="crm-calls-view-all"
-       class="text-xs text-muted-foreground hover:text-foreground hover:underline">View all calls</a>
+    <div class="flex items-center gap-3">
+      <a href="{% url 'studio_crm_call_new' crm_id=record.pk %}"
+         data-testid="crm-calls-log-link"
+         class="text-xs font-medium text-accent hover:underline">Log call</a>
+      <a href="{% url 'studio_crm_calls' %}"
+         data-testid="crm-calls-view-all"
+         class="text-xs text-muted-foreground hover:text-foreground hover:underline">View all calls</a>
+    </div>
   </div>
   {% if crm_call_entries %}
   <ul class="divide-y divide-border" data-testid="crm-calls-list">
-    {% for entry in crm_call_entries %}
+    {% for call in crm_call_entries %}
     <li class="py-3 flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between"
         data-testid="crm-call-item"
-        data-call-kind="{{ entry.kind }}"
-        data-call-source="{{ entry.source }}">
+        data-call-source="{{ call.source }}">
       <div class="min-w-0">
-        {% if entry.detail_url %}
-        <a href="{{ entry.detail_url }}"
+        <a href="{% url 'studio_crm_call_detail' call_id=call.pk %}"
            data-testid="crm-call-link"
-           class="text-sm font-medium text-accent hover:underline">{{ entry.occurred_at|operator_datetime }}</a>
-        {% else %}
-        <span class="text-sm font-medium text-foreground" data-testid="crm-call-when">{{ entry.occurred_at|operator_datetime }}</span>
-        {% endif %}
+           class="text-sm font-medium text-accent hover:underline">{{ call.occurred_at|operator_datetime }}</a>
         <p class="text-xs text-muted-foreground" data-testid="crm-call-source">
           <span class="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                data-testid="crm-call-source-label">{{ entry.source_label }}</span>
-          {% if entry.kind == 'booked' %}
-          {% if entry.host_name %} &middot; With {{ entry.host_name }}{% else %} &middot; Calendly host needs matching{% endif %}
-          {% if not entry.occurred_at %} &middot; Time not set{% endif %}
-          {% elif entry.logged_by %} &middot; logged by {{ entry.logged_by }}{% endif %}
+                data-testid="crm-call-source-label">{{ call.get_source_display }}</span>
+          {% if call.created_by_id %} &middot; logged by {{ call.created_by.email }}{% endif %}
         </p>
-        {% if entry.summary %}
-        <p class="mt-1 text-sm text-muted-foreground" data-testid="crm-call-snippet">{{ entry.summary|truncatechars:140 }}</p>
+        {% if call.summary %}
+        <p class="mt-1 text-sm text-muted-foreground" data-testid="crm-call-snippet">{{ call.summary|truncatechars:140 }}</p>
         {% endif %}
       </div>
-      {% if entry.edit_url %}
-      <a href="{{ entry.edit_url }}"
+      <a href="{% url 'studio_crm_call_edit' call_id=call.pk %}"
          data-testid="crm-call-edit-link"
          class="shrink-0 text-xs text-muted-foreground hover:text-foreground hover:underline">Edit</a>
-      {% endif %}
     </li>
     {% endfor %}
   </ul>

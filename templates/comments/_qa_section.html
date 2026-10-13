@@ -54,12 +54,21 @@ Parameters:
   Both default to the exact prior values so course / workshop / plan pages
   render byte-identically.
 
+- ``answer_guideline`` (optional, default False): homework-only opt-in
+  (issue #1896). When True the wrapper carries ``data-answer-guideline``
+  with the no-answer copy (its single source), and
+  ``comments/_qa_script.html`` inserts a hidden helper caption under the
+  top-level and each reply composer, revealed only while that field is
+  non-empty. Anonymous and read-only threads never carry it. Only the
+  course-unit include passes it, and only for ``kind`` homework units.
+  Guideline only: posting and the comments API are unchanged.
+
 Staff moderation (issue #1894) needs no extra parameters: the script in
 ``comments/_qa_script.html`` renders Edit/Delete on every card only when
 the list payload reports ``can_moderate`` for the signed-in staff viewer.
 {% endcomment %}
 {% load accounts_extras %}
-<div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}"{% if read_only %} data-read-only="true"{% endif %}>{% if not read_only %}
+<div class="{{ section_class|default:'mt-12 mb-12' }} qa-thread" id="qa-section{% if instance_id %}-{{ instance_id }}{% endif %}" data-content-id="{{ content_id }}"{% if read_only %} data-read-only="true"{% endif %}{% if answer_guideline and user_authenticated and not read_only %} data-answer-guideline="Don&#x27;t share homework answers here. If you have a question, discuss it in general terms without revealing the answer."{% endif %}>{% if not read_only %}
   <h2 class="mb-6 flex items-center gap-2 {{ heading_class|default:'text-xl' }} font-semibold tracking-tight">
     <i data-lucide="message-circle" class="h-5 w-5 text-accent"></i>
     {% if section_heading %}{{ section_heading }}{% else %}Questions &amp; Answers{% endif %}<span class="qa-count-wrapper" id="qa-count-wrapper{% if instance_id %}-{{ instance_id }}{% endif %}" hidden> (<span class="qa-count" id="qa-count{% if instance_id %}-{{ instance_id }}{% endif %}">0</span>)</span>
@@ -71,7 +80,7 @@ the list payload reports ``can_moderate`` for the signed-in staff viewer.
       {{ composer_disabled_reason|default:"Discussion is not available right now." }}
     </div>
     {% else %}
-    <div class="mb-8">
+    <div class="qa-composer mb-8">
       <textarea
         id="qa-new-question{% if instance_id %}-{{ instance_id }}{% endif %}"
         rows="3"

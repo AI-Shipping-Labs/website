@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load accounts_extras %}
+{% load accounts_extras date_formatting %}
 
 {% block title %}Reschedule Meeting | AI Shipping Labs{% endblock %}
 {% block meta_description %}Reschedule your meeting with {{ host.name }}.{% endblock %}
@@ -9,7 +9,7 @@
   {% include "includes/header.html" %}
 
   <section class="px-4 pt-28 pb-16 sm:px-6 lg:px-8 lg:pt-36 lg:pb-24">
-    <div class="mx-auto max-w-4xl">
+    <div class="mx-auto max-w-5xl">
       <a href="{% url 'booking_confirmed' token=booking.manage_token %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground mb-6" data-testid="reschedule-back-link">
         <i data-lucide="arrow-left" class="h-4 w-4"></i>
         Back to meeting details
@@ -30,7 +30,7 @@
         <div class="p-6 bg-secondary/50 border-b border-border">
           <h1 class="text-xl font-semibold text-foreground">Reschedule Meeting</h1>
           <p class="text-sm text-muted-foreground mt-1">
-            Current time: <span class="font-medium text-foreground">{{ booking.start_datetime|date:"l, F j, Y, H:i" }} UTC</span>
+            Current time: <span class="font-medium text-foreground">{{ booking.start_datetime|event_source_full_datetime }} UTC</span>
           </p>
         </div>
 
@@ -57,7 +57,7 @@
 
             <div>
               <label for="tz-select" class="block text-xs font-medium text-muted-foreground mb-1">Timezone:</label>
-              <select id="tz-select" class="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none">
+              <select id="tz-select" class="app-select w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none">
                 {% for tz in common_timezones %}
                 <option value="{{ tz }}" {% if tz == initial_tz %}selected{% endif %}>{{ tz }}</option>
                 {% endfor %}

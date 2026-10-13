@@ -1917,6 +1917,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_student_reads_a_moved_proposal_still_waiting_on_answers",
     })
 
+    issue_1948_owners = frozenset({
+        "playwright_tests/test_public_booking_1948.py::"
+        "TestPublicBookingFlow::test_request_a_call_links_to_new_booking",
+        "playwright_tests/test_public_booking_1948.py::"
+        "TestPublicBookingFlow::test_public_booking_and_management",
+    })
+
     issue_1938_owners = frozenset({
         "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
         "test_staff_sees_a_pod_waiting_on_a_proposal_not_idle",
@@ -2182,8 +2189,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2934)
-        self.assertEqual(len(inventory.owners), 2730)
+        self.assertEqual(inventory.item_count, 2936)
+        self.assertEqual(len(inventory.owners), 2732)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2220,6 +2227,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1896_owners
             | self.issue_1928_owners
             | self.issue_1940_owners
+            | self.issue_1948_owners
             | self.issue_1938_owners
             | self.issue_1921_owners
             | self.youtube_referrer_owners
@@ -2338,6 +2346,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1802_owners
             | self.issue_1944_owners
             | self.issue_1896_owners
+            | self.issue_1948_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
         ):

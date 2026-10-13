@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load accounts_extras %}
+{% load accounts_extras date_formatting %}
 
 {% block title %}Meeting Confirmed | AI Shipping Labs{% endblock %}
 {% block meta_description %}Your 30-minute meeting with {{ booking.host.name }} is confirmed.{% endblock %}
@@ -56,11 +56,11 @@
             <i data-lucide="calendar" class="h-5 w-5 text-accent shrink-0 mt-0.5"></i>
             <div>
               <span class="font-semibold text-foreground block" data-testid="confirmed-datetime">
-                {{ invitee_start|date:"l, F j, Y" }}
+                {{ invitee_start|member_full_date }}
               </span>
               <span class="text-muted-foreground">
-                {{ invitee_start|date:"H:i" }} – {{ invitee_end|date:"H:i" }} ({{ booking.invitee_timezone }})
-                <span class="text-xs text-muted-foreground/70">· {{ host_start|date:"H:i" }} host time</span>
+                {{ invitee_start|operator_time }} – {{ invitee_end|operator_time }} ({{ booking.invitee_timezone }})
+                <span class="text-xs text-muted-foreground/70">· {{ host_start|operator_time }} host time</span>
               </span>
             </div>
           </div>

@@ -8,6 +8,8 @@ never diverge from the deep links the notifications deliver. No
 member-facing surface may render its output.
 """
 
+from django.db import models
+
 from comments.models import Comment
 from notifications.services.notification_service import (
     HomeworkStepCommentContext,
@@ -47,17 +49,33 @@ def recent_member_qa(user, limit=QA_LIMIT):
     the thread ``title``/``url`` (deep link to the public thread), and
     the timestamp.
     """
-    comments = list(
-        Comment.objects
-        .filter(user=user, hidden_at__isnull=True)
-        .select_related('parent', 'parent__user')
-        .order_by('-created_at')[:limit]
+    return qa_context_for_members([user], limit=limit).get(
+        user.pk, {'rows': [], 'total': 0},
     )
-    total = Comment.objects.filter(
-        user=user, hidden_at__isnull=True,
-    ).count()
-    if not comments:
-        return {'rows': [], 'total': total}
+
+
+def qa_context_for_members(users, limit=QA_LIMIT):
+    """Batched ``{user_id: {'rows': [...], 'total': n}}`` for a page.
+
+    Same semantics as :func:`recent_member_qa` but resolved with one
+    comments query and one count query for the whole page, so the CRM
+    export's query budget stays flat as the member count grows.
+    """
+    users = list(users)
+    if not users:
+        return {}
+    totals = dict(
+        Comment.objects
+        .filter(user__in=users, hidden_at__isnull=True)
+        .values_list('user_id')
+        .annotate(n=models.Count('id'))
+    )
+    contexts = {
+        user.pk: {'rows': [], 'total': totals.get(user.pk, 0)}
+        for user in users
+    }
+    if not any(totals.values()):
+        return contexts
 
     # Local import keeps the ordinary CRM page import graph free of the
     # notification service's content-app lookups until they are needed.
@@ -67,8 +85,20 @@ def recent_member_qa(user, limit=QA_LIMIT):
     )
     from plans.models import Plan
 
-    rows = []
+    pending = {pk for pk, count in totals.items() if count}
+    comments = (
+        Comment.objects
+        .filter(user__in=users, hidden_at__isnull=True)
+        .select_related('parent', 'parent__user')
+        .order_by('-created_at')
+    )
     for comment in comments:
+        context = contexts.get(comment.user_id)
+        if context is None or len(context['rows']) >= limit:
+            pending.discard(comment.user_id)
+            if not pending:
+                break
+            continue
         content, content_title = _resolve_commented_content(
             comment.content_id,
         )
@@ -76,7 +106,7 @@ def recent_member_qa(user, limit=QA_LIMIT):
             continue
         urls = content_comment_urls(content)
         thread_url = urls[-1] if urls else ''
-        rows.append({
+        context['rows'].append({
             'comment': comment,
             'is_question': comment.parent_id is None,
             'kind_label': _surface_label(content),
@@ -85,4 +115,4 @@ def recent_member_qa(user, limit=QA_LIMIT):
             'thread_title': content_title or '',
             'created_at': comment.created_at,
         })
-    return {'rows': rows, 'total': total}
+    return contexts

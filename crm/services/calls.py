@@ -26,6 +26,7 @@ __all__ = [
     'SOURCE_CALENDLY',
     'SOURCE_MANUAL',
     'calls_for_member',
+    'calls_for_members',
     'record_call',
 ]
 
@@ -140,3 +141,37 @@ def calls_for_member(user):
         .order_by('-occurred_at', '-created_at')
     )
 
+
+def calls_for_members(users):
+    """Batched ``{user_id: [Call, ...]}`` map for a page of users.
+
+    Same union semantics as :func:`calls_for_member` resolved in one
+    query for the whole page, so the export's query budget stays flat
+    as the member count grows (issue #1949 AC15 guard).
+    """
+    users = list(users)
+    if not users:
+        return {}
+    email_to_user = {}
+    for user in users:
+        email_to_user.setdefault(user.email.lower(), user.pk)
+    rows = (
+        Call.objects
+        .filter(
+            Q(contact__user__in=users)
+            | Q(
+                contact__isnull=True,
+                email__in=[user.email for user in users],
+            ),
+        )
+        .select_related('created_by')
+        .order_by('-occurred_at', '-created_at')
+    )
+    grouped = {user.pk: [] for user in users}
+    for call in rows:
+        user_id = call.contact.user_id if call.contact_id else None
+        if user_id is None:
+            user_id = email_to_user.get(call.email.lower())
+        if user_id in grouped:
+            grouped[user_id].append(call)
+    return grouped

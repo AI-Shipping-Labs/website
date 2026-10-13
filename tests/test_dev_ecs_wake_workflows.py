@@ -39,6 +39,36 @@ class DevEcsWakeActionTest(SimpleTestCase):
         self.assertIn('"${REQUIRED_CONSECUTIVE}"', run_script)
         self.assertNotIn("grep -Fq", run_script)
 
+    def test_shared_action_prints_ecs_evidence_around_readiness(self):
+        # #1943: a dev readiness timeout must carry ECS evidence (service
+        # events, stopped-task reasons, target health), not only
+        # "empty-or-unreachable".
+        action = _load_yaml(ACTION_PATH)
+        run_script = action["runs"]["steps"][0]["run"]
+
+        scale_index = run_script.index("aws ecs update-service")
+        poll_index = run_script.index("if readiness_poll_until_stable")
+        error_index = run_script.index("::error ::Readiness timeout")
+        events_query = "services[0].events[:25]"
+
+        self.assertIn(events_query, run_script)
+        self.assertIn("stoppedReason:stoppedReason", run_script)
+        self.assertIn("describe-target-health", run_script)
+
+        before_scale = run_script.index("print_service_state\n", run_script.index("::group::ECS state before scaling"))
+        self.assertLess(before_scale, scale_index)
+
+        failure_block = run_script[poll_index:error_index]
+        self.assertIn("print_service_state", failure_block)
+        self.assertIn("print_task_state", failure_block)
+
+        # Diagnostics are read-only: the only mutating ECS call is the one
+        # update-service that wakes the service.
+        self.assertEqual(run_script.count("update-service"), 1)
+        for mutating in ("stop-task", "run-task", "deregister", "delete-"):
+            with self.subTest(mutating=mutating):
+                self.assertNotIn(mutating, run_script)
+
     def test_shared_action_exposes_required_configuration_inputs(self):
         action = _load_yaml(ACTION_PATH)
         inputs = action["inputs"]

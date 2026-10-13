@@ -69,6 +69,64 @@ runs:
           "${TIMEOUT_SECONDS}" "${POLL_SECONDS}" \
           "${MAX_ATTEMPTS}" "${REQUIRED_CONSECUTIVE}"
 
+        # Read-only ECS evidence (#1943). Dev readiness failures used to log
+        # only "empty-or-unreachable", which cannot distinguish a task that
+        # was stopped (OOM, failed ELB health checks) from a slow cold start.
+        # Service events keep the recent stop/start history, so print them
+        # before scaling and print task/target state again on failure. Every
+        # call is best-effort and bounded so diagnostics never change the
+        # readiness verdict.
+        ecs_diag() {
+          timeout 60 aws "$@" --region "${AWS_REGION}" 2>&1 || echo "(diagnostic call failed: aws $1 $2)"
+        }
+
+        print_service_state() {
+          echo "--- ECS service ${ECS_SERVICE}: deployments ---"
+          ecs_diag ecs describe-services \
+            --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" \
+            --query 'services[0].deployments[].[status,rolloutState,desiredCount,runningCount,pendingCount,failedTasks,taskDefinition,updatedAt]' \
+            --output text
+          echo "--- ECS service ${ECS_SERVICE}: recent events (newest first) ---"
+          ecs_diag ecs describe-services \
+            --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" \
+            --query 'services[0].events[:25].[createdAt,message]' \
+            --output text
+        }
+
+        print_task_state() {
+          local status arns
+          for status in RUNNING STOPPED; do
+            echo "--- ${status} tasks for ${ECS_SERVICE} ---"
+            arns=$(timeout 60 aws ecs list-tasks --region "${AWS_REGION}" \
+              --cluster "${ECS_CLUSTER}" --service-name "${ECS_SERVICE}" \
+              --desired-status "${status}" --query 'taskArns[:5]' --output text 2>/dev/null || true)
+            if [ -z "${arns}" ] || [ "${arns}" = "None" ]; then
+              echo "(none)"
+              continue
+            fi
+            # shellcheck disable=SC2086 # task ARNs are space-separated words
+            ecs_diag ecs describe-tasks --cluster "${ECS_CLUSTER}" --tasks ${arns} \
+              --query 'tasks[].{task:taskArn,last:lastStatus,health:healthStatus,startedAt:startedAt,stoppedAt:stoppedAt,stopCode:stopCode,stoppedReason:stoppedReason,containers:containers[].{name:name,last:lastStatus,exitCode:exitCode,reason:reason}}' \
+              --output json
+          done
+          echo "--- ALB target health for ${ECS_SERVICE} ---"
+          local tg_arn
+          tg_arn=$(timeout 60 aws ecs describe-services --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" \
+            --query 'services[0].loadBalancers[0].targetGroupArn' --output text 2>/dev/null || true)
+          if [ -n "${tg_arn}" ] && [ "${tg_arn}" != "None" ]; then
+            ecs_diag elbv2 describe-target-health --target-group-arn "${tg_arn}" \
+              --query 'TargetHealthDescriptions[].[Target.Id,TargetHealth.State,TargetHealth.Reason,TargetHealth.Description]' \
+              --output text
+          else
+            echo "(no load balancer target group)"
+          fi
+        }
+
+        echo "::group::ECS state before scaling ${ECS_SERVICE}"
+        print_service_state
+        echo "::endgroup::"
+
         echo "Scaling ECS service ${ECS_SERVICE} in cluster ${ECS_CLUSTER} to desired count ${DESIRED_COUNT}..."
         aws ecs update-service \
           --region "${AWS_REGION}" \
@@ -85,5 +143,9 @@ runs:
           exit 0
         fi
 
-        echo "::error ::Readiness timeout: ${PING_URL} did not satisfy its response expectation stably within the hard ${TIMEOUT_SECONDS}s deadline (attempts=${READINESS_ATTEMPTS}, consecutive=${READINESS_CONSECUTIVE}/${REQUIRED_CONSECUTIVE}, response_state=${READINESS_LAST_RESPONSE_STATE}, response_bytes=${READINESS_LAST_RESPONSE_BYTES})."
+        echo "::group::ECS state after readiness timeout for ${ECS_SERVICE}"
+        print_service_state
+        print_task_state
+        echo "::endgroup::"
+        echo "::error ::Readiness timeout:${PING_URL} did not satisfy its response expectation stably within the hard ${TIMEOUT_SECONDS}s deadline (attempts=${READINESS_ATTEMPTS}, consecutive=${READINESS_CONSECUTIVE}/${REQUIRED_CONSECUTIVE}, response_state=${READINESS_LAST_RESPONSE_STATE}, response_bytes=${READINESS_LAST_RESPONSE_BYTES})."
         exit 1

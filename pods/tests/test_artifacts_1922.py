@@ -17,6 +17,7 @@ from integrations.models import IntegrationSetting
 from pods.models import PodArtifact, PodJoinRequest, PodMeeting, PodMembership
 from pods.services import artifacts as artifact_svc
 from pods.services import config as pods_config
+from pods.services import meetings as meetings_svc
 from pods.tests.fixtures import COURSE_SLUG, enroll, make_cohort, make_course, make_meeting, make_pod, make_user
 from pods.tests.test_meeting_views import message_texts, texts
 
@@ -347,7 +348,12 @@ class NotesSectionTest(ArtifactFixture):
         response = self.client.get(self.pod_url())
         self.assertEqual(texts(response, 'pod-note-title'), ['Zoom transcript', 'Loose notes'])
         self.assertEqual(texts(response, 'pod-note-kind'), ['Transcript', 'Notes'])
-        day = artifact_svc.compact_date(newest.created_at, 'UTC')
+        # Mirror the view's zone (viewer preference), not a pinned one:
+        # a UTC-pinned date flips a day early/late near the timezone's
+        # midnight boundary and made this test midnight-flaky in CI.
+        day = artifact_svc.compact_date(
+            newest.created_at, meetings_svc.zone_for(self.anna),
+        )
         meta = texts(response, 'pod-note-meta')
         self.assertEqual(meta[0], f'Meeting 2 · Added by Anna K. (you) on {day}')
         self.assertRegex(meta[1], r'^Added by Raj P\. on [A-Z][a-z]{2} \d{1,2}$')

@@ -72,9 +72,9 @@ from studio.utils import studio_listing_querystring, studio_pager_querystring
 User = get_user_model()
 
 CRM_LIST_PAGE_SIZE = 50
-FILTER_ALL = 'all'
-FILTER_ACTIVE = 'active'
-FILTER_ARCHIVED = 'archived'
+FILTER_ALL = "all"
+FILTER_ACTIVE = "active"
+FILTER_ARCHIVED = "archived"
 VALID_LIST_FILTERS = {FILTER_ALL, FILTER_ACTIVE, FILTER_ARCHIVED}
 DEFAULT_LIST_FILTER = FILTER_ACTIVE
 
@@ -92,9 +92,9 @@ def crm_markdown_download(request, crm_id):
     filename = markdown_filename_for_crm_record(record.pk)
     response = HttpResponse(
         render_crm_record_markdown(aggregate),
-        content_type='text/markdown; charset=utf-8',
+        content_type="text/markdown; charset=utf-8",
     )
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -116,16 +116,16 @@ def _active_tier_info(user, override):
     """
     effective_tier = resolve_effective_tier(user, override)
     if effective_tier.is_override:
-        source = 'override'
+        source = "override"
     elif user.membership.stripe_customer_id:
         # Issue #1579: the Stripe id lives on payments.Membership.
-        source = 'stripe'
+        source = "stripe"
     else:
-        source = 'default'
+        source = "default"
     return {
-        'name': effective_tier.name,
-        'slug': effective_tier.slug,
-        'source': source,
+        "name": effective_tier.name,
+        "slug": effective_tier.slug,
+        "source": source,
     }
 
 
@@ -142,10 +142,10 @@ def crm_track(request, user_id):
     user = get_object_or_404(User, pk=user_id)
     existing = CRMRecord.objects.filter(user=user).first()
     if existing is not None:
-        return redirect('studio_crm_detail', crm_id=existing.pk)
+        return redirect("studio_crm_detail", crm_id=existing.pk)
     record = CRMRecord.objects.create(user=user, created_by=request.user)
-    messages.success(request, 'Now tracking this user in the CRM.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
+    messages.success(request, "Now tracking this user in the CRM.")
+    return redirect("studio_crm_detail", crm_id=record.pk)
 
 
 @staff_required
@@ -156,41 +156,38 @@ def crm_list(request):
     Search: case-insensitive substring on ``user.email`` and ``persona``.
     Pagination: 50 per page (mirrors the user list).
     """
-    active_filter = _normalize_list_filter(request.GET.get('filter', ''))
+    active_filter = _normalize_list_filter(request.GET.get("filter", ""))
     account_lifecycle_filter = _normalize_account_lifecycle_filter(
-        request.GET.get('account_lifecycle', ''),
+        request.GET.get("account_lifecycle", ""),
     )
-    search = (request.GET.get('q', '') or '').strip()
-    raw_tag = request.GET.get('tag', '')
-    active_tag = normalize_tag(raw_tag) if raw_tag else ''
+    search = (request.GET.get("q", "") or "").strip()
+    raw_tag = request.GET.get("tag", "")
+    active_tag = normalize_tag(raw_tag) if raw_tag else ""
 
     records_qs = (
-        CRMRecord.objects
-        .select_related('user', 'user__membership__tier', 'user__attribution')
+        CRMRecord.objects.select_related("user", "user__membership__tier", "user__attribution")
         .annotate(
-            plans_count=Count('user__plans', distinct=True),
-            notes_count=Count('user__interview_notes', distinct=True),
+            plans_count=Count("user__plans", distinct=True),
+            notes_count=Count("user__interview_notes", distinct=True),
         )
-        .order_by('-updated_at')
+        .order_by("-updated_at")
     )
 
     if active_filter == FILTER_ACTIVE:
-        records_qs = records_qs.filter(status='active')
+        records_qs = records_qs.filter(status="active")
     elif active_filter == FILTER_ARCHIVED:
-        records_qs = records_qs.filter(status='archived')
+        records_qs = records_qs.filter(status="archived")
 
     if account_lifecycle_filter:
         records_qs = records_qs.filter(
             account_lifecycle_q(
                 account_lifecycle_filter,
-                user_prefix='user__',
+                user_prefix="user__",
             )
         )
 
     if search:
-        records_qs = records_qs.filter(
-            Q(user__email__icontains=search) | Q(persona__icontains=search)
-        )
+        records_qs = records_qs.filter(Q(user__email__icontains=search) | Q(persona__icontains=search))
 
     if active_tag:
         records_qs = records_qs.filter(
@@ -199,7 +196,7 @@ def crm_list(request):
 
     paginator = Paginator(records_qs, CRM_LIST_PAGE_SIZE)
     try:
-        page_number = int(request.GET.get('page', '1'))
+        page_number = int(request.GET.get("page", "1"))
     except (TypeError, ValueError):
         page_number = 1
     if page_number < 1:
@@ -215,38 +212,41 @@ def crm_list(request):
     rows = []
     for record in records:
         tier_info = _active_tier_info(
-            record.user, override_map.get(record.user_id),
+            record.user,
+            override_map.get(record.user_id),
         )
         account_lifecycle = derive_account_lifecycle(record.user)
-        rows.append({
-            'pk': record.pk,
-            'user_pk': record.user.pk,
-            'email': record.user.email,
-            'full_name': f'{record.user.first_name} {record.user.last_name}'.strip(),
-            'tier_name': tier_info['name'],
-            'tier_slug': tier_info['slug'],
-            'tier_source': tier_info['source'],
-            'account_lifecycle': account_lifecycle,
-            'account_lifecycle_label': lifecycle_label(account_lifecycle),
-            'persona': record.persona,
-            'status': record.status,
-            'status_display': record.get_status_display(),
-            'updated_at': record.updated_at,
-            'plans_count': record.plans_count,
-            'notes_count': record.notes_count,
-        })
+        rows.append(
+            {
+                "pk": record.pk,
+                "user_pk": record.user.pk,
+                "email": record.user.email,
+                "full_name": f"{record.user.first_name} {record.user.last_name}".strip(),
+                "tier_name": tier_info["name"],
+                "tier_slug": tier_info["slug"],
+                "tier_source": tier_info["source"],
+                "account_lifecycle": account_lifecycle,
+                "account_lifecycle_label": lifecycle_label(account_lifecycle),
+                "persona": record.persona,
+                "status": record.status,
+                "status_display": record.get_status_display(),
+                "updated_at": record.updated_at,
+                "plans_count": record.plans_count,
+                "notes_count": record.notes_count,
+            }
+        )
 
     counts = {
-        'all': CRMRecord.objects.count(),
-        'active': CRMRecord.objects.filter(status='active').count(),
-        'archived': CRMRecord.objects.filter(status='archived').count(),
+        "all": CRMRecord.objects.count(),
+        "active": CRMRecord.objects.filter(status="active").count(),
+        "archived": CRMRecord.objects.filter(status="archived").count(),
     }
 
     listing_params = {
-        'filter': active_filter,
-        'account_lifecycle': account_lifecycle_filter or None,
-        'q': search or None,
-        'tag': active_tag or None,
+        "filter": active_filter,
+        "account_lifecycle": account_lifecycle_filter or None,
+        "q": search or None,
+        "tag": active_tag or None,
     }
 
     def listing_url(**updates):
@@ -256,8 +256,7 @@ def crm_list(request):
         )
 
     lifecycle_filter_links = [
-        (value, label, listing_url(account_lifecycle=value))
-        for value, label in ACCOUNT_LIFECYCLE_CHOICES
+        (value, label, listing_url(account_lifecycle=value)) for value, label in ACCOUNT_LIFECYCLE_CHOICES
     ]
     previous_url = (
         studio_pager_querystring(
@@ -278,33 +277,37 @@ def crm_list(request):
         else None
     )
 
-    return render(request, 'studio/crm/list.html', {
-        'rows': rows,
-        'paginator': paginator,
-        'page': page,
-        'active_filter': active_filter,
-        'account_lifecycle_filter': account_lifecycle_filter,
-        'search': search,
-        'active_tag': active_tag,
-        'known_tags': list_all_tags(),
-        'counts': counts,
-        'filter_all': FILTER_ALL,
-        'filter_active': FILTER_ACTIVE,
-        'filter_archived': FILTER_ARCHIVED,
-        'account_lifecycle_choices': ACCOUNT_LIFECYCLE_CHOICES,
-        'crm_filter_active_url': listing_url(filter=FILTER_ACTIVE),
-        'crm_filter_archived_url': listing_url(filter=FILTER_ARCHIVED),
-        'crm_filter_all_url': listing_url(filter=FILTER_ALL),
-        'crm_lifecycle_all_url': listing_url(account_lifecycle=None),
-        'crm_lifecycle_filter_links': lifecycle_filter_links,
-        'crm_pager_previous_url': previous_url,
-        'crm_pager_next_url': next_url,
-    })
+    return render(
+        request,
+        "studio/crm/list.html",
+        {
+            "rows": rows,
+            "paginator": paginator,
+            "page": page,
+            "active_filter": active_filter,
+            "account_lifecycle_filter": account_lifecycle_filter,
+            "search": search,
+            "active_tag": active_tag,
+            "known_tags": list_all_tags(),
+            "counts": counts,
+            "filter_all": FILTER_ALL,
+            "filter_active": FILTER_ACTIVE,
+            "filter_archived": FILTER_ARCHIVED,
+            "account_lifecycle_choices": ACCOUNT_LIFECYCLE_CHOICES,
+            "crm_filter_active_url": listing_url(filter=FILTER_ACTIVE),
+            "crm_filter_archived_url": listing_url(filter=FILTER_ARCHIVED),
+            "crm_filter_all_url": listing_url(filter=FILTER_ALL),
+            "crm_lifecycle_all_url": listing_url(account_lifecycle=None),
+            "crm_lifecycle_filter_links": lifecycle_filter_links,
+            "crm_pager_previous_url": previous_url,
+            "crm_pager_next_url": next_url,
+        },
+    )
 
 
 def _get_record(crm_id):
     return get_object_or_404(
-        CRMRecord.objects.select_related('user', 'user__membership__tier', 'user__attribution'),
+        CRMRecord.objects.select_related("user", "user__membership__tier", "user__attribution"),
         pk=crm_id,
     )
 
@@ -315,25 +318,28 @@ def _activity_filter_chips(request, active_category):
     chips = []
     for category in categories:
         params = request.GET.copy()
-        params['activity_category'] = category
+        params["activity_category"] = category
         query = params.urlencode()
-        chips.append({
-            'category': category,
-            'label': ACTIVITY_CATEGORY_LABELS[category],
-            'url': f'?{query}' if query else request.path,
-            'active': category == active_category,
-        })
+        chips.append(
+            {
+                "category": category,
+                "label": ACTIVITY_CATEGORY_LABELS[category],
+                "url": f"?{query}" if query else request.path,
+                "active": category == active_category,
+            }
+        )
     return chips
 
 
 def _record_detail_context(record, request):
     """Build the shared context for the CRM detail page."""
     tier_info = _active_tier_info(
-        record.user, get_active_override(record.user),
+        record.user,
+        get_active_override(record.user),
     )
     account_lifecycle = derive_account_lifecycle(record.user)
     activity_category = normalize_activity_category(
-        request.GET.get('activity_category', ''),
+        request.GET.get("activity_category", ""),
     )
     activity_context = build_activity_context(
         record.user,
@@ -343,44 +349,30 @@ def _record_detail_context(record, request):
     )
     activity_filter_chips = _activity_filter_chips(request, activity_category)
     activity_view_all_url = next(
-        chip['url']
-        for chip in activity_filter_chips
-        if chip['category'] == ACTIVITY_CATEGORY_ALL
+        chip["url"] for chip in activity_filter_chips if chip["category"] == ACTIVITY_CATEGORY_ALL
     )
     note_queryset = (
-        InterviewNote.objects
-        .filter(member=record.user)
-        .select_related('plan__sprint', 'created_by')
-        .order_by('-created_at')
+        InterviewNote.objects.filter(member=record.user)
+        .select_related("plan__sprint", "created_by")
+        .order_by("-created_at")
     )
     member_plans = list(
-        Plan.objects
-        .filter(member=record.user)
-        .select_related('sprint')
-        .order_by('-sprint__start_date', '-created_at')
+        Plan.objects.filter(member=record.user).select_related("sprint").order_by("-sprint__start_date", "-created_at")
     )
 
     # Onboarding answers (issue #871). Reuse the shared answer-flattening
     # helper that backs the read-only ``/api/onboarding/responses/<email>``
     # API so the CRM page and the API never diverge on answer-type handling.
     onboarding_response = get_onboarding_response(record.user)
-    onboarding_answers = (
-        flatten_response_answers(onboarding_response)
-        if onboarding_response is not None
-        else []
-    )
-    onboarding_submitted = (
-        onboarding_response is not None
-        and onboarding_response.status == 'submitted'
-    )
+    onboarding_answers = flatten_response_answers(onboarding_response) if onboarding_response is not None else []
+    onboarding_submitted = onboarding_response is not None and onboarding_response.status == "submitted"
 
     # Booked calls captured from Calendly (issue #884). Show the member's
     # active (not-canceled) bookings, soonest first, with the host.
     booked_calls = list(
-        BookedCall.objects
-        .filter(member=record.user, status=STATUS_BOOKED)
-        .select_related('host')
-        .order_by('scheduled_at', 'created_at')
+        BookedCall.objects.filter(member=record.user, status=STATUS_BOOKED)
+        .select_related("host")
+        .order_by("scheduled_at", "created_at")
     )
 
     # Logged CRM calls (issue #1949): manual / booking / calendly rows
@@ -392,52 +384,45 @@ def _record_detail_context(record, request):
     qa_context = recent_member_qa(record.user)
 
     return {
-        'record': record,
-        'detail_user': record.user,
-        'tier_name': tier_info['name'],
-        'tier_slug': tier_info['slug'],
-        'tier_source': tier_info['source'],
-        'account_lifecycle': account_lifecycle,
-        'account_lifecycle_label': lifecycle_label(account_lifecycle),
-        'member_plans': member_plans,
-        'crm_call_entries': logged_calls,
-        'booked_calls': booked_calls,
-        'recent_qa_rows': qa_context['rows'],
-        'recent_qa_total': qa_context['total'],
-        'activities': activity_context['activities'],
-        'activity_total': activity_context['activity_total'],
-        'activity_limit': activity_context['activity_limit'],
-        'activity_has_more': activity_context['activity_has_more'],
-        'first_payment_at': activity_context['first_payment_at'],
-        'active_activity_category': activity_category,
-        'active_activity_category_label': (
-            ACTIVITY_CATEGORY_LABELS[activity_category]
-        ),
-        'activity_filter_chips': activity_filter_chips,
-        'activity_view_all_url': activity_view_all_url,
-        'activity_has_any': (
-            activity_context['activity_category_counts'][ACTIVITY_CATEGORY_ALL]
-            > 0
-        ),
-        'activity_category_counts': activity_context['activity_category_counts'],
-        'onboarding_response': onboarding_response,
-        'onboarding_answers': onboarding_answers,
-        'onboarding_submitted': onboarding_submitted,
-        'internal_notes': note_queryset.internal(),
-        'external_notes': note_queryset.external(),
+        "record": record,
+        "detail_user": record.user,
+        "tier_name": tier_info["name"],
+        "tier_slug": tier_info["slug"],
+        "tier_source": tier_info["source"],
+        "account_lifecycle": account_lifecycle,
+        "account_lifecycle_label": lifecycle_label(account_lifecycle),
+        "member_plans": member_plans,
+        "crm_call_entries": logged_calls,
+        "booked_calls": booked_calls,
+        "recent_qa_rows": qa_context["rows"],
+        "recent_qa_total": qa_context["total"],
+        "activities": activity_context["activities"],
+        "activity_total": activity_context["activity_total"],
+        "activity_limit": activity_context["activity_limit"],
+        "activity_has_more": activity_context["activity_has_more"],
+        "first_payment_at": activity_context["first_payment_at"],
+        "active_activity_category": activity_category,
+        "active_activity_category_label": (ACTIVITY_CATEGORY_LABELS[activity_category]),
+        "activity_filter_chips": activity_filter_chips,
+        "activity_view_all_url": activity_view_all_url,
+        "activity_has_any": (activity_context["activity_category_counts"][ACTIVITY_CATEGORY_ALL] > 0),
+        "activity_category_counts": activity_context["activity_category_counts"],
+        "onboarding_response": onboarding_response,
+        "onboarding_answers": onboarding_answers,
+        "onboarding_submitted": onboarding_submitted,
+        "internal_notes": note_queryset.internal(),
+        "external_notes": note_queryset.external(),
         # ``current_plan`` is consumed by the reused
         # ``_member_notes.html`` partial when the staff "Add member
         # note" button needs a plan prefill. The CRM record is
         # member-scoped, not plan-scoped, so we pass ``None``.
-        'current_plan': None,
-        'member_notes_return_url': f'/studio/crm/{record.pk}/#member-notes',
-        'record_status_choices': STATUS_CHOICES,
+        "current_plan": None,
+        "member_notes_return_url": f"/studio/crm/{record.pk}/#member-notes",
+        "record_status_choices": STATUS_CHOICES,
         # Structured persona dropdown (issue #802). #801 added the FK but
         # deferred the Studio control; staff pick an active Persona here.
         # Blank leaves the free-text ``persona`` as the source of truth.
-        'persona_choices': list(
-            Persona.objects.filter(is_active=True).order_by('order', 'name')
-        ),
+        "persona_choices": list(Persona.objects.filter(is_active=True).order_by("order", "name")),
     }
 
 
@@ -447,7 +432,7 @@ def crm_detail(request, crm_id):
     record = _get_record(crm_id)
     return render(
         request,
-        'studio/crm/detail.html',
+        "studio/crm/detail.html",
         _record_detail_context(record, request),
     )
 
@@ -457,20 +442,21 @@ def crm_detail(request, crm_id):
 def crm_edit(request, crm_id):
     """Save the snapshot card fields (persona, summary, next_steps)."""
     record = _get_record(crm_id)
-    record.persona = (request.POST.get('persona') or '').strip()[:120]
-    record.summary = (request.POST.get('summary') or '').strip()
-    record.next_steps = (request.POST.get('next_steps') or '').strip()
+    record.persona = (request.POST.get("persona") or "").strip()[:120]
+    record.summary = (request.POST.get("summary") or "").strip()
+    record.next_steps = (request.POST.get("next_steps") or "").strip()
     # Structured persona (issue #802): blank clears the FK.
-    raw_persona_ref = (request.POST.get('persona_ref') or '').strip()
+    raw_persona_ref = (request.POST.get("persona_ref") or "").strip()
     if raw_persona_ref.isdigit():
         record.persona_ref = Persona.objects.filter(
-            pk=int(raw_persona_ref), is_active=True,
+            pk=int(raw_persona_ref),
+            is_active=True,
         ).first()
     else:
         record.persona_ref = None
     record.save()
-    messages.success(request, 'CRM record updated.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
+    messages.success(request, "CRM record updated.")
+    return redirect("studio_crm_detail", crm_id=record.pk)
 
 
 @staff_required
@@ -481,11 +467,15 @@ def crm_slack_ingest_review(request):
     updates from people we could not auto-match are not lost, plus the
     most recent ingest runs so staff can confirm the daily job ran.
     """
-    return render(request, 'studio/crm/slack_ingest.html', {
-        'unmatched_threads': unmatched_threads(),
-        'recent_runs': SlackChannelIngest.objects.all()[:10],
-        'reply_token_configured': bool(get_slack_plan_sprints_user_token()),
-    })
+    return render(
+        request,
+        "studio/crm/slack_ingest.html",
+        {
+            "unmatched_threads": unmatched_threads(),
+            "recent_runs": SlackChannelIngest.objects.all()[:10],
+            "reply_token_configured": bool(get_slack_plan_sprints_user_token()),
+        },
+    )
 
 
 def _safe_back(request):
@@ -494,14 +484,14 @@ def _safe_back(request):
     Only a same-host referer is honoured so the redirect cannot be aimed
     off-site by a crafted Referer header.
     """
-    referer = request.META.get('HTTP_REFERER', '')
+    referer = request.META.get("HTTP_REFERER", "")
     if referer and url_has_allowed_host_and_scheme(
         referer,
         allowed_hosts={request.get_host()},
         require_https=request.is_secure(),
     ):
         return redirect(referer)
-    return redirect('studio_crm_list')
+    return redirect("studio_crm_list")
 
 
 @staff_required
@@ -516,7 +506,8 @@ def crm_slack_progress_undo(request, event_id):
     event = get_object_or_404(IngestedProgressEvent, pk=event_id)
     reverse_event(event)
     messages.success(
-        request, 'Reverted all auto-applied changes from this Slack update.',
+        request,
+        "Reverted all auto-applied changes from this Slack update.",
     )
     return _safe_back(request)
 
@@ -531,7 +522,7 @@ def crm_slack_progress_change_undo(request, change_id):
     """
     change = get_object_or_404(AppliedProgressChange, pk=change_id)
     reverse_change(change)
-    messages.success(request, 'Reverted the auto-applied change.')
+    messages.success(request, "Reverted the auto-applied change.")
     return _safe_back(request)
 
 
@@ -540,10 +531,10 @@ def crm_slack_progress_change_undo(request, change_id):
 def crm_archive(request, crm_id):
     """Set the record's status to ``archived``."""
     record = _get_record(crm_id)
-    record.status = 'archived'
-    record.save(update_fields=['status', 'updated_at'])
-    messages.info(request, 'CRM record archived.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
+    record.status = "archived"
+    record.save(update_fields=["status", "updated_at"])
+    messages.info(request, "CRM record archived.")
+    return redirect("studio_crm_detail", crm_id=record.pk)
 
 
 @staff_required
@@ -551,10 +542,10 @@ def crm_archive(request, crm_id):
 def crm_reactivate(request, crm_id):
     """Set the record's status back to ``active``."""
     record = _get_record(crm_id)
-    record.status = 'active'
-    record.save(update_fields=['status', 'updated_at'])
-    messages.success(request, 'CRM record reactivated.')
-    return redirect('studio_crm_detail', crm_id=record.pk)
+    record.status = "active"
+    record.save(update_fields=["status", "updated_at"])
+    messages.success(request, "CRM record reactivated.")
+    return redirect("studio_crm_detail", crm_id=record.pk)
 
 
 CRM_CALLS_PAGE_SIZE = 50
@@ -566,7 +557,7 @@ def _parse_occurred_at(raw):
     Returns ``None`` when the value is missing or unparseable so the
     caller can re-render the form with an error.
     """
-    value = (raw or '').strip()
+    value = (raw or "").strip()
     parsed = parse_datetime(value) if value else None
     if parsed is None:
         return None
@@ -577,7 +568,7 @@ def _parse_occurred_at(raw):
 
 def _get_call(call_id):
     return get_object_or_404(
-        Call.objects.select_related('contact__user', 'created_by'),
+        Call.objects.select_related("contact__user", "created_by"),
         pk=call_id,
     )
 
@@ -589,18 +580,14 @@ def crm_calls(request):
     Search filters on the stored email. Each row links to the call
     detail and, when matched, to the contact's CRM record.
     """
-    search = (request.GET.get('q', '') or '').strip()
-    calls_qs = (
-        Call.objects
-        .select_related('contact__user', 'created_by')
-        .order_by('-occurred_at', '-created_at')
-    )
+    search = (request.GET.get("q", "") or "").strip()
+    calls_qs = Call.objects.select_related("contact__user", "created_by").order_by("-occurred_at", "-created_at")
     if search:
         calls_qs = calls_qs.filter(email__icontains=search)
 
     paginator = Paginator(calls_qs, CRM_CALLS_PAGE_SIZE)
     try:
-        page_number = int(request.GET.get('page', '1'))
+        page_number = int(request.GET.get("page", "1"))
     except (TypeError, ValueError):
         page_number = 1
     page_number = max(1, min(page_number, paginator.num_pages))
@@ -608,55 +595,53 @@ def crm_calls(request):
 
     rows = [
         {
-            'pk': call.pk,
-            'contact_id': call.contact_id,
-            'crm_pk': call.contact_id,
-            'email': call.email,
-            'full_name': (
-                f'{call.contact.user.first_name} '
-                f'{call.contact.user.last_name}'.strip()
-                if call.contact_id else ''
+            "pk": call.pk,
+            "contact_id": call.contact_id,
+            "crm_pk": call.contact_id,
+            "email": call.email,
+            "full_name": (
+                f"{call.contact.user.first_name} {call.contact.user.last_name}".strip() if call.contact_id else ""
             ),
-            'occurred_at': call.occurred_at,
-            'source': call.source,
-            'snippet': call.summary,
+            "occurred_at": call.occurred_at,
+            "source": call.source,
+            "snippet": call.summary,
         }
         for call in page.object_list
     ]
 
     def pager_url(target_page):
         params = request.GET.copy()
-        params['page'] = target_page
+        params["page"] = target_page
         query = params.urlencode()
-        return f'?{query}' if query else request.path
+        return f"?{query}" if query else request.path
 
-    return render(request, 'studio/crm/calls_list.html', {
-        'rows': rows,
-        'search': search,
-        'paginator': paginator,
-        'page': page,
-        'crm_calls_pager_previous_url': (
-            pager_url(page.previous_page_number())
-            if page.has_previous() else None
-        ),
-        'crm_calls_pager_next_url': (
-            pager_url(page.next_page_number())
-            if page.has_next() else None
-        ),
-    })
+    return render(
+        request,
+        "studio/crm/calls_list.html",
+        {
+            "rows": rows,
+            "search": search,
+            "paginator": paginator,
+            "page": page,
+            "crm_calls_pager_previous_url": (pager_url(page.previous_page_number()) if page.has_previous() else None),
+            "crm_calls_pager_next_url": (pager_url(page.next_page_number()) if page.has_next() else None),
+        },
+    )
 
 
 @staff_required
 def crm_call_detail(request, call_id):
     """One call: contact, when it was, and the full discussion summary."""
     call = _get_call(call_id)
-    return render(request, 'studio/crm/call_detail.html', {
-        'call': call,
-        'record': call.contact,
-        'contact_label': (
-            call.contact.user.email if call.contact_id else call.email
-        ),
-    })
+    return render(
+        request,
+        "studio/crm/call_detail.html",
+        {
+            "call": call,
+            "record": call.contact,
+            "contact_label": (call.contact.user.email if call.contact_id else call.email),
+        },
+    )
 
 
 @staff_required
@@ -669,72 +654,80 @@ def crm_call_new(request, crm_id):
     to the contact detail where the Calls section lists it.
     """
     record = _get_record(crm_id)
-    raw_occurred = ''
-    summary = ''
-    form_error = ''
-    if request.method == 'POST':
-        raw_occurred = request.POST.get('occurred_at', '')
-        summary = (request.POST.get('summary') or '').strip()
+    raw_occurred = ""
+    summary = ""
+    form_error = ""
+    if request.method == "POST":
+        raw_occurred = request.POST.get("occurred_at", "")
+        summary = (request.POST.get("summary") or "").strip()
+        source = (request.POST.get("source") or "").strip() or SOURCE_MANUAL
+        if source not in {choice for choice, _ in CALL_SOURCE_CHOICES}:
+            source = SOURCE_MANUAL
         occurred_at = _parse_occurred_at(raw_occurred)
         if occurred_at is None:
-            form_error = 'Enter the date and time of the call.'
+            form_error = "Enter the date and time of the call."
         else:
             record_call(
                 email=record.user.email,
                 occurred_at=occurred_at,
                 summary=summary,
-                source=SOURCE_MANUAL,
+                source=source,
                 created_by=request.user,
             )
-            messages.success(request, 'Call logged.')
-            return redirect('studio_crm_detail', crm_id=record.pk)
-    return render(request, 'studio/crm/call_form.html', {
-        'record': record,
-        'call': None,
-        'occurred_at_value': (
-            raw_occurred
-            or timezone.localtime().strftime('%Y-%m-%dT%H:%M')
-        ),
-        'summary_value': summary,
-        'source_value': SOURCE_MANUAL,
-        'form_error': form_error,
-        'source_choices': CALL_SOURCE_CHOICES,
-    })
+            messages.success(request, "Call logged.")
+            return redirect("studio_crm_detail", crm_id=record.pk)
+    return render(
+        request,
+        "studio/crm/call_form.html",
+        {
+            "record": record,
+            "call": None,
+            "occurred_at_value": (raw_occurred or timezone.localtime().strftime("%Y-%m-%dT%H:%M")),
+            "summary_value": summary,
+            "source_value": SOURCE_MANUAL,
+            "form_error": form_error,
+            "source_choices": CALL_SOURCE_CHOICES,
+        },
+    )
 
 
 @staff_required
 def crm_call_edit(request, call_id):
     """Edit when a call was, what was discussed, and its source."""
     call = _get_call(call_id)
-    form_error = ''
+    form_error = ""
     summary = call.summary
-    if request.method == 'POST':
-        raw_occurred = request.POST.get('occurred_at', '')
-        summary = (request.POST.get('summary') or '').strip()
-        source = (request.POST.get('source') or '').strip() or call.source
+    if request.method == "POST":
+        raw_occurred = request.POST.get("occurred_at", "")
+        summary = (request.POST.get("summary") or "").strip()
+        source = (request.POST.get("source") or "").strip() or call.source
         occurred_at = _parse_occurred_at(raw_occurred)
         if occurred_at is None:
-            form_error = 'Enter the date and time of the call.'
+            form_error = "Enter the date and time of the call."
             occurred_at_value = raw_occurred
         else:
             call.occurred_at = occurred_at
             call.summary = summary
             call.source = source
             call.save(
-                update_fields=['occurred_at', 'summary', 'source', 'updated_at'],
+                update_fields=["occurred_at", "summary", "source", "updated_at"],
             )
-            messages.success(request, 'Call updated.')
-            return redirect('studio_crm_call_detail', call_id=call.pk)
+            messages.success(request, "Call updated.")
+            return redirect("studio_crm_call_detail", call_id=call.pk)
     else:
         occurred_at_value = timezone.localtime(
             call.occurred_at,
-        ).strftime('%Y-%m-%dT%H:%M')
-    return render(request, 'studio/crm/call_form.html', {
-        'record': call.contact,
-        'call': call,
-        'occurred_at_value': occurred_at_value,
-        'summary_value': summary,
-        'source_value': call.source,
-        'form_error': form_error,
-        'source_choices': CALL_SOURCE_CHOICES,
-    })
+        ).strftime("%Y-%m-%dT%H:%M")
+    return render(
+        request,
+        "studio/crm/call_form.html",
+        {
+            "record": call.contact,
+            "call": call,
+            "occurred_at_value": occurred_at_value,
+            "summary_value": summary,
+            "source_value": call.source,
+            "form_error": form_error,
+            "source_choices": CALL_SOURCE_CHOICES,
+        },
+    )

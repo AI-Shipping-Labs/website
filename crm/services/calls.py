@@ -21,13 +21,13 @@ from crm.models.call import (
 from crm.models.crm_record import CRMRecord
 
 __all__ = [
-    'CALL_SOURCE_CHOICES',
-    'SOURCE_BOOKING',
-    'SOURCE_CALENDLY',
-    'SOURCE_MANUAL',
-    'calls_for_member',
-    'calls_for_members',
-    'record_call',
+    "CALL_SOURCE_CHOICES",
+    "SOURCE_BOOKING",
+    "SOURCE_CALENDLY",
+    "SOURCE_MANUAL",
+    "calls_for_member",
+    "calls_for_members",
+    "record_call",
 ]
 
 
@@ -35,9 +35,9 @@ def record_call(
     *,
     email,
     occurred_at,
-    summary='',
+    summary="",
     source=SOURCE_MANUAL,
-    source_ref='',
+    source_ref="",
     created_by=None,
 ):
     """Create or update one CRM :class:`~crm.models.Call`.
@@ -72,22 +72,20 @@ def record_call(
     Returns:
         The created or updated :class:`~crm.models.Call`.
     """
-    email = (email or '').strip()
+    email = (email or "").strip()
     if not email:
-        raise ValueError('record_call requires a contact email.')
+        raise ValueError("record_call requires a contact email.")
     if occurred_at is None:
-        raise ValueError('record_call requires occurred_at.')
+        raise ValueError("record_call requires occurred_at.")
 
     user = get_user_model().objects.filter(email__iexact=email).first()
-    contact = (
-        CRMRecord.objects.filter(user=user).first() if user else None
-    )
+    contact = CRMRecord.objects.filter(user=user).first() if user else None
 
     defaults = {
-        'contact': contact,
-        'email': email,
-        'occurred_at': occurred_at,
-        'summary': summary or '',
+        "contact": contact,
+        "email": email,
+        "occurred_at": occurred_at,
+        "summary": summary or "",
     }
 
     with transaction.atomic():
@@ -96,11 +94,13 @@ def record_call(
             # the member was untracked keep contact=NULL until any later
             # recorded call re-resolves the record (#1949).
             Call.objects.filter(
-                contact__isnull=True, email__iexact=email,
+                contact__isnull=True,
+                email__iexact=email,
             ).update(contact=contact)
         if source_ref:
             existing = Call.objects.filter(
-                source=source, source_ref=source_ref,
+                source=source,
+                source_ref=source_ref,
             ).first()
             if existing is not None:
                 for field, value in defaults.items():
@@ -118,7 +118,7 @@ def record_call(
             )
         return Call.objects.create(
             source=source,
-            source_ref='',
+            source_ref="",
             created_by=created_by,
             **defaults,
         )
@@ -132,13 +132,9 @@ def calls_for_member(user):
     picture never loses pre-tracking history.
     """
     return (
-        Call.objects
-        .filter(
-            Q(contact__user=user)
-            | Q(contact__isnull=True, email__iexact=user.email)
-        )
-        .select_related('contact__user', 'created_by')
-        .order_by('-occurred_at', '-created_at')
+        Call.objects.filter(Q(contact__user=user) | Q(contact__isnull=True, email__iexact=user.email))
+        .select_related("contact__user", "created_by")
+        .order_by("-occurred_at", "-created_at")
     )
 
 
@@ -156,16 +152,15 @@ def calls_for_members(users):
     for user in users:
         email_to_user.setdefault(user.email.lower(), user.pk)
     rows = (
-        Call.objects
-        .filter(
+        Call.objects.filter(
             Q(contact__user__in=users)
             | Q(
                 contact__isnull=True,
                 email__in=[user.email for user in users],
             ),
         )
-        .select_related('created_by')
-        .order_by('-occurred_at', '-created_at')
+        .select_related("created_by")
+        .order_by("-occurred_at", "-created_at")
     )
     grouped = {user.pk: [] for user in users}
     for call in rows:

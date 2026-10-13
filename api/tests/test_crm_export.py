@@ -862,9 +862,10 @@ class CrmExportQueryBudgetTest(CrmExportTestBase):
             # serializer (#1304), removing per-plan child and plan-note queries
             # while preserving the JSON payload. Issue #1933: the per-member
             # TierOverride lookup is one batched query for the page.
-            # Issue #1949: each member gains one logged-calls query plus
-            # the Member Q&A reads.
-            with self.assertNumQueries(40):
+            # Issue #1949: the per-member calls + member-Q&A reads are
+            # batched page-wide (calls_for_members / qa_context_for_members),
+            # keeping the whole export at a flat query budget.
+            with self.assertNumQueries(33):
                 response = self.client.get(self.URL, **self._auth())
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["count"], 3)

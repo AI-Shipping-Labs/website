@@ -26,14 +26,14 @@ def _surface_label(content):
     from content.models import Unit, WorkshopPage
 
     if isinstance(content, HomeworkStepCommentContext):
-        return 'Homework step'
+        return "Homework step"
     if isinstance(content, Unit):
-        return 'Course unit'
+        return "Course unit"
     if isinstance(content, WorkshopPage):
-        return 'Workshop'
+        return "Workshop"
     if isinstance(content, Note):
-        return 'Book club note'
-    return ''
+        return "Book club note"
+    return ""
 
 
 def recent_member_qa(user, limit=QA_LIMIT):
@@ -50,7 +50,8 @@ def recent_member_qa(user, limit=QA_LIMIT):
     the timestamp.
     """
     return qa_context_for_members([user], limit=limit).get(
-        user.pk, {'rows': [], 'total': 0},
+        user.pk,
+        {"rows": [], "total": 0},
     )
 
 
@@ -65,15 +66,11 @@ def qa_context_for_members(users, limit=QA_LIMIT):
     if not users:
         return {}
     totals = dict(
-        Comment.objects
-        .filter(user__in=users, hidden_at__isnull=True)
-        .values_list('user_id')
-        .annotate(n=models.Count('id'))
+        Comment.objects.filter(user__in=users, hidden_at__isnull=True)
+        .values_list("user_id")
+        .annotate(n=models.Count("id"))
     )
-    contexts = {
-        user.pk: {'rows': [], 'total': totals.get(user.pk, 0)}
-        for user in users
-    }
+    contexts = {user.pk: {"rows": [], "total": totals.get(user.pk, 0)} for user in users}
     if not any(totals.values()):
         return contexts
 
@@ -87,14 +84,13 @@ def qa_context_for_members(users, limit=QA_LIMIT):
 
     pending = {pk for pk, count in totals.items() if count}
     comments = (
-        Comment.objects
-        .filter(user__in=users, hidden_at__isnull=True)
-        .select_related('parent', 'parent__user')
-        .order_by('-created_at')
+        Comment.objects.filter(user__in=users, hidden_at__isnull=True)
+        .select_related("parent", "parent__user")
+        .order_by("-created_at")
     )
     for comment in comments:
         context = contexts.get(comment.user_id)
-        if context is None or len(context['rows']) >= limit:
+        if context is None or len(context["rows"]) >= limit:
             pending.discard(comment.user_id)
             if not pending:
                 break
@@ -105,14 +101,16 @@ def qa_context_for_members(users, limit=QA_LIMIT):
         if content is None or isinstance(content, Plan):
             continue
         urls = content_comment_urls(content)
-        thread_url = urls[-1] if urls else ''
-        context['rows'].append({
-            'comment': comment,
-            'is_question': comment.parent_id is None,
-            'kind_label': _surface_label(content),
-            'snippet': comment_preview(comment.body),
-            'thread_url': thread_url,
-            'thread_title': content_title or '',
-            'created_at': comment.created_at,
-        })
+        thread_url = urls[-1] if urls else ""
+        context["rows"].append(
+            {
+                "comment": comment,
+                "is_question": comment.parent_id is None,
+                "kind_label": _surface_label(content),
+                "snippet": comment_preview(comment.body),
+                "thread_url": thread_url,
+                "thread_title": content_title or "",
+                "created_at": comment.created_at,
+            }
+        )
     return contexts

@@ -79,12 +79,12 @@ from crm.services.activity_context import (
     build_complete_activity_context,
     serialize_activity_for_api,
 )
-from crm.services.calls import calls_for_member
+from crm.services.calls import calls_for_member, calls_for_members
 from crm.services.markdown_export import (
     markdown_filename_for_crm_record,
     render_crm_record_markdown,
 )
-from crm.services.member_qa import recent_member_qa
+from crm.services.member_qa import qa_context_for_members, recent_member_qa
 from integrations.config import get_config
 from plans.models import (
     Checkpoint,
@@ -255,7 +255,9 @@ def _base_queryset():
     """
     return (
         User.objects.select_related(
-            "membership__tier", "membership__pending_tier", "attribution",
+            "membership__tier",
+            "membership__pending_tier",
+            "attribution",
         )
         .prefetch_related(
             "plans",
@@ -293,8 +295,7 @@ def _has_crm_signal(user, crm_record):
     if user.plans.all():
         return True
     if any(
-        r.questionnaire_id is not None
-        and r.questionnaire.purpose == "onboarding"
+        r.questionnaire_id is not None and r.questionnaire.purpose == "onboarding"
         for r in user.questionnaire_responses.all()
     ):
         return True
@@ -344,12 +345,14 @@ def _gated_plans_by_member(bearer, users):
             Prefetch(
                 "weeks",
                 queryset=Week.objects.order_by(
-                    "position", "week_number",
+                    "position",
+                    "week_number",
                 ).prefetch_related(
                     Prefetch(
                         "checkpoints",
                         queryset=Checkpoint.objects.order_by(
-                            "position", "id",
+                            "position",
+                            "id",
                         ),
                     ),
                     Prefetch(
@@ -373,7 +376,8 @@ def _gated_plans_by_member(bearer, users):
             Prefetch(
                 "interview_notes",
                 queryset=InterviewNote.objects.select_related(
-                    "member", "created_by",
+                    "member",
+                    "created_by",
                 ).order_by("-created_at"),
                 to_attr="_export_interview_notes",
             ),
@@ -387,8 +391,14 @@ def _gated_plans_by_member(bearer, users):
 
 
 def _serialize_member(
-    user, bearer, persona_by_questionnaire, notes_by_member, plans_by_member,
+    user,
+    bearer,
+    persona_by_questionnaire,
+    notes_by_member,
+    plans_by_member,
     overrides_by_member,
+    calls_by_member=None,
+    qa_by_member=None,
 ):
     """Build one member's full CRM aggregate dict.
 
@@ -404,23 +414,19 @@ def _serialize_member(
     adds no per-member override query.
     """
     payload = serialize_user_state(
-        user, active_override=overrides_by_member.get(user.pk),
+        user,
+        active_override=overrides_by_member.get(user.pk),
     )
 
     crm_record = getattr(user, "crm_record", None)
     payload["crm_record"] = serialize_crm_record_full(crm_record)
 
-    payload["notes"] = [
-        serialize_interview_note(n)
-        for n in notes_by_member.get(user.id, [])
-    ]
+    payload["notes"] = [serialize_interview_note(n) for n in notes_by_member.get(user.id, [])]
 
-    payload["plans"] = [
-        serialize_plan_detail(plan, viewer=bearer)
-        for plan in plans_by_member.get(user.id, [])
-    ]
+    payload["plans"] = [serialize_plan_detail(plan, viewer=bearer) for plan in plans_by_member.get(user.id, [])]
     # Issue #1949: per-member calls (union of contact-linked and
     # pre-tracking email matches) and member Q&A context.
+    member_calls = calls_by_member.get(user.id, []) if calls_by_member is not None else calls_for_member(user)
     payload["calls"] = [
         {
             "id": call.pk,
@@ -430,14 +436,14 @@ def _serialize_member(
             "summary": call.summary,
             "source": call.source,
             "source_ref": call.source_ref,
-            "created_by_email": (
-                call.created_by.email if call.created_by else None
-            ),
+            "created_by_email": (call.created_by.email if call.created_by else None),
             "created_at": call.created_at.isoformat(),
         }
-        for call in calls_for_member(user)
+        for call in member_calls
     ]
-    qa_context = recent_member_qa(user)
+    qa_context = (
+        qa_by_member.get(user.id, {"rows": [], "total": 0}) if qa_by_member is not None else recent_member_qa(user)
+    )
     payload["member_qa"] = [
         {
             "id": row["comment"].pk,
@@ -461,25 +467,17 @@ def _serialize_member(
         for enrollment in user.sprint_enrollments.all()
     ]
 
-    payload["course_enrollments"] = [
-        serialize_course_enrollment(enrollment)
-        for enrollment in user.enrollments.all()
-    ]
+    payload["course_enrollments"] = [serialize_course_enrollment(enrollment) for enrollment in user.enrollments.all()]
 
     onboarding_responses = []
     for response in user.questionnaire_responses.all():
-        if (
-            response.questionnaire_id is None
-            or response.questionnaire.purpose != "onboarding"
-        ):
+        if response.questionnaire_id is None or response.questionnaire.purpose != "onboarding":
             continue
         persona = resolve_persona_for_questionnaire(
             response.questionnaire,
             personas_by_questionnaire=persona_by_questionnaire,
         )
-        onboarding_responses.append(
-            serialize_response(response, persona=persona)
-        )
+        onboarding_responses.append(serialize_response(response, persona=persona))
     payload["onboarding_responses"] = onboarding_responses
 
     return payload
@@ -512,15 +510,11 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
     # backward compatible.
     course_slugs = [row.course.slug for row in user.enrollments.all()]
     payload["course_enrollments"] = [
-        {"course_slug": slug, **item}
-        for slug, item in zip(course_slugs, payload["course_enrollments"])
+        {"course_slug": slug, **item} for slug, item in zip(course_slugs, payload["course_enrollments"])
     ]
 
     activity_context = build_complete_activity_context(user)
-    payload["activities"] = [
-        serialize_activity_for_api(item)
-        for item in activity_context["activities"]
-    ]
+    payload["activities"] = [serialize_activity_for_api(item) for item in activity_context["activities"]]
     payload["booked_calls"] = [
         {
             "id": call.pk,
@@ -561,9 +555,7 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
             "summary": call.summary,
             "source": call.source,
             "source_ref": call.source_ref,
-            "created_by_email": (
-                call.created_by.email if call.created_by else None
-            ),
+            "created_by_email": (call.created_by.email if call.created_by else None),
             "created_at": isoformat_or_none(call.created_at),
         }
         for call in calls_for_member(user)
@@ -614,10 +606,7 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
                 200: {"description": "Markdown attachment."},
                 401: {"description": "Missing, invalid, or non-staff token."},
                 404: {
-                    "description": (
-                        "The primary email is unknown, or the user is not "
-                        "tracked in CRM."
-                    ),
+                    "description": ("The primary email is unknown, or the user is not tracked in CRM."),
                 },
                 405: {"description": "Only GET is supported."},
             },
@@ -626,11 +615,7 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
 )
 def crm_record_markdown_export(request, email):
     """Download the complete Markdown CRM archive for one primary email."""
-    user_id = (
-        User.objects.filter(email__iexact=email)
-        .values_list("id", flat=True)
-        .first()
-    )
+    user_id = User.objects.filter(email__iexact=email).values_list("id", flat=True).first()
     if user_id is None:
         return error_response("User not found", "user_not_found", status=404)
 
@@ -695,10 +680,7 @@ def crm_record_markdown_export(request, email):
                 "limit": {
                     "type": "integer",
                     "required": False,
-                    "description": (
-                        "Default 200; clamped to the configurable "
-                        "``CRM_EXPORT_MAX_LIMIT`` ceiling."
-                    ),
+                    "description": ("Default 200; clamped to the configurable ``CRM_EXPORT_MAX_LIMIT`` ceiling."),
                 },
                 "offset": {
                     "type": "integer",
@@ -708,10 +690,7 @@ def crm_record_markdown_export(request, email):
                 "since": {
                     "type": "string",
                     "required": False,
-                    "description": (
-                        "ISO-8601 datetime; only users with "
-                        "``date_joined >= since``."
-                    ),
+                    "description": ("ISO-8601 datetime; only users with ``date_joined >= since``."),
                 },
                 "q": {
                     "type": "string",
@@ -755,10 +734,7 @@ def crm_record_markdown_export(request, email):
                     "example": _EXPORT_EXAMPLE,
                 },
                 422: {
-                    "description": (
-                        "Invalid ``scope`` / ``limit`` / ``offset`` / "
-                        "``since``."
-                    ),
+                    "description": ("Invalid ``scope`` / ``limit`` / ``offset`` / ``since``."),
                     "example": {
                         "error": "Invalid scope: 'everyone'",
                         "code": "validation_error",
@@ -770,9 +746,7 @@ def crm_record_markdown_export(request, email):
                     },
                 },
                 404: {
-                    "description": (
-                        "``email`` was supplied but no exact user exists."
-                    ),
+                    "description": ("``email`` was supplied but no exact user exists."),
                     "example": {
                         "error": "User not found",
                         "code": "user_not_found",
@@ -822,7 +796,9 @@ def crm_export(request):
     tag = normalize_tag(raw_tag) if raw_tag is not None else ""
     if raw_tag is not None and not tag:
         return error_response(
-            "Invalid tag", "validation_error", status=422,
+            "Invalid tag",
+            "validation_error",
+            status=422,
             details={"field": "tag", "value": raw_tag},
         )
 
@@ -833,15 +809,12 @@ def crm_export(request):
     persona_by_questionnaire = persona_map_by_questionnaire()
 
     if email:
-        target_id = (
-            User.objects
-            .filter(email__iexact=email)
-            .values_list("id", flat=True)
-            .first()
-        )
+        target_id = User.objects.filter(email__iexact=email).values_list("id", flat=True).first()
         if target_id is None:
             return error_response(
-                "User not found", "user_not_found", status=404,
+                "User not found",
+                "user_not_found",
+                status=404,
             )
 
         qs = qs.filter(pk=target_id)
@@ -857,7 +830,7 @@ def crm_export(request):
             if not _has_crm_signal(user, crm_record):
                 matched = []
 
-        page = matched[offset:offset + limit]
+        page = matched[offset : offset + limit]
         return _export_response(
             page=page,
             total=len(matched),
@@ -887,7 +860,7 @@ def crm_export(request):
         matched.append(user)
 
     total = len(matched)
-    page = matched[offset:offset + limit]
+    page = matched[offset : offset + limit]
 
     return _export_response(
         page=page,
@@ -901,7 +874,14 @@ def crm_export(request):
 
 
 def _export_response(
-    *, page, total, limit, offset, scope, bearer, persona_by_questionnaire,
+    *,
+    page,
+    total,
+    limit,
+    offset,
+    scope,
+    bearer,
+    persona_by_questionnaire,
 ):
     # Batch the two gated reads once for the whole page so the gate stays
     # the unforgeable boundary without an N+1 across members.
@@ -909,6 +889,9 @@ def _export_response(
     plans_by_member = _gated_plans_by_member(bearer, page)
     # Issue #1933: one strongest-override query for the whole page.
     overrides_by_member = get_active_overrides_by_user(page)
+    # Issue #1949: batched calls + member-Q&A maps for the whole page.
+    calls_by_member = calls_for_members(page)
+    qa_by_member = qa_context_for_members(page)
 
     members = [
         _serialize_member(
@@ -918,6 +901,8 @@ def _export_response(
             notes_by_member,
             plans_by_member,
             overrides_by_member,
+            calls_by_member=calls_by_member,
+            qa_by_member=qa_by_member,
         )
         for user in page
     ]

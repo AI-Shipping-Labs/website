@@ -181,7 +181,7 @@ class BookingCrmCallRecordTest(TestCase):
     @patch("booking.services.booking_service.create_calendar_event")
     @patch("booking.services.booking_service.query_busy")
     def test_booking_call_links_tracked_contact(self, mock_busy, mock_gcal, mock_zoom):
-        from crm.models import CRMRecord, Call
+        from crm.models import Call, CRMRecord
 
         mock_busy.return_value = []
         mock_zoom.return_value = {"meeting_id": "zm", "join_url": "https://zoom.test/j/zm"}

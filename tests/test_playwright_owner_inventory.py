@@ -1703,6 +1703,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_phone_roster_shows_stacked_cards_with_override",
     })
 
+    issue_1936_owners = frozenset({
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_laptop_roster_spans_full_width_with_every_column_visible",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_operator_filters_laptop_roster_to_one_attendee_and_opens_them",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_tablet_and_phone_widths_read_the_roster_as_cards",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_feedback_panel_spans_the_same_full_width_as_the_roster",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_operator_finds_leftover_grants_that_raise_nobody",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_operator_revokes_a_leftover_grant_and_stays_on_the_filter",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_effective_view_lists_only_comps_that_raise_access",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_clean_state_once_every_leftover_is_revoked",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_leftover_grant_counts_again_after_the_paid_tier_lapses",
+        "playwright_tests/test_studio_roster_width_and_ineffective_overrides_1936.py::"
+        "test_member_cannot_reach_the_tier_override_cleanup_list",
+    })
+
     issue_1934_owners = frozenset({
         "playwright_tests/test_pod_meetings_polish_1934.py::"
         "test_student_proposes_a_time_and_understands_what_confirms_it",
@@ -2082,8 +2105,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2893)
-        self.assertEqual(len(inventory.owners), 2689)
+        self.assertEqual(inventory.item_count, 2903)
+        self.assertEqual(len(inventory.owners), 2699)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2107,6 +2130,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1927_owners
             | self.issue_1929_owners
             | self.issue_1933_owners
+            | self.issue_1936_owners
             | self.issue_1919_owners
             | self.issue_1934_owners
             | self.issue_1920_owners

@@ -19880,6 +19880,89 @@
       }
     },
     "/api/tier-overrides": {
+      "get": {
+        "description": "Lists every active, non-expired ``TierOverride`` ordered by ``expires_at`` ascending (the Studio tier overrides list order). A grant raises access when its tier level is above the member's current stored tier (``free`` when unset); otherwise it is not raising access (a leftover grant). A weaker grant shadowed by a stronger one still raises access when it is above the stored tier. Status is computed at request time. ``total``, ``effective_count`` and ``ineffective_count`` are always the unfiltered totals; ``count`` is the number of rows returned.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "description": "``all`` (default), ``effective`` (raising access) or ``ineffective`` (not raising access).",
+              "enum": [
+                "all",
+                "effective",
+                "ineffective"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "description": "Maximum rows, default 200, clamped to 1000.",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "count": 1,
+                  "effective_count": 2,
+                  "ineffective_count": 3,
+                  "overrides": [
+                    {
+                      "created_at": "2026-09-01T10:00:00+00:00",
+                      "email": "leftover@example.com",
+                      "expires_at": "2026-12-01T10:00:00+00:00",
+                      "granted_by": "staff@example.com",
+                      "id": 42,
+                      "raises_access": false,
+                      "source": "manual",
+                      "stored_tier": "main",
+                      "tier": "basic",
+                      "tier_at_grant": "free"
+                    }
+                  ],
+                  "total": 5
+                }
+              }
+            },
+            "description": "Active overrides plus status counts."
+          },
+          "401": {
+            "description": "Missing, invalid or non-staff token."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": "invalid_status",
+                  "details": {
+                    "allowed": [
+                      "all",
+                      "effective",
+                      "ineffective"
+                    ],
+                    "field": "status"
+                  },
+                  "error": "Invalid status: 'nope'"
+                }
+              }
+            },
+            "description": "Invalid ``status`` (code ``invalid_status``) or ``limit`` (code ``validation_error``)."
+          }
+        },
+        "summary": "List active tier overrides",
+        "tags": [
+          "Tier overrides"
+        ]
+      },
       "post": {
         "description": "Grants the same long-lived ``TierOverride`` the Studio bulk contact-import gives non-paying members: a 10-year override (default tier ``main``) that deactivates any existing active override and records who granted it. A single grant is a one-element ``emails`` list. Missing users are created (``signup_source=imported``, ``email_verified=false``). Re-running an identical active grant is idempotent (``skipped_idempotent``, no new row). ``tier`` is validated against ``Tier`` -- unknown slug -> ``unknown_tier``; ``free`` / ``level==0`` -> ``invalid_tier``. Batch cap 1000.",
         "requestBody": {
@@ -19970,7 +20053,7 @@
     },
     "/api/tier-overrides/revoke": {
       "post": {
-        "description": "Deactivates each user's active ``TierOverride`` rows (manual and source-specific grants such as Maven) through the same service as the Studio revoke button, and writes one ``tier_override_revoked`` audit row per revoked override. Rows stay as history. Emails resolve by primary email, then alias. Per-email ``status``: ``revoked``, ``no_active_override``, ``user_not_found``, or ``malformed``. Re-running is idempotent (``no_active_override``). ``dry_run: true`` reports ``would_revoke`` and writes nothing. Batch cap 1000.",
+        "description": "Deactivates each user's active ``TierOverride`` rows (manual and source-specific grants such as Maven) through the same service as the Studio revoke button, and writes one ``tier_override_revoked`` audit row per revoked override. Rows stay as history. Emails resolve by primary email, then alias. Per-email ``status``: ``revoked``, ``no_active_override``, ``user_not_found``, or ``malformed``. Re-running is idempotent (``no_active_override``). ``dry_run: true`` reports ``would_revoke`` and writes nothing. ``ineffective_only: true`` revokes (or reports) only the member's active overrides that do not raise access (tier at or below the current stored tier) and leaves grants that raise access untouched; a member whose active overrides all raise access reports ``no_active_override``. Batch cap 1000.",
         "requestBody": {
           "content": {
             "application/json": {
@@ -19989,6 +20072,10 @@
                       "type": "string"
                     },
                     "type": "array"
+                  },
+                  "ineffective_only": {
+                    "description": "Only revoke grants that do not raise access. Default false (revoke every active override).",
+                    "type": "boolean"
                   }
                 },
                 "required": [

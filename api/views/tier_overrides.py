@@ -1,8 +1,12 @@
-"""Tier-override grant and revoke API endpoints (issue #833).
+"""Tier-override list, grant and revoke API endpoints (issue #833).
+
+``GET /api/tier-overrides`` (issue #1936) lists active overrides with a
+``raises_access`` flag computed by ``content.access.annotate_override_raises_access``
+(the same definition as the Studio "Not raising access" filter).
 
 ``POST /api/tier-overrides/revoke`` deactivates active overrides through
 ``payments.services.tier_override_revoke``, the same service the Studio revoke
-button uses.
+button uses. ``ineffective_only`` narrows it to grants that raise nothing.
 
 ``POST /api/tier-overrides`` grants the same long-lived ``TierOverride`` the
 Studio bulk contact-import gives non-paying members: a 10-year ``main`` override
@@ -37,6 +41,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_email
 from django.db import transaction
+from django.db.models import Count, F, Q
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -44,9 +49,11 @@ from django.views.decorators.csrf import csrf_exempt
 from accounts.auth import token_required
 from accounts.services.email_resolution import resolve_user_by_email
 from api.openapi import openapi_spec
+from api.request_parsing import parse_limit
 from api.safety import error_response
 from api.utils import parse_json_body, require_methods
 from community.models import CommunityAuditLog
+from content.access import annotate_override_raises_access
 from payments.models import Tier, TierOverride
 from payments.services.tier_override_revoke import (
     active_overrides_for,
@@ -96,13 +103,94 @@ def _is_valid_email(value):
     return True
 
 
+# Issue #1936: ``GET /api/tier-overrides`` status filter values.
+LIST_STATUS_VALUES = ("all", "effective", "ineffective")
+
+# ``GET /api/tier-overrides`` page size: default 200, clamped to the batch cap.
+LIST_LIMIT_DEFAULT = 200
+
+_LIST_ROW_EXAMPLE = {
+    "id": 42,
+    "email": "leftover@example.com",
+    "tier": "basic",
+    "stored_tier": "main",
+    "tier_at_grant": "free",
+    "raises_access": False,
+    "source": "manual",
+    "created_at": "2026-09-01T10:00:00+00:00",
+    "expires_at": "2026-12-01T10:00:00+00:00",
+    "granted_by": "staff@example.com",
+}
+
+
 @token_required
 @csrf_exempt
-@require_methods("POST")
+@require_methods("GET", "POST")
 @openapi_spec(
     tag="Tier overrides",
-    summary="Grant a 10-year tier override",
+    summary="List or grant tier overrides",
     methods={
+        "GET": {
+            "summary": "List active tier overrides",
+            "description": (
+                "Lists every active, non-expired ``TierOverride`` ordered by "
+                "``expires_at`` ascending (the Studio tier overrides list "
+                "order). A grant raises access when its tier level is above "
+                "the member's current stored tier (``free`` when unset); "
+                "otherwise it is not raising access (a leftover grant). A "
+                "weaker grant shadowed by a stronger one still raises access "
+                "when it is above the stored tier. Status is computed at "
+                "request time. ``total``, ``effective_count`` and "
+                "``ineffective_count`` are always the unfiltered totals; "
+                "``count`` is the number of rows returned."
+            ),
+            "query": {
+                "status": {
+                    "type": "string",
+                    "enum": list(LIST_STATUS_VALUES),
+                    "required": False,
+                    "description": (
+                        "``all`` (default), ``effective`` (raising access) "
+                        "or ``ineffective`` (not raising access)."
+                    ),
+                },
+                "limit": {
+                    "type": "integer",
+                    "required": False,
+                    "description": (
+                        f"Maximum rows, default {LIST_LIMIT_DEFAULT}, "
+                        f"clamped to {BATCH_CAP}."
+                    ),
+                },
+            },
+            "responses": {
+                200: {
+                    "description": "Active overrides plus status counts.",
+                    "example": {
+                        "count": 1,
+                        "total": 5,
+                        "effective_count": 2,
+                        "ineffective_count": 3,
+                        "overrides": [_LIST_ROW_EXAMPLE],
+                    },
+                },
+                401: {"description": "Missing, invalid or non-staff token."},
+                422: {
+                    "description": (
+                        "Invalid ``status`` (code ``invalid_status``) or "
+                        "``limit`` (code ``validation_error``)."
+                    ),
+                    "example": {
+                        "error": "Invalid status: 'nope'",
+                        "code": "invalid_status",
+                        "details": {
+                            "field": "status",
+                            "allowed": list(LIST_STATUS_VALUES),
+                        },
+                    },
+                },
+            },
+        },
         "POST": {
             "summary": "Grant a contact-import-style tier override",
             "description": (
@@ -183,7 +271,85 @@ def _is_valid_email(value):
         },
     },
 )
-def tier_overrides_grant(request):
+def tier_overrides_collection(request):
+    """``GET`` lists active overrides; ``POST`` grants overrides."""
+    if request.method == "GET":
+        return _list_overrides(request)
+    return _grant_overrides(request)
+
+
+def _serialize_list_row(override):
+    return {
+        "id": override.pk,
+        "email": override.user.email,
+        "tier": override.override_tier.slug,
+        "stored_tier": override.stored_tier_slug or "free",
+        "tier_at_grant": (
+            override.original_tier.slug if override.original_tier else None
+        ),
+        "raises_access": override.raises_access,
+        "source": override.source or "manual",
+        "created_at": override.created_at.isoformat(),
+        "expires_at": override.expires_at.isoformat(),
+        "granted_by": (
+            override.granted_by.email if override.granted_by else None
+        ),
+    }
+
+
+def _list_overrides(request):
+    """Return active overrides with raises-access status (issue #1936).
+
+    Two queries regardless of row count: one aggregate for the counts and
+    one select (stored tier, grant-time tier and granter joined) for rows.
+    """
+    status = (request.GET.get("status") or "all").strip().lower()
+    if status not in LIST_STATUS_VALUES:
+        return error_response(
+            f"Invalid status: {request.GET.get('status')!r}",
+            "invalid_status",
+            status=422,
+            details={"field": "status", "allowed": list(LIST_STATUS_VALUES)},
+        )
+    limit, err = parse_limit(
+        request.GET.get("limit"),
+        default=LIST_LIMIT_DEFAULT,
+        maximum=BATCH_CAP,
+    )
+    if err is not None:
+        return err
+
+    base = annotate_override_raises_access(
+        TierOverride.objects.filter(
+            is_active=True, expires_at__gt=timezone.now(),
+        )
+        .select_related("user", "override_tier", "original_tier", "granted_by")
+        .annotate(stored_tier_slug=F("user__membership__tier__slug"))
+        .order_by("expires_at", "pk")
+    )
+    counts = base.aggregate(
+        total=Count("pk"),
+        effective=Count("pk", filter=Q(raises_access=True)),
+    )
+    rows = base
+    if status == "effective":
+        rows = rows.filter(raises_access=True)
+    elif status == "ineffective":
+        rows = rows.filter(raises_access=False)
+    overrides = [_serialize_list_row(o) for o in rows[:limit]]
+    return JsonResponse(
+        {
+            "count": len(overrides),
+            "total": counts["total"],
+            "effective_count": counts["effective"],
+            "ineffective_count": counts["total"] - counts["effective"],
+            "overrides": overrides,
+        },
+        status=200,
+    )
+
+
+def _grant_overrides(request):
     """Grant a 10-year tier override to one or many members.
 
     Request body::
@@ -411,7 +577,12 @@ def _grant_batch(emails, tier, granted_by, actor_label, *, expires_at=None):
                 "``no_active_override``, ``user_not_found``, or ``malformed``. "
                 "Re-running is idempotent (``no_active_override``). "
                 "``dry_run: true`` reports ``would_revoke`` and writes "
-                f"nothing. Batch cap {BATCH_CAP}."
+                "nothing. ``ineffective_only: true`` revokes (or reports) "
+                "only the member's active overrides that do not raise access "
+                "(tier at or below the current stored tier) and leaves grants "
+                "that raise access untouched; a member whose active overrides "
+                "all raise access reports ``no_active_override``. "
+                f"Batch cap {BATCH_CAP}."
             ),
             "request_body": {
                 "required": ["emails"],
@@ -421,6 +592,13 @@ def _grant_batch(emails, tier, granted_by, actor_label, *, expires_at=None):
                         "items": {"type": "string"},
                     },
                     "dry_run": {"type": "boolean"},
+                    "ineffective_only": {
+                        "type": "boolean",
+                        "description": (
+                            "Only revoke grants that do not raise access. "
+                            "Default false (revoke every active override)."
+                        ),
+                    },
                 },
                 "example": {"emails": ["refunded@example.com"]},
             },
@@ -487,12 +665,16 @@ def tier_overrides_revoke(request):
             "batch_too_large",
         )
     dry_run = data.get("dry_run") is True
+    ineffective_only = data.get("ineffective_only") is True
 
     actor = f"actor_token={_actor_label(request)}"
     results = []
     with transaction.atomic():
         for raw in _dedupe_emails(emails):
-            results.append(_revoke_one(raw, actor=actor, dry_run=dry_run))
+            results.append(_revoke_one(
+                raw, actor=actor, dry_run=dry_run,
+                ineffective_only=ineffective_only,
+            ))
 
     counts = {
         status: sum(1 for r in results if r["status"] == status)
@@ -516,17 +698,21 @@ def _serialize_override(override):
     }
 
 
-def _revoke_one(raw, *, actor, dry_run):
+def _revoke_one(raw, *, actor, dry_run, ineffective_only=False):
     if not _is_valid_email(raw):
         return {"email": raw, "status": "malformed"}
     user = resolve_user_by_email(raw)
     if user is None:
         return {"email": raw, "status": "user_not_found"}
     if dry_run:
-        overrides = active_overrides_for(user)
+        overrides = active_overrides_for(
+            user, ineffective_only=ineffective_only,
+        )
         status = "would_revoke" if overrides else "no_active_override"
     else:
-        overrides = revoke_active_overrides(user, actor=actor)
+        overrides = revoke_active_overrides(
+            user, actor=actor, ineffective_only=ineffective_only,
+        )
         status = "revoked" if overrides else "no_active_override"
     return {
         "email": raw,

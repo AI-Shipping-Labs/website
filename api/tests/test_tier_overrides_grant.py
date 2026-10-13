@@ -2,7 +2,7 @@
 
 Covers every "Django API test scenario" from the issue: the 10-year main grant,
 user creation for the cohort case, deactivation of a prior override, idempotent
-re-grant, staff auth (401 unauth + non-staff), wrong method (405), batch with a
+re-grant, staff auth (401 unauth + non-staff), unsupported method (405), batch with a
 malformed row, per-grant audit rows, invalid-tier rejection before any write,
 and over-cap batch rejection.
 """
@@ -198,8 +198,10 @@ class TierOverridesGrantTest(TestCase):
 
     # ---- Scenario: wrong method is rejected ------------------------------
 
-    def test_get_method_rejected(self):
-        response = self.client.get(
+    def test_unsupported_method_rejected(self):
+        # Issue #1936: GET on this path is now the list endpoint, so an
+        # unsupported method (PUT) carries the 405 check.
+        response = self.client.put(
             "/api/tier-overrides",
             HTTP_AUTHORIZATION=f"Token {self.token.key}",
         )

@@ -210,20 +210,23 @@ class ActiveOverridesRenderTest(ActiveOverridesListTestBase):
         revoke_url = reverse('studio_user_tier_override_revoke', args=[user.pk])
         self.assertContains(response, f'action="{revoke_url}"')
 
-    def test_legacy_row_without_original_tier_renders_dash(self):
+    def test_legacy_row_without_original_tier_shows_current_stored_tier(self):
+        # Issue #1936: Base tier is the member's current stored tier, so a
+        # legacy grant with no grant-time snapshot still shows a tier pill
+        # (it used to render '-') and no "when granted" line.
         user = self._make_user('legacy@test.com', tier=self.free)
         self._make_override(
             user, self.main, expires_in_days=10,
             original_tier_sentinel=True,
         )
         response = self.client.get(self.url)
-        # The base-tier column for this row is rendered as '-'.
+        html = response.content.decode()
         self.assertRegex(
-            response.content.decode(),
-            (
-                r'data-testid="active-override-base-tier"[^>]*>\s*-\s*</td>'
-            ),
+            html,
+            r'data-testid="active-override-base-tier-pill"\s+'
+            r'data-tier="free">Free</span>',
         )
+        self.assertNotIn('active-override-base-tier-at-grant', html)
 
     def test_granted_by_dash_when_unset(self):
         user = self._make_user('orphan@test.com', tier=self.free)

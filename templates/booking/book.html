@@ -73,7 +73,7 @@
               <label for="tz-select" class="block text-xs font-medium text-muted-foreground mb-1.5">
                 Timezone:
               </label>
-              <select id="tz-select" class="w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="timezone-select">
+              <select id="tz-select" class="app-select w-full bg-secondary border border-border rounded-lg px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="timezone-select">
                 {% for tz in common_timezones %}
                 <option value="{{ tz }}" {% if tz == initial_tz %}selected{% endif %}>{{ tz }}</option>
                 {% endfor %}
@@ -162,7 +162,7 @@
               <div>
                 <label for="discussion_topic" class="block text-xs font-medium text-foreground mb-1">Topic</label>
                 <select name="discussion_topic" id="discussion_topic"
-                        class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                        class="app-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
                         data-testid="select-discussion-topic">
                   {% for topic in topic_choices %}
                   <option value="{{ topic }}">{{ topic }}</option>

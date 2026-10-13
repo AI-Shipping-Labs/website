@@ -3,15 +3,6 @@
 from django.db import migrations, models
 
 
-def update_alexey_booking_url(apps, schema_editor):
-    CallHost = apps.get_model("community", "CallHost")
-    CallHost.objects.filter(slug="alexey").update(booking_url="/book/alexey/")
-
-
-def noop_reverse(apps, schema_editor):
-    pass
-
-
 class Migration(migrations.Migration):
     dependencies = [
         ("community", "0020_tier_override_revoked_audit_action"),
@@ -23,5 +14,4 @@ class Migration(migrations.Migration):
             name="booking_url",
             field=models.CharField(blank=True, help_text="The profile's scheduler link.", max_length=500),
         ),
-        migrations.RunPython(update_alexey_booking_url, noop_reverse),
     ]

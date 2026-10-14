@@ -4,17 +4,29 @@ from django.http import HttpResponse
 from django.views.decorators.http import require_GET
 
 from integrations.config import site_base_url
-from website.search_indexing import production_search_indexing_enabled
+from website.search_indexing import (
+    faceted_listing_robots_disallow_patterns,
+    production_search_indexing_enabled,
+)
 
 
 @require_GET
 def robots_txt(request):
-    """Allow crawling everywhere and advertise the sitemap only on prod."""
+    """Keep public pages crawlable while excluding private and facet URLs."""
     lines = [
         'User-agent: *',
         'Allow: /',
     ]
     if production_search_indexing_enabled():
+        lines.extend([
+            'Disallow: /accounts/',
+            'Disallow: /register',
+            'Disallow: /api/',
+        ])
+        lines.extend(
+            f'Disallow: {pattern}'
+            for pattern in faceted_listing_robots_disallow_patterns()
+        )
         canonical_base = str(site_base_url()).strip().rstrip('/')
         lines.extend(('', f'Sitemap: {canonical_base}/sitemap.xml'))
 

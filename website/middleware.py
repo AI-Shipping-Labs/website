@@ -1,5 +1,6 @@
 """Server-level middleware that runs before host validation."""
 
+import re
 from urllib.parse import urlsplit
 
 from django.conf import settings
@@ -32,6 +33,43 @@ class SearchIndexingPolicyMiddleware:
 
 # Compatibility import for tests/extensions written against issue #1376.
 DevSearchExclusionMiddleware = SearchIndexingPolicyMiddleware
+
+
+_CRAWLER_USER_AGENT_RE = re.compile(
+    r'(?:^|[^a-z0-9])(?:[a-z0-9._-]*(?:bot|crawler|spider))'
+    r'(?:$|[/\s;,+()])',
+    re.IGNORECASE,
+)
+_SOCIAL_LOGIN_START_RE = re.compile(
+    r'^/accounts/(?:google|github|slack)/login/$',
+)
+
+
+def is_web_crawler_user_agent(user_agent):
+    """Recognize crawler tokens without classifying browser automation."""
+    return bool(_CRAWLER_USER_AGENT_RE.search(str(user_agent or '')))
+
+
+class CrawlerOAuthGuardMiddleware:
+    """Stop crawler reads before social login creates session/OAuth state."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        if (
+            request.method in {'GET', 'HEAD'}
+            and _SOCIAL_LOGIN_START_RE.fullmatch(request.path_info)
+            and is_web_crawler_user_agent(
+                request.META.get('HTTP_USER_AGENT', ''),
+            )
+        ):
+            return HttpResponse(
+                'Crawler access denied.\n',
+                status=403,
+                content_type='text/plain; charset=utf-8',
+            )
+        return self.get_response(request)
 
 
 class HealthCheckMiddleware:

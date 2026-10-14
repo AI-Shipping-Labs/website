@@ -10,6 +10,7 @@ including page provides them, and fall back to /projects otherwise.
 <div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="project-card-tags">
   {% for tag in project.tags|slice:":3" %}
   <a href="{% tag_add_url project_tag_base selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+     rel="nofollow"
      class="inline-flex max-w-full items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="project-card-tag-link">{{ tag }}</a>
   {% endfor %}

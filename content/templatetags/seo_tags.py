@@ -25,6 +25,7 @@ from events.services.display_time import format_event_tz_strip
 from events.services.public_copy import strip_internal_description_notes
 from integrations.config import site_base_url
 from integrations.services.banner_generator.resolve import effective_banner_url
+from website.search_indexing import request_has_listing_facets
 
 register = template.Library()
 
@@ -891,7 +892,10 @@ def page_seo_tags(context, title, description, canonical_path, canonical_query='
         path = path.rstrip('/')
 
     canonical_url = f'{site_url}{path}'
+    request = context.get('request')
     query = str(canonical_query or '').strip().lstrip('?')
+    if request is not None and request_has_listing_facets(request):
+        query = ''
     if query:
         canonical_url = f'{canonical_url}?{query}'
 

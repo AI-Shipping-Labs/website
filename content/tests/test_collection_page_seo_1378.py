@@ -324,9 +324,9 @@ class EventsCollectionMetadataTest(TestCase):
         self.assertEqual(head.meta['og:url'], [expected_url])
         return response, head
 
-    def test_past_filter_has_distinct_title_description_and_canonical(self):
+    def test_past_filter_has_distinct_copy_and_unfiltered_canonical(self):
         response, head = self.assert_event_url(
-            '?filter=past', f'{SITE_URL}/events?filter=past',
+            '?filter=past', f'{SITE_URL}/events',
         )
 
         self.assertEqual(head.title, 'Past Events | AI Shipping Labs')
@@ -344,10 +344,10 @@ class EventsCollectionMetadataTest(TestCase):
         self.assertEqual(head.meta['twitter:description'], [description])
         self.assertEqual(response.context['filter_mode'], 'past')
 
-    def test_past_tag_and_page_are_dropped_while_filter_state_stays_active(self):
+    def test_past_tag_and_page_use_unfiltered_canonical(self):
         response, _head_metadata = self.assert_event_url(
             '?filter=past&tag=python&page=2',
-            f'{SITE_URL}/events?filter=past',
+            f'{SITE_URL}/events',
         )
 
         self.assertEqual(response.context['filter_mode'], 'past')
@@ -371,11 +371,11 @@ class EventsCollectionMetadataTest(TestCase):
             ('?page=999', f'{SITE_URL}/events'),
             (
                 '?filter=past&page=2',
-                f'{SITE_URL}/events?filter=past&page=2',
+                f'{SITE_URL}/events',
             ),
             (
                 '?filter=past&page=999',
-                f'{SITE_URL}/events?filter=past&page=2',
+                f'{SITE_URL}/events',
             ),
         ]
         for query, expected_url in cases:

@@ -23,9 +23,9 @@
 
       {% if all_tags %}
       <div class="mb-8 flex flex-wrap gap-2" aria-label="Filter downloads by topic">
-        <a href="/downloads" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
+        <a href="/downloads" rel="nofollow" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
         {% for tag in all_tags %}
-        <a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
+        <a href="{% tag_add_url base_path selected_tags tag %}" rel="nofollow" class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}" {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
         {% endfor %}
       </div>
       {% endif %}
@@ -49,7 +49,7 @@
           </a>
           {% if item.download.tags %}
           <div class="flex flex-wrap gap-1.5 px-4 pb-4 sm:px-5 sm:pb-5" data-testid="download-card-tags">
-            {% for tag in item.download.tags|slice:":3" %}<a href="{% tag_add_url base_path selected_tags tag %}" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>{% endfor %}
+            {% for tag in item.download.tags|slice:":3" %}<a href="{% tag_add_url base_path selected_tags tag %}" rel="nofollow" class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">{{ tag }}</a>{% endfor %}
             {% if item.download.tags|length > 3 %}<span class="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground" aria-label="{{ item.download.tags|length|add:'-3' }} more download tags">+{{ item.download.tags|length|add:"-3" }}</span>{% endif %}
           </div>
           {% endif %}
@@ -59,7 +59,7 @@
       {% else %}
         {% if selected_tags %}
           {% button_classes 'secondary' as downloads_empty_cta_classes %}
-          {% member_empty_state title='No downloads found' body='No downloads match the selected topics.' icon='download' kind='filter' primary_cta_label='View all downloads' primary_cta_url='/downloads' primary_cta_icon='arrow-right' primary_cta_class=downloads_empty_cta_classes %}
+          {% member_empty_state title='No downloads found' body='No downloads match the selected topics.' icon='download' kind='filter' primary_cta_label='View all downloads' primary_cta_url='/downloads' primary_cta_icon='arrow-right' primary_cta_class=downloads_empty_cta_classes primary_cta_rel='nofollow' %}
         {% else %}
           {% member_empty_state title='No downloads yet' body='No downloadable resources yet. Check back soon.' icon='download' kind='fresh' %}
         {% endif %}

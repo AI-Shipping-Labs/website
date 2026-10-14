@@ -37,6 +37,7 @@
         </div>
         <div class="inline-flex rounded-lg border border-border bg-secondary/60 p-1" role="tablist" aria-label="Event filter">
           <a href="{% url 'events_list' %}"
+             rel="nofollow"
              role="tab"
              data-testid="events-filter-upcoming"
              {% if filter_mode == 'upcoming' %}aria-current="page" aria-selected="true"{% else %}aria-selected="false"{% endif %}
@@ -45,6 +46,7 @@
             Upcoming
           </a>
           <a href="/events?filter=past"
+             rel="nofollow"
              role="tab"
              data-testid="events-filter-past"
              {% if filter_mode == 'past' %}aria-current="page" aria-selected="true"{% else %}aria-selected="false"{% endif %}
@@ -64,7 +66,7 @@
           {{ tag }}
         </span>
         {% endfor %}
-        <a href="/events?filter=past" class="text-xs text-accent hover:underline">Clear</a>
+        <a href="/events?filter=past" rel="nofollow" class="text-xs text-accent hover:underline">Clear</a>
       </div>
       {% endif %}
 
@@ -103,7 +105,7 @@
 
         {% else %}
         {% if selected_tags %}
-        {% member_empty_state title='No past events match this filter' body='Try another topic or view the full history.' icon='calendar' kind='filter' primary_cta_label='View all past events' primary_cta_url='/events?filter=past' %}
+        {% member_empty_state title='No past events match this filter' body='Try another topic or view the full history.' icon='calendar' kind='filter' primary_cta_label='View all past events' primary_cta_url='/events?filter=past' primary_cta_rel='nofollow' %}
         {% else %}
         {% member_empty_state title='No past events yet' body='Once a session wraps up it will show up here.' icon='calendar' kind='fresh' %}
         {% endif %}

@@ -22,6 +22,7 @@ opens with a dangling "or" that refers to nothing.
 <div class="space-y-4" data-auth-oauth-providers>
   {% if oauth_google_enabled %}
   <a href="{% url 'google_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
+     rel="nofollow"
      class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-google-action"
      {% if oauth_action == "Sign up" %}data-ga-oauth-track-signup-start="true" data-ga-oauth-provider="google"{% endif %}>
@@ -37,6 +38,7 @@ opens with a dangling "or" that refers to nothing.
 
   {% if oauth_github_enabled %}
   <a href="{% url 'github_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
+     rel="nofollow"
      class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-github-action"
      {% if oauth_action == "Sign up" %}data-ga-oauth-track-signup-start="true" data-ga-oauth-provider="github"{% endif %}>
@@ -49,6 +51,7 @@ opens with a dangling "or" that refers to nothing.
 
   {% if oauth_slack_enabled and oauth_action != "Sign up" %}
   <a href="{% url 'slack_login' %}{% if next_url %}?next={{ next_url|urlencode }}{% endif %}"
+     rel="nofollow"
      class="{% button_classes 'secondary' size='md' extra='w-full' %}"
      data-testid="oauth-slack-action"
      >

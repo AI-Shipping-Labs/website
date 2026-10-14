@@ -294,7 +294,7 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
     goto_with_retry(page, f'{django_server}/events?filter=past')
     _assert_page_head(
         page,
-        f'{site_url}/events?filter=past',
+        f'{site_url}/events',
         'Past Events | AI Shipping Labs',
     )
     assert 'community calls, book club sessions, and Q&As' in _meta(
@@ -313,7 +313,7 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
     assert 'Page 2 of 2' in page.get_by_test_id(
         'events-past-pagination'
     ).inner_text()
-    assert _canonical(page) == f'{site_url}/events?filter=past'
+    assert _canonical(page) == f'{site_url}/events'
 
     upcoming_cases = (
         '/events?page=1',
@@ -331,16 +331,16 @@ def test_events_past_taxonomy_facets_and_pagination_are_normalized(
         assert page.get_by_test_id('events-past-pagination').count() == 0
 
     past_pagination_cases = (
-        ('/events?filter=past&page=1', f'{site_url}/events?filter=past', 1),
+        ('/events?filter=past&page=1', f'{site_url}/events', 1),
         (
             '/events?filter=past&page=2',
-            f'{site_url}/events?filter=past&page=2',
+            f'{site_url}/events',
             2,
         ),
-        ('/events?filter=past&page=bad', f'{site_url}/events?filter=past', 1),
+        ('/events?filter=past&page=bad', f'{site_url}/events', 1),
         (
             '/events?filter=past&page=999',
-            f'{site_url}/events?filter=past&page=2',
+            f'{site_url}/events',
             2,
         ),
     )

@@ -16,6 +16,19 @@ PRODUCTION_URL = 'https://aishippinglabs.com'
 PRODUCTION_BODY = (
     'User-agent: *\n'
     'Allow: /\n'
+    'Disallow: /accounts/\n'
+    'Disallow: /register\n'
+    'Disallow: /api/\n'
+    'Disallow: /blog?*tag=\n'
+    'Disallow: /blog?*topic=\n'
+    'Disallow: /projects?*difficulty=\n'
+    'Disallow: /projects?*tag=\n'
+    'Disallow: /resources?*tag=\n'
+    'Disallow: /downloads?*tag=\n'
+    'Disallow: /workshops/catalog?*tag=\n'
+    'Disallow: /workshops/catalog?*topic=\n'
+    'Disallow: /events?*filter=\n'
+    'Disallow: /events?*tag=\n'
     '\n'
     'Sitemap: https://aishippinglabs.com/sitemap.xml\n'
 )
@@ -54,7 +67,7 @@ class ProductionRobotsResponseTest(RobotsConfigMixin, TestCase):
         self.assertEqual(response.content.decode().count('User-agent:'), 1)
         self.assertEqual(response.content.decode().count('Allow:'), 1)
         self.assertEqual(response.content.decode().count('Sitemap:'), 1)
-        self.assertNotIn('Disallow:', response.content.decode())
+        self.assertEqual(response.content.decode().count('Disallow:'), 13)
         self.assertNotIn('X-Robots-Tag', response)
         self.assertEqual(response['Cache-Control'], 'no-store, max-age=0')
         self.assertEqual(response['Pragma'], 'no-cache')
@@ -84,8 +97,10 @@ class ProductionRobotsResponseTest(RobotsConfigMixin, TestCase):
         second = self.client.get('/robots.txt')
         self.assertEqual(
             second.content.decode(),
-            'User-agent: *\nAllow: /\n\n'
-            'Sitemap: https://runtime-canonical.test/sitemap.xml\n',
+            PRODUCTION_BODY.replace(
+                'https://aishippinglabs.com/sitemap.xml',
+                'https://runtime-canonical.test/sitemap.xml',
+            ),
         )
         self.assertNotContains(second, 'runtime-canonical.test//sitemap.xml')
         self.assertEqual(second['Cache-Control'], 'no-store, max-age=0')

@@ -81,7 +81,7 @@
     {% endcomment %}
     {% for tag in event.tags %}
     {% if event.is_past and event.status != 'cancelled' %}
-    <a href="/events?filter=past&amp;tag={{ tag }}" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
+    <a href="/events?filter=past&amp;tag={{ tag }}" rel="nofollow" class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground hover:bg-secondary/80 transition-colors">{{ tag }}</a>
     {% else %}
     <span class="rounded-full bg-secondary px-3 py-1 text-xs text-muted-foreground">{{ tag }}</span>
     {% endif %}

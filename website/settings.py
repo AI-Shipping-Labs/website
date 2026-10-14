@@ -267,6 +267,9 @@ MIDDLEWARE = [
     # get security headers but skip session / auth / CSRF processing.
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'integrations.middleware.RemoveTrailingSlashMiddleware',
+    # Must remain ahead of SessionMiddleware: crawler reads of allauth login
+    # entry points must not allocate a session or OAuth state.
+    'website.middleware.CrawlerOAuthGuardMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

@@ -29,6 +29,7 @@
         <div class="flex flex-wrap gap-2">
           {% if current_difficulty %}
           <a href="/projects{% if selected_tags %}?{% for tag in selected_tags %}tag={{ tag }}{% if not forloop.last %}&{% endif %}{% endfor %}{% endif %}"
+             rel="nofollow"
              class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground"
              data-testid="project-difficulty-clear">
             Clear filter
@@ -36,6 +37,7 @@
           {% endif %}
           {% for diff in all_difficulties %}
           <a href="/projects?difficulty={{ diff }}{% for tag in selected_tags %}&tag={{ tag }}{% endfor %}"
+             rel="nofollow"
              class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if current_difficulty == diff %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
              data-testid="project-difficulty-{{ diff }}"
              {% if current_difficulty == diff %}aria-current="page"{% endif %}>
@@ -44,6 +46,7 @@
           {% endfor %}
           {% if has_unspecified_difficulty %}
           <a href="/projects?difficulty=unspecified{% for tag in selected_tags %}&tag={{ tag }}{% endfor %}"
+             rel="nofollow"
              class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if current_difficulty == 'unspecified' %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
              data-testid="project-difficulty-unspecified"
              {% if current_difficulty == 'unspecified' %}aria-current="page"{% endif %}>
@@ -59,11 +62,13 @@
         <p class="mb-2 text-sm font-medium text-muted-foreground">Filter by topic</p>
         <div class="flex flex-wrap gap-2" aria-label="Filter projects by topic">
           <a href="/projects{% if current_difficulty %}?difficulty={{ current_difficulty|urlencode }}{% endif %}"
+             rel="nofollow"
              class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
              data-testid="project-tag-all"
              {% if not selected_tags %}aria-current="page"{% endif %}>All</a>
           {% for tag in all_tags|slice:":12" %}
           <a href="{% tag_add_url base_path selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+             rel="nofollow"
              class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
              data-testid="project-tag-{{ tag }}"
              {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
@@ -78,6 +83,7 @@
           <div class="mt-2 flex flex-wrap gap-2">
             {% for tag in all_tags|slice:"12:" %}
             <a href="{% tag_add_url base_path selected_tags tag %}{% if current_difficulty %}&amp;difficulty={{ current_difficulty|urlencode }}{% endif %}"
+               rel="nofollow"
                class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if tag in selected_tags %}bg-accent text-accent-foreground{% else %}bg-secondary text-muted-foreground hover:bg-secondary/80 hover:text-foreground{% endif %}"
                data-testid="project-tag-{{ tag }}"
                {% if tag in selected_tags %}aria-current="page"{% endif %}>{{ tag }}</a>
@@ -96,9 +102,9 @@
       </div>
       {% else %}
       {% if selected_tags %}
-      {% member_empty_state title='No projects match these tags' body='No projects match the selected tags.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' testid='projects-empty-state' %}
+      {% member_empty_state title='No projects match these tags' body='No projects match the selected tags.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' primary_cta_rel='nofollow' testid='projects-empty-state' %}
       {% elif current_difficulty %}
-      {% member_empty_state title='No projects match this difficulty' body='No projects match the selected difficulty.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' testid='projects-empty-state' %}
+      {% member_empty_state title='No projects match this difficulty' body='No projects match the selected difficulty.' icon='rocket' kind='filter' primary_cta_label='View all projects' primary_cta_url='/projects' primary_cta_rel='nofollow' testid='projects-empty-state' %}
       {% else %}
       {% member_empty_state title='No project ideas yet' body='Check back soon for pet and portfolio project ideas.' icon='rocket' kind='fresh' testid='projects-empty-state' %}
       {% endif %}

@@ -26,7 +26,7 @@
   {% if primary_cta_label and primary_cta_url or secondary_cta_label and secondary_cta_url %}
   <div class="mt-4 flex flex-col items-center justify-center gap-2 sm:flex-row">
     {% if primary_cta_label and primary_cta_url %}
-    <a href="{{ primary_cta_url }}" class="{{ primary_cta_class }}">
+    <a href="{{ primary_cta_url }}"{% if primary_cta_rel %} rel="{{ primary_cta_rel }}"{% endif %} class="{{ primary_cta_class }}">
       {{ primary_cta_label }}
       {% if primary_cta_icon %}<i data-lucide="{{ primary_cta_icon }}" class="h-4 w-4"></i>{% endif %}
     </a>

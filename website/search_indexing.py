@@ -17,6 +17,20 @@ PRODUCTION_SITE_HOST = 'aishippinglabs.com'
 NOINDEX_ROBOTS_DIRECTIVE = 'noindex, nofollow, noarchive'
 NOINDEX_ROBOTS_META_CONTENT = 'noindex,nofollow,noarchive'
 
+# Public listing routes with query parameters that narrow the collection.
+# Keep this registry aligned with the filter controls rendered by the listing
+# templates. It drives both page-level noindex policy and robots.txt rules so
+# a newly recognized facet cannot be fixed in one crawler surface but missed
+# in the other.
+FACETED_LISTING_QUERY_PARAMS = {
+    '/blog': frozenset({'tag', 'topic'}),
+    '/projects': frozenset({'difficulty', 'tag'}),
+    '/resources': frozenset({'tag'}),
+    '/downloads': frozenset({'tag'}),
+    '/workshops/catalog': frozenset({'tag', 'topic'}),
+    '/events': frozenset({'filter', 'tag'}),
+}
+
 # Backwards-compatible names retained for #1376 callers and tests.
 DEV_ROBOTS_DIRECTIVE = NOINDEX_ROBOTS_DIRECTIVE
 DEV_ROBOTS_META_CONTENT = NOINDEX_ROBOTS_META_CONTENT
@@ -141,6 +155,22 @@ def _resolved_route_name(request):
         return None
 
 
+def request_has_listing_facets(request):
+    """Return whether the request narrows a registered public listing."""
+    path = request.path.rstrip('/') or '/'
+    facet_params = FACETED_LISTING_QUERY_PARAMS.get(path, ())
+    return any(param in request.GET for param in facet_params)
+
+
+def faceted_listing_robots_disallow_patterns():
+    """Return robots.txt patterns for every registered listing facet."""
+    return tuple(
+        f'{path}?*{param}='
+        for path, params in FACETED_LISTING_QUERY_PARAMS.items()
+        for param in sorted(params)
+    )
+
+
 def production_request_indexing_disabled(request):
     """Return whether a production request is a private/operational surface."""
     path = request.path.rstrip('/') or '/'
@@ -150,6 +180,8 @@ def production_request_indexing_disabled(request):
     if path in _PRIVATE_API_RESULT_PATHS:
         return True
     if _resolved_route_name(request) in _PRIVATE_ROUTE_NAMES:
+        return True
+    if request_has_listing_facets(request):
         return True
 
     user = getattr(request, 'user', None)

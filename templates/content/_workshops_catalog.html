@@ -42,11 +42,13 @@
       {% if topic_filters %}
       <nav data-cb-syllabus-browse class="mt-4 flex flex-wrap gap-2" aria-label="Filter workshops by topic" data-testid="workshop-topic-filter">
         <a href="{{ base_path }}"
+           rel="nofollow"
            class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if not selected_topic and not selected_tags %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
            data-testid="workshop-topic-all"
            {% if not selected_topic and not selected_tags %}aria-current="page"{% endif %}>All</a>
         {% for topic in topic_filters %}
         <a href="{{ base_path }}?topic={{ topic.slug }}"
+           rel="nofollow"
            class="inline-flex min-h-[44px] items-center justify-center rounded-full px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background {% if topic.slug == selected_topic %}bg-accent text-accent-foreground{% else %}border border-border bg-transparent text-muted-foreground hover:border-accent/50 hover:text-foreground{% endif %}"
            data-testid="workshop-topic-{{ topic.slug }}"
            {% if topic.slug == selected_topic %}aria-current="page"{% endif %}>{{ topic.label }}</a>
@@ -98,7 +100,7 @@
     {# compute classes with button_classes and pass them in, otherwise #}
     {# the CTA renders as a bare accent link. #}
     {% button_classes 'secondary' as clear_filters_cta_class %}
-    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url primary_cta_class=clear_filters_cta_class testid='workshops-empty-state' %}
+    {% member_empty_state title='No workshops found' body='No workshops match the selected filters.' icon='graduation-cap' kind='filter' primary_cta_label='View all workshops' primary_cta_url=clear_filters_url primary_cta_class=clear_filters_cta_class primary_cta_rel='nofollow' testid='workshops-empty-state' %}
     {% else %}
     {% member_empty_state title='No workshops published yet' body='Check back soon.' icon='graduation-cap' kind='fresh' testid='workshops-empty-state' %}
     {% endif %}

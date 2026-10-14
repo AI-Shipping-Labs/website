@@ -2030,6 +2030,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_path_dispatch_does_not_steal_another_course_route",
     })
 
+    issue_1828_owners = frozenset({
+        "playwright_tests/test_homework_learning_public.py::"
+        "test_examples_open_by_keyboard_and_links_survive_refresh_edit_and_review",
+        "playwright_tests/test_homework_learning_public.py::"
+        "test_invalid_public_link_shows_targeted_error_and_keeps_the_draft",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2255,8 +2262,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2961)
-        self.assertEqual(len(inventory.owners), 2757)
+        self.assertEqual(inventory.item_count, 2963)
+        self.assertEqual(len(inventory.owners), 2759)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2299,6 +2306,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1938_owners
             | self.issue_1921_owners
             | self.issue_1827_owners
+            | self.issue_1828_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
@@ -2415,6 +2423,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1802_owners
             | self.issue_1944_owners
             | self.issue_1827_owners
+            | self.issue_1828_owners
             | self.issue_1896_owners
             | self.issue_1948_owners
             | self.issue_1949_owners

@@ -42,7 +42,14 @@ def _create_assignment(email):
         homework=(
             'Build your project.\n\n## Question 1. Project\nDescribe your project.\n'
             '## Learning in Public\nShare a small win, a useful lesson, or a demo.\n\n'
-            'For example, link to a project update, a short demo, or a post about a problem you solved.'
+            'For example, link to a project update, a short demo, or a post about a problem you solved.\n\n'
+            '<details>\n<summary>LinkedIn example</summary>\n\n'
+            '<pre><code>Shipped the first version of my project this week, with a long line that '
+            'must scroll inside its own box instead of widening the page. Project: &lt;LINK&gt;</code></pre>\n\n'
+            '</details>\n\n'
+            '<details>\n<summary>X example (under 280 weighted characters)</summary>\n\n'
+            '<pre><code>Shipped my project. Project: &lt;LINK&gt;</code></pre>\n\n'
+            '</details>\n'
         ),
     )
     homework = Homework.objects.create(
@@ -70,6 +77,23 @@ def _learner_context(browser, email):
         'domain': '127.0.0.1', 'path': '/',
     }])
     return context
+
+
+def _wait_for_saved_links(page, homework, expected):
+    """Poll the stored draft: the status text can still show an older save."""
+    # Model import waits for conftest's Django setup, like this module's other helpers.
+    from community_base.homework_steps.models import HomeworkDraft
+
+    key = f'aisl:homework:{homework.pk}'
+    for _ in range(50):
+        draft = HomeworkDraft.objects.filter(assignment_key=key).first()
+        # Form serialization submits textarea newlines as CRLF.
+        saved = draft.answers.get('learning-in-public', '') if draft else ''
+        if saved.replace('\r\n', '\n') == expected:
+            return
+        page.wait_for_timeout(100)
+    status = page.locator('[data-save-status]').text_content()
+    raise AssertionError(f'Draft never saved {expected!r}; save status {status!r}')
 
 
 @pytest.mark.core
@@ -128,4 +152,106 @@ def test_public_links_are_configurable_saved_and_submitted(django_server, browse
     assert submission.homework_link == 'https://github.com/student/project'
     assert submission.time_spent_lectures is None
     assert submission.time_spent_homework is None
+    context.close()
+
+
+@browser_journey
+def test_examples_open_by_keyboard_and_links_survive_refresh_edit_and_review(
+    django_server, browser,
+):
+    """Issue #1828: collapsed examples, persisted links and the Review list."""
+    from content.models.homework import Submission
+
+    email = 'learning-public-review-1828@test.com'
+    unit, homework = _create_assignment(email)
+    context = _learner_context(browser, email)
+    page = context.new_page()
+    page.set_viewport_size({'width': 390, 'height': 844})
+    unit_url = f'{django_server}{unit.get_absolute_url()}'
+    page.goto(f'{unit_url}/learning-in-public', wait_until='domcontentloaded')
+
+    prompt = page.get_by_test_id('homework-question-prompt')
+    linkedin = prompt.locator('details').filter(has_text='LinkedIn example')
+    x_example = prompt.locator('details').filter(has_text='X example')
+    expect(linkedin).not_to_have_attribute('open', '')
+    expect(x_example).not_to_have_attribute('open', '')
+    expect(prompt.get_by_text('Shipped my project.')).to_be_hidden()
+
+    linkedin.locator('summary').focus()
+    page.keyboard.press('Enter')
+    expect(linkedin).to_have_attribute('open', '')
+    x_example.locator('summary').click()
+    expect(prompt.get_by_text('Shipped my project.')).to_be_visible()
+    assert page.evaluate('document.documentElement.scrollWidth') <= 390
+    page.screenshot(path='.tmp/learning-in-public-1828-examples-mobile.png', full_page=True)
+
+    page.get_by_label('Public link 1').fill('https://example.com/first-post')
+    page.get_by_role('button', name='Add another link').click()
+    page.get_by_label('Public link 2').fill('https://example.com/second-post')
+    _wait_for_saved_links(
+        page, homework, 'https://example.com/first-post\nhttps://example.com/second-post',
+    )
+
+    page.reload(wait_until='domcontentloaded')
+    expect(page.get_by_label('Public link 1')).to_have_value('https://example.com/first-post')
+    expect(page.get_by_label('Public link 2')).to_have_value('https://example.com/second-post')
+    page.get_by_label('Public link 2').fill('https://example.com/edited-post')
+    _wait_for_saved_links(
+        page, homework, 'https://example.com/first-post\nhttps://example.com/edited-post',
+    )
+
+    page.get_by_role('button', name='Save & review').click()
+    expect(page).to_have_url(f'{unit_url}/review')
+    public_row = page.get_by_test_id('homework-review-summary').locator('li.homework-review-row').filter(
+        has=page.get_by_test_id('homework-review-public-links'),
+    )
+    expect(public_row.locator('strong')).to_have_text('Learning in Public')
+    expect(public_row.get_by_role('listitem')).to_have_text([
+        'https://example.com/first-post', 'https://example.com/edited-post',
+    ])
+    page.screenshot(path='.tmp/learning-in-public-1828-review-mobile.png', full_page=True)
+    assert not Submission.objects.filter(homework=homework).exists()
+
+    page.get_by_label('Homework URL (required)').fill('https://github.com/student/project')
+    page.get_by_role('button', name='Submit homework').click()
+    expect(page.get_by_test_id('homework-submitted-status')).to_be_visible()
+    submission = Submission.objects.get(homework=homework)
+    assert submission.learning_in_public_links == [
+        'https://example.com/first-post', 'https://example.com/edited-post',
+    ]
+    context.close()
+
+
+@browser_journey
+def test_invalid_public_link_shows_targeted_error_and_keeps_the_draft(
+    django_server, browser,
+):
+    """Issue #1828: a bad link blocks submit with a named error, draft intact."""
+    from content.models.homework import Submission
+
+    email = 'learning-public-invalid-1828@test.com'
+    unit, homework = _create_assignment(email)
+    context = _learner_context(browser, email)
+    page = context.new_page()
+    unit_url = f'{django_server}{unit.get_absolute_url()}'
+    page.goto(f'{unit_url}/learning-in-public', wait_until='domcontentloaded')
+
+    page.get_by_label('Public link 1').fill('https://example.com/good-post')
+    page.get_by_role('button', name='Add another link').click()
+    page.get_by_label('Public link 2').fill('not a link')
+    _wait_for_saved_links(page, homework, 'https://example.com/good-post\nnot a link')
+
+    page.goto(f'{unit_url}/review', wait_until='domcontentloaded')
+    page.get_by_label('Homework URL (required)').fill('https://github.com/student/project')
+    page.get_by_role('button', name='Submit homework').click()
+
+    expect(page.get_by_role('alert')).to_have_text(
+        'Learning in Public: public link 2 is not a valid http or https link.',
+    )
+    page.screenshot(path='.tmp/learning-in-public-1828-error-desktop.png', full_page=True)
+    assert not Submission.objects.filter(homework=homework).exists()
+
+    page.goto(f'{unit_url}/learning-in-public', wait_until='domcontentloaded')
+    expect(page.get_by_label('Public link 1')).to_have_value('https://example.com/good-post')
+    expect(page.get_by_label('Public link 2')).to_have_value('not a link')
     context.close()

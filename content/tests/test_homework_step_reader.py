@@ -620,7 +620,11 @@ class ActivatedHomeworkReaderTest(HomeworkUnitSetupMixin, TestCase):
         })
 
         self.assertEqual(response.status_code, 400)
-        self.assertContains(response, 'Add no more than 1 public link.', status_code=400)
+        self.assertContains(
+            response,
+            'Learning in Public: add no more than 1 public link (you added 2).',
+            status_code=400,
+        )
         self.assertEqual(
             HomeworkDraft.objects.get(user=self.student).answers[LEARNING_IN_PUBLIC_KEY],
             'https://example.com/one\nhttps://example.com/two',

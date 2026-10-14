@@ -22,7 +22,9 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='podartifact',
             name='size_bytes',
-            field=models.PositiveBigIntegerField(default=0, editable=False),
+            field=models.PositiveBigIntegerField(
+                db_default=0, default=0, editable=False,
+            ),
         ),
         migrations.RunPython(backfill_size_bytes, migrations.RunPython.noop),
     ]

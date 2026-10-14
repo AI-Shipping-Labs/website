@@ -68,7 +68,10 @@ class PodArtifact(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     # Stored so list surfaces never load and UTF-8-encode whole transcript
     # bodies just to size them (perf lane 2026-10-14); save() keeps it exact.
-    size_bytes = models.PositiveBigIntegerField(default=0, editable=False)
+    # db_default keeps old-image inserts safe during the deploy overlap.
+    size_bytes = models.PositiveBigIntegerField(
+        default=0, db_default=0, editable=False,
+    )
 
     class Meta:
         ordering = ['-created_at', '-pk']

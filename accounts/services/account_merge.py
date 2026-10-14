@@ -71,7 +71,10 @@ class SubscriptionConflictError(MergeError):
     def __init__(self, canonical_sub, secondary_sub):
         self.canonical_sub = canonical_sub
         self.secondary_sub = secondary_sub
-        super().__init__("Both accounts have a live subscription; refusing to drop a paid sub without force.")
+        super().__init__(
+            "Both accounts have a live subscription; refusing to drop a paid "
+            "sub without force."
+        )
 
 
 class StaffMergeRefused(MergeError):
@@ -158,10 +161,7 @@ def _strategy_user_attribution(plan, related_model, field_name, canonical, secon
         moved = 1
     sec.delete()
     plan.record_move(
-        related_model._meta.label,
-        field_name,
-        moved=moved,
-        dropped=1 - moved,
+        related_model._meta.label, field_name, moved=moved, dropped=1 - moved,
     )
 
 
@@ -216,7 +216,9 @@ def _strategy_course_progress(plan, related_model, field_name, canonical, second
     """
     moved = 0
     dropped = 0
-    canon_units = {p.unit_id: p for p in related_model.objects.filter(user=canonical)}
+    canon_units = {
+        p.unit_id: p for p in related_model.objects.filter(user=canonical)
+    }
     for sec_row in related_model.objects.filter(user=secondary):
         canon_row = canon_units.get(sec_row.unit_id)
         if canon_row is None:
@@ -252,7 +254,11 @@ def _strategy_email_address(plan, related_model, field_name, canonical, secondar
     one-primary-per-user index never sees two. Rows whose ``email`` canonical
     already owns are dropped (true ``(user, email)`` duplicate -- same address).
     """
-    canon_emails = set(related_model.objects.filter(**{field_name: canonical}).values_list("email", flat=True))
+    canon_emails = set(
+        related_model.objects.filter(**{field_name: canonical}).values_list(
+            "email", flat=True
+        )
+    )
     moved = 0
     dropped = 0
     for row in related_model.objects.filter(**{field_name: secondary}):
@@ -290,9 +296,9 @@ def _strategy_email_log(plan, related_model, field_name, canonical, secondary):
     ``campaign IS NULL`` -- is a straight bulk repoint.
     """
     canon_campaigns = set(
-        related_model.objects.filter(**{field_name: canonical}, campaign__isnull=False).values_list(
-            "campaign_id", flat=True
-        )
+        related_model.objects.filter(
+            **{field_name: canonical}, campaign__isnull=False
+        ).values_list("campaign_id", flat=True)
     )
     moved = 0
     for row in related_model.objects.filter(**{field_name: secondary}):
@@ -322,12 +328,17 @@ def _strategy_enrollment(plan, related_model, field_name, canonical, secondary):
     """
     now = timezone.now()
     canonical_active_courses = set(
-        related_model.objects.filter(user=canonical, unenrolled_at__isnull=True).values_list("course_id", flat=True)
+        related_model.objects.filter(
+            user=canonical, unenrolled_at__isnull=True
+        ).values_list("course_id", flat=True)
     )
     moved = 0
     dropped = 0
     for sec_row in related_model.objects.filter(user=secondary):
-        if sec_row.unenrolled_at is None and sec_row.course_id in canonical_active_courses:
+        if (
+            sec_row.unenrolled_at is None
+            and sec_row.course_id in canonical_active_courses
+        ):
             # Soft-unenrol secondary's active dup BEFORE repointing.
             sec_row.unenrolled_at = now
             sec_row.user = canonical
@@ -373,7 +384,9 @@ def _strategy_availability_profile(plan, related_model, field_name, canonical, s
     _strategy_reader_profile(plan, related_model, field_name, canonical, secondary)
 
 
-def _strategy_member_api_key(plan, related_model, field_name, canonical, secondary):
+def _strategy_member_api_key(
+    plan, related_model, field_name, canonical, secondary
+):
     """Revoke secondary member credentials without changing their owner.
 
     Revoked rows remain attached to the retired identity as durable security
@@ -386,7 +399,9 @@ def _strategy_member_api_key(plan, related_model, field_name, canonical, seconda
     plan.credentials["member_api_keys_revoked"] = revoked
 
 
-def _strategy_package_api_key(plan, related_model, field_name, canonical, secondary):
+def _strategy_package_api_key(
+    plan, related_model, field_name, canonical, secondary
+):
     """Revoke the secondary's community-base API keys instead of moving them.
 
     ``community_base.api.APIKey`` is a credential, so it follows the
@@ -404,7 +419,9 @@ def _strategy_package_api_key(plan, related_model, field_name, canonical, second
     """
     from accounts.models import Token
 
-    token_prefixes = Token.objects.filter(user=secondary).values_list("lookup_prefix", flat=True)
+    token_prefixes = Token.objects.filter(user=secondary).values_list(
+        "lookup_prefix", flat=True
+    )
     revoked = (
         related_model.objects.filter(
             **{field_name: secondary},
@@ -416,23 +433,24 @@ def _strategy_package_api_key(plan, related_model, field_name, canonical, second
     plan.credentials["package_api_keys_revoked"] = revoked
 
 
-def _strategy_operator_token(plan, related_model, field_name, canonical, secondary):
+def _strategy_operator_token(
+    plan, related_model, field_name, canonical, secondary
+):
     """Delete secondary operator credentials instead of transferring them."""
     tokens = related_model.objects.filter(**{field_name: secondary})
     deleted = tokens.count()
     if deleted:
-        try:
-            from community_base.api.models import APIKey
+        from community_base.api.models import APIKey
 
-            prefixes = list(tokens.values_list("lookup_prefix", flat=True))
-            APIKey.objects.filter(lookup_prefix__in=prefixes).delete()
-        except Exception:
-            pass
+        prefixes = list(tokens.values_list("lookup_prefix", flat=True))
+        APIKey.objects.filter(lookup_prefix__in=prefixes).delete()
         tokens.delete()
     plan.credentials["operator_tokens_deleted"] = deleted
 
 
-def _strategy_membership(plan, related_model, field_name, canonical, secondary):
+def _strategy_membership(
+    plan, related_model, field_name, canonical, secondary
+):
     """Keep both Membership rows (issue #1579).
 
     Every User row must keep exactly one Membership row, so the secondary's
@@ -444,7 +462,9 @@ def _strategy_membership(plan, related_model, field_name, canonical, secondary):
     return
 
 
-def _strategy_member_extra(plan, related_model, field_name, canonical, secondary):
+def _strategy_member_extra(
+    plan, related_model, field_name, canonical, secondary
+):
     """Keep both MemberExtra rows, but move the contact tags (issue #1692).
 
     ``accounts_ext.MemberExtra`` has the same shape as ``payments.Membership``:
@@ -700,9 +720,13 @@ def _repoint_relations(plan, canonical, secondary):
 
         keys = _unique_keys_for(related_model, field_name)
         if keys:
-            _repoint_with_unique_keys(plan, related_model, field_name, keys, canonical, secondary)
+            _repoint_with_unique_keys(
+                plan, related_model, field_name, keys, canonical, secondary
+            )
         else:
-            moved = related_model.objects.filter(**{field_name: secondary}).update(**{field_name: canonical})
+            moved = related_model.objects.filter(**{field_name: secondary}).update(
+                **{field_name: canonical}
+            )
             if moved:
                 plan.record_move(model_label, field_name, moved=moved)
 
@@ -772,20 +796,29 @@ def _reconcile_scalars(plan, canonical, secondary):
 
     # tier: higher stored subscription/base level wins. Temporary effective
     # access from TierOverride is reconciled separately below.
-    canon_level = canon_membership.tier.level if canon_membership.tier_id else 0
+    canon_level = (
+        canon_membership.tier.level if canon_membership.tier_id else 0
+    )
     sec_level = sec_membership.tier.level if sec_membership.tier_id else 0
     if sec_level > canon_level:
         rec["tier"] = {
-            "from": (canon_membership.tier.slug if canon_membership.tier_id else None),
+            "from": (
+                canon_membership.tier.slug if canon_membership.tier_id else None
+            ),
             "to": sec_membership.tier.slug,
             "source": "secondary",
         }
         canon_membership.tier = sec_membership.tier
 
     # Billing identifiers: move secondary's only when canonical has no sub.
-    if not canon_membership.subscription_id and sec_membership.subscription_id:
+    if (
+        not canon_membership.subscription_id
+        and sec_membership.subscription_id
+    ):
         if sec_membership.stripe_customer_id:
-            canon_membership.stripe_customer_id = sec_membership.stripe_customer_id
+            canon_membership.stripe_customer_id = (
+                sec_membership.stripe_customer_id
+            )
         canon_membership.subscription_id = sec_membership.subscription_id
         canon_membership.billing_period_end = sec_membership.billing_period_end
         canon_membership.pending_tier = sec_membership.pending_tier
@@ -835,12 +868,16 @@ def _reconcile_scalars(plan, canonical, secondary):
         canonical.import_metadata = merged
 
     # Bounce state: keep the WORSE of the two (a known-bad address stays bad).
-    if _BOUNCE_RANK.get(secondary.bounce_state, 0) > _BOUNCE_RANK.get(canonical.bounce_state, 0):
+    if _BOUNCE_RANK.get(secondary.bounce_state, 0) > _BOUNCE_RANK.get(
+        canonical.bounce_state, 0
+    ):
         canonical.bounce_state = secondary.bounce_state
         canonical.bounce_recorded_at = secondary.bounce_recorded_at
         canonical.last_bounce_diagnostic = secondary.last_bounce_diagnostic
         rec["bounce_state"] = {"to": canonical.bounce_state}
-    canonical.soft_bounce_count = max(canonical.soft_bounce_count, secondary.soft_bounce_count)
+    canonical.soft_bounce_count = max(
+        canonical.soft_bounce_count, secondary.soft_bounce_count
+    )
 
     # unsubscribed: OR.
     if secondary.unsubscribed and not canonical.unsubscribed:
@@ -859,7 +896,9 @@ def _reconcile_tier_overrides(plan, canonical):
     """Collapse canonical's active overrides to ONE and revoke redundant ones."""
     now = timezone.now()
     active = list(
-        TierOverride.objects.filter(user=canonical, is_active=True, expires_at__gt=now).select_related("override_tier")
+        TierOverride.objects.filter(
+            user=canonical, is_active=True, expires_at__gt=now
+        ).select_related("override_tier")
     )
     if not active:
         return
@@ -885,7 +924,11 @@ def _reconcile_tier_overrides(plan, canonical):
     # Redundant-after-paid: if canonical's real stored tier now meets or exceeds the
     # surviving override's level, the override is courtesy fat -- revoke it
     # (mirrors ``_apply_stripe_subscription_tier``).
-    canon_level = canonical.membership.tier.level if canonical.membership.tier_id else 0
+    canon_level = (
+        canonical.membership.tier.level
+        if canonical.membership.tier_id
+        else 0
+    )
     if keeper.override_tier.level <= canon_level:
         keeper.is_active = False
         keeper.save(update_fields=["is_active"])
@@ -906,7 +949,9 @@ def _reconcile_tier_overrides(plan, canonical):
 # --------------------------------------------------------------------------- #
 # Public entry point.
 # --------------------------------------------------------------------------- #
-def merge_accounts(canonical, secondary, *, actor_label, actor=None, dry_run=False, force=False):
+def merge_accounts(
+    canonical, secondary, *, actor_label, actor=None, dry_run=False, force=False
+):
     """Merge ``secondary`` into ``canonical`` and return a :class:`MergePlan`.
 
     ``actor_label`` is the short string attributed in the audit ``details``;
@@ -930,13 +975,18 @@ def merge_accounts(canonical, secondary, *, actor_label, actor=None, dry_run=Fal
 
         # Idempotent no-op: a current merge leaves the inactive secondary with
         # a deterministic ``merged+<pk>@merged.invalid`` placeholder.
-        already_scrubbed = (secondary.email or "").strip().lower().endswith(SCRUBBED_EMAIL_SUFFIX)
+        already_scrubbed = (secondary.email or "").strip().lower().endswith(
+            SCRUBBED_EMAIL_SUFFIX
+        )
         if not secondary.is_active and already_scrubbed:
             plan.already_merged = True
             return plan
 
-        if (canonical.is_staff or canonical.is_superuser or secondary.is_staff or secondary.is_superuser) and not force:
-            raise StaffMergeRefused("Refusing to merge into / from a staff account without force.")
+        if (canonical.is_staff or canonical.is_superuser
+                or secondary.is_staff or secondary.is_superuser) and not force:
+            raise StaffMergeRefused(
+                "Refusing to merge into / from a staff account without force."
+            )
 
         canon_sub = canonical.membership.subscription_id or ""
         sec_sub = secondary.membership.subscription_id or ""
@@ -988,12 +1038,10 @@ def merge_accounts(canonical, secondary, *, actor_label, actor=None, dry_run=Fal
             if plan.stripe.get("subscription_moved"):
                 secondary_membership.stripe_customer_id = ""
                 secondary_membership.subscription_id = ""
-                secondary_membership.save(
-                    update_fields=[
-                        "stripe_customer_id",
-                        "subscription_id",
-                    ]
-                )
+                secondary_membership.save(update_fields=[
+                    "stripe_customer_id",
+                    "subscription_id",
+                ])
             plan.secondary_deactivated = True
 
             _write_audit(plan, canonical, actor_label)

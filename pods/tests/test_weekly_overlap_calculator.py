@@ -7,6 +7,7 @@ identical results while expanding each member once per request.
 """
 
 from datetime import UTC, datetime
+
 from django.test import SimpleTestCase, tag
 from freezegun import freeze_time
 

@@ -15,11 +15,11 @@ import datetime
 from collections import defaultdict
 from zoneinfo import ZoneInfo
 
-from accounts.utils.user_checks import is_authenticated_user
 from community_base.homework_steps.models import HomeworkDraft
 from django.db import models
 from django.utils import timezone
 
+from accounts.utils.user_checks import is_authenticated_user
 from content.models import Cohort, CohortEnrollment
 from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON, Unit

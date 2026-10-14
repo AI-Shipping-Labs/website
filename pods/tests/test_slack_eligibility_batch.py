@@ -10,12 +10,11 @@ values and the pod page's flat query cost as membership grows.
 import datetime
 
 from django.db import connection
+from django.test import TestCase, tag
+from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from payments.models import Tier, TierOverride
-from django.test import TestCase, tag
-from django.test.utils import CaptureQueriesContext
-
 from pods.services.people import is_slack_eligible, slack_eligibility_map
 from pods.services.presentation import build_pod_page
 from pods.tests.fixtures import (

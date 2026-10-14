@@ -52,13 +52,13 @@ from pods.services.people import (
 )
 from pods.services.slack import profile_url, suggested_channel_name
 from pods.services.suggestions import (
+    WeeklyOverlapCalculator,
     load_member_availability,
     member_strip,
     required_attendance,
     slots_attendable,
     suggest_slots,
     weekly_overlap,
-    WeeklyOverlapCalculator,
     weekly_overlap_hours,
 )
 

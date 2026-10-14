@@ -1,10 +1,15 @@
 """Filters for untrusted student homework answers (Studio + Review & submit)."""
 
 from django import template
+from django.core.exceptions import ValidationError
+from django.core.validators import URLValidator
+from django.utils.html import format_html, format_html_join
 
 from content.services.homework_review import render_student_answer_html
 
 register = template.Library()
+
+_HTTP_URL = URLValidator(schemes=['http', 'https'])
 
 # community-base stepper question types whose review value is a resolved
 # option label (or comma-joined labels), never student-authored text.
@@ -39,3 +44,32 @@ def homework_answer_html(value):
     if not isinstance(value, str):
         value = str(value)
     return render_student_answer_html(value)
+
+
+@register.filter(is_safe=True)
+def homework_public_links_html(value):
+    """Render the newline-separated Learning in Public answer as a URL list.
+
+    Issue #1828: Review shows each saved link on its own list item instead of
+    one run-together paragraph. Draft text has not been validated yet, so
+    only a valid http(s) URL becomes a link; anything else stays escaped text
+    for the learner to fix before submitting.
+    """
+    links = [line.strip() for line in str(value or '').splitlines() if line.strip()]
+    if not links:
+        return ''
+    items = format_html_join(
+        '', '<li>{}</li>',
+        ((_public_link_item(link),) for link in links),
+    )
+    return format_html('<ul data-testid="homework-review-public-links">{}</ul>', items)
+
+
+def _public_link_item(link):
+    try:
+        _HTTP_URL(link)
+    except ValidationError:
+        return link
+    return format_html(
+        '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>', link, link,
+    )

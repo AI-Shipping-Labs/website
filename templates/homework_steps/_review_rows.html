@@ -5,7 +5,9 @@
     <li class="homework-review-row">
       <div class="homework-review-answer">
         <strong>{% if row.has_semantic_label %}{{ row.step_label }}{% else %}Question {{ row.question_number }}{% endif %}</strong>
-        {% if row.answer|length > 240 %}
+        {% if row.key == 'learning-in-public' %}
+          {% with public_links_html=row.answer|homework_public_links_html %}{% if public_links_html %}<div class="prose max-w-none">{{ public_links_html }}</div>{% else %}<span>No links added</span>{% endif %}{% endwith %}
+        {% elif row.answer|length > 240 %}
           <details>
             <summary>{{ row.answer|truncatechars:160 }}</summary>
             {% if is_option %}

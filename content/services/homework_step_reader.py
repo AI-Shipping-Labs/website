@@ -452,19 +452,29 @@ class AISLHomeworkAdapter:
 
 
 def _parse_public_links(answer, limit):
-    """Validate the optional newline-separated public links answer."""
+    """Validate the optional newline-separated public links answer.
+
+    Messages name the Learning in Public step and the offending link
+    (issue #1828) because they surface on Review, away from the field.
+    """
     if not isinstance(answer, str):
-        raise ValidationError('Enter public links one per line.')
+        raise ValidationError('Learning in Public: enter public links one per line.')
     links = [line.strip() for line in answer.splitlines() if line.strip()]
     if len(links) > limit:
         noun = 'link' if limit == 1 else 'links'
-        raise ValidationError(f'Add no more than {limit} public {noun}.')
+        raise ValidationError(
+            f'Learning in Public: add no more than {limit} public {noun} '
+            f'(you added {len(links)}).'
+        )
     validate_url = URLValidator(schemes=['http', 'https'])
-    for link in links:
+    for number, link in enumerate(links, start=1):
         try:
             validate_url(link)
         except ValidationError as exc:
-            raise ValidationError('Enter a valid http or https link for each public link.') from exc
+            raise ValidationError(
+                f'Learning in Public: public link {number} is not a valid '
+                'http or https link.'
+            ) from exc
     return links
 
 

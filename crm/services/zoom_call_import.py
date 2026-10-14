@@ -22,6 +22,7 @@ import datetime as dt
 import json
 import os
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -402,15 +403,27 @@ class CrmApiClient:
         }
 
     def _request(self, method, path, json_body=None):
+        """One API call; honors ``429`` + ``Retry-After`` (max 2 waits).
+
+        The throttle contract for the import run: requests stay
+        sequential and well under the token limit, but a ``429`` is
+        retried with the server's ``Retry-After`` delay (clamped to
+        ``[1, 60]`` seconds, default 5) before failing.
+        """
         import requests
 
-        response = requests.request(
-            method,
-            f'{self.base_url}{path}',
-            headers=self._headers(),
-            json=json_body,
-            timeout=self.timeout,
-        )
+        response = None
+        for attempt in range(3):
+            response = requests.request(
+                method,
+                f'{self.base_url}{path}',
+                headers=self._headers(),
+                json=json_body,
+                timeout=self.timeout,
+            )
+            if response.status_code != 429 or attempt == 2:
+                break
+            time.sleep(_retry_after_seconds(response))
         if response.status_code >= 400:
             raise RuntimeError(
                 f'{method} {path} failed with HTTP '
@@ -445,3 +458,12 @@ def _urlquote(value):
     from urllib.parse import quote
 
     return quote(str(value), safe='')
+
+
+def _retry_after_seconds(response, default=5.0):
+    """Server ``Retry-After`` delay in seconds, clamped to ``[1, 60]``."""
+    try:
+        delay = float(response.headers.get('Retry-After', default))
+    except (TypeError, ValueError):
+        return default
+    return min(60.0, max(1.0, delay))

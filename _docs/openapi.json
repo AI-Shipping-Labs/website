@@ -5641,15 +5641,11 @@
                       "account_lifecycle": "full_account",
                       "calls": [
                         {
-                          "capture_status": "none",
                           "created_at": "2026-06-01T16:00:00+00:00",
                           "created_by_email": "staff@example.com",
                           "email": "alice@example.com",
-                          "email_draft_ready_at": null,
-                          "email_sent_at": null,
                           "id": 12,
                           "occurred_at": "2026-06-01T15:00:00+00:00",
-                          "recording_url": "",
                           "source": "manual",
                           "source_ref": "",
                           "summary": "Discussed sprint goals."

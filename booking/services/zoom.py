@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 import requests
 
+from integrations.config import get_config
 from integrations.services.zoom import (
     ZOOM_API_BASE_URL,
     ZoomAPIError,
@@ -50,6 +51,11 @@ def create_booking_zoom_meeting(
             "join_before_host": True,
             "waiting_room": False,
             "approval_type": 2,  # No registration required
+            # Issue #1951 (AC10): booked 1:1s must cloud-record so the
+            # post-meeting capture pipeline can pull the transcript.
+            # Same config key and default as the shared meeting-creation
+            # path in integrations/services/zoom.py.
+            "auto_recording": get_config("ZOOM_AUTO_RECORDING", "cloud"),
         },
     }
 

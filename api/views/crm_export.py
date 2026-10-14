@@ -79,6 +79,7 @@ from crm.services.activity_context import (
     build_complete_activity_context,
     serialize_activity_for_api,
 )
+from crm.services.call_capture import capture_status
 from crm.services.calls import calls_for_member, calls_for_members
 from crm.services.markdown_export import (
     markdown_filename_for_crm_record,
@@ -436,6 +437,11 @@ def _serialize_member(
             "summary": call.summary,
             "source": call.source,
             "source_ref": call.source_ref,
+            # Issue #1951: Zoom capture + attendee email draft state.
+            "recording_url": call.recording_url,
+            "capture_status": capture_status(call),
+            "email_draft_ready_at": isoformat_or_none(call.email_draft_ready_at),
+            "email_sent_at": isoformat_or_none(call.email_sent_at),
             "created_by_email": (call.created_by.email if call.created_by else None),
             "created_at": call.created_at.isoformat(),
         }
@@ -555,6 +561,11 @@ def build_single_crm_record_aggregate(crm_record, *, bearer, exported_at=None):
             "summary": call.summary,
             "source": call.source,
             "source_ref": call.source_ref,
+            # Issue #1951: Zoom capture + attendee email draft state.
+            "recording_url": call.recording_url,
+            "capture_status": capture_status(call),
+            "email_draft_ready_at": isoformat_or_none(call.email_draft_ready_at),
+            "email_sent_at": isoformat_or_none(call.email_sent_at),
             "created_by_email": (call.created_by.email if call.created_by else None),
             "created_at": isoformat_or_none(call.created_at),
         }

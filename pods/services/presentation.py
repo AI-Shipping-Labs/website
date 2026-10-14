@@ -57,6 +57,7 @@ from pods.services.suggestions import (
     slots_attendable,
     suggest_slots,
     weekly_overlap,
+    WeeklyOverlapCalculator,
     weekly_overlap_hours,
 )
 
@@ -167,6 +168,9 @@ def build_pod_rows(activity, viewer, *, now=None):
     can_request = activity.is_participant(viewer)
     own_pods = [pod for pod in pods if any(m.user_id == viewer.pk for m in pod.memberships.all())]
     meeting_lines = next_meeting_lines(own_pods, _viewer_zone(viewer_availability, viewer), now)
+    # One grid serves every pod's fit: member cells expand once per member,
+    # not once per pod.
+    fit = WeeklyOverlapCalculator(now)
     rows = []
     for pod in pods:
         members = [m.user for m in pod.memberships.all()]
@@ -180,7 +184,7 @@ def build_pod_rows(activity, viewer, *, now=None):
         others = [availability[u.pk] for u in members if u.pk != viewer.pk]
         hours = None
         if state.key != STATE_MEMBER:
-            hours = weekly_overlap_hours(viewer_availability, others, now=now)
+            hours = fit.hours(viewer_availability, others)
         rows.append({
             'pod': pod,
             'count': count,

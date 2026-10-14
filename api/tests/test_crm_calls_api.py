@@ -109,6 +109,38 @@ class CrmCallsCreateTest(CrmCallsEndpointBase):
         )
         self.assertEqual(Call.objects.filter(source='booking').count(), 1)
 
+    def test_zoom_source_is_accepted(self):
+        # Issue #1951 AC1: the import writes with source=zoom.
+        response = self._post({
+            'email': self.member.email,
+            'occurred_at': _iso(minute=25),
+            'summary': 'Historical 1:1 summary.',
+            'source': 'zoom',
+            'source_ref': '2026-04-23-jane-doe-summary',
+        })
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()['source'], 'zoom')
+        self.assertTrue(
+            Call.objects.filter(
+                source='zoom',
+                source_ref='2026-04-23-jane-doe-summary',
+            ).exists(),
+        )
+
+    def test_unknown_source_returns_422(self):
+        response = self._post({
+            'email': self.member.email,
+            'occurred_at': _iso(minute=30),
+            'source': 'telegram',
+        })
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()['details']['field'], 'source')
+        self.assertEqual(response.json()['details']['value'], 'telegram')
+        self.assertEqual(
+            Call.objects.filter(source='telegram').count(),
+            0,
+        )
+
     def test_missing_email_returns_422(self):
         response = self._post({'occurred_at': _iso(minute=15)})
         self.assertEqual(response.status_code, 422)

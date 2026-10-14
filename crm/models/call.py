@@ -21,13 +21,13 @@ from crm.models.crm_record import CRMRecord
 SOURCE_MANUAL = 'manual'
 SOURCE_BOOKING = 'booking'
 SOURCE_CALENDLY = 'calendly'
+SOURCE_ZOOM = 'zoom'
 CALL_SOURCE_CHOICES = [
     (SOURCE_MANUAL, 'Manual'),
     (SOURCE_BOOKING, 'Booking'),
     (SOURCE_CALENDLY, 'Calendly'),
+    (SOURCE_ZOOM, 'Zoom import'),
 ]
-
-
 class CallManager(models.Manager):
     """Default manager that widens related ``calls`` access (issue #1949).
 
@@ -111,6 +111,58 @@ class Call(models.Model):
             'confirmation id); enables the ``(source, source_ref)`` '
             'idempotent upsert. Blank for manual entries.'
         ),
+    )
+    # Post-meeting capture (issue #1951): the scheduled
+    # ``booking-call-capture`` pipeline enriches booking-source rows with
+    # the Zoom recording pointer, the parsed transcript, an LLM summary,
+    # and a DRAFT attendee email. The pipeline never sends email; the
+    # only send path is the explicit Studio button (which stamps
+    # ``email_sent_at``).
+    recording_url = models.URLField(
+        blank=True,
+        default='',
+        help_text=(
+            'Zoom recording share/play pointer for the call. Never a '
+            'signed download URL (those expire).'
+        ),
+    )
+    transcript_text = models.TextField(
+        blank=True,
+        default='',
+        help_text='Parsed VTT transcript text. Staff-only data.',
+    )
+    capture_attempts = models.IntegerField(
+        default=0,
+        help_text='Retry counter while Zoom has not processed the transcript yet.',
+    )
+    capture_unavailable_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'Terminal no-recording/no-transcript marker, set after the '
+            'retry budget is exhausted.'
+        ),
+    )
+    email_draft_subject = models.CharField(
+        max_length=255,
+        blank=True,
+        default='',
+        help_text='Draft subject for the attendee summary email.',
+    )
+    email_draft_body = models.TextField(
+        blank=True,
+        default='',
+        help_text='Draft body (plain text) for the attendee summary email.',
+    )
+    email_draft_ready_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Set when a draft is stored; gates the Studio Send button.',
+    )
+    email_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text='Set only when a human explicitly sends from Studio.',
     )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

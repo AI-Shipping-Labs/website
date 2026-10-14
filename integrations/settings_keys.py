@@ -30,6 +30,7 @@ GROUP_LABELS = {
     "banner_generator": "Banner Generator",
     "booking": "Booking & Calendar",
     "calendly": "Calendly",
+    "crm": "CRM",
     "github": "GitHub App",
     "llm": "LLM Provider",
     "maven": "Maven",
@@ -66,6 +67,7 @@ _GROUP_ORDER = (
     "maven",
     "triggers",
     "pods",
+    "crm",
 )
 
 _KEY_ORDER = {
@@ -107,6 +109,9 @@ _KEY_ORDER = {
         "DAPIER_API_TOKEN",
         "DAPIER_AGENT_NAME",
         "GOOGLE_CALENDAR_ID",
+    ),
+    "crm": (
+        "CRM_CALL_CAPTURE_ENABLED",
     ),
     "github": (
         "GITHUB_APP_ID",
@@ -2315,4 +2320,15 @@ GOOGLE_CALENDAR_ID = declare(
     secret=False,
     optional=True,
     docs_url="_docs/configuration.md#booking-and-calendar",
+)
+
+CRM_CALL_CAPTURE_ENABLED = declare(
+    key="CRM_CALL_CAPTURE_ENABLED",
+    group="crm",
+    label="CRM Call Capture Enabled",
+    description="When on, the scheduled booking-call-capture task pulls the Zoom recording and transcript for finished booked 1:1 calls, refreshes the call summary through the LLM, and stores a DRAFT attendee email in Studio. It never sends email; sending is the explicit Studio Send button.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/configuration.md#crm",
 )

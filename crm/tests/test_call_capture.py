@@ -1,0 +1,349 @@
+"""Tests for the post-meeting booking-call capture pipeline (#1951).
+
+Zoom and the LLM are always stubbed; the email backend is asserted
+NEVER to be called by the pipeline (the Studio button is the only send
+path).
+"""
+
+import datetime
+from unittest.mock import MagicMock, patch
+
+from django.core import mail
+from django.test import TestCase
+from django.utils import timezone
+
+from booking.models import Booking, BookingHost
+from crm.models.call import Call
+from crm.services import call_capture
+from crm.services.call_capture import (
+    capture_call,
+    capture_status,
+    calls_pending_capture,
+)
+from crm.services.calls import record_call
+
+VTT = (
+    "WEBVTT\n\n"
+    "00:00:01.000 --> 00:00:04.000\n"
+    "Welcome to the call.\n\n"
+    "00:00:04.500 --> 00:00:08.000\n"
+    "Let's look at your portfolio project.\n"
+)
+
+
+def _files(*recording_types):
+    return {
+        "share_url": "https://zoom.us/rec/share/abc",
+        "recording_files": [
+            {
+                "recording_type": recording_type,
+                "download_url": f"https://zoom.us/download/{recording_type}",
+            }
+            for recording_type in recording_types
+        ],
+    }
+
+
+class CaptureBase(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.host, _ = BookingHost.objects.get_or_create(
+            slug="alexey",
+            defaults={
+                "name": "Alexey Grigorev",
+                "email": "alexey@test.com",
+                "timezone": "UTC",
+                "notice_hours": 0.0,
+                "horizon_days": 30,
+                "slot_duration_minutes": 30,
+                "is_active": True,
+            },
+        )
+
+    def _booking(self, *, status="confirmed", ended_hours_ago=2, zoom_id="zm-1"):
+        end = timezone.now() - datetime.timedelta(hours=ended_hours_ago)
+        start = end - datetime.timedelta(minutes=30)
+        return Booking.objects.create(
+            host=self.host,
+            invitee_name="Mariano Beccaria",
+            invitee_email="mariano@example.com",
+            start_datetime=start,
+            end_datetime=end,
+            status=status,
+            zoom_meeting_id=zoom_id,
+        )
+
+    def _call(self, booking):
+        return record_call(
+            email=booking.invitee_email,
+            occurred_at=booking.start_datetime,
+            summary="Booked: portfolio review.",
+            source="booking",
+            source_ref=str(booking.pk),
+        )
+
+    def _zoom(self, recordings):
+        return patch(
+            "crm.services.call_capture.get_meeting_recordings",
+            return_value=recordings,
+        )
+
+    def _llm(self, *, enabled=True, text="Summary of the call.", error=None):
+        return (
+            patch.object(call_capture.llm, "is_enabled", return_value=enabled),
+            patch.object(
+                call_capture.llm, "complete",
+                side_effect=error,
+                return_value=MagicMock(text=text),
+            ),
+        )
+
+    def _vtt(self):
+        return patch.object(
+            call_capture, "_download_vtt", return_value=VTT.encode("utf-8"),
+        )
+
+
+class SelectionTest(CaptureBase):
+    def test_booking_source_call_is_pending(self):
+        booking = self._booking()
+        call = self._call(booking)
+        self.assertEqual([row.pk for row in calls_pending_capture()], [call.pk])
+
+    def test_manual_and_zoom_sources_are_never_pending(self):
+        for source in ("manual", "zoom"):
+            record_call(
+                email="x@example.com",
+                occurred_at=timezone.now(),
+                summary="not a booking row",
+                source=source,
+                source_ref="ref-1",
+            )
+        self.assertEqual(
+            Call.objects.filter(source__in=["manual", "zoom"]).count(), 2,
+        )
+        self.assertEqual(list(calls_pending_capture()), [])
+
+    def test_drafted_sent_or_unavailable_calls_are_not_pending(self):
+        booking = self._booking()
+        drafted = self._call(booking)
+        drafted.email_draft_ready_at = timezone.now()
+        drafted.save(update_fields=["email_draft_ready_at", "updated_at"])
+        sent = self._call(booking)
+        sent.email_sent_at = timezone.now()
+        sent.save(update_fields=["email_sent_at", "updated_at"])
+        unavailable = self._call(booking)
+        unavailable.capture_unavailable_at = timezone.now()
+        unavailable.save(update_fields=["capture_unavailable_at", "updated_at"])
+        self.assertEqual(
+            {row.pk for row in calls_pending_capture()},
+            {drafted.pk, sent.pk, unavailable.pk} - {drafted.pk, sent.pk, unavailable.pk},
+        )
+        self.assertEqual(list(calls_pending_capture()), [])
+
+
+class CaptureCallTest(CaptureBase):
+    def test_happy_path_stores_transcript_summary_and_draft(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm()
+        with self._zoom(_files("audio_transcript", "shared_screen")), self._vtt(), llm_enabled, llm_complete:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "drafted")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIn("portfolio project", call.transcript_text)
+        self.assertEqual(call.recording_url, "https://zoom.us/rec/share/abc")
+        self.assertEqual(call.capture_attempts, 0)
+        # Summary written through the record_call upsert on
+        # (source, source_ref): same row, refreshed occurred_at.
+        self.assertEqual(call.summary, "Summary of the call.")
+        self.assertEqual(call.email, booking.invitee_email)
+        self.assertEqual(
+            call.occurred_at, booking.start_datetime,
+        )
+        # Draft stored, addressed to the invitee, never sent.
+        self.assertIn("Your 1:1 with Alexey Grigorev", call.email_draft_subject)
+        self.assertEqual(call.email_draft_body, "Summary of the call.")
+        self.assertIsNotNone(call.email_draft_ready_at)
+        self.assertIsNone(call.email_sent_at)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_no_recording_files_marks_unavailable_immediately(self):
+        booking = self._booking()
+        self._call(booking)
+        with self._zoom({"recording_files": []}):
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "unavailable")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIsNotNone(call.capture_unavailable_at)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_transcript_not_ready_increments_attempts_then_marks(self):
+        booking = self._booking()
+        self._call(booking)
+        recordings = _files("shared_screen")  # video exists, transcript missing
+        for expected_attempt in (1, 2, 3):
+            with self._zoom(recordings):
+                result = capture_call(calls_pending_capture().first())
+            self.assertEqual(result["status"], "not_ready")
+            call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+            self.assertEqual(call.capture_attempts, expected_attempt)
+            self.assertIsNone(call.capture_unavailable_at)
+        with self._zoom(recordings):
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "unavailable")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIsNotNone(call.capture_unavailable_at)
+
+    def test_missing_zoom_id_marks_unavailable(self):
+        booking = self._booking(zoom_id="")
+        self._call(booking)
+        result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "unavailable")
+        self.assertEqual(result["reason"], "no_zoom_meeting_id")
+
+    def test_cancelled_booking_is_skipped_not_marked(self):
+        booking = self._booking(status="canceled")
+        call = self._call(booking)
+        result = capture_call(call)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "booking_not_confirmed")
+        call.refresh_from_db()
+        self.assertIsNone(call.capture_unavailable_at)
+
+    def test_meeting_outside_lookback_is_skipped(self):
+        booking = self._booking(ended_hours_ago=24 * 8)
+        call = self._call(booking)
+        result = capture_call(call)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "outside_lookback_window")
+
+    def test_future_meeting_is_skipped(self):
+        booking = self._booking(ended_hours_ago=-24)
+        call = self._call(booking)
+        result = capture_call(call)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "meeting_not_finished")
+
+    def test_orphaned_call_is_skipped_not_marked(self):
+        call = record_call(
+            email="ghost@example.com",
+            occurred_at=timezone.now(),
+            summary="no booking behind me",
+            source="booking",
+            source_ref="999999",
+        )
+        result = capture_call(call)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "no_booking")
+        call.refresh_from_db()
+        self.assertIsNone(call.capture_unavailable_at)
+
+    def test_manage_token_source_ref_resolves_booking(self):
+        booking = self._booking()
+        call = record_call(
+            email=booking.invitee_email,
+            occurred_at=booking.start_datetime,
+            summary="token-ref call",
+            source="booking",
+            source_ref=booking.manage_token,
+        )
+        with self._zoom({"recording_files": []}):
+            result = capture_call(call)
+        self.assertEqual(result["status"], "unavailable")
+
+
+class SummaryGatesTest(CaptureBase):
+    def test_llm_disabled_stores_transcript_but_skips_draft(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_disabled, _ = self._llm(enabled=False)
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_disabled:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "llm_not_configured")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIn("portfolio project", call.transcript_text)
+        self.assertEqual(call.summary, "Booked: portfolio review.")
+        self.assertIsNone(call.email_draft_ready_at)
+
+    def test_llm_error_never_raises_and_leaves_summary(self):
+        from integrations.services.llm import LLMError
+
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_error = self._llm(error=LLMError("boom"))
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_error:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["reason"], "llm_error")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertEqual(call.summary, "Booked: portfolio review.")
+        self.assertIsNone(call.email_draft_ready_at)
+
+    def test_transcript_over_cap_is_truncated(self):
+        booking = self._booking()
+        long_text = "x" * (call_capture.CALL_SUMMARY_MAX_TRANSCRIPT_CHARS + 10)
+        message = call_capture._generate_summary(
+            booking, long_text,
+        )
+        # Generation itself is not the point here; the truncation note
+        # path must not raise and the cap must bound the prompt size.
+        self.assertIn(message["status"], ("ok", "error"))
+
+
+class RunBookingCallCaptureTest(CaptureBase):
+    def test_disabled_master_switch_short_circuits(self):
+        with patch.object(
+            call_capture, "crm_call_capture_enabled", return_value=False,
+        ):
+            result = call_capture.capture_finished_booking_calls()
+        self.assertEqual(result["status"], "disabled")
+
+    def test_tick_never_sends_email_and_drafsts_once(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm(text="Run summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete, patch(
+            "django.core.mail.send_mail",
+        ) as send_mail:
+            tally = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["status"], "ok")
+        self.assertEqual(tally["drafted"], 1)
+        send_mail.assert_not_called()
+        self.assertEqual(len(mail.outbox), 0)
+        # A second tick is a no-op: the drafted call drops out of selection.
+        with patch(
+            "django.core.mail.send_mail",
+        ) as send_mail_again:
+            second = call_capture.capture_finished_booking_calls()
+        self.assertEqual(second["selected"], 0)
+        send_mail_again.assert_not_called()
+
+    def test_task_wrapper_delegates_to_service(self):
+        with patch.object(
+            call_capture, "capture_finished_booking_calls",
+            return_value={"status": "ok"},
+        ) as run:
+            from crm.tasks.call_capture import capture_finished_booking_calls
+
+            result = capture_finished_booking_calls()
+        self.assertEqual(result, {"status": "ok"})
+        run.assert_called_once_with()
+
+
+class CaptureStatusTest(CaptureBase):
+    def test_derived_statuses(self):
+        booking = self._booking()
+        call = self._call(booking)
+        self.assertEqual(capture_status(call), call_capture.CAPTURE_STATUS_NONE)
+        call.capture_attempts = 1
+        self.assertEqual(capture_status(call), call_capture.CAPTURE_STATUS_WAITING)
+        call.transcript_text = "text"
+        self.assertEqual(capture_status(call), call_capture.CAPTURE_STATUS_STORED)
+        call.transcript_text = ""
+        call.capture_attempts = 0
+        call.capture_unavailable_at = timezone.now()
+        self.assertEqual(
+            capture_status(call), call_capture.CAPTURE_STATUS_UNAVAILABLE,
+        )

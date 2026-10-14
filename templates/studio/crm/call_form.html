@@ -51,6 +51,26 @@
     </select>
   </div>
     </div>
+    {% if call and call.email_draft_ready_at and not call.email_sent_at %}
+    <div>
+      <label for="call-email-draft-subject" class="block text-xs font-medium text-muted-foreground mb-1">Attendee email draft subject</label>
+      <input id="call-email-draft-subject"
+             type="text"
+             name="email_draft_subject"
+             value="{{ call.email_draft_subject }}"
+             maxlength="255"
+             data-testid="crm-call-email-draft-subject-input"
+             class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">
+    </div>
+    <div>
+      <label for="call-email-draft-body" class="block text-xs font-medium text-muted-foreground mb-1">Attendee email draft body</label>
+      <textarea id="call-email-draft-body"
+                name="email_draft_body"
+                rows="8"
+                data-testid="crm-call-email-draft-body-input"
+                class="bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground w-full focus:outline-none focus:ring-1 focus:ring-accent">{{ call.email_draft_body }}</textarea>
+    </div>
+    {% endif %}
     {% if call %}
     {% endif %}
     <div>

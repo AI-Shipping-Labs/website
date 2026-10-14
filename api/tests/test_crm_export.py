@@ -21,6 +21,7 @@ from accounts.models import Token
 from content.models import Course
 from content.services.enrollment import ensure_enrollment
 from crm.models import CRMRecord
+from crm.services.calls import record_call
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from plans.models import (
@@ -212,6 +213,54 @@ class CrmExportCallsTest(CrmExportTestBase):
         body = response.json()
         self.assertEqual(body["total"], 1)
         return body["members"][0]
+
+    def test_call_entries_carry_capture_fields(self):
+        # Issue #1951 AC21: recording/capture/draft state on export.
+        now = timezone.now()
+        call = record_call(
+            email=self.member.email,
+            occurred_at=now - datetime.timedelta(hours=2),
+            summary='Captured summary.',
+            source='booking',
+            source_ref='BK-EXP-CAP',
+        )
+        call.transcript_text = 'Parsed transcript text.'
+        call.recording_url = 'https://zoom.us/rec/share/durable'
+        call.email_draft_subject = 'Your 1:1 with Alexey'
+        call.email_draft_body = 'Captured summary.'
+        call.email_draft_ready_at = now
+        call.save()
+        aggregate = build_single_crm_record_aggregate(
+            self.record, bearer=self.staff,
+        )
+        entry = next(
+            row for row in aggregate['calls'] if row['id'] == call.pk
+        )
+        self.assertEqual(
+            entry['recording_url'], 'https://zoom.us/rec/share/durable',
+        )
+        self.assertEqual(entry['capture_status'], 'stored')
+        self.assertIsNotNone(entry['email_draft_ready_at'])
+        self.assertIsNone(entry['email_sent_at'])
+
+    def test_capture_status_unavailable_on_export(self):
+        now = timezone.now()
+        call = record_call(
+            email=self.member.email,
+            occurred_at=now - datetime.timedelta(hours=2),
+            summary='No recording ever.',
+            source='booking',
+            source_ref='BK-EXP-UNA',
+        )
+        call.capture_unavailable_at = now
+        call.save(update_fields=['capture_unavailable_at'])
+        aggregate = build_single_crm_record_aggregate(
+            self.record, bearer=self.staff,
+        )
+        entry = next(
+            row for row in aggregate['calls'] if row['id'] == call.pk
+        )
+        self.assertEqual(entry['capture_status'], 'unavailable')
 
     def test_member_aggregate_includes_calls(self):
         calls = self._payload()["calls"]

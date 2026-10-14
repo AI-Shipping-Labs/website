@@ -513,6 +513,22 @@ Zoom meeting links for booked 1:1 calls are generated automatically via the Serv
 
 Test: visit `/book/alexey`, verify available time slots load from the schedule, and book a test slot. Confirm the booking creates a Zoom meeting and Google Calendar event, and redirects to the confirmation page.
 
+## 10.2. CRM
+
+### CRM
+
+Studio path: `Studio > Settings > CRM`.
+
+Configures the post-meeting capture pipeline for booked 1:1 calls (issue #1951). After a booked meeting ends, a scheduled task pulls the Zoom recording and transcript, refreshes the CRM call summary through the LLM, and stores a DRAFT summary email for the attendee in Studio (`/studio/crm/calls/<id>/`). The pipeline never sends email: sending is the explicit `Send to attendee` button on the call detail page, and it stamps `Sent at` on the call.
+
+| Key | Source | Notes |
+|-----|--------|-------|
+| `CRM_CALL_CAPTURE_ENABLED` | non-secret | Master switch for the scheduled capture/summary/draft pipeline (default on). Turn off to stop all automatic Zoom pulls and LLM drafting; manual call logging and the Studio Send button keep working. |
+
+Requirements: the booking Zoom meetings must cloud-record (`ZOOM_AUTO_RECORDING`, default `cloud`, Section 10) and the LLM provider must be configured (Section `LLM Provider` in Studio settings) for summaries to draft. With no recording, the call is marked `unavailable` after the retry budget; with no LLM configured, the transcript is still stored and only the draft stays empty.
+
+Historical 1:1 call summaries (the `zoom-calls` repo) are imported with `uv run python manage.py import_zoom_calls --path <checkout> --apply` — dry-run is the default; unresolved participant names are skipped and reported, never guessed.
+
 ## 11. End-to-end smoke test
 
 Run this checklist after configuring everything. Each item is one click, end to end.

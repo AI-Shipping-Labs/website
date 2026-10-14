@@ -246,6 +246,13 @@ SCHEDULE_DEFINITIONS = (
         description="every 15 min",
     ),
     ScheduleDefinition(
+        "booking-call-capture",
+        "crm.tasks.call_capture.capture_finished_booking_calls",
+        "*/15 * * * *",
+        r2_only=True,
+        description="every 15 min",
+    ),
+    ScheduleDefinition(
         "reconcile-schedules",
         "jobs.tasks.schedule_reconciliation.reconcile_schedules",
         "*/15 * * * *",

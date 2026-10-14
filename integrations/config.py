@@ -484,6 +484,21 @@ def recording_recap_auto_draft_enabled():
     return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
+def crm_call_capture_enabled():
+    """True when the scheduled booking-call capture pipeline may run.
+
+    Issue #1951. Default-on: after a booked 1:1 meeting ends, the
+    ``booking-call-capture`` task pulls the Zoom recording/transcript,
+    refreshes the CRM call summary through the LLM, and stores a DRAFT
+    attendee email. It never sends email -- sending is the explicit
+    Studio Send button.
+    """
+    raw = get_config('CRM_CALL_CAPTURE_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
 def event_reminders_include_cohort_enabled():
     """True when the 24h/20m event reminders also mail linked cohort members.
 

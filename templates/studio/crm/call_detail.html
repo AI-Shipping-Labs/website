@@ -54,4 +54,54 @@
     </div>
   </dl>
 </section>
+
+{% if call.email_draft_ready_at or call.email_sent_at or call.capture_unavailable_at %}
+<section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-call-email-draft">
+  <h2 class="text-lg font-semibold text-foreground mb-4">Attendee email draft</h2>
+  <dl class="space-y-4">
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Capture status</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-capture-status">
+        {% if call.capture_unavailable_at %}Unavailable (no recording or transcript){% elif capture_status == 'stored' %}Captured from Zoom{% elif capture_status == 'waiting' %}Waiting for Zoom{% else %}&mdash;{% endif %}
+      </dd>
+    </div>
+    {% if call.recording_url %}
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Recording</dt>
+      <dd class="text-sm text-foreground"><a href="{{ call.recording_url }}" class="text-accent hover:underline">Open Zoom recording</a></dd>
+    </div>
+    {% endif %}
+    {% if call.email_draft_ready_at or call.email_sent_at %}
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Draft subject</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-email-draft-subject">{{ call.email_draft_subject }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Draft body</dt>
+      <dd class="mt-1 text-sm text-foreground whitespace-pre-line" data-testid="crm-call-email-draft-body">{{ call.email_draft_body }}</dd>
+    </div>
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Draft ready</dt>
+      <dd class="text-sm text-foreground">{{ call.email_draft_ready_at|operator_datetime }}</dd>
+    </div>
+    {% endif %}
+    {% if call.email_sent_at %}
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Sent at</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-email-sent">{{ call.email_sent_at|operator_datetime }}</dd>
+    </div>
+    {% endif %}
+  </dl>
+  {% if call.email_draft_ready_at and not call.email_sent_at %}
+  <form method="post" action="{% url 'studio_crm_call_send_email' call_id=call.pk %}" class="mt-4">
+    {% csrf_token %}
+    <button type="submit"
+            data-testid="crm-call-email-send"
+            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+      Send to attendee
+    </button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
 {% endblock %}

@@ -1555,7 +1555,12 @@ def pod_artifacts(request, pod_id):
     limit, offset, error = _parse_limit(request, ARTIFACT_LIST_DEFAULT_LIMIT, ARTIFACT_LIST_MAX_LIMIT)
     if error is not None:
         return error
-    artifacts = PodArtifact.objects.filter(pod=pod).select_related('added_by').order_by('-created_at', '-pk')
+    artifacts = (
+        PodArtifact.objects.filter(pod=pod)
+        .select_related('added_by')
+        .defer('body')
+        .order_by('-created_at', '-pk')
+    )
     kind = request.GET.get('kind')
     if kind is not None:
         if kind not in _ARTIFACT_KIND_VALUES:

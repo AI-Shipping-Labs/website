@@ -9,12 +9,14 @@ export" (the explicitly deferred operator surface -- not built here).
 import datetime
 from urllib.parse import urlencode
 
-from django.db.models import Count
+from django.db.models import Count, Max, Sum
+from django.http import HttpResponse, HttpResponseNotModified
 from django.shortcuts import get_object_or_404, render
+from django.template.loader import render_to_string
 from django.utils import timezone
 
 from content.models import Course, Unit
-from content.models.homework import Homework, HomeworkState, Submission
+from content.models.homework import Answer, Homework, HomeworkState, Submission
 from content.services.homework_review import submission_review_items
 from studio.decorators import staff_required
 
@@ -206,6 +208,31 @@ def homework_list(request, course_id):
     })
 
 
+def _submissions_revision(homework):
+    """Cheap change token for the submissions fragment: row identities only.
+
+    The fragment is derived from the homework's submissions, their answers,
+    and the questions; counts and latest pks change exactly when a row is
+    added or replaced. Three aggregate reads, no row hydration.
+    """
+    # ``submitted_at`` is re-stamped on every re-submit and the score sums
+    # move on re-scoring, so in-place updates are covered too.
+    submissions = Submission.objects.filter(homework=homework).aggregate(
+        rows=Count('pk'), latest=Max('pk'), last_at=Max('submitted_at'),
+        question_points=Sum('questions_score'), total_points=Sum('total_score'),
+    )
+    answers = Answer.objects.filter(submission__homework=homework).aggregate(
+        rows=Count('pk'), latest=Max('pk'),
+    )
+    questions = homework.questions.aggregate(rows=Count('pk'), latest=Max('pk'))
+    return '-'.join(str(value) for value in (
+        submissions['rows'], submissions['latest'], submissions['last_at'],
+        submissions['question_points'], submissions['total_points'],
+        answers['rows'], answers['latest'],
+        questions['rows'], questions['latest'],
+    ))
+
+
 @staff_required
 def homework_submissions(request, homework_id):
     """Read-only list of every submission for one homework.
@@ -234,14 +261,27 @@ def homework_submissions(request, homework_id):
         [homework.content_id] if homework.content_id else [],
     )
     unit = units.get(homework.content_id) if homework.content_id else None
-    context = {
+    if request.GET.get('fragment') == 'submissions':
+        # The staff page polls this fragment every five seconds. An unchanged
+        # page answers 304 on row identities alone, so an open tab no longer
+        # rebuilds, re-renders, and re-ships the whole list each poll.
+        etag = f'"hw{homework.pk}-r{_submissions_revision(homework)}"'
+        if request.headers.get('if-none-match') == etag:
+            return HttpResponseNotModified()
+        html = render_to_string(
+            'studio/courses/_homework_submissions_list.html',
+            {
+                'homework': homework,
+                'course': course,
+                'submission_items': submission_review_items(homework, submissions),
+                'public_url': _public_homework_url(course, homework, unit),
+            },
+            request=request,
+        )
+        return HttpResponse(html, headers={'ETag': etag})
+    return render(request, 'studio/courses/homework_submissions.html', {
         'homework': homework,
         'course': course,
         'submission_items': submission_review_items(homework, submissions),
         'public_url': _public_homework_url(course, homework, unit),
-    }
-    if request.GET.get('fragment') == 'submissions':
-        return render(
-            request, 'studio/courses/_homework_submissions_list.html', context,
-        )
-    return render(request, 'studio/courses/homework_submissions.html', context)
+    })

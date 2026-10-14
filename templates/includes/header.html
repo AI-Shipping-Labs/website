@@ -1,3 +1,4 @@
+{% load static %}
 {% load plan_nav %}
 {% load accounts_extras %}
 {% load studio_open %}
@@ -261,6 +262,9 @@ once here and shown as the desktop pill (lg+), an account-dropdown item
 {% comment %}Outside <header>: its backdrop-blur would make it the containing block for this fixed pill.{% endcomment %}
 {% include "includes/_studio_edit_button.html" with studio_edit_url=header_studio_open_url %}
 
+{% if request.user.is_authenticated %}
+<script src="{% static 'js/visibility-poller.js' %}"></script>
+{% endif %}
 <script>
   // Section anchors (issue #1833): keep --site-header-offset equal to the
   // fixed header's height + 16px so `.prose` headings reached by a
@@ -566,13 +570,6 @@ once here and shown as the desktop pill (lg+), an account-dropdown item
       }
     }
 
-    function fetchUnreadCount() {
-      fetch('/api/notifications/unread-count')
-        .then(function(r) { return r.json(); })
-        .then(function(data) { updateBadge(data.count); })
-        .catch(function() {});
-    }
-
     function timeAgo(isoString) {
       var diff = (Date.now() - new Date(isoString).getTime()) / 1000;
       if (diff < 60) return 'just now';
@@ -675,8 +672,20 @@ once here and shown as the desktop pill (lg+), an account-dropdown item
       });
     };
 
-    // Initial fetch + poll every 60 seconds
-    fetchUnreadCount();
-    setInterval(fetchUnreadCount, 60000);
+    // Fetch immediately, then poll while the page is visible. Slow responses
+    // never overlap; transient failures back off and expired sessions stop.
+    window.AISLVisibilityPoller.create({
+      interval: 60000,
+      maxBackoff: 15 * 60 * 1000,
+      immediate: true,
+      request: function() {
+        return fetch('/api/notifications/unread-count');
+      },
+      onResponse: function(response) {
+        return response.json().then(function(data) {
+          updateBadge(data.count);
+        });
+      }
+    }).start();
   })();
 </script>

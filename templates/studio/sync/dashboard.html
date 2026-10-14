@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load studio_filters %}
+{% load static studio_filters %}
 
 {% block studio_title %}Content Sync{% endblock %}
 
@@ -90,6 +90,7 @@ poller has a stable mount point even after the inner partial is replaced.
   {% include "studio/sync/_repos_section.html" %}
 </div>
 
+<script src="{% static 'js/visibility-poller.js' %}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
   // Toggle detail rows on click. Re-bind after each fragment swap so newly
@@ -253,9 +254,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (!wrapper) return;
     var fragmentUrl = wrapper.dataset.fragmentUrl;
     if (!fragmentUrl) return;
-    var POLL_INTERVAL_MS = 3000;
     var indicator = document.getElementById('sync-live-indicator');
-    var timer = null;
 
     function anyRunning() {
       var section = document.getElementById('sync-repos-section');
@@ -270,61 +269,27 @@ document.addEventListener('DOMContentLoaded', function() {
       indicator.classList.toggle('inline-flex', active);
     }
 
-    function shouldPoll() {
-      return document.visibilityState === 'visible' && anyRunning();
-    }
-
-    function refresh() {
-      if (document.visibilityState !== 'visible') return;
-      fetch(fragmentUrl, {
-        credentials: 'same-origin',
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
-      })
-        .then(function(resp) {
-          if (!resp.ok) return null;
-          return resp.text();
-        })
-        .then(function(html) {
-          if (html === null || html === undefined) return;
+    window.AISLVisibilityPoller.create({
+      interval: 3000,
+      maxBackoff: 60000,
+      shouldPoll: anyRunning,
+      onActiveChange: setIndicator,
+      request: function() {
+        return fetch(fragmentUrl, {
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        });
+      },
+      onResponse: function(resp) {
+        return resp.text().then(function(html) {
           wrapper.innerHTML = html;
           // Re-bind delegated handlers on freshly injected DOM.
           bindTypeRowToggles(wrapper);
           bindSyncFormFlash(wrapper);
           bindCourseTreeState(wrapper);
-          // Stop polling if nothing is running anymore.
-          if (!anyRunning()) {
-            stop();
-            setIndicator(false);
-          }
-        })
-        .catch(function() {
-          // Network blip — try again next tick. Don't disable polling.
         });
-    }
-
-    function start() {
-      if (timer !== null) return;
-      timer = setInterval(refresh, POLL_INTERVAL_MS);
-      setIndicator(true);
-    }
-    function stop() {
-      if (timer === null) return;
-      clearInterval(timer);
-      timer = null;
-    }
-
-    document.addEventListener('visibilitychange', function() {
-      if (shouldPoll()) {
-        start();
-      } else {
-        stop();
-        // Keep the Live indicator visible only when we're actually polling.
-        // If hidden + still running, show no indicator until we resume.
-        if (!anyRunning()) setIndicator(false);
       }
-    });
-
-    if (shouldPoll()) start();
+    }).start();
   })();
 });
 </script>

@@ -45,6 +45,9 @@ from content.services.homework_step_threads import step_thread_content_id
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.models import Notification
+from notifications.services.staff_comment_alerts import (
+    deliver_staff_comment_alert,
+)
 from plans.models import Plan, Sprint
 
 User = get_user_model()
@@ -147,6 +150,16 @@ class StaffCommentAlertBase(TestCase):
         patcher = mock.patch(POST_TARGET, return_value=_ok_response())
         self.post = patcher.start()
         self.addCleanup(patcher.stop)
+        queue_patcher = mock.patch(
+            'notifications.services.staff_comment_alerts.async_task',
+            side_effect=self._run_queued_alert,
+        )
+        self.queue = queue_patcher.start()
+        self.addCleanup(queue_patcher.stop)
+
+    @staticmethod
+    def _run_queued_alert(_task_path, comment_id, **_kwargs):
+        return deliver_staff_comment_alert(comment_id)
 
     def _set(self, key, value):
         IntegrationSetting.objects.update_or_create(
@@ -159,12 +172,13 @@ class StaffCommentAlertBase(TestCase):
         clear_config_cache()
 
     def _comment(self, content_id, user=None, parent=None, body='A question'):
-        return create_comment(
-            content_id=content_id,
-            user=user or self.member,
-            body=body,
-            parent=parent,
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            return create_comment(
+                content_id=content_id,
+                user=user or self.member,
+                body=body,
+                parent=parent,
+            )
 
 
 @tag('core')
@@ -366,13 +380,14 @@ class StaffCommentAlertGatingTest(StaffCommentAlertBase):
         top = self._comment(self.lesson.content_id)
         self.post.reset_mock()
 
-        response = self.client.post(
-            f'/api/comments/{top.pk}/replies',
-            data=json.dumps({'body': 'Use a page-aware splitter'}),
-            content_type='application/json',
-            HTTP_AUTHORIZATION=f'Token {plaintext}',
-            HTTP_IDEMPOTENCY_KEY='staff-reply-1926',
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f'/api/comments/{top.pk}/replies',
+                data=json.dumps({'body': 'Use a page-aware splitter'}),
+                content_type='application/json',
+                HTTP_AUTHORIZATION=f'Token {plaintext}',
+                HTTP_IDEMPOTENCY_KEY='staff-reply-1926',
+            )
 
         self.assertEqual(response.status_code, 201)
         self.post.assert_not_called()
@@ -423,11 +438,12 @@ class StaffCommentAlertGatingTest(StaffCommentAlertBase):
         with self.assertLogs(
             'notifications.services.staff_comment_alerts', level='INFO',
         ):
-            response = self.client.post(
-                f'/api/comments/{self.lesson.content_id}',
-                data=json.dumps({'body': 'Anyone there?'}),
-                content_type='application/json',
-            )
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    f'/api/comments/{self.lesson.content_id}',
+                    data=json.dumps({'body': 'Anyone there?'}),
+                    content_type='application/json',
+                )
 
         self.assertEqual(response.status_code, 201)
         self.post.assert_not_called()
@@ -497,11 +513,12 @@ class StaffCommentAlertFailureTest(StaffCommentAlertBase):
         with self.assertLogs(
             'notifications.services.staff_comment_alerts', level='ERROR',
         ) as logs:
-            response = self.client.post(
-                f'/api/comments/{self.lesson.content_id}',
-                data=json.dumps({'body': 'Video does not load'}),
-                content_type='application/json',
-            )
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    f'/api/comments/{self.lesson.content_id}',
+                    data=json.dumps({'body': 'Video does not load'}),
+                    content_type='application/json',
+                )
 
         self.assertEqual(response.status_code, 201)
         comment = Comment.objects.get(body='Video does not load')

@@ -20,9 +20,12 @@ owner bell, and the HTTP response to the commenter never depend on Slack.
 import logging
 
 from accounts.utils.display import display_name
+from comments.models import Comment
 from community.slack_config import slack_api_enabled
 from content.models import Unit, WorkshopPage
 from integrations.config import get_config, site_base_url
+from jobs.tasks import async_task
+from jobs.tasks.names import build_task_name
 from notifications.services.notification_service import (
     HomeworkStepCommentContext,
     _comment_email_parent_title,
@@ -40,6 +43,38 @@ from notifications.services.staff_slack import (
 logger = logging.getLogger(__name__)
 
 PREVIEW_MAX_CHARS = 300
+COMMENT_ALERT_TASK_PATH = (
+    'notifications.services.staff_comment_alerts.deliver_staff_comment_alert'
+)
+
+
+def enqueue_staff_comment_alert(comment_id):
+    """Enqueue one comment alert with a scalar, committed comment id."""
+    return async_task(
+        COMMENT_ALERT_TASK_PATH,
+        comment_id,
+        task_name=build_task_name(
+            'Staff comment alert',
+            f'comment {comment_id}',
+            'comment creation',
+        ),
+    )
+
+
+def deliver_staff_comment_alert(comment_id):
+    """Reload a comment and its authors, then run the existing alert gates."""
+    comment = (
+        Comment.objects.select_related('user', 'parent__user')
+        .filter(pk=comment_id)
+        .first()
+    )
+    if comment is None:
+        logger.info(
+            'Staff comment Slack alert skipped: comment %s no longer exists',
+            comment_id,
+        )
+        return False
+    return notify_staff_of_comment(comment)
 
 
 def staff_comment_alerts_enabled():

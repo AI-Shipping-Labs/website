@@ -2,6 +2,7 @@
 
 import logging
 
+from django.db import transaction
 from django.utils import timezone
 
 from accounts.utils.activation import mark_activated
@@ -36,26 +37,32 @@ def create_comment(*, content_id, user, body, parent=None):
 
 
 def _notify_staff_channel(comment):
-    """Best-effort staff Slack alert for member comments (issue #1926).
+    """Enqueue the best-effort staff Slack alert after commit.
 
     Runs separately from ``_notify_comment_recipients`` because the owner
     notifier returns early when a thread has no linked owner, while the
-    team alert must fire regardless. Slack failures never affect the
-    already-saved comment.
+    team alert must fire regardless. Passing only the comment id keeps the
+    queue payload small and makes the worker reload committed state. Queue
+    failures never affect the already-saved comment.
     """
-    try:
-        # Lazy for the same reason as ``_notify_comment_recipients``: the
-        # generic comments app keeps no static dependency on notifications.
-        from notifications.services.staff_comment_alerts import (  # noqa: PLC0415
-            notify_staff_of_comment,
-        )
+    comment_id = comment.pk
 
-        notify_staff_of_comment(comment)
-    except Exception:
-        logger.exception(
-            'staff comment Slack alert failed for comment %s',
-            comment.pk,
-        )
+    def enqueue():
+        try:
+            # Lazy for the same reason as ``_notify_comment_recipients``: the
+            # generic comments app keeps no static dependency on notifications.
+            from notifications.services.staff_comment_alerts import (  # noqa: PLC0415
+                enqueue_staff_comment_alert,
+            )
+
+            enqueue_staff_comment_alert(comment_id)
+        except Exception:
+            logger.exception(
+                'staff comment Slack alert enqueue failed for comment %s',
+                comment_id,
+            )
+
+    transaction.on_commit(enqueue)
 
 
 def _notify_comment_recipients(comment):

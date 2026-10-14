@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load static %}
 
 {% block studio_title %}Import {{ batch.pk }}{% endblock %}
 
@@ -45,10 +46,10 @@
   {% include "studio/imports/_status.html" %}
 </div>
 
+<script src="{% static 'js/visibility-poller.js' %}"></script>
 <script>
 (function() {
   var container = document.getElementById('import-status-container');
-  var timer = null;
 
   function bindSorting() {
     var table = document.getElementById('errors-table');
@@ -66,28 +67,29 @@
     });
   }
 
-  function poll() {
+  function shouldPoll() {
     var panel = document.getElementById('import-status-panel');
-    if (!panel || panel.getAttribute('data-finished') === 'true') {
-      if (timer) window.clearInterval(timer);
-      return;
-    }
-    fetch(container.getAttribute('data-fragment-url'), {headers: {'X-Requested-With': 'fetch'}})
-      .then(function(response) { return response.text(); })
-      .then(function(html) {
-        container.innerHTML = html;
-        bindSorting();
-        var nextPanel = document.getElementById('import-status-panel');
-        if (nextPanel && nextPanel.getAttribute('data-finished') === 'true' && timer) {
-          window.clearInterval(timer);
-        }
-      });
+    return Boolean(panel && panel.getAttribute('data-finished') !== 'true');
   }
 
   bindSorting();
-  if (document.getElementById('import-status-panel').getAttribute('data-finished') !== 'true') {
-    timer = window.setInterval(poll, 5000);
-  }
+  window.AISLVisibilityPoller.create({
+    interval: 5000,
+    maxBackoff: 60000,
+    shouldPoll: shouldPoll,
+    request: function() {
+      return fetch(container.getAttribute('data-fragment-url'), {
+        credentials: 'same-origin',
+        headers: {'X-Requested-With': 'fetch'}
+      });
+    },
+    onResponse: function(response) {
+      return response.text().then(function(html) {
+        container.innerHTML = html;
+        bindSorting();
+      });
+    }
+  }).start();
 })();
 </script>
 {% endblock %}

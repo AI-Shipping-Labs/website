@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load studio_filters %}
+{% load static studio_filters %}
 
 {% block studio_title %}Worker Status{% endblock %}
 
@@ -429,57 +429,32 @@
   fragment endpoint every 3s and swap the table in place. We pause when the
   tab isn't visible so backgrounded dashboards don't burn cycles.
   {% endcomment %}
+  <script src="{% static 'js/visibility-poller.js' %}"></script>
   <script>
   (function() {
     var wrapper = document.getElementById('pending-tasks-wrapper');
     if (!wrapper) return;
     var fragmentUrl = wrapper.dataset.fragmentUrl;
     if (!fragmentUrl) return;
-    var POLL_INTERVAL_MS = 3000;
-    var timer = null;
-
-    function shouldPoll() {
-      return document.visibilityState === 'visible';
-    }
-
-    function refresh() {
-      if (!shouldPoll()) return;
-      fetch(fragmentUrl, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-        .then(function(resp) {
-          if (!resp.ok) return null;
-          return resp.text();
-        })
-        .then(function(html) {
-          if (html === null || html === undefined) return;
+    window.AISLVisibilityPoller.create({
+      interval: 3000,
+      maxBackoff: 60000,
+      request: function() {
+        return fetch(fragmentUrl, {
+          credentials: 'same-origin',
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+      },
+      onResponse: function(resp) {
+        return resp.text().then(function(html) {
           // Don't clobber the wrapper while a confirm() dialog is open — that
           // would yank the form out from under the operator. The browser's
           // own focus-during-confirm semantics handle this implicitly because
           // fetch() callbacks queue behind the modal dialog.
           wrapper.innerHTML = html;
-        })
-        .catch(function() {
-          // Network blip — try again next tick. Don't disable polling.
         });
-    }
-
-    function start() {
-      if (timer !== null) return;
-      timer = setInterval(refresh, POLL_INTERVAL_MS);
-    }
-    function stop() {
-      if (timer === null) return;
-      clearInterval(timer);
-      timer = null;
-    }
-
-    document.addEventListener('visibilitychange', function() {
-      if (shouldPoll()) {
-        start();
-      } else {
-        stop();
       }
-    });
-    if (shouldPoll()) start();
+    }).start();
   })();
   </script>
 </div>

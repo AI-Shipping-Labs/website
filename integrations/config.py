@@ -62,6 +62,8 @@ from django.core.cache.backends.base import InvalidCacheBackendError
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.core.validators import validate_email
 from django.db import DatabaseError
+from django.db.models import F, Window
+from django.db.models.functions import RowNumber
 from django.test.testcases import DatabaseOperationForbidden
 
 from integrations.shared_cache import get_shared_cache, set_shared_cache
@@ -618,6 +620,34 @@ def _read_stamp():
     return (package_stamp, donor_stamp)
 
 
+def _latest_donor_changes(donor_keys):
+    """Return the latest ``(key, new_value)`` row for each donor key.
+
+    The transitional donor fallback only needs to know whether each key's
+    latest package change is a clear tombstone. Rank in SQL so a cold cache
+    receives one row per donor key instead of the key's complete audit
+    history. ``pk`` makes equal timestamps deterministic on SQLite and
+    PostgreSQL, matching ``SettingChange``'s model ordering.
+    """
+    if not donor_keys:
+        return []
+    from community_base.config.models import SettingChange  # noqa: PLC0415
+
+    return list(
+        SettingChange.objects.filter(setting_key__in=donor_keys)
+        .annotate(
+            latest_rank=Window(
+                expression=RowNumber(),
+                partition_by=(F("setting_key"),),
+                order_by=(F("created_at").desc(), F("pk").desc()),
+            )
+        )
+        .filter(latest_rank=1)
+        .order_by("setting_key")
+        .values_list("setting_key", "new_value")
+    )
+
+
 def _populate_cache():
     """Load all declared cb_config Setting values into the in-process cache.
 
@@ -655,20 +685,11 @@ def _populate_cache():
             if not is_secret or _allow_declared_legacy_secret(row_key)
         ]
         donor_keys = {row_key for row_key, _ in donor_rows}
-        clear_keys = set()
-        if donor_keys:
-            from community_base.config.models import SettingChange  # noqa: PLC0415
-
-            seen = set()
-            changes = SettingChange.objects.filter(
-                setting_key__in=donor_keys,
-            ).order_by("-created_at", "-pk").values_list("setting_key", "new_value")
-            for row_key, new_value in changes:
-                if row_key in seen:
-                    continue
-                seen.add(row_key)
-                if new_value is None:
-                    clear_keys.add(row_key)
+        clear_keys = {
+            row_key
+            for row_key, new_value in _latest_donor_changes(donor_keys)
+            if new_value is None
+        }
         package_keys = set(
             Setting.objects.values_list("key", flat=True)
         )

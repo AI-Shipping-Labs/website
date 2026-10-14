@@ -39,11 +39,24 @@ CONFIG_KEYS = (
     'STAFF_SIGNUP_NOTIFY_CHANNEL_ID',
 )
 LESSON_PATH = '/courses/llm-zoomcamp/module-1/intro-to-rag'
+Q_CLUSTER_SYNC = {
+    'name': 'test',
+    'sync': True,
+    'orm': 'default',
+}
 
 
 # ----------------------------------------------------------------------
 # Fixtures / helpers
 # ----------------------------------------------------------------------
+
+
+@pytest.fixture(autouse=True)
+def _execute_comment_alert_jobs_inline(settings):
+    """Run the queued alert worker in-process for browser assertions."""
+    settings.Q_CLUSTER = Q_CLUSTER_SYNC
+    with mock.patch('django_q.conf.Conf.SYNC', True):
+        yield
 
 
 def _configure(server, **overrides):

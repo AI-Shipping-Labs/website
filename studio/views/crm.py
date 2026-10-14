@@ -659,13 +659,13 @@ def crm_call_send_email(request, call_id):
     explicit staff action is the single send path. Re-checks draft-ready
     and not-already-sent so a double POST sends exactly once.
     """
-    from integrations.config import get_config
+    from integrations.config import crm_call_summary_email_from
 
     call = _get_call(call_id)
     if not call.email_draft_ready_at or call.email_sent_at or not call.email_draft_body:
         messages.error(request, "No ready attendee email draft on this call.")
         return redirect("studio_crm_call_detail", call_id=call.pk)
-    from_email = get_config("SES_FROM_EMAIL", "community@aishippinglabs.com")
+    from_email = crm_call_summary_email_from()
     try:
         sent = send_mail(
             subject=call.email_draft_subject or "Your 1:1 call summary",
@@ -685,6 +685,38 @@ def crm_call_send_email(request, call_id):
     call.email_sent_at = timezone.now()
     call.save(update_fields=["email_sent_at", "updated_at"])
     messages.success(request, "Attendee summary email sent.")
+    return redirect("studio_crm_call_detail", call_id=call.pk)
+
+@staff_required
+@require_POST
+def crm_call_mark_sent(request, call_id):
+    """Mark the draft as sent without emailing (copy-into-mail-client flow)."""
+    call = _get_call(call_id)
+    if not call.email_draft_ready_at:
+        messages.error(request, "No ready attendee email draft on this call.")
+    elif call.email_sent_at:
+        messages.info(request, "Attendee email was already sent.")
+    else:
+        call.email_sent_at = timezone.now()
+        call.email_sent_by = request.user
+        call.save(update_fields=["email_sent_at", "email_sent_by", "updated_at"])
+        messages.success(request, "Attendee summary email marked as sent.")
+    return redirect("studio_crm_call_detail", call_id=call.pk)
+
+
+@staff_required
+@require_POST
+def crm_call_dismiss_draft(request, call_id):
+    """Dismiss the draft: no email will go out for this call."""
+    call = _get_call(call_id)
+    if not call.email_draft_ready_at:
+        messages.error(request, "No ready attendee email draft on this call.")
+    elif call.email_draft_dismissed_at:
+        messages.info(request, "Draft was already dismissed.")
+    else:
+        call.email_draft_dismissed_at = timezone.now()
+        call.save(update_fields=["email_draft_dismissed_at", "updated_at"])
+        messages.success(request, "Attendee email draft dismissed.")
     return redirect("studio_crm_call_detail", call_id=call.pk)
 
 

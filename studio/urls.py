@@ -126,6 +126,8 @@ from studio.views.crm import (
     crm_call_detail,
     crm_call_edit,
     crm_call_send_email,
+    crm_call_mark_sent,
+    crm_call_dismiss_draft,
     crm_call_new,
     crm_calls,
     crm_detail,
@@ -1164,6 +1166,16 @@ urlpatterns = [
         'crm/calls/<int:call_id>/send-email/',
         crm_call_send_email,
         name='studio_crm_call_send_email',
+    ),
+    path(
+        'crm/calls/<int:call_id>/mark-sent/',
+        crm_call_mark_sent,
+        name='studio_crm_call_mark_sent',
+    ),
+    path(
+        'crm/calls/<int:call_id>/dismiss-draft/',
+        crm_call_dismiss_draft,
+        name='studio_crm_call_dismiss_draft',
     ),
     path(
         'crm/<int:crm_id>/calls/new/',

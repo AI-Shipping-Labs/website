@@ -86,6 +86,7 @@ from api.views.course_enrollments import (
 )
 from api.views.course_instructors import course_instructors
 from api.views.crm_calls import crm_calls
+from api.views.crm_call_drafts import crm_call_drafts
 from api.views.crm_export import crm_export, crm_record_markdown_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list
@@ -1364,6 +1365,14 @@ urlpatterns = [
     # Staff-token read-only aggregate: the full per-user CRM record (state +
     # crm_record + notes + nested plans + enrollments + onboarding
     # responses) in one call. Slashless form like every other /api route.
+    # ---- CRM attendee email drafts (issue #1951) ------------------------
+    # Staff-token read-only listing of the drafts the booking-call
+    # capture pipeline stores; sending stays a Studio-only action.
+    path(
+        "crm/call-email-drafts",
+        crm_call_drafts,
+        name="api_crm_call_drafts",
+    ),
     path(
         "crm/export",
         crm_export,

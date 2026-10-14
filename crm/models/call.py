@@ -15,19 +15,29 @@ from django.db import models
 
 from crm.models.crm_record import CRMRecord
 
-#: Suggested values for :attr:`Call.source`. The field itself is
-#: free-form (no ``choices`` constraint) so a new origin never needs a
-#: migration; writers should stick to these tokens.
+#: Values for :attr:`Call.source`. The field validates against
+#: ``CALL_SOURCE_CHOICES`` (issue #1951 added ``zoom``/``telegram``), so
+#: a new origin token ships with a state-only migration; writers must
+#: use one of these.
 SOURCE_MANUAL = 'manual'
 SOURCE_BOOKING = 'booking'
 SOURCE_CALENDLY = 'calendly'
 SOURCE_ZOOM = 'zoom'
+SOURCE_TELEGRAM = 'telegram'
 CALL_SOURCE_CHOICES = [
     (SOURCE_MANUAL, 'Manual'),
     (SOURCE_BOOKING, 'Booking'),
     (SOURCE_CALENDLY, 'Calendly'),
     (SOURCE_ZOOM, 'Zoom import'),
+    (SOURCE_TELEGRAM, 'Telegram import'),
 ]
+
+#: Derived lifecycle values for the attendee summary email (issue
+#: #1951). Exposed by :attr:`Call.email_draft_status` and the
+#: ``GET /api/crm/call-email-drafts`` read; never stored as a column.
+EMAIL_DRAFT_STATUS_DRAFT = 'draft'
+EMAIL_DRAFT_STATUS_SENT = 'sent'
+EMAIL_DRAFT_STATUS_DISMISSED = 'dismissed'
 class CallManager(models.Manager):
     """Default manager that widens related ``calls`` access (issue #1949).
 
@@ -114,10 +124,10 @@ class Call(models.Model):
     )
     # Post-meeting capture (issue #1951): the scheduled
     # ``booking-call-capture`` pipeline enriches booking-source rows with
-    # the Zoom recording pointer, the parsed transcript, an LLM summary,
-    # and a DRAFT attendee email. The pipeline never sends email; the
-    # only send path is the explicit Studio button (which stamps
-    # ``email_sent_at``).
+    # a recording pointer when one is discoverable and a summary email
+    # DRAFT (LLM-written, with a deterministic fallback). The pipeline
+    # never sends email; the only send paths are the explicit Studio
+    # actions, which stamp ``email_sent_at``/``email_sent_by``.
     recording_url = models.URLField(
         blank=True,
         default='',
@@ -164,6 +174,38 @@ class Call(models.Model):
         blank=True,
         help_text='Set only when a human explicitly sends from Studio.',
     )
+    email_sent_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+        help_text='Staff member who sent (or marked sent) the email.',
+    )
+    email_draft_dismissed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            'Set when staff dismiss the draft without sending (no email '
+            'will go out for this call).'
+        ),
+    )
+    @property
+    def email_draft_status(self):
+        """Derived attendee-email lifecycle: ``draft``/``sent``/``dismissed``.
+
+        ``sent`` once ``email_sent_at`` is stamped (Studio send or
+        mark-as-sent), ``dismissed`` once ``email_draft_dismissed_at`` is
+        stamped, ``draft`` before either. Derived rather than stored so
+        the lifecycle can never disagree with the timestamps.
+        """
+
+        if self.email_sent_at:
+            return EMAIL_DRAFT_STATUS_SENT
+        if self.email_draft_dismissed_at:
+            return EMAIL_DRAFT_STATUS_DISMISSED
+        return EMAIL_DRAFT_STATUS_DRAFT
+
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

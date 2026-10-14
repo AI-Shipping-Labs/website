@@ -242,17 +242,237 @@ def resolve_email(client, aliases, parsed):
     return Resolution(UNRESOLVED, reason=f'{UNRESOLVED_AMBIGUOUS}: {emails}')
 
 
+def _refs_for_email(client, email, cache, source):
+    """Existing ``source_ref`` set for one email + source (cached)."""
+    key = (email, source)
+    if key not in cache:
+        calls = client.member_calls(email) or []
+        cache[key] = {
+            row.get('source_ref')
+            for row in calls
+            if row.get('source') == source and row.get('source_ref')
+        }
+    return cache[key]
+
+
 def _zoom_refs_for_email(client, email, cache):
-    """Source refs of the member's existing ``zoom`` calls (report only)."""
-    if email not in cache:
-        members = client.member_calls(email)
-        refs = set()
-        for member in members:
-            for call in member.get('calls', []):
-                if call.get('source') == 'zoom':
-                    refs.add(call.get('source_ref'))
-        cache[email] = refs
-    return cache[email]
+    """Back-compat wrapper: the ``zoom`` refs for one email."""
+    return _refs_for_email(client, email, cache, 'zoom')
+
+#: ``20260420_jakob-zischka.md`` plan stem -> member slug.
+PLAN_STEM_RE = re.compile(r'^\d{8}_(?P<slug>[a-z0-9-]+)$')
+
+#: A dated call-note heading: ``## 1x1 with Alexey (Apr 23, 2026)``.
+PLAN_HEADING_RE = re.compile(
+    r'^(?P<title>.+?)\s+\((?P<date>[A-Z][a-z]+ [0-9]{1,2}, [0-9]{4})\)\s*$',
+)
+
+#: Headings that count as call-note sections (issue #1951): a heading
+#: naming a call, notes, meeting, or a 1x1. Everything else in a plan
+#: file (goals, background, homework) is not call history.
+_PLAN_SECTION_TITLE_RE = re.compile(r'call|note|meeting|1x1', re.IGNORECASE)
+
+_MONTHS = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+
+#: ``telegram``-source token for plan-note imports.
+SOURCE_TELEGRAM = 'telegram'
+
+
+@dataclass(frozen=True)
+class PlanNote:
+    """One dated call-note section from a member plan file."""
+
+    filename: str
+    stem: str
+    member_slug: str
+    name: str
+    heading: str
+    heading_slug: str
+    date: dt.date
+    body: str
+
+    def occurred_at(self):
+        """The heading date at 12:00 UTC (deterministic across runs)."""
+        return dt.datetime(
+            self.date.year, self.date.month, self.date.day, 12, 0, 0,
+            tzinfo=dt.timezone.utc,
+        )
+
+    def payload(self):
+        """The ``POST /api/crm/calls`` body for this note.
+
+        ``email`` is filled by the caller after resolution; ``source_ref``
+        is ``<plan stem>#<heading slug>`` so a re-run upserts in place.
+        """
+        return {
+            'email': None,
+            'occurred_at': self.occurred_at().isoformat(),
+            'summary': self.body,
+            'source': SOURCE_TELEGRAM,
+            'source_ref': f'{self.stem}#{self.heading_slug}',
+        }
+
+
+def heading_slug(title):
+    """``1x1 with Alexey (Apr 23, 2026)`` -> ``1x1-with-alexey``."""
+    slug = re.sub(r'\([^)]*\)', ' ', title).lower()
+    slug = re.sub(r'[^a-z0-9]+', '-', slug).strip('-')
+    return slug
+
+
+def plan_member_from_stem(stem):
+    """``20260420_jakob-zischka`` -> ``('jakob-zischka', 'Jakob Zischka')``.
+
+    The plan belongs to its member, so the member comes from the
+    filename; the heading names the call, not the attendee. Returns
+    ``None`` for files that do not match the ``YYYYMMDD_<slug>`` shape.
+    """
+    match = PLAN_STEM_RE.match(stem)
+    if match is None:
+        return None
+    slug = match.group('slug')
+    display = ' '.join(part.capitalize() for part in slug.split('-'))
+    return slug, display
+
+
+def parse_plan_date(raw):
+    """``Apr 23, 2026`` -> ``dt.date`` or ``None`` (never guessed)."""
+    month_name, _, rest = raw.partition(' ')
+    month = _MONTHS.get(month_name.lower())
+    try:
+        day, year = (part.strip() for part in rest.split(','))
+        return dt.date(int(year), month, int(day))
+    except (ValueError, AttributeError, TypeError):
+        return None
+
+
+def parse_plan_file(path):
+    """Return ``(dated_notes, skipped)`` for one plan file.
+
+    A heading that names a call-note section (call / note / meeting /
+    1x1) and carries a parseable ``(Mon DD, YYYY)`` date becomes one
+    :class:`PlanNote`; the section body runs to the next heading of the
+    same or higher level. A call-note heading without a parseable date
+    is skipped and reported with its heading -- dates are never
+    invented. Files whose stem does not match ``YYYYMMDD_<member-slug>``
+    are skipped whole (there is no member to resolve against).
+    """
+    stem = path.stem
+    member = plan_member_from_stem(stem)
+    if member is None:
+        return [], [
+            SkippedFile(
+                path.name,
+                'plan filename does not match YYYYMMDD_<member-slug>.md',
+            ),
+        ]
+    member_slug, member_name = member
+
+    text = path.read_text(encoding='utf-8')
+    heading_line_re = re.compile(
+        r'^(?P<level>#{1,4})\s+(?P<title>.*?)\s*$', re.M,
+    )
+    lines = text.splitlines()
+    offsets = []
+    pos = 0
+    for line in lines:
+        m = heading_line_re.match(line)
+        offsets.append((pos, m))
+        pos += len(line) + 1
+
+    notes = []
+    skipped = []
+    for idx, (start, m) in enumerate(offsets):
+        if m is None:
+            continue
+        title = m.group('title').strip()
+        if not _PLAN_SECTION_TITLE_RE.search(title):
+            continue
+        level = len(m.group('level'))
+        dated = PLAN_HEADING_RE.match(title)
+        section_start = start + m.end() + 1
+        section_end = len(text)
+        for later_start, later in offsets[idx + 1:]:
+            if later is not None and len(later.group('level')) <= level:
+                section_end = later_start
+                break
+        body = text[section_start:section_end].strip()
+        date = parse_plan_date(dated.group('date')) if dated else None
+        if date is None:
+            skipped.append(
+                SkippedFile(
+                    f'{stem}#{heading_slug(title)}',
+                    'undated call-note section',
+                ),
+            )
+            continue
+        notes.append(
+            PlanNote(
+                filename=path.name,
+                stem=stem,
+                member_slug=member_slug,
+                name=member_name,
+                heading=title,
+                heading_slug=heading_slug(title),
+                date=date,
+                body=body,
+            ),
+        )
+    return notes, skipped
+
+
+def discover_plan_files(root):
+    """List ``<root>/1x1/plans/*.md`` sorted (the directory may be absent)."""
+    return sorted((Path(root) / '1x1' / 'plans').glob('*.md'))
+
+
+def _import_plan_notes(*, root, client, aliases, apply, result,
+                       refs_cache, plan_parser=None):
+    """Extend an import run with the plan-file call notes (telegram)."""
+    parse = plan_parser or parse_plan_file
+    for path in discover_plan_files(root):
+        notes, skipped = parse(path)
+        result.skipped_files.extend(skipped)
+        for note in notes:
+            resolution = resolve_email(client, aliases, note)
+            if resolution.status != MATCHED:
+                result.skipped_unresolved += 1
+                result.rows.append({
+                    'parsed': note,
+                    'resolution': resolution,
+                    'disposition': 'skipped',
+                })
+                continue
+            ref = note.payload()['source_ref']
+            existing = _refs_for_email(
+                client, resolution.email, refs_cache, SOURCE_TELEGRAM,
+            )
+            if apply:
+                payload = note.payload()
+                payload['email'] = resolution.email
+                client.post_call(payload)
+                disposition = 'created'
+                if ref in existing:
+                    disposition = 'updated'
+                    result.updated += 1
+                else:
+                    result.created += 1
+            else:
+                disposition = (
+                    'would_update' if ref in existing else 'would_create'
+                )
+                if disposition == 'would_update':
+                    result.would_update += 1
+                else:
+                    result.would_create += 1
+            result.rows.append({
+                'parsed': note,
+                'resolution': resolution,
+                'disposition': disposition,
+            })
 
 
 def run_import(
@@ -262,6 +482,8 @@ def run_import(
     aliases=None,
     apply=False,
     parser=None,
+    include_plans=True,
+    plan_parser=None,
 ):
     """Parse, resolve, and (optionally) record every dated summary.
 
@@ -325,6 +547,17 @@ def run_import(
             'resolution': resolution,
             'disposition': disposition,
         })
+
+    if include_plans:
+        _import_plan_notes(
+            root=root,
+            client=client,
+            aliases=aliases,
+            apply=apply,
+            result=result,
+            refs_cache=refs_cache,
+            plan_parser=plan_parser,
+        )
 
     return result
 

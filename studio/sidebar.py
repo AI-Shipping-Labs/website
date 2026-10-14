@@ -318,6 +318,8 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_crm_call_edit',
         'studio_crm_call_new',
         'studio_crm_call_send_email',
+        'studio_crm_call_mark_sent',
+        'studio_crm_call_dismiss_draft',
     )),
     ('people', 'assistant', ('studio_assistant',)),
 

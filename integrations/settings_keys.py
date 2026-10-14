@@ -112,6 +112,7 @@ _KEY_ORDER = {
     ),
     "crm": (
         "CRM_CALL_CAPTURE_ENABLED",
+        "CRM_CALL_SUMMARY_EMAIL_FROM",
     ),
     "github": (
         "GITHUB_APP_ID",
@@ -2320,6 +2321,18 @@ GOOGLE_CALENDAR_ID = declare(
     secret=False,
     optional=True,
     docs_url="_docs/configuration.md#booking-and-calendar",
+)
+
+CRM_CALL_SUMMARY_EMAIL_FROM = declare(
+    key="CRM_CALL_SUMMARY_EMAIL_FROM",
+    group="crm",
+    label="CRM Call Summary Email From",
+    description="From-address for the draft attendee summary email stored on captured booking calls. Blank falls back to DEFAULT_FROM_EMAIL.",
+    value_type="str",
+    default="",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#crm",
 )
 
 CRM_CALL_CAPTURE_ENABLED = declare(

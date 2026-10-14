@@ -55,9 +55,12 @@
   </dl>
 </section>
 
-{% if call.email_draft_ready_at or call.email_sent_at or call.capture_unavailable_at %}
+{% if call.email_draft_ready_at or call.email_sent_at or call.capture_unavailable_at or call.email_draft_dismissed_at or call.source == 'booking' %}
 <section class="bg-card border border-border rounded-lg p-6 mb-8 max-w-4xl" data-testid="crm-call-email-draft">
   <h2 class="text-lg font-semibold text-foreground mb-4">Attendee email draft</h2>
+  {% if not call.email_draft_ready_at and not call.email_sent_at and not call.capture_unavailable_at and not call.email_draft_dismissed_at %}
+  <p class="text-sm text-muted-foreground" data-testid="crm-call-email-draft-empty">No follow-up draft yet.</p>
+  {% endif %}
   <dl class="space-y-4">
     <div>
       <dt class="text-xs font-medium text-muted-foreground">Capture status</dt>
@@ -90,17 +93,47 @@
       <dt class="text-xs font-medium text-muted-foreground">Sent at</dt>
       <dd class="text-sm text-foreground" data-testid="crm-call-email-sent">{{ call.email_sent_at|operator_datetime }}</dd>
     </div>
+    {% if call.email_sent_by %}
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Sent by</dt>
+      <dd class="text-sm text-foreground">{{ call.email_sent_by.email }}</dd>
+    </div>
+    {% endif %}
+    {% endif %}
+    {% if call.email_draft_dismissed_at %}
+    <div>
+      <dt class="text-xs font-medium text-muted-foreground">Dismissed</dt>
+      <dd class="text-sm text-foreground" data-testid="crm-call-email-dismissed">{{ call.email_draft_dismissed_at|operator_datetime }}</dd>
+    </div>
     {% endif %}
   </dl>
-  {% if call.email_draft_ready_at and not call.email_sent_at %}
-  <form method="post" action="{% url 'studio_crm_call_send_email' call_id=call.pk %}" class="mt-4">
-    {% csrf_token %}
-    <button type="submit"
-            data-testid="crm-call-email-send"
-            class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
-      Send to attendee
-    </button>
-  </form>
+  {% if call.email_draft_ready_at and not call.email_sent_at and not call.email_draft_dismissed_at %}
+  <div class="mt-4 flex flex-wrap gap-3">
+    <form method="post" action="{% url 'studio_crm_call_send_email' call_id=call.pk %}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-call-email-send"
+              class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Send to attendee
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_crm_call_mark_sent' call_id=call.pk %}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-call-email-mark-sent"
+              class="bg-secondary border border-border text-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Mark as sent
+      </button>
+    </form>
+    <form method="post" action="{% url 'studio_crm_call_dismiss_draft' call_id=call.pk %}">
+      {% csrf_token %}
+      <button type="submit"
+              data-testid="crm-call-email-dismiss"
+              class="bg-secondary border border-border text-muted-foreground px-4 py-2 rounded-lg text-sm font-medium hover:bg-muted transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background">
+        Dismiss
+      </button>
+    </form>
+  </div>
   {% endif %}
 </section>
 {% endif %}

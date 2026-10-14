@@ -488,15 +488,32 @@ def crm_call_capture_enabled():
     """True when the scheduled booking-call capture pipeline may run.
 
     Issue #1951. Default-on: after a booked 1:1 meeting ends, the
-    ``booking-call-capture`` task pulls the Zoom recording/transcript,
-    refreshes the CRM call summary through the LLM, and stores a DRAFT
-    attendee email. It never sends email -- sending is the explicit
-    Studio Send button.
+    ``booking-call-capture`` task enriches the booking-sourced CRM call
+    and stores a DRAFT attendee summary email (LLM-written, with a
+    deterministic fallback). It never sends email -- sending is the
+    explicit Studio action only.
     """
     raw = get_config('CRM_CALL_CAPTURE_ENABLED', 'true')
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')
+
+
+def crm_call_summary_email_from():
+    """From-address for draft attendee summary emails (issue #1951).
+
+    Reads ``CRM_CALL_SUMMARY_EMAIL_FROM`` and falls back to
+    ``DEFAULT_FROM_EMAIL`` when unset or blank, so a single Studio
+    setting is enough to brand the 1:1 summary mail.
+    """
+    from django.conf import settings as django_settings
+
+    configured = str(get_config('CRM_CALL_SUMMARY_EMAIL_FROM', '')).strip()
+    if configured:
+        return configured
+    return str(
+        getattr(django_settings, 'DEFAULT_FROM_EMAIL', '') or ''
+    ).strip()
 
 
 def event_reminders_include_cohort_enabled():

@@ -264,20 +264,33 @@ def _draft_summary_email(call, booking, *, now=None):
     del now
     if not crm_call_capture_enabled():
         return {'status': 'skipped', 'reason': 'capture_disabled'}
-    if not llm.is_enabled():
-        logger.info(
-            'Call summary skipped for call %s: LLM not configured; '
-            'the existing booking summary stays untouched',
-            call.pk,
-        )
-        return {'status': 'skipped', 'reason': 'llm_not_configured'}
 
-    summary_result = _generate_summary(booking, call.transcript_text)
-    if summary_result['status'] != 'ok':
-        # Log-and-continue: never raises, the existing booking summary
-        # stays untouched, and a later tick retries generation.
-        return summary_result
-    summary = summary_result['summary']
+    # A usable draft always exists (issue #1951): the LLM summary when
+    # available, otherwise the deterministic booking fallback (topic +
+    # notes). A call with neither gets no draft and is retried/ending
+    # unavailable through the normal attempt machinery.
+    summary_source = 'llm'
+    if not llm.is_enabled():
+        summary = _fallback_summary(booking)
+        summary_source = 'fallback'
+        if not summary:
+            logger.info(
+                'Call summary skipped for call %s: LLM not configured '
+                'and the booking has no topic/notes fallback',
+                call.pk,
+            )
+            return {'status': 'skipped', 'reason': 'llm_not_configured'}
+    else:
+        summary_result = _generate_summary(booking, call.transcript_text)
+        if summary_result['status'] != 'ok':
+            summary = _fallback_summary(booking)
+            summary_source = 'fallback'
+            if not summary:
+                # Log-and-continue: never raises, the existing booking
+                # summary stays untouched, and a later tick retries.
+                return summary_result
+        else:
+            summary = summary_result['summary']
 
     # The canonical upsert refreshes occurred_at after reschedules and
     # re-adopts the contact link; the same (source, source_ref) write
@@ -297,13 +310,14 @@ def _draft_summary_email(call, booking, *, now=None):
         'updated_at',
     ])
     logger.info(
-        'Stored attendee email draft for call %s (booking %s)',
-        updated_call.pk, booking.pk,
+        'Stored attendee email draft for call %s (booking %s, %s)',
+        updated_call.pk, booking.pk, summary_source,
     )
     return {
         'status': 'drafted',
         'call_id': updated_call.pk,
         'characters': len(summary),
+        'summary_source': summary_source,
     }
 
 
@@ -313,6 +327,22 @@ def draft_subject(booking):
         f'Your 1:1 with {booking.host.name} — '
         f'{booking.start_datetime.strftime("%b %d")}'
     )
+
+
+def _fallback_summary(booking):
+    """Deterministic draft body: booking topic + notes (issue #1951).
+
+    The usable-without-LLM guarantee: returns ``''`` only when the
+    booking carries neither a topic nor notes.
+    """
+    parts = []
+    topic = (booking.discussion_topic or '').strip()
+    notes = (booking.discussion_notes or '').strip()
+    if topic:
+        parts.append(f'Planned topic: {topic}')
+    if notes:
+        parts.append(notes)
+    return '\n\n'.join(parts)
 
 
 def _generate_summary(booking, transcript_text):

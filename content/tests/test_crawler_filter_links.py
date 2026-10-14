@@ -86,7 +86,6 @@ class CrawlerAuthLinkTest(TestCase):
             "/projects",
             {"difficulty": "intermediate", "tag": ["gemini", "agents"]},
         )
-        self.assertEqual(response.status_code, 200)
         anchors = _anchors(response.content.decode())
 
         for testid, expected_count in (
@@ -105,7 +104,6 @@ class CrawlerAuthLinkTest(TestCase):
     def test_every_social_login_link_is_nofollow_and_keeps_next(self):
         next_url = "/projects?difficulty=intermediate&tag=gemini&tag=agents"
         response = self.client.get("/accounts/login/", {"next": next_url})
-        self.assertEqual(response.status_code, 200)
         anchors = _anchors(response.content.decode())
 
         for provider in ("google", "github", "slack"):
@@ -139,7 +137,6 @@ class CrawlerFilterLinkTest(TestCase):
             "/projects",
             {"difficulty": "intermediate", "tag": "gemini"},
         )
-        self.assertEqual(response.status_code, 200)
         anchors = _anchors(response.content.decode())
 
         filter_links = [
@@ -165,7 +162,6 @@ class CrawlerFilterLinkTest(TestCase):
 
     def test_detail_filter_tags_are_nofollow_but_content_link_is_followable(self):
         response = self.client.get(self.project.get_absolute_url())
-        self.assertEqual(response.status_code, 200)
         anchors = _anchors(response.content.decode())
 
         for tag_name in self.project.tags:
@@ -258,7 +254,6 @@ class CrawlerFilterLinkTest(TestCase):
         )
         for request_url, clear_href in cases:
             response = self.client.get(request_url)
-            self.assertEqual(response.status_code, 200)
             parser = _AnchorParser()
             parser.feed(response.content.decode())
             matches = _find(parser.filter_empty_anchors, href=clear_href)

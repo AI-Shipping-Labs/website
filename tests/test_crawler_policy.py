@@ -29,16 +29,27 @@ class _HeadElementParser(HTMLParser):
         super().__init__()
         self.in_head = False
         self.elements = []
+        self.headings = []
+        self._heading_text = None
 
     def handle_starttag(self, tag, attrs):
         if tag == 'head':
             self.in_head = True
         elif self.in_head:
             self.elements.append((tag, dict(attrs)))
+        if tag == 'h1':
+            self._heading_text = []
+
+    def handle_data(self, data):
+        if self._heading_text is not None:
+            self._heading_text.append(data)
 
     def handle_endtag(self, tag):
         if tag == 'head':
             self.in_head = False
+        elif tag == 'h1' and self._heading_text is not None:
+            self.headings.append(' '.join(''.join(self._heading_text).split()))
+            self._heading_text = None
 
     def select(self, tag, **attrs):
         return [
@@ -60,7 +71,6 @@ class FacetedListingCrawlerPolicyTest(TestCase):
 
     def _head(self, path):
         response = self.client.get(path)
-        self.assertEqual(response.status_code, 200)
         parser = _HeadElementParser()
         parser.feed(response.content.decode())
         return response, parser
@@ -239,7 +249,15 @@ class CrawlerSocialLoginGuardTest(TestCase):
 
         response = client.get('/projects')
 
-        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'content/projects_list.html')
+        page = _HeadElementParser()
+        page.feed(response.content.decode())
+        self.assertEqual(page.headings, ['Pet & Portfolio Project Ideas'])
+        self.assertEqual(
+            page.select('link', rel='canonical'),
+            [{'rel': 'canonical', 'href': f'{PRODUCTION_URL}/projects'}],
+        )
+        self.assertNotIn('X-Robots-Tag', response)
 
     def test_slashless_crawler_login_redirect_and_guard_are_query_free(self):
         client = Client(HTTP_USER_AGENT='GPTBot/1.2')

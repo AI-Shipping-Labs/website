@@ -1,8 +1,8 @@
 """Studio mark-as-sent / dismiss actions on the attendee email draft.
 
-Issue #1951: the scheduled pipeline never sends email; these staff
-buttons are the only send/mark paths, with double-POST and dismissed-
-draft guards.
+Issue #1951: the scheduled pipeline auto-sends once per captured call;
+these staff buttons cover retries and the mark/dismiss flows, with
+double-POST and dismissed-draft guards.
 """
 
 import datetime

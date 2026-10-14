@@ -489,9 +489,10 @@ def crm_call_capture_enabled():
 
     Issue #1951. Default-on: after a booked 1:1 meeting ends, the
     ``booking-call-capture`` task enriches the booking-sourced CRM call
-    and stores a DRAFT attendee summary email (LLM-written, with a
-    deterministic fallback). It never sends email -- sending is the
-    explicit Studio action only.
+    and sends the attendee summary email automatically (To the
+    attendee, Cc the booking host; LLM-written with a deterministic
+    fallback). One send per call -- failures keep the draft for the
+    explicit Studio actions.
     """
     raw = get_config('CRM_CALL_CAPTURE_ENABLED', 'true')
     if isinstance(raw, bool):
@@ -500,7 +501,7 @@ def crm_call_capture_enabled():
 
 
 def crm_call_summary_email_from():
-    """From-address for draft attendee summary emails (issue #1951).
+    """From-address for attendee summary emails (issue #1951).
 
     Reads ``CRM_CALL_SUMMARY_EMAIL_FROM`` and falls back to
     ``DEFAULT_FROM_EMAIL`` when unset or blank, so a single Studio
@@ -512,6 +513,31 @@ def crm_call_summary_email_from():
     if configured:
         return configured
     return str(getattr(settings, 'DEFAULT_FROM_EMAIL', '') or '').strip()
+
+
+def crm_call_summary_email_cc():
+    """Cc address for the attendee summary email (issue #1951).
+
+    Reads ``CRM_CALL_SUMMARY_EMAIL_CC``. Blank is allowed: the capture
+    pipeline then falls back to the booking host's email, so the
+    operator copy reaches Alexey with no configuration.
+    """
+    return str(get_config('CRM_CALL_SUMMARY_EMAIL_CC', '')).strip()
+
+
+def crm_call_summary_autosend_enabled():
+    """True when the capture pipeline may auto-send (issue #1951).
+
+    Default-on per Alexey: after a booked 1:1 meeting is captured, the
+    summary email goes out automatically. Off keeps capture and
+    drafting running but leaves every email as a draft for the Studio
+    ``Send to attendee`` button (which always sends, regardless of
+    this flag).
+    """
+    raw = get_config('CRM_CALL_SUMMARY_AUTOSEND_ENABLED', 'true')
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in ('true', '1', 'yes')
 
 
 def event_reminders_include_cohort_enabled():

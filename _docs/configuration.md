@@ -519,13 +519,16 @@ Test: visit `/book/alexey`, verify available time slots load from the schedule, 
 
 Studio path: `Studio > Settings > CRM`.
 
-Configures the post-meeting capture pipeline for booked 1:1 calls (issue #1951). After a booked meeting ends, a scheduled task pulls the Zoom recording and transcript, refreshes the CRM call summary through the LLM, and stores a DRAFT summary email for the attendee in Studio (`/studio/crm/calls/<id>/`). The pipeline never sends email: sending is the explicit `Send to attendee` button on the call detail page, and it stamps `Sent at` on the call.
+Configures the post-meeting capture pipeline for booked 1:1 calls (issue #1951). After a booked meeting ends, a scheduled task pulls the Zoom recording and transcript, refreshes the CRM call summary through the LLM, and automatically sends the attendee summary email: To = the attendee, Cc = the operator copy. One send per call, stamped `Sent at` on the call (`/studio/crm/calls/<id>/`); each send is logged, and a call with no attendee email keeps its draft for the Studio `Send to attendee` button.
 
 | Key | Source | Notes |
 |-----|--------|-------|
-| `CRM_CALL_CAPTURE_ENABLED` | non-secret | Master switch for the scheduled capture/summary/draft pipeline (default on). Turn off to stop all automatic Zoom pulls and LLM drafting; manual call logging and the Studio Send button keep working. |
+| `CRM_CALL_CAPTURE_ENABLED` | non-secret | Master switch for the scheduled capture/summary/auto-send pipeline (default on). Turn off to stop all automatic Zoom pulls, LLM drafting, and summary sends; manual call logging and the Studio actions keep working. |
+| `CRM_CALL_SUMMARY_EMAIL_FROM` | non-secret | From-address for the attendee summary email; blank falls back to `DEFAULT_FROM_EMAIL`. |
+| `CRM_CALL_SUMMARY_EMAIL_CC` | non-secret | Cc address on the auto-sent summary (the operator copy); blank falls back to the booking host's email. |
+| `CRM_CALL_SUMMARY_AUTOSEND_ENABLED` | non-secret | Kill switch for the automatic send (default on). Turn off to keep capture and drafting running while leaving every email as a draft for the Studio `Send to attendee` button; historical imports (`zoom`/`telegram`) and `manual` calls never send in any configuration. |
 
-Requirements: the booking Zoom meetings must cloud-record (`ZOOM_AUTO_RECORDING`, default `cloud`, Section 10) and the LLM provider must be configured (Section `LLM Provider` in Studio settings) for summaries to draft. With no recording, the call is marked `unavailable` after the retry budget; with no LLM configured, the transcript is still stored and only the draft stays empty.
+Requirements: the booking Zoom meetings must cloud-record (`ZOOM_AUTO_RECORDING`, default `cloud`, Section 10) for transcripts; with the LLM provider unconfigured (Section `LLM Provider` in Studio settings) the deterministic topic/notes fallback fills the summary instead. With no recording, the call is marked `unavailable` after the retry budget; when neither the LLM nor the fallback yields a summary, nothing is drafted or sent and the tick retries.
 
 Historical 1:1 call summaries (the `zoom-calls` repo) are imported with `uv run python manage.py import_zoom_calls --path <checkout> --apply` — dry-run is the default; unresolved participant names are skipped and reported, never guessed.
 

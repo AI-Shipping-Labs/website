@@ -100,7 +100,7 @@ class HomeworkStepAnsweredTest(HomeworkUnitSetupMixin, TestCase):
         CohortEnrollment.objects.create(user=self.student, cohort=self.cohort)
         self.client.force_login(self.student)
         # The first GET creates the learner's draft.
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
 
     def set_draft(self, answers):
         draft = HomeworkDraft.objects.get(user=self.student)
@@ -109,7 +109,7 @@ class HomeworkStepAnsweredTest(HomeworkUnitSetupMixin, TestCase):
         draft.save()
 
     def get_step(self, step='review'):
-        return self.client.get(f'{self.unit_url}?homework_step={step}')
+        return self.client.get(f'{self.unit_url}/{step}')
 
     def answered_titles(self, response):
         return [
@@ -275,7 +275,7 @@ class HomeworkStepAnsweredQueryCountTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.save(update_fields=['stepper_enabled'])
         Question.objects.filter(homework=self.homework, source_question_id='q3-canary').delete()
         self.client.force_login(self.student)
-        url = f'{self.unit_url}?homework_step=review'
+        url = f'{self.unit_url}/review'
         self.client.get(url)
         draft = HomeworkDraft.objects.get(user=self.student)
         draft.answers = {'q1-lines': option_key('14'), 'q2-reflect': 'One'}

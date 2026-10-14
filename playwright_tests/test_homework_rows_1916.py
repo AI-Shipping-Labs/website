@@ -192,7 +192,7 @@ def test_learner_status_follows_homework_progress_across_the_course(
     _open_week(page, django_server, syllabus)
 
     _row(page, 'Homework: Document Processing').click()
-    expect(page).to_have_url(unit_url)
+    expect(page).to_have_url(f'{unit_url}/intro')
     expect(page.get_by_test_id('homework-page-state')).to_have_text('Not submitted')
     page.get_by_role('link', name='Start questions').click()
     expect(page).to_have_url(f'{unit_url}/q1-first')
@@ -486,5 +486,5 @@ def test_phone_learner_reads_long_status_without_overflow(django_server, browser
     assert overflow <= 0, overflow
     page.screenshot(path=f'{SCREENSHOT_DIR}/drawer-390-light.png')
     drawer_row.click()
-    expect(page).to_have_url(f'{django_server}{data["unit"].get_absolute_url()}')
+    expect(page).to_have_url(f'{django_server}{data["unit"].get_absolute_url()}/intro')
     context.close()

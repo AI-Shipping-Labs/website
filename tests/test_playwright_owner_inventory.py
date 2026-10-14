@@ -2011,6 +2011,25 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_cohort_pods_keep_working_unchanged",
     })
 
+    issue_1827_owners = frozenset({
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_first_time_learner_starts_homework_at_a_clean_path_url",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_returning_learner_resumes_the_existing_draft",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_learner_moves_between_path_steps_without_losing_an_answer",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_cohort_learner_keeps_cohort_context_across_every_step",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_learner_submits_and_updates_at_the_review_path",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_learner_follows_a_previously_copied_query_url",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_learner_recovers_after_an_authored_question_changes",
+        "playwright_tests/test_homework_step_paths_1827.py::"
+        "test_path_dispatch_does_not_steal_another_course_route",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2236,8 +2255,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2953)
-        self.assertEqual(len(inventory.owners), 2749)
+        self.assertEqual(inventory.item_count, 2961)
+        self.assertEqual(len(inventory.owners), 2757)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2279,6 +2298,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1949_owners
             | self.issue_1938_owners
             | self.issue_1921_owners
+            | self.issue_1827_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
@@ -2394,6 +2414,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1782_owners
             | self.issue_1802_owners
             | self.issue_1944_owners
+            | self.issue_1827_owners
             | self.issue_1896_owners
             | self.issue_1948_owners
             | self.issue_1949_owners

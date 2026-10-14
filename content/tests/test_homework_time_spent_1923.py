@@ -92,10 +92,10 @@ class TimeSpentStepperTest(HomeworkUnitSetupMixin, TestCase):
             'time_spent_lectures_field', 'time_spent_homework_field',
         ])
         self.client.force_login(self.student)
-        self.review_url = f'{self.unit_url}?homework_step=review'
+        self.review_url = f'{self.unit_url}/review'
 
     def submit(self, **final_fields):
-        self.client.get(self.unit_url)
+        self.client.get(self.unit_url, follow=True)
         draft = HomeworkDraft.objects.get(user=self.student)
         data = {
             'assignment_key': f'aisl:homework:{self.homework.pk}',
@@ -253,7 +253,7 @@ class NormalizeDraftHoursMigrationTest(HomeworkUnitSetupMixin, TestCase):
             },
         )
         self.client.force_login(self.student)
-        review_url = f'{self.unit_url}?homework_step=review'
+        review_url = f'{self.unit_url}/review'
         before = self.client.get(review_url)
         self.assertTrue(before.context['stepper']['has_pending_changes'])
 

@@ -231,7 +231,7 @@ def test_operator_closed_stepper_is_read_only_without_deadline_claim(
     page = context.new_page()
     unit_url = f'{django_server}{unit.get_absolute_url()}'
 
-    page.goto(f'{unit_url}?homework_step=review', wait_until='domcontentloaded')
+    page.goto(f'{unit_url}/review', wait_until='domcontentloaded')
     expect(page.get_by_test_id('homework-page-state').locator(
         '[data-homework-state="closed_not_submitted"]',
     )).to_be_visible()

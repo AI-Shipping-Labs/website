@@ -94,7 +94,7 @@ class HomeworkFormRenderTest(HomeworkUnitSetupMixin, TestCase):
         self.homework.save(update_fields=['due_date', 'stepper_enabled'])
         self.client.force_login(self.student)
 
-        response = self.client.get(self.unit_url)
+        response = self.client.get(self.unit_url, follow=True)
 
         self.assertContains(response, 'homework-stepper-container')
         self.assertNotContains(response, 'homework-due-date')

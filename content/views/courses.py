@@ -85,6 +85,9 @@ from content.services.homework_step_reader import (
     LEARNING_IN_PUBLIC_KEY,
     AISLHomeworkAdapter,
     build_assignment,
+    homework_entry_step,
+    homework_resume_step,
+    homework_step_keys,
     question_key,
 )
 from content.services.homework_step_threads import (
@@ -1253,6 +1256,14 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
                 'homework_state': homework_state_for(user, assignment),
             },
         )
+        # Issue #1827: the browser always shows a step path. The bare Unit
+        # URL and old ``?homework_step=`` bookmarks redirect to one.
+        if request.method == 'GET':
+            canonical_url = _canonical_homework_step_redirect_url(
+                request, unit, assignment, route_step,
+            )
+            if canonical_url:
+                return redirect(canonical_url)
         return handle_stepper(
             request, assignment, AISLHomeworkAdapter(homework, unit, cohort=owned_cohort),
             action=unit.get_absolute_url(),
@@ -1261,9 +1272,41 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
             query_params={'cohort': request.GET['cohort']}
             if request.GET.get('cohort') else None,
             route_step=route_step,
-            step_url_builder=lambda step: f'{unit.get_absolute_url().rstrip("/")}/{step}',
+            step_url_builder=partial(homework_step_path, unit),
         )
     return render(request, 'content/course_unit_detail.html', context)
+
+
+HOMEWORK_STEP_QUERY_PARAM = 'homework_step'
+
+
+def homework_step_path(unit, step):
+    """Canonical no-trailing-slash path of one homework step (issue #1827)."""
+    return f'{unit.get_absolute_url().rstrip("/")}/{step}'
+
+
+def _canonical_homework_step_redirect_url(request, unit, assignment, route_step):
+    """Where a stepped-homework GET must go to show a step path, or None.
+
+    A step path without the legacy query is already canonical, so the
+    shared handler serves it (and owns the unknown-key fallback). The bare
+    Unit URL opens the learner's entry step; a legacy ``?homework_step=``
+    bookmark moves its key into the path. Every other query value
+    (``cohort``, ``receipt``, ``notice``) is kept; only the step moves.
+    """
+    legacy_step = request.GET.get(HOMEWORK_STEP_QUERY_PARAM)
+    if route_step is not None and legacy_step is None:
+        return None
+    query = request.GET.copy()
+    query.pop(HOMEWORK_STEP_QUERY_PARAM, None)
+    step = route_step or legacy_step
+    if not step:
+        step = homework_entry_step(request.user, assignment)
+    elif step not in homework_step_keys(assignment):
+        step = homework_resume_step(request.user, assignment)
+        query['notice'] = 'changed'
+    url = homework_step_path(unit, step)
+    return f'{url}?{query.urlencode()}' if query else url
 
 
 def course_unit_detail(request, course_slug, module_slug, unit_slug):
@@ -1334,8 +1377,14 @@ def _unit_for_course_unit_path(course, module_slug, unit_slug):
     return (submodule, unit) if unit else None
 
 
-def _is_valid_homework_route_step(request, course, unit, route_step):
-    """Check a path step against the viewer's resolved cohort assignment."""
+def _homework_route_step_keys(request, course, unit):
+    """Step keys of the viewer's stepped homework on ``unit``, else None.
+
+    Resolved against the viewer's selected cohort, so a path step is only
+    ever checked against the assignment the stepper will actually serve.
+    ``None`` means the unit has no active stepped homework for this viewer
+    (ordinary lesson, prose-only or inactive homework).
+    """
     selected_cohort, selected_is_preview = select_display_cohort(
         course, request.user, request.GET.get('cohort', ''),
     )
@@ -1344,11 +1393,37 @@ def _is_valid_homework_route_step(request, course, unit, route_step):
         cohort=selected_cohort if not selected_is_preview else None,
     )
     if not homework or not homework.stepper_enabled or not homework.questions.exists():
-        return False
-    question_keys = {question_key(question) for question in homework.questions.all()}
+        return None
+    keys = {'intro', 'review'}
+    keys.update(question_key(question) for question in homework.questions.all())
     if homework.learning_in_public_cap:
-        question_keys.add(LEARNING_IN_PUBLIC_KEY)
-    return route_step in {'intro', 'review'} or route_step in question_keys
+        keys.add(LEARNING_IN_PUBLIC_KEY)
+    return keys
+
+
+def _serves_homework_step(request, step_keys, route_step):
+    """Whether a stepped homework's path serves ``route_step``.
+
+    Valid keys always do. An unknown key (a removed question, a typo) is
+    served to a signed-in viewer so the shared stepper can apply its safe
+    fallback: the resume step plus the "question changed" notice, after
+    every access, cohort and drip check (issue #1827). Anonymous visitors
+    keep the plain 404 for unknown keys.
+    """
+    if step_keys is None:
+        return False
+    return route_step in step_keys or request.user.is_authenticated
+
+
+def _real_submodule_unit(course, parent_slug, module_slug, unit_slug):
+    """The real unit at ``/courses/<course>/<parent>/<submodule>/<unit>``."""
+    return Unit.objects.filter(
+        module__course=course,
+        module__parent__slug=parent_slug,
+        module__parent__parent__isnull=True,
+        module__slug=module_slug,
+        slug=unit_slug,
+    ).first()
 
 
 def course_homework_step_or_submodule_unit(
@@ -1357,9 +1432,10 @@ def course_homework_step_or_submodule_unit(
     """Serve a canonical three-slug unit step, preserving four-slug units.
 
     ``/courses/<course>/<module>/<unit>/<step>`` overlaps the existing
-    submodule-unit route. Resolve it as a homework step only when the
-    three-slug prefix names a stepper homework and the final slug is a
-    valid step; otherwise dispatch to the existing four-slug route.
+    submodule-unit route. A real nested Unit at that path always keeps its
+    page (issue #1827). Otherwise resolve it as a homework step when the
+    three-slug prefix names an active stepped homework; anything else
+    dispatches to the existing four-slug route.
     """
     course = get_object_or_404(Course, slug=course_slug, status='published')
     try:
@@ -1368,7 +1444,14 @@ def course_homework_step_or_submodule_unit(
         target = None
     if target:
         module, unit = target
-        if _is_valid_homework_route_step(request, course, unit, homework_step):
+        nested_unit = _real_submodule_unit(
+            course, module_slug, unit_slug, homework_step,
+        )
+        step_keys = _homework_route_step_keys(request, course, unit)
+        if (
+            (nested_unit is None or nested_unit.pk == unit.pk)
+            and _serves_homework_step(request, step_keys, homework_step)
+        ):
             return _render_course_unit_detail(
                 request, course, module, unit, route_step=homework_step,
             )
@@ -1417,7 +1500,8 @@ def course_submodule_homework_step_detail(
     unit = get_object_or_404(Unit, module=submodule, slug=unit_slug)
     if is_inline_homework_unit(submodule, unit, course.slug):
         raise Http404
-    if not _is_valid_homework_route_step(request, course, unit, homework_step):
+    step_keys = _homework_route_step_keys(request, course, unit)
+    if not _serves_homework_step(request, step_keys, homework_step):
         raise Http404
     return _render_course_unit_detail(
         request, course, submodule, unit, route_step=homework_step,

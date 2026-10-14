@@ -4,6 +4,7 @@ import hashlib
 import math
 from decimal import Decimal, InvalidOperation
 
+from community_base.homework_steps.models import HomeworkDraft
 from community_base.homework_steps.types import (
     AcceptedSubmission,
     Assignment,
@@ -283,6 +284,61 @@ def build_assignment(homework, unit, user, *, context=None):
         ),
         question_results=revealed_results,
     )
+
+
+def homework_step_keys(assignment):
+    """Every step key the stepper serves, in reader order."""
+    return ['intro', *(question.key for question in assignment.questions), 'review']
+
+
+def _first_unanswered_step(assignment, answers):
+    for question in assignment.questions:
+        if answers.get(question.key) in (None, '', []):
+            return question.key
+    return 'review'
+
+
+def homework_resume_step(user, assignment):
+    """The step a stale or unknown step key falls back to (issue #1827).
+
+    Mirrors the shared stepper's resume target: the first question the
+    learner's draft has not answered yet. Without a draft, the answers the
+    draft will be seeded from stand in, so nothing is created here.
+    """
+    draft = HomeworkDraft.objects.filter(
+        user=user, assignment_key=assignment.key,
+    ).only('answers').first()
+    if draft is not None:
+        return _first_unanswered_step(assignment, draft.answers)
+    seed = (
+        assignment.accepted_submission.answers
+        if assignment.accepted_submission is not None
+        else assignment.existing_answers
+    )
+    return _first_unanswered_step(assignment, seed)
+
+
+def homework_entry_step(user, assignment):
+    """The step the bare homework Unit URL opens (issue #1827).
+
+    Same order as the shared stepper's bare GET: submitted work opens
+    Review & submit, an existing draft resumes at its first unanswered
+    question, and a first visit opens the introduction. Read-only — the
+    lookup never creates, copies or resets a draft.
+    """
+    context = assignment.context if isinstance(assignment.context, dict) else {}
+    if (
+        assignment.has_submission
+        or context.get('homework_is_submitted')
+        or assignment.accepted_submission is not None
+    ):
+        return 'review'
+    draft = HomeworkDraft.objects.filter(
+        user=user, assignment_key=assignment.key,
+    ).only('answers').first()
+    if draft is None:
+        return 'intro'
+    return _first_unanswered_step(assignment, draft.answers)
 
 
 class AISLHomeworkAdapter:

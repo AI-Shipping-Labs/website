@@ -83,7 +83,7 @@ def test_public_links_are_configurable_saved_and_submitted(django_server, browse
     context = _learner_context(browser, email)
     page = context.new_page()
     unit_url = f'{django_server}{unit.get_absolute_url()}'
-    page.goto(f'{unit_url}?homework_step=learning-in-public', wait_until='domcontentloaded')
+    page.goto(f'{unit_url}/learning-in-public', wait_until='domcontentloaded')
 
     step_nav = page.get_by_role('group', name='Homework steps')
     expect(step_nav.get_by_role('link', name='Learning in Public')).to_be_visible()

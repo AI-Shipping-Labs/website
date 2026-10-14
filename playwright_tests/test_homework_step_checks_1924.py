@@ -290,7 +290,7 @@ def test_submitted_learner_still_sees_answered_questions_checked(django_server, 
     page.locator(
         '#sidebar-nav a.reader-list-row', has_text='Homework: Document Processing',
     ).first.click()
-    expect(page).to_have_url(unit_url)
+    expect(page).to_have_url(f'{unit_url}/review')
     expect(_homework_row_status(page)).to_have_text('Submitted')
     for title in ('Question 1', 'Question 2', 'Question 3'):
         _assert_answered(page, title)
@@ -406,7 +406,7 @@ def test_closed_homework_checks_match_the_accepted_submission(django_server, bro
     page.locator(
         '#sidebar-nav a.reader-list-row', has_text='Homework: Document Processing',
     ).first.click()
-    expect(page).to_have_url(unit_url)
+    expect(page).to_have_url(f'{unit_url}/review')
     expect(_homework_row_status(page)).to_have_text('Submitted')
     _assert_answered(page, 'Question 1')
     _assert_answered(page, 'Question 2')

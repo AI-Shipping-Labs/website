@@ -98,7 +98,7 @@ def test_failed_autosave_blocks_step_link_without_losing_choice(
         '**/api/homework-reader/drafts/**',
         lambda route: route.fulfill(status=failure_status, body='save unavailable'),
     )
-    url = f'{django_server}{unit.get_absolute_url()}?homework_step=q1-first'
+    url = f'{django_server}{unit.get_absolute_url()}/q1-first'
     page.goto(url, wait_until='domcontentloaded')
     page.get_by_role('radio', name='Alpha').check()
     expect(page.locator('[data-save-status]')).to_contain_text(expected_error)
@@ -143,7 +143,7 @@ def test_sidebar_exit_saves_latest_dirty_choice_before_navigation(django_server,
     context = _learner_context(browser, email)
     page = context.new_page()
     unit_url = f'{django_server}{unit.get_absolute_url()}'
-    page.goto(f'{unit_url}?homework_step=q1-first', wait_until='domcontentloaded')
+    page.goto(f'{unit_url}/q1-first', wait_until='domcontentloaded')
     page.get_by_role('radio', name='Alpha').check()
     page.get_by_role('radio', name='Beta').check()
     page.get_by_role('group', name='Homework steps').get_by_role(
@@ -237,7 +237,7 @@ def test_learner_saves_resumes_and_submits_from_review(django_server, browser):
     assert submission.homework_link == 'https://github.com/example/solution'
     assert submission.answers.count() == 2
     assert completion_service.is_completed(user, unit)
-    page.goto(f'{unit_url}?homework_step=review', wait_until='domcontentloaded')
+    page.goto(f'{unit_url}/review', wait_until='domcontentloaded')
     expect(page.locator('[data-testid="homework-submitted-status"]')).to_be_visible()
     expect(page.get_by_role('button', name='Update submission')).to_be_visible()
     expect(page.get_by_role('link', name='Back to course')).to_be_visible()

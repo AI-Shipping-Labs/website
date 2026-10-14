@@ -293,8 +293,18 @@ def delete_url(pod, artifact):
 
 
 def pod_artifacts(pod):
-    """Every artifact of ``pod``, newest first, with its author (one query)."""
-    return list(PodArtifact.objects.filter(pod=pod).select_related('added_by').order_by('-created_at', '-pk'))
+    """Every artifact of ``pod``, newest first, with its author (one query).
+
+    Metadata only: ``body`` is deferred because no list surface renders it
+    (transcripts reach hundreds of KiB each); the detail view loads the
+    full row.
+    """
+    return list(
+        PodArtifact.objects.filter(pod=pod)
+        .select_related('added_by')
+        .defer('body')
+        .order_by('-created_at', '-pk')
+    )
 
 
 def meta_line(artifact, numbers, viewer, zone_name):

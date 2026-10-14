@@ -481,17 +481,37 @@ def weekly_overlap(members, viewer_zone, *, now=None):
     }
 
 
+class WeeklyOverlapCalculator:
+    """One shared 7-day grid for a request's fit computations.
+
+    ``weekly_overlap_hours`` builds a fresh grid and recomputes every
+    member's cells on each call. The pod list asks for the overlap once
+    per pod with the same viewer and horizon, so the calculator expands
+    each member's availability once and reuses the expansion across pods.
+    Results are identical to repeated ``weekly_overlap_hours`` calls with
+    a single ``now``.
+    """
+
+    def __init__(self, now=None):
+        now = now or timezone.now()
+        self.grid = Grid(now, now + FIT_HORIZON)
+
+    def cells(self, member):
+        return self.grid.cells(member)
+
+    def hours(self, viewer, others):
+        if viewer is None or not viewer.has_windows:
+            return None
+        others = [m for m in others if m.has_windows]
+        if not others:
+            return None
+        rows = [self.cells(viewer)] + [self.cells(m) for m in others]
+        free_cells = sum(1 for values in zip(*rows, strict=True) if min(values) >= 1)
+        return (free_cells * GRID_MINUTES) // 60
+
+
 def weekly_overlap_hours(viewer, others, *, now=None):
     """Whole hours in the next 7 days where ``viewer`` and every member of
     ``others`` with availability are free. ``None`` when it cannot be
     computed (viewer or the pod has no availability)."""
-    if viewer is None or not viewer.has_windows:
-        return None
-    others = [m for m in others if m.has_windows]
-    if not others:
-        return None
-    now = now or timezone.now()
-    grid = Grid(now, now + FIT_HORIZON)
-    rows = [grid.cells(viewer)] + [grid.cells(m) for m in others]
-    free_cells = sum(1 for values in zip(*rows, strict=True) if min(values) >= 1)
-    return (free_cells * GRID_MINUTES) // 60
+    return WeeklyOverlapCalculator(now).hours(viewer, others)

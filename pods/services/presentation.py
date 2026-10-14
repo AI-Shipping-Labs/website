@@ -47,6 +47,7 @@ from pods.services.people import (
     humanize_age,
     is_slack_eligible,
     offset_range_label,
+    slack_eligibility_map,
     timezone_label,
 )
 from pods.services.slack import profile_url, suggested_channel_name
@@ -57,6 +58,7 @@ from pods.services.suggestions import (
     slots_attendable,
     suggest_slots,
     weekly_overlap,
+    WeeklyOverlapCalculator,
     weekly_overlap_hours,
 )
 
@@ -167,6 +169,9 @@ def build_pod_rows(activity, viewer, *, now=None):
     can_request = activity.is_participant(viewer)
     own_pods = [pod for pod in pods if any(m.user_id == viewer.pk for m in pod.memberships.all())]
     meeting_lines = next_meeting_lines(own_pods, _viewer_zone(viewer_availability, viewer), now)
+    # One grid serves every pod's fit: member cells expand once per member,
+    # not once per pod.
+    fit = WeeklyOverlapCalculator(now)
     rows = []
     for pod in pods:
         members = [m.user for m in pod.memberships.all()]
@@ -180,7 +185,7 @@ def build_pod_rows(activity, viewer, *, now=None):
         others = [availability[u.pk] for u in members if u.pk != viewer.pk]
         hours = None
         if state.key != STATE_MEMBER:
-            hours = weekly_overlap_hours(viewer_availability, others, now=now)
+            hours = fit.hours(viewer_availability, others)
         rows.append({
             'pod': pod,
             'count': count,
@@ -392,12 +397,18 @@ def build_pod_page(pod, viewer, *, now=None):
             notice['link_url'] = activity.list_url()
     show_private = is_member or is_staff
     viewer_slack_ok = is_slack_eligible(viewer)
+    # One batched read answers every member eligibility check below; the
+    # per-member path cost several queries per member.
+    member_eligibility = slack_eligibility_map(members) if is_member else {}
 
     member_rows = []
     for user in members:
         member = availability[user.pk]
         slack_url = ''
-        if is_member and viewer_slack_ok and user.pk != viewer.pk and is_slack_eligible(user):
+        if (
+            is_member and viewer_slack_ok and user.pk != viewer.pk
+            and member_eligibility.get(user.pk)
+        ):
             slack_url = profile_url(user)
         member_rows.append({
             'user_id': user.pk,
@@ -474,7 +485,7 @@ def build_pod_page(pod, viewer, *, now=None):
     slack = None
     if is_member:
         others_below_main = any(
-            not is_slack_eligible(u) for u in members if u.pk != viewer.pk
+            not member_eligibility.get(u.pk) for u in members if u.pk != viewer.pk
         )
         slack = {
             'channel_url': pod.slack_channel_url,

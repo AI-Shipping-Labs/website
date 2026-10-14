@@ -319,16 +319,28 @@
     }
   });
 
+  var inFlight = false;
+  var currentTag = '';
+  var failures = 0;
   function refresh() {
-    if (!fragmentUrl || !listRoot) return;
-    fetch(fragmentUrl, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+    if (!fragmentUrl || !listRoot || inFlight) return;
+    inFlight = true;
+    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+    if (currentTag) headers['If-None-Match'] = currentTag;
+    fetch(fragmentUrl, { credentials: 'same-origin', headers: headers })
       .then(function (resp) {
-        if (!resp.ok) return null;
-        return resp.text();
+        if (resp.status === 304) { failures = 0; return null; }
+        if (!resp.ok) throw new Error('refresh failed');
+        var tag = resp.headers.get('ETag') || '';
+        return resp.text().then(function (html) {
+          return { html: html, tag: tag };
+        });
       })
-      .then(function (html) {
-        if (html === null || html === undefined) return;
-        listRoot.innerHTML = html;
+      .then(function (payload) {
+        failures = 0;
+        if (!payload) return;
+        if (payload.tag) currentTag = payload.tag;
+        listRoot.innerHTML = payload.html;
         updateCount();
         syncTalkedBadges();
         if (presenting) renderSlide();
@@ -337,7 +349,13 @@
           window.lucide.createIcons();
         }
       })
-      .catch(function () {});
+      .catch(function () {
+        failures += 1;
+        if (failures >= 5) {
+          stop();
+        }
+      })
+      .then(function () { inFlight = false; });
   }
   function shouldPoll() {
     return document.visibilityState === 'visible';

@@ -113,7 +113,11 @@ def meeting_state(pod, now=None, meetings=None):
     """Build a :class:`MeetingState` for ``pod`` (one query unless given)."""
     now = now or timezone.now()
     if meetings is None:
-        meetings = list(PodMeeting.objects.filter(pod_id=pod.pk).order_by('starts_at', 'pk'))
+        meetings = list(
+            PodMeeting.objects.filter(pod_id=pod.pk)
+            .select_related('proposed_by', 'moved_by')
+            .order_by('starts_at', 'pk')
+        )
     else:
         meetings = sorted(meetings, key=lambda m: (m.starts_at, m.pk))
     state = MeetingState(now=now, meetings=meetings, expired=_expired_ids(meetings, now))

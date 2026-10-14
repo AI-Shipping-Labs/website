@@ -12,12 +12,18 @@ deliverables from any module.
 from __future__ import annotations
 
 import datetime
+from collections import defaultdict
 from zoneinfo import ZoneInfo
 
+from accounts.utils.user_checks import is_authenticated_user
 from community_base.homework_steps.models import HomeworkDraft
+from django.db import models
+from django.utils import timezone
 
+from content.models import Cohort, CohortEnrollment
+from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
 from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON, Unit
-from content.models.homework import Submission
+from content.models.homework import Homework, Question, Submission
 from content.models.peer_review import ProjectSubmission
 from content.services.course_home import _all_module_units, next_core_module
 from content.services.course_schedule import cohort_projects
@@ -25,6 +31,7 @@ from content.services.course_units import (
     decide_course_unit_access,
     decide_course_unit_drip_lock,
     format_week_range,
+    preferred_dated_enrollment_cohorts,
     resolve_homework_for_unit,
 )
 from content.services.homework_step_reader import question_key
@@ -62,13 +69,16 @@ def _has_answer(value):
     return value not in (None, '', [], ())
 
 
-def homework_state(unit, user, cohort):
+def homework_state(unit, user, cohort, loader=None):
     """The learner's state on one homework unit.
 
     Returns ``questions`` (authored question count), ``answered`` (questions
     with a saved draft answer; all of them once submitted), ``submitted``,
-    and ``has_draft``.
+    and ``has_draft``. Pass ``loader`` (a ``HomeworkStateLoader``) from
+    request-scoped builders so repeated calls cost no extra queries.
     """
+    if loader is not None:
+        return loader.state_for(unit)
     homework = resolve_homework_for_unit(unit, user, cohort=cohort)
     questions = list(homework.questions.all()) if homework else []
     submitted = bool(homework) and Submission.objects.filter(
@@ -93,14 +103,176 @@ def homework_state(unit, user, cohort):
     }
 
 
-def _homework_item_counts(unit, user, cohort, completed_ids):
+class HomeworkStateLoader:
+    """Batch the per-homework lookups behind ``homework_state`` for one request.
+
+    ``homework_state`` resolves the cohort ``Homework`` row, its questions,
+    the learner's submission, and their saved draft per unit -- and course
+    Home asks for the same homework from several builders on one request,
+    which multiplied those queries by the homework count. The loader answers
+    every ``state_for`` call from batched querysets, so the page's query
+    count stops growing with the homework count. Cohort resolution mirrors
+    ``resolve_homework_for_unit``: the given cohort when present, otherwise
+    the learner's enrolled cohorts (dated first), then the course's
+    started/self-paced cohorts.
+    """
+
+    def __init__(self, user, cohort, course):
+        self.user = user
+        self.cohort = cohort
+        self.course = course
+        self._loaded = False
+        self._homework_by_content_id = {}
+        self._questions_by_homework_id = {}
+        self._submitted_homework_ids = set()
+        self._draft_answers_by_key = {}
+
+    def state_for(self, unit):
+        self._load()
+        homework = (
+            self._homework_by_content_id.get(unit.content_id)
+            if unit.content_id else None
+        )
+        questions = (
+            self._questions_by_homework_id.get(homework.pk, []) if homework else []
+        )
+        submitted = bool(homework) and homework.pk in self._submitted_homework_ids
+        answered = 0
+        if submitted:
+            answered = len(questions)
+        elif homework is not None:
+            answers = self._draft_answers_by_key.get(
+                f'aisl:homework:{homework.pk}',
+            )
+            if not isinstance(answers, dict):
+                answers = {}
+            for question in questions:
+                if _has_answer(answers.get(question_key(question))):
+                    answered += 1
+        return {
+            'questions': len(questions),
+            'answered': answered,
+            'submitted': submitted,
+            'has_draft': answered > 0 and not submitted,
+        }
+
+    def _load(self):
+        if self._loaded:
+            return
+        self._loaded = True
+        content_ids = list(Unit.objects.filter(
+            module__course=self.course,
+            kind=UNIT_KIND_HOMEWORK,
+            content_id__isnull=False,
+        ).values_list('content_id', flat=True))
+        if not content_ids:
+            return
+        homework_rows = self._resolve_homework_rows(content_ids)
+        if not homework_rows:
+            return
+        self._homework_by_content_id = {
+            row.content_id: row for row in homework_rows
+        }
+        homework_ids = [row.pk for row in homework_rows]
+        questions = defaultdict(list)
+        for question in Question.objects.filter(homework_id__in=homework_ids):
+            questions[question.homework_id].append(question)
+        self._questions_by_homework_id = dict(questions)
+        self._submitted_homework_ids = set(Submission.objects.filter(
+            student=self.user, homework_id__in=homework_ids,
+        ).values_list('homework_id', flat=True))
+        self._draft_answers_by_key = {
+            draft.assignment_key: draft.answers
+            for draft in HomeworkDraft.objects.filter(
+                user=self.user,
+                assignment_key__in=[
+                    f'aisl:homework:{pk}' for pk in homework_ids
+                ],
+            ).only('assignment_key', 'answers')
+        }
+
+    def _resolve_homework_rows(self, content_ids):
+        """Resolve homework rows in cohort-preference order, batched."""
+        if self.cohort is not None:
+            if self.cohort.course_id != self.course.pk:
+                return []
+            if not self.user.is_staff and not CohortEnrollment.objects.filter(
+                user=self.user, cohort=self.cohort,
+            ).exists():
+                return []
+            return list(Homework.objects.filter(
+                cohort=self.cohort, content_id__in=content_ids,
+            ).order_by('pk'))
+        by_content_id = {}
+        ranks = {}
+        if is_authenticated_user(self.user):
+            for cohort in preferred_dated_enrollment_cohorts(self.user, self.course):
+                ranks.setdefault(cohort.pk, len(ranks))
+            for enrollment in (
+                CohortEnrollment.objects
+                .filter(user=self.user, cohort__course=self.course)
+                .exclude(cohort__mode=COHORT_MODE_COHORT)
+                .select_related('cohort')
+                .order_by('pk')
+            ):
+                ranks.setdefault(enrollment.cohort_id, len(ranks))
+        if ranks:
+            for homework in Homework.objects.filter(
+                content_id__in=content_ids, cohort_id__in=ranks,
+            ).order_by('pk'):
+                current = by_content_id.get(homework.content_id)
+                if (
+                    current is None
+                    or ranks[homework.cohort_id] < ranks[current.cohort_id]
+                ):
+                    by_content_id[homework.content_id] = homework
+        unresolved = [
+            content_id for content_id in content_ids
+            if content_id not in by_content_id
+        ]
+        if unresolved:
+            fallback_ids = list(self._fallback_cohort_ids())
+            if fallback_ids:
+                ranks = {
+                    cohort_id: index for index, cohort_id in enumerate(fallback_ids)
+                }
+                candidates = sorted(
+                    Homework.objects.filter(
+                        content_id__in=unresolved, cohort_id__in=fallback_ids,
+                    ),
+                    key=lambda homework: (ranks[homework.cohort_id], homework.pk),
+                )
+                for homework in candidates:
+                    by_content_id.setdefault(homework.content_id, homework)
+        return list(by_content_id.values())
+
+    def _fallback_cohort_ids(self):
+        """Course cohorts eligible as fallback, in ``resolve`` preference order."""
+        today = timezone.now().date()
+        return (
+            Cohort.objects
+            .filter(course=self.course)
+            .filter(
+                models.Q(
+                    mode=COHORT_MODE_COHORT,
+                    start_date__isnull=False,
+                    start_date__lt=today,
+                )
+                | models.Q(mode=COHORT_MODE_SELF_PACED)
+            )
+            .order_by(models.F('start_date').desc(nulls_last=True))
+            .values_list('id', flat=True)
+        )
+
+
+def _homework_item_counts(unit, user, cohort, completed_ids, loader=None):
     """Return ``(done, total)`` for one homework unit, one item per question.
 
     A submitted homework counts every question as done. Before submitting,
     each question with a saved draft answer counts. A homework with no
     authored questions is one item, done once submitted or its unit is complete.
     """
-    state = homework_state(unit, user, cohort)
+    state = homework_state(unit, user, cohort, loader=loader)
     if not state['questions']:
         return (1 if state['submitted'] or unit.pk in completed_ids else 0), 1
     return state['answered'], state['questions']
@@ -117,7 +289,7 @@ def _question_label(state):
     return label
 
 
-def module_progress(module, user, cohort, completed_ids):
+def module_progress(module, user, cohort, completed_ids, loader=None):
     """Count everything in ``module`` the learner is expected to finish.
 
     Items are each core unit, each question of the module's homework, and
@@ -133,7 +305,9 @@ def module_progress(module, user, cohort, completed_ids):
     questions_done = 0
     questions_total = 0
     for unit in _homework_units(module):
-        done, total = _homework_item_counts(unit, user, cohort, completed_ids)
+        done, total = _homework_item_counts(
+            unit, user, cohort, completed_ids, loader=loader,
+        )
         questions_done += done
         questions_total += total
 
@@ -195,7 +369,7 @@ def deliverable_key(row):
     return ('Homework', row.get('unit_content_id') or row['title'])
 
 
-def _display_row(row, *, unit, user, cohort, cohort_query):
+def _display_row(row, *, unit, user, cohort, cohort_query, loader=None):
     """Shape one deliverable for Home: status always shown, question counts.
 
     An open homework nobody has started reads "Not started" rather than
@@ -206,7 +380,7 @@ def _display_row(row, *, unit, user, cohort, cohort_query):
         row['url'] += cohort_query
     row['question_label'] = ''
     if row['kind'] == 'Homework' and unit is not None:
-        state = homework_state(unit, user, cohort)
+        state = homework_state(unit, user, cohort, loader=loader)
         row['question_label'] = _question_label(state)
         if row['status'] == 'Not submitted' and not row['closed'] and not state['has_draft']:
             row['status'] = 'Not started'
@@ -234,7 +408,7 @@ def _sort_deliverables(rows):
     return rows
 
 
-def _deliverable_rows(commitments, module, *, user, cohort, cohort_query):
+def _deliverable_rows(commitments, module, *, user, cohort, cohort_query, loader=None):
     """The module's own homework and projects for a learner with a cohort."""
     source = [
         row for row in commitments['open_assignments'] + commitments['completed_assignments']
@@ -245,7 +419,7 @@ def _deliverable_rows(commitments, module, *, user, cohort, cohort_query):
     for row in source:
         row = _display_row(
             row, unit=units.get(row.get('unit_content_id') or ''),
-            user=user, cohort=cohort, cohort_query=cohort_query,
+            user=user, cohort=cohort, cohort_query=cohort_query, loader=loader,
         )
         # The card already names the module.
         row['module_title'] = ''
@@ -253,12 +427,12 @@ def _deliverable_rows(commitments, module, *, user, cohort, cohort_query):
     return _sort_deliverables(rows)
 
 
-def _undated_deliverable_rows(work_items, *, user, cohort):
+def _undated_deliverable_rows(work_items, *, user, cohort, loader=None):
     """Deliverable rows for a learner without a cohort: no dates, same anatomy."""
     rows = []
     for item in work_items:
         unit = item['unit']
-        state = homework_state(unit, user, cohort)
+        state = homework_state(unit, user, cohort, loader=loader)
         if state['submitted']:
             status, tone, verb = 'Submitted', 'success', 'View'
         elif state['has_draft']:
@@ -387,7 +561,8 @@ def _week_start(day):
     return day - datetime.timedelta(days=day.weekday())
 
 
-def build_due_next(course, user, cohort, commitments, *, cohort_query, now):
+def build_due_next(course, user, cohort, commitments, *, cohort_query, now,
+                   loader=None):
     """Home's "Due next": the nearest open homework and project deliverables.
 
     Open (not submitted, not closed) deliverables of a dated cohort, from any
@@ -422,7 +597,7 @@ def build_due_next(course, user, cohort, commitments, *, cohort_query, now):
     for row in chosen:
         display = _display_row(
             row, unit=units.get(row.get('unit_content_id') or ''),
-            user=user, cohort=cohort, cohort_query=cohort_query,
+            user=user, cohort=cohort, cohort_query=cohort_query, loader=loader,
         )
         if display['kind'] == 'Project':
             display['module_title'] = row.get('project_group_title') or ''
@@ -441,7 +616,7 @@ def build_due_next(course, user, cohort, commitments, *, cohort_query, now):
 
 
 def build_current_module(course, user, cohort, home, commitments, *, completed_ids,
-                         cohort_query, today, due_next_keys=frozenset()):
+                         cohort_query, today, due_next_keys=frozenset(), loader=None):
     """Template context for the Current module card and Next live session block.
 
     ``due_next_keys`` are deliverables already listed in "Due next"; the card
@@ -457,10 +632,11 @@ def build_current_module(course, user, cohort, home, commitments, *, completed_i
     if cohort:
         deliverables = _deliverable_rows(
             commitments, module, user=user, cohort=cohort, cohort_query=cohort_query,
+            loader=loader,
         )
     else:
         deliverables = _undated_deliverable_rows(
-            commitments['focus_work_items'], user=user, cohort=cohort,
+            commitments['focus_work_items'], user=user, cohort=cohort, loader=loader,
         )
     # "Due next" already lists some of these; the card shows the rest, but
     # the primary action still considers every deliverable of the module.
@@ -497,7 +673,9 @@ def build_current_module(course, user, cohort, home, commitments, *, completed_i
             'eyebrow': 'Current module' if in_cohort_week else 'Your next module',
             'week_label': week_label,
             'week_range': week_range,
-            'progress': module_progress(module, user, cohort, completed_ids),
+            'progress': module_progress(
+                module, user, cohort, completed_ids, loader=loader,
+            ),
             'action': _primary_action(
                 module, next_module, user, cohort, completed_ids, today=today,
                 deliverables=deliverables, cohort_query=cohort_query,

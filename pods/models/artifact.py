@@ -66,6 +66,9 @@ class PodArtifact(models.Model):
         related_name='pod_artifacts',
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    # Stored so list surfaces never load and UTF-8-encode whole transcript
+    # bodies just to size them (perf lane 2026-10-14); save() keeps it exact.
+    size_bytes = models.PositiveBigIntegerField(default=0, editable=False)
 
     class Meta:
         ordering = ['-created_at', '-pk']
@@ -76,7 +79,6 @@ class PodArtifact(models.Model):
     def __str__(self):
         return f'{self.get_kind_display()}: {self.title} ({self.pod})'
 
-    @property
-    def size_bytes(self):
-        """Size of the body in UTF-8 bytes (what ``PODS_ARTIFACT_MAX_KB`` caps)."""
-        return len(self.body.encode('utf-8'))
+    def save(self, *args, **kwargs):
+        self.size_bytes = len(self.body.encode('utf-8'))
+        super().save(*args, **kwargs)

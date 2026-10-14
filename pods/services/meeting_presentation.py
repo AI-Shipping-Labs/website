@@ -340,29 +340,51 @@ def build_meeting_rows(pod, viewer, *, member_avail, viewer_zone, is_member, now
     tip_id = artifact_svc.tip_meeting_id(state) if notes_on and is_member else None
     member_ids = {m.user.pk for m in member_avail}
     needed = required_attendance(len(member_avail)) or 2
-    responses = {}
-    meeting_ids = [m.pk for m in state.meetings]
-    for response in PodMeetingResponse.objects.filter(meeting_id__in=meeting_ids).order_by('pk'):
-        responses.setdefault(response.meeting_id, []).append(response)
     names = {m.user.pk: display_name(m.user) for m in member_avail}
     movers = {m.user.pk: m.user for m in member_avail}
     member_users = [m.user for m in member_avail]
 
+    # One pass groups weekly proposals by series: every later member joins
+    # its head's group, so no per-meeting rescan of the whole history.
     groups = []
-    seen_series = set()
+    series_groups = {}
     for meeting in state.meetings:
         if meeting.status == MEETING_STATUS_PROPOSED and meeting.series_id:
-            if meeting.series_id in seen_series:
-                continue
-            seen_series.add(meeting.series_id)
-            group = [m for m in state.meetings if m.status == MEETING_STATUS_PROPOSED and m.series_id == meeting.series_id]
+            group = series_groups.get(meeting.series_id)
+            if group is None:
+                group = []
+                series_groups[meeting.series_id] = group
+                groups.append(group)
+            group.append(meeting)
         else:
-            group = [meeting]
-        groups.append(group)
+            groups.append([meeting])
 
+    # Only upcoming rows and the newest past rows ever render; building the
+    # full history's rows (strips, actions, offers) dominated large pods.
+    selected_groups = []
+    past_heads = []
+    for group in groups:
+        head = group[0]
+        expired = state.is_expired(head)
+        is_upcoming = (
+            not expired and meeting_end(head) > now
+            and head.status != MEETING_STATUS_HELD
+        )
+        if is_upcoming:
+            selected_groups.append(group)
+        else:
+            past_heads.append((head.starts_at, head.pk, group))
+    past_heads.sort(key=lambda row: (row[0], row[1]), reverse=True)
+    selected_groups.extend(row[2] for row in past_heads[:PAST_LIMIT])
+
+    responses = {}
+    for response in PodMeetingResponse.objects.filter(
+        meeting_id__in=[group[0].pk for group in selected_groups],
+    ).order_by('pk'):
+        responses.setdefault(response.meeting_id, []).append(response)
     offer_needed = _needed_for_offer(member_avail)
     upcoming, past = [], []
-    for group in groups:
+    for group in selected_groups:
         head = group[0]
         expired = state.is_expired(head)
         live_status = head.status in (MEETING_STATUS_PROPOSED, MEETING_STATUS_SCHEDULED) and not expired
@@ -664,7 +686,35 @@ def dashboard_pod_meetings(user, now, pods=None):
     pods = dashboard_member_pods(user) if pods is None else pods
     if not pods:
         return []
-    meetings = list(PodMeeting.objects.filter(pod__in=pods).order_by('starts_at', 'pk'))
+    # Load only the meetings the cards can render: scheduled and held
+    # meetings bound the numbering (a pod plans at most ~20), live
+    # proposals bound the answer work, and the expired heads of those
+    # proposals' series come along so whole-series expiry stays exact.
+    # Cancelled meetings and long-dead proposal history never change the
+    # result, so they stay unloaded.
+    meetings = list(
+        PodMeeting.objects.filter(pod__in=pods)
+        .filter(
+            Q(status__in=(MEETING_STATUS_SCHEDULED, MEETING_STATUS_HELD))
+            | Q(status=MEETING_STATUS_PROPOSED, starts_at__gt=now),
+        )
+        .order_by('starts_at', 'pk')
+    )
+    series_ids = {m.series_id for m in meetings if m.series_id}
+    if series_ids:
+        meetings += list(
+            PodMeeting.objects.filter(pod__in=pods)
+            .filter(
+                status=MEETING_STATUS_PROPOSED,
+                series_id__in=series_ids,
+                starts_at__lte=now,
+            )
+            .order_by('starts_at', 'pk')
+        )
+        meetings.sort(key=lambda m: (m.starts_at, m.pk))
+    meetings_by_pod = {}
+    for meeting in meetings:
+        meetings_by_pod.setdefault(meeting.pod_id, []).append(meeting)
     answers = dict(
         PodMeetingResponse.objects.filter(
             user=user, meeting__in=[m.pk for m in meetings],
@@ -672,7 +722,10 @@ def dashboard_pod_meetings(user, now, pods=None):
     )
     zone = zone_for(user)
     horizon = now + timedelta(days=DASHBOARD_DAYS)
-    states = {pod.pk: meeting_state(pod, now, meetings=[m for m in meetings if m.pod_id == pod.pk]) for pod in pods}
+    states = {
+        pod.pk: meeting_state(pod, now, meetings=meetings_by_pod.get(pod.pk, []))
+        for pod in pods
+    }
     # Only heads this member still has to answer in the window can be listed.
     candidates = {
         pod_id: {

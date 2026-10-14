@@ -113,6 +113,8 @@ _KEY_ORDER = {
     "crm": (
         "CRM_CALL_CAPTURE_ENABLED",
         "CRM_CALL_SUMMARY_EMAIL_FROM",
+        "CRM_CALL_SUMMARY_EMAIL_CC",
+        "CRM_CALL_SUMMARY_AUTOSEND_ENABLED",
     ),
     "github": (
         "GITHUB_APP_ID",
@@ -2327,7 +2329,7 @@ CRM_CALL_SUMMARY_EMAIL_FROM = declare(
     key="CRM_CALL_SUMMARY_EMAIL_FROM",
     group="crm",
     label="CRM Call Summary Email From",
-    description="From-address for the draft attendee summary email stored on captured booking calls. Blank falls back to DEFAULT_FROM_EMAIL.",
+    description="From-address for the attendee summary email sent after a booked 1:1 call is captured. Blank falls back to DEFAULT_FROM_EMAIL.",
     value_type="str",
     default="",
     secret=False,
@@ -2335,11 +2337,34 @@ CRM_CALL_SUMMARY_EMAIL_FROM = declare(
     docs_url="_docs/configuration.md#crm",
 )
 
+CRM_CALL_SUMMARY_EMAIL_CC = declare(
+    key="CRM_CALL_SUMMARY_EMAIL_CC",
+    group="crm",
+    label="CRM Call Summary Email Cc",
+    description="Cc address on the auto-sent attendee summary email (the operator copy). Blank falls back to the booking host's email.",
+    value_type="str",
+    default="",
+    secret=False,
+    optional=True,
+    docs_url="_docs/configuration.md#crm",
+)
+
+CRM_CALL_SUMMARY_AUTOSEND_ENABLED = declare(
+    key="CRM_CALL_SUMMARY_AUTOSEND_ENABLED",
+    group="crm",
+    label="CRM Call Summary Autosend Enabled",
+    description="When on, the capture pipeline sends the attendee summary email automatically after storing it. Off keeps capture and drafting running but leaves every email as a draft for the Studio Send button.",
+    value_type="bool",
+    default="true",
+    secret=False,
+    docs_url="_docs/configuration.md#crm",
+)
+
 CRM_CALL_CAPTURE_ENABLED = declare(
     key="CRM_CALL_CAPTURE_ENABLED",
     group="crm",
     label="CRM Call Capture Enabled",
-    description="When on, the scheduled booking-call-capture task pulls the Zoom recording and transcript for finished booked 1:1 calls, refreshes the call summary through the LLM, and stores a DRAFT attendee email in Studio. It never sends email; sending is the explicit Studio Send button.",
+    description="When on, the scheduled booking-call-capture task pulls the Zoom recording and transcript for finished booked 1:1 calls, refreshes the call summary through the LLM, and sends the attendee summary email automatically (To the attendee, Cc the booking host; one send per call). Studio Send / Mark as sent / Dismiss stay available for manual handling.",
     value_type="bool",
     default="true",
     secret=False,

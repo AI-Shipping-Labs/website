@@ -9,11 +9,8 @@ exists for them. Staff create the row via the ``Track in CRM`` button on
 ``/studio/users/<id>/``.
 """
 
-import logging
-
 from django.contrib import messages
 from django.contrib.auth import get_user_model
-from django.core.mail import send_mail
 from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import HttpResponse
@@ -653,38 +650,35 @@ def crm_call_detail(request, call_id):
 @staff_required
 @require_POST
 def crm_call_send_email(request, call_id):
-    """Send the stored attendee summary draft (the ONLY send path, #1951).
+    """Send the stored attendee summary draft from Studio (#1951).
 
-    The scheduled capture pipeline stores drafts and never sends; this
-    explicit staff action is the single send path. Re-checks draft-ready
-    and not-already-sent so a double POST sends exactly once.
+    Manual retry path sharing the capture pipeline's sender (To the
+    attendee, Cc the operator copy). Re-checks draft-ready and
+    not-already-sent so a double POST sends exactly once.
     """
-    from integrations.config import crm_call_summary_email_from
+    from crm.services.call_capture import (
+        booking_for_call,
+        send_summary_email,
+    )
 
     call = _get_call(call_id)
-    if not call.email_draft_ready_at or call.email_sent_at or not call.email_draft_body:
+    if (
+        not call.email_draft_ready_at
+        or call.email_sent_at
+        or call.email_draft_dismissed_at
+        or not call.email_draft_body
+    ):
         messages.error(request, "No ready attendee email draft on this call.")
         return redirect("studio_crm_call_detail", call_id=call.pk)
-    from_email = crm_call_summary_email_from()
-    try:
-        sent = send_mail(
-            subject=call.email_draft_subject or "Your 1:1 call summary",
-            message=call.email_draft_body,
-            from_email=from_email,
-            recipient_list=[call.email],
-            fail_silently=False,
+    result = send_summary_email(
+        call, booking_for_call(call), sent_by=request.user,
+    )
+    if result["status"] == "sent":
+        messages.success(request, "Attendee summary email sent.")
+    else:
+        messages.error(
+            request, "Sending the attendee email failed; try again later.",
         )
-    except Exception as exc:
-        logger = logging.getLogger(__name__)
-        logger.error("Attendee summary send failed for call %s: %s", call.pk, exc)
-        messages.error(request, "Sending the attendee email failed; try again later.")
-        return redirect("studio_crm_call_detail", call_id=call.pk)
-    if not sent:
-        messages.error(request, "Sending the attendee email failed; try again later.")
-        return redirect("studio_crm_call_detail", call_id=call.pk)
-    call.email_sent_at = timezone.now()
-    call.save(update_fields=["email_sent_at", "updated_at"])
-    messages.success(request, "Attendee summary email sent.")
     return redirect("studio_crm_call_detail", call_id=call.pk)
 
 @staff_required

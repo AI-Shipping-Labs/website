@@ -1,11 +1,11 @@
-"""Read-only listing of attendee summary email drafts (issue #1951).
+"""Read-only listing of attendee summary emails (issue #1951).
 
-``GET /api/crm/call-email-drafts`` (staff token) lists the draft
-summary emails the booking-call capture pipeline stores on CRM calls,
-so operator tooling can check what is pending review in Studio. Write,
-send, and delete are deliberately out of scope for the API: the only
-sender is the explicit Studio staff action, and the scheduled pipeline
-never sends email in any configuration.
+``GET /api/crm/call-email-drafts`` (staff token) lists the summary
+emails the booking-call capture pipeline stores on CRM calls, so
+operator tooling can check send state. Write, send, and delete are
+deliberately out of scope for the API: sending happens automatically
+at capture time, and the Studio staff actions handle retries and
+manual handling.
 """
 
 from django.db.models import Q

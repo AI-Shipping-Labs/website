@@ -458,8 +458,8 @@ class CRMCallDraftSectionTest(CRMCallDraftBase):
 
 
 class CRMCallSendEmailTest(CRMCallDraftBase):
-    """AC17/AC19: the explicit Studio POST is the only send path; a
-    double POST sends exactly once."""
+    """AC17/AC19: the Studio POST shares the capture pipeline's sender;
+    a double POST sends exactly once."""
 
     def test_send_delivers_exactly_once_and_redirects(self):
         self.add_draft(self.booking_call)
@@ -477,6 +477,10 @@ class CRMCallSendEmailTest(CRMCallDraftBase):
         )
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.member.email])
+        # Cc carries the host copy (empty when the host has no email).
+        self.assertEqual(
+            mail.outbox[0].cc, [self.host.email] if self.host.email else [],
+        )
         self.assertEqual(mail.outbox[0].subject, 'Your 1:1 with Alexey')
         self.booking_call.refresh_from_db()
         self.assertIsNotNone(self.booking_call.email_sent_at)
@@ -514,7 +518,8 @@ class CRMCallSendEmailTest(CRMCallDraftBase):
             kwargs={'call_id': self.booking_call.pk},
         )
         with mock.patch(
-            'studio.views.crm.send_mail', side_effect=RuntimeError('SES down'),
+            'crm.services.call_capture.EmailMessage',
+            side_effect=RuntimeError('SES down'),
         ):
             self.client.post(url)
         self.assertEqual(len(mail.outbox), 0)

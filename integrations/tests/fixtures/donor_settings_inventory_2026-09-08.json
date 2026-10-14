@@ -1411,7 +1411,7 @@
    {
     "key": "CRM_CALL_CAPTURE_ENABLED",
     "is_secret": false,
-    "description": "When on, the scheduled booking-call-capture task pulls the Zoom recording and transcript for finished booked 1:1 calls, refreshes the call summary through the LLM, and stores a DRAFT attendee email in Studio. It never sends email; sending is the explicit Studio Send button.",
+    "description": "When on, the scheduled booking-call-capture task pulls the Zoom recording and transcript for finished booked 1:1 calls, refreshes the call summary through the LLM, and sends the attendee summary email automatically (To the attendee, Cc the booking host; one send per call). Studio Send / Mark as sent / Dismiss stay available for manual handling.",
     "default": "true",
     "docs_url": "_docs/configuration.md#crm",
     "is_boolean": true
@@ -1419,9 +1419,24 @@
    {
     "key": "CRM_CALL_SUMMARY_EMAIL_FROM",
     "is_secret": false,
-    "description": "From-address for the draft attendee summary email stored on captured booking calls. Blank falls back to DEFAULT_FROM_EMAIL.",
+    "description": "From-address for the attendee summary email sent after a booked 1:1 call is captured. Blank falls back to DEFAULT_FROM_EMAIL.",
     "docs_url": "_docs/configuration.md#crm",
     "optional": true
+   },
+   {
+    "key": "CRM_CALL_SUMMARY_EMAIL_CC",
+    "is_secret": false,
+    "description": "Cc address on the auto-sent attendee summary email (the operator copy). Blank falls back to the booking host's email.",
+    "docs_url": "_docs/configuration.md#crm",
+    "optional": true
+   },
+   {
+    "key": "CRM_CALL_SUMMARY_AUTOSEND_ENABLED",
+    "is_secret": false,
+    "description": "When on, the capture pipeline sends the attendee summary email automatically after storing it. Off keeps capture and drafting running but leaves every email as a draft for the Studio Send button.",
+    "default": "true",
+    "docs_url": "_docs/configuration.md#crm",
+    "is_boolean": true
    }
   ]
  }

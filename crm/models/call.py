@@ -125,9 +125,10 @@ class Call(models.Model):
     # Post-meeting capture (issue #1951): the scheduled
     # ``booking-call-capture`` pipeline enriches booking-source rows with
     # a recording pointer when one is discoverable and a summary email
-    # DRAFT (LLM-written, with a deterministic fallback). The pipeline
-    # never sends email; the only send paths are the explicit Studio
-    # actions, which stamp ``email_sent_at``/``email_sent_by``.
+    # (LLM-written, with a deterministic fallback), sent automatically
+    # To the attendee with the operator copy on Cc. One send per call,
+    # stamped ``email_sent_at``/``email_sent_by``; the Studio actions
+    # share the same sender for retries and manual handling.
     recording_url = models.URLField(
         blank=True,
         default='',
@@ -177,7 +178,7 @@ class Call(models.Model):
     email_sent_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text='Set only when a human explicitly sends from Studio.',
+        help_text='Set when the summary email went out (capture auto-send or Studio action).',
     )
     email_sent_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -185,7 +186,7 @@ class Call(models.Model):
         null=True,
         blank=True,
         related_name='+',
-        help_text='Staff member who sent (or marked sent) the email.',
+        help_text='Staff member who sent (or marked sent) the email; null for the capture auto-send.',
     )
     email_draft_dismissed_at = models.DateTimeField(
         null=True,
@@ -199,8 +200,9 @@ class Call(models.Model):
     def email_draft_status(self):
         """Derived attendee-email lifecycle: ``draft``/``sent``/``dismissed``.
 
-        ``sent`` once ``email_sent_at`` is stamped (Studio send or
-        mark-as-sent), ``dismissed`` once ``email_draft_dismissed_at`` is
+        ``sent`` once ``email_sent_at`` is stamped (capture auto-send,
+        Studio send, or mark-as-sent), ``dismissed`` once
+        ``email_draft_dismissed_at`` is
         stamped, ``draft`` before either. Derived rather than stored so
         the lifecycle can never disagree with the timestamps.
         """

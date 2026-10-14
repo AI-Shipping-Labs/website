@@ -1,11 +1,21 @@
 """Post-meeting capture for booked 1:1 calls (issue #1951).
 
 After a booked meeting ends, this service pulls the Zoom recording and
-transcript, refreshes the call's summary through the LLM, and stores a
-DRAFT attendee email on the CRM call row. It NEVER sends email in any
-configuration: the only send path is the explicit Studio button
-(``studio.views.crm.crm_call_send_email``), which stamps
-``email_sent_at``.
+transcript, refreshes the call's summary through the LLM, and sends the
+attendee summary email automatically: To = the attendee, Cc = the
+operator copy (``CRM_CALL_SUMMARY_EMAIL_CC``, falling back to the
+booking host's email). Exactly one send per call, stamped
+``email_sent_at`` and logged; a call with no resolvable attendee email
+keeps its stored draft for the explicit Studio actions
+(``studio.views.crm.crm_call_send_email``, ``Mark as sent``,
+``Dismiss``), which share the same sender.
+
+Booking-source only: ``send_summary_email`` refuses any call whose
+``source`` is not ``booking``, so historical imports (``zoom``,
+``telegram``) and ``manual`` rows can never send, through the pipeline
+or Studio. The automatic send at capture time is additionally gated on
+``CRM_CALL_SUMMARY_AUTOSEND_ENABLED`` (default on); Studio sends always
+go through.
 
 Retry model (mirrors ``events``/``jobs.tasks.recording_transcript``):
 Zoom can deliver the recording before the VTT is processed, so a
@@ -24,12 +34,18 @@ booking is a no-op.
 import datetime as dt
 import logging
 
+from django.core.mail import EmailMessage
 from django.utils import timezone
 
 from booking.models.booking import STATUS_CONFIRMED, Booking
 from crm.models.call import Call
 from crm.services.calls import record_call
-from integrations.config import crm_call_capture_enabled
+from integrations.config import (
+    crm_call_capture_enabled,
+    crm_call_summary_autosend_enabled,
+    crm_call_summary_email_cc,
+    crm_call_summary_email_from,
+)
 from integrations.services import llm
 from integrations.services.llm import LLMError
 from integrations.services.zoom import ZoomAPIError
@@ -159,6 +175,9 @@ def capture_finished_booking_calls(now=None):
         'status': 'ok',
         'selected': 0,
         'drafted': 0,
+        'email_sent': 0,
+        'email_skipped': 0,
+        'email_failed': 0,
         'not_ready': 0,
         'unavailable': 0,
         'skipped': 0,
@@ -171,6 +190,12 @@ def capture_finished_booking_calls(now=None):
         if key not in tally:
             tally[key] = 0
         tally[key] += 1
+        if result['status'] == 'drafted':
+            email_key = {
+                'sent': 'email_sent',
+                'failed': 'email_failed',
+            }.get(result.get('email_status'), 'email_skipped')
+            tally[email_key] += 1
         logger.info(
             'booking-call-capture call id=%s source_ref=%s: %s',
             call.pk, call.source_ref, result,
@@ -186,6 +211,11 @@ def capture_call(call, *, now=None):
     later tick or end in the terminal unavailable state.
     """
     now = now or timezone.now()
+    if call.source != 'booking':
+        # Historical imports (zoom/telegram) and manual rows never enter
+        # the pipeline (issue #1951): selection already filters on
+        # source='booking', and this guard makes a direct call safe too.
+        return {'status': 'skipped', 'reason': 'not_booking_source'}
     booking = booking_for_call(call)
     if booking is None:
         # Orphaned call (booking gone): ignored, never marked.
@@ -264,6 +294,10 @@ def _draft_summary_email(call, booking, *, now=None):
     del now
     if not crm_call_capture_enabled():
         return {'status': 'skipped', 'reason': 'capture_disabled'}
+    if not (booking.invitee_email or '').strip():
+        # No attendee email resolved (issue #1951): nothing to draft or
+        # send. ``record_call`` rejects a blank email, so skip before it.
+        return {'status': 'skipped', 'reason': 'no_attendee_email'}
 
     # A usable draft always exists (issue #1951): the LLM summary when
     # available, otherwise the deterministic booking fallback (topic +
@@ -309,16 +343,93 @@ def _draft_summary_email(call, booking, *, now=None):
         'email_draft_subject', 'email_draft_body', 'email_draft_ready_at',
         'updated_at',
     ])
+    if not crm_call_summary_autosend_enabled():
+        # Kill switch (issue #1951): capture and drafting keep running,
+        # but the email stays a draft for the Studio Send button (which
+        # bypasses this flag).
+        logger.info(
+            'Stored attendee email draft for call %s (booking %s, %s): '
+            'auto-send disabled, left as draft',
+            updated_call.pk, booking.pk, summary_source,
+        )
+        return {
+            'status': 'drafted',
+            'call_id': updated_call.pk,
+            'characters': len(summary),
+            'summary_source': summary_source,
+            'email_status': 'skipped',
+        }
+    email_result = send_summary_email(updated_call, booking)
     logger.info(
-        'Stored attendee email draft for call %s (booking %s, %s)',
+        'Stored attendee email for call %s (booking %s, %s): email %s',
         updated_call.pk, booking.pk, summary_source,
+        email_result['status'],
     )
     return {
         'status': 'drafted',
         'call_id': updated_call.pk,
         'characters': len(summary),
         'summary_source': summary_source,
+        'email_status': email_result['status'],
     }
+
+def send_summary_email(call, booking=None, *, sent_by=None):
+    """Send the stored attendee summary email; exactly once (#1951).
+
+    The one shared sender for the pipeline's automatic send at capture
+    time and the Studio ``Send now`` retry button. To = the attendee,
+    Cc = the operator copy (``CRM_CALL_SUMMARY_EMAIL_CC`` or the
+    booking host). Booking-source only: historical imports (``zoom``,
+    ``telegram``) and ``manual`` rows are refused here, so no caller --
+    pipeline or Studio -- can ever send them. An already-sent or
+    dismissed draft is skipped, and a failed send keeps the draft so a
+    later attempt can retry.
+    """
+    if call.source != 'booking':
+        return {'status': 'skipped', 'reason': 'not_booking_source'}
+    if not call.email_draft_ready_at or not call.email_draft_body:
+        return {'status': 'skipped', 'reason': 'no_ready_draft'}
+    if call.email_sent_at:
+        return {'status': 'skipped', 'reason': 'already_sent'}
+    if call.email_draft_dismissed_at:
+        return {'status': 'skipped', 'reason': 'draft_dismissed'}
+    to_email = (call.email or '').strip()
+    if not to_email:
+        logger.warning(
+            'Attendee summary not sent for call %s: no attendee email',
+            call.pk,
+        )
+        return {'status': 'skipped', 'reason': 'no_attendee_email'}
+    cc_email = crm_call_summary_email_cc()
+    if not cc_email and booking is not None:
+        cc_email = (getattr(booking.host, 'email', '') or '').strip()
+    cc_list = [cc_email] if cc_email else []
+    try:
+        sent = EmailMessage(
+            subject=call.email_draft_subject or 'Your 1:1 call summary',
+            body=call.email_draft_body,
+            from_email=crm_call_summary_email_from(),
+            to=[to_email],
+            cc=cc_list,
+        ).send(fail_silently=False)
+    except Exception as exc:
+        logger.error(
+            'Attendee summary send failed for call %s: %s', call.pk, exc,
+        )
+        return {'status': 'failed', 'reason': 'send_error'}
+    if not sent:
+        return {'status': 'failed', 'reason': 'send_error'}
+    call.email_sent_at = timezone.now()
+    call.email_sent_by = sent_by
+    call.save(update_fields=[
+        'email_sent_at', 'email_sent_by', 'updated_at',
+    ])
+    logger.info(
+        'Attendee summary email sent for call %s (cc_host_copy=%s, '
+        'sent_by=%s)',
+        call.pk, bool(cc_list), 'staff' if sent_by else 'capture-pipeline',
+    )
+    return {'status': 'sent'}
 
 
 def draft_subject(booking):

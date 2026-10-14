@@ -1,8 +1,8 @@
 """Tests for the post-meeting booking-call capture pipeline (#1951).
 
-Zoom and the LLM are always stubbed; the email backend is asserted
-NEVER to be called by the pipeline (the Studio button is the only send
-path).
+Zoom and the LLM are always stubbed; the pipeline sends exactly one
+attendee summary email per captured call (To the attendee, Cc the
+booking host) and a second tick never sends twice.
 """
 
 import datetime
@@ -123,6 +123,13 @@ class SelectionTest(CaptureBase):
             Call.objects.filter(source__in=["manual", "zoom"]).count(), 2,
         )
         self.assertEqual(list(calls_pending_capture()), [])
+        # Imported/manual rows never enter the pipeline, so a real tick
+        # with capture enabled selects nothing and sends nothing (the
+        # historical-import guarantee, through the real mail path).
+        with self._zoom(_files("audio_transcript")), self._vtt():
+            tally = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["selected"], 0)
+        self.assertEqual(len(mail.outbox), 0)
 
     def test_drafted_sent_or_unavailable_calls_are_not_pending(self):
         booking = self._booking()
@@ -140,6 +147,69 @@ class SelectionTest(CaptureBase):
             {drafted.pk, sent.pk, unavailable.pk} - {drafted.pk, sent.pk, unavailable.pk},
         )
         self.assertEqual(list(calls_pending_capture()), [])
+
+
+class HistoricalImportNeverSendsTest(CaptureBase):
+    """Issue #1951: historical imports never send, in any configuration.
+
+    The shared sender refuses every non-booking source, so neither the
+    scheduled tick nor a direct send -- pipeline or Studio -- can ever
+    email a ``zoom``/``telegram`` import or a ``manual`` row.
+    """
+
+    def _imported_call(self, source, source_ref):
+        call = record_call(
+            email="member@example.com",
+            occurred_at=timezone.now() - datetime.timedelta(days=90),
+            summary="Historical 1:1 writeup.",
+            source=source,
+            source_ref=source_ref,
+        )
+        call.email_draft_subject = "Your 1:1 with Alexey"
+        call.email_draft_body = "Historical summary."
+        call.email_draft_ready_at = timezone.now()
+        call.save(update_fields=[
+            "email_draft_subject", "email_draft_body",
+            "email_draft_ready_at", "updated_at",
+        ])
+        return call
+
+    def test_imported_calls_never_send_on_a_tick(self):
+        zoom_call = self._imported_call("zoom", "2026-04-24-jdoe-summary")
+        telegram_call = self._imported_call("telegram", "plan#notes")
+        with self._zoom(_files("audio_transcript")), self._vtt():
+            tally = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["selected"], 0)
+        self.assertEqual(len(mail.outbox), 0)
+        zoom_call.refresh_from_db()
+        telegram_call.refresh_from_db()
+        self.assertIsNone(zoom_call.email_sent_at)
+        self.assertIsNone(telegram_call.email_sent_at)
+
+    def test_shared_sender_refuses_every_non_booking_source(self):
+        for source, ref in (
+            ("zoom", "2026-04-24-jdoe-summary"),
+            ("telegram", "plan#notes"),
+            ("manual", "hand-logged"),
+        ):
+            with self.subTest(source=source):
+                call = self._imported_call(source, ref)
+                result = call_capture.send_summary_email(call)
+                self.assertEqual(result["status"], "skipped")
+                self.assertEqual(result["reason"], "not_booking_source")
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertEqual(
+            Call.objects.filter(email_sent_at__isnull=False).count(), 0,
+        )
+
+    def test_capture_call_refuses_non_booking_source_directly(self):
+        call = self._imported_call("zoom", "2026-04-24-jdoe-summary")
+        # No Zoom/LLM stubs: the source guard returns before any
+        # network-facing work.
+        result = capture_call(call)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "not_booking_source")
+        self.assertEqual(len(mail.outbox), 0)
 
 
 class CaptureCallTest(CaptureBase):
@@ -161,12 +231,16 @@ class CaptureCallTest(CaptureBase):
         self.assertEqual(
             call.occurred_at, booking.start_datetime,
         )
-        # Draft stored, addressed to the invitee, never sent.
+        # Stored, addressed to the invitee, and auto-sent: one email,
+        # attendee on To, the booking host copy on Cc.
         self.assertIn("Your 1:1 with Alexey Grigorev", call.email_draft_subject)
         self.assertEqual(call.email_draft_body, "Summary of the call.")
         self.assertIsNotNone(call.email_draft_ready_at)
-        self.assertIsNone(call.email_sent_at)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertIsNotNone(call.email_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [booking.invitee_email])
+        self.assertEqual(mail.outbox[0].cc, [self.host.email])
+        self.assertEqual(result["email_status"], "sent")
 
     def test_no_recording_files_marks_unavailable_immediately(self):
         booking = self._booking()
@@ -268,9 +342,9 @@ class SummaryGatesTest(CaptureBase):
         self.assertIsNone(call.email_draft_ready_at)
 
     def test_llm_disabled_falls_back_to_booking_topic_draft(self):
-        # Issue #1951: a usable draft always exists -- without the LLM
+        # Issue #1951: a usable email always exists -- without the LLM
         # the deterministic booking topic/notes fallback fills in, and
-        # still nothing is sent.
+        # the auto-send still goes out on the fallback body.
         booking = self._booking()
         booking.discussion_topic = "Portfolio review and RAG pipeline"
         booking.discussion_notes = "Alexey will share senior job leads."
@@ -285,7 +359,9 @@ class SummaryGatesTest(CaptureBase):
         self.assertIn("Portfolio review", call.email_draft_body)
         self.assertIn("job leads", call.email_draft_body)
         self.assertIsNotNone(call.email_draft_ready_at)
-        self.assertEqual(len(mail.outbox), 0)
+        self.assertIsNotNone(call.email_sent_at)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].cc, [self.host.email])
 
     def test_llm_error_never_raises_and_leaves_summary(self):
         from integrations.services.llm import LLMError
@@ -320,25 +396,152 @@ class RunBookingCallCaptureTest(CaptureBase):
             result = call_capture.capture_finished_booking_calls()
         self.assertEqual(result["status"], "disabled")
 
-    def test_tick_never_sends_email_and_drafts_once(self):
+    def test_tick_sends_email_once_and_second_tick_is_a_noop(self):
         booking = self._booking()
         self._call(booking)
         llm_enabled, llm_complete = self._llm(text="Run summary.")
-        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete, patch(
-            "django.core.mail.send_mail",
-        ) as send_mail:
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete:
             tally = call_capture.capture_finished_booking_calls()
         self.assertEqual(tally["status"], "ok")
         self.assertEqual(tally["drafted"], 1)
-        send_mail.assert_not_called()
-        self.assertEqual(len(mail.outbox), 0)
-        # A second tick is a no-op: the drafted call drops out of selection.
-        with patch(
-            "django.core.mail.send_mail",
-        ) as send_mail_again:
-            second = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["email_sent"], 1)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [booking.invitee_email])
+        self.assertEqual(mail.outbox[0].cc, [self.host.email])
+        # A second tick is a no-op: the sent call drops out of selection.
+        second = call_capture.capture_finished_booking_calls()
         self.assertEqual(second["selected"], 0)
-        send_mail_again.assert_not_called()
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_autosend_disabled_stores_draft_without_sending(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm(text="Autosend-off summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete, patch.object(
+            call_capture, "crm_call_summary_autosend_enabled",
+            return_value=False,
+        ):
+            tally = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["status"], "ok")
+        self.assertEqual(tally["drafted"], 1)
+        self.assertEqual(tally["email_sent"], 0)
+        self.assertEqual(tally["email_skipped"], 1)
+        self.assertEqual(len(mail.outbox), 0)
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIsNotNone(call.email_draft_ready_at)
+        self.assertIsNone(call.email_sent_at)
+
+    def test_studio_send_bypasses_the_autosend_kill_switch(self):
+        booking = self._booking()
+        call = self._call(booking)
+        call.email_draft_subject = "s"
+        call.email_draft_body = "Manual retry body."
+        call.email_draft_ready_at = timezone.now()
+        call.save(update_fields=[
+            "email_draft_subject", "email_draft_body",
+            "email_draft_ready_at", "updated_at",
+        ])
+        with patch.object(
+            call_capture, "crm_call_summary_autosend_enabled",
+            return_value=False,
+        ):
+            result = call_capture.send_summary_email(
+                call, booking, sent_by=None,
+            )
+        self.assertEqual(result["status"], "sent")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, [booking.invitee_email])
+
+    def test_booking_without_attendee_email_is_skipped_not_sent(self):
+        booking = self._booking()
+        call = self._call(booking)
+        # The pipeline re-adopts the booking invitee email on the
+        # upsert, so the booking itself must carry the blank.
+        booking.invitee_email = ""
+        booking.save(update_fields=["invitee_email"])
+        llm_enabled, llm_complete = self._llm(text="No-email summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "no_attendee_email")
+        call.refresh_from_db()
+        self.assertIsNone(call.email_draft_ready_at)
+        self.assertIsNone(call.email_sent_at)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_send_failure_keeps_draft_and_counts_email_failed(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm(text="Failing summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete, patch(
+            "crm.services.call_capture.EmailMessage",
+            side_effect=RuntimeError("SES down"),
+        ):
+            tally = call_capture.capture_finished_booking_calls()
+        self.assertEqual(tally["drafted"], 1)
+        self.assertEqual(tally["email_failed"], 1)
+        self.assertEqual(len(mail.outbox), 0)
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIsNotNone(call.email_draft_ready_at)
+        self.assertIsNone(call.email_sent_at)
+        # The failed call drops out of selection; no retry loop.
+        second = call_capture.capture_finished_booking_calls()
+        self.assertEqual(second["selected"], 0)
+
+    def test_auto_send_never_targets_a_dismissed_draft(self):
+        booking = self._booking()
+        call = self._call(booking)
+        call.email_draft_subject = "s"
+        call.email_draft_body = "b"
+        call.email_draft_ready_at = timezone.now()
+        call.email_draft_dismissed_at = timezone.now()
+        call.save(update_fields=[
+            "email_draft_subject", "email_draft_body",
+            "email_draft_ready_at", "email_draft_dismissed_at",
+            "updated_at",
+        ])
+        result = call_capture.send_summary_email(call, booking)
+        self.assertEqual(result["status"], "skipped")
+        self.assertEqual(result["reason"], "draft_dismissed")
+        self.assertEqual(len(mail.outbox), 0)
+        self.assertIsNone(call.email_sent_at)
+
+    def test_cc_setting_overrides_host_copy(self):
+        booking = self._booking()
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm(text="Cc override summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete, patch.object(
+            call_capture, "crm_call_summary_email_cc",
+            return_value="operator-copy@test.com",
+        ):
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["email_status"], "sent")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].cc, ["operator-copy@test.com"])
+
+    def test_blank_host_email_means_no_cc(self):
+        host, _ = BookingHost.objects.get_or_create(
+            slug="noemail",
+            defaults={
+                "name": "No Email Host",
+                "email": "",
+                "timezone": "UTC",
+                "notice_hours": 0.0,
+                "horizon_days": 30,
+                "slot_duration_minutes": 30,
+                "is_active": True,
+            },
+        )
+        booking = self._booking()
+        booking.host = host
+        booking.save(update_fields=["host"])
+        self._call(booking)
+        llm_enabled, llm_complete = self._llm(text="Blank host summary.")
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_enabled, llm_complete:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["email_status"], "sent")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].cc, [])
 
     def test_task_wrapper_delegates_to_service(self):
         with patch.object(

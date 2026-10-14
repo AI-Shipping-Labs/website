@@ -13,6 +13,7 @@ from content.views.workshops import (
     _build_catalog_filter_url,
     _normalize_workshop_catalog_tags,
 )
+from website.search_indexing import NOINDEX_ROBOTS_DIRECTIVE
 
 
 class WorkshopCatalogTagNormalizerTest(SimpleTestCase):
@@ -132,7 +133,7 @@ class WorkshopCatalogEarlyBoundResponseTest(TestCase):
                 self.assertEqual(response['Cache-Control'], 'no-store')
                 self.assertEqual(
                     response['X-Robots-Tag'],
-                    'noindex, nofollow',
+                    NOINDEX_ROBOTS_DIRECTIVE,
                 )
                 self.assertEqual(
                     response.content.decode(),

@@ -6,6 +6,12 @@ from booking.models.booking import (
     Booking,
     generate_manage_token,
 )
+from booking.models.call_request import (
+    STATUS_APPROVED,
+    STATUS_DECLINED,
+    STATUS_PENDING,
+    CallRequest,
+)
 from booking.models.host import (
     WEEKDAY_CHOICES,
     BookingDateOverride,
@@ -24,4 +30,8 @@ __all__ = [
     "STATUS_CANCELED",
     "STATUS_RESCHEDULED",
     "STATUS_CHOICES",
+    "CallRequest",
+    "STATUS_PENDING",
+    "STATUS_APPROVED",
+    "STATUS_DECLINED",
 ]

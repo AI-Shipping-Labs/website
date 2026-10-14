@@ -14,6 +14,7 @@ from booking.models import (
     Booking,
     BookingHost,
 )
+from booking.services.allowance import get_member_allowance
 from booking.services.booking_service import (
     SlotUnavailableError,
     cancel_booking,
@@ -62,6 +63,9 @@ TOPIC_CHOICES = [
 
 def booking_index(request):
     """Default entry point redirects to Alexey's booking page."""
+    if not request.user.is_authenticated:
+        return redirect(f"/accounts/login/?next={request.path}")
+
     host = BookingHost.objects.filter(is_active=True).first()
     slug = host.slug if host else "alexey"
     return redirect("booking_host", slug=slug)
@@ -69,9 +73,14 @@ def booking_index(request):
 
 def host_booking(request, slug):
     """Main public booking page showing interactive calendar and details form."""
+    if not request.user.is_authenticated:
+        return redirect(f"/accounts/login/?next={request.path}")
+
     host = get_host_by_slug(slug)
     if not host:
         raise Http404("Booking host not found.")
+
+    allowance = get_member_allowance(request.user)
 
     initial_tz = request.GET.get("tz") or host.timezone
     try:
@@ -81,6 +90,18 @@ def host_booking(request, slug):
 
     context = {
         "host": host,
+        "allowance": allowance,
+        "onboarded": allowance.is_onboarded,
+        "can_access_onboarding": allowance.can_access_onboarding,
+        "active_booking": allowance.active_booking,
+        "has_active_booking": allowance.has_active_booking,
+        "pending_request": allowance.pending_request,
+        "has_pending_request": allowance.has_pending_request,
+        "declined_request": allowance.declined_request,
+        "has_declined_request": allowance.has_declined_request,
+        "remaining_allowance": allowance.remaining_allowance,
+        "can_book": allowance.can_book,
+        "can_request_call": allowance.can_request_call,
         "initial_tz": initial_tz,
         "common_timezones": COMMON_TIMEZONES,
         "topic_choices": TOPIC_CHOICES,
@@ -127,9 +148,37 @@ def host_slots(request, slug):
 @require_POST
 def host_confirm(request, slug):
     """Confirm a selected slot and provision the booking."""
+    if not request.user.is_authenticated:
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
+            return JsonResponse({"error": "Authentication required"}, status=401)
+        return redirect(f"/accounts/login/?next=/book/{slug}")
+
     host = get_host_by_slug(slug)
     if not host:
         raise Http404("Host not found")
+
+    allowance = get_member_allowance(request.user)
+
+    if not allowance.is_onboarded:
+        err_msg = "Please finish onboarding before booking a call."
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
+            return JsonResponse({"error": err_msg}, status=400)
+        messages.error(request, err_msg)
+        return redirect("booking_host", slug=slug)
+
+    if allowance.has_active_booking:
+        err_msg = "You already have an active scheduled meeting. Please reschedule or cancel it first."
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
+            return JsonResponse({"error": err_msg}, status=400)
+        messages.error(request, err_msg)
+        return redirect("booking_host", slug=slug)
+
+    if allowance.remaining_allowance <= 0:
+        err_msg = "You have 0 remaining booking allowance. Please submit a call request."
+        if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.headers.get("accept") == "application/json":
+            return JsonResponse({"error": err_msg}, status=400)
+        messages.error(request, err_msg)
+        return redirect("booking_host", slug=slug)
 
     start_iso = request.POST.get("start_iso", "").strip()
     invitee_name = request.POST.get("invitee_name", "").strip()
@@ -159,6 +208,7 @@ def host_confirm(request, slug):
             discussion_topic=discussion_topic,
             discussion_notes=discussion_notes,
             company=company,
+            member=request.user,
         )
     except SlotUnavailableError:
         messages.error(request, "That slot was just booked. Please pick another available time.")

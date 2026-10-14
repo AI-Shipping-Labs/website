@@ -66,6 +66,12 @@ from studio.views.call_hosts import (
     call_host_edit,
     call_host_list,
 )
+from studio.views.call_requests import (
+    studio_call_request_approve,
+    studio_call_request_decline,
+    studio_call_request_detail,
+    studio_call_requests_list,
+)
 from studio.views.campaigns import (
     campaign_create,
     campaign_delete,
@@ -915,6 +921,12 @@ urlpatterns = [
     path('call-hosts/new', call_host_create, name='studio_call_host_create'),
     path('call-hosts/<int:host_id>/edit', call_host_edit, name='studio_call_host_edit'),
     path('call-hosts/<int:host_id>/delete', call_host_delete, name='studio_call_host_delete'),
+
+    # Call requests (issue #1953)
+    path('call-requests/', studio_call_requests_list, name='studio_call_requests_list'),
+    path('call-requests/<int:request_id>/', studio_call_request_detail, name='studio_call_request_detail'),
+    path('call-requests/<int:request_id>/approve/', studio_call_request_approve, name='studio_call_request_approve'),
+    path('call-requests/<int:request_id>/decline/', studio_call_request_decline, name='studio_call_request_decline'),
     # Instructor account linking (issue #1345)
     path('instructors/', instructor_list, name='studio_instructor_list'),
     path(

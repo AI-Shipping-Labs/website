@@ -99,6 +99,101 @@
         ]
       }
     },
+    "/api/booking/call-requests": {
+      "get": {
+        "description": "List and filter member call requests by status or member.",
+        "responses": {
+          "200": {
+            "description": "Filtered list of call requests."
+          }
+        },
+        "summary": "List member call requests",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
+    "/api/booking/call-requests/{request_id}": {
+      "get": {
+        "description": "Fetch a single call request by ID.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Call request details."
+          },
+          "404": {
+            "description": "Call request not found."
+          }
+        },
+        "summary": "Get call request details",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
+    "/api/booking/call-requests/{request_id}/approve": {
+      "post": {
+        "description": "Staff approves a call request, setting status='approved' and incrementing allowance.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated call request."
+          },
+          "404": {
+            "description": "Call request not found."
+          }
+        },
+        "summary": "Approve a call request",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
+    "/api/booking/call-requests/{request_id}/decline": {
+      "post": {
+        "description": "Staff declines a call request, recording review notes without granting allowance.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "request_id",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Updated call request."
+          },
+          "404": {
+            "description": "Call request not found."
+          }
+        },
+        "summary": "Decline a call request",
+        "tags": [
+          "Booking"
+        ]
+      }
+    },
     "/api/books": {
       "get": {
         "description": "Returns every book. Chapters are summarized as a count.",

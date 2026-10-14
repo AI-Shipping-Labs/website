@@ -105,6 +105,36 @@ class Token(models.Model):
         if not self.key_hash:
             self.set_plaintext_key(self.generate_plaintext_key())
         super().save(*args, **kwargs)
+        self._sync_to_api_key()
+
+    def delete(self, *args, **kwargs):
+        try:
+            from community_base.api.models import APIKey
+
+            APIKey.objects.filter(lookup_prefix=self.lookup_prefix).delete()
+        except Exception:
+            pass
+        return super().delete(*args, **kwargs)
+
+    def _sync_to_api_key(self):
+        if not self._token_user_is_staff():
+            return
+        try:
+            from community_base.api.models import APIKey
+
+            APIKey.objects.update_or_create(
+                lookup_prefix=self.lookup_prefix,
+                defaults={
+                    "id": f"key_{self.id[:32]}",
+                    "user": self.user,
+                    "name": self.name or f"Staff Token {self.lookup_prefix[:8]}",
+                    "key_hash": self.key_hash,
+                    "scopes": ["*"],
+                    "kind": APIKey.Kind.STAFF,
+                },
+            )
+        except Exception:
+            pass
 
     @property
     def key(self):

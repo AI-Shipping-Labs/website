@@ -191,11 +191,12 @@ jobs:
     env:
       TEST_SHARD_COUNT: "4"
       TEST_SHARD_INDEX: ${{ matrix.shard }}
-    # Per-shard #269 hang safety net. Each shard runs ~1/4 of the suite
-    # (~7-8m test runtime + ~2-3m setup), so 20m leaves >40% headroom while
-    # keeping the django-q-hang blast radius (#269) far below the historical
-    # ~1h40m worst case — much tighter than the old single-job 45m cap.
-    timeout-minutes: 20
+    # Per-shard #269 hang safety net. Hash sharding is uneven: shard 2 ran
+    # 1174-1194s on the last green runs (shards 1/4 ~600s), so a 20m cap had
+    # no headroom and cancelled it on 88d78a117 (#1953). 30m keeps the
+    # django-q-hang blast radius far below the old ~1h40m worst case; the
+    # imbalance itself is tracked separately.
+    timeout-minutes: 30
 
     steps:
       - name: Start CI timing profile

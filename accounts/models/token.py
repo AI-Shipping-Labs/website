@@ -11,6 +11,7 @@ The database stores a non-secret row identifier, a password-style hash, and a
 lookup prefix used to narrow authentication candidates.
 """
 
+import logging
 import secrets
 import uuid
 
@@ -18,6 +19,8 @@ from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
 from django.db import models
+
+logger = logging.getLogger(__name__)
 
 
 def generate_token_identifier():
@@ -93,9 +96,7 @@ class Token(models.Model):
         if not self._token_user_is_staff():
             raise ValidationError(
                 {
-                    "user": (
-                        "API tokens can only be created for staff or admin users."
-                    ),
+                    "user": ("API tokens can only be created for staff or admin users."),
                 }
             )
 
@@ -113,7 +114,7 @@ class Token(models.Model):
 
             APIKey.objects.filter(lookup_prefix=self.lookup_prefix).delete()
         except Exception:
-            pass
+            logger.exception("Failed to delete synced APIKey for token %s", self.lookup_prefix)
         return super().delete(*args, **kwargs)
 
     def _sync_to_api_key(self):
@@ -134,7 +135,7 @@ class Token(models.Model):
                 },
             )
         except Exception:
-            pass
+            logger.exception("Failed to sync Token to APIKey for prefix %s", self.lookup_prefix)
 
     @property
     def key(self):

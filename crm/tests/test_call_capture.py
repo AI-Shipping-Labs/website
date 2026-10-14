@@ -16,9 +16,9 @@ from booking.models import Booking, BookingHost
 from crm.models.call import Call
 from crm.services import call_capture
 from crm.services.call_capture import (
+    calls_pending_capture,
     capture_call,
     capture_status,
-    calls_pending_capture,
 )
 from crm.services.calls import record_call
 
@@ -267,6 +267,26 @@ class SummaryGatesTest(CaptureBase):
         self.assertEqual(call.summary, "Booked: portfolio review.")
         self.assertIsNone(call.email_draft_ready_at)
 
+    def test_llm_disabled_falls_back_to_booking_topic_draft(self):
+        # Issue #1951: a usable draft always exists -- without the LLM
+        # the deterministic booking topic/notes fallback fills in, and
+        # still nothing is sent.
+        booking = self._booking()
+        booking.discussion_topic = "Portfolio review and RAG pipeline"
+        booking.discussion_notes = "Alexey will share senior job leads."
+        booking.save(update_fields=["discussion_topic", "discussion_notes"])
+        self._call(booking)
+        llm_disabled, _ = self._llm(enabled=False)
+        with self._zoom(_files("audio_transcript")), self._vtt(), llm_disabled:
+            result = capture_call(calls_pending_capture().first())
+        self.assertEqual(result["status"], "drafted")
+        self.assertEqual(result["summary_source"], "fallback")
+        call = Call.objects.get(source="booking", source_ref=str(booking.pk))
+        self.assertIn("Portfolio review", call.email_draft_body)
+        self.assertIn("job leads", call.email_draft_body)
+        self.assertIsNotNone(call.email_draft_ready_at)
+        self.assertEqual(len(mail.outbox), 0)
+
     def test_llm_error_never_raises_and_leaves_summary(self):
         from integrations.services.llm import LLMError
 
@@ -300,7 +320,7 @@ class RunBookingCallCaptureTest(CaptureBase):
             result = call_capture.capture_finished_booking_calls()
         self.assertEqual(result["status"], "disabled")
 
-    def test_tick_never_sends_email_and_drafsts_once(self):
+    def test_tick_never_sends_email_and_drafts_once(self):
         booking = self._booking()
         self._call(booking)
         llm_enabled, llm_complete = self._llm(text="Run summary.")

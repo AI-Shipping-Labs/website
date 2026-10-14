@@ -131,13 +131,13 @@ class CrmCallsCreateTest(CrmCallsEndpointBase):
         response = self._post({
             'email': self.member.email,
             'occurred_at': _iso(minute=30),
-            'source': 'telegram',
+            'source': 'carrier-pigeon',
         })
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()['details']['field'], 'source')
-        self.assertEqual(response.json()['details']['value'], 'telegram')
+        self.assertEqual(response.json()['details']['value'], 'carrier-pigeon')
         self.assertEqual(
-            Call.objects.filter(source='telegram').count(),
+            Call.objects.filter(source='carrier-pigeon').count(),
             0,
         )
 

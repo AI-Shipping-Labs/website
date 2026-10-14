@@ -85,8 +85,8 @@ from api.views.course_enrollments import (
     course_enrollments_collection,
 )
 from api.views.course_instructors import course_instructors
-from api.views.crm_calls import crm_calls
 from api.views.crm_call_drafts import crm_call_drafts
+from api.views.crm_calls import crm_calls
 from api.views.crm_export import crm_export, crm_record_markdown_export
 from api.views.docs import docs_page, openapi_json
 from api.views.email_log import email_log_list

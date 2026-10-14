@@ -202,8 +202,10 @@ def load_aliases(path):
 
 
 def _alias_email(aliases, *, stem, name):
+    # Operator maps arrive with display-name keys ("Sri Sai=..." via
+    # --map); accept both raw and casefolded spellings.
     for key in (stem, name):
-        email = aliases.get(key.casefold())
+        email = aliases.get(key) or aliases.get(key.casefold())
         if email:
             return email
     return None
@@ -246,10 +248,10 @@ def _refs_for_email(client, email, cache, source):
     """Existing ``source_ref`` set for one email + source (cached)."""
     key = (email, source)
     if key not in cache:
-        calls = client.member_calls(email) or []
         cache[key] = {
             row.get('source_ref')
-            for row in calls
+            for member in client.member_calls(email) or []
+            for row in member.get('calls', [])
             if row.get('source') == source and row.get('source_ref')
         }
     return cache[key]

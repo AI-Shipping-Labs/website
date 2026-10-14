@@ -694,6 +694,11 @@ def crm_call_mark_sent(request, call_id):
     call = _get_call(call_id)
     if not call.email_draft_ready_at:
         messages.error(request, "No ready attendee email draft on this call.")
+    elif call.email_draft_dismissed_at:
+        messages.error(
+            request,
+            "The draft was dismissed; it cannot be marked as sent.",
+        )
     elif call.email_sent_at:
         messages.info(request, "Attendee email was already sent.")
     else:

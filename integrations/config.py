@@ -506,14 +506,12 @@ def crm_call_summary_email_from():
     ``DEFAULT_FROM_EMAIL`` when unset or blank, so a single Studio
     setting is enough to brand the 1:1 summary mail.
     """
-    from django.conf import settings as django_settings
+    from django.conf import settings  # noqa: PLC0415
 
     configured = str(get_config('CRM_CALL_SUMMARY_EMAIL_FROM', '')).strip()
     if configured:
         return configured
-    return str(
-        getattr(django_settings, 'DEFAULT_FROM_EMAIL', '') or ''
-    ).strip()
+    return str(getattr(settings, 'DEFAULT_FROM_EMAIL', '') or '').strip()
 
 
 def event_reminders_include_cohort_enabled():

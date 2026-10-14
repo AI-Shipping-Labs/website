@@ -5518,6 +5518,26 @@
         ]
       }
     },
+    "/api/crm/call-email-drafts": {
+      "get": {
+        "description": "Read-only staff listing of the attendee summary email drafts stored on CRM calls (booking-call capture). Each row carries the call id, attendee email, draft subject, status (``draft`` / ``sent`` / ``dismissed``), and the draft-ready / sent timestamps. Nothing here sends email: the only send path is the explicit Studio staff action. Staff-token only.",
+        "responses": {
+          "200": {
+            "description": "Draft rows, most recent call first."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "405": {
+            "description": "Only GET is supported."
+          }
+        },
+        "summary": "List CRM attendee summary email drafts",
+        "tags": [
+          "CRM"
+        ]
+      }
+    },
     "/api/crm/calls": {
       "post": {
         "description": "Creates (or, with ``source_ref``, upserts) one CRM call for an email: when the call was (``occurred_at``, ISO 8601), what was discussed (``summary``), and where the row came from (``source``, default ``manual``; the booking app passes ``booking`` plus its confirmation id as ``source_ref``). The email resolves to a user case-insensitively; an unmatched email still records the call with the raw email snapshot and a null ``contact_id``. Delegates to ``crm.services.calls.record_call`` -- the same write path as the Studio form. Staff-token only.",

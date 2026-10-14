@@ -18,6 +18,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from accounts.models import Token
+from api.views.crm_export import build_single_crm_record_aggregate
 from content.models import Course
 from content.services.enrollment import ensure_enrollment
 from crm.models import CRMRecord
@@ -231,7 +232,7 @@ class CrmExportCallsTest(CrmExportTestBase):
         call.email_draft_ready_at = now
         call.save()
         aggregate = build_single_crm_record_aggregate(
-            self.record, bearer=self.staff,
+            self.crm, bearer=self.staff,
         )
         entry = next(
             row for row in aggregate['calls'] if row['id'] == call.pk
@@ -255,7 +256,7 @@ class CrmExportCallsTest(CrmExportTestBase):
         call.capture_unavailable_at = now
         call.save(update_fields=['capture_unavailable_at'])
         aggregate = build_single_crm_record_aggregate(
-            self.record, bearer=self.staff,
+            self.crm, bearer=self.staff,
         )
         entry = next(
             row for row in aggregate['calls'] if row['id'] == call.pk

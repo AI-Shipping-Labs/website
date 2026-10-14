@@ -298,3 +298,190 @@ class CrmApiClientAuthHeaderTest(TestCase):
         ):
             with self.assertRaises(RuntimeError):
                 zoom_call_import.resolve_staff_token(env={})
+
+
+def _plan_file(root, name, body):
+    from pathlib import Path
+
+    plans = Path(root) / "1x1" / "plans"
+    plans.mkdir(parents=True, exist_ok=True)
+    path = plans / name
+    path.write_text(body, encoding="utf-8")
+    return path
+
+
+class TelegramStubClient(StubClient):
+    """Stub that also reports existing ``telegram`` refs on the member."""
+
+    def __init__(self, *args, telegram_refs=(), **kwargs):
+        super().__init__(*args, **kwargs)
+        self.telegram_refs = set(telegram_refs)
+
+    def member_calls(self, email):
+        calls = [
+            {"source": "zoom", "source_ref": ref}
+            for ref in sorted(self.existing_refs)
+        ]
+        calls += [
+            {"source": "telegram", "source_ref": ref}
+            for ref in sorted(self.telegram_refs)
+        ]
+        return [{"email": email, "calls": calls}]
+
+
+class PlanNoteImportTest(TestCase):
+    """Dated call-note sections in ``1x1/plans/*.md`` (telegram source)."""
+
+    def _root(self):
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        _plan_file(
+            tmp.name,
+            "20260420_jakob-zischka.md",
+            "# Jakob Zischka\n"
+            "\n"
+            "## Background\n"
+            "\n"
+            "Wants to build an LLM pipeline.\n"
+            "\n"
+            "## 1x1 with Alexey (Apr 23, 2026)\n"
+            "\n"
+            "Discussed the portfolio and a RAG pipeline.\n"
+            "Action: draft the capstone proposal.\n"
+            "\n"
+            "## Goals\n"
+            "\n"
+            "Ship the capstone.\n"
+            "\n"
+            "## Call notes\n"
+            "\n"
+            "Undated notes that must be skipped.\n",
+        )
+        _plan_file(tmp.name, "notes-draft.md", "## Call (no member slug)\n")
+        return tmp.name
+
+    def test_dated_section_imports_as_telegram_call(self):
+        client = StubClient(users={"j@example.com": ("Jakob", "Zischka")})
+        result = run_import(root=self._root(), client=client, apply=True)
+        self.assertEqual(len(client.payloads), 1)
+        payload = client.payloads[0]
+        self.assertEqual(payload["source"], "telegram")
+        self.assertEqual(
+            payload["source_ref"],
+            "20260420_jakob-zischka#1x1-with-alexey",
+        )
+        self.assertEqual(payload["email"], "j@example.com")
+        self.assertEqual(payload["occurred_at"], "2026-04-23T12:00:00+00:00")
+        self.assertIn("RAG pipeline", payload["summary"])
+        self.assertNotIn("Ship the capstone", payload["summary"])
+        self.assertEqual(result.created, 1)
+        self.assertEqual(result.skipped_unresolved, 0)
+
+    def test_undated_section_and_bad_stem_are_skipped_with_reasons(self):
+        client = StubClient(users={"j@example.com": ("Jakob", "Zischka")})
+        result = run_import(root=self._root(), client=client, apply=True)
+        reasons = {sf.filename: sf.reason for sf in result.skipped_files}
+        self.assertEqual(
+            reasons["20260420_jakob-zischka#call-notes"],
+            "undated call-note section",
+        )
+        self.assertEqual(
+            reasons["notes-draft.md"],
+            "plan filename does not match YYYYMMDD_<member-slug>.md",
+        )
+
+    def test_rerun_classifies_telegram_update_not_create(self):
+        client = TelegramStubClient(
+            users={"j@example.com": ("Jakob", "Zischka")},
+            telegram_refs={"20260420_jakob-zischka#1x1-with-alexey"},
+        )
+        result = run_import(root=self._root(), client=client, apply=True)
+        self.assertEqual(result.updated, 1)
+        self.assertEqual(result.created, 0)
+
+
+class TwoSummariesSamePersonTest(TestCase):
+    """sergey-sedler has two summaries and must get two Call rows."""
+
+    def test_two_summaries_for_one_person_create_two_rows(self):
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        _summary_file(tmp.name, "2026-04-24", "sergey-sedler", "Sergey Sedler")
+        _summary_file(tmp.name, "2026-07-21", "sergey-sedler", "Sergey Sedler")
+        client = StubClient(users={"s@example.com": ("Sergey", "Sedler")})
+        result = run_import(root=tmp.name, client=client, apply=True)
+        self.assertEqual(result.created, 2)
+        self.assertEqual(
+            {payload["source_ref"] for payload in client.payloads},
+            {
+                "2026-04-24-sergey-sedler-summary",
+                "2026-07-21-sergey-sedler-summary",
+            },
+        )
+
+
+class ScriptEntrypointTest(TestCase):
+    """``scripts/import_crm_calls.py`` contract (#1951): flags + dry-run."""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        import importlib.util
+        from pathlib import Path
+
+        script_path = (
+            Path(__file__).resolve().parents[2] / "scripts" / "import_crm_calls.py"
+        )
+        spec = importlib.util.spec_from_file_location(
+            "import_crm_calls_script", script_path,
+        )
+        cls.script = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.script)
+
+    def test_help_documents_the_contract_flags(self):
+        import io
+        from contextlib import redirect_stdout
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            with self.assertRaises(SystemExit) as ctx:
+                self.script.main(["--help"])
+        self.assertEqual(ctx.exception.code, 0)
+        text = buffer.getvalue()
+        for flag in ("--source-dir", "--base-url", "--dry-run", "--map"):
+            self.assertIn(flag, text)
+
+    def test_dry_run_is_default_and_map_resolves_without_lookup(self):
+        import io
+        from contextlib import redirect_stdout
+        from tempfile import TemporaryDirectory
+
+        tmp = TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        _summary_file(tmp.name, "2026-10-12", "sri-sai", "Sri Sai")
+        sent = []
+
+        class ScriptStub(StubClient):
+            def post_call(self, payload):
+                sent.append(payload)
+                return {"id": 1}
+
+        stub = ScriptStub(users={"k@example.com": ("Kalavati", "Singh")})
+        original = self.script.zci.CrmApiClient
+        self.script.zci.CrmApiClient = lambda **kwargs: stub
+        self.addCleanup(setattr, self.script.zci, "CrmApiClient", original)
+
+        buffer = io.StringIO()
+        with redirect_stdout(buffer):
+            exit_code = self.script.main(
+                [
+                    "--source-dir", tmp.name,
+                    "--map", "Sri Sai=k@example.com",
+                ],
+            )
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(sent, [])
+        output = buffer.getvalue()
+        self.assertIn("would create", output)
+        self.assertIn("k@example.com", output)
+        self.assertNotIn("UNRESOLVED", output)

@@ -18,7 +18,7 @@ import uuid
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.exceptions import ValidationError
-from django.db import models
+from django.db import models, transaction
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +109,15 @@ class Token(models.Model):
         self._sync_to_api_key()
 
     def delete(self, *args, **kwargs):
-        try:
-            from community_base.api.models import APIKey
+        with transaction.atomic():
+            try:
+                from community_base.api.models import APIKey
 
-            APIKey.objects.filter(lookup_prefix=self.lookup_prefix).delete()
-        except Exception:
-            logger.exception("Failed to delete synced APIKey for token %s", self.lookup_prefix)
-        return super().delete(*args, **kwargs)
+                APIKey.objects.filter(lookup_prefix=self.lookup_prefix).delete()
+            except Exception:
+                logger.exception("Failed to delete synced APIKey for token %s", self.lookup_prefix)
+                raise
+            return super().delete(*args, **kwargs)
 
     def _sync_to_api_key(self):
         if not self._token_user_is_staff():

@@ -1,4 +1,4 @@
-"""Tests for Token to community_base APIKey synchronization."""
+from unittest.mock import patch
 
 from community_base.api.models import APIKey
 from django.contrib.auth import get_user_model
@@ -46,3 +46,20 @@ class TokenAPIKeySyncTest(TestCase):
         token.delete()
         self.assertFalse(APIKey.objects.filter(lookup_prefix=prefix).exists())
         self.assertIsNone(APIKey.authenticate(token.key))
+
+    def test_staff_token_deletion_fails_closed_when_api_key_delete_fails(self):
+        token = Token.objects.create(user=self.staff_user, name="Fail-Closed Token")
+        prefix = token.lookup_prefix
+        self.assertTrue(APIKey.objects.filter(lookup_prefix=prefix).exists())
+
+        with patch.object(
+            APIKey.objects,
+            "filter",
+            side_effect=RuntimeError("Simulated APIKey deletion failure"),
+        ):
+            with self.assertRaises(RuntimeError):
+                token.delete()
+
+        # Fail-closed check: Token must still exist because transaction rolled back
+        self.assertTrue(Token.objects.filter(lookup_prefix=prefix).exists())
+        self.assertTrue(APIKey.objects.filter(lookup_prefix=prefix).exists())

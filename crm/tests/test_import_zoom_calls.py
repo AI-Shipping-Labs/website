@@ -96,15 +96,15 @@ class ParseTest(TestCase):
         with TemporaryDirectory() as tmp:
             path = Path(tmp) / "1x1"
             path.mkdir(parents=True)
-            file_path = path / "2026-10-02-kalavati-singh-summary.md"
+            file_path = path / "2026-10-02-kim-park-summary.md"
             file_path.write_text(
-                "# 1x1: Kalavati Singh (Kala) and Alexey Grigorev\n\n"
+                "# 1x1: Kim Park (Kimmy) and Alexey Grigorev\n\n"
                 "Date: 2026-10-02\n",
                 encoding="utf-8",
             )
             parsed, reason = parse_summary_file(file_path)
             self.assertIsNone(reason)
-            self.assertEqual(parsed.name, "Kalavati Singh")
+            self.assertEqual(parsed.name, "Kim Park")
 
     def test_missing_date_line_is_skipped_never_guessed(self):
         with TemporaryDirectory() as tmp:
@@ -140,20 +140,20 @@ class _Parsed:
 
 class ResolveEmailTest(TestCase):
     def test_alias_by_name_wins_over_search(self):
-        client = StubClient(users={"k@example.com": ("Kalavati", "Singh")})
-        resolution = resolve_email(client, {"kala": "kala@resolved.com"}, _Parsed("Kala"))
+        client = StubClient(users={"k@example.com": ("Kim", "Park")})
+        resolution = resolve_email(client, {"kim": "kim@resolved.com"}, _Parsed("Kim"))
         self.assertEqual(resolution.status, zoom_call_import.MATCHED)
-        self.assertEqual(resolution.email, "kala@resolved.com")
+        self.assertEqual(resolution.email, "kim@resolved.com")
         self.assertEqual(client.searches, [])
 
     def test_alias_by_file_stem_resolves(self):
         client = StubClient()
         resolution = resolve_email(
             client,
-            {"2026-10-02-kalavati-singh": "kala@resolved.com"},
-            _Parsed("Kalavati Singh", stem="2026-10-02-kalavati-singh"),
+            {"2026-10-02-kim-park": "kim@resolved.com"},
+            _Parsed("Kim Park", stem="2026-10-02-kim-park"),
         )
-        self.assertEqual(resolution.email, "kala@resolved.com")
+        self.assertEqual(resolution.email, "kim@resolved.com")
 
     def test_unique_search_hit_resolves(self):
         client = StubClient(users={"m@example.com": ("Mariano", "Beccaria")})
@@ -239,7 +239,14 @@ class CommandTest(TestCase):
         client_factory = patch.object(
             zoom_call_import, "CrmApiClient", return_value=stub,
         )
-        with client_factory:
+        # CI has no staff token; the command resolves one before it
+        # touches the (patched) client.
+        token_factory = patch.object(
+            zoom_call_import,
+            "resolve_staff_token",
+            return_value="ci-token",
+        )
+        with client_factory, token_factory:
             out = io.StringIO()
             args = [f"--path={root}"]
             if apply:
@@ -269,15 +276,15 @@ class CommandTest(TestCase):
 
     def test_aliases_file_is_loaded(self):
         with TemporaryDirectory() as tmp:
-            _summary_file(tmp, "2026-10-02", "kalavati-singh", "Kalavati Singh")
+            _summary_file(tmp, "2026-10-02", "kim-park", "Kim Park")
             aliases_path = Path(tmp) / "aliases.json"
             aliases_path.write_text(
-                json.dumps({"kalavati singh": "kala@resolved.com"}),
+                json.dumps({"kim park": "kim@resolved.com"}),
                 encoding="utf-8",
             )
             stub = StubClient()
             output = self._run(tmp, stub, apply=True, aliases=str(aliases_path))
-            self.assertEqual(stub.payloads[0]["email"], "kala@resolved.com")
+            self.assertEqual(stub.payloads[0]["email"], "kim@resolved.com")
             self.assertIn("created=1", output)
 
     def test_missing_1x1_dir_fails_with_command_error(self):
@@ -337,8 +344,8 @@ class PlanNoteImportTest(TestCase):
         self.addCleanup(tmp.cleanup)
         _plan_file(
             tmp.name,
-            "20260420_jakob-zischka.md",
-            "# Jakob Zischka\n"
+            "20260420_eli-sample.md",
+            "# Eli Sample\n"
             "\n"
             "## Background\n"
             "\n"
@@ -361,14 +368,14 @@ class PlanNoteImportTest(TestCase):
         return tmp.name
 
     def test_dated_section_imports_as_telegram_call(self):
-        client = StubClient(users={"j@example.com": ("Jakob", "Zischka")})
+        client = StubClient(users={"j@example.com": ("Eli", "Sample")})
         result = run_import(root=self._root(), client=client, apply=True)
         self.assertEqual(len(client.payloads), 1)
         payload = client.payloads[0]
         self.assertEqual(payload["source"], "telegram")
         self.assertEqual(
             payload["source_ref"],
-            "20260420_jakob-zischka#1x1-with-alexey",
+            "20260420_eli-sample#1x1-with-alexey",
         )
         self.assertEqual(payload["email"], "j@example.com")
         self.assertEqual(payload["occurred_at"], "2026-04-23T12:00:00+00:00")
@@ -378,11 +385,11 @@ class PlanNoteImportTest(TestCase):
         self.assertEqual(result.skipped_unresolved, 0)
 
     def test_undated_section_and_bad_stem_are_skipped_with_reasons(self):
-        client = StubClient(users={"j@example.com": ("Jakob", "Zischka")})
+        client = StubClient(users={"j@example.com": ("Eli", "Sample")})
         result = run_import(root=self._root(), client=client, apply=True)
         reasons = {sf.filename: sf.reason for sf in result.skipped_files}
         self.assertEqual(
-            reasons["20260420_jakob-zischka#call-notes"],
+            reasons["20260420_eli-sample#call-notes"],
             "undated call-note section",
         )
         self.assertEqual(
@@ -392,8 +399,8 @@ class PlanNoteImportTest(TestCase):
 
     def test_rerun_classifies_telegram_update_not_create(self):
         client = TelegramStubClient(
-            users={"j@example.com": ("Jakob", "Zischka")},
-            telegram_refs={"20260420_jakob-zischka#1x1-with-alexey"},
+            users={"j@example.com": ("Eli", "Sample")},
+            telegram_refs={"20260420_eli-sample#1x1-with-alexey"},
         )
         result = run_import(root=self._root(), client=client, apply=True)
         self.assertEqual(result.updated, 1)
@@ -401,21 +408,21 @@ class PlanNoteImportTest(TestCase):
 
 
 class TwoSummariesSamePersonTest(TestCase):
-    """sergey-sedler has two summaries and must get two Call rows."""
+    """dana-example has two summaries and must get two Call rows."""
 
     def test_two_summaries_for_one_person_create_two_rows(self):
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        _summary_file(tmp.name, "2026-04-24", "sergey-sedler", "Sergey Sedler")
-        _summary_file(tmp.name, "2026-07-21", "sergey-sedler", "Sergey Sedler")
-        client = StubClient(users={"s@example.com": ("Sergey", "Sedler")})
+        _summary_file(tmp.name, "2026-04-24", "dana-example", "Dana Example")
+        _summary_file(tmp.name, "2026-07-21", "dana-example", "Dana Example")
+        client = StubClient(users={"s@example.com": ("Dana", "Example")})
         result = run_import(root=tmp.name, client=client, apply=True)
         self.assertEqual(result.created, 2)
         self.assertEqual(
             {payload["source_ref"] for payload in client.payloads},
             {
-                "2026-04-24-sergey-sedler-summary",
-                "2026-07-21-sergey-sedler-summary",
+                "2026-04-24-dana-example-summary",
+                "2026-07-21-dana-example-summary",
             },
         )
 
@@ -458,7 +465,7 @@ class ScriptEntrypointTest(TestCase):
 
         tmp = TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
-        _summary_file(tmp.name, "2026-10-12", "sri-sai", "Sri Sai")
+        _summary_file(tmp.name, "2026-10-12", "sri-sai", "Sam Ray")
         sent = []
 
         class ScriptStub(StubClient):
@@ -466,7 +473,13 @@ class ScriptEntrypointTest(TestCase):
                 sent.append(payload)
                 return {"id": 1}
 
-        stub = ScriptStub(users={"k@example.com": ("Kalavati", "Singh")})
+        stub = ScriptStub(users={"k@example.com": ("Kim", "Park")})
+        # CI has no repo .env: stub the token reader too.
+        token_reader = patch.object(
+            self.script, "_read_token", return_value="ci-token",
+        )
+        token_reader.start()
+        self.addCleanup(token_reader.stop)
         original = self.script.zci.CrmApiClient
         self.script.zci.CrmApiClient = lambda **kwargs: stub
         self.addCleanup(setattr, self.script.zci, "CrmApiClient", original)
@@ -476,7 +489,7 @@ class ScriptEntrypointTest(TestCase):
             exit_code = self.script.main(
                 [
                     "--source-dir", tmp.name,
-                    "--map", "Sri Sai=k@example.com",
+                    "--map", "Sam Ray=k@example.com",
                 ],
             )
         self.assertEqual(exit_code, 0)

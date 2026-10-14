@@ -42,8 +42,8 @@ DATE_LINE_RE = re.compile(
 DURATION_LINE_RE = re.compile(
     r'^Duration:\s*(?P<minutes>\d+)\s+minutes?\s*$', re.MULTILINE,
 )
-#: Strips parenthetical aliases: ``Kalavati Singh (Kala)`` ->
-#: ``Kalavati Singh``.
+#: Strips parenthetical aliases: ``Kim Park (Kimmy)`` ->
+#: ``Kim Park``.
 ALIAS_PARENS_RE = re.compile(r'\s*\([^)]*\)\s*')
 
 #: Resolution outcome tokens.
@@ -118,7 +118,7 @@ class ImportResult:
 def participant_from_h1(raw):
     """Extract the participant display name from the H1 remainder.
 
-    ``Kalavati Singh (Kala) and Alexey Grigorev`` -> ``Kalavati Singh``.
+    ``Kim Park (Kimmy) and Alexey Grigorev`` -> ``Kim Park``.
     Parenthetical aliases are stripped; the host is never the
     participant. Returns ``None`` when only the host is named.
     """
@@ -202,7 +202,7 @@ def load_aliases(path):
 
 
 def _alias_email(aliases, *, stem, name):
-    # Operator maps arrive with display-name keys ("Sri Sai=..." via
+    # Operator maps arrive with display-name keys ("Sam Ray=..." via
     # --map); accept both raw and casefolded spellings.
     for key in (stem, name):
         email = aliases.get(key) or aliases.get(key.casefold())
@@ -261,7 +261,7 @@ def _zoom_refs_for_email(client, email, cache):
     """Back-compat wrapper: the ``zoom`` refs for one email."""
     return _refs_for_email(client, email, cache, 'zoom')
 
-#: ``20260420_jakob-zischka.md`` plan stem -> member slug.
+#: ``20260420_eli-sample.md`` plan stem -> member slug.
 PLAN_STEM_RE = re.compile(r'^\d{8}_(?P<slug>[a-z0-9-]+)$')
 
 #: A dated call-note heading: ``## 1x1 with Alexey (Apr 23, 2026)``.
@@ -326,7 +326,7 @@ def heading_slug(title):
 
 
 def plan_member_from_stem(stem):
-    """``20260420_jakob-zischka`` -> ``('jakob-zischka', 'Jakob Zischka')``.
+    """``20260420_eli-sample`` -> ``('eli-sample', 'Eli Sample')``.
 
     The plan belongs to its member, so the member comes from the
     filename; the heading names the call, not the attendee. Returns

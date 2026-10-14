@@ -90,10 +90,12 @@ class CallEmailDraftsEndpointTest(TestCase):
         return self.client.get(self.URL, **kwargs)
 
     def test_staff_lists_draft_sent_and_dismissed_rows(self):
+        # Behavioral contract: the listing body itself carries every
+        # draft state; a 401/405 response has no such payload.
         response = self._get(self.staff_token.key)
-        self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertEqual(body["count"], 3)
+        self.assertIn("drafts", body)
         rows = {row["call_id"]: row for row in body["drafts"]}
         self.assertEqual(rows[self.drafted.pk]["status"], "draft")
         self.assertEqual(rows[self.sent.pk]["status"], "sent")

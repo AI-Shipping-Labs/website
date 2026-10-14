@@ -35,6 +35,7 @@ class R1ImageRecoveryWorkflowContractTest(SimpleTestCase):
                 "retry-stuck-recording-uploads",
                 "purge-plan-sprints-raw-text",
                 "onboarding-staff-notification-recovery",
+                "booking-call-capture",
             ),
         )
 

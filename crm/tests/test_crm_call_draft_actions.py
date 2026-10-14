@@ -106,7 +106,7 @@ class MarkSentActionTest(DraftActionBase):
         call.refresh_from_db()
         first_sent_at = call.email_sent_at
         response = self._post("studio_crm_call_mark_sent", call)
-        self.assertIn(response.status_code, (200, 302))
+        self.assertEqual(response.status_code, 302)
         call.refresh_from_db()
         self.assertEqual(call.email_sent_at, first_sent_at)
 
@@ -116,7 +116,7 @@ class MarkSentActionTest(DraftActionBase):
         call.email_draft_dismissed_at = timezone.now()
         call.save(update_fields=["email_draft_dismissed_at"])
         response = self._post("studio_crm_call_mark_sent", call)
-        self.assertIn(response.status_code, (200, 302))
+        self.assertEqual(response.status_code, 302)
         call.refresh_from_db()
         self.assertIsNone(call.email_sent_at)
 
@@ -124,7 +124,7 @@ class MarkSentActionTest(DraftActionBase):
         self.client.force_login(self.staff)
         call = self._make_call()
         response = self._post("studio_crm_call_mark_sent", call)
-        self.assertIn(response.status_code, (200, 302))
+        self.assertEqual(response.status_code, 302)
         call.refresh_from_db()
         self.assertIsNone(call.email_sent_at)
 
@@ -154,7 +154,7 @@ class DismissDraftActionTest(DraftActionBase):
         call.refresh_from_db()
         first = call.email_draft_dismissed_at
         response = self._post("studio_crm_call_dismiss_draft", call)
-        self.assertIn(response.status_code, (200, 302))
+        self.assertEqual(response.status_code, 302)
         call.refresh_from_db()
         self.assertEqual(call.email_draft_dismissed_at, first)
 

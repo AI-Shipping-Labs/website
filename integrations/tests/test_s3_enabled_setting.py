@@ -102,7 +102,7 @@ class S3EnabledRegistryTest(TestCase):
         intent is only that S3_ENABLED did NOT introduce a group, so it tracks
         the current total rather than a frozen number.
         """
-        self.assertEqual(len(INTEGRATION_GROUPS), 19)
+        self.assertEqual(len(INTEGRATION_GROUPS), 20)
 
 
 class S3ContentUploadEnabledResolutionTest(TestCase):

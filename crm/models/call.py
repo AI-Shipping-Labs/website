@@ -131,6 +131,7 @@ class Call(models.Model):
     recording_url = models.URLField(
         blank=True,
         default='',
+        db_default='',
         help_text=(
             'Zoom recording share/play pointer for the call. Never a '
             'signed download URL (those expire).'
@@ -139,10 +140,12 @@ class Call(models.Model):
     transcript_text = models.TextField(
         blank=True,
         default='',
+        db_default='',
         help_text='Parsed VTT transcript text. Staff-only data.',
     )
     capture_attempts = models.IntegerField(
         default=0,
+        db_default=0,
         help_text='Retry counter while Zoom has not processed the transcript yet.',
     )
     capture_unavailable_at = models.DateTimeField(
@@ -157,11 +160,13 @@ class Call(models.Model):
         max_length=255,
         blank=True,
         default='',
+        db_default='',
         help_text='Draft subject for the attendee summary email.',
     )
     email_draft_body = models.TextField(
         blank=True,
         default='',
+        db_default='',
         help_text='Draft body (plain text) for the attendee summary email.',
     )
     email_draft_ready_at = models.DateTimeField(

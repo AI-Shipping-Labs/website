@@ -515,6 +515,19 @@ rail rule below is scoped to ``min-width: 768px``.
               </a>
             </li>
             <li>
+              <a href="{% url 'studio_call_requests_list' %}"
+                 class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'call_requests' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                 {% if state.active_destination == 'call_requests' %}aria-current="page"{% endif %}>
+                <i data-lucide="phone-incoming" class="w-4 h-4"></i>
+                <span>Call requests</span>
+                {% if state.pending_call_requests_count %}
+                <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-accent/15 text-accent" data-testid="pending-call-requests-badge">
+                  {{ state.pending_call_requests_count }}
+                </span>
+                {% endif %}
+              </a>
+            </li>
+            <li>
               <a href="{% url 'studio_import_batch_list' %}"
                  class="flex items-center space-x-3 px-3 py-2 rounded-lg text-sm {% if state.active_destination == 'imports' %}bg-secondary text-foreground{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary{% endif %} transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                  {% if state.active_destination == 'imports' %}aria-current="page"{% endif %}>

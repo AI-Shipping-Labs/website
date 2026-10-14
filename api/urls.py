@@ -20,6 +20,12 @@ from api.views.articles import (
     article_preview_link,
     article_preview_token_regenerate,
 )
+from api.views.booking import (
+    booking_call_request_approve,
+    booking_call_request_decline,
+    booking_call_request_detail,
+    booking_call_requests_collection,
+)
 from api.views.books import (
     book_chapter_detail,
     book_chapter_pull_notes,
@@ -368,6 +374,27 @@ urlpatterns = [
         "call-profiles/<slug:slug>",
         call_profile_detail,
         name="api_call_profile_detail",
+    ),
+    # ---- Booking call requests (issue #1953) -------------------------
+    path(
+        "booking/call-requests",
+        booking_call_requests_collection,
+        name="api_booking_call_requests_collection",
+    ),
+    path(
+        "booking/call-requests/<int:request_id>/approve",
+        booking_call_request_approve,
+        name="api_booking_call_request_approve",
+    ),
+    path(
+        "booking/call-requests/<int:request_id>/decline",
+        booking_call_request_decline,
+        name="api_booking_call_request_decline",
+    ),
+    path(
+        "booking/call-requests/<int:request_id>",
+        booking_call_request_detail,
+        name="api_booking_call_request_detail",
     ),
     # ---- Worker (issue #714) ------------------------------------------
     # Read-only worker task observability. Register the ``failed`` literal

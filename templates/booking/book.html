@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load accounts_extras %}
+{% load accounts_extras date_formatting %}
 
 {% block title %}Book 30 min with {{ host.name }} | AI Shipping Labs{% endblock %}
 {% block meta_description %}Schedule a 30-minute 1:1 meeting with {{ host.name }}.{% endblock %}
@@ -26,6 +26,135 @@
       </div>
       {% endif %}
 
+      {% if not onboarded %}
+      <div class="rounded-xl border border-accent/40 bg-accent/10 p-6 sm:p-8" data-testid="request-call-onboarding-gate">
+        <div class="flex items-start gap-4">
+          <i data-lucide="sparkles" class="h-6 w-6 text-accent shrink-0 mt-0.5"></i>
+          <div>
+            <h2 class="text-lg font-semibold text-foreground">Finish your onboarding first so we can make the call useful.</h2>
+            <p class="text-sm text-muted-foreground mt-2 leading-relaxed">
+              A few minutes of context helps us prepare the right conversation for you.
+            </p>
+            {% if can_access_onboarding %}
+            <div class="mt-6">
+              <a href="/onboarding/"
+                 class="{% button_classes 'primary' %}"
+                 data-testid="request-call-onboarding-cta">
+                Finish onboarding
+              </a>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% elif has_active_booking %}
+      <div class="rounded-xl border border-accent/30 bg-card p-6 sm:p-8 shadow-sm" data-testid="active-booking-banner">
+        <div class="flex items-start gap-4">
+          <div class="p-2.5 rounded-lg bg-accent/10 text-accent shrink-0">
+            <i data-lucide="calendar-check" class="h-6 w-6"></i>
+          </div>
+          <div class="flex-1">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/15 text-accent">
+              Active meeting scheduled
+            </span>
+            <h2 class="text-xl font-semibold text-foreground mt-2">
+              You already have an active scheduled meeting with {{ active_booking.host.name }}
+            </h2>
+            <div class="mt-4 space-y-2 text-sm text-muted-foreground">
+              <div class="flex items-center gap-2">
+                <i data-lucide="clock" class="h-4 w-4 text-accent"></i>
+                <span>{{ active_booking.start_datetime|member_short_datetime }} UTC ({{ active_booking.duration_minutes }} min)</span>
+              </div>
+              {% if active_booking.zoom_join_url %}
+              <div class="flex items-center gap-2">
+                <i data-lucide="video" class="h-4 w-4 text-accent"></i>
+                <a href="{{ active_booking.zoom_join_url }}" target="_blank" rel="noopener noreferrer" class="text-accent hover:underline font-medium" data-testid="active-booking-zoom-link">
+                  Join Zoom meeting
+                </a>
+              </div>
+              {% endif %}
+            </div>
+            <p class="text-xs text-muted-foreground mt-4">
+              Members can have at most one active scheduled meeting at a time. The new booking calendar is disabled while an active meeting is scheduled.
+            </p>
+            <div class="mt-6 flex flex-wrap items-center gap-3">
+              <a href="{% url 'booking_reschedule' token=active_booking.manage_token %}"
+                 class="{% button_classes 'secondary' %}"
+                 data-testid="active-booking-reschedule"
+                 data-reschedule-link="true">
+                <i data-lucide="calendar-days" class="h-4 w-4"></i>
+                Reschedule meeting
+              </a>
+              <a href="{% url 'booking_cancel' token=active_booking.manage_token %}"
+                 class="{% button_classes 'secondary' extra='text-destructive hover:bg-destructive/10' %}"
+                 data-testid="active-booking-cancel"
+                 data-cancel-link="true">
+                <i data-lucide="x-circle" class="h-4 w-4"></i>
+                Cancel meeting
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% elif has_pending_request %}
+      <div class="rounded-xl border border-accent/30 bg-card p-6 sm:p-8 shadow-sm" data-testid="pending-call-request-banner">
+        <div class="flex items-start gap-4">
+          <div class="p-2.5 rounded-lg bg-accent/10 text-accent shrink-0">
+            <i data-lucide="clock" class="h-6 w-6"></i>
+          </div>
+          <div class="flex-1">
+            <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/15 text-accent">
+              Pending review
+            </span>
+            <h2 class="text-xl font-semibold text-foreground mt-2">
+              Alexey is reviewing your request
+            </h2>
+            <p class="text-sm text-muted-foreground mt-2 leading-relaxed">
+              We received your request to discuss <strong class="text-foreground font-medium">{{ pending_request.topic }}</strong>. Alexey reviews requests regularly and will update your booking allowance once approved.
+            </p>
+            <p class="text-xs text-muted-foreground mt-4">
+              Duplicate requests cannot be submitted while one is pending review.
+            </p>
+          </div>
+        </div>
+      </div>
+      {% elif remaining_allowance <= 0 %}
+      <div class="space-y-6">
+        <div class="rounded-xl border border-border bg-card/60 p-6">
+          <div class="flex items-center gap-3 text-muted-foreground text-sm">
+            <i data-lucide="info" class="h-5 w-5 text-accent shrink-0"></i>
+            <p>Your included 1:1 strategy call has taken place. If you'd like an additional call with {{ host.name }}, submit a request below explaining what you'd like to discuss.</p>
+          </div>
+        </div>
+
+        <form method="post" action="{% url 'request_a_call' %}" class="rounded-xl border border-border bg-card p-6 sm:p-8 space-y-5" data-testid="request-call-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="/book/{{ host.slug }}" />
+          <h2 class="text-xl font-semibold text-foreground">Request an additional call</h2>
+
+          <div>
+            <label for="id_topic" class="block text-sm font-medium text-foreground mb-1.5">Discussion topic *</label>
+            <select name="topic" id="id_topic" required class="app-select w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="request-call-topic">
+              {% for topic in topic_choices %}
+              <option value="{{ topic }}">{{ topic }}</option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div>
+            <label for="id_message" class="block text-sm font-medium text-foreground mb-1.5">What would you like to discuss? *</label>
+            <textarea name="message" id="id_message" rows="4" required class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" placeholder="Provide background on your project, challenges, or questions so Alexey can prepare." data-testid="request-call-message"></textarea>
+          </div>
+
+          <div>
+            <button type="submit" class="{% button_classes 'primary' %}" data-testid="request-call-submit">
+              <i data-lucide="send" class="h-4 w-4"></i>
+              Submit call request
+            </button>
+          </div>
+        </form>
+      </div>
+      {% else %}
       <!-- Booking Container Card -->
       <div class="rounded-xl border border-border bg-card shadow-sm overflow-hidden" data-testid="booking-container" data-host-slug="{{ host.slug }}">
         <div class="grid grid-cols-1 lg:grid-cols-12">
@@ -198,6 +327,7 @@
 
         </div>
       </div>
+      {% endif %}
     </div>
   </section>
 
@@ -206,8 +336,12 @@
 
 <script>
 (function() {
+  const tzSelect = document.getElementById("tz-select");
+  if (!tzSelect) {
+    return;
+  }
   const hostSlug = "{{ host.slug }}";
-  let currentTz = document.getElementById("tz-select").value || "{{ host.timezone }}";
+  let currentTz = tzSelect.value || "{{ host.timezone }}";
   
   // Try to detect user's browser timezone if not manually set
   try {
@@ -241,7 +375,6 @@
   const inputStartIso = document.getElementById("input-start-iso");
   const inputInviteeTz = document.getElementById("input-invitee-tz");
   const selectedSummaryTime = document.getElementById("selected-summary-time");
-  const tzSelect = document.getElementById("tz-select");
 
   tzSelect.addEventListener("change", function() {
     currentTz = this.value;

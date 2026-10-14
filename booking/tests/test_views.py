@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.test import TestCase
 
+from accounts.models import User
 from booking.models import (
     STATUS_CANCELED,
     STATUS_CONFIRMED,
@@ -10,10 +11,26 @@ from booking.models import (
     BookingHost,
     BookingWeeklyWindow,
 )
+from questionnaires.models import Questionnaire, Response
 
 
 class BookingViewsTest(TestCase):
     def setUp(self):
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            password="password123",
+            first_name="Test",
+            last_name="User",
+        )
+        self.questionnaire, _ = Questionnaire.objects.get_or_create(
+            slug="generic-onboarding",
+            defaults={"title": "Generic Onboarding", "purpose": "onboarding"},
+        )
+        Response.objects.create(
+            questionnaire=self.questionnaire,
+            respondent=self.user,
+            status="submitted",
+        )
         self.host, _ = BookingHost.objects.update_or_create(
             slug="alexey",
             defaults={
@@ -36,11 +53,17 @@ class BookingViewsTest(TestCase):
             is_active=True,
         )
 
-    def test_booking_index_redirects(self):
+    def test_booking_index_redirects_anonymous(self):
+        resp = self.client.get("/book")
+        self.assertRedirects(resp, "/accounts/login/?next=/book", fetch_redirect_response=False)
+
+    def test_booking_index_redirects_authenticated(self):
+        self.client.force_login(self.user)
         resp = self.client.get("/book")
         self.assertRedirects(resp, "/book/alexey", fetch_redirect_response=False)
 
     def test_host_booking_view(self):
+        self.client.force_login(self.user)
         resp = self.client.get("/book/alexey")
         self.assertContains(resp, "Alexey Test")
         self.assertContains(resp, "booking-container")
@@ -69,6 +92,7 @@ class BookingViewsTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-view", "join_url": "https://zoom.test/j/view"}
         mock_gcal.return_value = {"id": "gcal-view"}
 
+        self.client.force_login(self.user)
         resp = self.client.post(
             "/book/alexey/confirm",
             {

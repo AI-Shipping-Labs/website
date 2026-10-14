@@ -1,0 +1,204 @@
+{% extends "studio/base.html" %}
+{% load accounts_extras member_badges studio_filters date_formatting %}
+
+{% block studio_title %}Call request #{{ call_request.id }} | Studio{% endblock %}
+
+{% block studio_content %}
+<div class="mb-6">
+  <a href="{% url 'studio_call_requests_list' %}" class="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-4">
+    <i data-lucide="arrow-left" class="h-4 w-4"></i>
+    Back to call requests
+  </a>
+
+  {% studio_header_actions title="Call request review" subtitle="Review member discussion topic and approve or decline additional booking allowance." %}
+    {% if call_request.status == 'approved' %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/15 text-emerald-800 dark:text-emerald-400">
+      Approved
+    </span>
+    {% elif call_request.status == 'declined' %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-destructive/15 text-destructive">
+      Declined
+    </span>
+    {% else %}
+    <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent/15 text-accent">
+      Pending review
+    </span>
+    {% endif %}
+  {% endstudio_header_actions %}
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <!-- Main Column: Request Content & History (8 cols) -->
+  <div class="lg:col-span-8 space-y-6">
+
+    <!-- Request Details -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-4">Request details</h2>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Topic</label>
+          <p class="text-base font-medium text-foreground">{{ call_request.topic }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Message</label>
+          <div class="rounded-lg bg-secondary/50 p-4 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+            {{ call_request.message }}
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4 pt-2 text-xs text-muted-foreground border-t border-border">
+          <div>
+            <span class="font-medium text-foreground">Submitted:</span>
+            {{ call_request.created_at|operator_datetime }} UTC
+          </div>
+          <div>
+            <span class="font-medium text-foreground">Target Host:</span>
+            {{ call_request.host.name }}
+          </div>
+        </div>
+
+        {% if call_request.reviewed_at %}
+        <div class="pt-2 text-xs text-muted-foreground border-t border-border">
+          <span class="font-medium text-foreground">Reviewed:</span>
+          {{ call_request.reviewed_at|operator_datetime }} UTC
+          {% if call_request.reviewed_by %}
+          by {{ call_request.reviewed_by.name|default:call_request.reviewed_by.email }}
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Review Decision Form -->
+    {% if call_request.status == 'pending' %}
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-4">Review decision</h2>
+
+      <form method="post" class="space-y-4">
+        {% csrf_token %}
+        <div>
+          <label for="review_notes" class="block text-sm font-medium text-foreground mb-1.5">
+            Internal review notes (optional)
+          </label>
+          <textarea name="review_notes" id="review_notes" rows="3"
+                    class="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent"
+                    placeholder="Enter any notes on this decision for team reference..."
+                    data-testid="review-notes-input">{{ call_request.review_notes }}</textarea>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit"
+                  formaction="{% url 'studio_call_request_approve' request_id=call_request.id %}"
+                  class="{% button_classes 'primary' %}"
+                  data-testid="approve-request-button">
+            <i data-lucide="check" class="h-4 w-4"></i>
+            Approve request
+          </button>
+
+          <button type="submit"
+                  formaction="{% url 'studio_call_request_decline' request_id=call_request.id %}"
+                  class="{% button_classes 'secondary' extra='text-destructive hover:bg-destructive/10' %}"
+                  data-testid="decline-request-button">
+            <i data-lucide="x" class="h-4 w-4"></i>
+            Decline request
+          </button>
+        </div>
+      </form>
+    </div>
+    {% elif call_request.review_notes %}
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-2">Review notes</h2>
+      <p class="text-sm text-muted-foreground whitespace-pre-wrap">{{ call_request.review_notes }}</p>
+    </div>
+    {% endif %}
+
+    <!-- Member Call History -->
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm" data-testid="member-call-history">
+      <h2 class="text-base font-semibold text-foreground mb-4">Previous call history</h2>
+
+      {% if previous_bookings %}
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-border text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+              <th class="pb-3 pr-4">Host</th>
+              <th class="pb-3 px-4">Date & Time</th>
+              <th class="pb-3 px-4">Topic</th>
+              <th class="pb-3 pl-4 text-right">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-border">
+            {% for booking in previous_bookings %}
+            <tr>
+              <td class="py-3 pr-4 font-medium text-foreground">{{ booking.host.name }}</td>
+              <td class="py-3 px-4 text-muted-foreground">{{ booking.start_datetime|operator_datetime }} UTC</td>
+              <td class="py-3 px-4 text-muted-foreground">{{ booking.discussion_topic|default:"—" }}</td>
+              <td class="py-3 pl-4 text-right">
+                {% if booking.status == 'confirmed' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-800 dark:text-emerald-400">Confirmed</span>
+                {% elif booking.status == 'canceled' %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground">Canceled</span>
+                {% else %}
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-secondary text-muted-foreground">{{ booking.status }}</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-sm text-muted-foreground">No previous calls booked by this member.</p>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Sidebar Column: Member CRM & Profile Context (4 cols) -->
+  <div class="lg:col-span-4 space-y-6">
+    <div class="rounded-xl border border-border bg-card p-6 shadow-sm">
+      <h2 class="text-base font-semibold text-foreground mb-4">Member context</h2>
+
+      <div class="space-y-4">
+        <div>
+          <p class="text-lg font-semibold text-foreground">{{ member.name|default:member.email }}</p>
+          <p class="text-sm text-muted-foreground">{{ member.email }}</p>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">Tier</label>
+          {% if tier_name %}
+          {% member_tier_badge tier_name %}
+          {% else %}
+          <span class="text-sm text-muted-foreground">Free</span>
+          {% endif %}
+        </div>
+
+        <div class="pt-4 border-t border-border space-y-2">
+          {% if crm_record %}
+          <a href="{% url 'studio_crm_detail' crm_id=crm_record.id %}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="contact" class="h-4 w-4"></i>
+            Open member CRM record
+          </a>
+          {% else %}
+          <a href="/studio/crm/?q={{ member.email }}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="search" class="h-4 w-4"></i>
+            Search member in CRM
+          </a>
+          {% endif %}
+
+          <a href="{% url 'studio_user_detail' user_id=member.id %}"
+             class="flex items-center gap-2 text-sm text-accent hover:underline font-medium">
+            <i data-lucide="user" class="h-4 w-4"></i>
+            View Studio user detail
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

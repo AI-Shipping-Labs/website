@@ -1,0 +1,98 @@
+{% extends "studio/base.html" %}
+{% load studio_filters member_badges date_formatting %}
+
+{% block studio_title %}Call requests{% endblock %}
+
+{% block studio_content %}
+{% studio_header_actions title="Call requests" subtitle="Review member requests for additional 1:1 strategy calls." %}
+  {% if counts.pending %}
+  <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-accent/15 text-accent" data-testid="pending-call-requests-badge">
+    {{ counts.pending }} pending
+  </span>
+  {% endif %}
+{% endstudio_header_actions %}
+
+<!-- Filter Tabs -->
+<div class="flex items-center gap-2 mb-6 border-b border-border pb-3">
+  <a href="?status=all"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'all' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-all">
+    All ({{ counts.all }})
+  </a>
+  <a href="?status=pending"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'pending' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-pending">
+    Pending ({{ counts.pending }})
+  </a>
+  <a href="?status=approved"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'approved' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-approved">
+    Approved ({{ counts.approved }})
+  </a>
+  <a href="?status=declined"
+     class="px-3 py-1.5 rounded-lg text-sm transition-colors {% if active_status == 'declined' %}bg-secondary text-foreground font-medium{% else %}text-muted-foreground hover:text-foreground hover:bg-secondary/50{% endif %}"
+     data-testid="filter-status-declined">
+    Declined ({{ counts.declined }})
+  </a>
+</div>
+
+{% if call_requests %}
+<div class="{% studio_list_class 'wrapper' %}">
+  <table class="{% studio_list_class 'table' %}">
+    <thead class="{% studio_list_class 'thead' %}">
+      <tr>
+        <th class="{% studio_list_class 'th' %}">Member</th>
+        <th class="{% studio_list_class 'th' %}">Tier</th>
+        <th class="{% studio_list_class 'th' %}">Topic</th>
+        <th class="{% studio_list_class 'th' %}">Submitted</th>
+        <th class="{% studio_list_class 'th' %}">Status</th>
+        <th class="{% studio_list_class 'th' 'right' %}">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="{% studio_list_class 'tbody' %}">
+      {% for item in call_requests %}
+      <tr class="{% studio_list_class 'row' %}" data-testid="call-request-row" data-request-id="{{ item.request.id }}">
+        <td class="px-6 py-4">
+          <a href="{% url 'studio_call_request_detail' request_id=item.request.id %}" class="text-sm font-medium text-foreground hover:text-accent">
+            {{ item.request.member.name|default:item.request.member.email }}
+          </a>
+          <p class="text-xs text-muted-foreground">{{ item.request.member.email }}</p>
+        </td>
+        <td class="px-6 py-4">
+          {% if item.tier_name %}
+          {% member_tier_badge item.tier_name %}
+          {% else %}
+          <span class="text-xs text-muted-foreground">—</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 text-sm text-foreground">
+          {{ item.request.topic }}
+        </td>
+        <td class="px-6 py-4 text-xs text-muted-foreground">
+          {{ item.request.created_at|operator_datetime }}
+        </td>
+        <td class="px-6 py-4">
+          {% if item.request.status == 'approved' %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/15 text-emerald-800 dark:text-emerald-400">Approved</span>
+          {% elif item.request.status == 'declined' %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-destructive/15 text-destructive">Declined</span>
+          {% else %}
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-accent/15 text-accent">Pending</span>
+          {% endif %}
+        </td>
+        <td class="px-6 py-4 {% studio_list_class 'action_cell' %}">
+          <div class="{% studio_list_class 'action_group' %}">
+            <a href="{% url 'studio_call_request_detail' request_id=item.request.id %}" class="{% studio_action_class 'secondary' %}">
+              Review
+            </a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+{% studio_empty_state 'fresh' entity_label='call request' entity_label_plural='call requests' create_url=None empty_message='No call requests match the selected filter.' testid_suffix='call-requests' %}
+{% endif %}
+{% endblock %}

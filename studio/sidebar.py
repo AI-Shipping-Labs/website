@@ -48,6 +48,8 @@ back to "no section" again.
 
 from django.urls import Resolver404, resolve
 
+from booking.models import STATUS_PENDING, CallRequest
+
 #: Collapsible group slugs, in sidebar order. These match the
 #: ``studio-section-<slug>`` element ids in ``templates/studio/base.html``.
 SECTION_SLUGS = (
@@ -254,6 +256,12 @@ SIDEBAR_ROUTE_FAMILIES = (
         'studio_call_host_create',
         'studio_call_host_edit',
         'studio_call_host_delete',
+    )),
+    ('people', 'call_requests', (
+        'studio_call_requests_list',
+        'studio_call_request_detail',
+        'studio_call_request_approve',
+        'studio_call_request_decline',
     )),
     ('people', 'imports', (
         'studio_import_batch_list',
@@ -651,4 +659,10 @@ def sidebar_state(target):
     state['triggers_active'] = destination in TRIGGER_DESTINATIONS
     state['active_section'] = section
     state['active_destination'] = destination
+
+    try:
+        state['pending_call_requests_count'] = CallRequest.objects.filter(status=STATUS_PENDING).count()
+    except Exception:
+        state['pending_call_requests_count'] = 0
+
     return state

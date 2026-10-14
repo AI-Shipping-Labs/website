@@ -181,6 +181,7 @@ class StudioSidebarStructureTest(TestCase):
         ('/studio/downloads/', 'Downloads'),
         # People
         ('/studio/users/', 'Users'),
+        ('/studio/call-requests/', 'Call requests'),
         ('/studio/imports/', 'Imports'),
         ('/studio/tier_overrides/', 'Tier overrides'),
         ('/studio/tags/', 'Tags'),
@@ -252,7 +253,7 @@ class StudioSidebarStructureTest(TestCase):
                 )
 
     def test_every_rendered_nav_anchor_has_canonical_focus_classes(self):
-        for superuser, expected_count in ((False, 49), (True, 52)):
+        for superuser, expected_count in ((False, 50), (True, 53)):
             with self.subTest(superuser=superuser):
                 response = self._get_studio_dashboard(superuser=superuser)
                 anchors = self._sidebar_anchors(response)
@@ -629,6 +630,7 @@ class StudioSidebarStructureTest(TestCase):
         expected_order = [
             '<span>Users</span>',
             '<span>Call profiles</span>',
+            '<span>Call requests</span>',
             '<span>Imports</span>',
             '<span>Tier overrides</span>',
             '<span>Tags</span>',

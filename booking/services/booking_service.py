@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import logging
 from datetime import date, datetime, timedelta, timezone
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone as dj_timezone
+
+if TYPE_CHECKING:
+    from accounts.models import User
 
 from booking.models import (
     STATUS_CANCELED,
@@ -181,6 +185,7 @@ def create_booking(
     discussion_topic: str = "",
     discussion_notes: str = "",
     company: str = "",
+    member: User | None = None,
 ) -> Booking:
     """Create a verified booking, provisioning Zoom and Google Calendar entries."""
     start_utc = start_datetime if start_datetime.tzinfo else start_datetime.replace(tzinfo=timezone.utc)
@@ -199,9 +204,10 @@ def create_booking(
     if not slot_matches:
         raise SlotUnavailableError("Selected time slot is no longer available.")
 
-    # Match registered member user by email
-    User = get_user_model()
-    member = User.objects.filter(email__iexact=invitee_email.strip()).first()
+    # Match registered member user by email if not provided
+    if member is None:
+        User = get_user_model()
+        member = User.objects.filter(email__iexact=invitee_email.strip()).first()
 
     booking = Booking.objects.create(
         host=host,

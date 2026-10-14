@@ -70,7 +70,19 @@ class TestPublicBookingFlow:
     @browser_journey
     def test_public_booking_and_management(self, django_server, browser):
         _ensure_host()
-        context = browser.new_context()
+        user = create_user("learner@example.com")
+        from questionnaires.models import Questionnaire, Response
+
+        q, _ = Questionnaire.objects.get_or_create(
+            slug="generic-onboarding",
+            defaults={"title": "Generic Onboarding", "purpose": "onboarding"},
+        )
+        Response.objects.get_or_create(
+            questionnaire=q,
+            respondent=user,
+            defaults={"status": "submitted"},
+        )
+        context = auth_context(browser, user.email)
         page = context.new_page()
 
         # 1. Visit /book

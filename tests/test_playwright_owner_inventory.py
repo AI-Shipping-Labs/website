@@ -1948,6 +1948,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "TestPublicBookingFlow::test_public_booking_and_management",
     })
 
+    issue_1953_owners = frozenset({
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_01_anonymous_access_redirects_to_login",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_02_non_onboarded_member_sees_onboarding_gate",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_03_onboarded_member_sees_calendar",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_04_member_completes_booking_and_allowance_consumed",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_05_member_with_active_booking_sees_banner_and_gated",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_06_member_reschedules_active_booking",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_07_member_cancels_active_booking_and_allowance_restores",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_08_member_with_zero_allowance_sees_request_form",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_09_member_submits_call_request_and_sees_pending_banner",
+        "playwright_tests/test_booking_one_call_1953.py::"
+        "TestBookingOneCall1953::test_10_staff_reviews_and_approves_call_request_in_studio",
+    })
+
     issue_1938_owners = frozenset({
         "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
         "test_staff_sees_a_pod_waiting_on_a_proposal_not_idle",
@@ -2213,8 +2236,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2943)
-        self.assertEqual(len(inventory.owners), 2739)
+        self.assertEqual(inventory.item_count, 2953)
+        self.assertEqual(len(inventory.owners), 2749)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2252,6 +2275,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1928_owners
             | self.issue_1940_owners
             | self.issue_1948_owners
+            | self.issue_1953_owners
             | self.issue_1949_owners
             | self.issue_1938_owners
             | self.issue_1921_owners

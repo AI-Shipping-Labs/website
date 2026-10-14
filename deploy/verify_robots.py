@@ -11,6 +11,23 @@ class RobotsVerificationError(ValueError):
     """The robots response was unavailable or violated its contract."""
 
 
+APPROVED_DISALLOW_PATHS = (
+    '/accounts/',
+    '/register',
+    '/api/',
+    '/blog?*tag=',
+    '/blog?*topic=',
+    '/projects?*difficulty=',
+    '/projects?*tag=',
+    '/resources?*tag=',
+    '/downloads?*tag=',
+    '/workshops/catalog?*tag=',
+    '/workshops/catalog?*topic=',
+    '/events?*filter=',
+    '/events?*tag=',
+)
+
+
 def validate_robots(body, content_type, expected_sitemap):
     """Validate and return directive counts for the production response."""
     media_type = str(content_type or '').split(';', 1)[0].strip().lower()
@@ -33,8 +50,6 @@ def validate_robots(body, content_type, expected_sitemap):
         parsed.append((name.strip().lower(), value.strip()))
 
     names = Counter(name for name, _value in parsed)
-    if names['disallow']:
-        raise RobotsVerificationError('Disallow directive present')
     if names['user-agent'] != 1 or [
         value for name, value in parsed if name == 'user-agent'
     ] != ['*']:
@@ -50,9 +65,26 @@ def validate_robots(body, content_type, expected_sitemap):
     ]:
         raise RobotsVerificationError('unexpected Sitemap target')
 
-    expected_names = {'user-agent', 'allow', 'sitemap'}
+    expected_names = {'user-agent', 'allow', 'disallow', 'sitemap'}
     if set(names) != expected_names:
         raise RobotsVerificationError('unexpected robots directive')
+
+    disallow_paths = tuple(
+        value for name, value in parsed if name == 'disallow'
+    )
+    if Counter(disallow_paths) != Counter(APPROVED_DISALLOW_PATHS):
+        raise RobotsVerificationError('unexpected Disallow directives')
+
+    expected_directives = [
+        ('user-agent', '*'),
+        ('allow', '/'),
+        *((('disallow', path) for path in APPROVED_DISALLOW_PATHS)),
+        ('sitemap', expected_sitemap),
+    ]
+    if not parsed or parsed[0] != ('user-agent', '*'):
+        raise RobotsVerificationError('User-agent must be the first directive')
+    if Counter(parsed) != Counter(expected_directives):
+        raise RobotsVerificationError('unexpected robots directives')
     return names
 
 

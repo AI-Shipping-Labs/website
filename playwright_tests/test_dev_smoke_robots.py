@@ -1,30 +1,82 @@
 """Anonymous deployed-dev robots and crawlability smoke check (#1380)."""
 
+from collections import Counter
+from urllib.parse import urlsplit
+
 import pytest
 
 from playwright_tests.conftest import base_url_is_local, goto_with_retry
 
+PRODUCTION_HOST = 'aishippinglabs.com'
+PUBLIC_CRAWL_DIRECTIVES = (
+    ('user-agent', '*'),
+    ('allow', '/'),
+)
+PRODUCTION_ROBOTS_DIRECTIVES = PUBLIC_CRAWL_DIRECTIVES + (
+    ('disallow', '/accounts/'),
+    ('disallow', '/register'),
+    ('disallow', '/api/'),
+    ('disallow', '/blog?*tag='),
+    ('disallow', '/blog?*topic='),
+    ('disallow', '/projects?*difficulty='),
+    ('disallow', '/projects?*tag='),
+    ('disallow', '/resources?*tag='),
+    ('disallow', '/downloads?*tag='),
+    ('disallow', '/workshops/catalog?*tag='),
+    ('disallow', '/workshops/catalog?*topic='),
+    ('disallow', '/events?*filter='),
+    ('disallow', '/events?*tag='),
+    ('sitemap', 'https://aishippinglabs.com/sitemap.xml'),
+)
+
+
+def _parse_directives(body):
+    directives = []
+    for raw_line in body.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        name, separator, value = line.partition(':')
+        assert separator, f'Malformed robots directive: {line!r}'
+        directives.append((name.strip().lower(), value.strip()))
+    return tuple(directives)
+
+
+def _is_production_target(django_server):
+    target = django_server
+    if base_url_is_local():
+        from django.conf import settings
+
+        target = settings.SITE_BASE_URL
+    return urlsplit(str(target).strip()).hostname == PRODUCTION_HOST
+
+
+def _assert_approved_robots_policy(directives, *, production):
+    expected = (
+        PRODUCTION_ROBOTS_DIRECTIVES if production else PUBLIC_CRAWL_DIRECTIVES
+    )
+    assert directives[:1] == (('user-agent', '*'),)
+    assert directives.count(('user-agent', '*')) == 1
+    assert Counter(directives) == Counter(expected)
+
 
 @pytest.mark.core
+@pytest.mark.django_db(transaction=True)
 def test_robots_allows_crawling_and_dev_targets_expose_noindex(django_server, page):
     response = goto_with_retry(page, f'{django_server}/robots.txt')
     assert response.status == 200
     assert response.headers['content-type'].startswith('text/plain')
     body = response.body().decode('utf-8')
-    directives = [line.strip() for line in body.splitlines() if line.strip()]
-    assert 'Disallow:' not in body
+    directives = _parse_directives(body)
+    assert ('disallow', '/') not in directives
 
-    if base_url_is_local():
-        from django.conf import settings
-
-        expected = ['User-agent: *', 'Allow: /']
-        if settings.SITE_BASE_URL.rstrip('/') == 'https://aishippinglabs.com':
-            expected.append('Sitemap: https://aishippinglabs.com/sitemap.xml')
-        assert directives == expected
+    production = _is_production_target(django_server)
+    _assert_approved_robots_policy(directives, production=production)
+    if production:
         return
 
-    assert directives == ['User-agent: *', 'Allow: /']
-    assert 'Sitemap:' not in body
+    if base_url_is_local():
+        return
 
     expected_header = 'noindex, nofollow, noarchive'
     assert response.headers['x-robots-tag'] == expected_header

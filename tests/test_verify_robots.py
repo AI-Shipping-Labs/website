@@ -22,6 +22,19 @@ EXPECTED_SITEMAP = 'https://aishippinglabs.com/sitemap.xml'
 VALID_BODY = (
     b'User-agent: *\n'
     b'Allow: /\n'
+    b'Disallow: /accounts/\n'
+    b'Disallow: /register\n'
+    b'Disallow: /api/\n'
+    b'Disallow: /blog?*tag=\n'
+    b'Disallow: /blog?*topic=\n'
+    b'Disallow: /projects?*difficulty=\n'
+    b'Disallow: /projects?*tag=\n'
+    b'Disallow: /resources?*tag=\n'
+    b'Disallow: /downloads?*tag=\n'
+    b'Disallow: /workshops/catalog?*tag=\n'
+    b'Disallow: /workshops/catalog?*topic=\n'
+    b'Disallow: /events?*filter=\n'
+    b'Disallow: /events?*tag=\n'
     b'\n'
     b'Sitemap: https://aishippinglabs.com/sitemap.xml\n'
 )
@@ -38,6 +51,7 @@ class RobotsValidationTest(SimpleTestCase):
 
         self.assertEqual(result['user-agent'], 1)
         self.assertEqual(result['allow'], 1)
+        self.assertEqual(result['disallow'], 13)
         self.assertEqual(result['sitemap'], 1)
 
     def test_rejects_non_plain_text_and_invalid_utf8(self):
@@ -57,11 +71,29 @@ class RobotsValidationTest(SimpleTestCase):
                         EXPECTED_SITEMAP,
                     )
 
-    def test_rejects_disallow_and_missing_or_duplicate_allow_all_group(self):
+    def test_rejects_unapproved_disallow_and_invalid_allow_all_group(self):
         cases = (
             (
                 VALID_BODY + b'Disallow: /private\n',
-                'Disallow directive present',
+                'unexpected Disallow directives',
+            ),
+            (
+                VALID_BODY.replace(b'Disallow: /accounts/\n', b''),
+                'unexpected Disallow directives',
+            ),
+            (
+                VALID_BODY.replace(
+                    b'Disallow: /accounts/\n',
+                    b'Disallow: /accounts/\nDisallow: /accounts/\n',
+                ),
+                'unexpected Disallow directives',
+            ),
+            (
+                VALID_BODY.replace(
+                    b'Disallow: /accounts/\n',
+                    b'Disallow: /\n',
+                ),
+                'unexpected Disallow directives',
             ),
             (
                 VALID_BODY.replace(b'User-agent: *\n', b''),
@@ -73,6 +105,13 @@ class RobotsValidationTest(SimpleTestCase):
                     b'User-agent: *\nUser-agent: Googlebot\n',
                 ),
                 'exactly one User-agent',
+            ),
+            (
+                VALID_BODY.replace(
+                    b'User-agent: *\nAllow: /\n',
+                    b'Allow: /\nUser-agent: *\n',
+                ),
+                'User-agent must be the first directive',
             ),
             (
                 VALID_BODY.replace(b'Allow: /\n', b''),
@@ -94,6 +133,20 @@ class RobotsValidationTest(SimpleTestCase):
                         'text/plain',
                         EXPECTED_SITEMAP,
                     )
+
+    def test_accepts_reordered_approved_disallow_directives(self):
+        reordered = VALID_BODY.replace(
+            b'Disallow: /accounts/\nDisallow: /register\n',
+            b'Disallow: /register\nDisallow: /accounts/\n',
+        )
+
+        result = verify_robots.validate_robots(
+            reordered,
+            'text/plain',
+            EXPECTED_SITEMAP,
+        )
+
+        self.assertEqual(result['disallow'], 13)
 
     def test_rejects_missing_duplicate_or_unexpected_sitemap(self):
         wrong_targets = (

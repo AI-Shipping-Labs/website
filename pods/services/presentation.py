@@ -47,6 +47,7 @@ from pods.services.people import (
     humanize_age,
     is_slack_eligible,
     offset_range_label,
+    slack_eligibility_map,
     timezone_label,
 )
 from pods.services.slack import profile_url, suggested_channel_name
@@ -396,12 +397,18 @@ def build_pod_page(pod, viewer, *, now=None):
             notice['link_url'] = activity.list_url()
     show_private = is_member or is_staff
     viewer_slack_ok = is_slack_eligible(viewer)
+    # One batched read answers every member eligibility check below; the
+    # per-member path cost several queries per member.
+    member_eligibility = slack_eligibility_map(members) if is_member else {}
 
     member_rows = []
     for user in members:
         member = availability[user.pk]
         slack_url = ''
-        if is_member and viewer_slack_ok and user.pk != viewer.pk and is_slack_eligible(user):
+        if (
+            is_member and viewer_slack_ok and user.pk != viewer.pk
+            and member_eligibility.get(user.pk)
+        ):
             slack_url = profile_url(user)
         member_rows.append({
             'user_id': user.pk,
@@ -478,7 +485,7 @@ def build_pod_page(pod, viewer, *, now=None):
     slack = None
     if is_member:
         others_below_main = any(
-            not is_slack_eligible(u) for u in members if u.pk != viewer.pk
+            not member_eligibility.get(u.pk) for u in members if u.pk != viewer.pk
         )
         slack = {
             'channel_url': pod.slack_channel_url,

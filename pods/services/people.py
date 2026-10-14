@@ -6,7 +6,12 @@ from zoneinfo import ZoneInfo
 from django.utils import timezone
 
 from accounts.services.timezones import get_timezone_label, is_valid_timezone
-from content.access import LEVEL_MAIN, can_access, get_user_level
+from content.access import (
+    LEVEL_MAIN,
+    can_access,
+    get_active_overrides_by_user,
+    get_user_level,
+)
 from content.models import CohortEnrollment
 from content.models.cohort import COHORT_MODE_COHORT
 
@@ -52,6 +57,46 @@ def can_view_cohort_pods(user, cohort):
 def is_slack_eligible(user):
     """Same rule as ``/community/slack``: Main or above."""
     return get_user_level(user) >= LEVEL_MAIN
+
+
+def slack_eligibility_map(users):
+    """``{user_id: is_slack_eligible}`` for many members, in two queries.
+
+    ``is_slack_eligible`` resolves a membership row and the strongest
+    active tier override per user; the pod page asks for every member on
+    one request, which used to cost several queries per member. This
+    resolves the same rule for the whole set: staff and superusers are
+    Main by definition, a user without a membership row reads level 0
+    (``Membership.for_user`` would lazily create one with no tier), and
+    the override map keeps ``get_user_level``'s strongest-override-wins.
+    """
+    result = {}
+    member_ids = []
+    for user in users:
+        if not getattr(user, 'is_authenticated', False):
+            result[user.pk] = False
+        elif user.is_staff or user.is_superuser:
+            result[user.pk] = True
+        else:
+            member_ids.append(user.pk)
+    if not member_ids:
+        return result
+    from payments.models import Membership
+
+    base_levels = {
+        membership.user_id: membership.tier.level
+        for membership in Membership.objects.filter(user__in=member_ids)
+        .select_related('tier')
+        if membership.tier_id is not None
+    }
+    overrides = get_active_overrides_by_user(member_ids)
+    for user_id in member_ids:
+        level = base_levels.get(user_id, 0)
+        override = overrides.get(user_id)
+        if override is not None:
+            level = max(level, override.override_tier.level)
+        result[user_id] = level >= LEVEL_MAIN
+    return result
 
 
 def user_timezone_name(user, profile=None):

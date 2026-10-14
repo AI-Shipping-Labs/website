@@ -86,6 +86,9 @@ class CourseHomeQueryGrowthTests(TestCase):
             answer_type=AnswerType.ANY,
         )
 
+    def _content_id(self, index):
+        return Unit.objects.get(slug=f"homework-{index}").content_id
+
     def _tab_paths(self):
         return {
             "home": "/courses/query-growth/home?cohort=4",
@@ -137,3 +140,35 @@ class CourseHomeQueryGrowthTests(TestCase):
         self.client.force_login(self.user)
         with self.assertNumQueries(self._queries(self._tab_paths()["syllabus"])):
             self.client.get(self._tab_paths()["syllabus"])
+
+    def test_loader_fallback_prefers_the_latest_started_cohort(self):
+        """No enrolled cohort: the batched fallback mirrors
+        ``resolve_homework_for_unit`` -- the latest-started course cohort
+        that has the homework wins, not an arbitrary row."""
+        from content.services.current_module import HomeworkStateLoader
+
+        expected = Homework.objects.get(cohort=self.cohort, slug="homework-0")
+        earlier = Cohort.objects.create(
+            course=self.course, name="Older cohort", external_key="older",
+            start_date=timezone.localdate() - datetime.timedelta(days=40),
+            end_date=timezone.localdate() - datetime.timedelta(days=5),
+        )
+        Homework.objects.create(
+            cohort=earlier, slug="homework-0", title="Older homework",
+            content_id=expected.content_id,
+        )
+        unit = Unit.objects.get(slug="homework-0")
+        other_user = User.objects.create_user(
+            email="no-enrollment@example.com", password="testpass",
+            email_verified=True,
+        )
+
+        loader = HomeworkStateLoader(other_user, None, self.course)
+        state = loader.state_for(unit)
+
+        self.assertFalse(state["submitted"])
+        self.assertEqual(state["questions"], 1)
+        self.assertEqual(
+            loader._homework_by_content_id[expected.content_id].pk,
+            expected.pk,
+        )

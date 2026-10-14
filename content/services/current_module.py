@@ -233,9 +233,16 @@ class HomeworkStateLoader:
         if unresolved:
             fallback_ids = list(self._fallback_cohort_ids())
             if fallback_ids:
-                for homework in Homework.objects.filter(
-                    content_id__in=unresolved, cohort_id__in=fallback_ids,
-                ).order_by('pk'):
+                ranks = {
+                    cohort_id: index for index, cohort_id in enumerate(fallback_ids)
+                }
+                candidates = sorted(
+                    Homework.objects.filter(
+                        content_id__in=unresolved, cohort_id__in=fallback_ids,
+                    ),
+                    key=lambda homework: (ranks[homework.cohort_id], homework.pk),
+                )
+                for homework in candidates:
                     by_content_id.setdefault(homework.content_id, homework)
         return list(by_content_id.values())
 

@@ -103,7 +103,9 @@ class CourseHomeQueryGrowthTests(TestCase):
     def _queries(self, path):
         with CaptureQueriesContext(connection) as captured:
             response = self.client.get(path)
-        self.assertEqual(response.status_code, 200, path)
+        # The course-home shell renders on every tab; this doubles as the
+        # success contract so a 404 can never pass a query-count assertion.
+        self.assertContains(response, 'data-testid="course-home"')
         return len(captured.captured_queries)
 
     def test_tab_query_counts_do_not_grow_with_homework_count(self):

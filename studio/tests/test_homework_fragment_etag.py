@@ -22,7 +22,7 @@ class HomeworkFragmentEtagTest(HomeworkStudioSetupMixin, TestCase):
         self.client.login(email='staff@test.com', password='testpass')
 
         first = self.client.get(self.url())
-        self.assertEqual(first.status_code, 200)
+        self.assertContains(first, 'data-testid="homework-submissions-fragment"')
         etag = first['ETag']
         self.assertTrue(etag)
 
@@ -39,10 +39,9 @@ class HomeworkFragmentEtagTest(HomeworkStudioSetupMixin, TestCase):
             homework_link='', answers_by_question_id={self.question.pk: '4'},
         )
         second = self.client.get(self.url(), HTTP_IF_NONE_MATCH=etag)
-        self.assertEqual(second.status_code, 200)
-        self.assertNotEqual(second['ETag'], etag)
         self.assertContains(second, 'data-submission-count="1"')
         self.assertContains(second, 'student-studio@test.com')
+        self.assertNotEqual(second['ETag'], etag)
 
     def test_changed_answer_revises_the_etag(self):
         self.client.login(email='staff@test.com', password='testpass')
@@ -58,5 +57,5 @@ class HomeworkFragmentEtagTest(HomeworkStudioSetupMixin, TestCase):
             homework_link='', answers_by_question_id={self.question.pk: '5'},
         )
         second = self.client.get(self.url(), HTTP_IF_NONE_MATCH=etag)
-        self.assertEqual(second.status_code, 200)
+        self.assertContains(second, '<p>5</p>')
         self.assertNotEqual(second['ETag'], etag)

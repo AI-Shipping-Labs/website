@@ -64,9 +64,9 @@ class ArtifactSizeBytesTest(TestCase):
 
     def test_staff_api_list_reports_stored_size_without_bodies(self):
         response = self.get_list()
-        self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload['total'], 1)
         row = payload['artifacts'][0]
+        self.assertEqual(row['title'], 'Session transcript')
         self.assertEqual(row['size_bytes'], len(BODY.encode('utf-8')))
         self.assertNotIn('body', row)

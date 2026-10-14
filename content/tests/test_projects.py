@@ -13,6 +13,7 @@ Covers:
 import json
 import re
 from datetime import date
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
@@ -21,6 +22,29 @@ from content.access import LEVEL_BASIC, LEVEL_OPEN
 from content.models import Project
 
 User = get_user_model()
+
+
+class _AnchorTextParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.anchors = []
+        self._attrs = None
+        self._text = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a' and self._attrs is None:
+            self._attrs = dict(attrs)
+            self._text = []
+
+    def handle_data(self, data):
+        if self._attrs is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag):
+        if tag == 'a' and self._attrs is not None:
+            self.anchors.append((self._attrs, ''.join(self._text).strip()))
+            self._attrs = None
+            self._text = []
 
 
 # --- Model behavior tests ---
@@ -281,10 +305,16 @@ class ProjectsListFilteringTest(TestCase):
         self.assertContains(response, 'No projects match these tags')
         self.assertContains(response, 'No projects match the selected tags.')
         self.assertContains(response, 'data-empty-kind="filter"')
-        self.assertContains(
-            response,
-            '<a href="/projects" class="text-accent hover:underline">View all projects</a>',
-            html=True,
+        parser = _AnchorTextParser()
+        parser.feed(response.content.decode())
+        clear_links = [
+            attrs for attrs, text in parser.anchors
+            if attrs.get('href') == '/projects' and text == 'View all projects'
+        ]
+        self.assertEqual(len(clear_links), 1)
+        self.assertIn(
+            'nofollow',
+            clear_links[0].get('rel', '').split(),
         )
 
     def test_filter_by_nonexistent_difficulty(self):
@@ -503,10 +533,16 @@ class ProjectsUnspecifiedDifficultyTest(TestCase):
         self.assertNotContains(response, 'Rated Beginner')
         self.assertContains(response, 'No projects match this difficulty')
         self.assertContains(response, 'data-empty-kind="filter"')
-        self.assertContains(
-            response,
-            '<a href="/projects" class="text-accent hover:underline">View all projects</a>',
-            html=True,
+        parser = _AnchorTextParser()
+        parser.feed(response.content.decode())
+        clear_links = [
+            attrs for attrs, text in parser.anchors
+            if attrs.get('href') == '/projects' and text == 'View all projects'
+        ]
+        self.assertEqual(len(clear_links), 1)
+        self.assertIn(
+            'nofollow',
+            clear_links[0].get('rel', '').split(),
         )
 
 

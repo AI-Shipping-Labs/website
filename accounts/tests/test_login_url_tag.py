@@ -8,8 +8,8 @@ after successful authentication. The exclusion list and sanitizer are
 shared with the logout flow.
 """
 
-import re
 from datetime import timedelta
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
@@ -21,6 +21,30 @@ from content.access import LEVEL_OPEN
 from content.models import Article
 
 User = get_user_model()
+
+
+class _AnchorParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.anchors = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag == "a":
+            self.anchors.append(dict(attrs))
+
+
+def _anchors(response):
+    parser = _AnchorParser()
+    parser.feed(response.content.decode())
+    return parser.anchors
+
+
+def _header_sign_in_links(anchors):
+    return [
+        anchor
+        for anchor in anchors
+        if anchor.get("data-testid") == "header-sign-in-link"
+    ]
 
 
 def _render(path):
@@ -156,38 +180,35 @@ class HeaderSignInLinkTest(TestCase):
         pointing back at the current blog post."""
         response = self.client.get(f"/blog/{self.article.slug}")
         self.assertEqual(response.status_code, 200)
-        body = response.content.decode()
 
         expected_href = (
             f'/accounts/login/?next=%2Fblog%2F{self.article.slug}'
         )
-        header_sign_in_hrefs = re.findall(
-            r'href="([^"]+)" data-testid="header-sign-in-link"',
-            body,
-        )
+        anchors = _anchors(response)
+        header_sign_in_links = _header_sign_in_links(anchors)
         self.assertEqual(
-            header_sign_in_hrefs,
-            [expected_href, expected_href],
+            len(header_sign_in_links),
+            2,
             (
                 f"Expected the desktop AND mobile Sign-in links to render "
-                f"href={expected_href!r}; found {header_sign_in_hrefs!r}."
+                f"href={expected_href!r}; found {header_sign_in_links!r}."
             ),
         )
-        # Defensive: the bare login URL (no ``?next=``) must NOT be
-        # rendered as a Sign-in href on a public detail page.
-        self.assertNotIn('href="/accounts/login/"', body)
+        for link in header_sign_in_links:
+            self.assertEqual(link.get("href"), expected_href)
+            self.assertIn("nofollow", link.get("rel", "").split())
+        self.assertNotIn(
+            "/accounts/login/",
+            [anchor.get("href") for anchor in anchors],
+        )
 
     def test_homepage_header_sign_in_links_have_no_next(self):
         """On ``/`` both Sign-in links render the bare URL with no
         ``?next=`` (round-trip is pointless)."""
         response = self.client.get("/")
         self.assertEqual(response.status_code, 200)
-        body = response.content.decode()
-        header_sign_in_hrefs = re.findall(
-            r'href="([^"]+)" data-testid="header-sign-in-link"',
-            body,
-        )
-        self.assertEqual(
-            header_sign_in_hrefs,
-            ["/accounts/login/", "/accounts/login/"],
-        )
+        header_sign_in_links = _header_sign_in_links(_anchors(response))
+        self.assertEqual(len(header_sign_in_links), 2)
+        for link in header_sign_in_links:
+            self.assertEqual(link.get("href"), "/accounts/login/")
+            self.assertIn("nofollow", link.get("rel", "").split())

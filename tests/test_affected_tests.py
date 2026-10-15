@@ -51,6 +51,7 @@ from scripts.affected_tests import (
     REPO_WIDE_GUARDS,
     REPO_WIDE_TEMPLATE_LINT_LABELS,
     REVERSE_IMPORT_APP_CAP,
+    TAILWIND_INPUT_CSS_GLOBS,
     TAILWIND_PRODUCER_GLOBS,
     TEST_TREE_CONTRACTS,
     TESTS_PACKAGE,
@@ -777,6 +778,45 @@ class RuleChainTest(SimpleTestCase):
         self.assertEqual(plan.playwright, "full")
         self.assertEqual(plan.django_labels, collapsed(*guards("tailwind.config.js")))
         self.assertEqual(plan.commands(), [plan.django_command, PLAYWRIGHT_FULL_COMMAND])
+
+    def test_tailwind_input_css_runs_the_build_gate_with_no_django_label(self):
+        """Origin: #1835 -- the Tailwind input stylesheet fell through to rule
+        13 (`WARN unmapped` + `make test-core`) and never ran the one check
+        that compiles it."""
+        # Rot guard: the glob still names the file the npm build compiles. If
+        # `css:build` moves its `-i` input, this row would silently map nothing.
+        css_build = json.loads((REPO_ROOT / "package.json").read_text())["scripts"]["css:build"]
+        build_input = css_build.split(" -i ", 1)[1].split()[0]
+        self.assertTrue((REPO_ROOT / build_input).is_file())
+        self.assertTrue(
+            any(fnmatch.fnmatchcase(build_input, glob) for glob in TAILWIND_INPUT_CSS_GLOBS),
+            f"{build_input} is not covered by TAILWIND_INPUT_CSS_GLOBS",
+        )
+
+        plan = plan_for([build_input])
+        self.assertEqual(plan.unmapped, [])
+        self.assertFalse(any(note.startswith("WARN unmapped:") for note in plan.notes))
+        self.assertEqual(plan.django_labels, [])
+        self.assertIsNone(plan.django_command)
+        self.assertEqual(plan.extra_commands, [CHECK_TAILWIND_COMMAND])
+        self.assertEqual(plan.playwright, "core")
+        self.assertEqual(plan.escalation_reasons, [])
+        self.assertEqual(plan.commands(), [CHECK_TAILWIND_COMMAND, PLAYWRIGHT_CORE_COMMAND])
+
+    def test_tailwind_input_css_composes_with_an_app_template(self):
+        template = "templates/plans/my_plan_detail.html"
+        plan = plan_for(["assets/css/tailwind.css", template])
+        self.assertEqual(plan.django_labels, collapsed("plans", *TEMPLATE_GUARD_LABELS))
+        self.assertEqual(plan.extra_commands, [CHECK_TAILWIND_COMMAND])
+        self.assertEqual(plan.unmapped, [])
+        self.assertEqual(plan.playwright, "core")
+
+    def test_other_assets_paths_still_fail_closed(self):
+        # The row is the build-input directory, deliberately not `assets/**`.
+        plan = plan_for(["assets/js/widget.js"])
+        self.assertEqual(plan.unmapped, ["assets/js/widget.js"])
+        self.assertEqual(plan.extra_commands, [CORE_COMMAND])
+        self.assertNotIn(CHECK_TAILWIND_COMMAND, plan.extra_commands)
 
     def test_single_app_migration_targets_only_that_app(self):
         path = "events/migrations/0042_add_field.py"

@@ -27,6 +27,7 @@ EXPECTED_GROUPS = {
     "crm-export",
     "event-series",
     "events",
+    "homework",
     "hosts",
     "integrations",
     "onboarding",

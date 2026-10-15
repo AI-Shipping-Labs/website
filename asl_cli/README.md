@@ -343,6 +343,43 @@ onto `community_base.coursework`.
 uv run asl sprints course-coursework-inventory ai-buildcamp
 ```
 
+### Recording a submission on a member's behalf
+
+When a member sends their homework or project some other way (an email, a
+Slack message), record it as their submission. It is scored exactly like the
+member's own submit, marked "Recorded by staff" with your note (Studio shows
+the badge), and logged in the audit log with your token. Homework open/closed
+state is not checked, so late and retroactive submissions work; use
+`--submitted-at` to backdate. An existing submission is refused unless
+`--replace`; a project already in peer review is never replaced. The member is
+not notified unless `--notify` (bell + `submission_recorded` email). Always try
+`--dry-run` first: it validates, scores, and shows the result without writing.
+
+```bash
+# Find the homework slug and the question keys --answer takes
+uv run asl homework list ai-buildcamp
+
+# Preview, then record. @file / @- read an answer from a file or stdin
+uv run asl homework submit --as member@example.com \
+  --course ai-buildcamp --homework week-2-homework \
+  --answer project-idea=@idea-from-email.txt --answer q-model=2 \
+  --submitted-at 2026-09-01T09:30:00Z --note "Sent by email on 2026-09-01" \
+  --dry-run
+uv run asl homework submit --as member@example.com \
+  --course ai-buildcamp --homework week-2-homework \
+  --answer project-idea=@idea-from-email.txt --answer q-model=2 \
+  --submitted-at 2026-09-01T09:30:00Z --note "Sent by email on 2026-09-01"
+
+# Projects: --project is the dated attempt slug (omit for an undated course)
+uv run asl homework submit-project --as member@example.com --course ai-buildcamp \
+  --project attempt-1 --url https://github.com/member/invoice-bot \
+  --description @idea-from-email.txt --note "Emailed project" --dry-run
+```
+
+Choice questions take the 1-based option index (`2`, or `1,3` for checkboxes)
+or the exact option text. When the slug exists in several cohorts, the
+member's own cohort is used, otherwise pass `--cohort`.
+
 ### Escape hatch
 
 ```bash
@@ -352,4 +389,4 @@ uv run asl raw POST /api/v1/settings/import --data '{"settings":{"SITE_BASE_URL"
 
 ## Command groups
 
-`events`, `event-series`, `users`, `sprints`, `plans`, `comments`, `contacts`, `content`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`
+`events`, `event-series`, `homework`, `users`, `sprints`, `plans`, `comments`, `contacts`, `content`, `tier-overrides`, `campaigns`, `integrations`, `sync`, `worker`, `triggers`, `onboarding`, `redirects`, `utm-campaigns`, `hosts`, `articles`, `tier-reconcile`, `ses-events`, `crm-export`, `cleanup-gates`, `openapi`, `raw`

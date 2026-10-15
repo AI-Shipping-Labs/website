@@ -9,7 +9,7 @@ export" (the explicitly deferred operator surface -- not built here).
 import datetime
 from urllib.parse import urlencode
 
-from django.db.models import Count, Max, Sum
+from django.db.models import Count, Max, Sum, prefetch_related_objects
 from django.http import HttpResponse, HttpResponseNotModified
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
@@ -243,24 +243,10 @@ def homework_submissions(request, homework_id):
     re-score, or export controls.
     """
     homework = get_object_or_404(
-        Homework.objects.select_related('cohort', 'cohort__course').prefetch_related(
-            'questions',
-        ),
+        Homework.objects.select_related('cohort', 'cohort__course'),
         pk=homework_id,
     )
-    submissions = (
-        Submission.objects
-        .filter(homework=homework)
-        .select_related('student')
-        .prefetch_related('answers__question')
-        .order_by('-submitted_at')
-    )
     course = homework.cohort.course
-    units = _units_by_content_id(
-        course,
-        [homework.content_id] if homework.content_id else [],
-    )
-    unit = units.get(homework.content_id) if homework.content_id else None
     if request.GET.get('fragment') == 'submissions':
         # The staff page polls this fragment every five seconds. An unchanged
         # page answers 304 on row identities alone, so an open tab no longer
@@ -268,6 +254,25 @@ def homework_submissions(request, homework_id):
         etag = f'"hw{homework.pk}-r{_submissions_revision(homework)}"'
         if request.headers.get('if-none-match') == etag:
             return HttpResponseNotModified()
+
+    # The conditional request above deliberately runs before these row-
+    # hydrating reads. A warm poll needs only the homework identity and the
+    # three bounded revision aggregates; changed and full-page responses keep
+    # the same complete review context as before.
+    prefetch_related_objects([homework], 'questions')
+    submissions = (
+        Submission.objects
+        .filter(homework=homework)
+        .select_related('student')
+        .prefetch_related('answers__question')
+        .order_by('-submitted_at')
+    )
+    units = _units_by_content_id(
+        course,
+        [homework.content_id] if homework.content_id else [],
+    )
+    unit = units.get(homework.content_id) if homework.content_id else None
+    if request.GET.get('fragment') == 'submissions':
         html = render_to_string(
             'studio/courses/_homework_submissions_list.html',
             {

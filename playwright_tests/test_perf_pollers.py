@@ -1,5 +1,6 @@
 """Browser regressions for the bounded polling lifecycle on live pages."""
 
+import datetime
 import os
 
 import pytest
@@ -228,4 +229,134 @@ def test_import_poll_pauses_hidden_and_stops_when_finished(django_server, browse
 
     page.clock.fast_forward(600_000)
     assert len(calls) == 1
+    context.close()
+
+
+@browser_journey
+def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
+    django_server,
+    browser,
+):
+    from django.utils import timezone
+
+    from content.models import Cohort, Course
+    from content.models.homework import Homework
+
+    email = "poll-homework@test.com"
+    _staff(email)
+    course = Course.objects.create(
+        title="Poll homework course",
+        slug="poll-homework-course",
+        status="published",
+    )
+    today = timezone.localdate()
+    cohort = Cohort.objects.create(
+        course=course,
+        name="Poll cohort",
+        start_date=today - datetime.timedelta(days=1),
+        end_date=today + datetime.timedelta(days=10),
+    )
+    homework = Homework.objects.create(
+        cohort=cohort,
+        slug="poll-homework",
+        title="Poll homework",
+        due_date=timezone.now() + datetime.timedelta(days=5),
+    )
+    homework_id = homework.pk
+    connection.close()
+
+    context = auth_context(browser, email)
+    page = context.new_page()
+    page.clock.install()
+    calls = []
+    held = []
+
+    def respond(route):
+        calls.append(route.request.url)
+        if len(calls) == 1:
+            held.append(route)
+            return
+        if len(calls) == 2:
+            route.fulfill(
+                status=200,
+                content_type="text/html",
+                headers={"ETag": '"homework-poll-v2"'},
+                body=(
+                    '<div data-testid="homework-submissions-fragment" '
+                    'data-submission-count="2">'
+                    '<p data-testid="homework-poll-result">Arrived after retry</p>'
+                    '<i data-testid="homework-poll-icon" data-lucide="circle-check"></i>'
+                    '</div>'
+                ),
+            )
+            return
+        route.fulfill(status=304, headers={"ETag": '"homework-poll-v2"'})
+
+    fragment = (
+        f"**/studio/homeworks/{homework_id}/submissions?fragment=submissions"
+    )
+    page.route(fragment, respond)
+    page.goto(
+        f"{django_server}/studio/homeworks/{homework_id}/submissions",
+        wait_until="domcontentloaded",
+    )
+    page.evaluate(
+        """
+        () => {
+            window.lucide = {
+                createIcons: () => {
+                    document.querySelectorAll(
+                        '#homework-submissions-list [data-lucide]'
+                    ).forEach((icon) => {
+                        icon.setAttribute('data-icon-initialized', 'true');
+                    });
+                },
+            };
+        }
+        """
+    )
+
+    _set_page_visibility(page, "hidden")
+    page.clock.fast_forward(60_000)
+    assert calls == []
+
+    _set_page_visibility(page, "visible")
+    with page.expect_request(fragment):
+        page.clock.fast_forward(5000)
+    page.clock.fast_forward(60_000)
+    assert len(calls) == 1
+
+    held[0].fulfill(status=500, body="temporary failure")
+    _flush_promises(page)
+    page.clock.fast_forward(9999)
+    assert len(calls) == 1
+    with page.expect_response(fragment) as recovered:
+        page.clock.fast_forward(1)
+    assert recovered.value.status == 200
+    expect(page.get_by_test_id("homework-poll-result")).to_have_text(
+        "Arrived after retry",
+    )
+    expect(page.get_by_test_id("homework-submissions-count")).to_contain_text(
+        "2 submissions",
+    )
+    expect(page.get_by_test_id("homework-poll-icon")).to_have_attribute(
+        "data-icon-initialized",
+        "true",
+    )
+    _flush_promises(page)
+
+    page.clock.fast_forward(4999)
+    assert len(calls) == 2
+    with page.expect_response(fragment) as unchanged:
+        page.clock.fast_forward(1)
+    assert unchanged.value.status == 304
+    assert len(calls) == 3
+    _flush_promises(page)
+
+    page.clock.fast_forward(4999)
+    assert len(calls) == 3
+    with page.expect_response(fragment) as healthy_after_304:
+        page.clock.fast_forward(1)
+    assert healthy_after_304.value.status == 304
+    assert len(calls) == 4
     context.close()

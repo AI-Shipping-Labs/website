@@ -115,6 +115,31 @@ class HomeworkSubmissionsStudioTest(HomeworkStudioSetupMixin, TestCase):
         response = self.client.get(f'/studio/homeworks/{self.homework.pk}/submissions')
         self.assertContains(response, 'homework-submission-answer-incorrect')
 
+    def test_staff_recorded_submission_is_badged_with_actor_and_note(self):
+        save_submission(
+            self.homework, self.student, homework_link='',
+            answers_by_question_id={self.question.pk: '4'},
+            on_behalf_by=self.staff, on_behalf_note='Answer arrived by email',
+        )
+        own = User.objects.create_user(email='own-submit@test.com', password='testpass')
+        save_submission(
+            self.homework, own, homework_link='',
+            answers_by_question_id={self.question.pk: '4'},
+        )
+        self.client.login(email='staff@test.com', password='testpass')
+
+        response = self.client.get(f'/studio/homeworks/{self.homework.pk}/submissions')
+
+        # One badge for the two rows: only the staff-recorded one is marked.
+        self.assertContains(response, 'data-testid="homework-submission-on-behalf"', count=1)
+        note = re.search(
+            r'data-testid="homework-submission-on-behalf-note">([^<]*)<',
+            response.content.decode(),
+        )
+        self.assertEqual(
+            note.group(1), 'Recorded by staff@test.com: Answer arrived by email',
+        )
+
     def test_non_staff_authenticated_user_is_denied(self):
         self.client.login(email='student-studio@test.com', password='testpass')
         response = self.client.get(f'/studio/homeworks/{self.homework.pk}/submissions')

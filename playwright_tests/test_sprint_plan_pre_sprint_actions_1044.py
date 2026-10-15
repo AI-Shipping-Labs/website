@@ -76,6 +76,44 @@ def _seed_plan(owner_email="member@test.com", teammate_email="teammate@test.com"
     return {"sprint_slug": sprint.slug, "plan_id": plan.pk}
 
 
+def _drag_row_above(page, source_row, target_row):
+    """Drag ``source_row`` above ``target_row`` through SortableJS.
+
+    ``locator.drag_to`` performs a single coarse pointer move from source
+    to target. SortableJS sometimes has not left its idle state by then,
+    so no drag starts, ``onEnd`` never fires and no reorder PATCH is sent
+    (the intermittent 30s ``expect_response`` timeout seen in scheduled
+    full-suite runs). Use the same explicit pointer sequence as
+    ``test_studio_plan_editor._drag_chip``: press, nudge, walk densely to
+    just above the target, then commit into its top edge without crossing
+    its midline.
+    """
+    # Sortable loads synchronously from the CDN. Fail with a clear message
+    # if it is missing instead of waiting 30s for a PATCH that cannot come.
+    page.wait_for_function("typeof window.Sortable !== 'undefined'")
+
+    target_row.scroll_into_view_if_needed()
+    source_row.scroll_into_view_if_needed()
+    sb = source_row.bounding_box()
+    # Grab the row's right padding, away from the checkbox and the
+    # click-to-edit text.
+    sx = sb["x"] + sb["width"] - 6
+    sy = sb["y"] + sb["height"] / 2
+
+    page.mouse.move(sx, sy)
+    page.mouse.down()
+    page.mouse.move(sx, sy - 2, steps=3)
+    page.mouse.move(sx, sy - 6, steps=5)
+
+    tb = target_row.bounding_box()
+    approach_y = tb["y"] - 2
+    commit_y = tb["y"] + 5
+    steps = max(int(abs(approach_y - sy)), 30)
+    page.mouse.move(sx, approach_y, steps=steps)
+    page.mouse.move(sx, commit_y, steps=2)
+    page.mouse.up()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestMemberPreSprintActions:
     @pytest.mark.core
@@ -191,7 +229,7 @@ class TestStudioPreSprintActions:
         third = rows.nth(2)
         first = rows.nth(0)
         with page.expect_response("**/api/next-steps/*") as reorder_response:
-            third.drag_to(first)
+            _drag_row_above(page, third, first)
         assert reorder_response.value.ok
 
         page.reload(wait_until="domcontentloaded")

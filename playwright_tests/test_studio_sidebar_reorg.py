@@ -240,7 +240,7 @@ class TestStaffLandsInStudio:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 1
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 52)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 53)
         focus_page.close()
 
 
@@ -458,7 +458,7 @@ class TestNonSuperuserGating:
         assert focus_page.locator(
             '#studio-sidebar-nav a[href="/studio/api-tokens/"]'
         ).count() == 0
-        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 49)
+        _assert_all_sidebar_anchors_have_keyboard_focus(focus_page, 50)
         focus_page.close()
 
 
@@ -695,6 +695,7 @@ class TestPlanningSection:
         assert [label.strip() for label in people_labels if label.strip()] == [
             "Users",
             "Call profiles",
+            "Call requests",
             "Imports",
             "Instructors",
             "Tier overrides",

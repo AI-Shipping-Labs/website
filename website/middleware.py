@@ -6,11 +6,101 @@ from urllib.parse import urlsplit
 from django.conf import settings
 from django.http import HttpResponse, HttpResponsePermanentRedirect
 from django.http.request import split_domain_port
+from django.utils.cache import patch_vary_headers
 
 from website.search_indexing import (
     NOINDEX_ROBOTS_DIRECTIVE,
     request_indexing_disabled,
 )
+
+# Paths whose responses must never be cached anywhere (CDN, browser,
+# anything in between): authenticated surfaces, APIs, and admin tooling.
+# ``/accounts/``, ``/account/`` and ``/studio/`` are also covered by
+# StudioNoStoreMiddleware; they are listed here so the CDN contract in
+# this middleware is self-contained.
+UNCACHEABLE_PREFIXES = (
+    '/accounts/',
+    '/account/',
+    '/admin/',
+    '/api/',
+    '/member-api/',
+    '/onboarding/',
+    '/studio/',
+)
+
+# Edge caches may keep anonymous public HTML for this long; browsers
+# revalidate every time (max-age=0). Matches the CloudFront cache policy
+# default TTL in aws-infra.
+PUBLIC_HTML_SMAXAGE = 300
+
+
+class PublicCachePolicyMiddleware:
+    """CDN-facing Cache-Control policy for public pages.
+
+    Prepares responses for a CDN (CloudFront) in front of the site that
+    may cache anonymous public HTML but must never cache anything tied
+    to a user, session, or cookie. The contract, in priority order:
+
+    1. ``UNCACHEABLE_PREFIXES`` responses -> ``private, no-store``.
+    2. Any response that sets or deletes cookies, or any request that
+       carries a session cookie -> ``private, no-store``. This is the
+       enforcement half of the CDN rule "never cache a response with
+       Set-Cookie": by the time this middleware runs (top of the stack,
+       so after every cookie-setting middleware below has produced its
+       response), any Set-Cookie the app would emit is already visible.
+    3. Anonymous 200 HTML -> ``public, max-age=0, s-maxage=300`` — the
+       only response class the CDN is allowed to cache.
+    4. Everything else (non-HTML 200s like sitemap.xml/robots.txt,
+       redirects, 404s without cookies) is left untouched; the CDN's
+       default TTL applies.
+
+    Middleware order matters: this must sit ABOVE SessionMiddleware,
+    CsrfViewMiddleware, allauth, and CampaignTrackingMiddleware in
+    ``MIDDLEWARE``. Response hooks run bottom-up, so only a position
+    above those sees the sessionid, csrftoken, and analytics cookies
+    they add — and can flip such responses to ``no-store``.
+    """
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+
+        path = request.path or ''
+        session_cookie = getattr(settings, 'SESSION_COOKIE_NAME', 'sessionid')
+        sets_cookies = bool(getattr(response, 'cookies', None))
+
+        def mark_no_store():
+            # Never downgrade a stricter Cache-Control a view already set
+            # (e.g. ``private, no-store, max-age=0`` on token pages); only
+            # fill it in when the view left it cacheable or unset.
+            if 'no-store' not in response.get('Cache-Control', '').lower():
+                response['Cache-Control'] = 'private, no-store'
+            patch_vary_headers(response, ('Cookie',))
+
+        if request.method in ('GET', 'HEAD') and path.startswith(UNCACHEABLE_PREFIXES):
+            mark_no_store()
+            return response
+
+        if request.method not in ('GET', 'HEAD'):
+            return response
+
+        if sets_cookies or request.COOKIES.get(session_cookie):
+            # Could be (or become) user-specific: never cache anywhere.
+            mark_no_store()
+            return response
+
+        is_public_html = (
+            response.status_code == 200
+            and response.get('Content-Type', '').lower().startswith('text/html')
+        )
+        if is_public_html:
+            smaxage = getattr(settings, 'PUBLIC_HTML_SMAXAGE', PUBLIC_HTML_SMAXAGE)
+            response['Cache-Control'] = f'public, max-age=0, s-maxage={smaxage}'
+            patch_vary_headers(response, ('Cookie',))
+
+        return response
 
 
 class SearchIndexingPolicyMiddleware:

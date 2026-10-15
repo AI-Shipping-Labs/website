@@ -138,6 +138,9 @@ ALLOWED_RUNTIME_LINES = {
         "- the request is for /studio/... or /admin/... (banner is public-only).",
         "if path.startswith('/studio/') or path.startswith('/admin/'):",
     },
+    "website/middleware.py": {
+        "'/admin/',",
+    },
     "website/urls.py": {
         "path('admin/', admin.site.urls),",
     },
@@ -179,6 +182,9 @@ ALLOWED_TEST_SNAPSHOTS = {
     ),
     "analytics/tests/test_middleware.py": _TestSnapshot(
         1, "488dc8587bb40348135db82bcba70f19983ffabc957c8e94373e8abbc5b407f5"
+    ),
+    "website/tests/test_public_cache_policy.py": _TestSnapshot(
+        1, "67158e835836bc8515bf82b6b727d3ab4232ce2afcc8d6c6505198c07fcfee7f"
     ),
     "content/tests/test_blog.py": _TestSnapshot(5, "73827bdca2964420abe8b341fe14cfb22128bda48cb7fd96f168d5a6a11d8114"),
     "content/tests/test_cohorts.py": _TestSnapshot(

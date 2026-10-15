@@ -6,6 +6,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.middleware.csrf import get_token
 
+from analytics.bots import is_bot
 from analytics.consent import (
     analytics_consent_granted,
     analytics_consent_state,
@@ -438,7 +439,16 @@ def site_context(request):
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': google_analytics_id,
         'analytics_consent_state': consent_state,
-        'analytics_consent_csrf_token': get_token(request),
+        # get_token() forces the csrftoken Set-Cookie onto the response.
+        # Consent POSTs read it from the cookie / banner attribute, so it
+        # is only needed for interactive visitors; emitting it for crawler
+        # user-agents would make every public page Set-Cookie-bearing and
+        # therefore uncacheable at the CDN. See PublicCachePolicyMiddleware.
+        'analytics_consent_csrf_token': (
+            get_token(request)
+            if not is_bot(request.headers.get('User-Agent', ''))
+            else ''
+        ),
         'aslab_anon_id': aslab_anon_id,
         'ga_login_state': ga_login_state,
         'ga_member_tier': ga_member_tier,

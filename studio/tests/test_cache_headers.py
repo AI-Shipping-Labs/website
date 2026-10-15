@@ -361,28 +361,32 @@ class PasswordResetCacheHeadersTest(PrivateNoStoreAssertions, TestCase):
 
 
 class PublicPagesNotAffectedTest(TestCase):
-    """Public pages must NOT get ``private, no-store`` from the middleware.
+    """Public pages stay CDN-cacheable, free of blanket ``no-store``.
 
-    Other middleware or framework defaults may set their own headers,
-    but the StudioNoStoreMiddleware specifically MUST NOT touch URLs
-    outside ``/studio/`` and ``/accounts/``.
+    StudioNoStoreMiddleware must not touch URLs outside ``/studio/``
+    and ``/accounts/``, and PublicCachePolicyMiddleware must give
+    anonymous public HTML its explicit ``public, s-maxage`` policy. A
+    crawler-style request (no cookies, bot user-agent) exercises
+    exactly that path: if either middleware blanket-marked public
+    pages ``private, no-store``, the responses below would lose their
+    cache policy. (Interactive first visits legitimately receive the
+    consent csrftoken and are marked ``private, no-store`` — that is
+    the CDN contract, tested in website.tests.test_public_cache_policy.)
     """
 
-    def test_homepage_does_not_have_private_no_store_from_middleware(self):
-        response = self.client.get('/')
+    def test_homepage_is_publicly_cacheable_for_crawlers(self):
+        response = self.client.get('/', HTTP_USER_AGENT='GPTBot/1.1')
         self.assertEqual(response.status_code, 200)
-        cache_control = response.get('Cache-Control', '').lower()
-        # Homepage may or may not have a Cache-Control (Django's default
-        # is to leave it unset). What we assert is that it is not the
-        # exact "private, no-store" combo that our middleware imposes —
-        # because if it were, public-page caching would be broken.
-        self.assertNotEqual(cache_control.strip(), 'private, no-store')
+        self.assertEqual(
+            response['Cache-Control'], 'public, max-age=0, s-maxage=300',
+        )
 
-    def test_blog_does_not_have_private_no_store_from_middleware(self):
-        response = self.client.get("/blog")
-        self.assertTemplateUsed(response, "content/blog_list.html")
-        cache_control = response.get("Cache-Control", "").lower()
-        self.assertNotEqual(cache_control.strip(), "private, no-store")
+    def test_blog_is_publicly_cacheable_for_crawlers(self):
+        response = self.client.get('/blog', HTTP_USER_AGENT='GPTBot/1.1')
+        self.assertTemplateUsed(response, 'content/blog_list.html')
+        self.assertEqual(
+            response['Cache-Control'], 'public, max-age=0, s-maxage=300',
+        )
 
 
 class StudioMessagesRenderedOnceTest(TestCase):

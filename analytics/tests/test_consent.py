@@ -26,8 +26,11 @@ class AnalyticsConsentTest(TestCase):
         self.assertContains(response, 'data-testid="analytics-consent-panel"')
         self.assertNotContains(response, 'googletagmanager.com')
         self.assertEqual(CampaignVisit.objects.count(), 0)
-        self.assertEqual(self.client.cookies[ANON_ID_COOKIE].value, '')
-        self.assertEqual(self.client.cookies[FIRST_TOUCH_COOKIE].value, '')
+        # Undecided + cookieless: nothing is set and no deletion headers are
+        # emitted — expirations only fire when legacy cookies are present
+        # (see test_denied_state_cleans_legacy_state).
+        self.assertNotIn(ANON_ID_COOKIE, self.client.cookies)
+        self.assertNotIn(FIRST_TOUCH_COOKIE, self.client.cookies)
         self.assertNotIn(SESSION_LAST_TOUCH, self.client.session)
 
     def test_grant_enables_loader_and_first_party_attribution(self):

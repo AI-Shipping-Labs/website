@@ -1,7 +1,6 @@
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.csrf import ensure_csrf_cookie
 
 from content.access import (
     LEVEL_TO_TIER_NAME,
@@ -323,7 +322,6 @@ def sprints_index(request):
     return render(request, 'content/sprints_index.html', context)
 
 
-@ensure_csrf_cookie
 def blog_list(request):
     """Blog listing page filtered by a curated topic (or legacy tags).
 
@@ -625,7 +623,6 @@ def tutorial_detail(request, slug):
     return render(request, 'content/tutorial_detail.html', context)
 
 
-@ensure_csrf_cookie
 def downloads_list(request):
     """Downloadable resources listing page with optional tag filtering."""
     downloads = Download.objects.filter(published=True)
@@ -680,7 +677,6 @@ def downloads_list(request):
     return render(request, 'content/downloads_list.html', context)
 
 
-@ensure_csrf_cookie
 def download_detail(request, slug):
     """Public download landing page and its single access decision."""
     download = get_object_or_404(Download, slug=slug, published=True)

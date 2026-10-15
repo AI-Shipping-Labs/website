@@ -243,9 +243,15 @@ class CampaignTrackingMiddleware:
             if any(request.COOKIES.get(name) for name in ANALYTICS_COOKIES):
                 request.session.pop(SESSION_LAST_TOUCH, None)
                 request.session.pop(SESSION_LAST_TOUCH_REFERRER, None)
-            response = self.get_response(request)
-            delete_analytics_cookies(response)
-            return response
+                response = self.get_response(request)
+                delete_analytics_cookies(response)
+                return response
+            # No analytics cookies to withdraw (the common crawler case):
+            # emitting deletion Set-Cookie headers anyway would mark every
+            # response as Set-Cookie-bearing, which both the CDN cache
+            # contract (PublicCachePolicyMiddleware) and CloudFront treat
+            # as uncacheable — for nothing.
+            return self.get_response(request)
 
         # Fast-path skip: bots, non-GET, system paths.
         if _should_skip(request):

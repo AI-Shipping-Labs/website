@@ -6,7 +6,6 @@ from django.db.models import Count, Exists, OuterRef, Q
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.csrf import ensure_csrf_cookie
 
 from accounts.gating import is_newsletter_only_user
 from accounts.oauth_context import get_oauth_provider_context
@@ -212,7 +211,6 @@ SECTION_NAV = [
 ]
 
 
-@ensure_csrf_cookie
 def home(request):
     """Homepage view.
 

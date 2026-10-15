@@ -249,6 +249,13 @@ MIGRATION_MODULES = {
 # (site key, access policy, jobs and mail backends, template dir and hooks).
 
 MIDDLEWARE = [
+    # Public-page CDN cache policy. Must stay FIRST: its response hook
+    # runs after every cookie-setting middleware below (sessions, CSRF,
+    # allauth, campaign analytics) has produced its response, so any
+    # response that ends up with Set-Cookie can be flipped to
+    # ``private, no-store`` before it leaves the stack. See
+    # website/middleware.py for the CDN contract.
+    'website.middleware.PublicCachePolicyMiddleware',
     # Outermost so every dev response and every production-private response,
     # including early responses, redirects, and errors, can receive the
     # applicable robots header.

@@ -126,6 +126,17 @@ class ProjectSubmission(models.Model):
         default='submitted',
     )
     submitted_at = models.DateTimeField(auto_now_add=True)
+    # Set when staff recorded this submission for the learner through
+    # ``POST /api/submissions/on-behalf``; cleared when the learner saves
+    # the submission form themselves.
+    submitted_on_behalf_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='+',
+    )
+    on_behalf_note = models.TextField(blank=True, default='', db_default='')
     batch_assigned_at = models.DateTimeField(null=True, blank=True)
     review_deadline = models.DateTimeField(null=True, blank=True)
     certificate_issued_at = models.DateTimeField(null=True, blank=True)

@@ -30,7 +30,10 @@ section "Affected-tests selection"):
 10. Templates map to their owning app (+ core Playwright) or, for shared
     fragments, to ``make test-core`` + full Playwright. Every template also
     picks up the repo-wide template guards from rule 14, by explicit label.
-11. ``static/**`` runs core Playwright; ``tailwind.config.js`` escalates.
+11. ``static/**`` runs core Playwright; ``tailwind.config.js`` escalates;
+    the Tailwind input stylesheet (``assets/css/*``) runs
+    ``make check-tailwind`` with no Django label. Every other ``assets/``
+    path still fails closed to rule 13.
 12. Migrations map to their own app; 2+ apps in one diff adds core.
 13. Anything unmatched fails closed to ``make test-core`` with a
     ``WARN unmapped:`` line -- never silently dropped.
@@ -393,6 +396,14 @@ SHARED_TEMPLATE_GLOBS: tuple[str, ...] = (
     "templates/_partials/*",
     "templates/base.html",
 )
+
+#: Rule 11. The Tailwind build input (``css:build`` is ``tailwindcss -i
+#: assets/css/tailwind.css ...``). No Django test module reads it, so it gets no
+#: label -- only the build gate that compiles it and verifies the bundle. Core
+#: Playwright (the default) is enough: unlike ``tailwind.config.js`` it cannot
+#: purge classes, so it is NOT an escalation trigger. Deliberately not
+#: ``assets/**``: any other ``assets/`` file must keep failing closed.
+TAILWIND_INPUT_CSS_GLOBS: tuple[str, ...] = ("assets/css/*",)
 
 #: Rule 8. Cap on the one-hop reverse-import expansion. Above this, substitute
 #: ``make test-core`` for the expansion so a hub module cannot silently
@@ -1025,6 +1036,10 @@ def build_plan(
             continue
         if path == "tailwind.config.js":
             # Escalated to full Playwright by rule 2; no Django target.
+            continue
+        if _matches(path, TAILWIND_INPUT_CSS_GLOBS):
+            # The Tailwind input stylesheet: the build gate, no Django target.
+            add_extra(CHECK_TAILWIND_COMMAND)
             continue
 
         # Rule 13 -- fail closed.

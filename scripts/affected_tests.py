@@ -20,6 +20,8 @@ section "Affected-tests selection"):
     ``docs/**``, ``CLAUDE.md``, ``_docs/design-system.md``, ...) target the
     app that reads them. Matching here also exempts a path from rule 1.
  4. ``website/**`` targets ``tests`` + ``website`` + ``make test-core``.
+    Runtime paths also escalate to full Playwright; ``website/tests.py`` and
+    ``website/tests/**`` remain on core Playwright like other test-only paths.
  5. Dependency manifests get a soft ``make test-core`` fallback + a note.
  6. A small curated hub-module map handles known cross-cutting files.
  7. Python files in repository test trees add the lexical/collection policy
@@ -892,6 +894,13 @@ def build_plan(
     # Rule 2 -- escalation triggers (flag only; the file still falls through).
     for path in relevant:
         for glob, reason in ESCALATION_TRIGGERS:
+            # ``fnmatch`` lets ``*`` cross path separators. Keep the broad
+            # website runtime trigger (including future nested modules), but
+            # do not treat test-only files as every-request production code.
+            if glob == "website/*" and (
+                path == "website/tests.py" or path.startswith("website/tests/")
+            ):
+                continue
             if fnmatch.fnmatchcase(path, glob):
                 entry = f"{path}: {reason}"
                 if entry not in escalations:

@@ -1013,7 +1013,7 @@ rule 2 (escalation), which sets a flag and lets the file fall through.
 | 2 | escalation triggers (table below) | sets Playwright to `full`, then falls through to the remaining rules |
 | 3 | `.github/**`, `scripts/**`, `Makefile`, `Dockerfile`, `docker-compose.yml`, `entrypoint.sh`, `Procfile.dev`, `deploy/**`, `package*.json`, `.agents/**` and `.claude/**` (both spellings map identically -- `.claude/skills` is a symlink, so `.agents/**` is what a real diff produces), `manage.py` | `tests`. Focused exceptions map `scripts/affected_tests.py` and the Playwright owner inventory script/ceiling/live-manifest files to their exact policy modules. |
 | 3 | guarded doc artifacts -- see the table below | the app whose tests read them; also exempts the path from rule 1 |
-| 4 | `website/**` | `tests` + `website` + `make test-core` + full Playwright (every-request blast radius) |
+| 4 | `website/**` | `tests` + `website` + `make test-core`. Runtime paths also get full Playwright for their every-request blast radius; `website/tests.py` and `website/tests/**` stay on core Playwright. |
 | 5 | `pyproject.toml`, `uv.lock` | `make test-core` plus a note -- soft trigger, rely on CI for the full suite |
 | 6 | curated hub modules (table below) | the mapped labels |
 | 7 | Python under `tests/**`, any app's `tests/**`, `asl_cli/tests/**`, or `playwright_tests/**` | all four repository-wide lexical ratchets that scan these trees. A Playwright-tree change also selects the Playwright owner-inventory and browser-journey policy modules. These labels supplement the next rule. |
@@ -1248,7 +1248,7 @@ encoded as `ESCALATION_TRIGGERS` in `scripts/affected_tests.py` and pinned by
 | `content/access.py`, `content/tier_config.py`, `accounts/gating.py`, `playwright_tests/test_access_control.py` | access-control matrix |
 | `payments/tier_state.py`, `payments/stripe_links.py`, `payments/services/**`, `payments/views/**` (webhook handlers live under `payments/services/`) | payments wiring |
 | `templates/includes/**`, `templates/_partials/**`, `templates/base.html`, `templates/studio/base.html`, `templates/studio/includes/**`, `templates/studio/_partials/**` | shared template fragments |
-| `website/**` (settings, urls, middleware, context processors), `accounts/context_processors.py`, `accounts_ext/session_backend.py` (backs `SESSION_ENGINE`) | every-request/every-page surface |
+| `website/**` except `website/tests.py` and `website/tests/**`, `accounts/context_processors.py`, `accounts_ext/session_backend.py` (backs `SESSION_ENGINE`) | every-request/every-page surface; test-only website files retain broad Django coverage plus core Playwright |
 | `tailwind.config.js` | content-purge config, can strip classes on any page |
 | `integrations/middleware.py` | every request |
 | `pyproject.toml`, `uv.lock` | soft trigger -- note only, does not force full local Playwright |

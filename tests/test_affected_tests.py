@@ -539,6 +539,37 @@ class RuleChainTest(SimpleTestCase):
         self.assertIn(CORE_COMMAND, plan.extra_commands)
         self.assertEqual(plan.playwright, "full")
 
+    def test_website_test_paths_keep_broad_django_coverage_without_full_playwright(self):
+        for path in (
+            "website/tests.py",
+            "website/tests/test_public_cache_policy.py",
+        ):
+            with self.subTest(path=path):
+                plan = plan_for([path])
+                self.assertEqual(
+                    plan.django_labels,
+                    collapsed(
+                        "tests",
+                        "website",
+                        *test_tree_contract_labels(path),
+                        *guards(path),
+                    ),
+                )
+                self.assertIn(CORE_COMMAND, plan.extra_commands)
+                self.assertEqual(plan.playwright, "core")
+                self.assertEqual(plan.escalation_reasons, [])
+
+    def test_website_runtime_paths_still_force_full_playwright(self):
+        for path in (
+            "website/middleware.py",
+            "website/runtime/future_middleware.py",
+        ):
+            with self.subTest(path=path):
+                plan = plan_for([path])
+                self.assertEqual(plan.playwright, "full")
+                self.assertTrue(plan.escalation_reasons)
+                self.assertIn(PLAYWRIGHT_FULL_COMMAND, plan.commands())
+
     def test_dependency_manifest_is_a_soft_core_fallback(self):
         plan = plan_for(["uv.lock", "pyproject.toml"])
         self.assertIsNone(plan.django_command)

@@ -86,7 +86,9 @@
         stopTerminal();
         return TERMINAL;
       }
-      if (response && response.ok === false) {
+      // Conditional GETs use 304 to mean a successful unchanged poll even
+      // though Fetch's ``ok`` flag covers only 2xx responses.
+      if (response && response.status !== 304 && response.ok === false) {
         var error = new Error('Polling request failed with status ' + response.status);
         error.status = response.status;
         throw error;

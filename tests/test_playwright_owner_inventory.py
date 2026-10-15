@@ -1982,6 +1982,11 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_import_poll_pauses_hidden_and_stops_when_finished",
     })
 
+    issue_1962_owners = frozenset({
+        "playwright_tests/test_perf_pollers.py::"
+        "test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff",
+    })
+
     issue_1938_owners = frozenset({
         "playwright_tests/test_pod_stuck_alert_followup_1938.py::"
         "test_staff_sees_a_pod_waiting_on_a_proposal_not_idle",
@@ -2273,8 +2278,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2968)
-        self.assertEqual(len(inventory.owners), 2763)
+        self.assertEqual(inventory.item_count, 2969)
+        self.assertEqual(len(inventory.owners), 2764)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2314,6 +2319,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1948_owners
             | self.issue_1953_owners
             | self.issue_1959_owners
+            | self.issue_1962_owners
             | self.issue_1949_owners
             | self.issue_1938_owners
             | self.issue_1921_owners

@@ -1,4 +1,5 @@
 {% extends "studio/base.html" %}
+{% load static %}
 {% load studio_filters %}
 {% load date_formatting %}
 
@@ -53,6 +54,7 @@
   </div>
 </div>
 
+<script src="{% static 'js/visibility-poller.js' %}"></script>
 <script>
 (function () {
   var toggle = document.querySelector('[data-testid="homework-privacy-toggle"]');
@@ -79,8 +81,6 @@
   var currentIndex = 0;
   var currentKey = '';
   var items = [];
-  var POLL_INTERVAL_MS = 5000;
-  var timer = null;
 
   function emails() {
     return document.querySelectorAll('[data-testid="homework-submission-student"]');
@@ -319,64 +319,33 @@
     }
   });
 
-  var inFlight = false;
   var currentTag = '';
-  var failures = 0;
-  function refresh() {
-    if (!fragmentUrl || !listRoot || inFlight) return;
-    inFlight = true;
-    var headers = { 'X-Requested-With': 'XMLHttpRequest' };
-    if (currentTag) headers['If-None-Match'] = currentTag;
-    fetch(fragmentUrl, { credentials: 'same-origin', headers: headers })
-      .then(function (resp) {
-        if (resp.status === 304) { failures = 0; return null; }
-        if (!resp.ok) throw new Error('refresh failed');
+  if (fragmentUrl && listRoot) {
+    window.AISLVisibilityPoller.create({
+      interval: 5000,
+      maxBackoff: 60000,
+      request: function () {
+        var headers = { 'X-Requested-With': 'XMLHttpRequest' };
+        if (currentTag) headers['If-None-Match'] = currentTag;
+        return fetch(fragmentUrl, { credentials: 'same-origin', headers: headers });
+      },
+      onResponse: function (resp) {
+        if (resp.status === 304) return null;
         var tag = resp.headers.get('ETag') || '';
         return resp.text().then(function (html) {
-          return { html: html, tag: tag };
+          if (tag) currentTag = tag;
+          listRoot.innerHTML = html;
+          updateCount();
+          syncTalkedBadges();
+          if (presenting) renderSlide();
+          applyPrivacy();
+          if (window.lucide && typeof window.lucide.createIcons === 'function') {
+            window.lucide.createIcons();
+          }
         });
-      })
-      .then(function (payload) {
-        failures = 0;
-        if (!payload) return;
-        if (payload.tag) currentTag = payload.tag;
-        listRoot.innerHTML = payload.html;
-        updateCount();
-        syncTalkedBadges();
-        if (presenting) renderSlide();
-        applyPrivacy();
-        if (window.lucide && typeof window.lucide.createIcons === 'function') {
-          window.lucide.createIcons();
-        }
-      })
-      .catch(function () {
-        failures += 1;
-        if (failures >= 5) {
-          stop();
-        }
-      })
-      .then(function () { inFlight = false; });
+      }
+    }).start();
   }
-  function shouldPoll() {
-    return document.visibilityState === 'visible';
-  }
-  function start() {
-    if (timer !== null) return;
-    timer = setInterval(refresh, POLL_INTERVAL_MS);
-  }
-  function stop() {
-    if (timer === null) return;
-    clearInterval(timer);
-    timer = null;
-  }
-  document.addEventListener('visibilitychange', function () {
-    if (shouldPoll()) {
-      start();
-    } else {
-      stop();
-    }
-  });
-  if (shouldPoll()) start();
   syncTalkedBadges();
 })();
 </script>

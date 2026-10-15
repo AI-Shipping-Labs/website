@@ -1,8 +1,11 @@
 # Agent Notes
 
+Mandatory repository rules for every agent. [`_docs/README.md`](_docs/README.md) maps the rest of the documentation.
+
 ## Development Process
 
-- Before continuing development work, read `_docs/PROCESS.md` and follow the issue pipeline documented there.
+- Read [`_docs/PROCESS.md`](_docs/PROCESS.md) at the start of every session, before acting on any issue. It defines the workflow, the agent roles (PM, software-engineer, tester, oncall-engineer, designer), the issue lifecycle, and the orchestrator's responsibilities. Do not groom, implement, test, or ship without first reading it. This applies to local and cloud/scheduled runs alike.
+- Before writing or changing code, read [`coding-standard.md`](coding-standard.md).
 - Treat feature requests for this repo as permission to launch the role subagents required by `_docs/PROCESS.md` (PM, software engineer, tester, PM acceptance, on-call) unless the user explicitly asks not to.
 - Treat "continue where we stopped" as a prompt to check `_docs/PROCESS.md`, inspect the current issue/worktree/process state, and resume the next pipeline step.
 - When launching Codex subagents for this workflow, use `gpt-5.6` with `reasoning_effort: "high"` and `service_tier: "priority"` by default unless the user explicitly asks for a cheaper or lower-reasoning run. Do not fall back to `gpt-5.4` or `gpt-5.5`; retry `gpt-5.6` later or keep the work local if `gpt-5.6` is unavailable. When launching Claude subagents, use Opus 4.8 by default.
@@ -17,18 +20,14 @@
 
 ## Project Overview
 
-AI Shipping Labs community platform — a Django-based website replacing the current Next.js static site.
+AI Shipping Labs community platform — a Django-based website replacing the earlier Next.js static site.
 
 - Product: [`_docs/product.md`](_docs/product.md) — what the site is, user personas, tiers, feature inventory, terminology
 - Process: [`_docs/PROCESS.md`](_docs/PROCESS.md) — development workflow, agent definitions, issue lifecycle, how to pick issues
 - Configuration: [`_docs/configuration.md`](_docs/configuration.md) — operator setup guide for OAuth login + every integration on a fresh environment
-- Specs: `specs/` folder (14 requirement specs with data models, APIs, acceptance criteria)
+- Specs: [`specs/`](specs/README.md) — product decision records (original requirements; code and `_docs/product.md` describe current behavior)
 - Issues: GitHub Issues on [AI-Shipping-Labs/website](https://github.com/AI-Shipping-Labs/website/issues)
-- Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer)
-
-## Working Process
-
-Read [`_docs/PROCESS.md`](_docs/PROCESS.md) at the start of every session, before acting on any issue. It defines the development workflow, the agent roles (PM, software-engineer, tester, oncall-engineer), the issue lifecycle, and the orchestrator's responsibilities. Do not groom, implement, test, or ship without first reading it. This applies to local and cloud/scheduled runs alike.
+- Agents: `.claude/agents/` (product-manager, software-engineer, tester, oncall-engineer, designer); skills: `.agents/skills/` (`.claude/skills` is a symlink)
 
 ## Repositories
 
@@ -36,8 +35,7 @@ The Django app lives here. AWS infrastructure lives in a separate repo. Knowing 
 
 - `AI-Shipping-Labs/website` — this repo. Django app, templates, tests, GitHub Actions for build/deploy. All product code.
 - `DataTalksClub/aws-infra` — Terraform for AWS (AISL resources under `main/aisl/`). SES (domain identity, DKIM/SPF/DMARC, configuration sets), SNS topics (`ses-bounces`, `ses-complaints`), RDS, ECS clusters/services, S3 buckets, Route53 DNS, IAM users/roles (including the `ECS-deploy` user used by CI), the inbound `email-forwarder.py` Lambda for `@aishippinglabs.com` mail forwarding. Key files: `main/aisl/email.tf`, `main/aisl/db.tf`, `main/aisl/ecs.tf`, `main/aisl/dns.tf`, `main/aisl/iam_certificates.tf`, `main/aisl/iam_ecs_deploy.tf` (the `ECS-deploy` user lives in `iam_ecs_deploy.tf`). Operator notes in `main/aisl/docs/email-best-practices.md`.
-- `AI-Shipping-Labs/content` — markdown + YAML content (articles, courses, projects, recordings, links, interview questions, tier data). Synced into the Django DB by the content-sync pipeline. The Django repo never edits content here directly.
-- `AI-Shipping-Labs/workshops-content` — workshop markdown source. Same sync pipeline.
+- Content repositories — markdown + YAML synced into the Django DB by the content-sync pipeline. The Django repo never edits content there directly. The registered sources are declared in `integrations/management/commands/seed_content_sources.py`: `AI-Shipping-Labs/content` (articles, projects, recordings, curated links, interview questions, tier data), `AI-Shipping-Labs/workshops-content` (workshops), `AI-Shipping-Labs/python-course` and `AI-Shipping-Labs/ai-buildcamp-course` (courses), and `AI-Shipping-Labs/wiki` (member wiki).
 - `DataTalksClub/community-base` — shared Django apps used by this site and by `DataTalksClub/website`. Local checkout at `~/git/community-base`. Its own process lives in its `AGENTS.md` and `docs/PROCESS.md`; work there is plan-driven via `docs/plan/`.
 - `DataTalksClub/website` — the DataTalks.Club site. The other consumer of `community-base`. Local checkout at `~/git/dtc-website`.
 
@@ -56,8 +54,8 @@ When the user asks about Django code, templates, or the test suite, it's always 
 
 ## Technology Stack
 
-- Backend: Django (Python), managed with uv
-- Frontend: Tailwind CSS via CDN (no build step)
+- Backend: Django (Python 3.13+, see `pyproject.toml`), managed with uv
+- Frontend: pinned Tailwind CSS 3.4.17 (`package.json`, `package-lock.json`) compiled and minified at build time. `make css-build` is canonical, `make dev` watches sources, and the generated `static/css/tailwind.css` is gitignored and never edited or committed. Rebuild it after adding new classes locally; CI rebuilds at deploy.
 - Testing: Playwright for E2E, Django TestCase for unit/integration
 - Payments: Stripe
 - Community: Slack
@@ -83,9 +81,9 @@ uv run python manage.py test {app} --parallel 4
 
 Every new configurable setting must go through the IntegrationSetting framework so it is editable from Studio settings with no redeploy. Do not read raw `os.environ` or `settings.X` for runtime-configurable values.
 
-- Read values with `get_config(key, default)` / `is_enabled(key)` from `integrations/config.py`. These resolve in order: DB override (set in Studio settings) -> environment variable -> default.
-- Register every key in `integrations/settings_registry.py` (with a `description` and `docs_url`) so it appears as an editable field in Studio settings with the Source badge (DB override / env / default).
-- Canonical example: the `#plan-sprints` channel — keys registered in `integrations/settings_registry.py` (`slack` group) and read via `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`, which calls `get_config(...)`. Environment variables remain an optional fallback, never the primary source.
+- Read values with `get_config(key, default)` / `is_enabled(key)` from `integrations/config.py`. These resolve in order: DB override (set in Studio settings) -> Django setting -> environment variable -> default.
+- Declare every key in `integrations/settings_keys.py`: a `declare(...)` entry with a `description` and `docs_url`, plus its group's `_KEY_ORDER` entry. `integrations/settings_registry.py` derives the Studio view from those declarations, so the key appears as an editable field in Studio settings with the Source badge (DB override / env / default).
+- Canonical example: the `#plan-sprints` channel — `SLACK_PLAN_SPRINTS_CHANNEL_ID` and its environment variants are declared in `integrations/settings_keys.py` (`slack` group) and read via `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`, which calls `get_config(...)`. Environment variables remain an optional fallback, never the primary source.
 
 ### File Editing on Windows
 
@@ -106,51 +104,6 @@ Follow [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) when writing
 - Playwright tests test user flows, not implementation details
 - One authoritative test per behavior — pick the right layer
 
-### Formatting Rules for Documents and Issues
-
-- No bold formatting (`**text**`) — use plain text, headings, or backticks for emphasis
-- Use `backticks` for code, file paths, commands, field names, and technical terms
-- Use headings (`##`, `###`) for structure, not bold text
-- Use tables for structured data, not bullet lists of key-value pairs
-- Keep lines concise — one idea per bullet point
-
-## Local Development Setup
-
-### First-time setup
-
-```bash
-uv sync                                    # install dependencies
-uv run python manage.py migrate            # creates DB, seeds tiers, creates django_q_cache table
-uv run python manage.py seed_content_sources  # register content sources
-```
-
-### Content sync
-
-All content (articles, courses, projects, recordings, links, interview questions, tier data) lives in the GitHub repo `AI-Shipping-Labs/content`. To populate locally:
-
-Option A — sync from a local clone:
-```bash
-git clone git@github.com:AI-Shipping-Labs/content.git ~/git/ai-shipping-labs-content
-uv run python manage.py sync_content --from-disk ~/git/ai-shipping-labs-content
-```
-
-Option B — sync via GitHub App (requires credentials in `.env`):
-```bash
-uv run python manage.py sync_content
-```
-
-### Dev seed data (optional)
-
-For fake users, events, polls, and notifications (useful for testing):
-
-```bash
-uv run python manage.py seed_data
-```
-
-This does NOT create content — content only comes from GitHub sync.
-
-### Run tests
-
 Local test scope comes from the diff, not from habit. `scripts/affected_tests.py` maps the changed files (including uncommitted and untracked work) to Django test labels plus a core-vs-full Playwright decision:
 
 ```bash
@@ -162,15 +115,38 @@ Inner loop while editing: `uv run python manage.py test {touched_app} --parallel
 
 Do NOT run the full Django suite locally (`make test`, `make test-all`, `make coverage`, or `manage.py test` with no labels). It is ~17,200 tests and starves everything else on the box, for no coverage gain: CI runs the full Django suite on every push to main and blocks the deploy on failure, and the full Playwright suite runs every 3 hours. Run it locally only if Alexey explicitly asks.
 
-See [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) ("Affected-tests selection") for the rule chain, the authoritative escalation table, and what to do when the plan looks wrong (fix the map — never widen the run by hand).
+See [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) ("Affected-tests selection") for the authoritative escalation table and what to do when the plan looks wrong (fix the map — never widen the run by hand), and [`_docs/testing-operations.md`](_docs/testing-operations.md) ("Affected-tests rule chain and maps") for the rule chain.
+
+### Formatting Rules for Documents and Issues
+
+- No bold formatting (`**text**`) — use plain text, headings, or backticks for emphasis
+- Use `backticks` for code, file paths, commands, field names, and technical terms
+- Use headings (`##`, `###`) for structure, not bold text
+- Use tables for structured data, not bullet lists of key-value pairs
+- Keep lines concise — one idea per bullet point
+
+## Local Development Setup
+
+[`README.md`](README.md) owns the contributor quick start (`make setup`, `make run`, `make dev`, test users). The individual steps, for an agent working without `make setup`:
+
+```bash
+uv sync                                    # install dependencies
+uv run python manage.py migrate            # creates DB, seeds tiers, creates django_q_cache table
+uv run python manage.py seed_content_sources  # register content sources
+```
+
+Content comes only from content sync, never from `seed_data`. Sync from a local clone:
+
+```bash
+git clone git@github.com:AI-Shipping-Labs/content.git ~/git/ai-shipping-labs-content
+uv run python manage.py sync_content --from-disk ~/git/ai-shipping-labs-content
+```
+
+or via the GitHub App (requires credentials in `.env`): `uv run python manage.py sync_content`. For fake users, cohorts, polls, and notifications, run `uv run python manage.py seed_data`.
 
 ## Content Architecture
 
-- Content repo: `AI-Shipping-Labs/content` (private, GitHub App auth)
-- Sync pipeline: webhook push → clone → parse markdown/YAML → upload images to S3 → upsert to DB
+- Sync pipeline: webhook push → clone → parse markdown/YAML → upload images to S3 → upsert to DB. [`_docs/content.md`](_docs/content.md) owns content types, frontmatter, and sync behavior.
+- Content repos are private and read through the GitHub App ([`_docs/integrations/github.md`](_docs/integrations/github.md)).
 - Image CDN: `https://cdn.aishippinglabs.com` (S3 + CloudFront)
-- Content types: `article`, `course`, `resource`, `project`, `interview_question`, `learning_path`
 - Manage sync from Studio: `/studio/sync/`
-
-## Current Work
-<!-- What are you working on? What's the current context? -->

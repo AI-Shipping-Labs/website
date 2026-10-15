@@ -1688,7 +1688,7 @@ class RepositoryImmutabilityAndProcessContractTest(SimpleTestCase):
                 sentinel.wait(timeout=5)
 
     def test_process_contract_keeps_retirement_separate_explicit_and_recoverable(self):
-        text = " ".join((PROJECT_ROOT / "_docs" / "PROCESS.md").read_text().split())
+        text = " ".join((PROJECT_ROOT / "_docs" / "process-worktree-lifecycle.md").read_text().split())
         for phrase in (
             "Unmerged agent branch retirement",
             "never invokes archive retirement automatically",

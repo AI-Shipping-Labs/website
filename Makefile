@@ -106,7 +106,7 @@ test-affected:
 # REAL configured provider (LLM_API_KEY must be set) and assert plain-English
 # scenario criteria via an LLM judge. On-demand only: NOT referenced by `test`,
 # `test-core`, `test-all`, or any CI workflow. Skips cleanly (no live calls)
-# when no LLM key is configured. See _docs/testing-guidelines.md.
+# when no LLM key is configured. See _docs/testing-operations.md.
 test-judge:
 	uv run pytest -m live_judge tests/live_judge/ -n 4
 
@@ -114,13 +114,13 @@ test-judge:
 # Opt-in only: NOT referenced by `test`, `test-core`, `test-all`, Playwright,
 # or any CI workflow. Skips cleanly (no Slack call) without
 # SLACK_BOT_TOKEN and SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID.
-# See community/tests/live_slack/ and _docs/testing-guidelines.md.
+# See community/tests/live_slack/ and _docs/testing-operations.md.
 test-live-slack-announcement:
 	RUN_LIVE_SLACK_ANNOUNCEMENT=1 uv run pytest -m live_slack_announcement community/tests/live_slack/ -v
 
 # Optional local/exhaustive Django coverage (not the Deploy Dev gate, not the
 # agent inner loop). Deploy Dev collects Coverage.py on the sharded `test`
-# matrix and combines with --fail-under=85; see _docs/testing-guidelines.md.
+# matrix and combines with --fail-under=85; see _docs/testing-operations.md.
 coverage:
 	uv run coverage erase
 	uv run coverage run manage.py test

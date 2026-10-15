@@ -330,7 +330,7 @@ The daily `#plan-sprints` ingest will not read any messages unless all three of 
 
 1. The bot has `channels:history` (public `#plan-sprints`) or `groups:history` + `groups:read` (private `#plan-sprints`). Without it `conversations.history` / `conversations.replies` fail with `missing_scope`.
 2. The bot is a member of the channel. Invite it with `/invite @<bot-name>` from inside `#plan-sprints` — otherwise the history calls return `not_in_channel`.
-3. The channel ID is configured for the active environment: `SLACK_PLAN_SPRINTS_CHANNEL_ID` (production), `SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` (development), or `SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` (test). These are the `slack`-group keys in `integrations/settings_registry.py`, resolved by `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`. When the key is blank the ingest logs "no #plan-sprints channel configured" and no-ops.
+3. The channel ID is configured for the active environment: `SLACK_PLAN_SPRINTS_CHANNEL_ID` (production), `SLACK_DEV_PLAN_SPRINTS_CHANNEL_ID` (development), or `SLACK_TEST_PLAN_SPRINTS_CHANNEL_ID` (test). These are `slack`-group keys declared in `integrations/settings_keys.py`, resolved by `get_slack_plan_sprints_channel_id()` in `community/slack_config.py`. When the key is blank the ingest logs "no #plan-sprints channel configured" and no-ops.
 
 Foot-gun: this is the Slack BOT app, separate from the Slack OAuth LOGIN app in section 3.3. Two Slack apps, two sets of credentials. Also keep production, development, and test bot channels separate; `SLACK_ENVIRONMENT=development` and `SLACK_ENVIRONMENT=test` intentionally ignore the production channel IDs.
 

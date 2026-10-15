@@ -6,7 +6,7 @@ and ``integrations.services.feedback_synthesis.synthesize_feedback``
 (#805) -- against the REAL configured LLM provider, asserting plain-English
 scenario criteria via an LLM judge built on the #799 service.
 
-Isolation (see ``_docs/testing-guidelines.md``):
+Isolation (see ``_docs/testing-operations.md``, "Live LLM-judge tests"):
 
 - Every test carries ``pytestmark = pytest.mark.live_judge``.
 - The whole set is skipped (never errored, zero live calls) when

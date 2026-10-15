@@ -2,9 +2,11 @@
 
 Django-based community platform for [aishippinglabs.com](https://aishippinglabs.com).
 
+This README is the contributor quick start. [`_docs/README.md`](_docs/README.md) maps every canonical document; agents must also follow [`AGENTS.md`](AGENTS.md).
+
 ## Prerequisites
 
-- Python 3.12+
+- Python 3.13+ (`requires-python` in `pyproject.toml`)
 - [uv](https://docs.astral.sh/uv/) for package management
 - Node.js 24 and npm (the pinned Tailwind 3.4.17 build is lockfile-driven)
 
@@ -19,8 +21,8 @@ This runs `scripts/setup.sh` which:
 2. Installs Python dependencies (`uv sync`)
 3. Clones `AI-Shipping-Labs/content` into `_content-repo/`
 4. Runs database migrations
-5. Seeds the database with test users, tiers, and sample data
-6. Syncs content from the local clone
+5. Seeds local sample data and test users (`seed_data`)
+6. Registers content sources and syncs content from the local clone
 
 ## Running
 
@@ -38,15 +40,7 @@ edited or committed. Use `make css-build` for an explicit production build.
 
 ## Seed Data and Test Users
 
-Load sample data for local development:
-
-```bash
-uv run python manage.py seed_data
-```
-
-This creates tiers, users, articles, courses, events, recordings, projects, polls, notifications, and newsletter subscribers. The command is idempotent -- running it twice won't create duplicates. Use `--flush` to wipe and recreate everything.
-
-### Test Users
+`uv run python manage.py seed_data` loads idempotent local sample data (`content/management/commands/seed_data.py`: test users, course cohorts, polls, notifications, newsletter subscribers, and social-login app rows); `--flush` clears that dev data first. Tiers come from migrations and content comes from content sync, not from `seed_data`.
 
 All test users have the password `testpass123`:
 
@@ -63,30 +57,7 @@ All test users have the password `testpass123`:
 
 Log in at http://localhost:8000/accounts/login/ with any of these emails. Routine staff work is under `/studio/`; the unlinked low-level Django admin is at `http://localhost:8000/admin/` (use the admin account).
 
-### Creating Users Manually
-
-Via Django shell:
-
-```bash
-uv run python manage.py shell
-```
-
-```python
-from accounts.models import User
-from payments.models import Tier
-
-tier = Tier.objects.get(slug='main')  # free, basic, main, or premium
-user = User.objects.create_user(email='you@example.com', password='yourpass')
-user.tier = tier
-user.email_verified = True
-user.save()
-```
-
-Or create a superuser:
-
-```bash
-uv run python manage.py createsuperuser
-```
+Create your own superuser with `uv run python manage.py createsuperuser`.
 
 ## Tests
 
@@ -99,106 +70,49 @@ uv run python scripts/affected_tests.py
 # Run exactly what the plan emitted
 make test-affected
 
-# Fast core subset for the inner dev loop (~30s, parallel)
+# Fast core subset for the inner dev loop
 make test-core
 
 # Core Playwright subset
 make test-playwright-core
 ```
 
-Exhaustive runs are CI gates, not part of the local loop:
-
-```bash
-make test            # CI gate: full Django unit/integration suite
-make playwright      # CI gate: full Playwright E2E suite
-make test-all        # CI gate: both
-make coverage        # optional exhaustive local coverage report (85% fail-under); not what Deploy Dev invokes
-```
-
-`make test-core` runs only test classes decorated with `@tag('core')` -- the
-auth, access-control, payments, sync, and critical model paths -- and is the
-fail-closed fallback the affected-tests plan uses.
-
-Do not run the full Django suite locally (`make test`, `make test-all`, `make coverage`).
-It is ~17,200 tests. Deploy Dev runs the Django suite sharded on every push to `main`
-and blocks the deploy on failure, including an 85% Coverage.py gate from those shards
-(combined; the exhaustive `make coverage` target is not what CI invokes), and the full
-Playwright suite runs every 3 hours, so a local repeat only costs you wall time. See
-[_docs/testing-guidelines.md](_docs/testing-guidelines.md) ("Affected-tests
-selection") for the rule chain and the policy on what belongs in core.
-
-Pytest and Playwright use pytest-managed test databases. They must not create
-fixture content in the normal local `db.sqlite3`; the Playwright server fixture
-fails fast if it is pointed at that development database. Use `seed_data` only
-for intentional local development sample data, and use content sync for content
-repo data.
+Do not run the full Django suite locally (`make test`, `make test-all`, `make coverage`); those are CI gates. Deploy Dev runs the sharded Django suite and its 85% coverage gate on every push to `main`, and the full Playwright suite runs every 3 hours. [`_docs/testing-guidelines.md`](_docs/testing-guidelines.md) owns the test-design rules, the affected-tests overview and escalation table, and the core-test policy; [`_docs/testing-operations.md`](_docs/testing-operations.md) owns test-database isolation, coverage, ratchets, the affected-tests rule chain, and Playwright concurrency.
 
 ## Background Job Worker
 
-The project uses [Django-Q2](https://django-q2.readthedocs.io/) for background task processing. It uses the ORM broker (SQLite/PostgreSQL) so no extra services (Redis, RabbitMQ) are needed.
-
-**Start the worker process** (in a separate terminal):
+Background tasks use [Django-Q2](https://django-q2.readthedocs.io/) with the ORM broker, so no Redis or RabbitMQ is needed.
 
 ```bash
-uv run python manage.py qcluster
+uv run python manage.py qcluster          # start the worker (separate terminal)
+uv run python manage.py setup_schedules   # register the default recurring schedules
 ```
 
-The worker must be running to process queued async tasks and execute recurring schedules.
+The worker must run to process queued tasks and recurring schedules. The schedule list lives in `jobs/schedule_reconciliation.py`; enqueue and schedule helpers are `async_task` and `schedule` in `jobs/tasks/helpers.py` (exported from `jobs.tasks`). Monitor jobs in Studio at `/studio/worker/`.
 
-**Register default recurring schedules:**
+## Configuration and Deployment
 
-```bash
-uv run python manage.py setup_schedules
-```
-
-This creates:
-- `health-check` -- runs every 15 minutes
-- `cleanup-webhook-logs` -- runs daily at 3 AM, deletes processed webhook logs older than 30 days
-
-**Enqueue a job from application code:**
-
-```python
-from jobs.tasks import async_task
-
-async_task('myapp.tasks.send_email', user_id=42, max_retries=3)
-```
-
-**Schedule a recurring job:**
-
-```python
-from jobs.tasks import schedule
-
-schedule('myapp.tasks.cleanup', cron='0 * * * *', name='hourly-cleanup')
-```
-
-Monitor jobs in Studio at `/studio/worker/` (queued, successful, failed tasks, and schedules). Django admin is reserved for low-level framework diagnostics.
-
-## Configuration (production / staging operators)
-
-Past `make setup`, every integration (OAuth login, Stripe, SES, Slack, GitHub App, S3, Zoom, YouTube) is configured from `Studio > Settings`. Operators bringing up a fresh environment should follow [_docs/configuration.md](_docs/configuration.md) — it documents the platform env vars that cannot live in Studio (e.g. `SECRET_KEY`, `CSRF_TRUSTED_ORIGINS`), the exact key list per integration group, the webhook URLs to register with each provider, and an end-to-end smoke test.
-
-## Deployment
-
-See [_docs/setup.md](_docs/setup.md) for infrastructure details, CI/CD, manual deployment, database access, and admin user creation.
+- [`_docs/configuration.md`](_docs/configuration.md) — operator bring-up: platform env vars that cannot live in Studio, every `Studio > Settings` integration group, webhook URLs, and the end-to-end smoke test.
+- [`_docs/setup.md`](_docs/setup.md) — infrastructure, CI/CD, manual deployment, database access, and admin user creation.
 
 ## Project Structure
 
+Each top-level Python package with an `apps.py` is a Django app (`accounts/`, `content/`, `events/`, `payments/`, `studio/`, and so on); `website/` holds project settings and URLs.
+
 ```
-website/              # Django project config (settings, urls, wsgi)
-accounts/             # User, Tier, auth, notifications
-payments/             # Stripe, subscriptions
-content/              # Articles, recordings, projects, curated links, courses, events
-integrations/         # Slack, Telegram, Zoom, external service hooks
-email_app/            # SES, campaigns, newsletter
-jobs/                 # Background job infrastructure (Django-Q2 helpers, tasks)
 templates/            # Django templates
-static/               # Static files (CSS, images)
-specs/                # Requirement specs and task definitions
+static/, assets/      # Static files and the Tailwind input stylesheet
 playwright_tests/     # Playwright E2E tests
+tests/                # Repository-wide guards and tooling tests
+scripts/              # Developer and operator tooling
+_docs/                # Canonical documentation (see _docs/README.md)
+specs/                # Product decision records
 ```
 
 ## Docs
 
-- [Specs](specs/README.md) — requirement specifications
+- [Documentation map](_docs/README.md) — canonical owner for each topic
+- [Process](_docs/PROCESS.md) — development workflow and issue lifecycle
+- [Coding standard](coding-standard.md) — code structure and review rules
+- [Specs](specs/README.md) — product decision records
 - [Issues](https://github.com/AI-Shipping-Labs/website/issues) — task tracking
-- [Process](PROCESS.md) — development workflow

@@ -7,8 +7,10 @@ benefit: CI already runs the full Django suite on every push to main and
 blocks the deploy, and the full Playwright suite runs every 3 hours.
 
 This helper turns ``git diff --name-only`` into a concrete, deterministic
-test plan through an ordered rule chain (see ``_docs/testing-guidelines.md``,
-section "Affected-tests selection"):
+test plan through an ordered rule chain (see ``_docs/testing-operations.md``,
+section "Affected-tests rule chain and maps"; the overview and authoritative
+escalation table are in ``_docs/testing-guidelines.md``, "Affected-tests
+selection"):
 
  1. No-test paths (the ``_docs`` / ``docs`` / ``specs`` trees and top-level
     markdown) contribute nothing. A docs-only diff short-circuits to
@@ -161,6 +163,7 @@ NO_TEST_DIRS: tuple[str, ...] = ("_docs", "docs", "specs")
 #:     ``member_api/tests/test_usage_docs_1112.py`` and served by
 #:     ``member_api/views/docs.py``;
 #:   * ``CLAUDE.md`` / ``AGENTS.md`` / ``README.md`` / ``_docs/PROCESS.md`` /
+#:     ``_docs/process-worktree-lifecycle.md`` /
 #:     ``_docs/testing-guidelines.md`` -- rot guards in ``tests/``.
 PLAYWRIGHT_FILE_COMMAND_PREFIX = "uv run pytest playwright_tests/"
 
@@ -238,6 +241,17 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("scripts/capture_screenshots.py", ("tests.test_capture_screenshots",)),
     ("_docs/testing-guidelines.md", ("tests.test_affected_tests",)),
+    # The worktree lifecycle runbook moved out of _docs/PROCESS.md (#1840);
+    # the cleanup and retirement contract tests read it, and the full-suite
+    # instruction guard in tests.test_affected_tests scans it.
+    (
+        "_docs/process-worktree-lifecycle.md",
+        (
+            "tests.test_affected_tests",
+            "tests.test_cleanup_agent_worktrees",
+            "tests.test_retire_agent_branches",
+        ),
+    ),
     ("scripts/retire-agent-branches.py", ("tests.test_retire_agent_branches",)),
     ("scripts/playwright_owner_inventory.py", ("tests.test_playwright_owner_inventory",)),
     (
@@ -349,6 +363,7 @@ CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("AGENTS.md", (TESTS_PACKAGE,)),
     ("README.md", (TESTS_PACKAGE,)),
     ("_docs/PROCESS.md", (TESTS_PACKAGE,)),
+    ("_docs/process-worktree-lifecycle.md", (TESTS_PACKAGE,)),
     ("_docs/testing-guidelines.md", (TESTS_PACKAGE,)),
     ("_docs/setup.md", (TESTS_PACKAGE,)),
     # Shipped doc artifacts read by app tests.

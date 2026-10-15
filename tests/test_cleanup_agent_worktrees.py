@@ -331,8 +331,22 @@ class RepositoryContractTest(SyntheticRepoTestCase):
             0,
         )
 
+    def test_process_routes_to_the_worktree_lifecycle_runbook(self):
+        # Issue #1840 moved the detailed contract out of PROCESS.md; the
+        # lifecycle owner must still name it as a required read and keep the
+        # binding summary of the safety vetoes.
+        process = " ".join((PROJECT_ROOT / "_docs" / "PROCESS.md").read_text().split())
+        for required in (
+            "[`process-worktree-lifecycle.md`](process-worktree-lifecycle.md)",
+            "`lease-create`",
+            "OS process absence is not evidence",
+            "`--human-pending` is never inferred",
+            "Never force, never delete recursively",
+        ):
+            self.assertIn(required, process)
+
     def test_process_contract_makes_post_green_cleanup_an_attributable_gate(self):
-        process = PROJECT_ROOT.joinpath("_docs", "PROCESS.md").read_text()
+        process = (PROJECT_ROOT / "_docs" / "process-worktree-lifecycle.md").read_text()
         normalized = " ".join(process.split())
 
         for required in (

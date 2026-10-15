@@ -1,7 +1,7 @@
 # Analytics integration setup
 
-This page documents every setting registered in
-`integrations/settings_registry.py` under the `analytics` group. Each
+This page documents every setting declared in
+`integrations/settings_keys.py` under the `analytics` group. Each
 section follows the same template — Purpose, Without it, Where to find
 it, Prereqs, Rotation, Test vs live.
 

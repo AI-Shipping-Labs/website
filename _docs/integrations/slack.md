@@ -1,7 +1,7 @@
 # Slack integration setup
 
-This page documents every Slack-related setting registered in
-`integrations/settings_registry.py` (the `slack` group). Each section
+This page documents every Slack-related setting declared in
+`integrations/settings_keys.py` (the `slack` group). Each section
 follows the same template — Purpose, Without it, Where to find it,
 Prereqs, Rotation, Test vs live — so an operator can answer "do I need
 to set this right now, or can I defer it?" without leaving the page.

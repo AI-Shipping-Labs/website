@@ -345,17 +345,23 @@ Idea: document the entire decision-making process and platform selection journey
 
 ## Sources
 
-[^3]: [20260218_155901_AlexeyDTC_msg1951_transcript.txt](../inbox/used/20260218_155901_AlexeyDTC_msg1951_transcript.txt)
-[^3b]: [20260218_155901_AlexeyDTC_msg1952_transcript.txt](../inbox/used/20260218_155901_AlexeyDTC_msg1952_transcript.txt)
-[^3c]: [20260218_155901_AlexeyDTC_msg1953_transcript.txt](../inbox/used/20260218_155901_AlexeyDTC_msg1953_transcript.txt)
-[^4]: [20260218_160548_AlexeyDTC_msg1963_transcript.txt](../inbox/used/20260218_160548_AlexeyDTC_msg1963_transcript.txt)
-[^5]: [20260218_160224_valeriia_kuka_msg1961_transcript.txt](../inbox/used/20260218_160224_valeriia_kuka_msg1961_transcript.txt)
-[^5b]: [20260218_160718_valeriia_kuka_msg1965.md](../inbox/used/20260218_160718_valeriia_kuka_msg1965.md)
-[^6]: [20260218_161001_AlexeyDTC_msg1970_transcript.txt](../inbox/used/20260218_161001_AlexeyDTC_msg1970_transcript.txt)
-[^7]: [20260218_161001_AlexeyDTC_msg1969.md](../inbox/used/20260218_161001_AlexeyDTC_msg1969.md)
-[^8]: [20260218_160725_AlexeyDTC_msg1967_transcript.txt](../inbox/used/20260218_160725_AlexeyDTC_msg1967_transcript.txt)
-[^9]: [20260218_161244_AlexeyDTC_msg1975.md](../inbox/used/20260218_161244_AlexeyDTC_msg1975.md), [aishippinglabs.com](https://aishippinglabs.com)
-[^10]: [20260218_161109_AlexeyDTC_msg1973_transcript.txt](../inbox/used/20260218_161109_AlexeyDTC_msg1973_transcript.txt)
-[^11]: [20260218_160017_valeriia_kuka_msg1957_photo.md](../inbox/used/20260218_160017_valeriia_kuka_msg1957_photo.md)
-[^13]: [20260218_173034_AlexeyDTC_msg1984_transcript.txt](../inbox/used/20260218_173034_AlexeyDTC_msg1984_transcript.txt), [20260218_173034_AlexeyDTC_msg1985_transcript.txt](../inbox/used/20260218_173034_AlexeyDTC_msg1985_transcript.txt), [20260218_173034_AlexeyDTC_msg1986_transcript.txt](../inbox/used/20260218_173034_AlexeyDTC_msg1986_transcript.txt), [20260218_173034_AlexeyDTC_msg1987_transcript.txt](../inbox/used/20260218_173034_AlexeyDTC_msg1987_transcript.txt)
-[^12]: [20260218_160017_valeriia_kuka_msg1958_photo.md](../inbox/used/20260218_160017_valeriia_kuka_msg1958_photo.md)
+The footnotes cite the 2026-02-18 transcripts, messages, and photo notes that
+fed this draft; each filename carries the timestamp, speaker, and message ID.
+They were linked from an `inbox/used/` folder outside this repository, were
+never committed here, and are not available. Product decisions that shipped are
+recorded in the numbered specs and `_docs/product.md`.
+
+[^3]: `20260218_155901_AlexeyDTC_msg1951_transcript.txt`
+[^3b]: `20260218_155901_AlexeyDTC_msg1952_transcript.txt`
+[^3c]: `20260218_155901_AlexeyDTC_msg1953_transcript.txt`
+[^4]: `20260218_160548_AlexeyDTC_msg1963_transcript.txt`
+[^5]: `20260218_160224_valeriia_kuka_msg1961_transcript.txt`
+[^5b]: `20260218_160718_valeriia_kuka_msg1965.md`
+[^6]: `20260218_161001_AlexeyDTC_msg1970_transcript.txt`
+[^7]: `20260218_161001_AlexeyDTC_msg1969.md`
+[^8]: `20260218_160725_AlexeyDTC_msg1967_transcript.txt`
+[^9]: `20260218_161244_AlexeyDTC_msg1975.md`, [aishippinglabs.com](https://aishippinglabs.com)
+[^10]: `20260218_161109_AlexeyDTC_msg1973_transcript.txt`
+[^11]: `20260218_160017_valeriia_kuka_msg1957_photo.md`
+[^13]: `20260218_173034_AlexeyDTC_msg1984_transcript.txt`, `20260218_173034_AlexeyDTC_msg1985_transcript.txt`, `20260218_173034_AlexeyDTC_msg1986_transcript.txt`, `20260218_173034_AlexeyDTC_msg1987_transcript.txt`
+[^12]: `20260218_160017_valeriia_kuka_msg1958_photo.md`

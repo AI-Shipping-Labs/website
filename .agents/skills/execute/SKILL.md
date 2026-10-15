@@ -1,13 +1,13 @@
 ---
 name: execute
-description: Run the full development loop - pick issues, implement, QA, PM review, commit, push, repeat. Works for both new features (open issues) and Playwright test implementation (needs-testing issues).
+description: Run the full development loop - pick issues, implement, QA, PM review, commit, merge, push, repeat. Works for both new features (open issues) and Playwright test implementation (needs-testing issues).
 disable-model-invocation: true
 argument-hint: [number-of-issues]
 ---
 
 # Execute Development Loop
 
-Run the full issue pipeline as defined in [`_docs/PROCESS.md`](_docs/PROCESS.md). Number of issues per batch: $ARGUMENTS (default: 2)
+Run the full issue pipeline as defined in [`_docs/PROCESS.md`](../../../_docs/PROCESS.md). Number of issues per batch: $ARGUMENTS (default: 2)
 
 The lifecycle: PM grooms → Engineer builds → Tester verifies → PM accepts → Ship. See PROCESS.md for the full agent workflow, issue lifecycle, and orchestrator responsibilities.
 
@@ -27,7 +27,7 @@ gh issue list --repo AI-Shipping-Labs/website --state open --limit 50 --json num
 For each ungroomed issue, launch a PM agent in parallel:
 
 ```
-Task(subagent_type="general-purpose", model="opus-4.8", run_in_background=true, prompt="You are the Product Manager agent. Read _docs/PRODUCT.md and _docs/PROCESS.md first, then read .claude/agents/product-manager.md for your role. Groom issue #N: gh issue view N --repo AI-Shipping-Labs/website. Add BDD test scenarios (Given/When/Then format), clarify acceptance criteria, ensure it is implementation-ready. Update with gh issue edit N --body '...'. Do NOT use bold formatting. Use backticks for code, headings for structure. Keep existing content and add to it.")
+Task(subagent_type="general-purpose", model="opus-4.8", run_in_background=true, prompt="You are the Product Manager agent. Read _docs/product.md and _docs/PROCESS.md first, then read .claude/agents/product-manager.md for your role. Groom issue #N: gh issue view N --repo AI-Shipping-Labs/website. Add BDD test scenarios (Given/When/Then format), clarify acceptance criteria, ensure it is implementation-ready. Update with gh issue edit N --body '...'. Do NOT use bold formatting. Use backticks for code, headings for structure. Keep existing content and add to it.")
 ```
 
 Do NOT wait for grooming to finish before picking issues — run grooming in the background. Issues that already have BDD scenarios are ready for implementation. Newly groomed issues will be available for the next batch.
@@ -76,13 +76,13 @@ Launch engineers in parallel for each picked issue.
 ### For new features (open issues):
 
 ```
-Task(subagent_type="implementer", model="opus-4.8", prompt="Implement issue #N. Read the issue with gh issue view N --repo AI-Shipping-Labs/website. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Follow the spec and acceptance criteria. Write code and tests. Do NOT commit.")
+Task(subagent_type="implementer", model="opus-4.8", prompt="Implement issue #N. Read the issue with gh issue view N --repo AI-Shipping-Labs/website. Read _docs/product.md and _docs/PROCESS.md first. Follow the spec and acceptance criteria. Write code and tests. Do NOT commit.")
 ```
 
 ### For Playwright tests (needs-testing issues):
 
 ```
-Task(subagent_type="implementer", model="opus-4.8", prompt="Implement Playwright E2E tests for issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. Read the issue (gh issue view N --repo AI-Shipping-Labs/website) for BDD scenarios. Read existing tests in playwright_tests/ for patterns and conventions. Write Playwright tests matching each BDD scenario. Run them: uv run pytest playwright_tests/test_{feature}.py -v. Do NOT commit.")
+Task(subagent_type="implementer", model="opus-4.8", prompt="Implement Playwright E2E tests for issue #N. Read _docs/product.md and _docs/PROCESS.md first. Read the issue (gh issue view N --repo AI-Shipping-Labs/website) for BDD scenarios. Read existing tests in playwright_tests/ for patterns and conventions. Write Playwright tests matching each BDD scenario. Run them: uv run pytest playwright_tests/test_{feature}.py -v. Do NOT commit.")
 ```
 
 Wait for all engineers to complete. If an engineer reports a blocker, skip that issue and note it.
@@ -92,7 +92,7 @@ Wait for all engineers to complete. If an engineer reports a blocker, skip that 
 For each completed implementation, launch a tester agent:
 
 ```
-Task(subagent_type="qa", model="opus-4.8", prompt="QA issue #N. Read _docs/PRODUCT.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, then derive the test scope from the diff instead of running everything: run uv run python scripts/affected_tests.py to print the plan, then make test-affected to execute exactly its commands (scoped Django labels plus the core-or-full Playwright subset it selected). Paste the emitted command(s) and the core/full decision in your report. Do NOT run the full local Django suite or the unfiltered Playwright suite — CI runs the full Django suite on every push to main and the full Playwright suite runs every 3 hours. After tests pass, capture screenshots to .tmp/screenshots/ and upload each one via the sandbox-screenshots service per tester.md Step 7 (capture: uv run python scripts/capture_screenshots.py --urls {relevant URLs} --output .tmp/screenshots; then upload each PNG with upload-screenshot; then post a single ## Screenshots comment on the issue). Report pass/fail with specifics.")
+Task(subagent_type="qa", model="opus-4.8", prompt="QA issue #N. Read _docs/product.md and _docs/PROCESS.md first. The engineer wrote {description}. Review the code, then derive the test scope from the diff instead of running everything: run uv run python scripts/affected_tests.py to print the plan, then make test-affected to execute exactly its commands (scoped Django labels plus the core-or-full Playwright subset it selected). Paste the emitted command(s) and the core/full decision in your report. Do NOT run the full local Django suite or the unfiltered Playwright suite — CI runs the full Django suite on every push to main and the full Playwright suite runs every 3 hours. After tests pass, capture screenshots to .tmp/screenshots/ and upload each one via the sandbox-screenshots service per tester.md step 8 Capture Screenshots (capture: uv run python scripts/capture_screenshots.py --urls {relevant URLs} --output .tmp/screenshots; then upload each PNG with upload-screenshot; then post a single ## Screenshots comment on the issue). Report pass/fail with specifics.")
 ```
 
 ## Step 4: Handle QA Results
@@ -110,21 +110,19 @@ Skip this step for Playwright test issues. For new features only:
 - Infrastructure tasks (labels: `infra`, `integration` without `frontend`): DX review
 
 ```
-Task(subagent_type="general-purpose", model="opus-4.8", prompt="You are the Product Manager agent doing acceptance review for issue #N. Read _docs/PRODUCT.md first. Read .claude/agents/product-manager.md for your review checklist. Read the templates, views, and copy. Report ACCEPT or REJECT with specifics.")
+Task(subagent_type="general-purpose", model="opus-4.8", prompt="You are the Product Manager agent doing acceptance review for issue #N. Read _docs/product.md first. Read .claude/agents/product-manager.md for your review checklist. Read the templates, views, and copy. Report ACCEPT or REJECT with specifics.")
 ```
 
 ## Step 6: Handle PM Results
 
 For each issue:
-- If PM ACCEPTS: proceed to commit. After commit, the PM closes the issue:
-  - Comment on the issue summarizing what was implemented and how it was tested
-  - Close the issue: `gh issue close N --repo AI-Shipping-Labs/website --comment "Accepted and merged in {commit_sha}. {brief summary of implementation}."`
-  - Exception: if the issue has `[HUMAN]` criteria, do NOT close — add the `human` label instead
+- If PM ACCEPTS: proceed to Step 7. Do not close the issue by hand. The SWE commit body carries `Closes #N`, so GitHub closes the issue when the orchestrator's merge commit reaches `origin/main`.
+  - Exception: if the issue has `[HUMAN]` criteria, the commit uses `Refs #N` instead, the issue stays open, and it gets the `human` label (see Step 7 and `_docs/PROCESS.md` "Human Verification")
 - If PM REJECTS: relay UX/DX feedback to engineer, fix, re-run PM review (max 2 retries)
 
-## Step 7: Commit and Push
+## Step 7: Commit, Merge, and Push
 
-For each accepted issue, commit with specific files (not `git add -A`):
+For each accepted issue, tell the software engineer to commit on its worktree branch with specific files (not `git add -A`) and no push:
 
 ```bash
 git add {specific files}
@@ -134,8 +132,9 @@ Short description
 Closes #N
 EOF
 )"
-git push origin main
 ```
+
+Then the orchestrator merges the worktree branch into a clean, synchronized local `main` with `git merge --no-ff` and pushes `main`, exactly as `_docs/PROCESS.md` ("Merging — local only, no PRs") describes. Never open a PR.
 
 For Playwright test commits:
 - Use `Refs #N` (not `Closes #N`) since the issue is already closed
@@ -149,14 +148,7 @@ For feature commits with `[HUMAN]` criteria:
 
 ## Step 8: Pipeline Check
 
-After pushing, check CI/CD:
-
-```bash
-sleep 10
-gh run list --repo AI-Shipping-Labs/website --limit 3
-```
-
-If a run fails, launch the oncall-engineer agent (pipeline-fixer) to fix it.
+After pushing, dispatch the oncall-engineer agent asynchronously and continue with other work. On-call is the sole CI observer: it invokes `scripts/watch-ci.py` once for the `Deploy Dev` run (`.claude/agents/oncall-engineer.md`). The orchestrator never runs `sleep`, `gh run watch`, or repeated `gh run list` itself. After a terminal green handoff, run the worktree cleanup handoff in `_docs/process-worktree-lifecycle.md`.
 
 ## Step 9: Repeat
 

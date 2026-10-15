@@ -1,5 +1,7 @@
 # Issue Backlog
 
+Historical record: the original milestone backlog scaffold. GitHub issues now own all work tracking, and `_docs/PROCESS.md` owns the lifecycle; the routes, models, and commands below are not current. Kept as provenance for the early milestone plan.
+
 Issues to create on GitHub as we progress through milestones. Issue #1 (M1: scaffold + reproduce site) is already created.
 
 ## M2: Auth + Tiers + Payments
@@ -66,4 +68,4 @@ Issues to create on GitHub as we progress through milestones. Issue #1 (M1: scaf
 
 ## M3-M9 (to be detailed later)
 
-Issues for milestones 3-9 will be created as we approach those milestones. See `PROCESS.md` for milestone overview and `specs/` for full requirements.
+Issues for milestones 3-9 will be created as we approach those milestones. See `specs/` for full requirements. (The milestone overview this line once pointed to no longer exists; `_docs/PROCESS.md` is the current process.)

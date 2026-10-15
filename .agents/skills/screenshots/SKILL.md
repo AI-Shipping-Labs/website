@@ -93,7 +93,7 @@ Then surface the printed `url` back to the user.
 
 ## Tester usage
 
-The tester agent captures a batch of pages, uploads each PNG, and posts a single `## Screenshots` comment to the issue. See `.claude/agents/tester.md` Step 7 for the exact comment format.
+The tester agent captures a batch of pages, uploads each PNG, and posts a single `## Screenshots` comment to the issue. See `.claude/agents/tester.md` step 8 (Capture Screenshots, 8c) for the exact comment format.
 
 ## Designer usage
 

@@ -1,5 +1,7 @@
 # 14 - GitHub-Hosted Content
 
+Status: decision record. The GitHub-as-source-of-truth decision, signed webhook sync, and private read-only GitHub App access are current. The per-type repository layout below (`blog`, `courses`, `resources`, `projects`) is the original plan, not the current one: the registered sources are declared in `integrations/management/commands/seed_content_sources.py` (`content`, `python-course`, `workshops-content`, `ai-buildcamp-course`, `wiki`). Current authoring and sync behavior is owned by [`_docs/content.md`](../_docs/content.md) and [`_docs/integrations/github.md`](../_docs/integrations/github.md).
+
 ## Overview
 
 All content (articles, courses, resources, projects) is authored and stored in GitHub repositories. The platform pulls content from these repos and renders it on the website. Authors edit content via Git — push to a branch, merge a PR, content appears on the site.

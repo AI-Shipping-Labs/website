@@ -46,7 +46,8 @@ def parse_submission_post(post_data, homework):
 def save_submission(
     homework, user, *, homework_link, answers_by_question_id,
     learning_in_public_links=None, time_spent_lectures=None,
-    time_spent_homework=None,
+    time_spent_homework=None, submitted_at=None, on_behalf_by=None,
+    on_behalf_note='',
 ):
     """Create or update ``user``'s ``Submission`` for ``homework``.
 
@@ -54,6 +55,10 @@ def save_submission(
     step never blocks a submission. Callers must confirm
     ``homework.is_accepting_submissions`` before calling this -- it does not
     re-check the deadline itself.
+
+    ``submitted_at`` defaults to now. ``on_behalf_by`` / ``on_behalf_note``
+    mark a submission staff recorded for the student; a student's own save
+    passes neither, so it clears a previous on-behalf marker.
     """
     enrollment, enrollment_created = CohortEnrollment.objects.get_or_create(
         user=user, cohort=homework.cohort,
@@ -70,10 +75,13 @@ def save_submission(
     submission.learning_in_public_links = learning_in_public_links or []
     submission.time_spent_lectures = time_spent_lectures
     submission.time_spent_homework = time_spent_homework
-    submission.submitted_at = timezone.now()
+    submission.submitted_at = submitted_at or timezone.now()
+    submission.submitted_on_behalf_by = on_behalf_by
+    submission.on_behalf_note = on_behalf_note or ''
     submission.save(update_fields=[
         'enrollment', 'homework_link', 'learning_in_public_links',
         'time_spent_lectures', 'time_spent_homework', 'submitted_at',
+        'submitted_on_behalf_by', 'on_behalf_note',
     ])
 
     questions_by_id = {q.pk: q for q in homework.questions.all()}

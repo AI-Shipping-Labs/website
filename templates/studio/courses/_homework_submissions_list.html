@@ -10,10 +10,16 @@ Self-contained: the page poller swaps this inner HTML in place.
     {% for item in submission_items %}
     <details class="group" data-testid="homework-submission-row" data-submission-row data-student-email="{{ item.submission.student.email }}"{% if item.submission.homework_link %} data-homework-link="{{ item.submission.homework_link }}"{% endif %}>
       <summary class="flex flex-col gap-2 px-4 sm:px-6 py-4 cursor-pointer hover:bg-secondary/30 transition-colors sm:flex-row sm:items-center sm:justify-between">
-        <span class="text-sm text-foreground break-all" data-testid="homework-submission-student">{{ item.submission.student.email }}</span>
+        <span class="flex flex-wrap items-center gap-2">
+          <span class="text-sm text-foreground break-all" data-testid="homework-submission-student">{{ item.submission.student.email }}</span>
+          {% if item.submission.submitted_on_behalf_by_id %}<span data-testid="homework-submission-on-behalf">{% studio_status_badge 'reviewed' 'Recorded by staff' %}</span>{% endif %}
+        </span>
         <span class="text-xs text-muted-foreground" data-testid="homework-submission-submitted-at">{{ item.submission.submitted_at|operator_datetime }}</span>
       </summary>
       <div class="px-4 sm:px-6 pb-5 border-t border-border bg-background/40">
+        {% if item.submission.submitted_on_behalf_by_id %}
+        <p class="mt-3 text-sm text-muted-foreground whitespace-pre-line" data-testid="homework-submission-on-behalf-note">Recorded by {{ item.submission.submitted_on_behalf_by.email }}{% if item.submission.on_behalf_note %}: {{ item.submission.on_behalf_note }}{% endif %}</p>
+        {% endif %}
         {% if item.submission.homework_link %}
         <div class="mt-3 mb-3">
           <span class="text-sm text-muted-foreground">Homework link:</span>

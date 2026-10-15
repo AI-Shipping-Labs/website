@@ -263,7 +263,7 @@ def homework_submissions(request, homework_id):
     submissions = (
         Submission.objects
         .filter(homework=homework)
-        .select_related('student')
+        .select_related('student', 'submitted_on_behalf_by')
         .prefetch_related('answers__question')
         .order_by('-submitted_at')
     )

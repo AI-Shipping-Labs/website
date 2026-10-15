@@ -41,6 +41,9 @@ NOTIFICATION_TYPE_CHOICES = [
     # Issue #1919: pod meeting proposed, agreed, moved, can't make it,
     # cancelled, and the hourly 24h reminder. Links to the pod page.
     ('pod_meeting', 'Pod Meeting'),
+    # Staff recorded a homework or project submission for the member
+    # (``POST /api/submissions/on-behalf`` with ``notify: true`` only).
+    ('submission_recorded', 'Submission Recorded'),
 ]
 
 

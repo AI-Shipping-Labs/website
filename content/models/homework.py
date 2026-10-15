@@ -238,6 +238,15 @@ class Submission(models.Model):
     )
     time_spent_lectures = models.FloatField(null=True, blank=True)
     time_spent_homework = models.FloatField(null=True, blank=True)
+    # Set when staff recorded this submission for the student through
+    # ``POST /api/submissions/on-behalf`` (e.g. answers that arrived by
+    # email); cleared again when the student re-submits themselves. Site
+    # extension -- the donor coursework model has no equivalent.
+    submitted_on_behalf_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='+',
+    )
+    on_behalf_note = models.TextField(blank=True, default='', db_default='')
 
     class Meta:
         constraints = [

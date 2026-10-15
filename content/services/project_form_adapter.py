@@ -206,6 +206,9 @@ class AislProjectSubmissionForm(ProjectSubmissionForm):
                 )
             if 'time_spent' in self.fields:
                 submission.time_spent = data.get('time_spent')
+            # The learner's own save supersedes a staff-recorded submission.
+            submission.submitted_on_behalf_by = None
+            submission.on_behalf_note = ''
             self.apply_extra_fields(submission)
             submission.full_clean()
             submission.save()

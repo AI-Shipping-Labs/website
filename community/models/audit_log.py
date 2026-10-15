@@ -83,6 +83,13 @@ class CommunityAuditLog(models.Model):
             "questionnaire_response_reopened",
             "Questionnaire response reopened",
         ),
+        # Staff recorded (or replaced) a homework / project submission for a
+        # member via ``POST /api/submissions/on-behalf``. The ``user`` FK is
+        # the SUBJECT (the member); ``details`` is a JSON summary with the
+        # submission kind and id, ``replaced``, ``submitted_at``, the note,
+        # and the actor (``actor_token=<label>`` plus ``actor_email``).
+        # Dry runs write NO row.
+        ("submission_on_behalf", "API: submission recorded on behalf"),
     ]
 
     user = models.ForeignKey(

@@ -129,6 +129,10 @@ TRANSACTIONAL_EMAIL_TYPES = {
     # Transactional because enrollment is an explicit sign-up; newsletter
     # unsubscribed does not suppress; bounce/complaint still do.
     "course_announcement",
+    # Staff recorded a homework or project submission for the member
+    # (``POST /api/submissions/on-behalf`` with ``notify``). Transactional:
+    # it is about the member's own coursework record.
+    "submission_recorded",
 }
 
 PROMOTIONAL_EMAIL_TYPES = {

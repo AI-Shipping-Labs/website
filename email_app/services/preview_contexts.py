@@ -255,6 +255,15 @@ PREVIEW_CONTEXTS = {
             '%2Fevents%2Fcommunity-lunch%2Fjoin'
         ),
     },
+    'submission_recorded': {
+        'user_name': 'Ada',
+        'assignment_title': 'Week 2 homework',
+        'course_title': 'AI Buildcamp',
+        'submission_url': (
+            'https://aishippinglabs.com/courses/ai-buildcamp/week-2/homework'
+            '?cohort=1'
+        ),
+    },
     'content_comment': {
         'user_name': 'Ada',
         'verb': 'comment',

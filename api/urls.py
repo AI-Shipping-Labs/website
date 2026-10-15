@@ -232,6 +232,10 @@ from api.views.stripe_webhooks import (
     stripe_webhooks_status,
     stripe_webhooks_verify,
 )
+from api.views.submissions_on_behalf import (
+    course_homework_list,
+    submission_on_behalf,
+)
 from api.views.subscription_reconciliation import (
     reconciliation_run_detail,
     reconciliation_runs_dispatch,
@@ -903,6 +907,17 @@ urlpatterns = [
         "courses/<slug:slug>/access/<path:email>",
         course_access_detail,
         name="api_course_access_detail",
+    ),
+    # ---- Coursework recorded on a member's behalf ----------------------
+    path(
+        "courses/<slug:slug>/homework",
+        course_homework_list,
+        name="api_course_homework_list",
+    ),
+    path(
+        "submissions/on-behalf",
+        submission_on_behalf,
+        name="api_submission_on_behalf",
     ),
     # ---- Course cohorts (event-series link diagnostics) ----------------
     path(

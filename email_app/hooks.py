@@ -450,6 +450,46 @@ def _resolve_content_comment_context(delivery, context):
     )
 
 
+def _resolve_submission_recorded_context(delivery, context):
+    """Mint the learner link for a staff-recorded submission.
+
+    The producer stores only the assignment and course titles; the worker
+    re-reads the homework ``Submission`` or ``ProjectSubmission`` relation
+    and links to the page where the member sees it. A deleted submission
+    fails closed instead of retrying forever.
+    """
+
+    from content.models import ProjectSubmission  # noqa: PLC0415
+    from content.models.homework import Submission  # noqa: PLC0415
+    from content.services.submissions_on_behalf import (  # noqa: PLC0415
+        homework_page_path,
+        project_page_path,
+    )
+    from integrations.config import site_base_url  # noqa: PLC0415
+
+    _member_greeting(delivery, context)
+    if delivery.related_object_type == "content.submission":
+        submission = (
+            Submission.objects.select_related("homework__cohort__course")
+            .filter(pk=delivery.related_object_id).first()
+        )
+        path = homework_page_path(submission.homework) if submission else None
+    elif delivery.related_object_type == "content.projectsubmission":
+        submission = (
+            ProjectSubmission.objects.select_related("course", "course_project")
+            .filter(pk=delivery.related_object_id).first()
+        )
+        path = (
+            project_page_path(submission.course, submission.course_project)
+            if submission else None
+        )
+    else:
+        raise PermanentJobError("submission_recorded_relation_missing")
+    if path is None:
+        raise PermanentJobError("submission_recorded_submission_missing")
+    context["submission_url"] = f"{site_base_url().rstrip('/')}{path}"
+
+
 # A1.2 slice 1: the four internal staff heads-ups. Each stores scalar
 # inputs only (#1613) — the subject member's id under a per-purpose key,
 # and for the paid-signup note the raw Stripe object ids.
@@ -1114,6 +1154,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_plan_shared_context(delivery, context)
     elif delivery.purpose == "content_comment":
         _resolve_content_comment_context(delivery, context)
+    elif delivery.purpose == "submission_recorded":
+        _resolve_submission_recorded_context(delivery, context)
     elif delivery.purpose in _STAFF_NOTIFICATION_PURPOSES:
         _resolve_staff_notification_context(delivery, context)
     elif delivery.purpose in ("bookclub_book_summary", "bookclub_chapter_summary"):

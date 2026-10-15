@@ -5497,6 +5497,60 @@
         ]
       }
     },
+    "/api/courses/{slug}/homework": {
+      "get": {
+        "description": "Every homework of the course, per cohort, with its state and questions. ``questions[].key`` is what ``POST /api/submissions/on-behalf`` takes in ``answers``; choice questions list their ``options`` (answer with the 1-based index or the exact text). Correct answers are never included.",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "course": "ai-buildcamp",
+                  "homework": [
+                    {
+                      "cohort": "1",
+                      "due_date": null,
+                      "id": 7,
+                      "questions": [
+                        {
+                          "id": 31,
+                          "key": "project-idea",
+                          "options": [],
+                          "text": "Describe your project idea",
+                          "type": "FL"
+                        }
+                      ],
+                      "slug": "week-2-homework",
+                      "state": "OP",
+                      "submission_count": 12,
+                      "title": "Week 2 homework"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Homework list."
+          },
+          "404": {
+            "description": "``unknown_course``."
+          }
+        },
+        "summary": "List homework with cohorts and question keys",
+        "tags": [
+          "Coursework"
+        ]
+      }
+    },
     "/api/courses/{slug}/instructors": {
       "get": {
         "parameters": [
@@ -19903,6 +19957,230 @@
         "summary": "Retrieve sprint roster activity (staff-only)",
         "tags": [
           "Sprints"
+        ]
+      }
+    },
+    "/api/submissions/on-behalf": {
+      "post": {
+        "description": "Records a submission for ``user`` (email -- primary, then alias -- or numeric id) as if they had submitted it, scored by the same code as a learner's own submit. ``kind: \"homework\"`` targets ``homework_id``, or ``course`` + ``homework`` (slug) + optional ``cohort`` key; ``answers`` maps question keys (from ``GET /api/courses/<slug>/homework``, or a question id) to answers -- text, or 1-based option index(es) / exact option text for choice questions. ``kind: \"project\"`` targets ``course`` + optional ``project`` (a dated attempt slug) and needs ``project_url``. Homework open/closed state is not checked. ``submitted_at`` (ISO-8601, not in the future) backdates the submission. The row is marked ``submitted_on_behalf_by`` with ``note``, and one ``submission_on_behalf`` audit-log row names the acting staff user and token. An existing submission returns 409 ``submission_exists`` unless ``replace: true``; a project already in peer review returns 409 ``submission_locked``. ``dry_run: true`` validates and scores but writes nothing (status ``would_create`` / ``would_replace``). The member gets no notification unless ``notify: true`` (bell + ``submission_recorded`` email).",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "answers": {
+                  "project-idea": "A RAG assistant for ..."
+                },
+                "course": "ai-buildcamp",
+                "dry_run": true,
+                "homework": "week-2-homework",
+                "kind": "homework",
+                "note": "Sent by email on 2026-10-01",
+                "submitted_at": "2026-10-01T09:00:00Z",
+                "user": "member@example.com"
+              },
+              "schema": {
+                "properties": {
+                  "answers": {
+                    "type": "object"
+                  },
+                  "cohort": {
+                    "description": "Cohort external key.",
+                    "type": "string"
+                  },
+                  "commit_id": {
+                    "type": "string"
+                  },
+                  "course": {
+                    "type": "string"
+                  },
+                  "description": {
+                    "type": "string"
+                  },
+                  "dry_run": {
+                    "type": "boolean"
+                  },
+                  "homework": {
+                    "description": "Homework slug.",
+                    "type": "string"
+                  },
+                  "homework_id": {
+                    "type": "integer"
+                  },
+                  "homework_link": {
+                    "type": "string"
+                  },
+                  "kind": {
+                    "enum": [
+                      "homework",
+                      "project"
+                    ],
+                    "type": "string"
+                  },
+                  "learning_in_public_links": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "note": {
+                    "type": "string"
+                  },
+                  "notify": {
+                    "type": "boolean"
+                  },
+                  "project": {
+                    "description": "Dated project attempt slug.",
+                    "type": "string"
+                  },
+                  "project_url": {
+                    "type": "string"
+                  },
+                  "replace": {
+                    "type": "boolean"
+                  },
+                  "submitted_at": {
+                    "format": "date-time",
+                    "type": "string"
+                  },
+                  "time_spent": {
+                    "type": "number"
+                  },
+                  "time_spent_homework": {
+                    "type": "number"
+                  },
+                  "time_spent_lectures": {
+                    "type": "number"
+                  },
+                  "user": {
+                    "description": "Email or numeric user id.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "user"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "audit_log_id": null,
+                  "cohort_enrollment_created": false,
+                  "dry_run": true,
+                  "homework": {
+                    "accepting_submissions": false,
+                    "cohort": "1",
+                    "course": "ai-buildcamp",
+                    "id": 7,
+                    "slug": "week-2-homework",
+                    "state": "CL",
+                    "title": "Week 2 homework"
+                  },
+                  "kind": "homework",
+                  "notify": false,
+                  "replaced_submission": null,
+                  "status": "would_create",
+                  "submission": {
+                    "answers": [
+                      {
+                        "answer_text": "A RAG assistant for ...",
+                        "is_correct": true,
+                        "question_id": 31,
+                        "question_key": "project-idea"
+                      }
+                    ],
+                    "homework_link": "",
+                    "id": 88,
+                    "learning_in_public_links": [],
+                    "on_behalf_note": "Sent by email on 2026-10-01",
+                    "questions_score": 1,
+                    "submitted_at": "2026-10-01T09:00:00+00:00",
+                    "submitted_on_behalf_by": "staff@example.com",
+                    "time_spent_homework": null,
+                    "time_spent_lectures": null,
+                    "total_score": 1
+                  },
+                  "user": {
+                    "email": "member@example.com",
+                    "id": 42
+                  }
+                }
+              }
+            },
+            "description": "Dry-run preview (nothing written)."
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "audit_log_id": 1301,
+                  "cohort_enrollment_created": false,
+                  "dry_run": false,
+                  "homework": {
+                    "accepting_submissions": false,
+                    "cohort": "1",
+                    "course": "ai-buildcamp",
+                    "id": 7,
+                    "slug": "week-2-homework",
+                    "state": "CL",
+                    "title": "Week 2 homework"
+                  },
+                  "kind": "homework",
+                  "notify": false,
+                  "replaced_submission": null,
+                  "status": "created",
+                  "submission": {
+                    "answers": [
+                      {
+                        "answer_text": "A RAG assistant for ...",
+                        "is_correct": true,
+                        "question_id": 31,
+                        "question_key": "project-idea"
+                      }
+                    ],
+                    "homework_link": "",
+                    "id": 88,
+                    "learning_in_public_links": [],
+                    "on_behalf_note": "Sent by email on 2026-10-01",
+                    "questions_score": 1,
+                    "submitted_at": "2026-10-01T09:00:00+00:00",
+                    "submitted_on_behalf_by": "staff@example.com",
+                    "time_spent_homework": null,
+                    "time_spent_lectures": null,
+                    "total_score": 1
+                  },
+                  "user": {
+                    "email": "member@example.com",
+                    "id": 42
+                  }
+                }
+              }
+            },
+            "description": "Submission created or replaced."
+          },
+          "400": {
+            "description": "Invalid JSON or ``ambiguous_homework`` (pass ``cohort``; ``details.candidates`` lists them)."
+          },
+          "404": {
+            "description": "``user_not_found``, ``unknown_course``, ``unknown_cohort``, ``unknown_homework`` or ``unknown_project``."
+          },
+          "409": {
+            "description": "``submission_exists`` (pass ``replace``) or ``submission_locked`` (project in peer review); ``details.existing_submission`` shows it."
+          },
+          "422": {
+            "description": "Missing field, bad type, unknown question, invalid answer, URL, link list, hours, note, or a future ``submitted_at``."
+          }
+        },
+        "summary": "Create or replace a member's submission",
+        "tags": [
+          "Coursework"
         ]
       }
     },

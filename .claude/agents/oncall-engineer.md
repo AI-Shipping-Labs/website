@@ -215,7 +215,8 @@ delete its branch from the live On-Call role. After On-Call and every other
 role have ended, the orchestrator verifies that state in its active-agent
 registry, closes the common-Git-dir lease, runs the fail-closed dry-run
 classifier from shared main, and applies at most one reviewed candidate at a
-time. See `_docs/PROCESS.md` ("Agent worktree lifecycle").
+time. See `_docs/PROCESS.md` ("Agent worktree lifecycle") and its required
+runbook `_docs/process-worktree-lifecycle.md`.
 
 ## Rules
 

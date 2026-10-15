@@ -1,7 +1,7 @@
 # LLM Provider integration setup
 
-This page documents every setting registered in
-`integrations/settings_registry.py` under the `llm` group (issue #799).
+This page documents every setting declared in
+`integrations/settings_keys.py` under the `llm` group (issue #799).
 Each section follows the same template — Purpose, Without it, Where to
 find it, Test vs live.
 

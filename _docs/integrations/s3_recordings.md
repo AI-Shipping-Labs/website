@@ -1,7 +1,7 @@
 # S3 Recordings integration setup
 
-This page documents every setting registered in
-`integrations/settings_registry.py` under the `s3_recordings` group.
+This page documents every setting declared in
+`integrations/settings_keys.py` under the `s3_recordings` group.
 Each section follows the same template — Purpose, Without it, Where to
 find it, Prereqs, Rotation, Test vs live.
 

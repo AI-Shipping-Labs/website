@@ -71,8 +71,9 @@ repeat it.
 
 - Read runtime-configurable values with `get_config(...)` and
   `is_enabled(...)` from `integrations/config.py`.
-- Register every such key in `integrations/settings_registry.py` so it is
-  editable from Studio settings.
+- Declare every such key in `integrations/settings_keys.py` so it is
+  editable from Studio settings (`integrations/settings_registry.py` derives
+  the Studio view; see `AGENTS.md`).
 - Do not introduce direct runtime configuration reads through `os.environ`
   or `settings.X`.
 

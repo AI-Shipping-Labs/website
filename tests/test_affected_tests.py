@@ -399,6 +399,16 @@ class RuleChainTest(SimpleTestCase):
                 self.assertEqual(plan.django_labels, ["tests"])
         guideline_plan = plan_for(["_docs/testing-guidelines.md"])
         self.assertEqual(guideline_plan.django_labels, ["tests.test_affected_tests"])
+        runbook_plan = plan_for(["_docs/process-worktree-lifecycle.md"])
+        self.assertFalse(runbook_plan.no_tests_required)
+        self.assertEqual(
+            runbook_plan.django_labels,
+            [
+                "tests.test_affected_tests",
+                "tests.test_cleanup_agent_worktrees",
+                "tests.test_retire_agent_branches",
+            ],
+        )
 
     def test_guarded_doc_artifacts_map_to_their_reading_app(self):
         for path, expected in (
@@ -2501,6 +2511,7 @@ AGENT_FACING_FILES = (
     "AGENTS.md",
     "README.md",
     "_docs/PROCESS.md",
+    "_docs/process-worktree-lifecycle.md",
     ".claude/agents/software-engineer.md",
     ".claude/agents/tester.md",
     ".claude/agents/oncall-engineer.md",

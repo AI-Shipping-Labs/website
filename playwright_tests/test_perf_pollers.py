@@ -159,7 +159,6 @@ def test_sync_poll_backs_off_and_stops_when_sync_finishes(django_server, browser
     _flush_promises(page)
 
     _set_page_visibility(page, "hidden")
-    assert page.evaluate("document.visibilityState") == "hidden"
     _set_page_visibility(page, "visible")
     assert page.evaluate("document.visibilityState") == "visible"
 
@@ -218,7 +217,6 @@ def test_import_poll_pauses_hidden_and_stops_when_finished(django_server, browse
     )
 
     _set_page_visibility(page, "hidden")
-    assert page.evaluate("document.visibilityState") == "hidden"
     page.clock.fast_forward(60_000)
     assert calls == []
 

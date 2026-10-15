@@ -6,7 +6,6 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.middleware.csrf import get_token
 
-from analytics.bots import is_bot
 from analytics.consent import (
     analytics_consent_granted,
     analytics_consent_state,
@@ -20,6 +19,7 @@ from content.nav_availability import (
 from integrations.config import get_config, site_base_url
 from integrations.middleware import get_announcement_banner
 from payments.models import Membership
+from website.middleware import is_web_crawler_user_agent
 from website.search_indexing import (
     request_indexing_disabled,
     search_indexing_disabled,
@@ -32,6 +32,18 @@ from website.search_indexing import (
 # ``analytics.middleware`` would drag in the analytics models and
 # their app config before Django is ready in some test paths.
 _ASLAB_AID_COOKIE = 'aslab_aid'
+
+
+def _skip_consent_csrf_token(request):
+    """True when the consent csrftoken would only cost CDN cacheability.
+
+    That is a fetch-only crawler with no session: its response could be
+    edge-cached, and it never POSTs the consent banner. Everyone else
+    (humans, headless browser automation, any session request) gets it.
+    """
+    if request.COOKIES.get(settings.SESSION_COOKIE_NAME):
+        return False
+    return is_web_crawler_user_agent(request.headers.get('User-Agent', ''))
 
 
 def _validated_aslab_anon_id(request):
@@ -444,10 +456,13 @@ def site_context(request):
         # is only needed for interactive visitors; emitting it for crawler
         # user-agents would make every public page Set-Cookie-bearing and
         # therefore uncacheable at the CDN. See PublicCachePolicyMiddleware.
+        # Only fetch-only crawlers without a session skip it: a session
+        # request is never CDN-cacheable anyway, and headless browser
+        # automation submits forms just like a human visitor.
         'analytics_consent_csrf_token': (
-            get_token(request)
-            if not is_bot(request.headers.get('User-Agent', ''))
-            else ''
+            ''
+            if _skip_consent_csrf_token(request)
+            else get_token(request)
         ),
         'aslab_anon_id': aslab_anon_id,
         'ga_login_state': ga_login_state,

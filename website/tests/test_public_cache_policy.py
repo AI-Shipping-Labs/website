@@ -8,8 +8,9 @@ CloudFront cache policy + viewer-request function.
 """
 
 from django.http import HttpResponse
-from django.test import RequestFactory, TestCase, override_settings
+from django.test import Client, RequestFactory, TestCase, override_settings
 
+from analytics.consent import ANALYTICS_CONSENT_COOKIE
 from website.middleware import PublicCachePolicyMiddleware
 
 factory = RequestFactory()
@@ -128,7 +129,7 @@ class PublicCachePolicyIntegrationTest(TestCase):
         # analytics cookies -> the response is edge-cacheable and sets
         # nothing.
         response = self.client.get('/', HTTP_USER_AGENT='GPTBot/1.1')
-        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'home.html')
         self.assertEqual(
             response['Cache-Control'], 'public, max-age=0, s-maxage=300',
         )
@@ -138,7 +139,8 @@ class PublicCachePolicyIntegrationTest(TestCase):
         # Interactive first visits still get the consent csrftoken; the
         # middleware must then mark the response uncacheable.
         response = self.client.get('/')
-        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'home.html')
+        self.assertIn('csrftoken', response.cookies)
         self.assertEqual(response['Cache-Control'], 'private, no-store')
 
     def test_login_page_is_no_store(self):
@@ -149,3 +151,45 @@ class PublicCachePolicyIntegrationTest(TestCase):
         response = self.client.get('/robots.txt')
         cache_control = response.get('Cache-Control', '')
         self.assertNotIn('public', cache_control.lower())
+
+
+class ConsentCsrfTokenForInteractiveClientsTest(TestCase):
+    """Only fetch-only crawlers without a session skip the consent token.
+
+    Regression guard for the 0c7033b5e red main: headless browsers match
+    the analytics bot regex (``headlesschrome``) but submit the consent
+    banner and other JS forms, so withholding the token 403'd every
+    consent POST from Playwright.
+    """
+
+    HEADLESS_CHROME_UA = (
+        'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+        '(KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36'
+    )
+
+    def test_anonymous_headless_chrome_can_post_consent(self):
+        client = Client(enforce_csrf_checks=True)
+        page = client.get('/', HTTP_USER_AGENT=self.HEADLESS_CHROME_UA)
+        token = page.context['analytics_consent_csrf_token']
+        self.assertIn('csrftoken', page.cookies)
+
+        response = client.post(
+            '/api/analytics/consent',
+            data='{"consent": "denied"}',
+            content_type='application/json',
+            HTTP_USER_AGENT=self.HEADLESS_CHROME_UA,
+            HTTP_X_CSRFTOKEN=token,
+        )
+        self.assertEqual(response.json()['consent'], 'denied')
+        self.assertEqual(
+            response.cookies[ANALYTICS_CONSENT_COOKIE].value, 'denied',
+        )
+
+    def test_crawler_ua_with_session_still_gets_consent_token(self):
+        # A session request is never edge-cacheable, so withholding the
+        # consent token would only break the banner POST (the Studio
+        # helper path in the failing Playwright suites).
+        self.client.cookies['sessionid'] = 'not-a-real-session'
+        response = self.client.get('/', HTTP_USER_AGENT='GPTBot/1.1')
+        self.assertNotEqual(response.context['analytics_consent_csrf_token'], '')
+        self.assertIn('csrftoken', response.cookies)

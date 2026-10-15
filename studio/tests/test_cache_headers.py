@@ -376,7 +376,7 @@ class PublicPagesNotAffectedTest(TestCase):
 
     def test_homepage_is_publicly_cacheable_for_crawlers(self):
         response = self.client.get('/', HTTP_USER_AGENT='GPTBot/1.1')
-        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'home.html')
         self.assertEqual(
             response['Cache-Control'], 'public, max-age=0, s-maxage=300',
         )

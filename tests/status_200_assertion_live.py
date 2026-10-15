@@ -1725,7 +1725,6 @@ DIRECT_STATUS_200_ASSERTION_LIVE_IDS: tuple[str, ...] = (
     "studio/tests/test_books.py::BookStudioChapterTest.test_duplicate_chapter_number_shows_friendly_error::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "studio/tests/test_books.py::BookStudioChapterTest.test_reorder_renumbers_chapters::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "studio/tests/test_cache_headers.py::HomepageDrainsMessagesTest.test_message_renders_once_on_homepage_then_drains::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
-    "studio/tests/test_cache_headers.py::PublicPagesNotAffectedTest.test_homepage_does_not_have_private_no_store_from_middleware::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "studio/tests/test_cache_headers.py::StudioCacheHeadersTest.test_studio_dashboard_has_no_store::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "studio/tests/test_cache_headers.py::StudioCacheHeadersTest.test_studio_settings_has_no_store::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",
     "studio/tests/test_cache_headers.py::StudioCacheHeadersTest.test_studio_worker_has_no_store::literal-status-200-assertion::acd337876ad09fbb738453b95c2b3718ba818334a4b0a2d5411a5f90951fc703::1",

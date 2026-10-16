@@ -196,7 +196,8 @@ class PeerReviewCohortGroupingTest(TestCase):
             f'/studio/courses/{self.course.pk}/peer-reviews',
         )
         self.assertContains(response, 'data-testid="cohort-active-state"')
-        self.assertContains(response, '>Active<')
+        self.assertContains(response, 'data-state="active"')
+        self.assertContains(response, 'data-component="studio-status-badge"')
 
     def test_cohort_group_shows_enrollment_count(self):
         response = self.client.get(
@@ -205,12 +206,12 @@ class PeerReviewCohortGroupingTest(TestCase):
         self.assertContains(response, 'data-testid="cohort-enrollment-count"')
         self.assertContains(response, '1 enrolled')
 
-    def test_self_paced_group_renders(self):
+    def test_legacy_unscoped_group_renders(self):
         response = self.client.get(
             f'/studio/courses/{self.course.pk}/peer-reviews',
         )
-        self.assertContains(response, 'Self-paced / no cohort')
-        self.assertContains(response, 'data-testid="cohort-self-paced-tag"')
+        self.assertContains(response, 'Legacy / no cohort')
+        self.assertContains(response, 'data-testid="cohort-legacy-tag"')
 
     def test_cohort_submission_appears_in_cohort_group(self):
         response = self.client.get(
@@ -225,20 +226,19 @@ class PeerReviewCohortGroupingTest(TestCase):
             f'/studio/courses/{self.course.pk}/peer-reviews',
         )
         cohort_groups = response.context['cohort_groups']
-        # Cohort first (because we emit cohorts before the self-paced bucket),
-        # then the self-paced bucket.
         self.assertEqual(len(cohort_groups), 2)
-        cohort_group, self_paced_group = cohort_groups
+        cohort_group, legacy_group = cohort_groups
         self.assertFalse(cohort_group['is_self_paced'])
-        self.assertTrue(self_paced_group['is_self_paced'])
+        self.assertFalse(legacy_group['is_self_paced'])
+        self.assertTrue(legacy_group['is_legacy_unscoped'])
         cohort_emails = [
             i['submission'].user.email for i in cohort_group['items']
         ]
-        self_paced_emails = [
-            i['submission'].user.email for i in self_paced_group['items']
+        legacy_emails = [
+            i['submission'].user.email for i in legacy_group['items']
         ]
         self.assertEqual(cohort_emails, ['enrolled@test.com'])
-        self.assertEqual(self_paced_emails, ['solo@test.com'])
+        self.assertEqual(legacy_emails, ['solo@test.com'])
 
     def test_no_submissions_empty_state_when_no_cohorts_no_subs(self):
         empty_course = Course.objects.create(

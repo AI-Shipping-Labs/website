@@ -12,6 +12,7 @@ from django.db import transaction
 from django.utils import timezone
 from django_q.models import Schedule
 
+from jobs.content_schedules import content_schedule_definitions
 from jobs.tasks.helpers import schedule
 
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ class ScheduleDefinition:
 
 
 SCHEDULE_DEFINITIONS = (
+    *content_schedule_definitions(ScheduleDefinition),
     ScheduleDefinition(
         "health-check", "jobs.tasks.healthcheck.health_check", "*/15 * * * *", description="every 15 min"
     ),
@@ -232,18 +234,6 @@ SCHEDULE_DEFINITIONS = (
     ),
     ScheduleDefinition(
         "cb-jobs-sweep", "jobs.tasks.community_base_jobs.sweep_jobs", "*/5 * * * *", description="five-minute cadence"
-    ),
-    ScheduleDefinition(
-        "coursework-form-pooled-batches",
-        "jobs.tasks.community_base_jobs.form_pooled_batches",
-        "*/15 * * * *",
-        description="every 15 min",
-    ),
-    ScheduleDefinition(
-        "coursework-expire-pooled-reviews",
-        "jobs.tasks.community_base_jobs.expire_pooled_reviews",
-        "*/15 * * * *",
-        description="every 15 min",
     ),
     ScheduleDefinition(
         "booking-call-capture",

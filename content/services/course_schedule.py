@@ -13,50 +13,111 @@ from content.models import Cohort, CohortEnrollment, Homework, Module, Unit
 from content.models.peer_review import CourseProject
 
 
+def _owned_cohorts(course, user):
+    if not user.is_authenticated:
+        return []
+    return [
+        enrollment.cohort
+        for enrollment in CohortEnrollment.objects.filter(
+            user=user, cohort__course=course,
+        ).select_related('cohort').order_by('cohort__start_date', 'pk')
+    ]
+
+
+def _requested_owned_cohort(cohorts, requested_key):
+    return next(
+        (
+            cohort for cohort in cohorts
+            if cohort.mode == 'cohort'
+            and cohort.external_key
+            and cohort.external_key.lower() == requested_key.lower()
+        ),
+        None,
+    )
+
+
+def _preferred_open_dated(cohorts, today):
+    dated = [
+        cohort for cohort in cohorts
+        if cohort.mode == 'cohort' and cohort.is_active
+        and cohort.end_date and cohort.end_date >= today
+    ]
+    current = [
+        cohort for cohort in dated
+        if cohort.start_date and cohort.start_date <= today
+    ]
+    if current:
+        return max(current, key=lambda cohort: (cohort.start_date, cohort.pk))
+    if dated:
+        return min(dated, key=lambda cohort: (cohort.start_date, cohort.pk))
+    return None
+
+
+def has_open_dated_enrollment(user, course, *, today=None):
+    """Whether the learner owns a current or upcoming active dated cohort."""
+    if not user.is_authenticated:
+        return False
+    today = today or timezone.localdate()
+    return CohortEnrollment.objects.filter(
+        user=user,
+        cohort__course=course,
+        cohort__mode='cohort',
+        cohort__is_active=True,
+        cohort__end_date__gte=today,
+    ).exists()
+
+
+def _default_owned_cohort(owned):
+    today = timezone.localdate()
+    dated = _preferred_open_dated(owned, today)
+    if dated is not None:
+        return dated
+    self_paced = next(
+        (
+            cohort for cohort in owned
+            if cohort.mode == 'self_paced' and cohort.is_active
+        ),
+        None,
+    )
+    if self_paced is not None:
+        return self_paced
+    dated = [cohort for cohort in owned if cohort.mode == 'cohort']
+    past = [
+        cohort for cohort in dated
+        if cohort.end_date and cohort.end_date < today
+    ]
+    if past:
+        return max(past, key=lambda cohort: (cohort.end_date, cohort.pk))
+    if dated:
+        return max(dated, key=lambda cohort: (cohort.start_date, cohort.pk))
+    return None
+
+
+def _resolve_owned_cohort(owned, requested_key, user, active):
+    if not requested_key:
+        return _default_owned_cohort(owned), False
+    cohort = _requested_owned_cohort(owned, requested_key)
+    if cohort is not None:
+        return cohort, False
+    if user.is_staff:
+        cohort = active.filter(external_key__iexact=requested_key).first()
+        return cohort, cohort is not None
+    return None, False
+
+
 def select_display_cohort(course, user, requested_key=''):
     """Resolve one schedule without letting a URL key override enrollment."""
     active = Cohort.objects.filter(
         course=course, mode='cohort', is_active=True,
     ).order_by('start_date', 'pk')
 
-    if user.is_authenticated:
-        enrollments = list(
-            CohortEnrollment.objects.filter(
-                user=user, cohort__course=course, cohort__mode='cohort',
-            ).select_related('cohort').order_by('cohort__start_date', 'pk')
-        )
-        if enrollments:
-            if requested_key:
-                cohort = next(
-                    (enrollment.cohort for enrollment in enrollments
-                     if enrollment.cohort.external_key
-                     and enrollment.cohort.external_key.lower() == requested_key.lower()),
-                    None,
-                )
-                if cohort is not None:
-                    return cohort, False
-                if user.is_staff:
-                    cohort = active.filter(external_key__iexact=requested_key).first()
-                    return cohort, cohort is not None
-                return None, False
-            today = timezone.localdate()
-            cohorts = [enrollment.cohort for enrollment in enrollments]
-            current = [cohort for cohort in cohorts if cohort.is_active
-                       and cohort.start_date <= today <= cohort.end_date]
-            if current:
-                return max(current, key=lambda cohort: (cohort.start_date, cohort.pk)), False
-            upcoming = [cohort for cohort in cohorts if cohort.is_active
-                        and cohort.start_date > today]
-            if upcoming:
-                return min(upcoming, key=lambda cohort: (cohort.start_date, cohort.pk)), False
-            past = [cohort for cohort in cohorts if cohort.end_date < today]
-            if past:
-                return max(past, key=lambda cohort: (cohort.end_date, cohort.pk)), False
-            return max(cohorts, key=lambda cohort: (cohort.start_date, cohort.pk)), False
+    owned = _owned_cohorts(course, user)
+    if owned:
+        return _resolve_owned_cohort(owned, requested_key, user, active)
 
-        if requested_key and user.is_staff:
-            cohort = active.filter(external_key__iexact=requested_key).first()
-            return cohort, cohort is not None
+    if user.is_authenticated and requested_key and user.is_staff:
+        cohort = active.filter(external_key__iexact=requested_key).first()
+        return cohort, cohort is not None
 
     if requested_key:
         cohort = active.filter(external_key__iexact=requested_key).first()

@@ -3,17 +3,19 @@
 import logging
 from datetime import timedelta
 
-from django.db.models import Q
 from django.utils import timezone
 
 from content.models import (
-    Cohort,
     CourseCertificate,
-    CourseProject,
     PeerReview,
     ProjectSubmission,
     Unit,
     UserCourseProgress,
+)
+from content.models.course import non_bonus_units
+from content.services.peer_review_batches import (
+    form_course_batches,
+    form_self_paced_project_batches,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,77 +26,18 @@ class PeerReviewService:
 
     @staticmethod
     def form_batches_for_course(course):
-        """Form review batches for a course.
-
-        Handles both cohort mode (synchronous) and self-paced mode (micro-batching).
-
-        Returns:
-            A dict with summary info: {'batched': int, 'reviews_assigned': int}
-        """
-        total_batched = 0
-        total_reviews = 0
-        now = timezone.now()
-
-        # Scheduled attempts have their own submission cutoff, review deadline,
-        # and review pool. The pool is further separated by learner cohort.
-        for project in CourseProject.objects.filter(
-            course=course, submission_due_at__lte=now,
-            review_due_at__gt=now,
-        ):
-            waiting = ProjectSubmission.objects.filter(
-                course=course, course_project=project, status='submitted',
-                submitted_at__lte=project.submission_due_at,
-            ).order_by('pk')
-            if project.cohort_id:
-                waiting = waiting.filter(cohort_id=project.cohort_id)
-            cohort_ids = waiting.values_list('cohort_id', flat=True).distinct()
-            for cohort_id in cohort_ids:
-                submissions = list(waiting.filter(cohort_id=cohort_id))
-                if len(submissions) < 2:
-                    continue
-                total_reviews += PeerReviewService._assign_reviews(
-                    course, submissions, project=project,
-                )
-                total_batched += len(submissions)
-
-        # Legacy rows retain the original cohort and self-paced behavior.
-        today = timezone.now().date()
-        past_cohorts = Cohort.objects.filter(
-            course=course,
-            end_date__lte=today,
-        )
-        for cohort in past_cohorts:
-            submissions = ProjectSubmission.objects.filter(
-                course=course,
-                cohort=cohort,
-                course_project__isnull=True,
-                status='submitted',
-            )
-            if submissions.count() >= 2:
-                count = PeerReviewService._assign_reviews(
-                    course, list(submissions),
-                )
-                total_batched += submissions.count()
-                total_reviews += count
-
-        # Self-paced mode: submissions without a cohort in 'submitted' status
-        waiting = list(
-            ProjectSubmission.objects.filter(
-                course=course,
-                course_project__isnull=True,
-                status='submitted',
-            ).filter(Q(cohort__isnull=True) | Q(cohort__mode='self_paced'))
-        )
-        min_needed = course.peer_review_count + 1
-        if len(waiting) >= min_needed:
-            count = PeerReviewService._assign_reviews(course, waiting)
-            total_batched += len(waiting)
-            total_reviews += count
-
-        return {'batched': total_batched, 'reviews_assigned': total_reviews}
+        """Form dated, legacy, and self-paced batches for a course."""
+        return form_course_batches(course, PeerReviewService._assign_reviews)
 
     @staticmethod
-    def _assign_reviews(course, submissions, project=None):
+    def form_self_paced_batches_for_project(project):
+        """Form complete rolling microbatches for one self-paced project."""
+        return form_self_paced_project_batches(
+            project, PeerReviewService._assign_reviews,
+        )
+
+    @staticmethod
+    def _assign_reviews(course, submissions, project=None, *, no_deadline=False):
         """Assign peer reviews using round-robin.
 
         Each student gets assigned `peer_review_count` other submissions to
@@ -104,7 +47,7 @@ class PeerReviewService:
             Number of PeerReview records created.
         """
         now = timezone.now()
-        deadline = (
+        deadline = None if no_deadline else (
             project.review_due_at if project else
             now + timedelta(days=course.peer_review_deadline_days)
         )
@@ -116,9 +59,16 @@ class PeerReviewService:
         )
         review_count = min(configured_count, n - 1)
 
-        reviews_created = 0
+        PeerReviewService._prepare_submissions(submissions, now, deadline)
+        reviews_created = PeerReviewService._create_review_assignments(
+            submissions, review_count,
+        )
+        PeerReviewService._notify_batch_ready(course, submissions, deadline, project)
+        return reviews_created
 
-        for i, submission in enumerate(submissions):
+    @staticmethod
+    def _prepare_submissions(submissions, now, deadline):
+        for submission in submissions:
             submission.status = 'in_review'
             submission.batch_assigned_at = now
             submission.review_deadline = deadline
@@ -126,8 +76,10 @@ class PeerReviewService:
                 'status', 'batch_assigned_at', 'review_deadline',
             ])
 
-        # Round-robin assignment: student i reviews submissions at
-        # offsets (i+1), (i+2), ..., (i+review_count) modulo n
+    @staticmethod
+    def _create_review_assignments(submissions, review_count):
+        reviews_created = 0
+        n = len(submissions)
         for i, submission in enumerate(submissions):
             for offset in range(1, review_count + 1):
                 reviewer_idx = (i + offset) % n
@@ -140,10 +92,6 @@ class PeerReviewService:
                 )
                 if created:
                     reviews_created += 1
-
-        # Send notifications
-        PeerReviewService._notify_batch_ready(course, submissions, deadline, project)
-
         return reviews_created
 
     @staticmethod
@@ -164,10 +112,8 @@ class PeerReviewService:
                 Notification.objects.create(
                     user=submission.user,
                     title=f'Peer reviews ready: {course.title}',
-                    body=(
-                        f'Your review batch has been formed. You have '
-                        f'{review_count} submissions to review by '
-                        f'{deadline.strftime("%B %d, %Y")}.'
+                    body=PeerReviewService._batch_ready_body(
+                        review_count, deadline,
                     ),
                     url=(
                         f'/courses/{course.slug}/projects/{project.slug}/reviews'
@@ -177,6 +123,18 @@ class PeerReviewService:
                 )
         except Exception:
             logger.exception('Failed to send batch ready notifications')
+
+    @staticmethod
+    def _batch_ready_body(review_count, deadline):
+        if deadline is None:
+            return (
+                f'Your review group is ready. You have {review_count} '
+                'submissions to review. Reviews remain open until completed.'
+            )
+        return (
+            f'Your review batch has been formed. You have {review_count} '
+            f'submissions to review by {deadline.strftime("%B %d, %Y")}.'
+        )
 
     @staticmethod
     def check_and_update_submission_status(submission):
@@ -233,54 +191,19 @@ class PeerReviewService:
         Returns:
             CourseCertificate if issued, None otherwise.
         """
-        # Already has certificate?
         if CourseCertificate.objects.filter(user=user, course=course).exists():
             return None
-
-        # 1. All units completed
-        total_units = Unit.objects.filter(module__course=course).count()
-        if total_units == 0:
+        if not PeerReviewService._all_core_units_complete(user, course):
             return None
-
-        completed_units = UserCourseProgress.objects.filter(
-            user=user,
-            unit__module__course=course,
-            completed_at__isnull=False,
-        ).count()
-        if completed_units < total_units:
+        submission = PeerReviewService._qualifying_submission(
+            user, course, course_project,
+        )
+        if submission is None:
             return None
+        return PeerReviewService._issue_certificate(user, course, submission)
 
-        # A learner can complete any one attempt. An incomplete assignment in
-        # a different attempt does not prevent certification for this one.
-        submissions = ProjectSubmission.objects.filter(
-            user=user, course=course,
-        ).select_related('course_project').order_by('submitted_at', 'pk')
-        if course_project is not None:
-            submissions = submissions.filter(course_project=course_project)
-
-        qualifying_submission = None
-        for submission in submissions:
-            assigned_reviews = PeerReview.objects.filter(
-                reviewer=user,
-                submission__course=course,
-                submission__course_project=submission.course_project,
-            )
-            if assigned_reviews.filter(is_complete=False).exists():
-                continue
-
-            received_reviews = submission.reviews.all()
-            if not received_reviews.exists() or received_reviews.filter(
-                is_complete=False,
-            ).exists():
-                continue
-            qualifying_submission = submission
-            break
-
-        if qualifying_submission is None:
-            return None
-        submission = qualifying_submission
-
-        # All conditions met - issue certificate
+    @staticmethod
+    def _issue_certificate(user, course, submission):
         certificate = CourseCertificate.objects.create(
             user=user,
             course=course,
@@ -306,6 +229,47 @@ class PeerReviewService:
             logger.exception('Failed to send certificate notification')
 
         return certificate
+
+    @staticmethod
+    def _all_core_units_complete(user, course):
+        units = non_bonus_units(Unit.objects.filter(module__course=course))
+        total = units.count()
+        if total == 0:
+            return False
+        completed = UserCourseProgress.objects.filter(
+            user=user, unit__in=units, completed_at__isnull=False,
+        ).count()
+        return completed >= total
+
+    @staticmethod
+    def _qualifying_submission(user, course, course_project):
+        submissions = ProjectSubmission.objects.filter(
+            user=user, course=course,
+        ).select_related('course_project', 'course_project__cohort')
+        if course_project is not None:
+            submissions = submissions.filter(course_project=course_project)
+        for submission in submissions.order_by('submitted_at', 'pk'):
+            if PeerReviewService._reviews_complete(user, course, submission):
+                return submission
+        return None
+
+    @staticmethod
+    def _reviews_complete(user, course, submission):
+        assigned = PeerReview.objects.filter(
+            reviewer=user,
+            submission__course=course,
+            submission__course_project=submission.course_project,
+        )
+        received = submission.reviews.all()
+        if assigned.filter(is_complete=False).exists():
+            return False
+        if not received.exists() or received.filter(is_complete=False).exists():
+            return False
+        project = submission.course_project
+        if not project or not project.is_self_paced:
+            return True
+        required = project.peer_review_count or course.peer_review_count
+        return assigned.count() >= required and received.count() >= required
 
     @staticmethod
     def issue_certificates_for_course(course):

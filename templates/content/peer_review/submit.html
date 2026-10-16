@@ -17,7 +17,7 @@
   </a>
 
   <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">Submit project</h1>
-  {% if course_project %}
+  {% if course_project and not self_paced_project %}
   {% comment %}
   Issue #1795: the Submit by header shares the syllabus display-zone rule —
   server renders the explicit fallback zone, the client localizes the
@@ -27,6 +27,8 @@
   <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Submit by <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
   {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
   </div>
+  {% elif course_project %}
+  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · No fixed submission deadline</p>
   {% endif %}
 
   <div class="mt-6">

@@ -316,7 +316,6 @@ class SetupSchedulesCommandTest(TestCase):
         self.assertEqual(slack.cron, '0 6 * * *')
 
     def test_no_unexpected_schedules_created(self):
-        """Command does not create any schedules outside the expected set."""
         call_command('setup_schedules', stdout=StringIO())
         names = set(Schedule.objects.values_list('name', flat=True))
         expected = {
@@ -334,6 +333,7 @@ class SetupSchedulesCommandTest(TestCase):
             'purge-user-activity',
             'purge-plan-sprints-raw-text',
             'event-reminders',
+            'self-paced-peer-review-batches',
             'complete-finished-events',
             'expire-tier-overrides',
             'slack-membership-refresh',

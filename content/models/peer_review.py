@@ -64,6 +64,19 @@ class CourseProject(models.Model):
     def __str__(self):
         return f'{self.course.title} - {self.title}'
 
+    @property
+    def is_self_paced(self):
+        """Whether this attempt belongs to an actual self-paced cohort."""
+        return bool(self.cohort_id and self.cohort.mode == 'self_paced')
+
+    def is_submission_open(self, now):
+        """Self-paced attempts ignore copied absolute submission dates."""
+        return self.is_self_paced or now < self.submission_due_at
+
+    def is_review_open(self, now):
+        """Self-paced review assignments remain open until completed."""
+        return self.is_self_paced or now < self.review_due_at
+
 
 class ProjectSubmission(models.Model):
     """A student's submitted project for a course."""

@@ -72,7 +72,7 @@ class CourseProjectSubmissionTarget:
     @property
     def submission_due_date(self):
         """The package deadline attribute, mapped from the AISL field."""
-        if self.course_project is None:
+        if self.course_project is None or self.course_project.is_self_paced:
             # The undated /courses/<slug>/submit slot has no deadline; its
             # lock is the submission status (see ``state``).
             return None

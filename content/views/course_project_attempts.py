@@ -35,7 +35,9 @@ def _attempt(request, slug, attempt_slug):
     guard = _require_course_access(request, course)
     if guard:
         return course, None, guard
-    projects = CourseProject.objects.filter(course=course, slug=attempt_slug)
+    projects = CourseProject.objects.select_related('cohort').filter(
+        course=course, slug=attempt_slug,
+    )
     if projects.count() != 1:
         raise Http404
     project = projects.get()
@@ -54,14 +56,31 @@ def attempt_submit(request, slug, attempt_slug):
     submission = ProjectSubmission.objects.filter(
         user=request.user, course_project=project,
     ).first()
-    deadline_passed = timezone.now() >= project.submission_due_at
+    deadline_passed = not project.is_submission_open(timezone.now())
     readonly = bool(deadline_passed or (submission and submission.status != 'submitted'))
     cert_cohort = certificate_cohort(request.user, course, project.cohort)
     enrollment = lookup_curriculum_enrollment(request.user, cert_cohort)
-    context = {
+    context = _submit_context(
+        request, course, project, submission, readonly,
+        deadline_passed, cert_cohort, enrollment,
+    )
+    if request.method == 'POST':
+        return _handle_attempt_submit(
+            request, course, project, submission, context,
+            readonly, deadline_passed, cert_cohort, enrollment,
+        )
+    return render(request, 'content/peer_review/submit.html', context)
+
+
+def _submit_context(
+    request, course, project, submission, readonly,
+    deadline_passed, cert_cohort, enrollment,
+):
+    return {
         'course': course, 'course_project': project,
         'submission': submission, 'readonly': readonly,
         'deadline_passed': deadline_passed,
+        'self_paced_project': project.is_self_paced,
         'project_form': build_submission_form(
             project=project, submission=submission,
             enrollment=enrollment, user=request.user,
@@ -69,25 +88,31 @@ def attempt_submit(request, slug, attempt_slug):
         ),
         **_schedule_zone_context(course, request.user),
     }
-    if request.method == 'POST':
-        if readonly:
-            context['error'] = 'The submission deadline has passed.' if deadline_passed else 'Reviews have started; this submission can no longer be edited.'
-            return render(request, 'content/peer_review/submit.html', context, status=403)
-        if request.POST.get('action') == 'delete':
-            context['error'] = REMOVAL_UNAVAILABLE_MESSAGE
-            return render(request, 'content/peer_review/submit.html', context, status=403)
-        form = build_submission_form(
-            data=request.POST, project=project, submission=submission,
-            enrollment=enrollment, user=request.user,
-            cohort=submission_cohort(request.user, course, project.cohort),
-            certificate_cohort=cert_cohort,
-        )
-        if form.is_valid():
-            submission, _created = form.save()
-            context.update(submission=submission, just_submitted=True, project_form=form)
-        else:
-            context['project_form'] = form
-            return render(request, 'content/peer_review/submit.html', context, status=400)
+
+
+def _handle_attempt_submit(
+    request, course, project, submission, context,
+    readonly, deadline_passed, cert_cohort, enrollment,
+):
+    if readonly:
+        context['error'] = 'The submission deadline has passed.'
+        if not deadline_passed:
+            context['error'] = 'Reviews have started; this submission can no longer be edited.'
+        return render(request, 'content/peer_review/submit.html', context, status=403)
+    if request.POST.get('action') == 'delete':
+        context['error'] = REMOVAL_UNAVAILABLE_MESSAGE
+        return render(request, 'content/peer_review/submit.html', context, status=403)
+    form = build_submission_form(
+        data=request.POST, project=project, submission=submission,
+        enrollment=enrollment, user=request.user,
+        cohort=submission_cohort(request.user, course, project.cohort),
+        certificate_cohort=cert_cohort,
+    )
+    context['project_form'] = form
+    if not form.is_valid():
+        return render(request, 'content/peer_review/submit.html', context, status=400)
+    submission, _created = form.save()
+    context.update(submission=submission, just_submitted=True)
     return render(request, 'content/peer_review/submit.html', context)
 
 
@@ -113,7 +138,8 @@ def attempt_reviews(request, slug, attempt_slug):
         'submission': submission, 'assigned_reviews': assigned_reviews,
         'received_reviews': received_reviews, 'certificate': certificate,
         'waiting_for_batch': bool(submission and submission.status == 'submitted' and not assigned_reviews),
-        'deadline_passed': timezone.now() >= project.submission_due_at,
+        'deadline_passed': not project.is_submission_open(timezone.now()),
+        'self_paced_project': project.is_self_paced,
         **_schedule_zone_context(course, request.user),
     })
 
@@ -130,31 +156,38 @@ def attempt_review_form(request, slug, attempt_slug, submission_id):
     context = {
         'course': course, 'course_project': project,
         'submission': submission, 'review': review,
-        'deadline_passed': timezone.now() >= project.review_due_at,
+        'deadline_passed': not project.is_review_open(timezone.now()),
+        'self_paced_project': project.is_self_paced,
         **_schedule_zone_context(course, request.user),
     }
     if request.method == 'POST' and not review.is_complete:
-        if timezone.now() >= project.review_due_at:
-            context['error'] = 'The peer review deadline has passed.'
-            return render(request, 'content/peer_review/review_form.html', context, status=403)
-        feedback = request.POST.get('feedback', '').strip()
-        if not feedback:
-            context['error'] = 'Feedback is required.'
-            return render(request, 'content/peer_review/review_form.html', context, status=400)
-        score = None
-        score_raw = request.POST.get('score', '').strip()
-        if score_raw:
-            try:
-                score = int(score_raw)
-                if not 1 <= score <= 5:
-                    score = None
-            except ValueError:
-                pass
-        review.score = score
-        review.feedback = feedback
-        review.is_complete = True
-        review.completed_at = timezone.now()
-        review.save(update_fields=['score', 'feedback', 'is_complete', 'completed_at'])
-        PeerReviewService.check_and_update_submission_status(submission)
+        response = _complete_attempt_review(request, project, submission, review, context)
+        if response:
+            return response
         return redirect('course_project_reviews', slug=slug, attempt_slug=attempt_slug)
     return render(request, 'content/peer_review/review_form.html', context)
+
+
+def _complete_attempt_review(request, project, submission, review, context):
+    if not project.is_review_open(timezone.now()):
+        context['error'] = 'The peer review deadline has passed.'
+        return render(request, 'content/peer_review/review_form.html', context, status=403)
+    feedback = request.POST.get('feedback', '').strip()
+    if not feedback:
+        context['error'] = 'Feedback is required.'
+        return render(request, 'content/peer_review/review_form.html', context, status=400)
+    score_raw = request.POST.get('score', '').strip()
+    score = None
+    if score_raw.isdigit() and 1 <= int(score_raw) <= 5:
+        score = int(score_raw)
+    review.score = score
+    review.feedback = feedback
+    review.is_complete = True
+    review.completed_at = timezone.now()
+    review.save(update_fields=['score', 'feedback', 'is_complete', 'completed_at'])
+    PeerReviewService.check_and_update_submission_status(submission)
+    if project.is_self_paced:
+        PeerReviewService.check_certificate_eligibility(
+            request.user, project.course, course_project=project,
+        )
+    return None

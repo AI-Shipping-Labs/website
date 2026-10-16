@@ -1,8 +1,8 @@
 """Playwright E2E tests for issue #493: Studio peer-review management rework.
 
 Covers:
-- Desktop: course-context header, cohort group with submission, self-paced
-  group with submission, friendly status filters and renamed actions.
+- Desktop: course-context header, dated and legacy groups with submissions,
+  friendly status filters and renamed actions.
 - Empty/disabled state: peer-review-disabled banner is shown.
 - Mobile: page renders without horizontal overflow at 390x844 and primary
   action button is tappable (>= 44px).
@@ -161,7 +161,7 @@ class TestDesktopCohortGrouping:
             f"/studio/courses/{course.pk}/edit"
         )
 
-        # Two cohort groups: the named cohort, then the self-paced bucket.
+        # Two cohort groups: the named cohort, then the legacy bucket.
         groups = page.locator('[data-testid="cohort-group"]')
         assert groups.count() == 2
 
@@ -178,14 +178,14 @@ class TestDesktopCohortGrouping:
         # Submission row inside the cohort group references the cohort student.
         assert "cohort-student@test.com" in cohort_group.inner_text()
 
-        self_paced = groups.nth(1)
-        assert "Self-paced / no cohort" in self_paced.locator(
+        legacy = groups.nth(1)
+        assert "Legacy / no cohort" in legacy.locator(
             '[data-testid="cohort-group-name"]'
         ).inner_text()
-        assert self_paced.locator(
-            '[data-testid="cohort-self-paced-tag"]'
+        assert legacy.locator(
+            '[data-testid="cohort-legacy-tag"]'
         ).is_visible()
-        assert "solo-student@test.com" in self_paced.inner_text()
+        assert "solo-student@test.com" in legacy.inner_text()
 
         # Renamed action labels.
         assert page.locator(

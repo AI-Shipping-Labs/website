@@ -18,8 +18,12 @@
 
   <h1 class="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">{% if course_project %}Peer reviews{% else %}Peer review dashboard{% endif %}</h1>
   {% if course_project %}
+  {% if self_paced_project %}
+  <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Reviews remain open until completed</p>
+  {% else %}
   <p class="mt-2 text-sm text-muted-foreground" data-testid="peer-review-meta">{{ course_project.title }} · Reviews due <time datetime="{{ course_project.review_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.review_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span></p>
   {% include "includes/timezone_notice.html" with viewer=request.user display_timezone=schedule_timezone timezone_login_next=request.get_full_path timezone_notice_class="mt-1" timezone_notice_subject="Deadline times" timezone_notice_explicit=schedule_can_localize timezone_notice_live_zone=schedule_can_localize only %}
+  {% endif %}
   {% endif %}
 
   {% if certificate %}
@@ -82,7 +86,9 @@
 
     {% if waiting_for_batch %}
     <p class="mt-4 rounded-md border border-border bg-secondary/50 px-3 py-2 text-sm text-foreground">
-      {% if course_project %}
+      {% if self_paced_project %}
+      Waiting for enough submissions to form a review group. We'll notify you when reviews are ready.
+      {% elif course_project %}
       Your project is saved. Peer reviews will be assigned after the submission deadline on <time datetime="{{ course_project.submission_due_at|schedule_instant }}" data-schedule-instant>{{ course_project.submission_due_at|schedule_datetime_local:schedule_timezone }}</time> <span data-schedule-zone-label>{{ schedule_timezone }}</span>. We'll notify you when they're ready.
       {% elif submission.cohort.mode == 'cohort' %}
       Your project is saved. Peer reviews will be assigned after your cohort ends on {{ submission.cohort.end_date|member_full_date }}. We'll notify you when they're ready.

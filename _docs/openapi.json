@@ -10376,6 +10376,9 @@
                     "course_access_granted": {
                       "type": "boolean"
                     },
+                    "course_enrolled": {
+                      "type": "boolean"
+                    },
                     "course_key": {
                       "type": "string"
                     },
@@ -10563,6 +10566,7 @@
                     "welcome_eligible",
                     "removed_at",
                     "course_access_granted",
+                    "course_enrolled",
                     "cohort_enrolled",
                     "steps"
                   ],
@@ -10840,6 +10844,9 @@
                         "course_access_granted": {
                           "type": "boolean"
                         },
+                        "course_enrolled": {
+                          "type": "boolean"
+                        },
                         "course_key": {
                           "type": "string"
                         },
@@ -11027,6 +11034,7 @@
                         "welcome_eligible",
                         "removed_at",
                         "course_access_granted",
+                        "course_enrolled",
                         "cohort_enrolled",
                         "steps"
                       ],

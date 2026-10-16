@@ -3,7 +3,7 @@
 import re
 
 from api.serializers.datetime import isoformat_or_none
-from content.models import CohortEnrollment, CourseAccess
+from content.models import CohortEnrollment, CourseAccess, Enrollment
 from integrations.services.maven import (
     MAVEN_TAGS_APPLIED_NOTE,
     MAVEN_TAGS_NO_PREFIX_NOTE,
@@ -48,16 +48,23 @@ def serialize_maven_step_error(value):
 def serialize_maven_occurrence(occurrence, *, detail=False, now=None):
     """Serialize one occurrence with one stable summary/detail vocabulary."""
     attention_reasons = occurrence_attention_reasons(occurrence, now=now)
-    data = {
+    data = _summary_data(occurrence, attention_reasons)
+    if detail:
+        data.update(_detail_data(occurrence, attention_reasons))
+    return data
+
+
+def _summary_data(occurrence, attention_reasons):
+    user = None
+    if occurrence.user_id:
+        user = {'id': occurrence.user_id, 'email': occurrence.user.email}
+    occurrence_email = occurrence.email
+    if occurrence.payload_redacted_at is not None:
+        occurrence_email = ''
+    return {
         "id": occurrence.pk,
-        "user": (
-            {"id": occurrence.user_id, "email": occurrence.user.email}
-            if occurrence.user_id
-            else None
-        ),
-        "occurrence_email": (
-            "" if occurrence.payload_redacted_at is not None else occurrence.email
-        ),
+        "user": user,
+        "occurrence_email": occurrence_email,
         "course": occurrence.course,
         "cohort": occurrence.cohort,
         "course_key": occurrence.course_key,
@@ -73,42 +80,45 @@ def serialize_maven_occurrence(occurrence, *, detail=False, now=None):
         "created_at": isoformat_or_none(occurrence.created_at),
         "updated_at": isoformat_or_none(occurrence.updated_at),
     }
-    if not detail:
-        return data
 
-    course_access_granted, cohort_enrolled = _maven_grant_flags(occurrence)
-    data.update(
-        {
-            "account_created": occurrence.account_created,
-            "welcome_eligible": occurrence.welcome_eligible,
-            "removed_at": isoformat_or_none(occurrence.removed_at),
-            "course_access_granted": course_access_granted,
-            "cohort_enrolled": cohort_enrolled,
-            "steps": [
-                _serialize_step(occurrence, name, attention_reasons)
-                for name in STEP_NAMES
-            ],
-        }
+
+def _detail_data(occurrence, attention_reasons):
+    course_access_granted, course_enrolled, cohort_enrolled = _maven_grant_flags(
+        occurrence,
     )
-    return data
+    return {
+        "account_created": occurrence.account_created,
+        "welcome_eligible": occurrence.welcome_eligible,
+        "removed_at": isoformat_or_none(occurrence.removed_at),
+        "course_access_granted": course_access_granted,
+        "course_enrolled": course_enrolled,
+        "cohort_enrolled": cohort_enrolled,
+        "steps": [
+            _serialize_step(occurrence, name, attention_reasons)
+            for name in STEP_NAMES
+        ],
+    }
 
 
 def _maven_grant_flags(occurrence):
-    """Return ``(course_access_granted, cohort_enrolled)`` for Studio/API support.
+    """Return the three Maven grant flags for Studio/API support.
 
     Resolution mirrors the ``enrollment`` step. An unresolvable course or
     cohort key (unconfigured mapping, or a pre-#1659 backfilled row) is
-    reported as ``False``/``False`` rather than raising — this is read-only
+    reported as false rather than raising — this is read-only
     operator visibility, never a provider call.
     """
     if occurrence.user_id is None or not occurrence.course_key:
-        return False, False
+        return False, False, False
     try:
         course = resolve_maven_course(occurrence.course_key)
     except MavenUnknownCourseError:
-        return False, False
+        return False, False, False
     course_access_granted = CourseAccess.objects.filter(
         user_id=occurrence.user_id, course=course,
+    ).exists()
+    course_enrolled = Enrollment.objects.filter(
+        user_id=occurrence.user_id, course=course, unenrolled_at__isnull=True,
     ).exists()
     cohort_enrolled = False
     try:
@@ -119,7 +129,7 @@ def _maven_grant_flags(occurrence):
         cohort_enrolled = CohortEnrollment.objects.filter(
             cohort=cohort, user_id=occurrence.user_id,
         ).exists()
-    return course_access_granted, cohort_enrolled
+    return course_access_granted, course_enrolled, cohort_enrolled
 
 
 def _serialize_step(occurrence, name, attention_reasons):

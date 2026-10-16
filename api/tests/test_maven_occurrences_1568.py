@@ -1,5 +1,3 @@
-"""Operator Maven occurrence ledger API coverage for issue #1568."""
-
 import json
 from contextlib import ExitStack
 from datetime import timedelta
@@ -455,6 +453,7 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
                 "welcome_eligible",
                 "removed_at",
                 "course_access_granted",
+                "course_enrolled",
                 "cohort_enrolled",
                 "steps",
             },
@@ -478,6 +477,7 @@ class MavenOccurrenceDetailAndPrivacyTest(MavenOccurrenceApiTestBase):
         self.assertIsInstance(override["attempted_at"], str)
         self.assertIsNone(body["removed_at"])
         self.assertFalse(body["course_access_granted"])
+        self.assertFalse(body["course_enrolled"])
         self.assertFalse(body["cohort_enrolled"])
 
     def test_redacted_email_stays_empty_and_private_storage_never_serializes(self):

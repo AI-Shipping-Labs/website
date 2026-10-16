@@ -4,7 +4,8 @@ from api.tests.test_maven_occurrences_1568 import (
     COLLECTION_URL,
     MavenOccurrenceApiTestBase,
 )
-from content.models import Cohort, CohortEnrollment, Course, CourseAccess
+from content.models import Cohort, CohortEnrollment, Course, CourseAccess, Enrollment
+from content.models.enrollment import SOURCE_MAVEN
 from integrations.models import MavenEnrollmentEvent
 
 
@@ -20,12 +21,15 @@ class MavenEnrollmentStepApiTest(MavenOccurrenceApiTestBase):
         )
         return course, cohort
 
-    def test_detail_includes_course_access_granted_and_cohort_enrolled_true(self):
+    def test_detail_includes_all_three_grant_flags_true(self):
         course, cohort = self._course_cohort()
         CourseAccess.objects.create(
             user=self.member, course=course, access_type="granted",
         )
         CohortEnrollment.objects.create(cohort=cohort, user=self.member)
+        Enrollment.objects.create(
+            user=self.member, course=course, source=SOURCE_MAVEN,
+        )
         occurrence = self.event(
             "detail-grant-flags",
             user=self.member,
@@ -35,6 +39,7 @@ class MavenEnrollmentStepApiTest(MavenOccurrenceApiTestBase):
 
         body = self.client.get(self.detail_url(occurrence), **self.auth()).json()
         self.assertTrue(body["course_access_granted"])
+        self.assertTrue(body["course_enrolled"])
         self.assertTrue(body["cohort_enrolled"])
 
     def test_detail_reports_false_when_keys_do_not_resolve(self):
@@ -46,6 +51,7 @@ class MavenEnrollmentStepApiTest(MavenOccurrenceApiTestBase):
         )
         body = self.client.get(self.detail_url(occurrence), **self.auth()).json()
         self.assertFalse(body["course_access_granted"])
+        self.assertFalse(body["course_enrolled"])
         self.assertFalse(body["cohort_enrolled"])
 
     def test_enrollment_appears_in_failed_steps_and_needs_attention(self):
@@ -88,6 +94,11 @@ class MavenEnrollmentStepApiTest(MavenOccurrenceApiTestBase):
         self.assertEqual(response.json()["retry"]["outcome"], "succeeded")
         self.assertTrue(
             CourseAccess.objects.filter(user=self.member, course=course).exists()
+        )
+        self.assertTrue(
+            Enrollment.objects.filter(
+                user=self.member, course=course, unenrolled_at__isnull=True,
+            ).exists()
         )
         self.assertTrue(
             CohortEnrollment.objects.filter(cohort=cohort, user=self.member).exists()

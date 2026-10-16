@@ -18,10 +18,11 @@ from accounts.services.email_resolution import normalize_email, resolve_user_by_
 from accounts.utils.tags import add_tag, normalize_tag, remove_tag
 from community.models import CommunityAuditLog
 from content.access import LEVEL_MAIN, get_user_level
-from content.models import CourseAccess
 from content.models.cohort import CohortEnrollment
-from content.services.course_cohorts import apply_cohort_enrollment_tags
-from content.services.enrollment import UNENROLL_CAUSE_ACCESS_LOST, record_unenrollment
+from content.services.enrollment import (
+    UNENROLL_CAUSE_ACCESS_LOST,
+    record_unenrollment,
+)
 from email_app.package_mail import send_package_mail
 from events.services.event_audience import email_skip_status
 from integrations.config import get_config, validate_email_config_value
@@ -33,6 +34,10 @@ from integrations.maven_config import (
     maven_removal_student_email_enabled,
 )
 from integrations.models import MavenEnrollmentEvent
+from integrations.services.maven_course_state import (
+    grant_maven_course_state,
+    revoke_maven_course_access,
+)
 from integrations.services.maven_matching import (
     MavenUnknownCohortError,
     MavenUnknownCourseError,
@@ -1110,7 +1115,7 @@ def _cohort_event_series(cohort):
 
 
 def _run_enrollment_step(row, actions):
-    """Resolve course/cohort and grant course access + cohort membership.
+    """Resolve the mapping and grant all three learner state records.
 
     Idempotent: ``get_or_create`` never duplicates an existing
     ``CourseAccess``/``CohortEnrollment`` row. An unresolvable
@@ -1120,26 +1125,9 @@ def _run_enrollment_step(row, actions):
     """
     course = resolve_maven_course(row.course_key)
     cohort = resolve_maven_cohort(course, row.cohort_key)
-
-    CourseAccess.objects.get_or_create(
-        user=row.user,
-        course=course,
-        defaults={"access_type": "granted"},
-    )
-    actions.append(f"Granted course access to {course.slug}.")
-
-    CohortEnrollment.objects.get_or_create(cohort=cohort, user=row.user)
-    actions.append(f"Enrolled in cohort {cohort.external_key}.")
-    added_tags = apply_cohort_enrollment_tags(row.user, cohort)
-    if added_tags:
-        actions.append(f"Applied cohort contact tags: {', '.join(added_tags)}.")
-
-    series = _cohort_event_series(cohort)
-    if series is not None:
-        from events.services.registration import get_or_create_series_registration
-
-        get_or_create_series_registration(series, row.user)
-        actions.append("Registered for the cohort's office-hours series.")
+    if not cohort.is_active:
+        raise MavenUnknownCohortError
+    grant_maven_course_state(row, course, cohort, actions)
 
 
 def _revoke_maven_grants(row, actions, outcome=None, *, transfer=None):
@@ -1206,14 +1194,7 @@ def _revoke_maven_grants(row, actions, outcome=None, *, transfer=None):
             f"Kept course access: still in cohort {_occurrence_label(transfer)}."
         )
         return
-    deleted, _counts = CourseAccess.objects.filter(
-        user_id=row.user_id, course=course, access_type="granted",
-    ).delete()
-    if deleted:
-        actions.append("Revoked course access.")
-        outcome.course_access = f"Revoked access to {course.title}."
-    elif CourseAccess.objects.filter(user_id=row.user_id, course=course).exists():
-        outcome.course_access = "Kept course access: they bought the course directly."
+    outcome.course_access = revoke_maven_course_access(row, course, actions)
 
 
 @dataclass
@@ -1303,21 +1284,20 @@ def _previous_cohort_enrollment(row):
     A returning alumnus (cohort 2, then cohort 4) keeps main access. Only an
     earlier ``start_date`` counts, in the same or another course; a later or
     parallel cohort (a transfer) gets its own override from its enrollment
-    step instead. Without a dated removed cohort there is nothing to compare
-    against, so nothing counts.
+    step instead. Removing an undated self-paced cohort keeps the most recent
+    dated alumnus membership as independent justification for access.
     """
     removed = _removed_cohort(row)
-    if removed is None or removed.start_date is None:
+    if removed is None:
         return None
-    return (
-        CohortEnrollment.objects.filter(
-            user_id=row.user_id, cohort__start_date__lt=removed.start_date,
-        )
-        .exclude(cohort_id=removed.pk)
-        .select_related("cohort__course")
-        .order_by("-cohort__start_date", "-pk")
-        .first()
-    )
+    enrollments = CohortEnrollment.objects.filter(
+        user_id=row.user_id, cohort__start_date__isnull=False,
+    ).exclude(cohort_id=removed.pk)
+    if removed.start_date is not None:
+        enrollments = enrollments.filter(cohort__start_date__lt=removed.start_date)
+    return enrollments.select_related("cohort__course").order_by(
+        "-cohort__start_date", "-pk",
+    ).first()
 
 
 def _cohort_phrase(cohort):
@@ -1452,14 +1432,14 @@ def _run_removal_step(row, actions, *, send_student_email=True):
             course = resolve_maven_course(row.course_key)
         except MavenUnknownCourseError:
             course = None
+        outcome.override = _revoke_maven_override(
+            row, actions, other_course=other_course,
+        )
         _revoke_maven_grants(row, actions, outcome, transfer=transfer)
         retracted = _retract_maven_tags(row, actions)
         if retracted:
             noun = "tags" if len(retracted) > 1 else "tag"
             outcome.tags = f"Removed {noun} {', '.join(retracted)}."
-        outcome.override = _revoke_maven_override(
-            row, actions, other_course=other_course,
-        )
     outcome.student_email = _send_removal_student_email(
         row, actions, course,
         send_student_email=send_student_email, transfer=transfer,

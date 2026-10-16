@@ -27,12 +27,11 @@ from content.services.course_home import (
     _is_orientation_module,
     _ordered_modules,
 )
-from content.services.course_schedule import cohort_projects
+from content.services.course_schedule import cohort_projects, has_open_dated_enrollment
 from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
     decide_course_unit_drip_lock,
-    preferred_dated_enrollment_cohorts,
     resolve_session_event,
 )
 from events.models import Event
@@ -100,16 +99,16 @@ def _row(kind, title, *, when=None, status='', url='', action='', detail='', com
 
 
 def is_self_paced_view(course, user, cohort):
-    """True when ``cohort`` is self-paced and the learner has no dated cohort.
+    """True when self-paced is not shadowed by an open dated cohort.
 
     A self-paced learner has no calendar: no live sessions and no due dates.
     Course access auto-creates a self-paced enrollment, so a learner in a
-    dated cohort can hold both; the dated cohort always wins.
+    current or upcoming dated cohort can hold both; that schedule wins.
     """
     return (
         cohort is not None
         and cohort.mode == COHORT_MODE_SELF_PACED
-        and not preferred_dated_enrollment_cohorts(user, course)
+        and not has_open_dated_enrollment(user, course)
     )
 
 
@@ -318,7 +317,7 @@ def _homework_rows(course, user, cohort, timezone_name, today):
 
 def _project_rows(course, user, cohort, timezone_name, now):
     projects = list(cohort_projects(course, cohort).select_related(
-        'module__parent',
+        'cohort', 'module__parent',
     ).order_by('submission_due_at', 'pk'))
     if not projects:
         return []
@@ -351,7 +350,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
                 ),
             )
         else:
-            open_for_submission = now < project.submission_due_at
+            open_for_submission = project.is_submission_open(now)
             row = _row(
                 'Project', project.title, when=project.submission_due_at,
                 status='Not submitted' if open_for_submission else 'Closed',
@@ -377,7 +376,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
         unfinished_assigned = any(not review.is_complete for review in reviews)
         target = project.peer_review_count or course.peer_review_count
         remaining = max(target - completed, 0)
-        review_open = now < project.review_due_at
+        review_open = project.is_review_open(now)
         if not reviews and remaining:
             status = 'Waiting for reviews' if review_open else 'Closed'
             action = ''

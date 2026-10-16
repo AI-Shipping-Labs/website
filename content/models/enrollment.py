@@ -24,11 +24,13 @@ from content.models.course import Course
 SOURCE_MANUAL = 'manual'
 SOURCE_AUTO_PROGRESS = 'auto_progress'
 SOURCE_ADMIN = 'admin'
+SOURCE_MAVEN = 'maven'
 
 SOURCE_CHOICES = [
     (SOURCE_MANUAL, 'Manual'),
     (SOURCE_AUTO_PROGRESS, 'Auto (first lesson complete)'),
     (SOURCE_ADMIN, 'Admin (Studio)'),
+    (SOURCE_MAVEN, 'Maven'),
 ]
 
 

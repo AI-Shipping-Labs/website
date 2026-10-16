@@ -30,8 +30,7 @@ logger = logging.getLogger(__name__)
 
 LIFECYCLES = tuple(value for value, _label in MavenEnrollmentEvent.LIFECYCLE_CHOICES)
 STATUSES = ("all", "failed", "needs_attention")
-DEFAULT_LIMIT = 50
-MAX_LIMIT = 200
+DEFAULT_LIMIT, MAX_LIMIT = 50, 200
 
 _ERROR_SCHEMA = {"$ref": "#/components/schemas/ErrorResponse"}
 _NULLABLE_DATETIME = {"type": ["string", "null"], "format": "date-time"}
@@ -102,6 +101,7 @@ _DETAIL_PROPERTIES = {
     "welcome_eligible": {"type": "boolean"},
     "removed_at": _NULLABLE_DATETIME,
     "course_access_granted": {"type": "boolean"},
+    "course_enrolled": {"type": "boolean"},
     "cohort_enrolled": {"type": "boolean"},
     "steps": {"type": "array", "items": _STEP_SCHEMA},
 }

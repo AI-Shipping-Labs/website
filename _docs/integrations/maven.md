@@ -111,6 +111,10 @@ is `ai-buildcamp-4` either way.
 The endpoint is `POST https://aishippinglabs.com/api/webhooks/maven`. It is
 CSRF-exempt and POST-only.
 
+Webhook delivery and the authenticated occurrence replay/retry routes are the
+only supported intake paths. There is no inbound email parser for Maven
+rosters or enrollment notifications.
+
 Authentication accepts the shared secret in EITHER (header-first is the
 production recommendation, because query strings are more likely to appear in
 proxy and browser logs):
@@ -130,6 +134,26 @@ Steps:
    cohort removal.
 3. Maven's guidance: after adding a webhook, wait ~2 minutes, then test by
    enrolling as a student would.
+
+### Self-paced launch checklist
+
+Before opening a self-paced Maven cohort:
+
+1. Configure the course's exact `maven_course_key` and the cohort's exact
+   `external_key`; matching is case-insensitive but never guessed.
+2. Verify the cohort is active with `mode=self_paced` and has no start/end
+   dates, event series, or capacity.
+3. Verify the mapping through `GET /api/courses/ai-buildcamp/cohorts`.
+4. Replay a sample enrollment and confirm the occurrence detail shows all
+   three grant flags true before importing the roster.
+
+Self-paced project reviews are swept every 15 minutes. Each pool is isolated
+to one course, self-paced cohort, and project. The oldest waiting
+`peer_review_count + 1` submissions form one exact group; incomplete groups
+wait for the next sweep, and a submission whose review lifecycle started is
+never batched again. Assignments have no due date and remain open until
+completed. Studio's `Create review assignments` action runs the same logic for
+operator recovery.
 
 The endpoint acts only on `user_cohort.enrolled` (onboarding) and
 `user_cohort.removed` (staff heads-up). Any other type — including
@@ -304,12 +328,15 @@ given row and a person needs a manual nudge.
   its own expiry and becomes effective if a temporary stronger grant expires.
   The grant is recorded in
   `CommunityAuditLog` (`action="maven_enrollment_override"`).
-- Grants course access and cohort membership (issue #1659): resolves
+- Grants course access, an active course enrollment, and cohort membership:
+  resolves
   `content.Course` by `maven_course_key` and `content.Cohort` by
   `external_key` (both matched case-insensitively against the webhook's
   `course_key`/`cohort_key`, scoped to the resolved course for the cohort),
-  then creates `CourseAccess(access_type="granted")` and `CohortEnrollment`
-  idempotently. When the resolved cohort has a linked office-hours
+  then creates `CourseAccess(access_type="granted")`, active
+  `Enrollment(source="maven")`, and `CohortEnrollment` idempotently. The
+  active course enrollment puts the learner in Continue Learning and the
+  active course-announcement audience. When the resolved cohort has a linked office-hours
   `EventSeries`, also creates a standing `SeriesRegistration`; a cohort with
   no linked series is a clean no-op for that part. Runs after `override`
   succeeds and independently of `notification`/`welcome`/`slack` — it never
@@ -393,14 +420,18 @@ given row and a person needs a manual nudge.
   workspace account.
 - An email that resolves to no account is handled gracefully (lighter
   "unknown user" note, no error).
-- Revokes the course grant and cohort membership (issue #1659): deletes the
+- Revokes the course grant and cohort membership: deletes the
   matching `CohortEnrollment` unconditionally, and deletes
   `CourseAccess(access_type="granted")` for the resolved course unless the
   user is active in a different cohort of the same course (a transfer). Both
   sides resolve through `integrations/services/maven_matching.py`, so an
   earlier active row for the same cohort under Maven's old keys (`4/11` vs
   `4`) never keeps access. `access_type="purchased"` `CourseAccess` is never
-  touched. When the cohort has a linked office-hours `EventSeries`, also
+  touched. The active course `Enrollment` ends only when no direct course
+  access remains and there is no same-course transfer; purchased access and a
+  transfer keep it active. Removing an undated self-paced cohort still finds
+  an earlier dated alumni cohort when deciding whether the Maven tier override
+  remains justified. When the cohort has a linked office-hours `EventSeries`, also
   deletes the standing `SeriesRegistration`. Resolution mirrors the
   `enrollment` step, but an occurrence whose course/cohort key never resolved
   has nothing to revoke — this is best-effort and never fails the `removal`
@@ -516,15 +547,14 @@ curl -sS \
   "https://aishippinglabs.com/api/integrations/maven/occurrences/123"
 ```
 
-The detail response always includes `tagging`, `override`, `enrollment`,
-`notification`, `welcome`, `slack`, and `removal` in dependency order. Each row reports
-status, attempts, timestamps, whether it needs attention, and a safe error
-class or controlled reason. Unsafe legacy errors appear as
-`last_error: "redacted"` with `error_redacted: true`. The detail response also
-includes `course_access_granted` and `cohort_enrolled` booleans — the current
-`CourseAccess`/`CohortEnrollment` existence for the occurrence's resolved
-course/cohort — so an operator can confirm a member's grant without a
-database query.
+The detail response includes `course_access_granted`, `course_enrolled`, and
+`cohort_enrolled` as independent flags for current `CourseAccess`, active
+`Enrollment`, and `CohortEnrollment` state. It always includes `tagging`,
+`override`, `enrollment`, `notification`, `welcome`, `slack`, and `removal`
+in dependency order. Each row reports status, attempts, timestamps, whether
+it needs attention, and a safe error class or controlled reason. Unsafe
+legacy errors appear as `last_error: "redacted"` with
+`error_redacted: true`.
 
 After fixing the provider or configuration cause, retry only the affected
 step. The URL supplies every option, so no request body is needed:

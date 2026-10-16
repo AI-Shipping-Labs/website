@@ -50,7 +50,6 @@ class EntrypointRegistersSchedulesTest(TestCase):
         self.assertEqual(schedule.schedule_type, Schedule.CRON)
 
     def test_registers_all_default_schedules(self):
-        """Every schedule registered by setup_schedules lands in the DB."""
         _register_schedules()
 
         names = set(Schedule.objects.values_list('name', flat=True))
@@ -62,6 +61,7 @@ class EntrypointRegistersSchedulesTest(TestCase):
             'cleanup-webhook-deliveries',
             'purge-user-activity',
             'event-reminders',
+            'self-paced-peer-review-batches',
             'complete-finished-events',
             'expire-tier-overrides',
             'slack-membership-refresh',

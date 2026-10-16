@@ -1,5 +1,5 @@
 {% extends "studio/base.html" %}
-{% load tag_filters date_formatting %}
+{% load tag_filters date_formatting studio_filters %}
 
 {% block studio_title %}Peer Reviews - {{ course.title }}{% endblock %}
 
@@ -78,7 +78,11 @@ the course edit page in one click.
     {% for project in course_projects %}
     <div class="flex flex-col gap-1 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
       <span class="font-medium text-foreground">{{ project.title }}{% if project.cohort %} · {{ project.cohort.name }}{% endif %}{% if project.peer_review_count %} · {{ project.peer_review_count }} reviews per student{% endif %}</span>
+      {% if project.is_self_paced %}
+      <span class="text-muted-foreground">No fixed schedule</span>
+      {% else %}
       <span class="text-muted-foreground">Submit {{ project.submission_due_at|operator_datetime_tz }} · Review {{ project.review_due_at|operator_datetime_tz }}</span>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -171,7 +175,7 @@ studio/base.html (issue #347), so we deliberately do not render them here.
 <div class="space-y-6">
   {% for group in cohort_groups %}
   <section data-testid="cohort-group"
-           data-cohort-id="{% if group.cohort %}{{ group.cohort.pk }}{% else %}self-paced{% endif %}"
+           data-cohort-id="{% if group.cohort %}{{ group.cohort.pk }}{% else %}legacy-unscoped{% endif %}"
            class="bg-card border border-border rounded-lg overflow-hidden">
     <header class="px-4 sm:px-6 py-4 border-b border-border bg-secondary/30">
       <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -183,18 +187,23 @@ studio/base.html (issue #347), so we deliberately do not render them here.
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:text-sm text-muted-foreground">
             {% if group.is_self_paced %}
             <span data-testid="cohort-self-paced-tag">No fixed schedule</span>
+            {% elif group.is_legacy_unscoped %}
+            <span data-testid="cohort-legacy-tag">No cohort assigned</span>
             {% else %}
             <span data-testid="cohort-window">
               {{ group.start_date|operator_date }}
               {% if group.end_date %}- {{ group.end_date|operator_date }}{% endif %}
             </span>
-            {% if group.is_active %}
-            <span data-testid="cohort-active-state"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/15 text-green-400">Active</span>
-            {% else %}
-            <span data-testid="cohort-active-state"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-muted-foreground">Inactive</span>
             {% endif %}
+            {% if group.cohort %}
+            <span data-testid="cohort-active-state"
+                  data-state="{% if group.is_active %}active{% else %}inactive{% endif %}">
+            {% if group.is_active %}
+            {% studio_status_badge 'active' 'Active' %}
+            {% else %}
+            {% studio_status_badge 'archived' 'Inactive' %}
+            {% endif %}
+            </span>
             <span data-testid="cohort-enrollment-count">
               {{ group.enrollment_count }} enrolled
             </span>
@@ -306,9 +315,8 @@ studio/base.html (issue #347), so we deliberately do not render them here.
       {% empty %}
       <div class="px-4 sm:px-6 py-6 text-sm text-muted-foreground"
            data-testid="cohort-group-empty">
-        {% if group.is_self_paced %}
-        No self-paced submissions yet.
-        Students enrolled outside any cohort will appear here when they submit.
+        {% if group.is_legacy_unscoped %}
+        No legacy submissions without a cohort yet.
         {% else %}
         No submissions yet for this cohort.
         Submissions appear here once enrolled students post their projects.

@@ -52,11 +52,75 @@ def _build_submission_item(sub):
     }
 
 
+def _cohort_group(cohort):
+    return {
+        'cohort': cohort,
+        'is_self_paced': cohort.mode == 'self_paced',
+        'is_legacy_unscoped': False,
+        'name': cohort.name,
+        'start_date': cohort.start_date,
+        'end_date': cohort.end_date,
+        'is_active': cohort.is_active,
+        'enrollment_count': cohort.enrollment_count,
+        'items': [],
+    }
+
+
+def _legacy_group():
+    return {
+        'cohort': None,
+        'is_self_paced': False,
+        'is_legacy_unscoped': True,
+        'name': 'Legacy / no cohort',
+        'start_date': None,
+        'end_date': None,
+        'is_active': True,
+        'enrollment_count': None,
+        'items': [],
+    }
+
+
+def _submission_groups(course, submissions):
+    cohorts = list(Cohort.objects.filter(course=course).order_by('-start_date'))
+    groups = {cohort.pk: _cohort_group(cohort) for cohort in cohorts}
+    legacy = _legacy_group()
+    for submission in submissions:
+        item = _build_submission_item(submission)
+        group = groups.get(submission.cohort_id, legacy)
+        group['items'].append(item)
+    cohort_groups = list(groups.values())
+    if legacy['items'] or not cohorts:
+        cohort_groups.append(legacy)
+    return cohorts, cohort_groups
+
+
+def _status_context(course, status_filter):
+    base_qs = ProjectSubmission.objects.filter(course=course)
+    counts = {
+        code: base_qs.filter(status=code).count()
+        for code, _label in SUBMISSION_STATUS_CHOICES
+    }
+    filters = [
+        {
+            'value': code,
+            'label': FRIENDLY_STATUS_LABELS.get(code, label),
+            'count': counts[code],
+            'active': status_filter == code,
+        }
+        for code, label in SUBMISSION_STATUS_CHOICES
+    ]
+    return {
+        'status_filters': filters,
+        'total_submissions': base_qs.count(),
+        'waiting_count': counts.get('submitted', 0),
+    }
+
+
 @staff_required
 def peer_review_management(request, course_id):
     """Show submissions for a course, grouped by cohort.
 
-    Submissions without a cohort go into a `Self-paced / no cohort` group so
+    Submissions without a cohort go into a distinct legacy group so
     operators can see which work item belongs to which cohort timeline.
     """
     course = get_object_or_404(Course, pk=course_id)
@@ -70,67 +134,7 @@ def peer_review_management(request, course_id):
     if status_filter:
         submissions_qs = submissions_qs.filter(status=status_filter)
 
-    # Build per-cohort buckets in a deterministic order.  We always include
-    # every cohort defined for the course so operators can see active cohorts
-    # that have not yet received submissions.
-    cohorts = list(Cohort.objects.filter(course=course).order_by('-start_date'))
-
-    # Map cohort_id -> {cohort, submissions, ...}; key None is the self-paced bucket.
-    groups_by_cohort = {}
-    for cohort in cohorts:
-        groups_by_cohort[cohort.pk] = {
-            'cohort': cohort,
-            'is_self_paced': False,
-            'name': cohort.name,
-            'start_date': cohort.start_date,
-            'end_date': cohort.end_date,
-            'is_active': cohort.is_active,
-            'enrollment_count': cohort.enrollment_count,
-            'items': [],
-        }
-
-    self_paced_group = {
-        'cohort': None,
-        'is_self_paced': True,
-        'name': 'Self-paced / no cohort',
-        'start_date': None,
-        'end_date': None,
-        'is_active': True,
-        'enrollment_count': None,
-        'items': [],
-    }
-
-    for sub in submissions_qs:
-        item = _build_submission_item(sub)
-        if sub.cohort_id and sub.cohort_id in groups_by_cohort:
-            groups_by_cohort[sub.cohort_id]['items'].append(item)
-        else:
-            self_paced_group['items'].append(item)
-
-    cohort_groups = list(groups_by_cohort.values())
-    # Append the self-paced bucket if it has submissions, OR if there are no
-    # cohorts at all (so the page still renders a single grouped section).
-    if self_paced_group['items'] or not cohorts:
-        cohort_groups.append(self_paced_group)
-
-    # Status filter chip data with friendly labels and counts.  Counts ignore
-    # the current filter so operators always see the full distribution.
-    base_qs = ProjectSubmission.objects.filter(course=course)
-    status_counts = {
-        code: base_qs.filter(status=code).count()
-        for code, _label in SUBMISSION_STATUS_CHOICES
-    }
-    status_filters = [
-        {
-            'value': code,
-            'label': FRIENDLY_STATUS_LABELS.get(code, label),
-            'count': status_counts[code],
-            'active': status_filter == code,
-        }
-        for code, label in SUBMISSION_STATUS_CHOICES
-    ]
-    total_submissions = base_qs.count()
-    waiting_count = status_counts.get('submitted', 0)
+    cohorts, cohort_groups = _submission_groups(course, submissions_qs)
 
     context = {
         'course': course,
@@ -139,10 +143,8 @@ def peer_review_management(request, course_id):
         'has_any_cohorts': bool(cohorts),
         'status_filter': status_filter,
         'status_filter_label': _friendly_status_label(status_filter) if status_filter else '',
-        'status_filters': status_filters,
-        'total_submissions': total_submissions,
-        'waiting_count': waiting_count,
     }
+    context.update(_status_context(course, status_filter))
     return render(request, 'studio/courses/peer_reviews.html', context)
 
 

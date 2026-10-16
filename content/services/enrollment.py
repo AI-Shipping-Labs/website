@@ -87,6 +87,25 @@ def ensure_enrollment(user, course, source: str = SOURCE_MANUAL):
     return enrollment, True
 
 
+def ensure_provider_enrollment(user, course, *, source):
+    """Idempotently activate a provider-backed course enrollment.
+
+    Existing active enrollments keep their original source. A previously
+    ended row remains historical and a new provider-sourced row is created.
+    """
+    return ensure_enrollment(user, course, source=source)
+
+
+def end_provider_enrollment(user, course, *, source) -> bool:
+    """End only an enrollment owned by the named provider source."""
+    enrollment = get_active_enrollment(user, course)
+    if enrollment is None or enrollment.source != source:
+        return False
+    enrollment.unenrolled_at = timezone.now()
+    enrollment.save(update_fields=['unenrolled_at'])
+    return True
+
+
 def auto_enroll_on_progress(user, course):
     """Hook for the mark-complete view — enroll if not already enrolled.
 

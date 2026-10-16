@@ -39,6 +39,37 @@ from content.models.completion import CONTENT_TYPE_WORKSHOP_PAGE
 from content.services.enrollment import auto_enroll_on_progress
 
 
+def _check_self_paced_certificate(user, unit):
+    """Issue a certificate when this newly completed core unit is the last gap."""
+    from content.models.course import non_bonus_units
+
+    if not non_bonus_units(Unit.objects.filter(pk=unit.pk)).exists():
+        return
+    from content.models.peer_review import CourseProject
+    from content.services.peer_review_service import PeerReviewService
+
+    projects = CourseProject.objects.filter(
+        cohort__mode='self_paced', submissions__user=user,
+        course=unit.module.course,
+    ).distinct()
+    for project in projects:
+        certificate = PeerReviewService.check_certificate_eligibility(
+            user, unit.module.course, course_project=project,
+        )
+        if certificate is not None:
+            return
+
+
+def _mark_unit_completed(user, unit, when):
+    progress, created = UserCourseProgress.objects.get_or_create(
+        user=user, unit=unit, defaults={'completed_at': when},
+    )
+    auto_enroll_on_progress(user, unit.module.course)
+    if created:
+        _check_self_paced_certificate(user, unit)
+    return progress
+
+
 def _require_supported(item):
     if not isinstance(item, (Unit, WorkshopPage)):
         raise TypeError(
@@ -68,14 +99,7 @@ def mark_completed(user, item, *, when=None):
     when = when or timezone.now()
 
     if isinstance(item, Unit):
-        progress, _created = UserCourseProgress.objects.get_or_create(
-            user=user, unit=item,
-            defaults={'completed_at': when},
-        )
-        # Auto-enroll regardless of whether the row was just created or
-        # already existed — ensure_enrollment is itself idempotent.
-        auto_enroll_on_progress(user, item.module.course)
-        return progress
+        return _mark_unit_completed(user, item, when)
 
     # WorkshopPage path.
     completion, _created = UserContentCompletion.objects.get_or_create(

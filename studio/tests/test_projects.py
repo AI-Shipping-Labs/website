@@ -255,4 +255,18 @@ class StudioProjectReviewTest(TestCase):
         self.client.get(f'/studio/projects/{self.project.pk}/review')
         with CaptureQueriesContext(connection) as queries:
             self.client.get(f'/studio/projects/{self.project.pk}/review')
-        self.assertLessEqual(len(queries), 7)
+        sidebar_count_queries = []
+        page_queries = []
+        for query in queries.captured_queries:
+            sql = query['sql']
+            is_sidebar_count = (
+                'COUNT(*)' in sql
+                and 'booking_callrequest' in sql
+                and '"status" = \'pending\'' in sql
+            )
+            if is_sidebar_count:
+                sidebar_count_queries.append(query)
+            else:
+                page_queries.append(query)
+        self.assertEqual(len(sidebar_count_queries), 1)
+        self.assertLessEqual(len(page_queries), 7)

@@ -23,6 +23,7 @@ from accounts.tasks import purge_unverified_users
 from accounts.tasks.purge_unverified_users import (
     DEFAULT_PURGE_UNVERIFIED_BATCH_SIZE,
     DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
+    _batch_blockers,
     _candidate_queryset,
     _positive_int_config,
     _related_user_ids,
@@ -561,18 +562,16 @@ class BoundedPurgeQueryPlanTest(TestCase):
         self.assertTrue(User.objects.filter(pk=users[4].pk).exists())
 
     def test_wall_clock_budget_returns_normally_without_deleting_batch(self):
-        users = [
-            _make_unverified(
-                f"budget-{index}@example.com",
-                expires_offset_hours=-48,
-            )
-            for index in range(2)
-        ]
-        ticks = iter([0, 0, 0, 241])
+        clock = {"now": 0}
+        users = [_make_unverified(f"budget-{index}@example.com", expires_offset_hours=-48) for index in range(2)]
+        def inspect_then_expire(*args, **kwargs):
+            result = _batch_blockers(*args, **kwargs)
+            clock["now"] = 241
+            return result
 
-        with patch(
-            "accounts.tasks.purge_unverified_users.time.monotonic",
-            side_effect=lambda: next(ticks, 241),
+        with patch("accounts.tasks.purge_unverified_users.monotonic",
+                   side_effect=lambda: clock["now"]), patch(
+            "accounts.tasks.purge_unverified_users._batch_blockers", side_effect=inspect_then_expire,
         ):
             result = purge_unverified_users()
 

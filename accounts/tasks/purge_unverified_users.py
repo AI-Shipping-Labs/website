@@ -7,10 +7,10 @@ batch instead of once per user.
 """
 
 import logging
-import time
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import timedelta
+from time import monotonic
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -179,7 +179,7 @@ def _record_field_blockers(
     bounded window so existing operational greps for these safety gates remain
     useful, without walking or warning for an unprocessed backlog.
     """
-    if time.monotonic() >= deadline:
+    if monotonic() >= deadline:
         return
     blocker_filter = (
         Q(last_login__isnull=False)
@@ -263,7 +263,7 @@ def _run_pass(
 
     candidates = _candidate_queryset(base_queryset)
     last_pk = 0
-    while result.batches < max_batches and time.monotonic() < deadline:
+    while result.batches < max_batches and monotonic() < deadline:
         batch = list(
             candidates.filter(pk__gt=last_pk)
             .order_by("pk")[:batch_size]
@@ -285,7 +285,7 @@ def _run_pass(
         # Relation inspection may itself consume the remaining time. Leave the
         # fully inspected batch for the next run instead of starting deletion
         # after the worker's safety budget.
-        if time.monotonic() >= deadline:
+        if monotonic() >= deadline:
             break
         _delete_batch(User, batch, blocked_by, result, eager=eager)
 
@@ -323,7 +323,7 @@ def purge_unverified_users():
         "PURGE_UNVERIFIED_MAX_BATCHES",
         DEFAULT_PURGE_UNVERIFIED_MAX_BATCHES,
     )
-    deadline = time.monotonic() + PURGE_UNVERIFIED_RUN_BUDGET_SECONDS
+    deadline = monotonic() + PURGE_UNVERIFIED_RUN_BUDGET_SECONDS
 
     standard = _run_pass(
         _standard_base_queryset(now),

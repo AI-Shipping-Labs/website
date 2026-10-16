@@ -585,36 +585,21 @@ def is_enabled(key):
     return str(val).strip().lower() in ("true", "1", "yes")
 
 
+def _read_shared_stamp(key, label):
+    """Read one memoized shared stamp, returning None when unavailable."""
+    try:
+        return get_shared_cache(key)
+    except _CACHE_STAMP_EXCEPTIONS:
+        logger.debug("Unable to read the %s config stamp", label, exc_info=True)
+        return None
+
+
 def _read_stamp():
-    """Return both published stamps, or None when neither is readable.
+    """Return the package and donor shared stamps when either is readable."""
+    from community_base.config.service import STAMP_KEY  # noqa: PLC0415
 
-    Since the step-5 cutover the package service publishes into the
-    default cache under its ``STAMP_KEY`` on every Studio/API save; the
-    donor channel (``django_q`` under ``integration_settings_stamp``) is
-    still watched so any surviving pre-cutover writer invalidates too.
-    Each tuple entry is None when its channel never published; the outer
-    None means both channels were unreadable, which the caller treats as
-    "no change" and lets the in-process cache stand.
-    """
-    package_stamp = None
-    donor_stamp = None
-    try:
-        from community_base.config.service import STAMP_KEY  # noqa: PLC0415
-        from django.core.cache import cache  # noqa: PLC0415
-
-        package_stamp = cache.get(STAMP_KEY)
-    except _CACHE_STAMP_EXCEPTIONS:
-        logger.debug(
-            "Unable to read the package config stamp",
-            exc_info=True,
-        )
-    try:
-        donor_stamp = get_shared_cache(_STAMP_CACHE_KEY)
-    except _CACHE_STAMP_EXCEPTIONS:
-        logger.debug(
-            "Unable to read integration settings cache stamp",
-            exc_info=True,
-        )
+    package_stamp = _read_shared_stamp(STAMP_KEY, "package")
+    donor_stamp = _read_shared_stamp(_STAMP_CACHE_KEY, "integration settings")
     if package_stamp is None and donor_stamp is None:
         return None
     return (package_stamp, donor_stamp)

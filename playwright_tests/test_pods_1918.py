@@ -501,6 +501,6 @@ def test_pods_stay_hidden_until_the_course_is_enabled(django_server, browser):
     admin_context.close()
 
     page.goto(_home(django_server), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('course-tab-pods')).to_be_visible()
+    expect(page.get_by_test_id('course-tab-pods')).to_have_text('Study groups')
     context.close()
     _set_config('PODS_COURSE_SLUGS', None)

@@ -59,6 +59,8 @@ from content.services.project_form_adapter import (
     LEARNING_IN_PUBLIC_CAP as PROJECT_LEARNING_IN_PUBLIC_CAP,
 )
 from content.services.project_form_adapter import submission_cohort
+from content.services.submission_errors import OnBehalfError
+from content.services.submission_errors import refuse_existing as _refuse_existing
 from email_app.package_mail import send_package_mail
 from notifications.models import Notification
 
@@ -76,17 +78,6 @@ EMAIL_TEMPLATE = 'submission_recorded'
 NOTE_MAX_LENGTH = 2000
 
 CHOICE_TYPES = (QuestionType.MULTIPLE_CHOICE, QuestionType.CHECKBOXES)
-
-
-class OnBehalfError(Exception):
-    """A refusal the API maps onto its ``error``/``code`` envelope."""
-
-    def __init__(self, message, code, *, status=422, details=None):
-        super().__init__(message)
-        self.message = message
-        self.code = code
-        self.status = status
-        self.details = details or {}
 
 
 @dataclass
@@ -515,14 +506,6 @@ def _audit(member, actor, details):
             },
             sort_keys=True,
         ),
-    )
-
-
-def _refuse_existing(existing_summary, kind):
-    raise OnBehalfError(
-        f'The member already has a {kind} submission; pass replace to overwrite it',
-        'submission_exists', status=409,
-        details={'existing_submission': existing_summary},
     )
 
 

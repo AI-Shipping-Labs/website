@@ -10,6 +10,7 @@ from accounts.urls import (
     onboarding_urlpatterns,
 )
 from accounts.views.auth import signup_redirect_view
+from api.views.runtime_settings import setting_detail_adapter, settings_list_adapter
 from content.sitemaps import sitemaps
 from content.views.marketing_pages import marketing_page_fallback
 from content.views.sitemap import sitemap
@@ -23,6 +24,15 @@ from website.robots import robots_txt
 # its default catch-all route.
 _ = admin.site.name
 admin.site.final_catch_all_view = False
+
+community_api_patterns = community_api_urlpatterns()
+
+
+def _community_api_dispatch(route):
+    for pattern in community_api_patterns:
+        if str(pattern.pattern) == route:
+            return pattern.callback
+    raise RuntimeError(f"Missing community-base API route: {route}")
 
 # Friendly, fully-chromed 404 page with a workshop-aware secondary CTA
 # (#1724). Dotted-path string so Django resolves it lazily (avoiding an
@@ -44,10 +54,20 @@ urlpatterns = [
     path('api/', include(auth_api_urlpatterns)),
     path('api/', include(email_api_urlpatterns)),
     path('api/', include(notification_api_urlpatterns)),
+    path(
+        'api/v1/settings',
+        settings_list_adapter(_community_api_dispatch('settings')),
+        name='runtime_settings_list',
+    ),
+    re_path(
+        r'^api/v1/settings/(?P<key>(?!export$|import$)[^/]+)$',
+        setting_detail_adapter(_community_api_dispatch('settings/<str:key>')),
+        name='runtime_setting_detail',
+    ),
     # Package-owned operator API. The registry is populated by the package
     # apps during django.setup(); mount it under its documented versioned
     # prefix after app initialization and before the legacy /api surface.
-    path('api/v1/', include((community_api_urlpatterns(), 'community_base_api'))),
+    path('api/v1/', include((community_api_patterns, 'community_base_api'))),
     path('api/', include('api.urls')),
     path('member-api/', include('member_api.urls')),
     path('', include(notification_page_urlpatterns)),

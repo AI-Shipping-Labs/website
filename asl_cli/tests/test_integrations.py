@@ -48,6 +48,25 @@ def test_settings_lists_all_package_pages_before_group_filter(monkeypatch):
     ]
 
 
+def test_settings_projects_invalid_rows_without_values(monkeypatch):
+    client = RecordingClient([{
+        "settings": [{
+            "key": "BROKEN", "group": "one", "configured": True,
+            "source": "db", "value": "must-not-print",
+            "error": {"code": "invalid_stored_value"},
+        }],
+        "pagination": {"total": 1, "limit": 100, "offset": 0},
+    }])
+    monkeypatch.setattr(integrations_module, "get_client", lambda: client)
+
+    result = CliRunner().invoke(cli, ["integrations", "settings"])
+
+    assert result.exit_code == 0, result.output
+    assert '"key": "BROKEN"' in result.output
+    assert "must-not-print" not in result.output
+    assert '"value"' not in result.output
+
+
 def test_settings_set_posts_package_import_shape(monkeypatch):
     client = RecordingClient([])
     monkeypatch.setattr(integrations_module, "get_client", lambda: client)

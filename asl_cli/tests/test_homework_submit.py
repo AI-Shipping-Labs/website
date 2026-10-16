@@ -6,6 +6,7 @@ import json
 
 import pytest
 from asl_cli.cli import cli
+from asl_cli.client import APIError
 from asl_cli.commands import homework as homework_module
 from click.testing import CliRunner
 
@@ -18,6 +19,22 @@ class RecordingClient:
 
     def get(self, path, **kwargs):
         self.calls.append(("GET", path, kwargs))
+        if path.endswith("submissions/on-behalf"):
+            return {
+                "kind": "homework",
+                "submission": {
+                    "submitted_at": "2026-09-01T09:30:00+00:00",
+                    "questions_score": 1,
+                    "total_score": 2,
+                    "submitted_on_behalf_by": "staff@test.com",
+                    "on_behalf_note": "Email",
+                    "answers": [{
+                        "question_key": "project-idea",
+                        "answer_text": "A bot",
+                        "is_correct": True,
+                    }],
+                },
+            }
         return {"course": "ai-buildcamp", "homework": []}
 
     def post(self, path, **kwargs):
@@ -140,3 +157,83 @@ def test_list_gets_course_homework(client):
     result = CliRunner().invoke(cli, ["homework", "list", "ai-buildcamp"])
     assert result.exit_code == 0, result.output
     assert client.calls == [("GET", "/api/courses/ai-buildcamp/homework", {})]
+
+
+def test_show_gets_submission_and_renders_answer_table(client):
+    result = CliRunner().invoke(cli, [
+        "homework", "show", "--as", "member@example.com",
+        "--course", "ai-buildcamp", "--homework", "week-2-homework",
+        "--cohort", "4", "--format", "table",
+    ])
+
+    assert result.exit_code == 0, result.output
+    assert client.calls == [("GET", "/api/submissions/on-behalf", {
+        "params": {
+            "user": "member@example.com", "course": "ai-buildcamp",
+            "homework": "week-2-homework", "cohort": "4",
+        },
+    })]
+    assert "project-idea" in result.output
+    assert "staff@test.com" in result.output
+
+
+def test_show_defaults_to_pretty_json_and_raw_is_compact(client):
+    args = [
+        "homework", "show", "--as", "member@example.com",
+        "--homework-id", "7",
+    ]
+    pretty = CliRunner().invoke(cli, args)
+    raw = CliRunner().invoke(cli, [*args, "--format", "raw"])
+
+    assert pretty.exit_code == raw.exit_code == 0
+    assert json.loads(pretty.output)["submission"]["answers"][0]["question_key"] == "project-idea"
+    assert json.loads(raw.output) == json.loads(pretty.output)
+    assert len(raw.output.splitlines()) == 1
+
+
+def test_zero_answer_submission_still_has_metadata_row():
+    payload = {
+        "submission": {
+            "submitted_at": "2026-09-01T09:30:00+00:00",
+            "questions_score": 0, "total_score": 0,
+            "submitted_on_behalf_by": None, "on_behalf_note": "", "answers": [],
+        },
+    }
+    assert homework_module._submission_rows(payload) == [{
+        "submitted_at": "2026-09-01T09:30:00+00:00", "score": "0/0",
+        "recorded_by": None, "note": "", "question_key": "",
+        "answer_text": "", "is_correct": "",
+    }]
+
+
+def test_show_without_target_is_a_usage_error(client):
+    result = CliRunner().invoke(cli, ["homework", "show", "--as", "m@example.com"])
+    assert result.exit_code == 2
+    assert client.calls == []
+
+
+def test_submit_conflict_prints_copyable_show_command(monkeypatch):
+    class ConflictClient:
+        def post(self, path, **kwargs):
+            raise APIError(409, {
+                "error": "Already submitted", "code": "submission_exists",
+                "details": {"existing_submission": {"id": 1}},
+            }, path)
+
+    monkeypatch.setattr(homework_module, "get_client", ConflictClient)
+    result = CliRunner().invoke(cli, [
+        "homework", "submit", "--as", "member@example.com",
+        "--course", "ai-buildcamp", "--homework", "week-2-homework",
+        "--cohort", "4",
+    ])
+
+    assert result.exit_code == 1
+    assert (
+        "asl homework show --as member@example.com --course ai-buildcamp "
+        "--homework week-2-homework --cohort 4"
+    ) in result.output
+
+    by_id = CliRunner().invoke(cli, [
+        "homework", "submit", "--as", "42", "--homework-id", "7",
+    ])
+    assert "asl homework show --as 42 --homework-id 7" in by_id.output

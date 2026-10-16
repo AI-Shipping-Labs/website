@@ -7,6 +7,40 @@ import click
 from asl_cli.commands._shared import emit, format_option, get_client
 
 API = "/api/v1"
+SETTING_FIELDS = ("key", "group", "configured", "source")
+
+
+def _setting_summary(entry):
+    summary = {}
+    for field in SETTING_FIELDS:
+        summary[field] = entry.get(field)
+    return summary
+
+
+def _filter_settings(settings, group_filter):
+    if not group_filter:
+        return settings
+    filtered = []
+    for entry in settings:
+        if entry.get("group") == group_filter:
+            filtered.append(entry)
+    return filtered
+
+
+def _settings_output(data, group_filter):
+    settings = list(data.get("settings", []))
+    total = data.get("pagination", {}).get("total", len(settings))
+    client = get_client()
+    while len(settings) < total:
+        page = client.get(
+            f"{API}/settings", params={"limit": 100, "offset": len(settings)},
+        )
+        if not isinstance(page, dict) or not page.get("settings"):
+            break
+        settings.extend(page["settings"])
+    settings = _filter_settings(settings, group_filter)
+    summaries = [_setting_summary(entry) for entry in settings]
+    return {**data, "settings": summaries}
 
 
 @click.group()
@@ -19,29 +53,18 @@ def integrations():
 @format_option
 def integrations_settings(group_filter, fmt):
     """List settings (keys, source, configured -- never values)."""
-    client = get_client()
     # The package API is paginated; collect all pages so the CLI preserves
     # the old command's complete inventory before applying its group filter.
-    data = client.get(f"{API}/settings", params={"limit": 100, "offset": 0})
+    data = get_client().get(f"{API}/settings", params={"limit": 100, "offset": 0})
     if isinstance(data, dict):
-        settings = list(data.get("settings", []))
-        total = data.get("pagination", {}).get("total", len(settings))
-        while len(settings) < total:
-            page = client.get(
-                f"{API}/settings",
-                params={"limit": 100, "offset": len(settings)},
-            )
-            if not isinstance(page, dict) or not page.get("settings"):
-                break
-            settings.extend(page["settings"])
-        if group_filter:
-            settings = [entry for entry in settings if entry.get("group") == group_filter]
-        data = {**data, "settings": settings}
+        data = _settings_output(data, group_filter)
     if fmt == "table":
-        rows = data.get("settings", []) if isinstance(data, dict) else data
-        emit(rows, fmt, columns=["key", "group", "configured", "source"])
-    else:
-        emit(data, fmt)
+        rows = data
+        if isinstance(data, dict):
+            rows = data.get("settings", [])
+        emit(rows, fmt, columns=list(SETTING_FIELDS))
+        return
+    emit(data, fmt, columns=list(SETTING_FIELDS))
 
 
 @integrations.command("set")

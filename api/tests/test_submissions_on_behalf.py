@@ -135,10 +135,6 @@ class PermissionTest(OnBehalfBase):
         self.assertFalse(Submission.objects.exists())
         self.assertFalse(audit_rows().exists())
 
-    def test_get_is_not_allowed(self):
-        response = self.client.get(URL, **self.auth())
-        self.assertEqual(response.status_code, 405)
-
     def test_homework_list_requires_staff_token(self):
         response = self.client.get('/api/courses/ai-buildcamp/homework')
         self.assertEqual(response.status_code, 401)
@@ -418,7 +414,10 @@ class ProjectTest(OnBehalfBase):
         ProjectSubmission.objects.create(
             user=self.member, course=self.course, project_url='https://github.com/m/old',
         )
-        self.assertEqual(self.post(self.project_body()).status_code, 409)
+        conflict = self.post(self.project_body())
+        self.assertEqual(conflict.status_code, 409)
+        self.assertIn('pass replace to overwrite it', conflict.json()['error'])
+        self.assertNotIn('homework show', conflict.json()['error'])
 
         response = self.post(self.project_body(replace=True))
         self.assertEqual(response.status_code, 201, response.content)

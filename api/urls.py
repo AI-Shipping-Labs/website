@@ -232,10 +232,8 @@ from api.views.stripe_webhooks import (
     stripe_webhooks_status,
     stripe_webhooks_verify,
 )
-from api.views.submissions_on_behalf import (
-    course_homework_list,
-    submission_on_behalf,
-)
+from api.views.submission_reads import submission_on_behalf
+from api.views.submissions_on_behalf import course_homework_list
 from api.views.subscription_reconciliation import (
     reconciliation_run_detail,
     reconciliation_runs_dispatch,

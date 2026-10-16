@@ -12,6 +12,9 @@ class IntegrationsConfig(AppConfig):
         # (plan issue A0.2 step 2). Idempotent: community_base.config.ready()
         # imports this module too once the config app is installed.
         from integrations import settings_keys  # noqa: F401
+        from integrations.package_config_cache import configure_package_config_cache
+
+        configure_package_config_cache()
 
         # A2.3 compatibility facade: legacy sync rows mirror into the
         # package tables (see integrations/legacy_mirror.py).

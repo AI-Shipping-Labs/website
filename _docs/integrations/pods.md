@@ -2,7 +2,8 @@
 
 Pods are small groups of members inside a community activity (issue #1918).
 Phase 1 attaches pods to dated course cohorts: enrolled cohort members see a
-`Pods` tab on course Home, start a pod of one, send join requests, join a
+`Study groups` tab between `Syllabus` and `Live sessions` on course Home,
+start a pod of one, send join requests, join a
 waiting list when a pod is full, add weekly availability in their own
 timezone, and see suggested meeting times. Since issue #1919 they turn a
 suggested time into an agreed pod meeting (propose, confirm, `Can't make it`
@@ -17,14 +18,15 @@ environment variable with the same name is an optional fallback.
 
 ## PODS_COURSE_SLUGS
 
-Comma-separated course slugs whose dated-cohort members see Pods, for example
-`ai-buildcamp`. Course-only: sprint pods are switched on per sprint with
+Comma-separated course slugs whose dated-cohort members and staff viewing that
+cohort see the `Study groups` tab, for example `ai-buildcamp`. Course-only:
+sprint pods are switched on per sprint with
 `Sprint.pods_enabled` (see [Sprint pods](#sprint-pods)).
 
 - Type: string.
 - Default: empty.
 - When empty, or when a course is not listed: every member pod URL for that
-  course returns 404 and course Home renders no `Pods` tab.
+  course returns 404 and course Home renders no `Study groups` tab.
 - Studio and the staff API work regardless, so pods can be prepared before a
   course is switched on.
 
@@ -238,7 +240,7 @@ Kill switch for the pod chat (issue #1920).
 - Type: boolean.
 - Default: `true`.
 - Off: no `Chat` section on the member pod page, no `N new messages` line on
-  the Pods tab, and `POST /courses/<slug>/home/pods/<pod_id>/messages`
+  the `Study groups` tab, and `POST /courses/<slug>/home/pods/<pod_id>/messages`
   returns 404.
 - Studio (`/studio/pods/<id>/#chat`) and the staff API
   (`GET /api/pods/<id>/messages`, hide and restore) keep working, so staff can
@@ -414,7 +416,7 @@ How agreed meetings work (issue #1919):
     action, and relabels `Change time` to `Propose another time` (primary
     only when there is no next best time);
   - reads `Proposed time can't be confirmed - propose another time` on the
-    Pods tab (when no confirmed meeting is upcoming) and is left out of the
+    `Study groups` tab (when no confirmed meeting is upcoming) and is left out of the
     dashboard `Your week` list;
   - still blocks proposing from Suggested times (no `Propose this time`
     links, no custom propose link), but the blocked line reads `The proposed
@@ -518,9 +520,9 @@ point; the pod page recommends Slack for ongoing conversation.
   1000 characters.`, and the hourly limit message
   (`PODS_CHAT_MESSAGES_PER_HOUR`).
 - Unread: opening the pod page as a member sets `PodMembership.chat_read_at`.
-  The member's own rows on the Pods tab show `N new messages` for visible
+  The member's own rows on the `Study groups` tab show `N new messages` for visible
   messages by others after that time (or after `joined_at` when never read).
-  The Pods tab badge still counts only pending requests. There are no bell,
+  The `Study groups` tab badge still counts only pending requests. There are no bell,
   email or Slack notifications per message.
 - Moderation: staff hide or restore a message in Studio (the pod's `Chat`
   section shows the latest 200 messages including hidden ones, with author

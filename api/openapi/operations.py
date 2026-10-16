@@ -7,6 +7,7 @@ def _query_parameters(query_spec):
     for name, schema_meta in query_spec.items():
         required = False
         if isinstance(schema_meta, dict):
+            schema_meta = dict(schema_meta)
             required = schema_meta.pop("required", False)
         parameters.append({
             "name": name,

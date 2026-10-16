@@ -582,6 +582,16 @@ Sprint pods are switched on per sprint, not by a setting: `GET`, `POST` and
 Settings live in the `Pods` IntegrationSetting group; see
 [`_docs/integrations/pods.md`](integrations/pods.md).
 
+## Runtime settings inventory
+
+`GET /api/v1/settings` and `GET /api/v1/settings/<key>` require a bearer API
+key with `settings.read`. A malformed database value remains discoverable and
+repairable: its entry has `configured: true`, `source: "db"`, `value: null`,
+and `error: {"code": "invalid_stored_value", "message": "Stored value is invalid."}`.
+Other entries and pagination are still returned, and secret values stay
+redacted. Package-owned PUT, import, and export routes keep their existing
+behavior.
+
 ## Not exposed (Studio-only)
 
 By design, the API does NOT expose:

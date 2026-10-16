@@ -19,6 +19,13 @@ from django.test import TestCase
 User = get_user_model()
 
 
+def _setting_entry(response, key):
+    for entry in response.json()["settings"]:
+        if entry["key"] == key:
+            return entry
+    raise AssertionError(f"Missing setting entry: {key}")
+
+
 class CommunitySettingsApiTest(TestCase):
     success_status = HTTPStatus.OK
 
@@ -82,6 +89,34 @@ class CommunitySettingsApiTest(TestCase):
         entry = body
         self.assertEqual(entry["value"], REDACTED)
         self.assertNotIn(secret, response.content.decode())
+
+    def test_malformed_typed_row_does_not_break_inventory_or_detail(self):
+        Setting.objects.create(
+            key="USER_ACTIVITY_RETENTION_DAYS",
+            value="not-an-integer",
+            value_type="int",
+            source="migration",
+        )
+
+        list_response = self.client.get(
+            "/api/v1/settings?limit=100", **self._headers()
+        )
+        self.assertEqual(list_response.status_code, self.success_status)
+        item = _setting_entry(list_response, "USER_ACTIVITY_RETENTION_DAYS")
+        expected_error = {
+            "code": "invalid_stored_value",
+            "message": "Stored value is invalid.",
+        }
+        self.assertEqual(item["value"], None)
+        self.assertEqual(item["source"], "db")
+        self.assertTrue(item["configured"])
+        self.assertEqual(item["error"], expected_error)
+
+        detail = self.client.get(
+            "/api/v1/settings/USER_ACTIVITY_RETENTION_DAYS", **self._headers()
+        )
+        self.assertEqual(detail.status_code, self.success_status)
+        self.assertEqual(detail.json()["error"], expected_error)
 
     def test_put_writes_package_storage_and_round_trips(self):
         response = self._json(

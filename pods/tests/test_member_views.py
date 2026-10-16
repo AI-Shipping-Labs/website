@@ -110,14 +110,6 @@ class EnablementAndAccessTest(PodViewFixture):
         self.assertNotContains(home, 'data-testid="course-tab-pods"')
 
     @ENABLED
-    def test_enabled_course_shows_pods_tab_after_projects_with_cohort_query(self):
-        self.client.force_login(self.anna)
-        home = self.client.get(f'/courses/{COURSE_SLUG}/home')
-        nav = home.content.decode().split('aria-label="Course pages"')[1].split('</nav>')[0]
-        self.assertLess(nav.index('>Projects</a>'), nav.index('data-testid="course-tab-pods"'))
-        self.assertIn(f'href="/courses/{COURSE_SLUG}/home/pods?cohort=4"', nav)
-
-    @ENABLED
     def test_non_enrolled_user_gets_404_and_anonymous_is_redirected(self):
         pod = _pod(self.cohort, 'Evening builders', members=[self.anna])
         self.client.force_login(self.outsider)

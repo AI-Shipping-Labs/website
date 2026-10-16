@@ -19969,6 +19969,103 @@
       }
     },
     "/api/submissions/on-behalf": {
+      "get": {
+        "description": "Read-only staff lookup using ``user`` plus ``homework_id``, or ``course`` + ``homework`` + optional ``cohort``.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "user",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "homework_id",
+            "required": false,
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "course",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "homework",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cohort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "homework": {
+                    "accepting_submissions": false,
+                    "cohort": "1",
+                    "course": "ai-buildcamp",
+                    "id": 7,
+                    "slug": "week-2-homework",
+                    "state": "CL",
+                    "title": "Week 2 homework"
+                  },
+                  "kind": "homework",
+                  "submission": {
+                    "answers": [
+                      {
+                        "answer_text": "A RAG assistant",
+                        "is_correct": true,
+                        "question_id": 31,
+                        "question_key": "project-idea"
+                      }
+                    ],
+                    "homework_link": "",
+                    "id": 88,
+                    "learning_in_public_links": [],
+                    "on_behalf_note": "Sent by email",
+                    "questions_score": 1,
+                    "submitted_at": "2026-10-01T09:00:00+00:00",
+                    "submitted_on_behalf_by": "staff@example.com",
+                    "time_spent_homework": null,
+                    "time_spent_lectures": null,
+                    "total_score": 1
+                  },
+                  "user": {
+                    "email": "member@example.com",
+                    "id": 42
+                  }
+                }
+              }
+            },
+            "description": "Existing homework submission."
+          },
+          "404": {
+            "description": "Member, homework, or submission not found."
+          }
+        },
+        "summary": "Inspect a member's homework submission",
+        "tags": [
+          "Coursework"
+        ]
+      },
       "post": {
         "description": "Records a submission for ``user`` (email -- primary, then alias -- or numeric id) as if they had submitted it, scored by the same code as a learner's own submit. ``kind: \"homework\"`` targets ``homework_id``, or ``course`` + ``homework`` (slug) + optional ``cohort`` key; ``answers`` maps question keys (from ``GET /api/courses/<slug>/homework``, or a question id) to answers -- text, or 1-based option index(es) / exact option text for choice questions. ``kind: \"project\"`` targets ``course`` + optional ``project`` (a dated attempt slug) and needs ``project_url``. Homework open/closed state is not checked. ``submitted_at`` (ISO-8601, not in the future) backdates the submission. The row is marked ``submitted_on_behalf_by`` with ``note``, and one ``submission_on_behalf`` audit-log row names the acting staff user and token. An existing submission returns 409 ``submission_exists`` unless ``replace: true``; a project already in peer review returns 409 ``submission_locked``. ``dry_run: true`` validates and scores but writes nothing (status ``would_create`` / ``would_replace``). The member gets no notification unless ``notify: true`` (bell + ``submission_recorded`` email).",
         "requestBody": {

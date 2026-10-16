@@ -206,6 +206,16 @@ class PackageSettingsRouteTest(TestCase):
             "community_base.api.registry",
         )
 
+    def test_import_and_export_routes_are_not_shadowed_by_safe_get_adapter(self):
+        self.assertEqual(
+            resolve("/api/v1/settings/import").func.__module__,
+            "community_base.api.registry",
+        )
+        self.assertEqual(
+            resolve("/api/v1/settings/export").func.__module__,
+            "community_base.api.registry",
+        )
+
     def test_studio_page_renders_package_source_badges(self):
         self.client.force_login(self.staff)
         response = self.client.get("/studio/settings/")
@@ -254,22 +264,20 @@ class PackageSettingsRouteTest(TestCase):
         self.assertTrue(any(item["key"] == "GOOGLE_ANALYTICS_ID" for item in payload["settings"]))
 
     def test_package_api_import_writes_package_storage(self):
-        response = self.client.post(
-            "/api/v1/settings/import",
-            data=json.dumps(
-                {
-                    "settings": {"SITE_BASE_URL": "https://api.example.test"},
-                    "reason": "test import",
-                }
-            ),
-            content_type="application/json",
-            HTTP_AUTHORIZATION=f"Bearer {self.plaintext}",
-        )
+        get_config("SITE_BASE_URL", "fallback")
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                "/api/v1/settings/import",
+                data=json.dumps(
+                    {
+                        "settings": {"SITE_BASE_URL": "https://api.example.test"},
+                        "reason": "test import",
+                    }
+                ),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {self.plaintext}",
+            )
 
         self.assertEqual(response.json(), {"updated": ["SITE_BASE_URL"]})
         self.assertEqual(Setting.objects.get(key="SITE_BASE_URL").source, "import")
-        # The package view schedules its runtime stamp with ``on_commit``;
-        # Django TestCase keeps the outer transaction open until teardown.
-        # Reset the shim cache so this assertion reads the committed row.
-        reset_local_config_cache()
         self.assertEqual(get_config("SITE_BASE_URL", "fallback"), "https://api.example.test")

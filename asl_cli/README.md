@@ -351,13 +351,20 @@ member's own submit, marked "Recorded by staff" with your note (Studio shows
 the badge), and logged in the audit log with your token. Homework open/closed
 state is not checked, so late and retroactive submissions work; use
 `--submitted-at` to backdate. An existing submission is refused unless
-`--replace`; a project already in peer review is never replaced. The member is
+`--replace`; inspect it first with `asl homework show`. The show command returns
+pretty JSON by default, compact JSON with `--format raw`, or one answer per row
+with `--format table`. A project already in peer review is never replaced. The member is
 not notified unless `--notify` (bell + `submission_recorded` email). Always try
 `--dry-run` first: it validates, scores, and shows the result without writing.
 
 ```bash
 # Find the homework slug and the question keys --answer takes
 uv run asl homework list ai-buildcamp
+
+# Inspect an existing submission before deciding whether to replace it
+uv run asl homework show --as member@example.com \
+  --course ai-buildcamp --homework week-2-homework --cohort 4
+uv run asl homework show --as member@example.com --homework-id 7 --format table
 
 # Preview, then record. @file / @- read an answer from a file or stdin
 uv run asl homework submit --as member@example.com \

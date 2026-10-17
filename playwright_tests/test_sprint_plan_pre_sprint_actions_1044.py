@@ -79,38 +79,72 @@ def _seed_plan(owner_email="member@test.com", teammate_email="teammate@test.com"
 def _drag_row_above(page, source_row, target_row):
     """Drag ``source_row`` above ``target_row`` through SortableJS.
 
-    ``locator.drag_to`` performs a single coarse pointer move from source
-    to target. SortableJS sometimes has not left its idle state by then,
-    so no drag starts, ``onEnd`` never fires and no reorder PATCH is sent
-    (the intermittent 30s ``expect_response`` timeout seen in scheduled
-    full-suite runs). Use the same explicit pointer sequence as
-    ``test_studio_plan_editor._drag_chip``: press, nudge, walk densely to
-    just above the target, then commit into its top edge without crossing
-    its midline.
+    SortableJS has ``animation: 150`` configured on ``nextStepList``. When
+    dragging across intermediate rows, SortableJS animates intermediate swaps
+    with CSS transforms for 150ms. In Playwright, synthetic pointer moves
+    dispatch within a few milliseconds; if ``mouse.up()`` is called while
+    SortableJS is still animating intermediate swaps, the final swap above
+    ``target_row`` has not yet been processed by the browser event loop, causing
+    SortableJS to commit the drop at an intermediate index (the flaky failure
+    seen in scheduled CI runs).
+
+    We synthesize an explicit pointer sequence:
+    1. Press on the source row's right padding (avoiding checkbox and inline edit).
+    2. Nudge in the direction of the target to wake SortableJS from idle.
+    3. Walk densely to the target row's top edge.
+    4. Wait for SortableJS to finish animating and settle the DOM order so that
+       ``source_row`` precedes ``target_row`` before releasing the mouse.
     """
-    # Sortable loads synchronously from the CDN. Fail with a clear message
-    # if it is missing instead of waiting 30s for a PATCH that cannot come.
     page.wait_for_function("typeof window.Sortable !== 'undefined'")
 
     target_row.scroll_into_view_if_needed()
     source_row.scroll_into_view_if_needed()
     sb = source_row.bounding_box()
+    tb = target_row.bounding_box()
+
     # Grab the row's right padding, away from the checkbox and the
     # click-to-edit text.
     sx = sb["x"] + sb["width"] - 6
     sy = sb["y"] + sb["height"] / 2
 
+    tx = tb["x"] + tb["width"] - 6
+    target_y = tb["y"] + min(5, max(2, tb["height"] / 4))
+
+    source_id = source_row.get_attribute("data-next-step-id")
+    target_id = target_row.get_attribute("data-next-step-id")
+
     page.mouse.move(sx, sy)
     page.mouse.down()
-    page.mouse.move(sx, sy - 2, steps=3)
-    page.mouse.move(sx, sy - 6, steps=5)
 
-    tb = target_row.bounding_box()
-    approach_y = tb["y"] - 2
-    commit_y = tb["y"] + 5
-    steps = max(int(abs(approach_y - sy)), 30)
-    page.mouse.move(sx, approach_y, steps=steps)
-    page.mouse.move(sx, commit_y, steps=2)
+    # Nudge in the direction of the target to wake SortableJS from idle.
+    nudge_dir = -1 if target_y < sy else 1
+    page.mouse.move(sx, sy + nudge_dir * 2, steps=3)
+    page.mouse.move(sx, sy + nudge_dir * 6, steps=5)
+
+    distance = max(abs(target_y - sy), abs(tx - sx))
+    steps = max(int(distance), 30)
+    page.mouse.move(tx, target_y, steps=steps)
+
+    # Wait for SortableJS (with animation: 150) to complete DOM reordering.
+    # Nudge slightly across frames if needed so the browser fires mousemove
+    # after animation completes.
+    def _is_reordered():
+        return page.evaluate(
+            """([srcId, tgtId]) => {
+                const rows = Array.from(document.querySelectorAll('[data-testid="next-step-row"]'));
+                const srcIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === srcId);
+                const tgtIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === tgtId);
+                return srcIdx !== -1 && tgtIdx !== -1 && srcIdx < tgtIdx;
+            }""",
+            [source_id, target_id],
+        )
+
+    for i in range(20):
+        if _is_reordered():
+            break
+        page.wait_for_timeout(50)
+        page.mouse.move(tx, target_y - (1 if i % 2 == 0 else -1))
+
     page.mouse.up()
 
 
@@ -231,6 +265,10 @@ class TestStudioPreSprintActions:
         with page.expect_response("**/api/next-steps/*") as reorder_response:
             _drag_row_above(page, third, first)
         assert reorder_response.value.ok
+        assert reorder_response.value.json().get("position") == 0
+        page.locator(
+            '[data-testid="save-indicator"][data-state="saved"]'
+        ).wait_for()
 
         page.reload(wait_until="domcontentloaded")
         assert "Review the sprint workshop links" in page.locator(

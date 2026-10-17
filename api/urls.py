@@ -280,6 +280,7 @@ from api.views.utm_campaigns import (
     utm_campaigns_collection,
 )
 from api.views.weeks import plan_weeks_collection, week_detail, week_note_detail
+from api.views.whoami import whoami
 from api.views.worker import (
     worker_task_detail,
     worker_tasks_collection,
@@ -323,6 +324,12 @@ urlpatterns = [
         "docs",
         docs_page,
         name="api_docs",
+    ),
+    # Device login: prove the caller's staff token for `asl whoami`.
+    path(
+        "whoami",
+        whoami,
+        name="api_whoami",
     ),
     # ---- Shared comments (issue #1592) -------------------------------
     path(

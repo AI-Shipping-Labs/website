@@ -87,6 +87,10 @@ urlpatterns = [
     # recipient link routes (tracking pixels, clicks, bridge unsubscribe).
     # email_app stays mounted first so it keeps serving its own links.
     path('', include('community_base.mail.urls')),
+    # Admin CLI device login: verification page (/device/) plus the
+    # /api/auth/device/* start/poll/approve endpoints. The credential it
+    # mints is a staff accounts.Token (see accounts/device_login.py).
+    path('', include('community_base.device_login.urls')),
     path('', include('plans.urls')),
     path('', include('bookclub.urls')),
     path('', include('community.urls')),

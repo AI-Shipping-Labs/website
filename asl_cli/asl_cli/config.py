@@ -3,13 +3,22 @@
 Resolution order for the staff API token:
   1. ``ASL_API_TOKEN`` environment variable.
   2. ``API_SHIPPING_LABS_API_TOKEN`` key in the repo ``.env`` file.
-  3. Interactive prompt (TTY only).
+  3. The device-login credentials file (``~/.config/asl/credentials.json``,
+     written by ``asl login`` with mode 0600).
+  4. Interactive prompt (TTY only).
+
+Device login is the preferred way to sign in: run ``asl login``, approve
+in the browser, and the CLI stores the resulting staff token. Existing
+``ASL_API_TOKEN`` / ``.env`` tokens keep working. To refresh a stored
+credential, run ``asl login`` again; ``asl logout`` removes the file
+(the server-side token itself is revoked in Studio).
 
 Base URL: ``ASL_BASE_URL`` env var, default ``https://aishippinglabs.com``.
 """
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -60,12 +69,77 @@ def resolve_staff_token() -> str:
     token = _read_env_value(_STAFF_ENV_KEYS)
     if token:
         return token
+    stored = read_stored_credential(resolve_base_url())
+    if stored:
+        return stored
     return _prompt("Staff API token")
 
 
 def resolve_base_url() -> str:
     """Return the configured base URL (no trailing slash)."""
     return os.environ.get("ASL_BASE_URL", DEFAULT_BASE_URL).rstrip("/")
+
+
+def credentials_path() -> Path:
+    """Location of the device-login credentials file (0600)."""
+    return Path(
+        os.environ.get("ASL_CREDENTIALS_PATH", "~/.config/asl/credentials.json")
+    ).expanduser()
+
+
+def read_stored_credential(base_url: str) -> str | None:
+    """Return the stored token when the file targets ``base_url``."""
+    path = credentials_path()
+    if not path.is_file():
+        return None
+    if path.stat().st_mode & 0o077:
+        raise RuntimeError(
+            f"Stored credentials at {path} must have mode 0600. "
+            "Fix the permissions or run `asl logout` and `asl login` again."
+        )
+    try:
+        profile = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise RuntimeError(f"Cannot read stored credentials at {path}.") from error
+    if not isinstance(profile, dict):
+        raise RuntimeError(f"Cannot read stored credentials at {path}.")
+    if profile.get("base_url") != base_url:
+        return None
+    token = profile.get("token", "")
+    return token.strip() or None
+
+
+def write_stored_credential(*, base_url: str, token: str, email: str = "") -> Path:
+    """Atomically store the device-login credential with mode 0600."""
+    path = credentials_path()
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        os.chmod(path.parent, 0o700)
+    except OSError:
+        pass
+    payload = json.dumps({"base_url": base_url, "token": token, "email": email})
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+            output.write(payload)
+    except BaseException:
+        try:
+            os.close(descriptor)
+        except OSError:
+            pass
+        raise
+    return path
+
+
+def clear_stored_credential() -> bool:
+    """Remove the stored credential file. Returns True when one existed."""
+    path = credentials_path()
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def _prompt(label: str) -> str:

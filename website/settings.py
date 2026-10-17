@@ -180,6 +180,7 @@ INSTALLED_APPS = [
     'community_base.kernel',
     'community_base.config',
     'community_base.api',
+    'community_base.device_login',
     # Project apps
     'accounts',
     # A3.2 (#1692): site-owned extensions to the user model that the shared
@@ -863,6 +864,9 @@ COMMUNITY_BASE = {
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
     'MAIL_TEMPLATE_OVERRIDE_LOADER': 'email_app.hooks.template_override_loader',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
+    # Admin CLI device login (community_base.device_login): approval mints a
+    # staff accounts.Token, the same credential operators used to copy by hand.
+    'DEVICE_LOGIN_TOKEN_MINTER': 'accounts.device_login.mint_device_token',
     # A6.2: the Relay contacts/subscriptions mirror. BASE_URL/API_KEY point
     # at the Relay tenant serving the AISL audience; WEBHOOK_SECRET verifies
     # the signed callback ingress mounted from community_base.mail.urls.

@@ -11,7 +11,37 @@ uv run asl --help
 
 ## Auth
 
-The credential is resolved from `ASL_API_TOKEN` env var -> `API_SHIPPING_LABS_API_TOKEN` in `.env` -> prompt. Existing `/api` commands send the legacy `Token` header. The `integrations` commands use the package `/api/v1/settings` routes and send the same credential as a `Bearer` API key; create a `community_base` staff key with the required `settings.read` and `settings.write` scopes for those commands.
+Device login is the preferred way to sign in. On a machine with a browser:
+
+```bash
+uv run asl login
+```
+
+The CLI prints a code and a verification URL. Open the URL in a signed-in
+browser (staff account), confirm the code matches, and approve. The CLI stores
+the resulting staff token in `~/.config/asl/credentials.json` (mode 0600) and
+prints `Signed in as <email>.` Only admins (staff) can approve a device login;
+other users get a clear refusal and no token is issued.
+
+```bash
+uv run asl whoami     # prove the stored credential against /api/whoami
+uv run asl logout     # remove the stored credential from this machine
+```
+
+If this machine is untrusted, also revoke the server-side token in Studio:
+`logout` removes the local file but the token stays valid until revoked.
+
+The credential is resolved from `ASL_API_TOKEN` env var -> stored device-login
+file (when it targets the current base URL) -> `API_SHIPPING_LABS_API_TOKEN` in
+`.env` -> prompt. To refresh, run `asl login` again. Override the credentials
+file location with `ASL_CREDENTIALS_PATH` (tests and agents on shared boxes).
+
+Existing `/api` commands send the legacy `Token` header. The `integrations`
+commands use the package `/api/v1/settings` routes and send the same credential
+as a `Bearer` API key; create a `community_base` staff key with the required
+`settings.read` and `settings.write` scopes for those commands. Device-login
+tokens work on both surfaces: the server mirrors each staff token into
+`community_base.api`.
 Override base URL with `ASL_BASE_URL` (default `https://aishippinglabs.com`).
 
 ## Rate limits

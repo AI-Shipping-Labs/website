@@ -24776,6 +24776,22 @@
         ]
       }
     },
+    "/api/whoami": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Token owner email"
+          },
+          "401": {
+            "description": "Missing or invalid token"
+          }
+        },
+        "summary": "Show the calling staff token owner",
+        "tags": [
+          "Auth"
+        ]
+      }
+    },
     "/api/worker/tasks": {
       "get": {
         "description": "Newest-first list of django-q tasks. Default returns the most recent 50 across success and failed. ``status``, ``group``, ``since``, ``q``, operator-date bounds, ``offset``, and ``limit`` compose to narrow the result.",

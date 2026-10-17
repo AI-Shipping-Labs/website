@@ -15,11 +15,12 @@ from asl_cli import config
 
 
 @pytest.fixture(autouse=True)
-def isolated_env(monkeypatch):
+def isolated_env(monkeypatch, tmp_path):
     """Strip the real environment and any ambient ``.env`` before each test."""
     for key in ("ASL_API_TOKEN", "API_SHIPPING_LABS_API_TOKEN", "ASL_BASE_URL"):
         monkeypatch.delenv(key, raising=False)
     monkeypatch.setattr(config, "_find_env_file", lambda: None)
+    monkeypatch.setenv("ASL_CREDENTIALS_PATH", str(tmp_path / "credentials.json"))
 
 
 def _write_env(tmp_path, body: str):

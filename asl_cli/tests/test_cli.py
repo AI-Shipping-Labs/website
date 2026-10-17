@@ -30,6 +30,8 @@ EXPECTED_GROUPS = {
     "homework",
     "hosts",
     "integrations",
+    "login",
+    "logout",
     "onboarding",
     "openapi",
     "plans",
@@ -43,6 +45,7 @@ EXPECTED_GROUPS = {
     "triggers",
     "users",
     "utm-campaigns",
+    "whoami",
     "worker",
 }
 

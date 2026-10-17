@@ -20,7 +20,7 @@ title: stored dates are not this learner's deadlines.
       {% if item.question_label %}{% if cohort and item.when %}<span aria-hidden="true">·</span>{% endif %}<span data-testid="course-home-deadline-questions">{{ item.question_label }}</span>{% endif %}
       {% if item.status %}{% member_label_badge item.status tone=item.status_tone size="xs" testid="course-home-deadline-status" %}{% endif %}
     </p>
-    {% if item.detail %}<p class="mt-0.5 text-xs text-muted-foreground">{{ item.detail }}</p>{% endif %}
+    {% if item.detail %}<p class="mt-0.5 text-xs text-muted-foreground" data-testid="course-home-deadline-detail">{{ item.detail }}</p>{% endif %}
     {% endif %}
   </div>
   {% if not deadline_preview and item.url and item.action %}

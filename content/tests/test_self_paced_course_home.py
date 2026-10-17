@@ -5,17 +5,52 @@ A self-paced learner has no live sessions, no due dates, and so no
 dates. A dated cohort's learner keeps all three.
 """
 
-import datetime
+from html.parser import HTMLParser
 
 from django.utils import timezone
 
 from accounts.models import User
 from content.models import Cohort, CohortEnrollment, UserCourseProgress
 from content.models.homework import Homework
-from content.models.peer_review import CourseProject
+from content.models.peer_review import CourseProject, PeerReview, ProjectSubmission
 from content.tests.test_course_home_current_module import CurrentModuleFixture
 
 TIMEZONE_NOTE = 'Shown in your timezone.'
+NO_FIXED_SUBMISSION_DEADLINE = 'No fixed submission deadline'
+OPEN_REVIEW_WINDOW = 'Reviews remain open until completed'
+
+
+class _TestIdTextParser(HTMLParser):
+    def __init__(self, testid):
+        super().__init__()
+        self.testid = testid
+        self.depth = 0
+        self.chunks = []
+        self.texts = []
+
+    def handle_starttag(self, tag, attrs):
+        if self.depth:
+            self.depth += 1
+        elif dict(attrs).get('data-testid') == self.testid:
+            self.depth = 1
+            self.chunks = []
+
+    def handle_data(self, data):
+        if self.depth:
+            self.chunks.append(data)
+
+    def handle_endtag(self, tag):
+        if not self.depth:
+            return
+        self.depth -= 1
+        if not self.depth:
+            self.texts.append(' '.join(''.join(self.chunks).split()))
+
+
+def _texts_for_testid(response, testid):
+    parser = _TestIdTextParser(testid)
+    parser.feed(response.content.decode())
+    return parser.texts
 
 
 class SelfPacedCourseHomeTests(CurrentModuleFixture):
@@ -41,12 +76,12 @@ class SelfPacedCourseHomeTests(CurrentModuleFixture):
             cohort=cls.self_paced, content_id=cls.homework_unit.content_id,
             slug='retrieval-homework', title='Self-paced retrieval homework',
         )
-        now = timezone.now()
         CourseProject.objects.create(
-            course=cls.course, module=cls.second, slug='retrieval-project',
+            course=cls.course, cohort=cls.self_paced, module=cls.second,
+            slug='retrieval-project',
             title='Retrieval project',
-            submission_due_at=now + datetime.timedelta(days=10),
-            review_due_at=now + datetime.timedelta(days=17),
+            submission_due_at=None,
+            review_due_at=None,
         )
 
     def setUp(self):
@@ -80,6 +115,7 @@ class SelfPacedCourseHomeTests(CurrentModuleFixture):
         self.assertNotContains(response, 'data-testid="course-home-module-sessions"')
         self.assertContains(response, 'data-testid="course-home-deliverables"')
         self.assertContains(response, 'Self-paced retrieval homework')
+        self.assertContains(response, NO_FIXED_SUBMISSION_DEADLINE)
 
     def test_homework_projects_and_syllabus_tabs_list_work_without_dates(self):
         for tab, title in (
@@ -91,6 +127,41 @@ class SelfPacedCourseHomeTests(CurrentModuleFixture):
                 response = self._get(f'/courses/{self.course.slug}/home/{tab}')
                 self._assert_no_calendar(response)
                 self.assertContains(response, title)
+                if tab != 'homework':
+                    self.assertContains(response, NO_FIXED_SUBMISSION_DEADLINE)
+
+    def _assert_submitted_project_copy(self, response, path):
+        self.assertContains(response, NO_FIXED_SUBMISSION_DEADLINE)
+        if path == 'home':
+            project_row = next(
+                row for row in response.context['current_module']['deliverables']
+                if row['kind'] == 'Project'
+            )
+            detail = f'{NO_FIXED_SUBMISSION_DEADLINE} · {OPEN_REVIEW_WINDOW}'
+            self.assertEqual(project_row['detail'], detail)
+            self.assertIn(
+                detail,
+                _texts_for_testid(response, 'course-home-deadline-detail'),
+            )
+        elif path != self.second.slug:
+            self.assertContains(response, OPEN_REVIEW_WINDOW)
+
+    def test_submitted_project_overviews_explain_open_review_window(self):
+        self.course.peer_review_enabled = True
+        self.course.save(update_fields=['peer_review_enabled'])
+        project = CourseProject.objects.get(
+            course=self.course, cohort=self.self_paced,
+        )
+        submission = ProjectSubmission.objects.create(
+            user=self.learner, course=self.course, cohort=self.self_paced,
+            course_project=project, project_url='https://example.com/project',
+        )
+        PeerReview.objects.create(submission=submission, reviewer=self.learner)
+
+        for path in ('home', 'home/projects', 'home/syllabus', self.second.slug):
+            with self.subTest(path=path):
+                response = self._get(f'/courses/{self.course.slug}/{path}')
+                self._assert_submitted_project_copy(response, path)
 
     def test_live_sessions_url_redirects_to_home(self):
         response = self._get(f'/courses/{self.course.slug}/home/sessions')
@@ -104,6 +175,7 @@ class SelfPacedCourseHomeTests(CurrentModuleFixture):
         self.assertEqual(response.context['module_session_rows'], [])
         self.assertContains(response, 'data-testid="module-work-status"')
         self.assertContains(response, 'Self-paced retrieval homework')
+        self.assertContains(response, NO_FIXED_SUBMISSION_DEADLINE)
 
     def test_dated_cohort_learner_keeps_sessions_due_dates_and_timezone_note(self):
         self.client.force_login(self.user)

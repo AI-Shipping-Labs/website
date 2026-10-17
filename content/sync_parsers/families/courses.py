@@ -1,12 +1,8 @@
 """Course sync dispatcher."""
 
-import datetime
 import os
 
 from django.core.exceptions import ValidationError
-from django.core.validators import validate_slug
-from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
 
 from content.sync_parsers.base import FamilyParser
 from content.sync_parsers.checkout_view import (
@@ -18,6 +14,13 @@ from content.sync_parsers.checkout_view import (
     raise_if_checkout_error,
 )
 from content.sync_parsers.common import GitHubSyncError, logger
+from content.sync_parsers.families.course_cohorts import (
+    note_course_cohort_warnings,
+    sync_course_cohorts,
+)
+from content.sync_parsers.families.course_projects import (
+    sync_course_projects as _sync_course_projects,
+)
 from content.sync_parsers.families.homework import sync_unit_homework
 from content.sync_parsers.families.instructors import (
     _attach_instructors_to_course,
@@ -388,11 +391,12 @@ def _sync_single_course(
         if not result.created:
             _delete_duplicate_course_siblings(candidates, course)
 
+        sync_course_cohorts(course, course_data, rel_path)
         _sync_course_children(
             course, course_data, course_dir, repo_dir, rel_path, source,
             commit_sha, stats, known_images, course_ignore_patterns,
         )
-        _sync_course_cohorts(course, course_data, rel_path, stats)
+        note_course_cohort_warnings(course, course_data, rel_path, stats)
         _sync_course_projects(course, course_data, rel_path)
 
         # Issue #788/#900: enqueue auto-banner render on EVERY sync, not
@@ -624,295 +628,6 @@ def _sync_course_children(
         course_ignore_patterns=course_ignore_patterns,
     )
 
-
-_COHORT_REQUIRED_FIELDS = ('key', 'name', 'start_date', 'end_date')
-_COHORT_SELF_PACED_REQUIRED_FIELDS = ('key', 'name')
-_VALID_COHORT_MODES = frozenset({'cohort', 'self_paced'})
-
-
-def _sync_course_projects(course, course_data, rel_path):
-    """Import dated attempts without deleting attempts that may have submissions.
-
-    ``projects`` is a list of mappings with a course-unique ``slug``, title,
-    submission and review deadlines (ISO 8601 with timezone), and optional
-    ``cohort_key`` and ``peer_review_count``. A cohort key scopes an attempt to
-    learners enrolled in that cohort.
-    """
-    from content.models import Module
-    from content.models.peer_review import CourseProject
-
-    entries = course_data.get('projects', [])
-    if not isinstance(entries, list):
-        raise GitHubSyncError(f'Invalid projects in {rel_path}/course.yaml: expected a list')
-    if entries and not course.peer_review_enabled:
-        raise GitHubSyncError(f'Projects in {rel_path}/course.yaml require peer_review_enabled: true')
-
-    parsed = []
-    seen = set()
-    for entry in entries:
-        if not isinstance(entry, dict):
-            raise GitHubSyncError(f'Invalid projects entry in {rel_path}/course.yaml: expected a mapping')
-        slug = entry.get('slug')
-        title = entry.get('title')
-        if not isinstance(slug, str) or not slug or not isinstance(title, str) or not title.strip():
-            raise GitHubSyncError(f'Projects in {rel_path}/course.yaml require slug and title')
-        try:
-            validate_slug(slug)
-        except ValidationError as exc:
-            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml has invalid slug') from exc
-        if len(slug) > 100 or len(title.strip()) > 200:
-            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml exceeds slug or title length')
-        if slug in seen:
-            raise GitHubSyncError(f'Duplicate project slug {slug!r} in {rel_path}/course.yaml')
-        seen.add(slug)
-        dates = {}
-        for field in ('submission_due_at', 'review_due_at'):
-            raw = entry.get(field)
-            value = raw if isinstance(raw, datetime.datetime) else parse_datetime(raw) if isinstance(raw, str) else None
-            if value is None or timezone.is_naive(value):
-                raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires timezone-aware {field}')
-            dates[field] = value
-        if dates['review_due_at'] <= dates['submission_due_at']:
-            raise GitHubSyncError(f'Project {slug!r} review_due_at must follow submission_due_at')
-        count = entry.get('peer_review_count')
-        if count is not None and (not isinstance(count, int) or isinstance(count, bool) or not 1 <= count <= 10):
-            raise GitHubSyncError(f'Project {slug!r} peer_review_count must be 1–10')
-        cohort = None
-        cohort_key = entry.get('cohort_key')
-        if cohort_key:
-            cohort = course.aisl_cohorts.filter(external_key=cohort_key).first()
-            if cohort is None:
-                raise GitHubSyncError(f'Project {slug!r} references unknown cohort_key {cohort_key!r}')
-        module_path = entry.get('module_path')
-        if not isinstance(module_path, str) or not module_path.strip():
-            raise GitHubSyncError(f'Project {slug!r} in {rel_path}/course.yaml requires module_path')
-        module = None
-        for component in module_path.split('/'):
-            if not component:
-                raise GitHubSyncError(f'Project {slug!r} has invalid module_path {module_path!r}')
-            module = Module.objects.filter(
-                course=course, parent=module, slug=component,
-            ).first()
-            if module is None:
-                raise GitHubSyncError(f'Project {slug!r} references unknown module_path {module_path!r}')
-        if module.parent_id is not None:
-            raise GitHubSyncError(
-                f'Project {slug!r} module_path must point to a top-level module',
-            )
-        parsed.append((slug, {
-            'title': title.strip(), 'cohort': cohort, 'module': module,
-            'peer_review_count': count, **dates,
-        }))
-
-    for slug, defaults in parsed:
-        CourseProject.objects.update_or_create(course=course, slug=slug, defaults=defaults)
-
-
-def _resolve_cohort_event_series(entry, key, rel_path):
-    """Return ``(present, series)`` for a ``cohorts:`` entry's ``event_series``.
-
-    ``present`` is False when the key is absent, so sync leaves a
-    Studio-set link untouched. A present key must name an existing
-    ``EventSeries`` slug; an unknown slug fails that course's sync.
-    """
-    if 'event_series' not in entry:
-        return False, None
-    # Model imports stay lazy in this parser module, like ``Cohort`` below.
-    from events.models import EventSeries
-
-    raw = entry['event_series']
-    slug = str(raw).strip() if raw is not None and not isinstance(raw, bool) else ''
-    if not slug:
-        raise GitHubSyncError(
-            f"Invalid cohorts entry '{key}' in {rel_path}: event_series must "
-            'be an event series slug'
-        )
-    series = EventSeries.objects.filter(slug=slug).first()
-    if series is None:
-        raise GitHubSyncError(
-            f"Invalid cohorts entry '{key}' in {rel_path}: unknown "
-            f"event_series '{slug}' (create the series in Studio first)"
-        )
-    return True, series
-
-
-def _sync_course_cohorts(course, course_data, rel_path, stats=None):
-    """Upsert ``course.yaml``'s ``cohorts:`` list into ``content.Cohort``.
-
-    Issue #1659: each entry is keyed on ``(course, external_key=key)`` — a
-    new key creates a cohort, a known key updates ``name``/``start_date``/
-    ``end_date``/``mode`` when they changed. A cohort key dropped from a
-    later YAML edit is left untouched in the database (reconcile-never
-    -destroy, same as the rest of the sync pipeline; a cohort may already
-    have enrollments).
-
-    Issue #1674: an optional ``mode:`` key (default ``cohort``, matching
-    the model default). A ``mode: self_paced`` entry must NOT set
-    ``start_date``/``end_date`` — sync fails that course naming the
-    cohort key if either is present. A second ``mode: self_paced`` entry
-    for the same course fails sync too, via ``Cohort.full_clean()``
-    surfacing the partial unique constraint as a ``ValidationError``.
-
-    An optional ``event_series: <series slug>`` key links the cohort to the
-    live-session series its session units resolve against. An unknown slug
-    fails the course; an absent key keeps any Studio-set link. A dated
-    cohort that has not ended and is still unlinked after sync is recorded
-    as a non-failing info-severity entry (the series may be created later in Studio), so
-    the sync history shows it without blocking stale-content sweeps.
-
-    Raises :class:`GitHubSyncError` on a malformed entry so the caller's
-    per-course exception handler records it against this course's sync only
-    — it must never abort the whole content sync run.
-    """
-    from content.models.cohort import Cohort
-
-    cohorts_data = course_data.get('cohorts') or []
-    if not isinstance(cohorts_data, list):
-        raise GitHubSyncError(
-            f'Invalid cohorts in {rel_path}: expected a list'
-        )
-
-    for entry in cohorts_data:
-        if not isinstance(entry, dict):
-            raise GitHubSyncError(
-                f'Invalid cohorts entry in {rel_path}: expected a mapping, '
-                f'got {type(entry).__name__}'
-            )
-
-        mode_raw = entry.get('mode', 'cohort')
-        mode = str(mode_raw).strip().lower() if not isinstance(mode_raw, bool) else None
-        if mode not in _VALID_COHORT_MODES:
-            raise GitHubSyncError(
-                f'Invalid cohorts entry in {rel_path}: unknown mode '
-                f"{mode_raw!r} (expected 'cohort' or 'self_paced')"
-            )
-
-        if mode == 'self_paced':
-            missing = [
-                field for field in _COHORT_SELF_PACED_REQUIRED_FIELDS
-                if entry.get(field) is None or entry.get(field) == ''
-            ]
-            if missing:
-                raise GitHubSyncError(
-                    f"Invalid cohorts entry in {rel_path}: "
-                    f"missing {', '.join(missing)}"
-                )
-            key = str(entry['key']).strip()
-            if entry.get('start_date') not in (None, '') or entry.get('end_date') not in (None, ''):
-                raise GitHubSyncError(
-                    f"Invalid cohorts entry '{key}' in {rel_path}: "
-                    'mode: self_paced must not set start_date/end_date'
-                )
-            defaults = {
-                'name': entry['name'],
-                'start_date': None,
-                'end_date': None,
-                'mode': 'self_paced',
-            }
-        else:
-            missing = [
-                field for field in _COHORT_REQUIRED_FIELDS
-                if entry.get(field) is None or entry.get(field) == ''
-            ]
-            if missing:
-                raise GitHubSyncError(
-                    f"Invalid cohorts entry in {rel_path}: "
-                    f"missing {', '.join(missing)}"
-                )
-            key = str(entry['key']).strip()
-            defaults = {
-                'name': entry['name'],
-                'start_date': _parse_cohort_date(
-                    entry['start_date'], field_name='start_date', rel_path=rel_path,
-                ),
-                'end_date': _parse_cohort_date(
-                    entry['end_date'], field_name='end_date', rel_path=rel_path,
-                ),
-                'mode': 'cohort',
-            }
-
-        has_series, series = _resolve_cohort_event_series(entry, key, rel_path)
-        if has_series:
-            defaults['event_series'] = series
-
-        cohort = Cohort.objects.filter(course=course, external_key=key).first()
-        if cohort is None:
-            cohort = Cohort(course=course, external_key=key, **defaults)
-            try:
-                cohort.full_clean()
-            except ValidationError as exc:
-                raise GitHubSyncError(
-                    f"Invalid cohorts entry '{key}' in {rel_path}: "
-                    f'{"; ".join(exc.messages)}'
-                ) from exc
-            cohort.save()
-            _note_unlinked_dated_cohort(cohort, rel_path, stats)
-            continue
-
-        changed_fields = [
-            field for field, value in defaults.items()
-            if getattr(cohort, field) != value
-        ]
-        if changed_fields:
-            for field in changed_fields:
-                setattr(cohort, field, defaults[field])
-            try:
-                cohort.full_clean()
-            except ValidationError as exc:
-                raise GitHubSyncError(
-                    f"Invalid cohorts entry '{key}' in {rel_path}: "
-                    f'{"; ".join(exc.messages)}'
-                ) from exc
-            cohort.save(update_fields=changed_fields)
-        _note_unlinked_dated_cohort(cohort, rel_path, stats)
-
-    # Course YAML may omit cohorts entirely when it has no scheduled
-    # offering. Give those courses one real, date-free cohort row. Existing
-    # dated cohorts are preserved and never get a synthetic replacement.
-    from content.services.course_cohorts import ensure_course_self_paced_cohort
-
-    ensure_course_self_paced_cohort(course)
-
-
-def _note_unlinked_dated_cohort(cohort, rel_path, stats):
-    """Record a non-failing sync note for a current or upcoming dated
-    cohort with no series. Ended cohorts are skipped: they will never get
-    one, and the note would leave every sync "Partial" for good.
-    """
-    from content.services.course_cohorts import cohort_requires_event_series
-
-    if cohort.event_series_id or not cohort_requires_event_series(cohort):
-        return
-    msg = (
-        f"Warning: cohort '{cohort.external_key}' ({cohort.name}) in "
-        f'{rel_path} has no event_series, so its live sessions show "Not '
-        'scheduled". Add event_series: <series slug> to the cohorts entry '
-        'or link a series in Studio.'
-    )
-    logger.warning(msg)
-    if stats is not None:
-        stats['errors'].append({'file': rel_path, 'error': msg, 'severity': 'info'})
-
-
-def _parse_cohort_date(value, *, field_name, rel_path):
-    """Resolve a ``cohorts:`` date value to a ``datetime.date``.
-
-    PyYAML's safe loader already parses unquoted ISO ``YYYY-MM-DD`` values
-    into ``datetime.date``, so that is accepted directly. A quoted string is
-    parsed explicitly so authors who quote the date don't hit a type error.
-    """
-    if isinstance(value, datetime.datetime):
-        return value.date()
-    if isinstance(value, datetime.date):
-        return value
-    if isinstance(value, str):
-        parsed = parse_date(value.strip())
-        if parsed is not None:
-            return parsed
-    raise GitHubSyncError(
-        f'Invalid cohorts entry in {rel_path}: {field_name} {value!r} is '
-        f'not a valid date (expected YYYY-MM-DD)'
-    )
 
 
 def _parse_module_yaml_for_lookup(module_yaml_path, course_dir, entry_name, stats):

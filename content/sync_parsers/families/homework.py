@@ -6,13 +6,9 @@ Issue #1683, tranche 1. Extends the same homework unit markdown file
 one file per homework, no second file to keep in sync.
 """
 
-import datetime
-
-from django.utils.dateparse import parse_datetime
-
-from content.models.homework import MAX_LEARNING_IN_PUBLIC_LINKS
-from content.services.homework_step_sections import validate_question_bindings
-from content.sync_parsers.common import GitHubSyncError, logger
+from content.models.cohort import COHORT_MODE_SELF_PACED
+from content.sync_parsers.common import GitHubSyncError
+from content.sync_parsers.families.homework_plan import build_homework_sync_plan
 
 _QUESTION_TYPE_MAP = {
     'multiple_choice': 'MC',
@@ -27,96 +23,12 @@ _ANSWER_TYPE_MAP = {
     'exact_string': 'EXS',
     'contains_string': 'CTS',
 }
-_FORM_SETTING_KEYS = {
-    'learning_in_public_cap',
-    'homework_url_field',
-    'time_spent_lectures_field',
-    'time_spent_homework_field',
-}
-
-
 def sync_unit_homework(unit, course, metadata, rel_path, stats):
-    """Upsert the ``Homework``/``Question`` rows backing ``unit``, if any.
-
-    No-op when the file carries neither ``due_date:`` nor ``questions:`` --
-    the common case for homework units that predate this issue, which must
-    keep rendering prose-only with no submission form (the explicit
-    backward-compatibility contract).
-
-    Raises :class:`GitHubSyncError` for a malformed ``due_date:`` or
-    ``questions:`` entry. The caller's per-file exception handler records
-    the error against this file only and continues syncing the rest of the
-    course -- one bad homework file never aborts the whole sync run.
-    """
-    from content.models.homework import Homework
-
-    raw_due_date = metadata.get('due_date')
-    raw_questions = metadata.get('questions')
-    has_form_settings = any(key in metadata for key in _FORM_SETTING_KEYS)
-
-    if (
-        raw_due_date is None and not raw_questions
-        and not metadata.get('homework_steps') and not has_form_settings
-    ):
+    """Upsert every cohort-specific Homework/Question row backing ``unit``."""
+    plan = build_homework_sync_plan(unit, course, metadata, rel_path)
+    if plan is None:
         return
-
-    # Some cohort assignments intentionally have no deadline. In that case
-    # OPEN/CLOSED state alone controls whether a learner can submit.
-    due_date = (
-        _parse_due_date(raw_due_date, rel_path)
-        if raw_due_date is not None else None
-    )
-
-    if not isinstance(raw_questions, list):
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: questions: must be a list'
-        )
-
-    stepper_enabled = metadata.get('homework_steps', False)
-    if not isinstance(stepper_enabled, bool):
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: homework_steps must be true or false'
-        )
-    form_settings = _parse_form_settings(metadata, rel_path)
-    if has_form_settings and not stepper_enabled:
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: final-form settings require '
-            'homework_steps: true'
-        )
-    if stepper_enabled:
-        question_ids = [entry.get('id') if isinstance(entry, dict) else None
-                        for entry in raw_questions]
-        if not question_ids:
-            raise GitHubSyncError(
-                f'Invalid homework in {rel_path}: homework_steps needs questions'
-            )
-        try:
-            validate_question_bindings(unit.homework, question_ids, rel_path)
-        except ValueError as exc:
-            raise GitHubSyncError(str(exc)) from exc
-        for index, entry in enumerate(raw_questions, start=1):
-            raw_type = entry.get('type')
-            if raw_type not in ('multiple_choice', 'checkboxes'):
-                continue
-            options = entry.get('options')
-            correct = str(entry.get('correct') or '').strip()
-            selected = [value.strip() for value in correct.split(',')]
-            if (
-                not isinstance(options, list) or not options
-                or any(not str(option).strip() for option in options)
-                or len({str(option).strip() for option in options}) != len(options)
-                or (raw_type == 'multiple_choice' and len(selected) != 1)
-                or not correct or any(not value.isdigit() for value in selected)
-                or len(set(selected)) != len(selected)
-                or any(int(value) < 1 or int(value) > len(options) for value in selected)
-            ):
-                raise GitHubSyncError(
-                    f'Invalid homework steps in {rel_path}: Question {index} '
-                    'needs distinct options and approved answer keys within its options'
-                )
-
-    cohort = _resolve_homework_cohort(course, rel_path)
-    if cohort is None:
+    if not plan.cohorts:
         stats['errors'].append({
             'file': rel_path,
             'severity': 'info',
@@ -127,23 +39,30 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
             ),
         })
         return
+    for cohort in plan.cohorts:
+        _sync_homework_target(unit, cohort, plan, rel_path)
 
+
+def _sync_homework_target(unit, cohort, plan, rel_path):
+    from content.models.homework import Homework
+
+    due_date = plan.due_date
+    if cohort.mode == COHORT_MODE_SELF_PACED:
+        due_date = None
     defaults = {
         'title': unit.title,
         'due_date': due_date,
         'content_id': unit.content_id,
         'source_repo': unit.source_repo,
         'source_path': rel_path,
-        'stepper_enabled': stepper_enabled,
-        **form_settings,
+        'stepper_enabled': plan.stepper_enabled,
+        **plan.form_settings,
     }
-
     homework = Homework.objects.filter(
         content_id=unit.content_id, cohort=cohort,
     ).first()
     if homework is None:
         homework = Homework.objects.filter(cohort=cohort, slug=unit.slug).first()
-
     if homework is None:
         homework = Homework(cohort=cohort, slug=unit.slug, **defaults)
         homework.save()
@@ -152,43 +71,19 @@ def sync_unit_homework(unit, course, metadata, rel_path, stats):
         for key, value in defaults.items():
             setattr(homework, key, value)
         homework.save()
+    _sync_questions(homework, plan.questions, rel_path)
 
+
+def _sync_questions(homework, questions, rel_path):
     seen_question_ids = set()
-    for index, entry in enumerate(raw_questions):
+    for index, entry in enumerate(questions):
         source_question_id = _sync_one_question(
             homework, entry, index, rel_path,
         )
         seen_question_ids.add(source_question_id)
-
-    # A questions: entry removed from frontmatter deletes the corresponding
-    # Question (and, via CASCADE, its Answer rows) on next sync.
     homework.questions.exclude(
         source_question_id__in=seen_question_ids,
     ).delete()
-
-
-def _parse_form_settings(metadata, rel_path):
-    """Validate optional source-authored submission fields and link cap."""
-    cap = metadata.get('learning_in_public_cap', 0)
-    if type(cap) is not int or not 0 <= cap <= MAX_LEARNING_IN_PUBLIC_LINKS:
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: learning_in_public_cap must be '
-            f'an integer from 0 to {MAX_LEARNING_IN_PUBLIC_LINKS}'
-        )
-
-    values = {'learning_in_public_cap': cap}
-    for key, default in (
-        ('homework_url_field', True),
-        ('time_spent_lectures_field', False),
-        ('time_spent_homework_field', False),
-    ):
-        value = metadata.get(key, default)
-        if not isinstance(value, bool):
-            raise GitHubSyncError(
-                f'Invalid homework in {rel_path}: {key} must be true or false'
-            )
-        values[key] = value
-    return values
 
 
 def _sync_one_question(homework, entry, index, rel_path):
@@ -275,72 +170,3 @@ def _sync_one_question(homework, entry, index, rel_path):
         question.save()
 
     return source_question_id
-
-
-def _parse_due_date(raw_value, rel_path):
-    """Parse ``due_date:`` into an aware ``datetime``.
-
-    Rejects a naive datetime (no UTC offset) with a :class:`GitHubSyncError`
-    naming the file -- ISO-8601 with an explicit offset is required, e.g.
-    ``'2026-09-27T21:59:00Z'``.
-    """
-    if isinstance(raw_value, datetime.datetime):
-        parsed = raw_value
-    elif isinstance(raw_value, str):
-        parsed = parse_datetime(raw_value.strip())
-    else:
-        parsed = None
-
-    if parsed is None:
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: due_date {raw_value!r} is '
-            f'not a valid ISO-8601 datetime'
-        )
-    if parsed.tzinfo is None:
-        raise GitHubSyncError(
-            f'Invalid homework in {rel_path}: due_date {raw_value!r} has '
-            f"no UTC offset (a naive datetime); use an explicit offset, "
-            f"e.g. '2026-09-27T21:59:00Z'"
-        )
-    return parsed
-
-
-def _resolve_homework_cohort(course, rel_path):
-    """Resolve the target ``Cohort`` for a homework file's questions.
-
-    Order: the course's dated (``mode='cohort'``) cohort whose date range
-    contains today; else, when the course has exactly one cohort overall
-    (dated or ``mode='self_paced'``), that cohort; otherwise ``None`` --
-    the caller logs a warning and skips homework sync for this file. Not a
-    hard sync failure: unrelated units in the same course still sync.
-
-    Issue #1674 made ``Cohort.start_date``/``end_date`` nullable
-    (``mode='self_paced'`` cohorts carry no dates), so the in-range check
-    only considers dated cohorts -- a self-paced cohort can never be "in
-    range" by definition, but still qualifies for the single-cohort
-    fallback.
-    """
-    from content.models.cohort import COHORT_MODE_COHORT, Cohort
-
-    today = datetime.date.today()
-    cohorts = list(Cohort.objects.filter(course=course))
-
-    in_range = [
-        c for c in cohorts
-        if c.mode == COHORT_MODE_COHORT
-        and c.start_date is not None
-        and c.end_date is not None
-        and c.start_date <= today <= c.end_date
-    ]
-    if in_range:
-        return in_range[0]
-
-    if len(cohorts) == 1:
-        return cohorts[0]
-
-    logger.warning(
-        'Skipping homework sync for %s: no in-range cohort and %d cohort(s) '
-        'defined for course %s (need exactly one to disambiguate).',
-        rel_path, len(cohorts), course.slug,
-    )
-    return None

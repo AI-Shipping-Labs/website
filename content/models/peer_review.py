@@ -15,7 +15,7 @@ SUBMISSION_STATUS_CHOICES = [
 
 
 class CourseProject(models.Model):
-    """A dated project attempt within a course, optionally scoped to a cohort."""
+    """A project attempt, date-free only for an actual self-paced cohort."""
 
     course = models.ForeignKey(
         'cb_curriculum.Course', on_delete=models.CASCADE,
@@ -31,8 +31,8 @@ class CourseProject(models.Model):
     )
     slug = models.SlugField(max_length=100)
     title = models.CharField(max_length=200)
-    submission_due_at = models.DateTimeField()
-    review_due_at = models.DateTimeField()
+    submission_due_at = models.DateTimeField(null=True, blank=True)
+    review_due_at = models.DateTimeField(null=True, blank=True)
     peer_review_count = models.PositiveSmallIntegerField(
         null=True, blank=True,
         validators=[MinValueValidator(1)],
@@ -55,11 +55,26 @@ class CourseProject(models.Model):
             errors['cohort'] = 'The cohort must belong to this course.'
         if self.module_id and self.course_id and self.module.course_id != self.course_id:
             errors['module'] = 'The module must belong to this course.'
-        if self.submission_due_at and self.review_due_at:
-            if self.review_due_at <= self.submission_due_at:
-                errors['review_due_at'] = 'Review deadline must follow submission deadline.'
+        errors.update(self._deadline_errors())
         if errors:
             raise ValidationError(errors)
+
+    def _deadline_errors(self):
+        if self.is_self_paced:
+            if self.submission_due_at is None and self.review_due_at is None:
+                return {}
+            return {
+                'submission_due_at': 'Self-paced attempts must not have fixed deadlines.',
+                'review_due_at': 'Self-paced attempts must not have fixed deadlines.',
+            }
+        if self.submission_due_at is None or self.review_due_at is None:
+            return {
+                'submission_due_at': 'Dated and unscoped attempts require both deadlines.',
+                'review_due_at': 'Dated and unscoped attempts require both deadlines.',
+            }
+        if self.review_due_at <= self.submission_due_at:
+            return {'review_due_at': 'Review deadline must follow submission deadline.'}
+        return {}
 
     def __str__(self):
         return f'{self.course.title} - {self.title}'
@@ -70,12 +85,20 @@ class CourseProject(models.Model):
         return bool(self.cohort_id and self.cohort.mode == 'self_paced')
 
     def is_submission_open(self, now):
-        """Self-paced attempts ignore copied absolute submission dates."""
-        return self.is_self_paced or now < self.submission_due_at
+        """Date-free self-paced attempts stay open; malformed rows fail closed."""
+        if self.is_self_paced:
+            return True
+        if self.submission_due_at is None:
+            return False
+        return now < self.submission_due_at
 
     def is_review_open(self, now):
         """Self-paced review assignments remain open until completed."""
-        return self.is_self_paced or now < self.review_due_at
+        if self.is_self_paced:
+            return True
+        if self.review_due_at is None:
+            return False
+        return now < self.review_due_at
 
 
 class ProjectSubmission(models.Model):

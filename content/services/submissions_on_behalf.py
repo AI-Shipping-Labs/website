@@ -722,7 +722,7 @@ def submit_project_on_behalf(
             'course': course.slug,
             'slug': attempt.slug if attempt else None,
             'title': attempt.title if attempt else course.title,
-            'submission_due_at': attempt.submission_due_at.isoformat() if attempt else None,
+            'submission_due_at': attempt and attempt.submission_due_at and attempt.submission_due_at.isoformat(),
         },
         'replaced_submission': existing_summary,
         'notify': notify,

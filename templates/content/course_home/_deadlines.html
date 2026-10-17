@@ -35,7 +35,10 @@
     <ol class="mt-2 divide-y divide-border">
       {% for item in completed_deadline_rows %}
       <li class="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-        <span class="min-w-0 break-words text-foreground">{{ item.title }}</span>
+        <span class="min-w-0 break-words text-foreground">
+          <span class="block">{{ item.title }}</span>
+          {% if item.detail %}<span class="mt-0.5 block text-xs text-muted-foreground">{{ item.detail }}</span>{% endif %}
+        </span>
         <span class="text-xs text-muted-foreground">{{ item.status }}</span>
       </li>
       {% endfor %}

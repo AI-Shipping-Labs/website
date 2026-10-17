@@ -127,6 +127,22 @@ def _course_projects_for_cohort(projects, cohort):
     return [project for project in projects if project.cohort_id == cohort.pk]
 
 
+def _course_home_projects_by_module(course, cohort, user, self_paced_view):
+    projects = list(
+        cohort_projects(course, cohort).select_related('cohort', 'module')
+    )
+    submitted_ids = set(ProjectSubmission.objects.filter(
+        user=user, course_project__in=projects,
+    ).values_list('course_project_id', flat=True))
+    projects_by_module = {}
+    for project in projects:
+        project.hide_dates = self_paced_view
+        project.show_reviews = project.pk in submitted_ids
+        if project.module_id:
+            projects_by_module.setdefault(project.module_id, []).append(project)
+    return projects_by_module
+
+
 def _course_grid_classes(count):
     """Return the canonical listing-grid class string.
 
@@ -772,12 +788,9 @@ def course_home(request, slug, section='home'):
         for unit_id, module_id in progress_rows:
             completed_unit_ids.add(unit_id)
             completed_counts[module_id] += 1
-        projects = cohort_projects(course, cohort).select_related('module')
-        projects_by_module = {}
-        for project in projects:
-            project.hide_dates = self_paced_view
-            if project.module_id:
-                projects_by_module.setdefault(project.module_id, []).append(project)
+        projects_by_module = _course_home_projects_by_module(
+            course, cohort, request.user, self_paced_view,
+        )
         schedule_cohort = None if self_paced_view else cohort
         unit_deadlines, module_deadline_summaries = build_deadline_context(course, schedule_cohort)
         context.update({

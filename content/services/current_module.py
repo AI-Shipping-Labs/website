@@ -385,6 +385,10 @@ def _display_row(row, *, unit, user, cohort, cohort_query, loader=None):
         if row['status'] == 'Not submitted' and not row['closed'] and not state['has_draft']:
             row['status'] = 'Not started'
             row['status_tone'] = 'neutral'
+    if row.get('show_open_review_window'):
+        row['detail'] = (
+            f"{row['detail']} · Reviews remain open until completed"
+        )
     return row
 
 

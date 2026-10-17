@@ -341,7 +341,8 @@ def _project_rows(course, user, cohort, timezone_name, now):
             row = _row(
                 'Project', project.title, when=project.submission_due_at,
                 status='Submitted', url=submit_url, action='View project',
-                complete=True, timezone_name=timezone_name,
+                detail=_project_schedule_detail(project), complete=True,
+                timezone_name=timezone_name,
                 project_group_id=project.module.parent_id or project.module_id
                 if project.module_id else project.title,
                 project_group_title=(
@@ -356,6 +357,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
                 status='Not submitted' if open_for_submission else 'Closed',
                 url=submit_url if open_for_submission else '',
                 action='Submit project' if open_for_submission else '',
+                detail=_project_schedule_detail(project),
                 closed=not open_for_submission, timezone_name=timezone_name,
                 project_group_id=project.module.parent_id or project.module_id
                 if project.module_id else project.title,
@@ -367,6 +369,10 @@ def _project_rows(course, user, cohort, timezone_name, now):
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
         row['module_title'] = row['project_group_title'] if project.module_id else ''
         row['project_id'] = project.pk
+        row['show_open_review_window'] = bool(
+            submission and project.is_self_paced and course.peer_review_enabled
+            and (project.peer_review_count or course.peer_review_count)
+        )
         rows.append(row)
 
         if not submission or not course.peer_review_enabled:
@@ -391,7 +397,7 @@ def _project_rows(course, user, cohort, timezone_name, now):
         row = _row(
             'Peer reviews', project.title, when=project.review_due_at,
             status=status, url=reviews_url if action else '', action=action,
-            detail=f'{completed} of {target} reviews completed',
+            detail=_review_schedule_detail(project, completed, target),
             complete=remaining == 0, closed=remaining > 0 and not review_open,
             timezone_name=timezone_name,
             project_group_id=project.module.parent_id or project.module_id
@@ -404,6 +410,19 @@ def _project_rows(course, user, cohort, timezone_name, now):
         row['module_id'] = project.module.parent_id or project.module_id if project.module_id else None
         rows.append(row)
     return rows
+
+
+def _project_schedule_detail(project):
+    if project.is_self_paced:
+        return 'No fixed submission deadline'
+    return ''
+
+
+def _review_schedule_detail(project, completed, target):
+    progress = f'{completed} of {target} reviews completed'
+    if project.is_self_paced:
+        return f'Reviews remain open until completed · {progress}'
+    return progress
 
 
 def _focus_module(course, cohort, now):

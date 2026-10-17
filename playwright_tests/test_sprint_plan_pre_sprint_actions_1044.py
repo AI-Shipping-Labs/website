@@ -198,42 +198,72 @@ class TestMemberPreSprintActions:
         context.close()
 
 
+def _seed_sprint_test_env():
+    """Seed test tiers, users, and sprint plan for staff tests."""
+    _ensure_tiers()
+    _clear_plan_data()
+    _create_staff_user("staff@test.com")
+    _create_user("member@test.com", tier_slug="main", email_verified=True)
+    _create_user("teammate@test.com", tier_slug="main", email_verified=True)
+    return _seed_plan()
+
+
+def _open_staff_plan_page(browser, django_server, plan_id):
+    """Open the studio plan detail page as staff and verify pre-sprint heading."""
+    context = _auth_context(browser, "staff@test.com")
+    page = context.new_page()
+    page.goto(
+        f"{django_server}/studio/plans/{plan_id}/",
+        wait_until="domcontentloaded",
+    )
+    assert page.get_by_role("heading", name="Pre-sprint actions").count() == 1
+    assert "Facilitator follow-up" not in page.locator("body").inner_text()
+    return context, page
+
+
+def _add_pre_sprint_action(page, text):
+    """Add a new pre-sprint action via the inline studio editor."""
+    assert page.get_by_test_id("add-next-step").inner_text() == (
+        "+ Add pre-sprint action"
+    )
+    page.get_by_test_id("add-next-step").click()
+    editor = page.get_by_test_id("next-step-edit-input")
+    editor.fill(text)
+    with page.expect_response("**/api/next-steps/*") as edit_response:
+        editor.press("Enter")
+    assert edit_response.value.ok
+
+
+def _verify_persisted_actions(page):
+    """Verify saved next-step order and done toggles persist across reload."""
+    page.locator(
+        '[data-testid="save-indicator"][data-state="saved"]'
+    ).wait_for()
+    page.reload(wait_until="domcontentloaded")
+    assert "Review the sprint workshop links" in page.locator(
+        '[data-testid="next-steps-panel"]',
+    ).inner_text()
+    assert page.locator(
+        '[data-testid="next-step-row"]',
+        has_text="Watch the missed kickoff recording",
+    ).locator('[data-testid="next-step-done-toggle"]').is_checked()
+    assert "Share repo" in page.locator('[data-testid="next-step-row"]').first.inner_text()
+
+
 @pytest.mark.django_db(transaction=True)
 class TestStudioPreSprintActions:
     def test_staff_reviews_adds_toggles_and_reorders_prep_actions(
         self, django_server, browser,
     ):
-        _ensure_tiers()
-        _clear_plan_data()
-        _create_staff_user("staff@test.com")
-        _create_user("member@test.com", tier_slug="main", email_verified=True)
-        _create_user("teammate@test.com", tier_slug="main", email_verified=True)
-        data = _seed_plan()
-
-        context = _auth_context(browser, "staff@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/plans/{data['plan_id']}/",
-            wait_until="domcontentloaded",
-        )
-        assert page.get_by_role("heading", name="Pre-sprint actions").count() == 1
-        assert "Facilitator follow-up" not in page.locator("body").inner_text()
-
+        data = _seed_sprint_test_env()
+        context, page = _open_staff_plan_page(browser, django_server, data["plan_id"])
         page.goto(
             f"{django_server}/studio/plans/{data['plan_id']}/edit/",
             wait_until="domcontentloaded",
         )
         assert page.get_by_role("heading", name="Pre-sprint actions").count() == 1
-        assert page.get_by_test_id("add-next-step").inner_text() == (
-            "+ Add pre-sprint action"
-        )
 
-        page.get_by_test_id("add-next-step").click()
-        editor = page.get_by_test_id("next-step-edit-input")
-        editor.fill("Review the sprint workshop links")
-        with page.expect_response("**/api/next-steps/*") as edit_response:
-            editor.press("Enter")
-        assert edit_response.value.ok
+        _add_pre_sprint_action(page, "Review the sprint workshop links")
 
         first_toggle = page.locator('[data-testid="next-step-done-toggle"]').first
         with page.expect_response("**/api/next-steps/*") as done_response:
@@ -247,17 +277,6 @@ class TestStudioPreSprintActions:
             _drag_row_above(page, third, first)
         assert reorder_response.value.ok
         assert reorder_response.value.json().get("position") == 0
-        page.locator(
-            '[data-testid="save-indicator"][data-state="saved"]'
-        ).wait_for()
 
-        page.reload(wait_until="domcontentloaded")
-        assert "Review the sprint workshop links" in page.locator(
-            '[data-testid="next-steps-panel"]',
-        ).inner_text()
-        assert page.locator(
-            '[data-testid="next-step-row"]',
-            has_text="Watch the missed kickoff recording",
-        ).locator('[data-testid="next-step-done-toggle"]').is_checked()
-        assert "Share repo" in page.locator('[data-testid="next-step-row"]').first.inner_text()
+        _verify_persisted_actions(page)
         context.close()

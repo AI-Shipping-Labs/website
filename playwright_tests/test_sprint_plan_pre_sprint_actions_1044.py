@@ -76,75 +76,56 @@ def _seed_plan(owner_email="member@test.com", teammate_email="teammate@test.com"
     return {"sprint_slug": sprint.slug, "plan_id": plan.pk}
 
 
-def _drag_row_above(page, source_row, target_row):
-    """Drag ``source_row`` above ``target_row`` through SortableJS.
-
-    SortableJS has ``animation: 150`` configured on ``nextStepList``. When
-    dragging across intermediate rows, SortableJS animates intermediate swaps
-    with CSS transforms for 150ms. In Playwright, synthetic pointer moves
-    dispatch within a few milliseconds; if ``mouse.up()`` is called while
-    SortableJS is still animating intermediate swaps, the final swap above
-    ``target_row`` has not yet been processed by the browser event loop, causing
-    SortableJS to commit the drop at an intermediate index (the flaky failure
-    seen in scheduled CI runs).
-
-    We synthesize an explicit pointer sequence:
-    1. Press on the source row's right padding (avoiding checkbox and inline edit).
-    2. Nudge in the direction of the target to wake SortableJS from idle.
-    3. Walk densely to the target row's top edge.
-    4. Wait for SortableJS to finish animating and settle the DOM order so that
-       ``source_row`` precedes ``target_row`` before releasing the mouse.
-    """
-    page.wait_for_function("typeof window.Sortable !== 'undefined'")
-
-    target_row.scroll_into_view_if_needed()
-    source_row.scroll_into_view_if_needed()
+def _get_row_anchor_coords(source_row, target_row):
+    """Return mouse start and target coordinates for dragging between rows."""
     sb = source_row.bounding_box()
     tb = target_row.bounding_box()
-
-    # Grab the row's right padding, away from the checkbox and the
-    # click-to-edit text.
     sx = sb["x"] + sb["width"] - 6
     sy = sb["y"] + sb["height"] / 2
-
     tx = tb["x"] + tb["width"] - 6
     target_y = tb["y"] + min(5, max(2, tb["height"] / 4))
+    return sx, sy, tx, target_y
 
-    source_id = source_row.get_attribute("data-next-step-id")
-    target_id = target_row.get_attribute("data-next-step-id")
+
+def _wait_for_sortable_dom_reorder(page, source_id, target_id, tx, target_y):
+    """Wait for SortableJS animation (150ms) to settle DOM order."""
+    script = """([srcId, tgtId]) => {
+        const rows = Array.from(document.querySelectorAll('[data-testid="next-step-row"]'));
+        const srcIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === srcId);
+        const tgtIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === tgtId);
+        return srcIdx !== -1 && tgtIdx !== -1 && srcIdx < tgtIdx;
+    }"""
+    for i in range(20):
+        if page.evaluate(script, [source_id, target_id]):
+            return
+        page.wait_for_timeout(50)
+        nudge = -1
+        if i % 2 == 0:
+            nudge = 1
+        page.mouse.move(tx, target_y - nudge)
+
+
+def _drag_row_above(page, source_row, target_row):
+    """Drag ``source_row`` above ``target_row`` through SortableJS."""
+    page.wait_for_function("typeof window.Sortable !== 'undefined'")
+    target_row.scroll_into_view_if_needed()
+    source_row.scroll_into_view_if_needed()
+    sx, sy, tx, target_y = _get_row_anchor_coords(source_row, target_row)
 
     page.mouse.move(sx, sy)
     page.mouse.down()
-
-    # Nudge in the direction of the target to wake SortableJS from idle.
-    nudge_dir = -1 if target_y < sy else 1
+    nudge_dir = 1
+    if target_y < sy:
+        nudge_dir = -1
     page.mouse.move(sx, sy + nudge_dir * 2, steps=3)
     page.mouse.move(sx, sy + nudge_dir * 6, steps=5)
 
-    distance = max(abs(target_y - sy), abs(tx - sx))
-    steps = max(int(distance), 30)
+    steps = max(int(max(abs(target_y - sy), abs(tx - sx))), 30)
     page.mouse.move(tx, target_y, steps=steps)
 
-    # Wait for SortableJS (with animation: 150) to complete DOM reordering.
-    # Nudge slightly across frames if needed so the browser fires mousemove
-    # after animation completes.
-    def _is_reordered():
-        return page.evaluate(
-            """([srcId, tgtId]) => {
-                const rows = Array.from(document.querySelectorAll('[data-testid="next-step-row"]'));
-                const srcIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === srcId);
-                const tgtIdx = rows.findIndex(r => r.getAttribute('data-next-step-id') === tgtId);
-                return srcIdx !== -1 && tgtIdx !== -1 && srcIdx < tgtIdx;
-            }""",
-            [source_id, target_id],
-        )
-
-    for i in range(20):
-        if _is_reordered():
-            break
-        page.wait_for_timeout(50)
-        page.mouse.move(tx, target_y - (1 if i % 2 == 0 else -1))
-
+    source_id = source_row.get_attribute("data-next-step-id")
+    target_id = target_row.get_attribute("data-next-step-id")
+    _wait_for_sortable_dom_reorder(page, source_id, target_id, tx, target_y)
     page.mouse.up()
 
 

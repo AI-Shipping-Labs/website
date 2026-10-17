@@ -1,7 +1,5 @@
 """Learner-facing self-paced CourseProject flows for issue #1967."""
 
-from datetime import timedelta
-
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.utils import timezone
@@ -43,16 +41,14 @@ class SelfPacedProjectAttemptTest(TestCase):
             mode='self_paced', is_active=True,
         )
         CohortEnrollment.objects.create(cohort=self.cohort, user=self.user)
-        now = timezone.now()
         self.project = CourseProject.objects.create(
             course=self.course, cohort=self.cohort, module=self.module,
             slug='project', title='Project',
-            submission_due_at=now - timedelta(days=30),
-            review_due_at=now - timedelta(days=20), peer_review_count=2,
+            submission_due_at=None, review_due_at=None, peer_review_count=2,
         )
         self.client.force_login(self.user)
 
-    def test_copied_dates_do_not_block_or_render_on_submission(self):
+    def test_date_free_attempt_does_not_block_or_render_on_submission(self):
         response = self.client.post(
             '/courses/self-paced-1967/projects/project/submit',
             {'github_link': 'https://github.com/me/project', 'commit_id': 'a1b2c3d'},

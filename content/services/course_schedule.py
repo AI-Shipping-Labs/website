@@ -185,7 +185,6 @@ def build_deadline_context(course, cohort):
     """Map homework by content ID and projects by module, including ancestors."""
     if cohort is None:
         return {}, {}
-
     homework_due = {
         row['content_id']: row['due_date']
         for row in Homework.objects.filter(cohort=cohort, content_id__isnull=False)
@@ -199,25 +198,46 @@ def build_deadline_context(course, cohort):
                         .values('module_id', 'submission_due_at', 'review_due_at'))
     deadlines = {}
     per_module = {}
+    _add_homework_deadlines(
+        units, homework_due, deadlines, per_module, module_parents,
+    )
+    _add_project_deadlines(project_rows, per_module, module_parents)
+    return deadlines, _deadline_summaries(per_module)
 
-    def add_to_ancestors(module_id, due):
-        while module_id is not None:
-            per_module.setdefault(module_id, []).append(due)
-            module_id = module_parents.get(module_id)
 
+def _add_homework_deadlines(
+    units, homework_due, deadlines, per_module, module_parents,
+):
     for unit in units:
         if unit['kind'] != 'homework':
             continue
         due = homework_due.get(unit['source_content_id'])
         deadlines[unit['id']] = due
         if due:
-            add_to_ancestors(unit['module_id'], due)
+            _add_to_module_ancestors(
+                per_module, module_parents, unit['module_id'], due,
+            )
 
+
+def _add_project_deadlines(project_rows, per_module, module_parents):
     for project in project_rows:
-        if project['module_id']:
-            add_to_ancestors(project['module_id'], project['submission_due_at'])
-            add_to_ancestors(project['module_id'], project['review_due_at'])
+        if not project['module_id']:
+            continue
+        for field in ('submission_due_at', 'review_due_at'):
+            _add_to_module_ancestors(
+                per_module, module_parents, project['module_id'], project[field],
+            )
 
+
+def _add_to_module_ancestors(per_module, module_parents, module_id, due):
+    if due is None:
+        return
+    while module_id is not None:
+        per_module.setdefault(module_id, []).append(due)
+        module_id = module_parents.get(module_id)
+
+
+def _deadline_summaries(per_module):
     now = timezone.now()
     summaries = {}
     for module_id, dates in per_module.items():
@@ -227,4 +247,4 @@ def build_deadline_context(course, cohort):
             'count': len(dates),
             'is_upcoming': bool(upcoming),
         }
-    return deadlines, summaries
+    return summaries

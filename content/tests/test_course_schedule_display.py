@@ -11,6 +11,7 @@ from freezegun import freeze_time
 
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess, Homework, Module, Unit
 from content.models.peer_review import CourseProject
+from content.services.course_schedule import build_deadline_context
 
 
 class CourseScheduleDisplayTest(TestCase):
@@ -266,3 +267,20 @@ class CourseScheduleDisplayTest(TestCase):
                 self.assertEqual(response.context['course_projects'], [])
                 self.assertNotContains(response, 'Open Attempt')
                 self.assertNotContains(response, 'Attempt 4')
+
+    def test_date_free_self_paced_project_is_excluded_from_deadline_summary(self):
+        self_paced = Cohort.objects.create(
+            course=self.course, name='Self-paced', external_key='self-paced',
+            mode='self_paced',
+        )
+        CourseProject.objects.create(
+            course=self.course, cohort=self_paced, module=self.topic,
+            slug='self-paced-attempt', title='Self-paced attempt',
+            submission_due_at=None, review_due_at=None,
+        )
+
+        _unit_deadlines, summaries = build_deadline_context(
+            self.course, self_paced,
+        )
+
+        self.assertEqual(summaries, {})

@@ -90,13 +90,18 @@ peer_review_enabled: true             # required when projects are listed
 peer_review_count: 3                  # default reviews per learner
 peer_review_criteria: |              # markdown shown during review
   Explain what works and what to improve.
-projects:                              # optional dated project attempts
+projects:                              # optional project attempts
   - slug: attempt-1                    # unique within the course
     title: Attempt 1
     module_path: capstone-project/capstone-project  # leaf syllabus module
     cohort_key: cohort-4               # optional; must match a cohort key above
     submission_due_at: '2030-11-08T23:59:00+01:00'
     review_due_at: '2030-11-15T23:59:00+01:00'
+  - slug: self-paced-attempt           # distinct course-unique slug
+    title: Self-paced attempt
+    module_path: capstone-project
+    cohort_key: self-paced             # resolves to mode: self_paced above
+                                        # omit both deadline fields
 ```
 
 ### `maven_course_key` and `cohorts:`
@@ -172,19 +177,28 @@ and Studio and the API let it save or unlink without a series.
 
 ### Project attempts
 
-`projects:` defines separate submission and peer review windows within a
-curriculum module. Each entry needs a course-unique `slug`, a `title`, a
-`module_path` of one or two module slugs, and timezone-aware ISO 8601 values
-for `submission_due_at` and `review_due_at`. The review deadline must follow
-the submission deadline. Set `cohort_key` to restrict the attempt to learners
-enrolled in that cohort; omit it for a course-wide attempt. An optional
-`peer_review_count` overrides the course value for that attempt.
+`projects:` defines separate submission and peer review attempts within a
+curriculum module. Each entry needs a course-unique `slug`, a `title`, and a
+`module_path` of one or two module slugs. Set `cohort_key` to restrict the
+attempt to learners enrolled in that cohort; omit it for a course-wide
+attempt. An optional `peer_review_count` overrides the course value.
+
+Dated-cohort and course-wide attempts require timezone-aware ISO 8601
+`submission_due_at` and `review_due_at` values, with review strictly after
+submission. An entry whose `cohort_key` resolves to `mode: self_paced` must
+omit both fields; sync stores both as null and the attempt remains open until
+the learner completes it. Supplying either deadline on a Self-paced entry, or
+omitting either deadline on any other entry, fails the course sync. Resyncing
+the same Self-paced slug clears copied dates in place without replacing its
+row or learner records.
 
 `module_path` must identify a leaf module; the attempts appear in that module's
 syllabus and overview page. Sync upserts attempts by `(course, slug)` and never deletes an attempt removed
 from YAML, because it may already have submissions. Review assignments begin
-after the submission deadline and use the attempt's review deadline. Learners
-choose an attempt within the curriculum and submit separately to each one.
+after the submission deadline and use the attempt's review deadline. A
+Self-paced attempt instead joins the rolling same-attempt pool and receives no
+fixed review deadline. Learners choose an attempt within the curriculum and
+submit separately to each one.
 
 ### Access levels
 
@@ -291,12 +305,12 @@ questions:
 markdown body (the homework instructions/prose)
 ```
 
-Sync resolves ONE target cohort per sync pass (`_resolve_homework_cohort`
-in `content/sync_parsers/families/homework.py`): the course's currently
-in-range `mode='cohort'` cohort; if none is in range and the course has
-exactly one cohort overall (including a `mode='self_paced'` cohort), that
-cohort; otherwise the homework file is skipped with a logged sync warning
-(not a hard failure -- unrelated units in the same course still sync).
+Sync preserves the existing dated target policy: the course's currently
+in-range `mode='cohort'` cohort, or the only cohort as a fallback. It also
+targets the one active, explicitly declared `mode: self_paced` cohort when
+present. The targets are deduplicated, so a self-paced-only course still gets
+one row. When dated cohorts are ambiguous, the dated target is skipped with a
+logged sync warning while the explicit Self-paced target continues syncing.
 `Homework.content_id` is scoped `(cohort, content_id)`, not globally
 unique, specifically so a later cohort resolving against the same
 curriculum unit gets its own `Homework` row instead of colliding with an
@@ -304,18 +318,18 @@ earlier cohort's -- reconcile-never-destroy, same as the rest of the sync
 pipeline; an earlier cohort's `Homework` row is never touched by a later
 cohort's sync pass. A `questions:` entry removed from a later edit deletes
 the corresponding question (and its submitted answers) on next sync.
+The dated row stores the source `due_date`. The Self-paced row stores
+`due_date: null`, copies the same questions and form settings, and remains
+open or closed through `Homework.state`. Adding or removing a Self-paced
+YAML entry never relocates or deletes historical Homework or learner rows.
 
 Render-time resolution is a related but DIFFERENT, per-viewer policy
 (`content.services.course_units.resolve_homework_for_unit`, a sibling of
 `resolve_session_event`'s policy for `kind: event` units): the viewer's
 own enrolled cohort (any mode) first, else the most recent past dated
 cohort or any self-paced cohort. A self-paced cohort has no
-`start_date`/`end_date` and therefore no deadline to be late against --
-`Homework.is_accepting_submissions` never enforces `due_date` for a
-`mode='self_paced'` cohort (only `state == OPEN` gates it); the frontmatter
-`due_date:` value is still stored on that cohort's `Homework` row (sync
-requires it whenever `questions:` is present, dated cohort or not) but is
-inert for a self-paced learner.
+`start_date`/`end_date`; its Homework copy also has no `due_date`.
+`Homework.is_accepting_submissions` uses only `state == OPEN` for every mode.
 
 A `kind: homework` unit with no `questions:`/`due_date:` frontmatter keeps
 rendering as prose-only instructions, with no submission form -- adding

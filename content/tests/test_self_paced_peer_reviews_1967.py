@@ -36,11 +36,10 @@ class SelfPacedReviewBatchTest(TestCase):
             course=self.course, name='Self-paced', mode='self_paced',
             is_active=True,
         )
-        now = timezone.now()
         self.project = CourseProject.objects.create(
             course=self.course, cohort=self.cohort, slug='capstone',
-            title='Capstone', submission_due_at=now - timedelta(days=30),
-            review_due_at=now - timedelta(days=20), peer_review_count=2,
+            title='Capstone', submission_due_at=None,
+            review_due_at=None, peer_review_count=2,
         )
 
     def _submission(self, number, *, project=None, **fields):
@@ -73,8 +72,7 @@ class SelfPacedReviewBatchTest(TestCase):
     def test_project_pools_are_isolated_and_idempotent(self):
         second = CourseProject.objects.create(
             course=self.course, cohort=self.cohort, slug='second', title='Second',
-            submission_due_at=timezone.now(),
-            review_due_at=timezone.now() + timedelta(days=1),
+            submission_due_at=None, review_due_at=None,
             peer_review_count=2,
         )
         for number in range(2):
@@ -134,11 +132,9 @@ class SelfPacedReviewTaskTest(TestCase):
         cohort = Cohort.objects.create(
             course=course, name='Self-paced', mode='self_paced', is_active=active,
         )
-        now = timezone.now()
         project = CourseProject.objects.create(
             course=course, cohort=cohort, slug='project', title='Project',
-            submission_due_at=now - timedelta(days=2),
-            review_due_at=now - timedelta(days=1), peer_review_count=1,
+            submission_due_at=None, review_due_at=None, peer_review_count=1,
         )
         for number in range(2):
             user = User.objects.create_user(
@@ -181,10 +177,9 @@ class SelfPacedCertificateTest(TestCase):
         self.core = Unit.objects.create(
             module=self.module, title='Core unit', slug='core-unit', sort_order=0,
         )
-        now = timezone.now()
         self.project = CourseProject.objects.create(
             course=self.course, cohort=self.cohort, slug='project', title='Project',
-            submission_due_at=now, review_due_at=now + timedelta(days=1),
+            submission_due_at=None, review_due_at=None,
             peer_review_count=2,
         )
         self.user = User.objects.create_user(email='certificate@test.com')

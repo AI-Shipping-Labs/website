@@ -199,3 +199,17 @@ class CourseworkInventoryApiTest(TestCase):
         response = self._get(url='/api/courses/missing/coursework-inventory')
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()['code'], 'unknown_course')
+
+    def test_date_free_self_paced_project_serializes_null_deadlines(self):
+        self_paced = Cohort.objects.get(course=self.course, mode='self_paced')
+        project = CourseProject.objects.create(
+            course=self.course, cohort=self_paced,
+            slug='self-paced-attempt', title='Self-paced attempt',
+            submission_due_at=None, review_due_at=None,
+        )
+
+        data = self._get().json()
+
+        item = next(row for row in data['projects']['items'] if row['id'] == project.pk)
+        self.assertIsNone(item['submission_due_at'])
+        self.assertIsNone(item['review_due_at'])

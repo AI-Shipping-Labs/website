@@ -23,8 +23,8 @@ class SelfPacedPeerReviewStudioTest(TestCase):
         CourseProject.objects.create(
             course=self.course, cohort=self.cohort,
             slug='project', title='Project',
-            submission_due_at='2026-01-01T00:00:00Z',
-            review_due_at='2026-01-08T00:00:00Z',
+            submission_due_at=None,
+            review_due_at=None,
         )
         self.client.force_login(staff)
 

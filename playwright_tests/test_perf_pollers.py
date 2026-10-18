@@ -29,6 +29,13 @@ def _flush_promises(page):
     page.evaluate("() => Promise.resolve()")
 
 
+def _pause_installed_clock(page):
+    pause_time = datetime.datetime.now(datetime.UTC) + datetime.timedelta(minutes=1)
+    page.clock.pause_at(pause_time)
+    expected_time = int(pause_time.timestamp() * 1000)
+    assert page.evaluate("Date.now()") == expected_time
+
+
 def _set_page_visibility(page, state):
     page.evaluate(
         """
@@ -153,6 +160,10 @@ def test_sync_poll_backs_off_and_stops_when_sync_finishes(django_server, browser
     expect(page.locator("#sync-live-indicator")).to_have_attribute(
         "data-polling", "true",
     )
+    _set_page_visibility(page, "hidden")
+    assert calls == []
+    _pause_installed_clock(page)
+    _set_page_visibility(page, "visible")
 
     with page.expect_response(fragment) as failed:
         page.clock.fast_forward(3000)
@@ -233,6 +244,8 @@ def test_import_poll_pauses_hidden_and_stops_when_finished(django_server, browse
 
 
 @browser_journey
+# Playwright cohesion exception: one page and routed request sequence must span
+# hidden, failure, recovery, ETag, and 304 states in this lifecycle regression.
 def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
     django_server,
     browser,
@@ -270,9 +283,11 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
     page.clock.install()
     calls = []
     held = []
+    request_headers = []
 
     def respond(route):
         calls.append(route.request.url)
+        request_headers.append(route.request.headers)
         if len(calls) == 1:
             held.append(route)
             return
@@ -315,8 +330,9 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
         }
         """
     )
-
     _set_page_visibility(page, "hidden")
+    assert calls == []
+    _pause_installed_clock(page)
     page.clock.fast_forward(60_000)
     assert calls == []
 
@@ -333,6 +349,7 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
     with page.expect_response(fragment) as recovered:
         page.clock.fast_forward(1)
     assert recovered.value.status == 200
+    recovered_at = page.evaluate("Date.now()")
     expect(page.get_by_test_id("homework-poll-result")).to_have_text(
         "Arrived after retry",
     )
@@ -344,6 +361,7 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
         "true",
     )
     _flush_promises(page)
+    assert page.evaluate("Date.now()") == recovered_at
 
     page.clock.fast_forward(4999)
     assert len(calls) == 2
@@ -351,6 +369,10 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
         page.clock.fast_forward(1)
     assert unchanged.value.status == 304
     assert len(calls) == 3
+    assert request_headers[2].get("if-none-match") == '"homework-poll-v2"'
+    expect(page.get_by_test_id("homework-poll-result")).to_have_text(
+        "Arrived after retry",
+    )
     _flush_promises(page)
 
     page.clock.fast_forward(4999)
@@ -359,4 +381,5 @@ def test_homework_poll_pauses_never_overlaps_and_recovers_with_backoff(
         page.clock.fast_forward(1)
     assert healthy_after_304.value.status == 304
     assert len(calls) == 4
+    assert request_headers[3].get("if-none-match") == '"homework-poll-v2"'
     context.close()

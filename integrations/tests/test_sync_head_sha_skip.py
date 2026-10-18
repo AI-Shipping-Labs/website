@@ -399,7 +399,12 @@ class SyncFromDiskWithoutGitTest(TestCase):
         'community_base.content_sync.github.GitHubClient.resolve_commit',
     )
     def test_from_disk_never_consults_remote(self, mock_fetch):
-        log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        git_ceiling = os.path.dirname(self.temp_dir)
+        with mock.patch.dict(
+            os.environ,
+            {'GIT_CEILING_DIRECTORIES': git_ceiling},
+        ):
+            log = sync_content_source(self.source, repo_dir=self.temp_dir)
         self.assertEqual(log.status, 'success')
         self.assertEqual(log.items_created, 1)
         mock_fetch.assert_not_called()

@@ -1881,7 +1881,9 @@ class SyncResourcesTest(TestCase):
             f.write('  url: "https://example.com/course"\n')
             f.write('  category: courses\n')
 
-        sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
+        git_ceiling = os.path.dirname(self.temp_dir)
+        with patch.dict(os.environ, {'GIT_CEILING_DIRECTORIES': git_ceiling}):
+            sync_log = sync_content_source(self.source, repo_dir=self.temp_dir)
 
         self.assertEqual(sync_log.status, 'success')
         self.assertEqual(sync_log.items_created, 2)

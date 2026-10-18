@@ -129,6 +129,23 @@ def select_display_cohort(course, user, requested_key=''):
     return None, False
 
 
+def default_display_cohorts_by_course(user, course_ids):
+    """Resolve each enrolled course's default cohort in one query."""
+    owned_by_course = {}
+    for course_id in course_ids:
+        owned_by_course[course_id] = []
+    enrollments = CohortEnrollment.objects.filter(
+        user=user, cohort__course_id__in=course_ids,
+    ).select_related('cohort').order_by('cohort__start_date', 'pk')
+    for enrollment in enrollments:
+        course_id = enrollment.cohort.course_id
+        owned_by_course[course_id].append(enrollment.cohort)
+    defaults = {}
+    for course_id, cohorts in owned_by_course.items():
+        defaults[course_id] = _default_owned_cohort(cohorts)
+    return defaults
+
+
 def pickable_cohorts(course, *, today=None):
     """Dated cohorts a learner with course access may join from course Home.
 

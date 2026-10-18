@@ -30,6 +30,22 @@ from content.models import Cohort, CohortEnrollment, Course, Module, Unit, UserC
 User = get_user_model()
 
 
+class SidebarNavLinks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.links, self.current = {}, None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'a':
+            self.current = {'attrs': dict(attrs), 'icons': []}
+            self.links[self.current['attrs']['href']] = self.current
+        elif tag == 'i' and self.current is not None:
+            self.current['icons'].append(dict(attrs).get('data-lucide'))
+    def handle_endtag(self, tag):
+        if tag == 'a':
+            self.current = None
+
+
 class ThreeLevelCourseViewMixin:
     @classmethod
     def setUpTestData(cls):
@@ -168,38 +184,22 @@ class BuildcampSinglePageTopicTest(TestCase):
         week = self.client.get('/api/courses/ai-buildcamp').json()['syllabus'][0]
         self.assertEqual(week['units'][-1]['title'], 'Capstone Presentations')
 
-    def test_course_scope_reader_shows_inline_current_and_completed_rows(self):
+    def test_self_paced_reader_hides_event_and_shows_current_and_completed_rows(self):
         session_unit = self.session.units.get()
         overview_unit = self.overview.units.get()
+        topic_unit = self.topic.units.get()
         UserCourseProgress.objects.create(
             user=self.user, unit=overview_unit, completed_at=timezone.now(),
         )
         self.client.force_login(self.user)
-        response = self.client.get(session_unit.get_absolute_url())
+        response = self.client.get(topic_unit.get_absolute_url())
         sidebar = response.content.decode().split('<nav id="sidebar-nav"', 1)[1].split('</nav>', 1)[0]
-
-        class NavLinks(HTMLParser):
-            def __init__(self):
-                super().__init__()
-                self.links = {}
-                self.current = None
-
-            def handle_starttag(self, tag, attrs):
-                if tag == 'a':
-                    attributes = dict(attrs)
-                    self.current = {'attrs': attributes, 'icons': []}
-                    self.links[attributes['href']] = self.current
-                elif tag == 'i' and self.current is not None:
-                    self.current['icons'].append(dict(attrs).get('data-lucide'))
-
-            def handle_endtag(self, tag):
-                if tag == 'a':
-                    self.current = None
-
-        links = NavLinks()
+        links = SidebarNavLinks()
         links.feed(sidebar)
+        self.assertTrue(response.context['self_paced_view'])
+        self.assertNotIn(session_unit.get_absolute_url(), links.links)
         self.assertEqual(
-            links.links[session_unit.get_absolute_url()]['attrs'].get('aria-current'),
+            links.links[topic_unit.get_absolute_url()]['attrs'].get('aria-current'),
             'page',
         )
         self.assertIn('check-circle-2', links.links[overview_unit.get_absolute_url()]['icons'])

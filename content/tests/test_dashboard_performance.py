@@ -73,9 +73,9 @@ class InProgressCoursesQueryCountTest(TierSetupMixin, TestCase):
         from progress rows. Issue #346 added a batched CourseAccess query
         to replace the per-course can_access() N+1. Total constant queries:
           1. Active enrollments + course (select_related)
-          2. Per-course total unit counts (annotate)
+          2. Default display cohorts for all enrolled courses
           3. Per-course completed unit ids (UserCourseProgress)
-          4. All units across enrolled courses (resolve next_unit in Python)
+          4. All units across enrolled courses (totals and next unit in Python)
           5. Individual CourseAccess grants for enrolled courses
         """
         from content.views.home import _get_in_progress_courses

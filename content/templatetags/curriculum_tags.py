@@ -17,6 +17,7 @@ from content.services.course_inline import (
     inline_units_and_topics,
     inline_units_for,
 )
+from content.services.course_view_units import course_units_for_view
 
 register = template.Library()
 
@@ -34,9 +35,19 @@ def bonus_only(items):
 
 
 @register.filter
-def leaf_unit_count(children):
+def leaf_unit_count(children, self_paced_view=False):
     """Count units below a parent module from its prefetched child modules."""
-    return sum(len(child.units.all()) for child in children)
+    total = 0
+    for child in children:
+        units = course_units_for_view(child.units.all(), self_paced_view)
+        total += len(units)
+    return total
+
+
+@register.filter
+def visible_course_units(units, self_paced_view=False):
+    """Hide event placeholders only for an actual Self-paced course view."""
+    return course_units_for_view(units, self_paced_view)
 
 
 @register.filter

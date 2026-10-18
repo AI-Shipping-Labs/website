@@ -9,8 +9,14 @@ from django.utils import timezone
 
 from content.access import LEVEL_BASIC, LEVEL_OPEN, LEVEL_REGISTERED, get_user_level
 from content.models import CourseAccess, UserCourseProgress
-from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, UNIT_KIND_LESSON
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_LESSON
 from content.models.peer_review import CourseProject
+from content.services.course_home_units import (
+    all_module_units,
+    build_course_home_unit_rows,
+    first_instructional_module,
+    focus_homework_units,
+)
 from content.services.course_units import (
     build_module_week_dates,
     decide_course_unit_access,
@@ -20,8 +26,8 @@ from content.services.course_units import (
 from events.models import Event
 from events.models.event import PUBLIC_EVENT_STATUSES
 
-MATERIAL_KINDS = {UNIT_KIND_LESSON, UNIT_KIND_EVENT}
 ORIENTATION_WORDS = {'orientation', 'logistics', 'welcome', 'introduction'}
+_all_module_units = all_module_units
 
 
 def _is_orientation_module(module):
@@ -42,28 +48,6 @@ def _ordered_modules(course):
     return [module for module in top if not module.is_bonus] + [
         module for module in top if module.is_bonus
     ]
-
-
-def _material_units(module):
-    children = list(module.children.all())
-    if children:
-        ordered = [child for child in children if not child.is_bonus] + [
-            child for child in children if child.is_bonus
-        ]
-        return [unit for child in ordered for unit in child.units.all()
-                if unit.kind in MATERIAL_KINDS]
-    return [unit for unit in module.units.all() if unit.kind in MATERIAL_KINDS]
-
-
-def _all_module_units(module):
-    """Return a module's units in curriculum order, including submodule units."""
-    children = list(module.children.all())
-    if not children:
-        return list(module.units.all())
-    ordered = [child for child in children if not child.is_bonus] + [
-        child for child in children if child.is_bonus
-    ]
-    return [unit for child in ordered for unit in child.units.all()]
 
 
 def _current_cohort_module(modules, week_dates, cohort, today):
@@ -134,7 +118,7 @@ def _can_open_unit(unit, *, user_level, individual_access, entitlement_mode, is_
     return user_level >= required
 
 
-def build_course_home(course, user, cohort, *, today=None):
+def build_course_home(course, user, cohort, *, today=None, self_paced_view=False):
     """Return one coherent view model; database query count is independent of module count."""
     today = today or timezone.localdate()
     modules = _ordered_modules(course)
@@ -152,46 +136,13 @@ def build_course_home(course, user, cohort, *, today=None):
     week_dates = build_module_week_dates(
         modules, cohort, extend_final_to_cohort_end=course.slug == 'ai-buildcamp',
     )
-    rows = []
-    optional_child_rows = []
-    all_units = []
-    required_units = []
-    for module in modules:
-        units = _material_units(module)
-        all_units.extend(units)
-        core_units = [unit for unit in units if not unit.effective_is_bonus]
-        required_units.extend(core_units)
-        week = week_dates.get(module.pk)
-        available_dates = [_unit_available_on(unit, cohort) for unit in core_units]
-        future_dates = [date for date in available_dates if date and date > today]
-        rows.append({
-            'module': module,
-            'url': f'/courses/{course.slug}/{module.slug}',
-            'total': len(core_units),
-            'completed': len(completed_ids & {unit.pk for unit in core_units}),
-            'optional': module.is_bonus,
-            'capstone': module.pk in capstone_ids,
-            'week_range': format_week_range(*week) if week else '',
-            'next_available': min(future_dates) if future_dates else None,
-        })
-        if not module.is_bonus:
-            for child in module.children.all():
-                if not child.is_bonus:
-                    continue
-                # The curriculum caps nesting at two module levels; the
-                # prefetched leaf units need no child lookup per optional row.
-                child_units = [unit for unit in child.units.all()
-                               if unit.kind in MATERIAL_KINDS]
-                optional_child_rows.append({
-                    'module': child,
-                    'url': f'/courses/{course.slug}/{module.slug}/{child.slug}',
-                    'total': len(child_units),
-                    'completed': len(completed_ids & {unit.pk for unit in child_units}),
-                    'optional': True,
-                    'capstone': False,
-                    'week_range': format_week_range(*week) if week else '',
-                    'next_available': None,
-                })
+    unit_rows = build_course_home_unit_rows(
+        course, modules, completed_ids, capstone_ids, week_dates, today,
+        self_paced_view, lambda unit: _unit_available_on(unit, cohort),
+    )
+    rows = unit_rows.rows
+    optional_child_rows = unit_rows.optional_child_rows
+    required_units = unit_rows.required_units
 
     orientation_rows = [
         row for row in rows[:1]
@@ -199,7 +150,7 @@ def build_course_home(course, user, cohort, *, today=None):
         and _is_orientation_module(row['module'])
     ]
     orientation_module_ids = {row['module'].pk for row in orientation_rows}
-    unscheduled_cohort = cohort is None or cohort.mode == 'self_paced'
+    unscheduled_cohort = cohort is None or self_paced_view
 
     locked_dates = []
     ended_session_positions = _ended_session_positions(cohort)
@@ -335,31 +286,22 @@ def build_course_home(course, user, cohort, *, today=None):
     else:
         action = 'start'
 
-    first_instructional_module = next((
-        module for module in modules
-        if not module.is_bonus and module.pk not in orientation_module_ids
-        and any(
-            unit.kind in MATERIAL_KINDS | {UNIT_KIND_HOMEWORK}
-            and not unit.effective_is_bonus
-            for unit in _all_module_units(module)
-        )
-    ), None)
+    instructional_module = first_instructional_module(
+        modules, orientation_module_ids, self_paced_view,
+    )
     recommended_module = _top_level_module(recommendation.module if recommendation else None)
     focus_module = current_cohort_module or recommended_module
     if unscheduled_cohort and (
         focus_module is None or focus_module.pk in orientation_module_ids
     ):
-        focus_module = first_instructional_module or focus_module
+        focus_module = instructional_module or focus_module
     focus_week_range = ''
     if focus_module and focus_module.pk in week_dates:
         focus_week_range = format_week_range(*week_dates[focus_module.pk])
     focus_module_row = next(
         (row for row in rows if row['module'].pk == focus_module.pk), None,
     ) if focus_module else None
-    focus_work_units = [
-        unit for unit in _all_module_units(focus_module)
-        if unit.kind == 'homework' and not unit.effective_is_bonus
-    ] if focus_module else []
+    focus_work_units = focus_homework_units(focus_module, self_paced_view)
 
     if unscheduled_cohort:
         # Without a calendar week, the learner is in the module that holds

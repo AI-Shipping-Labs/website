@@ -41,18 +41,22 @@ from content.services.enrollment import auto_enroll_on_progress
 
 def _check_self_paced_certificate(user, unit):
     """Issue a certificate when this newly completed core unit is the last gap."""
-    from content.models.course import non_bonus_units
-
-    if not non_bonus_units(Unit.objects.filter(pk=unit.pk)).exists():
-        return
     from content.models.peer_review import CourseProject
-    from content.services.peer_review_service import PeerReviewService
+    from content.services.peer_review_service import (
+        PeerReviewService,
+        certificate_required_units,
+    )
 
     projects = CourseProject.objects.filter(
         cohort__mode='self_paced', submissions__user=user,
         course=unit.module.course,
     ).distinct()
     for project in projects:
+        required_unit = certificate_required_units(
+            Unit.objects.filter(pk=unit.pk), project,
+        )
+        if not required_unit.exists():
+            continue
         certificate = PeerReviewService.check_certificate_eligibility(
             user, unit.module.course, course_project=project,
         )

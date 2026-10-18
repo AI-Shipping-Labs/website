@@ -30,10 +30,15 @@ from content.access import (
 )
 from content.models import Cohort, CohortEnrollment, Unit, UserCourseProgress
 from content.models.cohort import COHORT_MODE_COHORT, COHORT_MODE_SELF_PACED
-from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK, non_bonus_units
+from content.models.course import UNIT_KIND_EVENT, UNIT_KIND_HOMEWORK
 from content.models.homework import Homework, QuestionType, Submission
 from content.services.course_navigation import course_entry_url
 from content.services.course_schedule import schedule_instant_iso
+from content.services.course_view_units import (
+    adjacent_viewer_unit,
+    get_all_units_ordered,
+    reader_progress,
+)
 from content.services.homework_reveal import locked_after_submit, question_results
 from content.services.session_join import build_session_join_context
 from content.templatetags.video_utils import get_video_thumbnail_url
@@ -337,6 +342,7 @@ def build_drip_locked_course_unit_context(
 
 def build_course_unit_navigation_context(
     user, course, module, unit, *, request=None, session_cohort=None,
+    self_paced_view=False,
 ):
     """Build navigation, completion, discussion, and mobile progress context."""
     modules = course.get_syllabus()
@@ -365,8 +371,13 @@ def build_course_unit_navigation_context(
         )
         is_completed = unit.pk in completed_unit_ids
 
-    next_unit = get_next_unit(course, unit)
-    prev_unit = get_prev_unit(course, unit)
+    ordered_units = get_all_units_ordered(course)
+    next_unit = adjacent_viewer_unit(
+        ordered_units, unit, 1, self_paced_view,
+    )
+    prev_unit = adjacent_viewer_unit(
+        ordered_units, unit, -1, self_paced_view,
+    )
 
     show_discussion = (
         bool(course.discussion_url)
@@ -374,25 +385,9 @@ def build_course_unit_navigation_context(
         and get_user_level(user) >= LEVEL_MAIN
     )
 
-    # Issue #1674: reader_progress_total/reader_progress_completed exclude
-    # bonus modules/units (same denominator as total_units()/
-    # completed_units(), via the one named non_bonus_units() filter);
-    # event-kind units count like any other unit. reader_progress_current
-    # is the unit's 1-indexed position within that same non-bonus reading
-    # order — falls back to 1 if the current unit is itself bonus (not a
-    # member of the filtered list).
-    all_units_ordered = get_all_units_ordered(course)
-    non_bonus_unit_ids = set(
-        non_bonus_units(Unit.objects.filter(module__course=course))
-        .values_list('pk', flat=True)
+    progress = reader_progress(
+        course, unit, ordered_units, completed_unit_ids, self_paced_view,
     )
-    flat_units = [u.pk for u in all_units_ordered if u.pk in non_bonus_unit_ids]
-    reader_progress_total = len(flat_units)
-    try:
-        reader_progress_current = flat_units.index(unit.pk) + 1
-    except ValueError:
-        reader_progress_current = 1
-    reader_progress_completed = len(completed_unit_ids & non_bonus_unit_ids)
 
     # Issue #1674: a kind='event' unit renders a session card above the
     # body. None means either "not a kind='event' unit" or "no Event
@@ -433,46 +428,12 @@ def build_course_unit_navigation_context(
         'bottom_next_testid': 'bottom-next-btn',
         'reader_mobile_label': 'Course navigation',
         'reader_progress_kind': 'lesson',
-        'reader_progress_current': reader_progress_current,
-        'reader_progress_total': reader_progress_total,
-        'reader_progress_completed': reader_progress_completed,
+        'reader_progress_current': progress['current'],
+        'reader_progress_total': progress['total'],
+        'reader_progress_completed': progress['completed'],
         'unit_session_entry': unit_session_entry,
+        'self_paced_view': self_paced_view,
     }
-
-
-def get_all_units_ordered(course):
-    """Return all units in course reading order (issue #1674).
-
-    Depth-first, per the documented contract: top-level modules in
-    ``(sort_order, id)`` order; a leaf module yields its own units with
-    required lessons before bonus lessons; a parent module yields required
-    child submodules before bonus submodules. Mixed content
-    (direct units alongside children) is forbidden by ``Module.clean()``,
-    so there is no interleaving case. This follows the syllabus grouping,
-    which also places bonus content after required content at each level.
-    ``kind`` does not affect reading order.
-
-    This is the single ordering helper both ``get_next_unit``/
-    ``get_prev_unit`` and the progress-percentage/``reader_progress_*``
-    computation call — no second implementation of ordering anywhere.
-    Reuses ``Course.get_syllabus()``'s prefetch: four queries total, one
-    per tree level, not one per module.
-    """
-    def syllabus_order(items):
-        items = list(items)
-        return [item for item in items if not item.is_bonus] + [
-            item for item in items if item.is_bonus
-        ]
-
-    units = []
-    for module in course.get_syllabus():
-        children = syllabus_order(module.children.all())
-        if children:
-            for child in children:
-                units.extend(syllabus_order(child.units.all()))
-        else:
-            units.extend(syllabus_order(module.units.all()))
-    return units
 
 
 def get_next_unit(course, current_unit):

@@ -1,4 +1,3 @@
-from collections import Counter
 from dataclasses import replace
 from functools import partial
 from urllib.parse import urlencode
@@ -65,6 +64,16 @@ from content.services.course_schedule import (
     pickable_cohorts,
     schedule_timezone_name,
     select_display_cohort,
+)
+from content.services.course_view_progress import (
+    build_course_view_navigation_context,
+    default_course_progress,
+    select_course_view,
+)
+from content.services.course_view_units import (
+    completed_units_by_module,
+    course_progress_counts,
+    get_next_incomplete_unit_for_view,
 )
 from content.services.current_module import (
     HomeworkStateLoader,
@@ -261,7 +270,7 @@ def course_detail(request, slug):
     # Derived week dates and deliverable deadlines use the same selected
     # schedule cohort. An enrolled learner sees only an owned cohort; a
     # validated query key can select a public preview without granting access.
-    viewer_cohort, schedule_is_preview = select_display_cohort(
+    viewer_cohort, schedule_is_preview, self_paced_view = select_course_view(
         course, user, request.GET.get('cohort', ''),
     )
     unit_deadlines, module_deadline_summaries = build_deadline_context(
@@ -293,16 +302,9 @@ def course_detail(request, slug):
     completed_unit_ids: set[int] = set()
     completed_count_by_module: dict[int, int] = {}
     if user.is_authenticated:
-        progress_rows = UserCourseProgress.objects.filter(
-            user=user,
-            unit__module__course=course,
-            completed_at__isnull=False,
-        ).values_list('unit_id', 'unit__module_id')
-        module_id_counts: Counter = Counter()
-        for unit_id, module_id in progress_rows:
-            completed_unit_ids.add(unit_id)
-            module_id_counts[module_id] += 1
-        completed_count_by_module = dict(module_id_counts)
+        completed_unit_ids, completed_count_by_module = completed_units_by_module(
+            user, course, modules, self_paced_view,
+        )
 
     gating = build_gating_context(user, course, 'course')
 
@@ -412,7 +414,9 @@ def course_detail(request, slug):
     user_is_enrolled = is_enrolled(user, course)
     next_unit_for_user = None
     if user_is_enrolled:
-        next_unit_for_user = course.get_next_unit_for(user)
+        next_unit_for_user = get_next_incomplete_unit_for_view(
+            course, user, self_paced_view,
+        )
 
     context = {
         'course': course,
@@ -433,6 +437,7 @@ def course_detail(request, slug):
         'module_week_ranges': module_week_ranges,
         'schedule_cohort': viewer_cohort,
         'schedule_is_preview': schedule_is_preview,
+        'self_paced_view': self_paced_view,
         'schedule_timezone': schedule_timezone_name(course, user),
         'schedule_can_localize': should_use_browser_timezone(user),
         'unit_deadlines': unit_deadlines,
@@ -536,8 +541,9 @@ def course_home(request, slug, section='home'):
         context['preview_cohorts'] = course.aisl_cohorts.filter(
             mode='cohort', is_active=True,
         ).order_by('start_date')
-    context['total_units'] = course.total_units()
-    context['completed_units'] = course.completed_units(request.user)
+    progress = course_progress_counts(request.user, course, self_paced_view)
+    context['total_units'] = progress.total
+    context['completed_units'] = progress.completed
     context['progress_pct'] = (
         int(context['completed_units'] / context['total_units'] * 100)
         if context['total_units'] else 0
@@ -552,7 +558,9 @@ def course_home(request, slug, section='home'):
     )
 
     if section == 'home':
-        context.update(build_course_home(course, request.user, cohort))
+        context.update(build_course_home(
+            course, request.user, cohort, self_paced_view=self_paced_view,
+        ))
         commitments = build_course_commitments(
             course, request.user, cohort, focus_module=context['current_module'],
         )
@@ -779,15 +787,9 @@ def course_home(request, slug, section='home'):
             modules, request.user, cohort,
             include_status=not context['is_cohort_preview'],
         )
-        progress_rows = UserCourseProgress.objects.filter(
-            user=request.user, unit__module__course=course,
-            completed_at__isnull=False,
-        ).values_list('unit_id', 'unit__module_id')
-        completed_unit_ids = set()
-        completed_counts = Counter()
-        for unit_id, module_id in progress_rows:
-            completed_unit_ids.add(unit_id)
-            completed_counts[module_id] += 1
+        completed_unit_ids, completed_counts = completed_units_by_module(
+            request.user, course, modules, self_paced_view,
+        )
         projects_by_module = _course_home_projects_by_module(
             course, cohort, request.user, self_paced_view,
         )
@@ -797,7 +799,7 @@ def course_home(request, slug, section='home'):
             'modules': modules,
             'has_access': True,
             'completed_unit_ids': completed_unit_ids,
-            'completed_count_by_module': dict(completed_counts),
+            'completed_count_by_module': completed_counts,
             'projects_by_module': projects_by_module,
             'preview_project_ids': set(),
             'module_week_ranges': {
@@ -938,8 +940,7 @@ def api_course_detail(request, slug):
 
     has_access = can_access(user, course)
     modules = course.get_syllabus()
-    total = course.total_units()
-    completed = course.completed_units(user)
+    progress = default_course_progress(user, course)
 
     # Build syllabus. ``modules`` comes from ``Course.get_syllabus()`` which
     # prefetches the full tree (top-level modules, their children, and
@@ -985,8 +986,8 @@ def api_course_detail(request, slug):
     # Include progress for authenticated users
     if user.is_authenticated:
         data['progress'] = {
-            'completed': completed,
-            'total': total,
+            'completed': progress.completed,
+            'total': progress.total,
         }
 
     return JsonResponse(data)
@@ -1055,19 +1056,7 @@ def _resolve_top_level_module(course, module_slug):
 
 
 def _render_module_overview(request, course, module):
-    """Module overview page: renders ``Module.overview_html`` + lesson list.
-
-    Issue #222: the module README is now the module overview rather than a
-    sibling Unit. Issue #1674: also used for a submodule's own overview
-    page — a submodule either lists its own units (leaf) or has no
-    ``submodules`` at all (max depth two, so a submodule never has
-    children of its own).
-
-    Access mirrors the course detail page: the page is always reachable for
-    SEO; gated content shows the upgrade CTA. Unit links in the lesson
-    list are clickable for users with access; the unit detail view itself
-    handles the per-lesson gating / teaser.
-    """
+    """Render a top-level or leaf-module overview with course access policy."""
     user = request.user
 
     has_access = can_access(user, course)
@@ -1080,7 +1069,7 @@ def _render_module_overview(request, course, module):
     inline_units, submodules = inline_units_and_topics(children, course.slug)
     units.extend(inline_units)
     course_projects = list(CourseProject.objects.filter(module=module).select_related('cohort'))
-    viewer_cohort, viewer_is_preview = select_display_cohort(
+    viewer_cohort, viewer_is_preview, self_paced_view = select_course_view(
         course, user, request.GET.get('cohort', ''),
     )
     project_cohort = viewer_cohort
@@ -1181,6 +1170,7 @@ def _render_module_overview(request, course, module):
             if not has_access and not gated_entitlement else ''
         ),
         'gated_entitlement': gated_entitlement,
+        'self_paced_view': self_paced_view,
     }
     return render(request, 'content/module_overview.html', context)
 
@@ -1264,9 +1254,9 @@ def _render_course_unit_detail(request, course, module, unit, *, route_step=None
     from analytics.activity import record_lesson_open
     record_lesson_open(user, unit=unit)
 
-    context = course_unit_service.build_course_unit_navigation_context(
+    context = build_course_view_navigation_context(
         user, course, module, unit, request=request,
-        session_cohort=selected_cohort,
+        selected_cohort=selected_cohort,
     )
     # Issue #1916: annotated in place so the reader sidebar's homework rows
     # show the learner's homework status (scoped and full navigation share

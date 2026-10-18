@@ -12,13 +12,22 @@ from content.models import (
     Unit,
     UserCourseProgress,
 )
-from content.models.course import non_bonus_units
+from content.models.course import UNIT_KIND_EVENT, non_bonus_units
 from content.services.peer_review_batches import (
     form_course_batches,
     form_self_paced_project_batches,
 )
+from content.services.peer_review_notifications import notify_reviews_complete
 
 logger = logging.getLogger(__name__)
+
+
+def certificate_required_units(queryset, course_project):
+    """Return units required by the certificate's qualifying attempt."""
+    units = non_bonus_units(queryset)
+    if course_project is not None and course_project.is_self_paced:
+        return units.exclude(kind=UNIT_KIND_EVENT)
+    return units
 
 
 class PeerReviewService:
@@ -101,7 +110,6 @@ class PeerReviewService:
             from notifications.models import Notification
 
             for submission in submissions:
-                # Count how many reviews this student needs to complete
                 review_count = PeerReview.objects.filter(
                     reviewer=submission.user,
                     submission__course=course,
@@ -138,45 +146,20 @@ class PeerReviewService:
 
     @staticmethod
     def check_and_update_submission_status(submission):
-        """Check if all reviews for a submission are complete and update status.
-
-        Also checks if the student has completed all their own reviews,
-        and if so, triggers certificate eligibility check.
-        """
+        """Update review status and check project-scoped certificate eligibility."""
         if submission.status not in ('in_review', 'review_complete'):
             return
-
-        # Check if all reviews for this submission are complete
         all_reviews = submission.reviews.all()
         if not all_reviews.exists():
             return
-
         all_complete = all(r.is_complete for r in all_reviews)
-
         if all_complete and submission.status == 'in_review':
             submission.status = 'review_complete'
             submission.save(update_fields=['status'])
-
-            # Notify the submitter
-            try:
-                from notifications.models import Notification
-                Notification.objects.create(
-                    user=submission.user,
-                    title=f'Reviews complete: {submission.course.title}',
-                    body='All peer reviews for your project are in. View your feedback.',
-                    url=(
-                        f'/courses/{submission.course.slug}/projects/'
-                        f'{submission.course_project.slug}/reviews'
-                        if submission.course_project_id
-                        else f'/courses/{submission.course.slug}/reviews'
-                    ),
-                    notification_type='new_content',
-                )
-            except Exception:
-                logger.exception('Failed to send reviews complete notification')
-
-        # Check certificate eligibility
-        PeerReviewService.check_certificate_eligibility(submission.user, submission.course)
+            notify_reviews_complete(submission)
+        PeerReviewService.check_certificate_eligibility(
+            submission.user, submission.course, submission.course_project,
+        )
 
     @staticmethod
     def check_certificate_eligibility(user, course, course_project=None):
@@ -193,12 +176,14 @@ class PeerReviewService:
         """
         if CourseCertificate.objects.filter(user=user, course=course).exists():
             return None
-        if not PeerReviewService._all_core_units_complete(user, course):
-            return None
         submission = PeerReviewService._qualifying_submission(
             user, course, course_project,
         )
         if submission is None:
+            return None
+        if not PeerReviewService._all_certificate_units_complete(
+            user, course, submission.course_project,
+        ):
             return None
         return PeerReviewService._issue_certificate(user, course, submission)
 
@@ -231,8 +216,9 @@ class PeerReviewService:
         return certificate
 
     @staticmethod
-    def _all_core_units_complete(user, course):
-        units = non_bonus_units(Unit.objects.filter(module__course=course))
+    def _all_certificate_units_complete(user, course, course_project):
+        course_units = Unit.objects.filter(module__course=course)
+        units = certificate_required_units(course_units, course_project)
         total = units.count()
         if total == 0:
             return False
@@ -273,11 +259,7 @@ class PeerReviewService:
 
     @staticmethod
     def issue_certificates_for_course(course):
-        """Manually issue certificates for all eligible students in a course.
-
-        Returns:
-            Number of certificates issued.
-        """
+        """Manually issue certificates for every eligible course learner."""
         count = 0
         submissions = ProjectSubmission.objects.filter(
             course=course,
@@ -285,7 +267,7 @@ class PeerReviewService:
 
         for submission in submissions:
             cert = PeerReviewService.check_certificate_eligibility(
-                submission.user, course,
+                submission.user, course, submission.course_project,
             )
             if cert:
                 count += 1

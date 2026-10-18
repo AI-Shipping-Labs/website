@@ -13,33 +13,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+from scripts.tailwind_producers import (  # noqa: E402, F401, I001  (re-exported after path fix)
+    PRODUCER_FILES,
+    PRODUCER_JS_FAMILY,
+    PRODUCER_PART_FAMILIES,
+    PRODUCER_TOOL_FILES,
+    PRODUCER_VIEW_FAMILY,
+    producer_javascript_files,
+    producer_paths,
+    producer_python_files,
+)
 CSS_PATH = ROOT / "static/css/tailwind.css"
 STATIC_ROOT = ROOT / "staticfiles"
-
-# Files whose complete-string class producers are explicitly called out by the
-# #1383 contract. Studio views are included below as a directory family.
-PRODUCER_FILES = [
-    ROOT / "accounts/templatetags/accounts_extras.py",
-    ROOT / "content/templatetags/member_badges.py",
-    ROOT / "content/models/project.py",
-    ROOT / "content/models/download.py",
-    ROOT / "content/views/courses.py",
-    ROOT / "content/views/tags.py",
-    ROOT / "studio/templatetags/studio_filters.py",
-    ROOT / "plans/models.py",
-    ROOT / "email_app/ses_explain.py",
-]
-
-#: The directory families ``_producer_classes()`` scans on top of
-#: ``PRODUCER_FILES``. ``scripts/affected_tests.py`` imports these to derive
-#: rule 14's producer scan set, so the map cannot be narrower than the checker
-#: (issue #1755: `studio/forms/*.py` and `static/js/*.js` were missing from the
-#: map while the checker had been reading them all along).
-PRODUCER_VIEW_FAMILY = "studio/views"
-PRODUCER_PART_FAMILIES = ("forms", "widgets")
-PRODUCER_PART_EXCLUSIONS = ("tests", "migrations", ".venv")
-PRODUCER_JS_FAMILY = "static/js"
-PRODUCER_JS_EXCLUDED_PART = "vendor"
 
 PREFIXES = (
     "accent-",
@@ -191,47 +176,12 @@ def _python_string_literals(path):
             yield node.value
 
 
-def producer_python_files(root=ROOT):
-    """Every Python file whose complete-string literals are class producers.
-
-    Three families, and the whole set matters to
-    ``scripts/affected_tests.py``: editing any of these files can add a class
-    that the compiled bundle then has to contain. The families are named by
-    the constants above so the affected-tests map can be derived from them
-    instead of restating them (issue #1755).
-    """
-    files = [*PRODUCER_FILES, *(root / PRODUCER_VIEW_FAMILY).glob("*.py")]
-    # Form/widget constants can live in any first-party app. Scanning files
-    # named forms/widgets is intentionally narrower than all Python prose.
-    files.extend(
-        path
-        for path in root.rglob("*.py")
-        if any(part in PRODUCER_PART_FAMILIES for part in path.relative_to(root).parts)
-        and not set(PRODUCER_PART_EXCLUSIONS).intersection(path.relative_to(root).parts)
-    )
-    return sorted(set(files))
-
-
-def producer_javascript_files(root=ROOT):
-    """First-party JavaScript whose quoted literals are class producers."""
-    return sorted(
-        path
-        for path in (root / PRODUCER_JS_FAMILY).rglob("*.js")
-        if PRODUCER_JS_EXCLUDED_PART not in path.relative_to(root / "static").parts
-    )
-
-
-def producer_paths(root=ROOT):
-    """Every file ``_producer_classes()`` reads, in stable order."""
-    return [*producer_python_files(root), *producer_javascript_files(root)]
-
-
-def _producer_classes():
+def _producer_classes(root=ROOT):
     values = []
-    for path in producer_python_files():
+    for path in producer_python_files(root):
         values.extend(_python_string_literals(path))
 
-    for path in producer_javascript_files():
+    for path in producer_javascript_files(root):
         # Class strings in first-party JS are simple quoted/backtick literals;
         # interpolated fragments are rejected separately by the source test.
         values.extend(match[1] for match in re.findall(r"(['\"`])((?:\\.|(?!\1).)*)\1", path.read_text()))
@@ -245,16 +195,16 @@ def _producer_classes():
     return classes
 
 
-def verify_bundle():
-    if not CSS_PATH.is_file():
-        raise AssertionError(f"missing generated bundle: {CSS_PATH.relative_to(ROOT)}")
-    css = CSS_PATH.read_text()
+def verify_bundle(root=ROOT, css_path=CSS_PATH):
+    if not css_path.is_file():
+        raise AssertionError(f"missing generated bundle: {css_path.relative_to(root)}")
+    css = css_path.read_text()
     if "@tailwind " in css or len(css) < 20_000:
         raise AssertionError("generated CSS is absent or not a compiled Tailwind bundle")
     if css.count("\n") > 2:
         raise AssertionError("generated CSS is not minified")
 
-    missing = sorted(name for name in _producer_classes() if _css_selector(name) not in css)
+    missing = sorted(name for name in _producer_classes(root) if _css_selector(name) not in css)
     if missing:
         raise AssertionError("compiled CSS is missing producer selectors: " + ", ".join(missing))
     return css

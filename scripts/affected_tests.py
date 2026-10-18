@@ -89,6 +89,7 @@ from scripts.verify_tailwind_build import (  # noqa: E402  (needs the sys.path f
     PRODUCER_FILES,
     PRODUCER_JS_FAMILY,
     PRODUCER_PART_FAMILIES,
+    PRODUCER_TOOL_FILES,
     PRODUCER_VIEW_FAMILY,
 )
 from tests.source_scan_policy import excluded_path_globs  # noqa: E402  (same)
@@ -543,8 +544,7 @@ TAILWIND_PRODUCER_GLOBS: tuple[str, ...] = (
     *(f"*/{family}/*.py" for family in PRODUCER_PART_FAMILIES),
     *(f"{family}/*.py" for family in PRODUCER_PART_FAMILIES),
     f"{PRODUCER_JS_FAMILY}/*.js",
-    # Editing the gate itself runs the gate.
-    "scripts/verify_tailwind_build.py",
+    *PRODUCER_TOOL_FILES,
 )
 
 #: Rule 14. The eight template lints that share ONE scan set: every ``*.html``
@@ -584,7 +584,6 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         name="tailwind-producers",
         globs=TAILWIND_PRODUCER_GLOBS,
         commands=(CHECK_TAILWIND_COMMAND,),
-        checker="scripts/verify_tailwind_build.py",
     ),
     RepoWideGuard(
         name="repo-wide-template-lints",

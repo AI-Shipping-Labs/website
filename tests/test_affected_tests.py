@@ -1185,7 +1185,7 @@ class CliTest(SimpleTestCase):
                     "playwright",
                     "escalation_reasons",
                     "unmapped",
-                    "notes",
+                    "notes", "commands",
                 ]
             ),
         )
@@ -1616,10 +1616,6 @@ class RepoWideScannerDiscoveryTest(SimpleTestCase):
             ("email_app/tests/test_email_service_shim_1651.py", ""),
             ("jobs/tests/test_async_task_names.py", ""),
             ("tests/test_unreachable_legacy_templates_1543.py", ""),
-            # The non-test half of the census. A resolver change that re-hides
-            # this (a parameter default, say) must fail loudly.
-            ("scripts/verify_tailwind_build.py", ""),
-            ("scripts/verify_tailwind_build.py", "static/js"),
         ):
             with self.subTest(scanner=expected):
                 self.assertIn(expected, trees)
@@ -2310,7 +2306,7 @@ class RepoWideGuardTest(SimpleTestCase):
                 *(f"*/{family}/*.py" for family in verify_tailwind_build.PRODUCER_PART_FAMILIES),
                 *(f"{family}/*.py" for family in verify_tailwind_build.PRODUCER_PART_FAMILIES),
                 f"{verify_tailwind_build.PRODUCER_JS_FAMILY}/*.js",
-                "scripts/verify_tailwind_build.py",
+                *verify_tailwind_build.PRODUCER_TOOL_FILES,
             ),
             "every producer family must be derived from the checker's own constants",
         )

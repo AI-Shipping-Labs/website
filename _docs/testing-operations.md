@@ -367,8 +367,9 @@ Some checkers are not owned by the directory they live in: they walk a whole
 tree. `content/tests/test_design_system_lint.py` lints every template,
 `tests/test_tailwind_build.py`'s `TailwindSourceScanTest` scans every template,
 every non-test `*.py` and every first-party `static/js/**/*.js`, and
-`scripts/verify_tailwind_build.py` scans string literals in a fixed producer
-list. Mapping a changed path to "the app that owns it" therefore misses them.
+`scripts/tailwind_producers.py` discovers tracked and non-ignored untracked
+class producers for `scripts/verify_tailwind_build.py`. Mapping a changed path
+to "the app that owns it" therefore misses them.
 
 Rule 14 is a declarative table in `scripts/affected_tests.py`. Each row is one
 checker's scan set: the path globs it reads, the Django labels (or extra
@@ -376,7 +377,7 @@ commands) that run it, and any exclusions.
 
 | Row | Scan set | Selects |
 |---|---|---|
-| `tailwind-producers` | all four families `_producer_classes()` reads: `verify_tailwind_build.PRODUCER_FILES`, `studio/views/*.py`, any `forms`/`widgets` directory anywhere in the tree, and first-party `static/js/**/*.js` (plus the checker itself) | `make check-tailwind` |
+| `tailwind-producers` | all four Git-owned families `_producer_classes()` reads: explicit producers, `studio/views/*.py`, any first-party `forms`/`widgets` directory, and first-party `static/js/**/*.js` (plus the verifier and discovery owner) | `make check-tailwind` |
 | `repo-wide-template-lints` | `templates/**/*.html` | the seven lints that read only that tree |
 | `template-comment-lint` | `templates/**/*.html` and `email_app/email_templates/*.md` | `content.tests.test_template_comment_lint` |
 | `tailwind-source-scan` | `templates/**/*.html`, `static/js/**/*.js`, `**/*.py` minus the shared exclusion set | `tests.test_tailwind_build.TailwindSourceScanTest` |
@@ -530,6 +531,14 @@ Python edit can select it on a checkout with no `node_modules` and no
 `static/css/tailwind.css`, while the bundle-reading assertions stay in
 `TailwindSourceContractTest`, selected by their own build inputs (`Dockerfile`,
 `tailwind.config.js`, `package.json`).
+
+The affected plan orders generated-artifact prerequisites before mapped Django
+tests. If final Django labels select `TailwindSourceContractTest`, an existing
+`make check-tailwind` moves before Django; otherwise one `make css-build` is
+added there. Supplemental commands stay after Django. The rendered and JSON
+plans expose the same command sequence that `--run` executes. A plan selecting
+only `TailwindSourceScanTest` remains build-free because that class reads source
+files rather than the generated bundle.
 
 ### Guarded doc artifacts
 

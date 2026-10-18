@@ -8,8 +8,8 @@ JOIN and PostgreSQL rejects it with
     NotSupportedError: FOR UPDATE cannot be applied to the nullable side of
     an outer join
 
-so every meeting write and every join request / approve / decline / leave /
-pod edit returned a 500 in production. SQLite drops the locking clause, so
+so every meeting write and every direct join / leave / pod edit returned a
+500 in production. SQLite drops the locking clause, so
 the SQLite suite never saw it. These tests only mean something on
 PostgreSQL and run in the CI ``PostgreSQL 16 Verification`` job
 (``manage.py test --tag=postgresql``).
@@ -17,13 +17,16 @@ PostgreSQL and run in the CI ``PostgreSQL 16 Verification`` job
 
 import datetime
 import json
+import traceback
+from threading import Barrier, Thread
 
-from django.db import connection
-from django.test import TestCase, tag
+from django.db import close_old_connections, connection
+from django.test import TestCase, TransactionTestCase, tag
 from django.utils import timezone
 
 from accounts.models import Token
-from pods.models import MEETING_RESPONSE_CANT, MEETING_RESPONSE_GOING, PodJoinRequest, PodMeeting
+from notifications.models import Notification
+from pods.models import MEETING_RESPONSE_CANT, MEETING_RESPONSE_GOING, PodMeeting
 from pods.services import meetings as mtg
 from pods.services import membership as svc
 from pods.tests.fixtures import enroll, make_cohort, make_course, make_meeting, make_pod, make_user
@@ -85,12 +88,11 @@ class PodLockPostgresTest(TestCase):
         mtg.set_meeting_status(created[0], self.staff, 'scheduled')
         self.assertEqual(PodMeeting.objects.filter(pod=pod, status='scheduled').count(), 4)
 
-    def test_join_request_approve_decline_leave_and_edit_run_under_the_pod_lock(self):
+    def test_idempotent_join_leave_and_edit_run_under_the_pod_lock(self):
         pod = self.pod([self.anna], source='member', max_members=3)
-        request = svc.request_to_join(pod, self.raj, 'Building an eval harness')
-        svc.approve_request(request, self.anna)
-        declined = svc.decline_request(svc.request_to_join(pod, self.mike), self.anna)
-        self.assertEqual(declined.status, 'declined')
+        membership, created = svc.join_pod(pod, self.raj)
+        repeated, created_again = svc.join_pod(pod, self.raj)
+        self.assertEqual((repeated.pk, created, created_again), (membership.pk, True, False))
         make_meeting(pod, timezone.now() + datetime.timedelta(days=2))
         make_meeting(pod, timezone.now() + datetime.timedelta(days=3))
         with self.assertRaisesMessage(svc.PodError, 'This pod already has 2 meetings planned or held.'):
@@ -100,7 +102,6 @@ class PodLockPostgresTest(TestCase):
         svc.remove_member(pod, self.raj, actor=self.raj)
         self.assertEqual(sorted(pod.memberships.values_list('user__email', flat=True)),
                          ['anna@example.com', 'mike@example.com'])
-        self.assertTrue(PodJoinRequest.objects.filter(pod=pod, user=self.raj, status='approved').exists())
 
     def test_member_and_api_endpoints_write_meetings_on_postgres(self):
         pod = self.pod([self.anna, self.raj])
@@ -118,3 +119,56 @@ class PodLockPostgresTest(TestCase):
             content_type='application/json', HTTP_AUTHORIZATION=f'Token {token.key}',
         )
         self.assertEqual(response.json()['meetings'][0]['status'], 'scheduled')
+
+
+@tag('core', 'postgresql')
+class PodJoinConcurrencyPostgresTest(TransactionTestCase):
+    def setUp(self):
+        if connection.vendor != 'postgresql':
+            self.skipTest('Concurrent row-lock behavior requires PostgreSQL')
+        self.course = make_course()
+        self.cohort = make_cohort(self.course)
+        self.anna = make_user('anna-concurrent@example.com')
+        self.raj = make_user('raj-concurrent@example.com')
+        for user in (self.anna, self.raj):
+            enroll(user, self.cohort)
+        self.pod = make_pod(self.cohort, 'Concurrent joins', [self.anna], owner=self.anna)
+
+    def _join(self):
+        try:
+            close_old_connections()
+            pod = type(self.pod).objects.get(pk=self.pod.pk)
+            user = type(self.raj).objects.get(pk=self.raj.pk)
+            self.start.wait(timeout=5)
+            membership, created = svc.join_pod(pod, user)
+            self.results.append((membership.pk, created))
+        except Exception as exc:
+            # The thread is an execution boundary: retain the traceback so
+            # its database failure is asserted in the parent test thread.
+            self.errors.append((exc, traceback.format_exc()))
+        finally:
+            close_old_connections()
+
+    def test_concurrent_joins_create_one_membership_without_side_effects(self):
+        self.start = Barrier(3)
+        self.results, self.errors = [], []
+        threads = [Thread(target=self._join, daemon=True) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        self.start.wait(timeout=5)
+        for thread in threads:
+            thread.join(timeout=10)
+        alive = []
+        for thread in threads:
+            alive.append(thread.is_alive())
+        self.assertFalse(any(alive))
+        self.assertEqual(self.errors, [])
+        created_flags = []
+        membership_ids = set()
+        for membership_id, created in self.results:
+            created_flags.append(created)
+            membership_ids.add(membership_id)
+        self.assertEqual(sorted(created_flags), [False, True])
+        self.assertEqual(len(membership_ids), 1)
+        self.assertEqual(self.pod.memberships.filter(user=self.raj).count(), 1)
+        self.assertFalse(Notification.objects.exists())

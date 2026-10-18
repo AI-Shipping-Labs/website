@@ -139,26 +139,25 @@ def test_buildcamp_student_starts_a_pod_of_one(django_server, browser):
     page.get_by_test_id('course-tab-pods').click()
     expect(page).to_have_url(re.compile(r'/home/pods\?cohort=4$'))
     empty = page.get_by_test_id('pods-empty')
-    expect(empty).to_contain_text('No pods yet')
-    empty.get_by_role('link', name='Start a pod').click()
+    expect(empty).to_contain_text('No study groups yet')
+    empty.get_by_role('link', name='Start a study group').click()
 
     page.get_by_label('Name').fill('RAG evals study group')
     page.get_by_label('Purpose').fill('Weekly review of our eval notebooks')
-    page.get_by_role('button', name='Start pod').click()
+    page.get_by_role('button', name='Start study group').click()
 
     expect(page.get_by_test_id('pod-name')).to_have_text('RAG evals study group')
-    expect(page.get_by_test_id('pod-meta')).to_contain_text('1 of 4 members')
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Your pod')
+    expect(page.get_by_test_id('pod-meta')).to_contain_text('1 member · Plan: 1 meeting × 60 min')
+    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Member')
     expect(page.get_by_test_id('messages-region')).to_contain_text(
-        'Pod started. Add your availability so others can see if they fit.',
+        'Study group started. Add your availability to coordinate a first check-in.',
     )
     expect(page.get_by_test_id('pod-times-needs-more')).to_contain_text('at least two members')
 
     page.get_by_test_id('pod-back').click()
     first_row = page.get_by_test_id('pod-row').first
     expect(first_row.get_by_test_id('pod-row-name')).to_have_text('RAG evals study group')
-    expect(first_row.get_by_test_id('pod-row-badge')).to_have_text('Your pod')
-    expect(first_row.get_by_test_id('pod-row-action')).to_have_text('Open pod')
+    expect(first_row.get_by_test_id('pod-row-leave')).to_have_text('Leave')
     context.close()
 
 
@@ -196,115 +195,6 @@ def test_student_adds_weekly_availability_in_her_own_timezone(django_server, bro
         'Windows on Tuesday overlap. Merge them into one window.',
     )
     expect(page.get_by_test_id('availability-summary-day')).to_have_count(5)
-    context.close()
-
-
-@browser_journey
-def test_student_finds_a_pod_that_fits_and_requests_to_join(django_server, browser):
-    _course, cohort, users = _seed()
-    from notifications.models import Notification
-
-    _windows(users['anna'], 'Europe/Berlin', WEEKDAY_EVENINGS)
-    _windows(users['raj'], 'Europe/Berlin', [(1, 18 * 60, 21 * 60, 'preferred'), (3, 18 * 60, 21 * 60, 'preferred')])
-    _windows(users['mike'], 'Asia/Tokyo', [(1, 6 * 60, 8 * 60, 'preferred')])
-    _pod(cohort, 'Morning crew', [users['mike']], owner=users['mike'])
-    evening = _pod(cohort, 'Evening builders', [users['raj']], owner=users['raj'])
-    from pods.models import Pod
-
-    Pod.objects.filter(pk=evening.pk).update(created_at=timezone.now() - datetime.timedelta(hours=1))
-    connection.close()
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(f'{_home(django_server)}/pods?cohort=4', wait_until='domcontentloaded')
-    names = page.get_by_test_id('pod-row-name')
-    expect(names).to_have_text(['Evening builders', 'Morning crew'])
-    rows = page.get_by_test_id('pod-row')
-    expect(rows.nth(0).get_by_test_id('pod-row-fit')).to_have_text(re.compile(r'Overlaps with you [1-9]\d* h a week'))
-    expect(rows.nth(1).get_by_test_id('pod-row-fit')).to_have_text('No overlap with you yet')
-
-    rows.nth(0).get_by_role('link', name='Request to join').click()
-    page.get_by_label('Why this pod? What are you working on?').fill('I am building a RAG eval harness')
-    page.get_by_test_id('pod-request-submit').click()
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Request sent')
-    expect(page.get_by_role('button', name='Withdraw request')).to_be_visible()
-    assert Notification.objects.filter(
-        user=users['raj'], read=False, title='New request to join Evening builders',
-    ).exists()
-    connection.close()
-    context.close()
-
-
-@pytest.mark.core
-@browser_journey
-def test_pod_owner_reviews_a_request_with_fit_and_approves_it(django_server, browser):
-    _course, cohort, users = _seed()
-    from pods.services.membership import request_to_join
-
-    for key in ('raj', 'mike'):
-        _windows(users[key], 'Europe/Berlin', [(1, 18 * 60, 21 * 60, 'preferred'), (3, 18 * 60, 21 * 60, 'preferred')])
-    _windows(users['anna'], 'Europe/Berlin', [(1, 18 * 60, 21 * 60, 'preferred')])
-    pod = _pod(cohort, 'Evening builders', [users['raj'], users['mike']], owner=users['raj'])
-    request_to_join(pod, users['anna'], 'I am building a RAG eval harness')
-    connection.close()
-
-    context, page = _page(browser, 'raj@test.com')
-    page.goto(_home(django_server), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('course-tab-pods-count')).to_have_text('1')
-    page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
-    request_row = page.get_by_test_id('pod-request')
-    expect(request_row.get_by_test_id('pod-request-name')).to_have_text('Anna K.')
-    expect(request_row.get_by_test_id('pod-request-meta')).to_contain_text('Europe/Berlin')
-    expect(request_row.get_by_test_id('pod-request-meta')).to_contain_text('Requested today')
-    expect(request_row.get_by_test_id('pod-request-fit')).to_have_text(re.compile(r'Fits \d+ of \d+ suggested times'))
-    expect(request_row.get_by_test_id('pod-request-message-text')).to_have_text('I am building a RAG eval harness')
-    expect(request_row.get_by_role('button', name='Decline')).to_be_visible()
-    request_row.get_by_role('button', name='Approve').click()
-    expect(page.get_by_test_id('pod-member-name')).to_contain_text(['Raj S.', 'Mike K.', 'Anna K.'])
-    expect(page.get_by_test_id('pod-requests-empty')).to_be_visible()
-    context.close()
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(f'{django_server}/notifications', wait_until='domcontentloaded')
-    link = page.get_by_role('link', name=re.compile('You joined Evening builders'))
-    expect(link).to_be_visible()
-    link.click()
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Your pod')
-    context.close()
-
-
-@browser_journey
-def test_member_joins_the_waiting_list_and_gets_in_when_a_seat_opens(django_server, browser):
-    _course, cohort, users = _seed()
-    from notifications.models import Notification
-
-    pod = _pod(cohort, 'Evening builders', [users['raj'], users['mike']], owner=users['raj'], max_members=2)
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(f'{_home(django_server)}/pods?cohort=4', wait_until='domcontentloaded')
-    row = page.get_by_test_id('pod-row').first
-    expect(row.get_by_test_id('pod-row-badge')).to_have_text('Full - waiting list')
-    row.get_by_role('link', name='Join waiting list').click()
-    page.get_by_role('button', name='Join waiting list').click()
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('On waiting list - #1')
-    context.close()
-
-    context, page = _page(browser, 'mike@test.com')
-    page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
-    page.get_by_test_id('pod-leave-toggle').click()
-    page.get_by_role('button', name='Yes, leave pod').click()
-    expect(page.get_by_test_id('messages-region')).to_contain_text('You left Evening builders.')
-    context.close()
-
-    context, page = _page(browser, 'raj@test.com')
-    page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
-    request_row = page.get_by_test_id('pod-request')
-    expect(request_row.get_by_test_id('pod-request-status')).to_have_text('Pending')
-    approve = request_row.get_by_role('button', name='Approve')
-    expect(approve).to_be_enabled()
-    assert Notification.objects.filter(user=users['raj'], title='A seat opened in Evening builders').exists()
-    connection.close()
-    approve.click()
-    expect(page.get_by_test_id('pod-meta')).to_contain_text('2 of 2 members')
-    expect(page.get_by_test_id('pod-member-name')).to_contain_text(['Raj S.', 'Anna K.'])
     context.close()
 
 
@@ -428,12 +318,12 @@ def test_admin_creates_a_pod_in_studio_for_paired_students(django_server, browse
     expect(page.get_by_test_id('studio-pod-result-added')).to_contain_text('Added (2)')
     expect(page.get_by_test_id('studio-pod-result-not_enrolled')).to_contain_text('main@test.com')
 
-    page.get_by_test_id('studio-pod-max-members').fill('5')
+    page.get_by_test_id('studio-pod-scheduling-note').fill('Choose a weekly time together.')
     page.get_by_test_id('sticky-save-action').click()
     expect(page.get_by_test_id('messages-region')).to_contain_text('Pod saved.')
     page.goto(f'{django_server}/studio/pods/', wait_until='domcontentloaded')
     row = page.get_by_test_id('studio-pod-row').filter(has_text='Agents pod')
-    expect(row.get_by_test_id('studio-pod-members')).to_have_text('2/5')
+    expect(row.get_by_test_id('studio-pod-members')).to_have_text('2')
     # At the default 1280px operator width the table fits without sideways
     # scrolling, so the row's View action is on screen.
     fits = page.evaluate(
@@ -449,37 +339,8 @@ def test_admin_creates_a_pod_in_studio_for_paired_students(django_server, browse
     page.goto(f'{_home(django_server)}/pods?cohort=4', wait_until='domcontentloaded')
     first = page.get_by_test_id('pod-row').first
     expect(first.get_by_test_id('pod-row-name')).to_have_text('Agents pod')
-    expect(first.get_by_test_id('pod-row-badge')).to_have_text('Your pod')
+    expect(first.get_by_test_id('pod-row-leave')).to_have_text('Leave')
     context.close()
-
-
-@browser_journey
-def test_admin_overrides_an_owner_who_has_not_answered(django_server, browser):
-    _course, cohort, users = _seed()
-    from pods.models import PodJoinRequest
-    from pods.services.membership import request_to_join
-
-    _set_config('PODS_STALE_REQUEST_DAYS', '5')
-    pod = _pod(cohort, 'Evening builders', [users['raj']], owner=users['raj'])
-    join_request = request_to_join(pod, users['mike'])
-    PodJoinRequest.objects.filter(pk=join_request.pk).update(created_at=timezone.now() - datetime.timedelta(days=6))
-    connection.close()
-
-    context, page = _page(browser, 'admin@test.com')
-    page.goto(f'{django_server}/studio/pods/', wait_until='domcontentloaded')
-    row = page.get_by_test_id('studio-pod-row').filter(has_text='Evening builders')
-    expect(row.get_by_test_id('studio-pod-oldest')).to_have_text('6 days ago')
-    expect(row.get_by_test_id('studio-pod-oldest').locator('span')).to_have_class(re.compile('amber'))
-    row.get_by_test_id('studio-pod-name').click()
-    page.get_by_test_id('studio-pod-request-approve').click()
-    expect(page.get_by_test_id('studio-pod-member')).to_contain_text(['raj@test.com', 'mike@test.com'])
-    context.close()
-
-    context, page = _page(browser, 'mike@test.com')
-    page.goto(f'{django_server}/notifications', wait_until='domcontentloaded')
-    expect(page.get_by_role('link', name=re.compile('You joined Evening builders'))).to_be_visible()
-    context.close()
-    _set_config('PODS_STALE_REQUEST_DAYS', None)
 
 
 @browser_journey

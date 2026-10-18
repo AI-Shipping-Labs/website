@@ -139,13 +139,13 @@ class MeetingAccessTest(MeetingViewFixture):
 @ENABLED
 @freeze_time(NOW)
 class MeetingsSectionTest(MeetingViewFixture):
-    def test_page_order_is_header_meetings_times_slack_members_requests_availability(self):
+    def test_page_order_is_header_meetings_times_slack_members_availability(self):
         pod = self.make_pod()
         self.client.force_login(self.anna)
         html = self.client.get(self.pod_url(pod)).content.decode()
         positions = self.order_of(html, [
             'pod-header', 'pod-meetings', 'pod-suggested-times', 'pod-slack', 'pod-members',
-            'pod-requests', 'pod-my-availability',
+            'pod-my-availability',
         ])
         self.assertEqual(positions, sorted(positions))
 
@@ -490,7 +490,7 @@ class ChangeFlowTest(MeetingViewFixture):
 @ENABLED
 @freeze_time(NOW)
 class PodsTabAndDashboardTest(MeetingViewFixture):
-    def test_pods_tab_shows_next_meeting_or_waiting_line_on_own_pods_only(self):
+    def test_study_group_rows_leave_meeting_state_on_the_detail_page(self):
         mine = self.make_pod()
         make_meeting(mine, berlin(2026, 10, 14, 18, 0))
         proposing = make_pod(self.cohort, 'Proposal pod', [self.anna, self.raj], owner=self.anna)
@@ -499,10 +499,8 @@ class PodsTabAndDashboardTest(MeetingViewFixture):
         make_meeting(other, berlin(2026, 10, 16, 18, 0))
         self.client.force_login(self.anna)
         response = self.client.get(self.pods_url())
-        self.assertEqual(
-            sorted(texts(response, 'pod-row-meeting')),
-            ['Next meeting: Wed Oct 14, 18:00 Europe/Berlin', 'Time proposed - waiting for confirmation'],
-        )
+        self.assertEqual(texts(response, 'pod-row-meeting'), [])
+        self.assertEqual(len(texts(response, 'pod-row')), 3)
 
     def test_dashboard_your_week_lists_scheduled_pod_meetings_the_viewer_can_make(self):
         pod = self.make_pod()

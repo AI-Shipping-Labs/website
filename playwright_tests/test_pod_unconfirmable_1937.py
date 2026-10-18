@@ -24,7 +24,7 @@ from playwright.sync_api import expect
 
 from playwright_tests.test_pod_meetings_1919 import POD_NAME, _meeting, _meeting_pod, _messages
 from playwright_tests.test_pod_meetings_polish_1934 import _broad_windows
-from playwright_tests.test_pods_1918 import COURSE_SLUG, _page, _pod_url, _seed, _windows
+from playwright_tests.test_pods_1918 import _page, _pod_url, _seed, _windows
 from scripts.browser_journey_policy import browser_journey
 
 os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
@@ -199,11 +199,6 @@ def test_member_checking_their_week_is_not_nagged_about_a_dead_proposal(django_s
     context, page = _page(browser, 'basic@test.com')
     page.goto(django_server + '/', wait_until='domcontentloaded')
     expect(page.get_by_test_id('dashboard-pod-meeting-title')).to_have_count(0)
-
-    page.goto(f'{django_server}/courses/{COURSE_SLUG}/home/pods?cohort=4', wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-row-meeting')).to_have_text(
-        "Proposed time can't be confirmed - propose another time",
-    )
     context.close()
 
 

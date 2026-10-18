@@ -2,8 +2,8 @@
 
 A live proposal can no longer be confirmed once the pod's members minus
 those who answered ``Can't make it`` are fewer than the required
-attendance. The pod page, the bell, the Pods tab line, the dashboard and
-the flash after answering all say so. Plus: ``Cancel meeting`` on proposal
+attendance. The pod page, the bell, the dashboard and the flash after
+answering all say so. Plus: ``Cancel meeting`` on proposal
 rows, no row ``Call link:`` line (covered in ``test_meetings_polish_1934``)
 and ``since today`` / ``since yesterday`` dates.
 
@@ -292,7 +292,7 @@ class UnconfirmableNotificationTest(MeetingViewFixture):
 @ENABLED
 @freeze_time(NOW)
 class UnconfirmableTabAndDashboardTest(MeetingViewFixture):
-    def test_pods_tab_line_and_dashboard_skip_a_dead_proposal(self):
+    def test_browse_hides_meeting_state_and_dashboard_skips_a_dead_proposal(self):
         dead_pod = self.make_pod([self.anna, self.raj, self.basic])
         [dead] = mtg.propose_meeting(dead_pod, self.anna, berlin(2026, 10, 12, 18, 0))
         # Bea has not answered; Raj and then the proposer herself can't make it.
@@ -302,24 +302,10 @@ class UnconfirmableTabAndDashboardTest(MeetingViewFixture):
         mtg.propose_meeting(live_pod, self.anna, berlin(2026, 10, 13, 18, 0))
         self.client.force_login(self.basic)
         response = self.client.get(self.pods_url())
-        self.assertEqual(
-            sorted(texts(response, 'pod-row-meeting')),
-            ["Proposed time can't be confirmed - propose another time", 'Time proposed - waiting for confirmation'],
-        )
+        self.assertEqual(texts(response, 'pod-row-meeting'), [])
         response = self.client.get('/')
         self.assertEqual(texts(response, 'dashboard-pod-meeting-title'), ['Live pod - Proposed time'])
         self.assertEqual(texts(response, 'dashboard-pod-meeting-needs-answer'), ['Needs your answer'])
-
-    def test_a_confirmed_upcoming_meeting_still_leads_the_tab_line(self):
-        pod = self.make_pod()
-        make_meeting(pod, berlin(2026, 10, 12, 18, 0), zone='Europe/Berlin')
-        [proposal] = mtg.propose_meeting(pod, self.anna, berlin(2026, 10, 14, 18, 0))
-        mtg.respond_to_meeting(proposal, self.raj, MEETING_RESPONSE_CANT)
-        mtg.respond_to_meeting(proposal, self.mike, MEETING_RESPONSE_CANT)
-        self.client.force_login(self.anna)
-        response = self.client.get(self.pods_url())
-        self.assertEqual(texts(response, 'pod-row-meeting'), ['Next meeting: Mon Oct 12, 18:00 Europe/Berlin'])
-
 
 # --- Cancel wording ---------------------------------------------------------------------
 

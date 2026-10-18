@@ -23,7 +23,7 @@ class PodMembershipInline(admin.TabularInline):
 
 @admin.register(Pod)
 class PodAdmin(admin.ModelAdmin):
-    list_display = ('name', 'cohort', 'sprint', 'status', 'max_members', 'owner', 'source', 'created_at')
+    list_display = ('name', 'cohort', 'sprint', 'status', 'owner', 'source', 'created_at')
     list_filter = ('status', 'source')
     search_fields = ('name', 'purpose')
     raw_id_fields = ('cohort', 'sprint', 'owner', 'created_by')
@@ -32,9 +32,20 @@ class PodAdmin(admin.ModelAdmin):
 
 @admin.register(PodJoinRequest)
 class PodJoinRequestAdmin(admin.ModelAdmin):
+    """Historical audit only; request mutations were retired in #1984."""
+
     list_display = ('pod', 'user', 'status', 'created_at', 'decided_at')
     list_filter = ('status',)
     raw_id_fields = ('pod', 'user', 'decided_by')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 class AvailabilityWindowInline(admin.TabularInline):

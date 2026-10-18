@@ -4,7 +4,7 @@
 {% block studio_title %}Pods{% endblock %}
 
 {% block studio_content %}
-{% studio_header_actions title="Pods" subtitle="Small groups inside a dated course cohort or a community sprint. Members start pods and send join requests; staff can create pods and step in on stale requests." testid="pods-header" %}
+{% studio_header_actions title="Pods" subtitle="Unlimited study groups inside a dated course cohort or an enabled community sprint. Eligible participants join open groups immediately." testid="pods-header" %}
   <a href="{% url 'studio_pod_create' %}{% if sprint_filter %}?sprint={{ sprint_filter }}{% elif cohort_filter %}?cohort={{ cohort_filter }}{% endif %}"
      class="bg-accent text-accent-foreground px-4 py-2 rounded-lg text-sm font-medium hover:opacity-90 transition-opacity inline-flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background"
      data-testid="pods-new">
@@ -23,8 +23,6 @@
         <th class="{% studio_list_class 'th' density='dense' %}">Pod</th>
         <th class="{% studio_list_class 'th' density='dense' %}">Activity</th>
         <th class="{% studio_list_class 'th' density='dense' %}">Members</th>
-        <th class="{% studio_list_class 'th' density='dense' %}">Requests</th>
-        <th class="{% studio_list_class 'th' density='dense' %}">Oldest request</th>
         <th class="{% studio_list_class 'th' density='dense' %}">Owner</th>
         <th class="{% studio_list_class 'th' density='dense' %}">Slack</th>
         <th class="{% studio_list_class 'th' density='dense' %}">Status</th>
@@ -50,11 +48,7 @@
           <div class="text-xs text-muted-foreground">{{ row.pod.cohort.course.title }}</div>
           {% endif %}
         </td>
-        <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Members" data-testid="studio-pod-members">{{ row.pod.member_total }}/{{ row.pod.max_members }}</td>
-        <td class="{% studio_list_class 'cell_padding' density='dense' %} whitespace-nowrap text-sm text-muted-foreground" data-label="Requests" data-testid="studio-pod-requests"><span data-testid="studio-pod-pending">{{ row.pod.pending_total }} pending</span><div data-testid="studio-pod-waiting">{{ row.pod.waiting_total }} waiting</div></td>
-        <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Oldest request" data-testid="studio-pod-oldest">
-          {% if row.stale %}{% studio_status_badge 'stale' row.stale_age %}{% elif row.oldest_age %}{{ row.oldest_age }}{% else %}—{% endif %}
-        </td>
+        <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Members" data-testid="studio-pod-members">{{ row.pod.member_total }}</td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} text-sm text-muted-foreground" data-label="Owner" data-testid="studio-pod-owner">{% if row.pod.owner %}{{ row.pod.owner.email }}{% else %}—{% endif %}</td>
         <td class="{% studio_list_class 'cell_padding' density='dense' %} whitespace-nowrap" data-label="Slack">
           {% if row.pod.slack_channel_url %}{% studio_status_badge 'set' 'Set' %}{% else %}{% studio_status_badge 'not_set' 'Not set' %}{% endif %}
@@ -69,7 +63,7 @@
       </tr>
       {% empty %}
         {% url 'studio_pod_list' as pods_clear_url %}
-        {% studio_empty_state 'filter' entity_label='pod' entity_label_plural='pods' clear_url=pods_clear_url colspan=9 %}
+        {% studio_empty_state 'filter' entity_label='pod' entity_label_plural='pods' clear_url=pods_clear_url colspan=7 %}
       {% endfor %}
     </tbody>
   </table>

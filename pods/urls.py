@@ -14,6 +14,7 @@ both and read ``slug`` or ``sprint_slug`` from the URL.
 from django.urls import path
 
 from pods.views.artifacts import artifact_delete, artifact_detail, artifact_new
+from pods.views.availability import availability_edit
 from pods.views.meetings import (
     meeting_cancel,
     meeting_held,
@@ -23,37 +24,37 @@ from pods.views.meetings import (
     pod_call_link,
 )
 from pods.views.member import (
-    availability_edit,
     pod_detail,
-    pod_edit,
-    pod_leave,
-    pod_message_create,
     pod_new,
-    pod_request,
-    pod_request_approve,
-    pod_request_decline,
-    pod_slack,
-    pod_withdraw,
     pods_list,
 )
+from pods.views.member_actions import (
+    pod_join,
+    pod_leave,
+    pod_message_create,
+    pod_slack,
+    retired_request_action,
+)
+from pods.views.pod_settings import pod_edit
 
 urlpatterns = [
     path('courses/<slug:slug>/home/pods', pods_list, name='course_pods'),
     path('courses/<slug:slug>/home/pods/new', pod_new, name='pod_new'),
     path('courses/<slug:slug>/home/pods/availability', availability_edit, name='pod_availability'),
     path('courses/<slug:slug>/home/pods/<int:pod_id>', pod_detail, name='pod_detail'),
-    path('courses/<slug:slug>/home/pods/<int:pod_id>/request', pod_request, name='pod_request'),
-    path('courses/<slug:slug>/home/pods/<int:pod_id>/withdraw', pod_withdraw, name='pod_withdraw'),
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/join', pod_join, name='pod_join'),
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/request', retired_request_action, name='pod_request'),
+    path('courses/<slug:slug>/home/pods/<int:pod_id>/withdraw', retired_request_action, name='pod_withdraw'),
     path('courses/<slug:slug>/home/pods/<int:pod_id>/leave', pod_leave, name='pod_leave'),
     path('courses/<slug:slug>/home/pods/<int:pod_id>/edit', pod_edit, name='pod_edit'),
     path(
         'courses/<slug:slug>/home/pods/<int:pod_id>/requests/<int:request_id>/approve',
-        pod_request_approve,
+        retired_request_action,
         name='pod_request_approve',
     ),
     path(
         'courses/<slug:slug>/home/pods/<int:pod_id>/requests/<int:request_id>/decline',
-        pod_request_decline,
+        retired_request_action,
         name='pod_request_decline',
     ),
     path('courses/<slug:slug>/home/pods/<int:pod_id>/slack', pod_slack, name='pod_slack'),
@@ -99,12 +100,13 @@ urlpatterns = [
     path('sprints/<slug:sprint_slug>/pods/new', pod_new, name='sprint_pod_new'),
     path('sprints/<slug:sprint_slug>/pods/availability', availability_edit, name='sprint_pod_availability'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>', pod_detail, name='sprint_pod_detail'),
-    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/request', pod_request, name='sprint_pod_request'),
-    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/withdraw', pod_withdraw, name='sprint_pod_withdraw'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/join', pod_join, name='sprint_pod_join'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/request', retired_request_action, name='sprint_pod_request'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/withdraw', retired_request_action, name='sprint_pod_withdraw'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/leave', pod_leave, name='sprint_pod_leave'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/edit', pod_edit, name='sprint_pod_edit'),
-    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/approve', pod_request_approve, name='sprint_pod_request_approve'),
-    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/decline', pod_request_decline, name='sprint_pod_request_decline'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/approve', retired_request_action, name='sprint_pod_request_approve'),
+    path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/requests/<int:request_id>/decline', retired_request_action, name='sprint_pod_request_decline'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/slack', pod_slack, name='sprint_pod_slack'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/messages', pod_message_create, name='sprint_pod_message_create'),
     path('sprints/<slug:sprint_slug>/pods/<int:pod_id>/call-link', pod_call_link, name='sprint_pod_call_link'),

@@ -119,11 +119,11 @@ def test_enrolled_member_finds_pods_on_the_sprint_page_and_starts_one(django_ser
     context, page = _page(browser, 'main@test.com')
     page.goto(_sprint_url(django_server), wait_until='domcontentloaded')
     section = page.get_by_test_id('sprint-pods')
-    expect(section).to_contain_text("You're not in a pod yet")
+    expect(section).to_contain_text("You're not in a study group yet")
     body = page.content()
     assert body.index('data-testid="sprint-accountability-partners"') < body.index('data-testid="sprint-pods"')
 
-    section.get_by_role('link', name='Browse pods').click()
+    section.get_by_role('link', name='Browse study groups').click()
     expect(page).to_have_url(re.compile(rf'/sprints/{SPRINT_SLUG}/pods$'))
     expect(page.get_by_test_id('sprint-pods-sprint-link')).to_have_text(SPRINT_NAME)
     expect(page.get_by_test_id('pods-list')).to_contain_text(
@@ -131,10 +131,10 @@ def test_enrolled_member_finds_pods_on_the_sprint_page_and_starts_one(django_ser
     )
     expect(page.get_by_test_id('course-tab-pods')).to_have_count(0)
 
-    page.get_by_role('link', name='Start a pod').first.click()
+    page.get_by_role('link', name='Start a study group').first.click()
     page.get_by_label('Name').fill('Agents study group')
     page.get_by_label('Purpose').fill('Build and review one agent a week')
-    page.get_by_role('button', name='Start pod').click()
+    page.get_by_role('button', name='Start study group').click()
     expect(page).to_have_url(re.compile(rf'/sprints/{SPRINT_SLUG}/pods/\d+$'))
     expect(page.get_by_test_id('pod-name')).to_have_text('Agents study group')
     expect(page.get_by_test_id('pod-member-name')).to_contain_text(['Anna K.'])
@@ -143,34 +143,7 @@ def test_enrolled_member_finds_pods_on_the_sprint_page_and_starts_one(django_ser
     expect(page).to_have_url(re.compile(rf'/sprints/{SPRINT_SLUG}$'))
     row = page.get_by_test_id('sprint-pod-row')
     expect(row.get_by_test_id('sprint-pod-name')).to_have_text('Agents study group')
-    expect(row.get_by_test_id('sprint-pod-meta')).to_have_text('1 of 4 members')
-    context.close()
-
-
-@pytest.mark.core
-@browser_journey
-def test_second_member_asks_to_join_and_the_owner_approves_from_the_sprint_page(django_server, browser):
-    sprint, _autumn, users = _seed()
-    pod = _pod(sprint, 'Agents study group', [users['anna']], owner=users['anna'])
-
-    context, page = _page(browser, 'main2@test.com')
-    page.goto(f'{_sprint_url(django_server)}/pods', wait_until='domcontentloaded')
-    page.get_by_test_id('pod-row').first.get_by_role('link', name='Request to join').click()
-    page.get_by_test_id('pod-request-submit').click()
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Request sent')
-    expect(page).to_have_url(re.compile(rf'/sprints/{SPRINT_SLUG}/pods/{pod.pk}$'))
-    context.close()
-
-    context, page = _page(browser, 'main@test.com')
-    page.goto(_sprint_url(django_server), wait_until='domcontentloaded')
-    waiting = page.get_by_test_id('sprint-pod-requests')
-    expect(waiting).to_have_text('1 request waiting for you')
-    waiting.click()
-    expect(page).to_have_url(re.compile(rf'/sprints/{SPRINT_SLUG}/pods/{pod.pk}#requests$'))
-    page.get_by_test_id('pod-request').get_by_role('button', name='Approve').click()
-    expect(page.get_by_test_id('pod-member-name')).to_contain_text(['Anna K.', 'Mike K.'])
-    main_text = page.locator('#main-content').inner_text()
-    assert not re.search(r'[\w.+-]+@[\w-]+\.[\w.]+', main_text), main_text
+    expect(row.get_by_test_id('sprint-pod-meta')).to_have_text('1 member')
     context.close()
 
 
@@ -256,7 +229,7 @@ def test_member_who_leaves_the_sprint_is_removed_from_its_pods(django_server, br
     context, page = _page(browser, 'main@test.com')
     page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
     expect(page.get_by_test_id('pod-member-name')).to_have_text(['Anna K. (you)'])
-    expect(page.get_by_test_id('pod-meta')).to_contain_text('1 of 4 members')
+    expect(page.get_by_test_id('pod-meta')).to_contain_text('1 member · Plan: 1 meeting × 60 min')
     context.close()
 
     assert PodJoinRequest.objects.get(pod=other, user=users['mike']).status == 'cancelled'
@@ -397,6 +370,6 @@ def test_cohort_pods_keep_working_unchanged(django_server, browser):
         'Small groups in your cohort that meet to work on one thing together.',
     )
     expect(page.get_by_test_id('sprint-pods-header')).to_have_count(0)
-    page.get_by_test_id('pod-row').first.get_by_role('link', name='Open pod').click()
+    page.get_by_test_id('pod-row').first.get_by_test_id('pod-row-title-link').click()
     expect(page).to_have_url(re.compile(rf'/courses/{COURSE_SLUG}/home/pods/{pod.pk}$'))
     context.close()

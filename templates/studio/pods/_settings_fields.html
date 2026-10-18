@@ -3,14 +3,21 @@
   <input id="pod-name" type="text" name="name" maxlength="80" required value="{{ form.name }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-name-input">
 </div>
 <div class="mb-6">
-  <label for="pod-purpose" class="block text-sm font-medium text-foreground mb-1">Purpose</label>
-  <textarea id="pod-purpose" name="purpose" rows="3" maxlength="500" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-purpose-input">{{ form.purpose }}</textarea>
+  <label for="pod-purpose" class="block text-sm font-medium text-foreground mb-1">Public purpose</label>
+  <textarea id="pod-purpose" name="purpose" rows="3" maxlength="160" required class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-purpose-input">{{ form.purpose }}</textarea>
+  <p class="text-xs text-muted-foreground mt-1">One reviewed sentence shown on the study-group list and detail page.</p>
 </div>
-<div class="mb-6 grid gap-4 sm:grid-cols-3">
-  <div>
-    <label for="pod-max-members" class="block text-sm font-medium text-foreground mb-1">Size limit</label>
-    <input id="pod-max-members" type="number" name="max_members" min="1" max="12" value="{{ form.max_members }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-max-members">
-  </div>
+<div class="mb-6">
+  <label for="pod-scheduling-note" class="block text-sm font-medium text-foreground mb-1">Scheduling guidance</label>
+  <textarea id="pod-scheduling-note" name="scheduling_note" rows="3" maxlength="500" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-scheduling-note">{{ form.scheduling_note }}</textarea>
+  <p class="text-xs text-muted-foreground mt-1">Optional neutral guidance shown only on the member detail page. Do not include identities or formation history.</p>
+</div>
+<div class="mb-6">
+  <label for="pod-internal-notes" class="block text-sm font-medium text-foreground mb-1">Internal formation notes — staff only</label>
+  <textarea id="pod-internal-notes" name="internal_notes" rows="5" maxlength="2000" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent" data-testid="studio-pod-internal-notes">{{ form.internal_notes }}</textarea>
+  <p class="text-xs text-muted-foreground mt-1">Formation and provenance history. Never shown on member pages.</p>
+</div>
+<div class="mb-6 grid gap-4 sm:grid-cols-2">
   <div>
     <label for="pod-meeting-count" class="block text-sm font-medium text-foreground mb-1">Meetings</label>
     <input id="pod-meeting-count" type="number" name="meeting_count" min="1" max="20" value="{{ form.meeting_count }}" class="w-full bg-secondary border border-border rounded-lg px-4 py-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-accent">

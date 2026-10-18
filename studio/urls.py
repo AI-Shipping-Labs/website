@@ -282,8 +282,7 @@ from studio.views.pods import (
     studio_pod_member_remove,
     studio_pod_message_hide,
     studio_pod_message_restore,
-    studio_pod_request_approve,
-    studio_pod_request_decline,
+    studio_pod_request_retired,
 )
 from studio.views.privacy_deletion import (
     privacy_deletion_confirm,
@@ -1262,12 +1261,12 @@ urlpatterns = [
     ),
     path(
         'pods/<int:pod_id>/requests/<int:request_id>/approve',
-        studio_pod_request_approve,
+        studio_pod_request_retired,
         name='studio_pod_request_approve',
     ),
     path(
         'pods/<int:pod_id>/requests/<int:request_id>/decline',
-        studio_pod_request_decline,
+        studio_pod_request_retired,
         name='studio_pod_request_decline',
     ),
     path('pods/<int:pod_id>/meetings/schedule', studio_pod_meeting_schedule, name='studio_pod_meeting_schedule'),

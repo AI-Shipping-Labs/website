@@ -251,16 +251,11 @@ _KEY_ORDER = {
     "triggers": ("TRIGGERS_ENABLED",),
     "pods": (
         "PODS_COURSE_SLUGS",
-        "PODS_DEFAULT_MAX_MEMBERS",
         "PODS_DEFAULT_MEETING_COUNT",
         "PODS_DEFAULT_MEETING_MINUTES",
-        "PODS_MAX_OPEN_REQUESTS_PER_MEMBER",
         "PODS_MAX_CREATED_PER_MEMBER",
         "PODS_SUGGESTION_HORIZON_DAYS",
         "PODS_SUGGESTION_COUNT",
-        "PODS_STALE_REQUEST_DAYS",
-        "PODS_REREQUEST_COOLDOWN_DAYS",
-        "PODS_STALE_REQUEST_ALERT_ENABLED",
         "PODS_MEETING_REMINDER_HOURS",
         "PODS_STUCK_PROPOSAL_HOURS",
         "PODS_STUCK_PROPOSAL_ALERT_ENABLED",
@@ -2100,16 +2095,6 @@ PODS_COURSE_SLUGS = declare(
     optional=True,
     docs_url="_docs/integrations/pods.md#pods_course_slugs",
 )
-PODS_DEFAULT_MAX_MEMBERS = declare(
-    key="PODS_DEFAULT_MAX_MEMBERS",
-    group="pods",
-    label="Pods Default Max Members",
-    description="Default size limit for a new pod (1-12). Defaults to 4.",
-    value_type="int",
-    default="4",
-    secret=False,
-    docs_url="_docs/integrations/pods.md#pods_default_max_members",
-)
 PODS_DEFAULT_MEETING_COUNT = declare(
     key="PODS_DEFAULT_MEETING_COUNT",
     group="pods",
@@ -2129,16 +2114,6 @@ PODS_DEFAULT_MEETING_MINUTES = declare(
     default="60",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_default_meeting_minutes",
-)
-PODS_MAX_OPEN_REQUESTS_PER_MEMBER = declare(
-    key="PODS_MAX_OPEN_REQUESTS_PER_MEMBER",
-    group="pods",
-    label="Pods Max Open Requests Per Member",
-    description="How many pending or waitlisted join requests one member may hold across the pods of one cohort. Defaults to 3.",
-    value_type="int",
-    default="3",
-    secret=False,
-    docs_url="_docs/integrations/pods.md#pods_max_open_requests_per_member",
 )
 PODS_MAX_CREATED_PER_MEMBER = declare(
     key="PODS_MAX_CREATED_PER_MEMBER",
@@ -2169,36 +2144,6 @@ PODS_SUGGESTION_COUNT = declare(
     default="5",
     secret=False,
     docs_url="_docs/integrations/pods.md#pods_suggestion_count",
-)
-PODS_STALE_REQUEST_DAYS = declare(
-    key="PODS_STALE_REQUEST_DAYS",
-    group="pods",
-    label="Pods Stale Request Days",
-    description="Studio highlights a pod whose oldest pending join request is older than this many days, and the daily staff Slack alert reports such requests, so staff can step in. Defaults to 5.",
-    value_type="int",
-    default="5",
-    secret=False,
-    docs_url="_docs/integrations/pods.md#pods_stale_request_days",
-)
-PODS_REREQUEST_COOLDOWN_DAYS = declare(
-    key="PODS_REREQUEST_COOLDOWN_DAYS",
-    group="pods",
-    label="Pods Rerequest Cooldown Days",
-    description="Days a student waits after a first declined request before asking the same pod once more. A second decline on that pod is final; staff can still add the student. 0 allows an immediate second request. Defaults to 14.",
-    value_type="int",
-    default="14",
-    secret=False,
-    docs_url="_docs/integrations/pods.md#pods_rerequest_cooldown_days",
-)
-PODS_STALE_REQUEST_ALERT_ENABLED = declare(
-    key="PODS_STALE_REQUEST_ALERT_ENABLED",
-    group="pods",
-    label="Pods Stale Request Alert Enabled",
-    description="When on, a daily job (09:00 UTC) posts one staff Slack message listing pending pod join requests older than PODS_STALE_REQUEST_DAYS that were not announced before. Posts to STAFF_COMMENT_NOTIFY_CHANNEL_ID, falling back to STAFF_SIGNUP_NOTIFY_CHANNEL_ID. No-redeploy kill switch. Defaults on.",
-    value_type="bool",
-    default="true",
-    secret=False,
-    docs_url="_docs/integrations/pods.md#pods_stale_request_alert_enabled",
 )
 PODS_MEETING_REMINDER_HOURS = declare(
     key="PODS_MEETING_REMINDER_HOURS",

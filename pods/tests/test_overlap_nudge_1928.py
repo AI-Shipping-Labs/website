@@ -237,7 +237,7 @@ class WeeklyOverlapPageTest(PodViewFixture):
         pod = self.pod_of([self.anna, self.raj])
         self.client.force_login(self.mike)
         response = self.client.get(self.pod_url(pod))
-        self.assertEqual(len(texts(response, 'pod-request-form')), 1)
+        self.assertEqual(texts(response, 'pod-join'), ['Join'])
         self.assertNotContains(response, 'pod-weekly-overlap')
         self.assertNotContains(response, 'pod-overlap-table')
 
@@ -253,7 +253,7 @@ class WeeklyOverlapPageTest(PodViewFixture):
         self.client.get(self.pod_url(pod))
         with CaptureQueriesContext(connection) as with_overlap:
             self.client.get(self.pod_url(pod))
-        with mock.patch('pods.services.presentation.weekly_overlap', return_value=None):
+        with mock.patch('pods.services.pod_suggestions.weekly_overlap', return_value=None):
             with CaptureQueriesContext(connection) as without_overlap:
                 response = self.client.get(self.pod_url(pod))
         self.assertNotContains(response, 'pod-weekly-overlap')

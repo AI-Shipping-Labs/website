@@ -1273,13 +1273,6 @@
     "optional": true
    },
    {
-    "key": "PODS_DEFAULT_MAX_MEMBERS",
-    "is_secret": false,
-    "description": "Default size limit for a new pod (1-12). Defaults to 4.",
-    "default": "4",
-    "docs_url": "_docs/integrations/pods.md#pods_default_max_members"
-   },
-   {
     "key": "PODS_DEFAULT_MEETING_COUNT",
     "is_secret": false,
     "description": "Default number of meetings for a new pod (1-20). Defaults to 1.",
@@ -1292,13 +1285,6 @@
     "description": "Default meeting length in minutes for a new pod: 30, 45, 60 or 90. Used to size suggested meeting times. Defaults to 60.",
     "default": "60",
     "docs_url": "_docs/integrations/pods.md#pods_default_meeting_minutes"
-   },
-   {
-    "key": "PODS_MAX_OPEN_REQUESTS_PER_MEMBER",
-    "is_secret": false,
-    "description": "How many pending or waitlisted join requests one member may hold across the pods of one cohort. Defaults to 3.",
-    "default": "3",
-    "docs_url": "_docs/integrations/pods.md#pods_max_open_requests_per_member"
    },
    {
     "key": "PODS_MAX_CREATED_PER_MEMBER",
@@ -1320,28 +1306,6 @@
     "description": "Maximum number of suggested meeting times shown for a pod. Defaults to 5.",
     "default": "5",
     "docs_url": "_docs/integrations/pods.md#pods_suggestion_count"
-   },
-   {
-    "key": "PODS_STALE_REQUEST_DAYS",
-    "is_secret": false,
-    "description": "Studio highlights a pod whose oldest pending join request is older than this many days, and the daily staff Slack alert reports such requests, so staff can step in. Defaults to 5.",
-    "default": "5",
-    "docs_url": "_docs/integrations/pods.md#pods_stale_request_days"
-   },
-   {
-    "key": "PODS_REREQUEST_COOLDOWN_DAYS",
-    "is_secret": false,
-    "description": "Days a student waits after a first declined request before asking the same pod once more. A second decline on that pod is final; staff can still add the student. 0 allows an immediate second request. Defaults to 14.",
-    "default": "14",
-    "docs_url": "_docs/integrations/pods.md#pods_rerequest_cooldown_days"
-   },
-   {
-    "key": "PODS_STALE_REQUEST_ALERT_ENABLED",
-    "is_secret": false,
-    "is_boolean": true,
-    "default": "true",
-    "description": "When on, a daily job (09:00 UTC) posts one staff Slack message listing pending pod join requests older than PODS_STALE_REQUEST_DAYS that were not announced before. Posts to STAFF_COMMENT_NOTIFY_CHANNEL_ID, falling back to STAFF_SIGNUP_NOTIFY_CHANNEL_ID. No-redeploy kill switch. Defaults on.",
-    "docs_url": "_docs/integrations/pods.md#pods_stale_request_alert_enabled"
    },
    {
     "key": "PODS_MEETING_REMINDER_HOURS",

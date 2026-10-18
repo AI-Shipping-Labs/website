@@ -1,27 +1,23 @@
-"""Join requests, waiting list, capacity and leave rules (issue #1918)."""
+"""Unlimited self-service study-group membership rules (#1984)."""
 
 import datetime
 
 from django.db import IntegrityError, transaction
-from django.test import TestCase, override_settings, tag
+from django.test import TestCase, tag
+from django.utils import timezone
 
 from content.models import CohortEnrollment
 from notifications.models import Notification
 from plans.models import Sprint
-from pods.models import (
-    POD_SOURCE_STUDIO,
-    Pod,
-    PodJoinRequest,
-    PodMembership,
-)
+from pods.models import POD_SOURCE_MEMBER, POD_SOURCE_STUDIO, Pod, PodJoinRequest, PodMembership
 from pods.services import membership as svc
-from pods.tests.fixtures import enroll, make_cohort, make_course, make_user
+from pods.tests.fixtures import enroll, make_cohort, make_course, make_meeting, make_user
 
 
-def _staff_pod(cohort, owner=None, members=(), max_members=4, name='Evening builders'):
+def _group(cohort, *, owner=None, members=(), name='Evening builders', status='open', source=POD_SOURCE_STUDIO):
     pod = Pod.objects.create(
-        cohort=cohort, name=name, purpose='Ship things', max_members=max_members,
-        owner=owner, source=POD_SOURCE_STUDIO,
+        cohort=cohort, name=name, purpose='Ship things together.', owner=owner,
+        source=source, status=status,
     )
     for user in members:
         PodMembership.objects.create(pod=pod, user=user, source='staff')
@@ -46,11 +42,13 @@ class PodRulesTest(TestCase):
     def test_pod_without_or_with_both_activities_is_rejected_by_db(self):
         with self.assertRaises(IntegrityError), transaction.atomic():
             Pod.objects.create(name='None', purpose='x')
-        sprint = Sprint.objects.create(name='S', slug='s', start_date=datetime.date(2026, 1, 5))  # date-rot-ok: fixed sprint row
+        sprint = Sprint.objects.create(
+            name='S', slug='s', start_date=datetime.date(2026, 1, 5),  # date-rot-ok
+        )
         with self.assertRaises(IntegrityError), transaction.atomic():
             Pod.objects.create(name='Both', purpose='x', cohort=self.cohort, sprint=sprint)
 
-    def test_self_paced_cohort_cannot_have_pods(self):
+    def test_self_paced_cohort_cannot_have_groups(self):
         self_paced = make_cohort(self.course, key='sp', name='Self-paced', mode='self_paced')
         enroll(self.anna, self_paced)
         with self.assertRaisesMessage(svc.PodError, svc.MSG_SELF_PACED):
@@ -59,187 +57,139 @@ class PodRulesTest(TestCase):
             svc.create_staff_pod(cohort=self_paced, data={'name': 'X', 'purpose': 'Y'}, source='studio')
         self.assertFalse(Pod.objects.filter(cohort=self_paced).exists())
 
-    def test_member_pod_of_one_makes_creator_owner_and_first_member(self):
-        pod = svc.start_member_pod(self.anna, self.cohort, {'name': 'RAG evals', 'purpose': 'Evals'})
-        self.assertEqual(pod.owner, self.anna)
-        self.assertEqual(pod.status, 'open')
+    def test_member_started_group_has_creator_and_validated_copy(self):
+        pod = svc.start_member_pod(self.anna, self.cohort, {
+            'name': 'RAG evals', 'purpose': 'Review eval evidence.',
+            'scheduling_note': 'Choose a weekly time together.',
+        })
+        self.assertEqual((pod.owner, pod.status, pod.scheduling_note), (
+            self.anna, 'open', 'Choose a weekly time together.',
+        ))
         self.assertEqual(
             list(pod.memberships.values_list('user__email', 'source')),
             [('anna@test.com', 'creator')],
         )
 
-    @override_settings(PODS_DEFAULT_MAX_MEMBERS='6')
-    def test_member_pod_uses_configured_default_size(self):
-        pod = svc.start_member_pod(self.anna, self.cohort, {'name': 'A', 'purpose': 'B'})
-        self.assertEqual(pod.max_members, 6)
-
-    def test_third_member_started_pod_is_rejected(self):
-        svc.start_member_pod(self.anna, self.cohort, {'name': 'One', 'purpose': 'x'})
-        svc.start_member_pod(self.anna, self.cohort, {'name': 'Two', 'purpose': 'x'})
-        with self.assertRaisesMessage(svc.PodError, 'You can start up to 2 pods in this cohort.'):
-            svc.start_member_pod(self.anna, self.cohort, {'name': 'Three', 'purpose': 'x'})
-        self.assertEqual(Pod.objects.filter(created_by=self.anna).count(), 2)
-
-    def test_request_is_pending_with_free_seat_and_waitlisted_when_full(self):
-        open_pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj])
-        full_pod = _staff_pod(self.cohort, members=[self.raj, self.mike], max_members=2, name='Full')
-        self.assertEqual(svc.request_to_join(open_pod, self.anna).status, 'pending')
-        self.assertEqual(svc.request_to_join(full_pod, self.anna).status, 'waitlisted')
-
-    def test_second_open_request_on_same_pod_is_rejected(self):
-        pod = _staff_pod(self.cohort, members=[self.raj])
-        svc.request_to_join(pod, self.anna)
-        with self.assertRaisesMessage(svc.PodError, svc.MSG_ALREADY_REQUESTED):
-            svc.request_to_join(pod, self.anna)
-        with self.assertRaises(IntegrityError), transaction.atomic():
-            PodJoinRequest.objects.create(pod=pod, user=self.anna, status='waitlisted')
-
-    def test_open_request_limit_counts_only_this_cohort(self):
-        pods = [_staff_pod(self.cohort, members=[self.raj], name=f'P{i}') for i in range(4)]
-        enroll(self.anna, self.other_cohort)
-        other = _staff_pod(self.other_cohort, members=[], name='Other')
-        svc.request_to_join(other, self.anna)
-        for pod in pods[:3]:
-            svc.request_to_join(pod, self.anna)
-        with self.assertRaisesMessage(
-            svc.PodError,
-            'You already have 3 open requests in this cohort. Withdraw one to request another pod.',
-        ):
-            svc.request_to_join(pods[3], self.anna)
-        self.assertFalse(pods[3].join_requests.exists())
-
-    def test_new_pending_request_notifies_owner_but_waitlisted_does_not(self):
-        pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj], max_members=2)
-        svc.request_to_join(pod, self.anna)
-        note = Notification.objects.get(user=self.raj)
-        self.assertEqual(note.title, 'New request to join Evening builders')
-        self.assertEqual(note.notification_type, 'pod_request')
-        self.assertEqual(note.url, f'/courses/{self.course.slug}/home/pods/{pod.pk}')
-        PodMembership.objects.create(pod=pod, user=self.mike, source='staff')
-        svc.request_to_join(pod, self.lea)
-        self.assertEqual(Notification.objects.filter(user=self.raj).count(), 1)
-
-    def test_approving_last_seat_waitlists_remaining_pending_requests(self):
-        pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj], max_members=2)
-        first = svc.request_to_join(pod, self.anna)
-        second = svc.request_to_join(pod, self.mike)
-        svc.approve_request(first, self.raj)
-        second.refresh_from_db()
-        self.assertEqual(second.status, 'waitlisted')
-        first.refresh_from_db()
-        self.assertEqual((first.status, first.decided_by), ('approved', self.raj))
-        note = Notification.objects.get(user=self.anna)
+    def test_join_is_immediate_unlimited_multigroup_and_idempotent(self):
+        first = _group(self.cohort, members=[self.raj], name='First')
+        second = _group(self.cohort, members=[self.mike], name='Second')
+        for _attempt in range(2):
+            membership, created = svc.join_pod(first, self.anna)
+        self.assertFalse(created)
+        self.assertEqual((membership.source, first.memberships.filter(user=self.anna).count()), ('member', 1))
+        svc.join_pod(second, self.anna)
         self.assertEqual(
-            (note.title, note.notification_type),
-            ('You joined Evening builders', 'pod_request_decided'),
+            set(PodMembership.objects.filter(user=self.anna).values_list('pod__name', flat=True)),
+            {'First', 'Second'},
         )
+        self.assertFalse(Notification.objects.exists())
 
-    def test_approve_on_full_pod_fails_for_owner_and_staff(self):
-        pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj, self.mike, self.lea, self.tom])
-        waitlisted = svc.request_to_join(pod, self.anna)
-        for actor in (self.raj, self.staff):
-            with self.assertRaisesMessage(svc.PodError, 'This pod is full (4 of 4). Raise the size limit first.'):
-                svc.approve_request(waitlisted, actor)
-        self.assertFalse(pod.memberships.filter(user=self.anna).exists())
-
-    def test_member_leaving_full_pod_moves_only_oldest_waitlisted_to_pending(self):
-        pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj, self.mike], max_members=2)
-        oldest = svc.request_to_join(pod, self.anna)
-        newer = svc.request_to_join(pod, self.lea)
-        Notification.objects.all().delete()
-        svc.remove_member(pod, self.mike)
-        oldest.refresh_from_db()
-        newer.refresh_from_db()
-        self.assertEqual((oldest.status, newer.status), ('pending', 'waitlisted'))
-        note = Notification.objects.get(user=self.raj)
-        self.assertEqual((note.title, note.notification_type), ('A seat opened in Evening builders', 'pod_request'))
-
-    def test_raising_size_limit_by_two_moves_two_oldest_waitlisted(self):
-        pod = _staff_pod(self.cohort, members=[self.raj, self.mike], max_members=2)
-        a = svc.request_to_join(pod, self.anna)
-        b = svc.request_to_join(pod, self.lea)
-        c = svc.request_to_join(pod, self.tom)
-        svc.update_pod(pod, {'max_members': 4}, staff=True)
-        statuses = [PodJoinRequest.objects.get(pk=r.pk).status for r in (a, b, c)]
-        self.assertEqual(statuses, ['pending', 'pending', 'waitlisted'])
-
-    def test_size_limit_cannot_go_below_member_count(self):
-        pod = _staff_pod(self.cohort, members=[self.raj, self.mike, self.lea])
-        with self.assertRaisesMessage(svc.PodError, 'The size limit cannot be lower than the current number of members (3).'):
-            svc.update_pod(pod, {'max_members': 2}, staff=True)
+    def test_join_ignores_historical_capacity_and_preserves_ownerless_state(self):
+        pod = _group(self.cohort, members=[self.raj, self.mike], name='Imported')
+        Pod.objects.filter(pk=pod.pk).update(max_members=1)
         pod.refresh_from_db()
-        self.assertEqual(pod.max_members, 4)
-
-    def test_owner_leaving_passes_ownership_to_earliest_joined(self):
-        pod = svc.start_member_pod(self.anna, self.cohort, {'name': 'A', 'purpose': 'B'})
-        PodMembership.objects.create(pod=pod, user=self.raj, source='request')
-        PodMembership.objects.create(pod=pod, user=self.mike, source='request')
-        svc.remove_member(pod, self.anna)
+        svc.join_pod(pod, self.anna)
         pod.refresh_from_db()
-        self.assertEqual(pod.owner, self.raj)
+        self.assertEqual((pod.memberships.count(), pod.owner_id), (3, None))
 
-    def test_last_member_leaving_member_pod_archives_and_cancels_requests(self):
-        pod = svc.start_member_pod(self.anna, self.cohort, {'name': 'A', 'purpose': 'B'})
-        request = svc.request_to_join(pod, self.raj)
-        svc.remove_member(pod, self.anna)
-        pod.refresh_from_db()
-        request.refresh_from_db()
-        self.assertEqual((pod.status, request.status), ('archived', 'cancelled'))
+    def test_join_requires_activity_eligibility_and_open_status(self):
+        outsider = make_user('outsider@test.com')
+        open_group = _group(self.cohort, name='Open')
+        closed_group = _group(self.cohort, name='Closed', status='closed')
+        with self.assertRaisesMessage(svc.PodError, svc.MSG_NOT_ELIGIBLE):
+            svc.join_pod(open_group, outsider)
+        with self.assertRaisesMessage(svc.PodError, 'This study group is closed.'):
+            svc.join_pod(closed_group, self.anna)
+        self.assertFalse(PodMembership.objects.filter(user=outsider).exists())
+        self.assertFalse(closed_group.memberships.filter(user=self.anna).exists())
 
-    def test_staff_pod_stays_open_when_empty(self):
-        pod = _staff_pod(self.cohort, members=[self.raj])
-        svc.remove_member(pod, self.raj)
-        pod.refresh_from_db()
-        self.assertEqual(pod.status, 'open')
+    def test_existing_member_can_repeat_join_after_group_closes(self):
+        pod = _group(self.cohort, members=[self.anna], status='closed')
+        membership, created = svc.join_pod(pod, self.anna)
+        self.assertFalse(created)
+        self.assertEqual(membership.user, self.anna)
 
-    def test_unenrollment_removes_from_cohort_pods_only(self):
-        enroll(self.anna, self.other_cohort)
-        pod = _staff_pod(self.cohort, members=[self.anna, self.raj])
-        other_member_pod = _staff_pod(self.other_cohort, members=[self.anna], name='Other')
-        requested = _staff_pod(self.cohort, members=[self.mike], name='Requested')
-        other_requested = _staff_pod(self.other_cohort, members=[], name='Other requested')
-        req = svc.request_to_join(requested, self.anna)
-        other_req = svc.request_to_join(other_requested, self.anna)
-        CohortEnrollment.objects.get(user=self.anna, cohort=self.cohort).delete()
-        req.refresh_from_db()
-        other_req.refresh_from_db()
-        self.assertFalse(pod.memberships.filter(user=self.anna).exists())
-        self.assertTrue(other_member_pod.memberships.filter(user=self.anna).exists())
-        self.assertEqual((req.status, other_req.status), ('cancelled', 'pending'))
+    def test_leave_is_group_local_transfers_owner_and_cleans_future_response(self):
+        first = _group(self.cohort, owner=self.anna, members=[self.anna, self.raj], name='First')
+        second = _group(self.cohort, members=[self.anna], name='Second')
+        future = make_meeting(first, starts_at=timezone.now() + datetime.timedelta(days=1))
+        past = make_meeting(first, starts_at=timezone.now() - datetime.timedelta(days=1))
+        future.responses.create(user=self.anna, response='going')
+        past.responses.create(user=self.anna, response='going')
+        svc.remove_member(first, self.anna, actor=self.anna)
+        first.refresh_from_db()
+        self.assertEqual(first.owner, self.raj)
+        self.assertTrue(second.memberships.filter(user=self.anna).exists())
+        self.assertFalse(future.responses.filter(user=self.anna).exists())
+        self.assertTrue(past.responses.filter(user=self.anna).exists())
 
-    def test_decline_notifies_requester_with_pods_tab_link(self):
-        pod = _staff_pod(self.cohort, owner=self.raj, members=[self.raj])
-        request = svc.request_to_join(pod, self.anna)
-        svc.decline_request(request, self.raj)
-        note = Notification.objects.get(user=self.anna)
-        self.assertEqual(note.title, 'Your request to join Evening builders was not accepted')
-        self.assertEqual(note.body, 'Browse other pods or start your own.')
-        self.assertEqual(note.url, f'/courses/{self.course.slug}/home/pods?cohort=4')
-        with self.assertRaisesMessage(svc.PodError, svc.MSG_REQUEST_NOT_OPEN):
-            svc.approve_request(request, self.staff)
+    def test_last_member_leaving_member_group_archives_and_staff_group_stays_open(self):
+        member_group = _group(
+            self.cohort, owner=self.anna, members=[self.anna], name='Member', source=POD_SOURCE_MEMBER,
+        )
+        staff_group = _group(self.cohort, members=[self.anna], name='Staff')
+        svc.remove_member(member_group, self.anna)
+        svc.remove_member(staff_group, self.anna)
+        member_group.refresh_from_db()
+        staff_group.refresh_from_db()
+        self.assertEqual((member_group.status, member_group.owner_id), ('archived', None))
+        self.assertEqual((staff_group.status, staff_group.memberships.count()), ('open', 0))
 
-    def test_staff_add_by_email_buckets_and_closes_open_request(self):
-        outsider = make_user('main@test.com')
-        pod = _staff_pod(self.cohort, members=[self.raj], max_members=3)
-        request = svc.request_to_join(pod, self.anna)
+    def test_staff_add_is_unlimited_idempotent_and_cancels_old_open_request(self):
+        pod = _group(self.cohort, members=[self.raj])
+        request = PodJoinRequest.objects.create(pod=pod, user=self.anna, status='waitlisted')
         results = svc.add_members_by_email(
-            pod,
-            ['anna@test.com', 'RAJ@test.com', 'main@test.com', 'ghost@test.com', 'mike@test.com', 'lea@test.com'],
-            actor=self.staff, source='staff',
+            pod, ['anna@test.com', 'mike@test.com', 'anna@test.com'], actor=self.staff, source='staff',
         )
+        again = svc.add_members_by_email(pod, ['anna@test.com'], actor=self.staff, source='staff')
+        request.refresh_from_db()
         self.assertEqual(results.as_dict(), {
-            'added': ['anna@test.com', 'mike@test.com'],
-            'not_enrolled': [outsider.email],
-            'unknown_user': ['ghost@test.com'],
-            'already_member': ['raj@test.com'],
-            'over_capacity': ['lea@test.com'],
+            'added': ['anna@test.com', 'mike@test.com'], 'not_enrolled': [],
+            'unknown_user': [], 'already_member': [],
         })
-        request.refresh_from_db()
-        self.assertEqual(request.status, 'approved')
+        self.assertEqual(again.already_member, ['anna@test.com'])
+        self.assertEqual((pod.memberships.count(), request.status), (3, 'cancelled'))
+        self.assertIsNotNone(request.decided_at)
 
-    def test_withdraw_sets_withdrawn(self):
-        pod = _staff_pod(self.cohort, members=[self.raj])
-        request = svc.request_to_join(pod, self.anna)
-        svc.withdraw_request(request, self.anna)
+    def test_request_mutations_are_retired_without_changing_history(self):
+        pod = _group(self.cohort)
+        request = PodJoinRequest.objects.create(pod=pod, user=self.anna, status='pending', message='hello')
+        calls = (
+            lambda: svc.request_to_join(pod, self.raj),
+            lambda: svc.approve_request(request, self.staff),
+            lambda: svc.decline_request(request, self.staff),
+            lambda: svc.withdraw_request(request, self.anna),
+        )
+        for call in calls:
+            with self.assertRaisesMessage(svc.PodError, svc.MSG_REQUESTS_RETIRED):
+                call()
         request.refresh_from_db()
-        self.assertEqual(request.status, 'withdrawn')
+        self.assertEqual((request.status, request.message), ('pending', 'hello'))
+        self.assertFalse(pod.memberships.exists())
+        self.assertFalse(Notification.objects.exists())
+
+    def test_copy_limits_internal_notes_and_retired_capacity(self):
+        cleaned, errors = svc.clean_pod_fields({
+            'name': 'Group', 'purpose': 'p' * 161, 'scheduling_note': 's' * 501,
+            'internal_notes': 'secret', 'max_members': 99,
+        })
+        self.assertNotIn('internal_notes', cleaned)
+        self.assertEqual(errors, {
+            'purpose': 'Purpose must be 160 characters or fewer.',
+            'max_members': svc.MSG_MAX_MEMBERS_RETIRED,
+            'scheduling_note': 'Scheduling guidance must be 500 characters or fewer.',
+            'internal_notes': 'Only staff can edit internal formation notes.',
+        })
+        _, staff_errors = svc.clean_pod_fields({
+            'name': 'Group', 'purpose': 'Public.', 'internal_notes': 'x' * 2001,
+        }, staff=True)
+        self.assertEqual(staff_errors['internal_notes'], 'Internal formation notes must be 2,000 characters or fewer.')
+
+    def test_unenrollment_only_removes_memberships_in_that_activity(self):
+        enroll(self.anna, self.other_cohort)
+        here = _group(self.cohort, members=[self.anna], name='Here')
+        there = _group(self.other_cohort, members=[self.anna], name='There')
+        CohortEnrollment.objects.filter(cohort=self.cohort, user=self.anna).delete()
+        svc.remove_user_from_cohort(self.anna, self.cohort)
+        self.assertFalse(here.memberships.filter(user=self.anna).exists())
+        self.assertTrue(there.memberships.filter(user=self.anna).exists())

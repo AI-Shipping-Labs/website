@@ -200,8 +200,7 @@ from api.views.pods import (
     pod_message_hide,
     pod_message_restore,
     pod_messages,
-    pod_request_approve,
-    pod_request_decline,
+    pod_request_retired,
     pod_requests,
     pods_collection,
     sprint_roster,
@@ -958,12 +957,12 @@ urlpatterns = [
     path("pods/<int:pod_id>/requests", pod_requests, name="api_pod_requests"),
     path(
         "pods/<int:pod_id>/requests/<int:request_id>/approve",
-        pod_request_approve,
+        pod_request_retired,
         name="api_pod_request_approve",
     ),
     path(
         "pods/<int:pod_id>/requests/<int:request_id>/decline",
-        pod_request_decline,
+        pod_request_retired,
         name="api_pod_request_decline",
     ),
     # Issue #1919: agreed pod meetings (no DELETE: cancel keeps history).

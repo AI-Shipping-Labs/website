@@ -6,7 +6,7 @@ route, they name the course route and let the pod's activity build the
 right URL:
 
     {% load pod_urls %}
-    {% pod_action_url 'pod_request' pod %}
+    {% pod_action_url 'pod_join' pod %}
     {% pod_action_url 'pod_meeting_cancel' pod meeting_id=row.meeting.pk %}
 """
 

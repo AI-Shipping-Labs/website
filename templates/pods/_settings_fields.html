@@ -1,5 +1,5 @@
 {% comment %}
-Pod settings fields shared by Start a pod and Edit pod (issue #1918).
+Study-group settings shared by the member create and edit pages.
 Blank number fields fall back to the configured PODS_DEFAULT_* values.
 {% endcomment %}
 <div class="space-y-5">
@@ -10,13 +10,14 @@ Blank number fields fall back to the configured PODS_DEFAULT_* values.
   <div>
     <label for="pod-purpose" class="block text-sm font-medium text-foreground">Purpose</label>
     <p id="pod-purpose-help" class="mt-0.5 text-xs text-muted-foreground">What will you work on together?</p>
-    <textarea id="pod-purpose" name="purpose" rows="4" maxlength="500" required aria-describedby="pod-purpose-help" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-purpose"{% if error_field == 'purpose' %} aria-invalid="true"{% endif %}>{{ form.purpose }}</textarea>
+    <textarea id="pod-purpose" name="purpose" rows="3" maxlength="160" required aria-describedby="pod-purpose-help" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-purpose"{% if error_field == 'purpose' %} aria-invalid="true"{% endif %}>{{ form.purpose }}</textarea>
   </div>
-  <div class="grid gap-4 sm:grid-cols-3">
-    <div>
-      <label for="pod-max-members" class="block text-sm font-medium text-foreground">Size limit</label>
-      <input id="pod-max-members" name="max_members" type="number" min="1" max="12" value="{% if form.max_members %}{{ form.max_members }}{% else %}{{ default_max_members }}{% endif %}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-max-members"{% if error_field == 'max_members' %} aria-invalid="true"{% endif %}>
-    </div>
+  <div>
+    <label for="pod-scheduling-note" class="block text-sm font-medium text-foreground">Scheduling guidance</label>
+    <p id="pod-scheduling-note-help" class="mt-0.5 text-xs text-muted-foreground">Optional neutral guidance shown on the group detail page.</p>
+    <textarea id="pod-scheduling-note" name="scheduling_note" rows="3" maxlength="500" aria-describedby="pod-scheduling-note-help" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-scheduling-note"{% if error_field == 'scheduling_note' %} aria-invalid="true"{% endif %}>{{ form.scheduling_note }}</textarea>
+  </div>
+  <div class="grid gap-4 sm:grid-cols-2">
     <div>
       <label for="pod-meeting-count" class="block text-sm font-medium text-foreground">Number of meetings</label>
       <input id="pod-meeting-count" name="meeting_count" type="number" min="1" max="20" value="{% if form.meeting_count %}{{ form.meeting_count }}{% else %}{{ default_meeting_count }}{% endif %}" class="mt-1 w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent" data-testid="pod-form-meeting-count">

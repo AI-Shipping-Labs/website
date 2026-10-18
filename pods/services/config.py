@@ -32,10 +32,6 @@ def pods_enabled_for_course(course):
     return bool(course) and course.slug in enabled_course_slugs()
 
 
-def default_max_members():
-    return _int_config('PODS_DEFAULT_MAX_MEMBERS', 4, minimum=1, maximum=12)
-
-
 def default_meeting_count():
     return _int_config('PODS_DEFAULT_MEETING_COUNT', 1, minimum=1, maximum=20)
 
@@ -43,10 +39,6 @@ def default_meeting_count():
 def default_meeting_minutes():
     value = _int_config('PODS_DEFAULT_MEETING_MINUTES', 60)
     return value if value in MEETING_MINUTE_OPTIONS else 60
-
-
-def max_open_requests_per_member():
-    return _int_config('PODS_MAX_OPEN_REQUESTS_PER_MEMBER', 3, minimum=1)
 
 
 def max_created_per_member():
@@ -61,15 +53,6 @@ def suggestion_count():
     return _int_config('PODS_SUGGESTION_COUNT', 5, minimum=1, maximum=20)
 
 
-def stale_request_days():
-    return _int_config('PODS_STALE_REQUEST_DAYS', 5, minimum=0)
-
-
-def rerequest_cooldown_days():
-    """Days a student waits after a first decline before asking the same pod again."""
-    return _int_config('PODS_REREQUEST_COOLDOWN_DAYS', 14, minimum=0)
-
-
 def _default_on(key):
     """Default-on boolean read of ``key``.
 
@@ -81,11 +64,6 @@ def _default_on(key):
     if isinstance(raw, bool):
         return raw
     return str(raw).strip().lower() in ('true', '1', 'yes')
-
-
-def stale_request_alert_enabled():
-    """Default-on read of ``PODS_STALE_REQUEST_ALERT_ENABLED``."""
-    return _default_on('PODS_STALE_REQUEST_ALERT_ENABLED')
 
 
 def stuck_proposal_hours():

@@ -57,27 +57,28 @@ class SprintDetailPodsSectionTest(TestCase):
         self.assertLess(body.index('data-testid="sprint-accountability-partners"'), body.index('data-testid="sprint-pods"'))
         html = section(response, 'sprint-pods')
         self.assertIn(f'href="/sprints/{self.sprint.slug}/pods"', html)
-        self.assertIn('Browse pods', html)
+        self.assertIn('Browse study groups', html)
         self.assertIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}"', html)
-        self.assertIn('2 of 4 members', html)
+        self.assertIn('2 members', html)
         self.assertIn('Next meeting:', html)
         self.assertEqual(EMAIL_RE.findall(html), [])
 
     def test_member_without_pods_sees_the_empty_state(self):
         self.client.force_login(self.mike)
         html = section(self.client.get(self.url()), 'sprint-pods')
-        self.assertIn("You're not in a pod yet", html)
-        self.assertIn('Start one or ask to join a pod in this sprint.', html)
+        self.assertIn("You're not in a study group yet", html)
+        self.assertIn('Start one or join an open study group in this sprint.', html)
         self.assertIn('data-testid="sprint-pods-browse"', html)
 
-    def test_owner_with_pending_requests_sees_the_waiting_link(self):
+    def test_historical_request_does_not_restore_request_controls(self):
         pod = self.pod('Agents', [self.anna], owner=self.anna)
         PodJoinRequest.objects.create(pod=pod, user=self.mike)
         self.client.force_login(self.anna)
         html = section(self.client.get(self.url()), 'sprint-pods')
-        self.assertIn('1 request waiting for you', html)
-        self.assertIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}#requests"', html)
-        self.assertIn('1 of 4 members', html)
+        self.assertIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}"', html)
+        self.assertIn('1 member', html)
+        self.assertNotIn('waiting for you', html)
+        self.assertNotIn(f'href="/sprints/{self.sprint.slug}/pods/{pod.pk}#requests"', html)
 
     def test_member_who_does_not_own_the_pod_sees_no_waiting_link(self):
         pod = self.pod('Agents', [self.anna, self.mike], owner=self.anna)

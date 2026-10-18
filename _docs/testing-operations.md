@@ -356,6 +356,11 @@ trigger fired. When the plan escalates to the full suite, the per-file
 (with a `NOTE playwright-full-supersedes:` line) -- the full run already covers
 them, and keeping them would boot another server and browser per changed file.
 
+`SUPPLEMENTAL_PLAYWRIGHT_OWNERS` adds exact local-only Playwright owners for
+product sources that core Playwright does not cover. These commands supplement
+the source's normal mapping, deduplicate across matching sources, and are
+removed by the same full-Playwright supersession rule.
+
 ### Repo-wide guards (`REPO_WIDE_GUARDS`, rule 14)
 
 Some checkers are not owned by the directory they live in: they walk a whole

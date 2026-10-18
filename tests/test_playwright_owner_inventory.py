@@ -1594,12 +1594,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_pods_1918.py::"
         "test_student_adds_weekly_availability_in_her_own_timezone",
         "playwright_tests/test_pods_1918.py::"
-        "test_student_finds_a_pod_that_fits_and_requests_to_join",
-        "playwright_tests/test_pods_1918.py::"
-        "test_pod_owner_reviews_a_request_with_fit_and_approves_it",
-        "playwright_tests/test_pods_1918.py::"
-        "test_member_joins_the_waiting_list_and_gets_in_when_a_seat_opens",
-        "playwright_tests/test_pods_1918.py::"
         "test_pod_members_see_suggestions_that_respect_every_timezone",
         "playwright_tests/test_pods_1918.py::"
         "test_pod_moves_to_slack_through_a_public_channel",
@@ -1609,8 +1603,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_someone_outside_the_cohort_cannot_see_its_pods",
         "playwright_tests/test_pods_1918.py::"
         "test_admin_creates_a_pod_in_studio_for_paired_students",
-        "playwright_tests/test_pods_1918.py::"
-        "test_admin_overrides_an_owner_who_has_not_answered",
         "playwright_tests/test_pods_1918.py::"
         "test_pods_stay_hidden_until_the_course_is_enabled",
     })
@@ -1656,18 +1648,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_pod_member_reads_suggested_times_knowing_who_has_no_availability",
         "playwright_tests/test_pods_polish_1927.py::"
         "test_mike_adds_availability_and_the_pod_sees_an_everyone_fits_time",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_declined_student_cannot_immediately_rerequest_the_same_pod",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_owner_is_not_pinged_again_by_a_declined_student",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_student_asks_once_more_after_the_cooldown",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_twice_declined_student_is_pointed_to_other_pods",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_staff_can_still_place_a_twice_declined_student",
-        "playwright_tests/test_pods_polish_1927.py::"
-        "test_staff_spots_a_stale_pod_in_studio",
         "playwright_tests/test_pods_polish_1927.py::"
         "test_pod_member_compares_genuinely_different_suggested_times",
     })
@@ -2008,8 +1988,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_sprint_pods_1921.py::"
         "test_enrolled_member_finds_pods_on_the_sprint_page_and_starts_one",
         "playwright_tests/test_sprint_pods_1921.py::"
-        "test_second_member_asks_to_join_and_the_owner_approves_from_the_sprint_page",
-        "playwright_tests/test_sprint_pods_1921.py::"
         "test_pod_members_agree_a_meeting_time_on_a_sprint_pod",
         "playwright_tests/test_sprint_pods_1921.py::"
         "test_pod_members_chat_on_a_sprint_pod",
@@ -2051,6 +2029,29 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_examples_open_by_keyboard_and_links_survive_refresh_edit_and_review",
         "playwright_tests/test_homework_learning_public.py::"
         "test_invalid_public_link_shows_targeted_error_and_keeps_the_draft",
+    })
+
+    issue_1984_owners = frozenset({
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_cohort_participant_joins_two_groups_for_broader_peer_support",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_sprint_participant_joins_without_an_approval_queue",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_member_leaves_one_group_while_keeping_another",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_participant_understands_a_closed_groups_boundary",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_ineligible_viewer_cannot_mutate_membership",
+        "playwright_tests/test_study_groups_responsive_1984.py::"
+        "test_learner_scans_a_long_group_list_efficiently",
+        "playwright_tests/test_study_groups_responsive_1984.py::"
+        "test_member_acts_from_a_narrow_screen_group_list_in_light_and_dark",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_participant_distinguishes_a_meeting_plan_from_a_scheduled_meeting",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_staff_publishes_copy_without_exposing_formation_history",
+        "playwright_tests/test_study_groups_1984.py::"
+        "test_imported_groups_survive_the_transition_intact",
     })
 
     youtube_referrer_owners = frozenset({
@@ -2278,8 +2279,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2969)
-        self.assertEqual(len(inventory.owners), 2764)
+        self.assertEqual(inventory.item_count, 2968)
+        self.assertEqual(len(inventory.owners), 2763)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2325,6 +2326,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1921_owners
             | self.issue_1827_owners
             | self.issue_1828_owners
+            | self.issue_1984_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners

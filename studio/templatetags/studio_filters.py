@@ -128,12 +128,10 @@ STATUS_BADGE_CLASSES = {
     # discovery surface — amber matches the canonical "needs a second
     # look, not an error" caution tone used for Override/Draft states.
     'hidden': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
-    # Issue #1918: a pod accepting requests reads as live (green); a closed
-    # pod is grey-muted like ``archived``.
+    # An open study group reads as live (green); a closed group is grey-muted.
     'open': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'closed': 'bg-secondary text-muted-foreground',
-    # Issue #1918: an unanswered pod request older than PODS_STALE_REQUEST_DAYS
-    # needs a second look (amber caution tone); Slack link Set / Not set.
+    # Legacy stale audit pills and Slack link Set / Not set.
     'stale': 'bg-amber-500/20 text-amber-700 dark:text-amber-300',
     'set': 'bg-green-500/20 text-green-700 dark:text-green-300',
     'not_set': 'bg-secondary text-muted-foreground',

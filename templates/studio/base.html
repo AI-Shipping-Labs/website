@@ -1308,6 +1308,8 @@ document.addEventListener('click', function(event) {
     var activeIndex = -1;
     var activeItems = [];
     var requestToken = 0;
+    var searchTimer = null;
+    var currentAbort = null;
 
     if (!endpoint || !input || !results) {
       return;
@@ -1398,15 +1400,29 @@ document.addEventListener('click', function(event) {
       var token = requestToken + 1;
       requestToken = token;
 
+      if (currentAbort) {
+        currentAbort.abort();
+        currentAbort = null;
+      }
+
       if (query.length < 2) {
         renderMessage('Keep typing');
         return;
       }
 
-      fetch(endpoint + '?q=' + encodeURIComponent(query), {
+      if (typeof AbortController !== 'undefined') {
+        currentAbort = new AbortController();
+      }
+
+      var fetchOptions = {
         headers: { 'Accept': 'application/json' },
         credentials: 'same-origin'
-      })
+      };
+      if (currentAbort) {
+        fetchOptions.signal = currentAbort.signal;
+      }
+
+      fetch(endpoint + '?q=' + encodeURIComponent(query), fetchOptions)
         .then(function(response) {
           if (!response.ok) {
             throw new Error('Search request failed');
@@ -1418,14 +1434,25 @@ document.addEventListener('click', function(event) {
             renderResults(payload);
           }
         })
-        .catch(function() {
+        .catch(function(err) {
+          if (err && err.name === 'AbortError') {
+            return;
+          }
           if (token === requestToken) {
             renderMessage('Search unavailable');
           }
         });
     }
 
-    input.addEventListener('input', search);
+    input.addEventListener('input', function() {
+      clearTimeout(searchTimer);
+      var query = input.value.trim();
+      if (query.length < 2) {
+        search();
+        return;
+      }
+      searchTimer = setTimeout(search, 200);
+    });
     input.addEventListener('focus', function() {
       if (input.value.trim().length < 2) {
         renderMessage('Keep typing');

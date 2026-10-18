@@ -147,7 +147,7 @@ class PodJoinConcurrencyPostgresTest(TransactionTestCase):
             # its database failure is asserted in the parent test thread.
             self.errors.append((exc, traceback.format_exc()))
         finally:
-            close_old_connections()
+            connection.close()
 
     def test_concurrent_joins_create_one_membership_without_side_effects(self):
         self.start = Barrier(3)

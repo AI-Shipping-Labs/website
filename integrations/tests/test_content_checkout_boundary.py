@@ -134,17 +134,48 @@ class ContentCheckoutBoundaryTest(SimpleTestCase):
     def test_unselected_tooling_symlink_is_not_followed_or_rejected(self):
         external = Path(self.sandbox.name) / 'tooling'
         external.mkdir()
-        (external / 'secret.md').write_text('TOOLING_SECRET', encoding='utf-8')
+        secret = b'UNIQUE_TOOLING_SECRET_1981'
+        secret_path = external / 'secret.md'
+        secret_path.write_bytes(secret)
         tooling = self.root / '.claude'
         tooling.mkdir()
         (tooling / 'skills').symlink_to(external, target_is_directory=True)
-        (self.root / 'article.md').write_text('ordinary', encoding='utf-8')
+        article = self.root / 'article.md'
+        article_bytes = b'ordinary article bytes'
+        article.write_bytes(article_bytes)
 
-        with self.assertRaises(CheckoutError) as caught:
-            with ImmutableCheckout(self.root):
-                pass
-        self.assertIn('symlink', str(caught.exception).lower())
-        self.assertNotIn('TOOLING_SECRET', str(caught.exception))
+        real_open = os.open
+        with patch(
+            'community_base.content_sync.checkout.os.open', wraps=real_open,
+        ) as observed_open:
+            self._assert_tooling_link_skipped(article_bytes, secret)
+
+        opened_paths = self._opened_paths(observed_open)
+        self.assertIn(article, opened_paths)
+        self.assertNotIn(secret_path, opened_paths)
+
+    def _assert_tooling_link_skipped(self, article_bytes, secret):
+        with ImmutableCheckout(self.root, max_files=1) as checkout:
+            self.assertEqual(checkout.skipped_links, ('.claude/skills',))
+            self.assertEqual(tuple(str(path) for path in checkout.files()), ('article.md',))
+            self.assertEqual(checkout.read_bytes('article.md'), article_bytes)
+            self.assertEqual((checkout.root / 'article.md').read_bytes(), article_bytes)
+            link = checkout.root / '.claude' / 'skills'
+            self.assertFalse(link.exists())
+            self.assertFalse((link / 'secret.md').exists())
+            with self.assertRaises(CheckoutError):
+                checkout.read_bytes('.claude/skills')
+            with self.assertRaises(CheckoutError):
+                checkout.read_bytes('.claude/skills/secret.md')
+            for copied_path in checkout.files():
+                self.assertNotIn(secret, checkout.read_bytes(copied_path))
+
+    def _opened_paths(self, observed_open):
+        opened_paths = set()
+        for call in observed_open.call_args_list:
+            if call.args:
+                opened_paths.add(Path(call.args[0]))
+        return opened_paths
 
     def test_special_content_entries_fail_without_opening_them(self):
         fifo = self.root / 'blocked.md'

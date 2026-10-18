@@ -141,16 +141,21 @@ def _assert_rows_look_like_siblings(page):
     homework_row = _row(page, 'Homework: Document Processing')
     capstone_row = _row(page, 'Capstone: Your AI Project')
     lesson_row = _row(page, 'From Idea to Submission')
-    for row in (homework_row, capstone_row):
+    rows = (homework_row, capstone_row, lesson_row)
+    for row in rows:
         expect(row).to_be_visible()
         expect(row.locator('.lucide-chevron-right, [data-lucide="chevron-right"]')).to_have_count(0)
+        # Real readiness signal: wait for the row's SVG icon to be attached and visible.
+        expect(row.locator('svg').first).to_be_visible()
+    for row in (homework_row, capstone_row):
         expect(row.get_by_test_id('syllabus-homework-icon')).to_have_count(1)
+    expect(lesson_row.get_by_test_id('syllabus-lesson-icon')).to_have_count(1)
     expect(page.get_by_test_id('syllabus-homework-group')).to_have_count(0)
     expect(page.get_by_test_id('syllabus-homework-step')).to_have_count(0)
-    boxes = [row.bounding_box() for row in (homework_row, capstone_row, lesson_row)]
+    boxes = [row.bounding_box() for row in rows]
     icon_x = [
         row.locator('svg').first.bounding_box()['x']
-        for row in (homework_row, capstone_row, lesson_row)
+        for row in rows
     ]
     assert len({round(box['x']) for box in boxes}) == 1, boxes
     assert len({round(box['width']) for box in boxes}) == 1, boxes

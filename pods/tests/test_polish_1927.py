@@ -2,18 +2,10 @@
 slots, re-request cooldown after a decline, and Studio's pending-only stale
 badge. The daily staff Slack alert lives in ``test_stale_request_alert``."""
 
-import datetime
-from datetime import UTC
 
-from django.test import SimpleTestCase, override_settings, tag
-from django.utils import timezone
+from django.test import SimpleTestCase, tag
 from freezegun import freeze_time
 
-from integrations.config import clear_config_cache
-from integrations.models import IntegrationSetting
-from notifications.models import Notification
-from pods.models import PodJoinRequest, PodMembership
-from pods.services import membership as svc
 from pods.services.suggestions import (
     MIN_WEEKLY_GAP_MINUTES,
     member_strip,
@@ -21,7 +13,7 @@ from pods.services.suggestions import (
     suggest_slots,
     weekly_gap,
 )
-from pods.tests.fixtures import COURSE_SLUG, make_user, set_windows
+from pods.tests.fixtures import make_user, set_windows
 from pods.tests.test_member_views import ENABLED, PodViewFixture, _pod, texts
 from pods.tests.test_suggestions import TUESDAY, member, utc
 
@@ -154,189 +146,3 @@ class NearDuplicateSlotTest(SimpleTestCase):
             for second in weekly[i + 1:]:
                 self.assertGreaterEqual(weekly_gap(first, second), MIN_WEEKLY_GAP_MINUTES, slots)
         self.assertEqual(len({s.start.date() for s in slots}), len(slots))
-
-
-# --- 2. Re-request cooldown after a decline -----------------------------------
-
-DECIDED = datetime.datetime(2026, 10, 9, 23, 30, tzinfo=UTC)
-
-
-class CooldownFixture(PodViewFixture):
-    def setUp(self):
-        self.addCleanup(clear_config_cache)
-        self.pod_a = _pod(self.cohort, 'Pod A', members=[self.raj], owner=self.raj)
-        self.pod_b = _pod(self.cohort, 'Pod B', members=[self.mike], owner=self.mike)
-
-    def _set(self, key, value):
-        IntegrationSetting.objects.update_or_create(key=key, defaults={'value': value})
-        clear_config_cache()
-
-    def decline(self, pod, user, decided_at=DECIDED):
-        request = PodJoinRequest.objects.create(pod=pod, user=user, status='pending')
-        svc.decline_request(request, pod.owner)
-        PodJoinRequest.objects.filter(pk=request.pk).update(decided_at=decided_at, created_at=decided_at)
-        return request
-
-    def owner_request_notifications(self, pod):
-        return Notification.objects.filter(user=pod.owner, title=f'New request to join {pod.name}').count()
-
-
-@tag('core')
-class RerequestRuleTest(CooldownFixture):
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok: one day after the frozen decline
-    def test_first_decline_starts_a_cooldown_in_the_students_timezone(self):
-        self.decline(self.pod_a, self.anna)
-        with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(self.pod_a, self.anna, 'please')
-        self.assertEqual(ctx.exception.code, 'request_cooldown')
-        # Oct 23 23:30 UTC is Oct 24 in Berlin.
-        self.assertEqual(ctx.exception.message, 'You can ask to join this pod again on Oct 24.')
-        self.assertEqual(PodJoinRequest.objects.filter(pod=self.pod_a, user=self.anna).count(), 1)
-        self.assertEqual(self.owner_request_notifications(self.pod_a), 0)
-
-        set_windows(self.anna, 'America/New_York', [])
-        self.anna._pods_profile = None
-        with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(self.pod_a, self.anna)
-        self.assertEqual(ctx.exception.message, 'You can ask to join this pod again on Oct 23.')
-
-    def test_cooldown_passed_allows_one_more_request_that_notifies_the_owner_once(self):
-        with freeze_time('2026-10-24 00:00:00'):  # date-rot-ok: 14 days after the frozen decline
-            self.decline(self.pod_a, self.anna)
-            request = svc.request_to_join(self.pod_a, self.anna, 'second try')
-        self.assertEqual(request.status, 'pending')
-        self.assertEqual(self.owner_request_notifications(self.pod_a), 1)
-
-    @freeze_time('2026-12-01 00:00:00')  # date-rot-ok: long after both frozen declines
-    def test_second_decline_is_final_and_does_not_notify(self):
-        self.decline(self.pod_a, self.anna)
-        self.decline(self.pod_a, self.anna, decided_at=DECIDED + datetime.timedelta(days=20))
-        with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(self.pod_a, self.anna)
-        self.assertEqual(ctx.exception.code, 'request_declined_final')
-        self.assertEqual(ctx.exception.message, "You can't ask to join this pod again.")
-        self.assertEqual(self.owner_request_notifications(self.pod_a), 0)
-
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok
-    def test_decline_on_one_pod_does_not_block_another_and_withdrawals_do_not_count(self):
-        self.decline(self.pod_a, self.anna)
-        for _ in range(3):
-            request = svc.request_to_join(self.pod_b, self.anna)
-            self.assertEqual(request.status, 'pending')
-            svc.withdraw_request(request, self.anna)
-        self.assertEqual(svc.request_to_join(self.pod_b, self.anna).status, 'pending')
-        self.assertEqual(svc.rerequest_state(self.pod_b, self.anna).key, svc.REREQUEST_ALLOWED)
-
-    @freeze_time('2026-10-10 00:00:00')  # date-rot-ok
-    def test_zero_cooldown_allows_immediate_retry_but_second_decline_is_final(self):
-        self._set('PODS_REREQUEST_COOLDOWN_DAYS', '0')
-        self.decline(self.pod_a, self.anna)
-        second = svc.request_to_join(self.pod_a, self.anna)
-        svc.decline_request(second, self.raj)
-        with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(self.pod_a, self.anna)
-        self.assertEqual(ctx.exception.code, 'request_declined_final')
-
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok
-    def test_invalid_cooldown_falls_back_to_fourteen_days(self):
-        self.decline(self.pod_a, self.anna)
-        for value in ('-3', 'soon'):
-            with self.subTest(value=value):
-                self._set('PODS_REREQUEST_COOLDOWN_DAYS', value)
-                state = svc.rerequest_state(self.pod_a, self.anna)
-                self.assertEqual(state.available_at, DECIDED + datetime.timedelta(days=14))
-
-    @freeze_time('2026-12-01 00:00:00')  # date-rot-ok
-    def test_staff_can_still_add_a_twice_declined_student(self):
-        self.decline(self.pod_a, self.anna)
-        self.decline(self.pod_a, self.anna, decided_at=DECIDED + datetime.timedelta(days=20))
-        staff = make_user('ops@test.com', staff=True)
-        self.client.force_login(staff)
-        self.client.post(f'/studio/pods/{self.pod_a.pk}/members/add', {'emails': 'anna@test.com'})
-        self.assertTrue(PodMembership.objects.filter(pod=self.pod_a, user=self.anna).exists())
-
-
-@tag('core')
-@ENABLED
-class RerequestPodPageTest(CooldownFixture):
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok
-    def test_within_cooldown_form_is_hidden_and_date_is_shown(self):
-        self.decline(self.pod_a, self.anna)
-        self.client.force_login(self.anna)
-        response = self.client.get(self.pod_url(self.pod_a))
-        self.assertEqual(texts(response, 'pod-status-badge'), ['Not accepted'])
-        self.assertEqual(
-            texts(response, 'pod-request-blocked'),
-            ['Your request was not accepted. You can ask again on Oct 24.'],
-        )
-        self.assertEqual(texts(response, 'pod-request-form'), [])
-
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok
-    def test_stale_form_post_shows_flash_error_and_creates_nothing(self):
-        self.decline(self.pod_a, self.anna)
-        self.client.force_login(self.anna)
-        response = self.client.post(self.pod_url(self.pod_a, '/request'), {'message': 'again'}, follow=True)
-        self.assertIn('You can ask to join this pod again on Oct 24.', [str(m) for m in response.context['messages']])
-        self.assertEqual(PodJoinRequest.objects.filter(pod=self.pod_a, user=self.anna).count(), 1)
-        self.assertEqual(self.owner_request_notifications(self.pod_a), 0)
-
-    @freeze_time('2026-10-25 00:00:00')  # date-rot-ok: after the 14-day cooldown
-    def test_after_cooldown_form_is_shown_with_retry_line(self):
-        self.decline(self.pod_a, self.anna)
-        self.client.force_login(self.anna)
-        response = self.client.get(self.pod_url(self.pod_a))
-        self.assertEqual(texts(response, 'pod-status-badge'), ['Not accepted'])
-        self.assertEqual(
-            texts(response, 'pod-request-retry'),
-            ['Your last request was not accepted. You can ask once more.'],
-        )
-        self.assertEqual(len(texts(response, 'pod-request-form')), 1)
-        self.assertEqual(texts(response, 'pod-request-blocked'), [])
-
-    @freeze_time('2026-12-01 00:00:00')  # date-rot-ok
-    def test_twice_declined_sees_final_line_with_browse_link(self):
-        self.decline(self.pod_a, self.anna)
-        self.decline(self.pod_a, self.anna, decided_at=DECIDED + datetime.timedelta(days=20))
-        self.client.force_login(self.anna)
-        response = self.client.get(self.pod_url(self.pod_a))
-        self.assertEqual(
-            texts(response, 'pod-request-blocked'),
-            ["This pod declined your request twice, so you can't ask to join it again. "
-             'Browse other pods or start your own.'],
-        )
-        self.assertContains(
-            response, f'href="/courses/{COURSE_SLUG}/home/pods?cohort=4" ',
-        )
-        self.assertEqual(texts(response, 'pod-request-form'), [])
-
-    @freeze_time('2026-10-10 12:00:00')  # date-rot-ok
-    def test_pods_tab_row_for_declined_pod_is_unchanged(self):
-        self.decline(self.pod_a, self.anna)
-        self.client.force_login(self.anna)
-        response = self.client.get(self.pods_url())
-        rows = dict(zip(texts(response, 'pod-row-name'), texts(response, 'pod-row-badge'), strict=False))
-        self.assertEqual(rows.get('Pod A'), 'Not accepted')
-
-
-# --- 3. Studio stale badge: pending only --------------------------------------
-
-@tag('core')
-@override_settings(PODS_STALE_REQUEST_DAYS=5)
-class StudioPendingOnlyStaleBadgeTest(PodViewFixture):
-    def test_only_an_old_pending_request_makes_a_pod_stale(self):
-        now = timezone.now()
-        pod_a = _pod(self.cohort, 'Pod A', members=[self.raj], owner=self.raj)
-        pod_b = _pod(self.cohort, 'Pod B', members=[self.mike], owner=self.mike, max_members=1)
-        pending = PodJoinRequest.objects.create(pod=pod_a, user=self.anna, status='pending')
-        waitlisted = PodJoinRequest.objects.create(pod=pod_b, user=self.anna, status='waitlisted')
-        PodJoinRequest.objects.filter(pk=pending.pk).update(created_at=now - datetime.timedelta(days=6))
-        PodJoinRequest.objects.filter(pk=waitlisted.pk).update(created_at=now - datetime.timedelta(days=10))
-        self.client.force_login(self.staff)
-
-        response = self.client.get('/studio/pods/')
-        stale = {row['pod'].name: row['stale'] for row in response.context['rows']}
-        self.assertEqual(stale, {'Pod A': True, 'Pod B': False})
-
-        svc.decline_request(pending, self.staff)
-        response = self.client.get('/studio/pods/')
-        self.assertFalse(any(row['stale'] for row in response.context['rows']))

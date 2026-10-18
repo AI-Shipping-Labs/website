@@ -13,7 +13,7 @@ actions), so the list keeps one action placement.
   {% if meetings.all_done_line %}
   <p class="mt-2 text-sm text-foreground" data-testid="pod-meetings-all-done">{{ meetings.all_done_line }}</p>
   {% if meetings.can_manage %}
-  <a href="{% pod_action_url 'pod_edit' pod %}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-meetings-edit-pod">Edit pod <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
+  <a href="{% pod_action_url 'pod_edit' pod %}" class="mt-2 inline-flex min-h-[44px] items-center gap-2 text-sm font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-testid="pod-meetings-edit-pod">Edit study group <i data-lucide="arrow-right" class="h-4 w-4" aria-hidden="true"></i></a>
   {% endif %}
   {% endif %}
 

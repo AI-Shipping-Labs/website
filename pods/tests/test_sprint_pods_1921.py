@@ -23,7 +23,6 @@ from pods.services.activity import activity_for_pod, cohort_activity, sprint_act
 from pods.services.first_meeting_nudge import dashboard_pod_nudges
 from pods.services.meeting_presentation import dashboard_pod_meetings
 from pods.services.meetings import propose_meeting
-from pods.services.stale_requests import request_line
 from pods.tests.fixtures import (
     COURSE_SLUG,
     enroll,
@@ -148,7 +147,7 @@ class SprintPodAccessTest(SprintPodFixture):
         self.client.force_login(self.outsider)
         self.assertEqual(self.client.get(self.url()).status_code, 404)
         self.assertEqual(self.client.get(self.pod_url(pod)).status_code, 404)
-        self.assertEqual(self.client.post(self.pod_url(pod, '/request')).status_code, 404)
+        self.assertEqual(self.client.post(self.pod_url(pod, '/join')).status_code, 404)
 
     def test_draft_and_cancelled_sprints_404_for_members_but_not_staff(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna])
@@ -193,7 +192,7 @@ class SprintPodPagesTest(SprintPodFixture):
         sprint_pod(self.sprint, 'Agents', members=[self.mike])
         self.client.force_login(self.anna)
         response = self.client.get(self.url())
-        self.assertContains(response, '<title>Pods · Spring sprint | AI Shipping Labs</title>', html=False)
+        self.assertContains(response, '<title>Study groups · Spring sprint | AI Shipping Labs</title>', html=False)
         self.assertContains(response, f'href="/sprints/{SPRINT_SLUG}" class="hover:text-accent')
         self.assertContains(response, 'Small groups in this sprint that meet to work on one thing together.')
         self.assertNotContains(response, 'data-course-tabs')
@@ -203,7 +202,7 @@ class SprintPodPagesTest(SprintPodFixture):
     def test_member_starts_a_pod_and_lands_on_the_sprint_pod_page(self):
         self.client.force_login(self.anna)
         response = self.client.post(self.url('/new'), {
-            'name': 'Agents study group', 'purpose': 'Build agents', 'max_members': '4',
+            'name': 'Agents study group', 'purpose': 'Build agents', 'scheduling_note': '',
             'meeting_count': '1', 'meeting_minutes': '60',
         })
         pod = Pod.objects.get(name='Agents study group')
@@ -215,7 +214,6 @@ class SprintPodPagesTest(SprintPodFixture):
 
     def test_every_pod_page_form_posts_under_the_sprint(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna, self.mike], owner=self.anna, meeting_count=4)
-        PodJoinRequest.objects.create(pod=pod, user=self.free)
         set_windows(self.anna, 'Europe/Berlin', [(d, '08:00', '22:00') for d in range(7)])
         set_windows(self.mike, 'Europe/Berlin', [(d, '08:00', '22:00') for d in range(7)])
         start = timezone.now() + datetime.timedelta(days=2)
@@ -228,44 +226,10 @@ class SprintPodPagesTest(SprintPodFixture):
             if action.startswith('/accounts/') or action == '/search':
                 continue
             self.assertTrue(action.startswith(f'/sprints/{SPRINT_SLUG}/pods/{pod.pk}/'), action)
-        for path in ('/slack', '/messages', '/call-link', '/leave', f'/requests/{pod.join_requests.get().pk}/approve'):
+        for path in ('/slack', '/messages', '/call-link', '/leave'):
             self.assertIn(f'/sprints/{SPRINT_SLUG}/pods/{pod.pk}{path}', page)
         self.assertNotIn('/courses/', ' '.join(actions))
         self.assertIn(f'/sprints/{SPRINT_SLUG}/pods/{pod.pk}/meetings/new?start=', page)
-
-    def test_request_approve_and_leave_redirect_under_the_sprint(self):
-        pod = sprint_pod(self.sprint, 'Agents', members=[self.anna], owner=self.anna)
-        self.client.force_login(self.mike)
-        response = self.client.post(self.pod_url(pod, '/request'), {'message': 'Hi'})
-        self.assertRedirects(response, self.pod_url(pod), fetch_redirect_response=False)
-        join_request = PodJoinRequest.objects.get(pod=pod, user=self.mike)
-        self.client.force_login(self.anna)
-        response = self.client.post(self.pod_url(pod, f'/requests/{join_request.pk}/approve'))
-        self.assertRedirects(response, self.pod_url(pod), fetch_redirect_response=False)
-        self.assertTrue(PodMembership.objects.filter(pod=pod, user=self.mike).exists())
-        self.client.force_login(self.mike)
-        response = self.client.post(self.pod_url(pod, '/leave'))
-        self.assertRedirects(response, self.url(), fetch_redirect_response=False)
-
-    def test_withdraw_and_decline_on_a_sprint_pod(self):
-        pod = sprint_pod(self.sprint, 'Agents', members=[self.anna], owner=self.anna)
-        self.client.force_login(self.mike)
-        self.client.post(self.pod_url(pod, '/request'))
-        response = self.client.post(self.pod_url(pod, '/withdraw'))
-        self.assertRedirects(response, self.pod_url(pod), fetch_redirect_response=False)
-        self.assertEqual(PodJoinRequest.objects.get(pod=pod, user=self.mike).status, 'withdrawn')
-        self.client.post(self.pod_url(pod, '/request'))
-        open_request = PodJoinRequest.objects.get(pod=pod, user=self.mike, status='pending')
-        self.client.force_login(self.anna)
-        self.client.post(self.pod_url(pod, f'/requests/{open_request.pk}/decline'))
-        declined = Notification.objects.filter(user=self.mike, title__contains='was not accepted').get()
-        self.assertEqual(declined.url, self.url())
-
-    def test_full_sprint_pod_puts_requests_on_the_waiting_list(self):
-        pod = sprint_pod(self.sprint, 'Pair', members=[self.anna], owner=self.anna, max_members=1)
-        self.client.force_login(self.mike)
-        self.client.post(self.pod_url(pod, '/request'))
-        self.assertEqual(PodJoinRequest.objects.get(pod=pod, user=self.mike).status, 'waitlisted')
 
     def test_member_below_tier_uses_pods_but_not_slack(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.free, self.anna], owner=self.anna)
@@ -279,7 +243,6 @@ class SprintPodPagesTest(SprintPodFixture):
 
     def test_pod_pages_never_show_member_emails(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna, self.mike], owner=self.anna)
-        PodJoinRequest.objects.create(pod=pod, user=self.free, message='Hi')
         self.client.force_login(self.anna)
         for url in (self.url(), self.pod_url(pod)):
             body = self.client.get(url).content.decode()
@@ -298,25 +261,10 @@ class SprintLimitsTest(SprintPodFixture):
             svc.start_member_pod(self.anna, self.sprint, {'name': 'Second', 'purpose': 'x'})
         self.assertEqual(ctx.exception.message, 'You can start up to 1 pods in this sprint.')
 
-    @override_settings(PODS_MAX_OPEN_REQUESTS_PER_MEMBER='1')
-    def test_open_request_limit_counts_per_sprint_and_says_sprint(self):
-        SprintEnrollment.objects.create(sprint=self.other_sprint, user=self.mike)
-        elsewhere = sprint_pod(self.other_sprint, 'Elsewhere', members=[self.anna])
-        first = sprint_pod(self.sprint, 'First', members=[self.anna])
-        second = sprint_pod(self.sprint, 'Second', members=[self.anna])
-        svc.request_to_join(elsewhere, self.mike)
-        svc.request_to_join(first, self.mike)
-        with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(second, self.mike)
-        self.assertEqual(
-            ctx.exception.message,
-            'You already have 1 open requests in this sprint. Withdraw one to request another pod.',
-        )
-
-    def test_non_enrolled_user_cannot_request_with_sprint_copy(self):
+    def test_non_enrolled_user_cannot_join_with_sprint_copy(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna])
         with self.assertRaises(svc.PodError) as ctx:
-            svc.request_to_join(pod, self.outsider)
+            svc.join_pod(pod, self.outsider)
         self.assertEqual(ctx.exception.message, 'Only members of this sprint can join its pods.')
 
 
@@ -353,13 +301,6 @@ class SprintUnenrollTest(SprintPodFixture):
 
 @tag('core')
 class SprintNotificationsAndDashboardTest(SprintPodFixture):
-    def test_request_and_approval_notifications_link_to_the_sprint_pod(self):
-        pod = sprint_pod(self.sprint, 'Agents', members=[self.anna], owner=self.anna)
-        join_request = svc.request_to_join(pod, self.mike)
-        self.assertEqual(Notification.objects.get(user=self.anna).url, self.pod_url(pod))
-        svc.approve_request(join_request, self.anna)
-        self.assertEqual(Notification.objects.get(user=self.mike).url, self.pod_url(pod))
-
     def test_meeting_notifications_link_to_the_sprint_pod(self):
         pod = sprint_pod(self.sprint, 'Agents', members=[self.anna, self.mike], owner=self.anna)
         start = (timezone.now() + datetime.timedelta(days=3)).replace(minute=0, second=0, microsecond=0)
@@ -401,13 +342,6 @@ class SprintNotificationsAndDashboardTest(SprintPodFixture):
             self.assertEqual(dashboard_pod_meetings(self.anna, now), [], status)
         pod.meetings.all().delete()
         self.assertEqual(dashboard_pod_nudges(self.anna, now), [])
-
-    def test_slack_alert_names_a_sprint_pod_by_its_sprint(self):
-        pod = sprint_pod(self.sprint, 'Agents', members=[self.anna], owner=self.anna)
-        join_request = PodJoinRequest.objects.create(pod=pod, user=self.mike)
-        line = request_line(join_request, 'https://x.test', timezone.now())
-        self.assertIn('|Agents> (Spring sprint) - Mike K.', line)
-
 
 @tag('core')
 class SprintStaffCreateTest(SprintPodFixture):

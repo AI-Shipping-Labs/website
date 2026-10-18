@@ -10,7 +10,6 @@ import uuid
 from datetime import UTC
 from unittest import mock
 
-import requests
 from django.test import TestCase, tag
 from freezegun import freeze_time
 
@@ -20,7 +19,6 @@ from integrations.models import IntegrationSetting
 from pods.models import (
     MEETING_RESPONSE_CANT,
     MEETING_RESPONSE_GOING,
-    PodJoinRequest,
     PodMeeting,
     PodMeetingResponse,
 )
@@ -336,108 +334,6 @@ class StuckProposalAlertTest(StuckFixture):
         ))
         self.assertEqual((payload['link_names'], payload['parse']), (False, 'none'))
 
-
-@tag('core')
-@freeze_time(NOW)
-class CombinedAlertTest(StuckFixture):
-    def setUp(self):
-        super().setUp()
-        self.request_pod = self.pod('Requests pod', members=[self.anna])
-        self.join_request = PodJoinRequest.objects.create(pod=self.request_pod, user=self.raj)
-        PodJoinRequest.objects.filter(pk=self.join_request.pk).update(created_at=NOW - 8 * DAY)
-        self.head = self.proposal(self.pod('Proposal pod'), age=3 * DAY)
-
-    def refreshed(self):
-        self.join_request.refresh_from_db()
-        self.head.refresh_from_db()
-        return self.join_request.stale_alerted_at, self.head.stuck_alerted_at
-
-    def test_one_message_carries_both_sections_and_one_button(self):
-        with self.assertLogs('pods.services.stale_requests', level='INFO') as logs:
-            self.assertEqual(send_stale_request_alert(now=NOW), 2)
-
-        self.assertEqual(self.post.call_count, 1)
-        payload = _payload(self.post)
-        self.assertEqual(payload['text'], 'Pod requests and proposals need attention')
-        sections = _section_texts(payload)
-        self.assertEqual(
-            [sections[0], sections[2]],
-            ['*1 pod request has waited more than 5 days*', '*1 pod proposal has waited more than 48 hours or half the time to the meeting*'],
-        )
-        self.assertIn('Raj P. (raj@example.com) asked 8 days ago', sections[1])
-        self.assertIn('|Proposal pod>', sections[3])
-        self.assertEqual([b['type'] for b in payload['blocks']].count('actions'), 1)
-        self.assertEqual(payload['blocks'][-1]['type'], 'actions')
-        self.assertEqual(self.refreshed(), (NOW, NOW))
-        self.assertIn(
-            'Posted pod request and proposal Slack alert for 1 pod request and 1 pod proposal to channel=C_STAFF',
-            [r.getMessage() for r in logs.records],
-        )
-
-    def test_slack_failures_mark_neither_kind_and_never_raise(self):
-        for name, kwargs in (
-            ('rejected', {'return_value': _rejected()}),
-            ('timeout', {'side_effect': requests.exceptions.Timeout('slow')}),
-        ):
-            with self.subTest(name=name):
-                self.post.reset_mock(return_value=True, side_effect=True)
-                self.post.configure_mock(**kwargs)
-                with self.assertLogs('pods.services.stale_requests', level='ERROR') as logs:
-                    self.assertEqual(send_stale_request_alert(now=NOW), 0)
-                self.assertEqual(self.refreshed(), (None, None))
-        self.assertEqual(
-            [r.getMessage() for r in logs.records],
-            ['Pod request and proposal Slack alert failed for 1 pod request and 1 pod proposal (channel=C_STAFF)'],
-        )
-
-    def test_rejection_log_for_proposals_only(self):
-        PodJoinRequest.objects.filter(pk=self.join_request.pk).update(stale_alerted_at=NOW - DAY)
-        self.post.return_value = _rejected('not_in_channel')
-        with self.assertLogs('pods.services.stale_requests', level='ERROR') as logs:
-            send_stale_request_alert(now=NOW)
-        self.assertEqual(
-            [r.getMessage() for r in logs.records],
-            ['Stuck pod proposal Slack alert rejected for 1 pod proposal (channel=C_STAFF): not_in_channel'],
-        )
-
-    def test_each_kill_switch_drops_only_its_own_section(self):
-        self._set('PODS_STUCK_PROPOSAL_ALERT_ENABLED', 'false')
-        self.assertEqual(send_stale_request_alert(now=NOW), 1)
-        self.assertEqual(_payload(self.post)['text'], 'Stale pod requests need attention')
-        self.assertEqual(self.refreshed(), (NOW, None))
-
-        PodJoinRequest.objects.filter(pk=self.join_request.pk).update(stale_alerted_at=None)
-        self._set('PODS_STUCK_PROPOSAL_ALERT_ENABLED', 'true')
-        self._set('PODS_STALE_REQUEST_ALERT_ENABLED', 'false')
-        self.post.reset_mock()
-        self.assertEqual(send_stale_request_alert(now=NOW), 1)
-        self.assertEqual(_payload(self.post)['text'], 'Stuck pod proposals need attention')
-        self.assertEqual(self.refreshed(), (None, NOW))
-
-        PodMeeting.objects.filter(pk=self.head.pk).update(stuck_alerted_at=None)
-        self._set('PODS_STUCK_PROPOSAL_ALERT_ENABLED', 'false')
-        self.post.reset_mock()
-        self.assertEqual(send_stale_request_alert(now=NOW), 0)
-        self.post.assert_not_called()
-        self.assertEqual(self.refreshed(), (None, None))
-
-    def test_slack_gate_skip_marks_nothing(self):
-        self._set('SLACK_ENABLED', 'false')
-        self.assertEqual(send_stale_request_alert(now=NOW), 0)
-        self.post.assert_not_called()
-        self.assertEqual(self.refreshed(), (None, None))
-
-    def test_proposal_moved_while_posting_is_not_marked(self):
-        def move_during_post(*args, **kwargs):
-            PodMeeting.objects.filter(pk=self.head.pk).update(moved_at=NOW)
-            return _ok()
-
-        self.post.side_effect = move_during_post
-        send_stale_request_alert(now=NOW)
-        self.assertEqual(self.refreshed(), (NOW, None))
-
-
-# --- Studio and Studio settings -----------------------------------------------------------
 
 @tag('core')
 @freeze_time(NOW)

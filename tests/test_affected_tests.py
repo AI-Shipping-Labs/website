@@ -51,6 +51,7 @@ from scripts.affected_tests import (
     REPO_WIDE_GUARDS,
     REPO_WIDE_TEMPLATE_LINT_LABELS,
     REVERSE_IMPORT_APP_CAP,
+    SUPPLEMENTAL_PLAYWRIGHT_OWNERS,
     TAILWIND_INPUT_CSS_GLOBS,
     TAILWIND_PRODUCER_GLOBS,
     TEST_TREE_CONTRACTS,
@@ -673,6 +674,42 @@ class RuleChainTest(SimpleTestCase):
             plan.django_labels,
             collapsed(*PLAYWRIGHT_TEST_TREE_POLICY_LABELS, *guards("playwright_tests/test_dashboard.py")),
         )
+
+    def test_supplemental_playwright_owners_compose_with_normal_mapping(self):
+        command = "uv run pytest playwright_tests/test_pod_unconfirmable_1937.py -v"
+        for source, _owners in SUPPLEMENTAL_PLAYWRIGHT_OWNERS:
+            with self.subTest(source=source):
+                plan = plan_for([source])
+                self.assertIn("pods", plan.django_labels)
+                self.assertTrue(set(guards(source)).issubset(plan.django_labels))
+                self.assertIn(command, plan.extra_commands)
+
+    def test_supplemental_playwright_owner_commands_are_deduplicated(self):
+        command = "uv run pytest playwright_tests/test_pod_unconfirmable_1937.py -v"
+        sources = [source for source, _owners in SUPPLEMENTAL_PLAYWRIGHT_OWNERS]
+        plan = plan_for(sources)
+        self.assertEqual(plan.extra_commands.count(command), 1)
+
+    def test_full_playwright_supersedes_supplemental_owner_command(self):
+        source = SUPPLEMENTAL_PLAYWRIGHT_OWNERS[0][0]
+        plan = plan_for([source, "templates/base.html"])
+        command = "uv run pytest playwright_tests/test_pod_unconfirmable_1937.py -v"
+        self.assertEqual(plan.playwright, "full")
+        self.assertNotIn(command, plan.extra_commands)
+        self.assertTrue(
+            any(note.startswith("NOTE playwright-full-supersedes:") for note in plan.notes),
+            plan.notes,
+        )
+
+    def test_supplemental_playwright_owners_exist_and_are_local_only(self):
+        for source, owners in SUPPLEMENTAL_PLAYWRIGHT_OWNERS:
+            with self.subTest(source=source):
+                self.assertTrue((REPO_ROOT / source).is_file())
+            for owner in owners:
+                with self.subTest(owner=owner):
+                    owner_path = REPO_ROOT / owner
+                    self.assertTrue(owner_path.is_file())
+                    self.assertIn("pytest.mark.local_only", owner_path.read_text())
 
     def test_repository_test_tree_contracts_are_data_driven_and_composable(self):
         self.assertEqual(len(TEST_TREE_CONTRACTS), 2)

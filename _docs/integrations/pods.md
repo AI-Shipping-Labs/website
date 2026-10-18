@@ -1,17 +1,18 @@
-# Pods
+# Study groups
 
-Pods are small groups of members inside a community activity (issue #1918).
-Phase 1 attaches pods to dated course cohorts: enrolled cohort members see a
+Study groups are small groups of members inside a community activity (issue #1918).
+Phase 1 attaches them to dated course cohorts: enrolled cohort members see a
 `Study groups` tab between `Syllabus` and `Live sessions` on course Home,
-start a pod of one, send join requests, join a
-waiting list when a pod is full, add weekly availability in their own
-timezone, and see suggested meeting times. Since issue #1919 they turn a
+start a group of one, join any number of open groups immediately, leave one
+without affecting their other memberships, add weekly availability in their
+own timezone, and see suggested meeting times. Since issue #1919 they turn a
 suggested time into an agreed pod meeting (propose, confirm, `Can't make it`
 with the next best time, move, cancel, held, a weekly series and one pod call
 link), with bell notifications and a reminder before each meeting. Staff
-manage pods in Studio (`Planning -> Pods`) and through the staff API
+manage study groups in Studio (`Planning -> Pods`) and through the staff API
 (`_docs/api.md`, `Pods API`). Since issue #1921 a community sprint is a second
-pod activity with the same member experience; see [Sprint pods](#sprint-pods).
+study-group activity with the same member experience; see
+[Sprint study groups](#sprint-study-groups).
 
 Every key below is set in Studio (`Operations -> Settings`, `Pods` group). An
 environment variable with the same name is an optional fallback.
@@ -21,7 +22,7 @@ environment variable with the same name is an optional fallback.
 Comma-separated course slugs whose dated-cohort members and staff viewing that
 cohort see the `Study groups` tab, for example `ai-buildcamp`. Course-only:
 sprint pods are switched on per sprint with
-`Sprint.pods_enabled` (see [Sprint pods](#sprint-pods)).
+`Sprint.pods_enabled` (see [Sprint study groups](#sprint-study-groups)).
 
 - Type: string.
 - Default: empty.
@@ -29,15 +30,6 @@ sprint pods are switched on per sprint with
   course returns 404 and course Home renders no `Study groups` tab.
 - Studio and the staff API work regardless, so pods can be prepared before a
   course is switched on.
-
-## PODS_DEFAULT_MAX_MEMBERS
-
-Default size limit for a new pod.
-
-- Type: integer, 1-12.
-- Default: `4`.
-- Applies to the member `Start a pod` form, Studio create and `POST /api/pods`
-  when no `max_members` is given.
 
 ## PODS_DEFAULT_MEETING_COUNT
 
@@ -53,17 +45,6 @@ Default meeting length for a new pod.
 - Type: integer, one of `30`, `45`, `60`, `90`.
 - Default: `60`.
 - The meeting length sizes the suggested meeting times on the pod page.
-
-## PODS_MAX_OPEN_REQUESTS_PER_MEMBER
-
-How many open (`pending` or `waitlisted`) join requests one member may hold
-across the pods of one cohort.
-
-- Type: integer.
-- Default: `3`.
-- Over the limit the member sees `You already have 3 open requests in this
-  cohort. Withdraw one to request another pod.` Requests in other cohorts do
-  not count.
 
 ## PODS_MAX_CREATED_PER_MEMBER
 
@@ -90,62 +71,6 @@ Maximum number of suggested meeting times shown for a pod.
 
 - Type: integer.
 - Default: `5`.
-
-## PODS_STALE_REQUEST_DAYS
-
-Studio highlight for unanswered join requests.
-
-- Type: integer.
-- Default: `5`.
-- On `/studio/pods/`, a pod whose oldest pending request is older than this many
-  days shows its age in an amber pill so staff can approve or decline as an
-  override. Nothing is approved automatically.
-
-Pending requests only: since issue #1927 the Studio `stale` badge looks at
-the oldest `pending` request. A waitlisted request is never stale, because
-nobody can approve it until a seat opens. The same threshold drives the daily
-staff Slack alert (`PODS_STALE_REQUEST_ALERT_ENABLED`).
-
-## PODS_REREQUEST_COOLDOWN_DAYS
-
-How long a student waits after a declined request before asking the same pod
-again.
-
-- Type: integer, `0` or more. Invalid values fall back to `14`.
-- Default: `14`.
-- Counted per pod and per student, from the decline's `decided_at`. Withdrawn
-  and cancelled requests do not count.
-- First decline: the pod page hides the request form and shows `Your request
-  was not accepted. You can ask again on Oct 23.` After the cooldown the form
-  comes back with `Your last request was not accepted. You can ask once more.`
-- Second decline on the same pod: final. The student sees `This pod declined
-  your request twice, so you can't ask to join it again.` with a `Browse other
-  pods` link. Staff can still add the student in Studio or through the API.
-- `0` allows an immediate second request; the second decline is still final.
-- A refused request creates no request and no owner notification.
-
-## PODS_STALE_REQUEST_ALERT_ENABLED
-
-Kill switch for the daily staff Slack alert about stale pod requests.
-
-- Type: boolean.
-- Default: `true`.
-- Job: `pods-stale-request-alert`, daily at 09:00 UTC
-  (`pods.tasks.stale_requests.send_stale_request_alert`).
-- Stale request: `pending`, pod not archived, created more than
-  `PODS_STALE_REQUEST_DAYS` days ago.
-- One message per run, only when at least one stale request has not been
-  announced yet (`PodJoinRequest.stale_alerted_at` is empty). Up to 10 request
-  lines, then `and N more`; already announced requests still waiting are
-  counted in a `N earlier requests are still waiting.` line. No message on
-  days with nothing new.
-- Channel: `STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to
-  `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`. Also needs `SLACK_ENABLED` and
-  `SLACK_BOT_TOKEN`. With any of these missing, or on a Slack error, nothing
-  is marked as announced and the job retries the next day.
-- Since issue #1935 the same daily message also carries stuck pod meeting
-  proposals (`PODS_STUCK_PROPOSAL_ALERT_ENABLED`). This key gates only the
-  requests section: with it off, stuck proposals still post.
 
 ## PODS_STUCK_PROPOSAL_HOURS
 
@@ -186,14 +111,13 @@ How long a pod meeting proposal may wait for answers before it is stuck
 
 ## PODS_STUCK_PROPOSAL_ALERT_ENABLED
 
-Kill switch for the stuck proposals section of the daily pods staff Slack
-message.
+Kill switch for the daily staff Slack alert about stuck study-group meeting
+proposals.
 
 - Type: boolean.
 - Default: `true`.
-- Job: the same `pods-stale-request-alert` (daily at 09:00 UTC). One message
-  per run covers stale requests and stuck proposals; it posts only when at
-  least one of them is new.
+- Job: `pods-stale-request-alert` (daily at 09:00 UTC). One message per run
+  covers new stuck proposals and posts only when at least one is new.
 - Section: `*3 pod proposals have waited more than 48 hours or half the time
   to the meeting*`, then up to 10
   lines, oldest first, then `and N more`:
@@ -210,10 +134,10 @@ message.
   on its first meeting after Slack accepts the post, and cleared when the
   proposal is moved, so a moved proposal that gets stuck again is announced
   again.
-- Fallback text: `Stale pod requests need attention`, `Stuck pod proposals
-  need attention`, or `Pod requests and proposals need attention`.
-- Same channel and Slack gates as `PODS_STALE_REQUEST_ALERT_ENABLED`. Off
-  drops only this section; stale requests still post.
+- Fallback text: `Stuck pod proposals need attention`.
+- Uses `STAFF_COMMENT_NOTIFY_CHANNEL_ID`, falling back to
+  `STAFF_SIGNUP_NOTIFY_CHANNEL_ID`, and also needs `SLACK_ENABLED` and
+  `SLACK_BOT_TOKEN`. Off disables the message.
 
 ## PODS_MEETING_REMINDER_HOURS
 
@@ -313,9 +237,9 @@ Largest pod note or transcript a member may save, in KB of UTF-8 text
   form says `Notes can be up to 500 KB. Trim the text or split it into two.`
   (the number follows the setting) and keeps the typed values.
 
-## Sprint pods
+## Sprint study groups
 
-Issue #1921 makes a community sprint a second pod activity. One helper,
+Issue #1921 makes a community sprint a second study-group activity. One helper,
 `pods/services/activity.py` (`PodActivity`), answers for either activity who
 is a participant, who may view, whether member pages are on, the member URLs,
 the display label and the noun used in copy (`cohort` or `sprint`). Cohort pod
@@ -337,11 +261,11 @@ All under the sprint, named `sprint_<course route name>`:
 
 | URL | Purpose |
 |---|---|
-| `/sprints/<slug>/pods` | Pods list |
-| `/sprints/<slug>/pods/new` | Start a pod |
+| `/sprints/<slug>/pods` | Study groups list |
+| `/sprints/<slug>/pods/new` | Start a study group |
 | `/sprints/<slug>/pods/availability` | Availability editor (the same single profile as cohort pods) |
-| `/sprints/<slug>/pods/<id>` | Pod page |
-| `/sprints/<slug>/pods/<id>/...` | `notes/new`, `notes/<id>`, `notes/<id>/delete` (issue #1922), `request`, `withdraw`, `leave`, `edit`, `requests/<id>/approve`, `requests/<id>/decline`, `slack`, `messages`, `call-link`, `meetings/new`, `meetings/<id>/respond`, `meetings/<id>/move`, `meetings/<id>/cancel`, `meetings/<id>/held` |
+| `/sprints/<slug>/pods/<id>` | Study group page |
+| `/sprints/<slug>/pods/<id>/...` | `notes/new`, `notes/<id>`, `notes/<id>/delete` (issue #1922), `join`, `leave`, `edit`, `slack`, `messages`, `call-link`, `meetings/new`, `meetings/<id>/respond`, `meetings/<id>/move`, `meetings/<id>/cancel`, `meetings/<id>/held` |
 
 Sprint pod pages show a sprint header (`Sprint` eyebrow, the sprint name
 linking to `/sprints/<slug>`) instead of the course tab strip.
@@ -353,19 +277,17 @@ linking to `/sprints/<slug>`) instead of the course tab strip.
 - Logged in without a `SprintEnrollment`: 404.
 - Enrolled member: full access. No extra tier check; staff can enroll a member
   below `min_tier_level`. The Slack hand-off keeps its Main-or-above rule.
-- Staff not enrolled: operator view (read, no `Start a pod`, no request form).
+- Staff not enrolled: operator view (read, no `Start a study group` or membership action).
 - A pod id from another sprint or from a cohort: 404.
 - Ended sprints keep their pods usable.
 
 ### Rules that differ only by activity
 
-- `PODS_MAX_OPEN_REQUESTS_PER_MEMBER` and `PODS_MAX_CREATED_PER_MEMBER` count
-  per sprint, and the messages say `in this sprint`. Every other `PODS_*`
-  default and limit applies unchanged.
+- `PODS_MAX_CREATED_PER_MEMBER` counts per sprint, and the message says
+  `in this sprint`. Every other active `PODS_*` default applies unchanged.
 - Unenrollment: deleting a `SprintEnrollment` (`sprint_leave` or Studio
   unenroll; the API has no enrollment delete) removes the user from that
-  sprint's pods with the normal leave rules and cancels their open requests
-  there. Cohort pods and other sprints' pods are untouched.
+  sprint's groups with the normal leave rules. Cohort pods and other sprints' pods are untouched.
 - Bell notifications, dashboard `Your week` rows and the first-meeting nudge
   link to `/sprints/<slug>/pods/<id>`.
 - The daily staff Slack alert names a sprint pod `Pod name (Sprint name)`.
@@ -497,7 +419,7 @@ point; the pod page recommends Slack for ongoing conversation.
 - Who: current pod members read and post, on any tier (the Slack tier gate
   does not apply). Staff who are not members read it on the member page but
   cannot post (`You can read this chat. Only pod members can post.`).
-  Non-members, requesters, waitlisted members and former members see no chat
+  Non-members and former members see no chat
   section and get `403` on POST.
 - Where: the `Chat` section (`#chat`) is the last section on the pod page.
   Archived pods are 404 for members; staff still read their chat. Closed
@@ -522,8 +444,8 @@ point; the pod page recommends Slack for ongoing conversation.
 - Unread: opening the pod page as a member sets `PodMembership.chat_read_at`.
   The member's own rows on the `Study groups` tab show `N new messages` for visible
   messages by others after that time (or after `joined_at` when never read).
-  The `Study groups` tab badge still counts only pending requests. There are no bell,
-  email or Slack notifications per message.
+  There is no membership-request badge and no bell, email or Slack
+  notification per message.
 - Moderation: staff hide or restore a message in Studio (the pod's `Chat`
   section shows the latest 200 messages including hidden ones, with author
   name and email) or with `POST /api/pods/<id>/messages/<message_id>/hide`
@@ -536,8 +458,8 @@ After a meeting, pod members add the meeting notes or the call transcript as
 a pod artifact (issue #1922). Plain text only: nothing goes to file storage.
 
 - Who: current pod members add and read. Staff who are not members read them
-  (on the pod page and the artifact page) but do not add them (`403`). Non-members,
-  requesters, waitlisted and former members see nothing and get 404 on every
+  (on the pod page and the artifact page) but do not add them (`403`). Non-members
+  and former members see nothing and get 404 on every
   notes URL. Archived pods stay 404 for members. The course must be in
   `PODS_COURSE_SLUGS`.
 - Meeting rows: the next upcoming `scheduled` meeting that has not started

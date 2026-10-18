@@ -59,7 +59,7 @@ LEGITIMATE_DELETE_HANDLERS = {
     "course_access.course_access_detail": (
         "relationship/attribute removal: granted CourseAccess row (never purchased)"
     ),
-    "pods.pod_member_detail": (
+    "pod_api_members.pod_member_detail": (
         "relationship removal: one PodMembership (leave rules apply); pod and user untouched"
     ),
     # 3. Soft-delete

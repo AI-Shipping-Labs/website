@@ -6,12 +6,10 @@ from urllib.parse import urlencode
 from content.services.course_announcements import show_announcements_tab
 from pods.services.config import pods_enabled_for_course
 from pods.services.people import can_view_cohort_pods, is_dated_cohort
-from pods.services.presentation import pending_count_for_owner
 
 
 def pods_tab_context(course, user, cohort):
-    """``show_pods_tab`` for dated-cohort viewers of an enabled course, plus
-    the owner's pending-request count for the tab badge."""
+    """``show_pods_tab`` for dated-cohort viewers of an enabled course."""
     visible = (
         pods_enabled_for_course(course)
         and is_dated_cohort(cohort)
@@ -19,7 +17,7 @@ def pods_tab_context(course, user, cohort):
     )
     return {
         'show_pods_tab': visible,
-        'pods_tab_count': pending_count_for_owner(cohort, user) if visible else 0,
+        'pods_tab_count': 0,
     }
 
 

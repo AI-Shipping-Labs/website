@@ -4,7 +4,7 @@
 webhook, Studio and the API all write it) and ``SprintEnrollment`` for
 sprint pods (``sprint_leave``, Studio unenroll and the enrollments API all
 delete it). Deleting a user's enrollment removes them from that activity's
-pods with the normal leave rules and cancels their open requests there;
+groups with the normal leave rules;
 other cohorts and sprints are untouched.
 """
 

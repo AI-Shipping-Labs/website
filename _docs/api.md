@@ -485,25 +485,24 @@ one row returns `409 content_id_ambiguous` with a `matches` list of `type`,
 
 Staff-token endpoints for pods (issue #1918): small groups inside a dated
 course cohort or, since issue #1921, a community sprint. Pairing logic stays in your own tooling; the site never pairs
-people automatically. Every write follows the same rules as the member pages
-and Studio: capacity, the waiting list (a freed seat moves the oldest
-waitlisted request back to `pending`, nobody is auto-approved), and the leave
-rules. Errors use the canonical `{"error", "code"}` envelope; a missing or
+people automatically. Groups have no size limit or approval queue. Staff may
+add any eligible members, and removing a member follows the same owner-transfer
+and last-member archive rules as the member pages. Historical join requests
+remain readable for audit only. Errors use the canonical `{"error", "code"}` envelope; a missing or
 non-staff token returns `401`.
 
 | Method | Path | Notes |
 |--------|------|-------|
-| GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, `pod_ids`, `open_request_pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
-| GET | `/api/sprints/<slug>/members` | Sprint pairing roster (issue #1921): every user with a `SprintEnrollment`, in the same member shape as the cohort roster; `enrolled_at` comes from the sprint enrollment and `pod_ids` / `open_request_pod_ids` are limited to this sprint's pods. Response carries `sprint` (slug) instead of `course` / `cohort_key`. Same pagination. `404 unknown_sprint` |
+| GET | `/api/courses/<slug>/cohorts/<key>/members` | Pairing roster: every enrolled user with `tier`, `tags`, `preferred_timezone`, Slack flags, `crm`, `availability`, and `pod_ids`. `limit` (default 200, max 500) and `offset`. `404 unknown_course` / `unknown_cohort` |
+| GET | `/api/sprints/<slug>/members` | Sprint pairing roster (issue #1921): every user with a `SprintEnrollment`, in the same member shape as the cohort roster; `enrolled_at` comes from the sprint enrollment and `pod_ids` are limited to this sprint's groups. Response carries `sprint` (slug) instead of `course` / `cohort_key`. Same pagination. `404 unknown_sprint` |
 | GET | `/api/pods` | Pod summaries (cohort and sprint pods); filters `course`, `cohort` (needs `course`), `sprint` (slug), `status`; `limit`/`offset`. `sprint` with `course` or `cohort`: `422 validation_error`; unknown sprint: `404 unknown_sprint` |
-| POST | `/api/pods` | Create (`source=api`), `201`, in a dated cohort (`course_slug` + `cohort_key`) or a sprint (`sprint_slug`). Both: `422 validation_error` with `field: sprint_slug`; neither: `422` with `field: course_slug`; unknown sprint: `404 unknown_sprint`. The owner and member emails must be enrolled in the cohort or sprint. Idempotent: a non-archived pod with the same name (case-insensitive) in the cohort or sprint is returned with `200` and only new emails are added; its settings and owner stay unchanged (use PATCH). `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`, `over_capacity`. Self-paced cohort: `422 validation_error` |
-| GET | `/api/pods/<id>` | Every pod payload (list and detail) carries `course_slug`, `cohort_key`, `cohort_name`, `sprint_slug` and `sprint_name`; the cohort fields are `null` for sprint pods and the sprint fields `null` for cohort pods (issue #1921). Settings, members, open requests with waiting-list position, `slack_channel_url`, `meeting_url`, `message_count` (visible chat messages) and `last_message_at` (latest visible message or `null`, issue #1920), `artifact_count` (notes and transcripts, issue #1922), `meetings` (every meeting that is not cancelled), `suggested_slots` (UTC) |
-| PATCH | `/api/pods/<id>` | `name`, `purpose`, `max_members` (`422` below member count), `meeting_count` (`422` below the meetings already planned or held), `meeting_minutes`, `status`, `owner_email` (a member or `null`), `slack_channel_url`, `meeting_url` (the pod call link: https only, max 500, empty clears) |
-| POST | `/api/pods/<id>/members` | `{"emails": [...]}`; idempotent; same result buckets (eligibility is enrollment in the pod's cohort or sprint); closes added users' open requests as `approved` |
+| POST | `/api/pods` | Create (`source=api`), `201`, in a dated cohort (`course_slug` + `cohort_key`) or a sprint (`sprint_slug`). Both: `422 validation_error` with `field: sprint_slug`; neither: `422` with `field: course_slug`; unknown sprint: `404 unknown_sprint`. The owner and member emails must be enrolled in the cohort or sprint. Idempotent: a non-archived group with the same name (case-insensitive) is returned with `200` and only new emails are added. `results` buckets: `added`, `not_enrolled`, `unknown_user`, `already_member`. `max_members` is retired and returns exact `422 validation_error`. Self-paced cohort: `422 validation_error` |
+| GET | `/api/pods/<id>` | Every group payload carries cohort/sprint identity, reviewed public `purpose`, public `scheduling_note`, staff-only `internal_notes`, members, Slack and call links, chat/artifact counts, meetings, and suggested slots. Historical requests are available only from their separate read endpoint |
+| PATCH | `/api/pods/<id>` | `name`, `purpose` (max 160), `scheduling_note` (max 500), `internal_notes` (max 2000, staff-only), `meeting_count`, `meeting_minutes`, `status`, `owner_email`, `slack_channel_url`, `meeting_url`. `max_members` is retired and returns exact `422 validation_error` |
+| POST | `/api/pods/<id>/members` | `{"emails": [...]}`; unlimited and idempotent; eligibility is enrollment in the group's cohort or sprint |
 | DELETE | `/api/pods/<id>/members/<email>` | Leave rules apply; `204`; `404 not_a_member` |
-| GET | `/api/pods/<id>/requests` | Every request, optional `status` filter. Each request has `status`, `decided_at`, `decided_by`, and `stale_alerted_at` (when the daily staff Slack alert first reported it as stale, else `null`) |
-| POST | `/api/pods/<id>/requests/<request_id>/approve` | Staff override; `409 pod_full`, `409 request_not_open` |
-| POST | `/api/pods/<id>/requests/<request_id>/decline` | Staff override; `409 request_not_open` |
+| GET | `/api/pods/<id>/requests` | Historical audit records, optional `status` filter. Request mutation endpoints are retired |
+| POST | `/api/pods/<id>/requests/<request_id>/approve` or `/decline` | Stable compatibility response for stale clients: `410` with `code: gone`; never changes requests or memberships |
 | GET | `/api/pods/<id>/meetings` | Every meeting (issue #1919), optional `status` filter (`proposed`, `scheduled`, `held`, `cancelled`). Each has `id`, `number` (`null` when cancelled or expired), `starts_at`, `ends_at`, `duration_minutes`, `timezone`, `status`, `expired`, `series_id`, `created_via`, `proposed_by`, `moved_by`, `moved_at`, `previous_starts_at`, `reminder_sent_at`, `responses` (`email`, `response`) |
 | POST | `/api/pods/<id>/meetings` | Schedule agreed meetings (`created_via=api`), notifies members. `starts_at` (ISO 8601 with offset, quarter hour, 1 hour to 180 days ahead), `timezone` (IANA), `repeat_weekly` (default `false`), `count` (default 1, or every remaining meeting with `repeat_weekly`). `201`; `409 meeting_limit_reached`; `422 validation_error` for a bad time, an overlap or a bad field |
 | PATCH | `/api/pods/<id>/meetings/<meeting_id>` | Either `starts_at` (+ optional `timezone`, default the meeting's zone, and `move_later`) to move, or `status` (`scheduled`, `held`, `cancelled`) as a staff override. Returns the changed meetings. `409 meeting_not_movable` (past, held or cancelled), `409 meeting_limit_reached`, `404 unknown_meeting` (another pod's meeting), `422 validation_error` (including `status: held` before the meeting starts: `This meeting has not started yet.`, issue #1934) |
@@ -534,19 +533,11 @@ curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: applicat
        "member_emails": ["anna@example.com", "raj@example.com"]}' \
   "https://aishippinglabs.com/api/pods"
 
-# Raise the size limit (moves waitlisted requests back to pending)
-curl -sL -X PATCH -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
-  -d '{"max_members": 5}' "https://aishippinglabs.com/api/pods/7"
-
 # Re-pair: remove one member, add another
 curl -sL -X DELETE -H "Authorization: Token $API_TOKEN" \
   "https://aishippinglabs.com/api/pods/7/members/raj@example.com"
 curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \
   -d '{"emails": ["mike@example.com"]}' "https://aishippinglabs.com/api/pods/7/members"
-
-# Approve a stale request as staff
-curl -sL -X POST -H "Authorization: Token $API_TOKEN" \
-  "https://aishippinglabs.com/api/pods/7/requests/12/approve"
 
 # Schedule the pod's remaining meetings weekly at 18:00 Berlin time
 curl -sL -X POST -H "Authorization: Token $API_TOKEN" -H "Content-Type: application/json" \

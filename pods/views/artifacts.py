@@ -4,8 +4,8 @@ Same access rules as the pod page (cohort or sprint pods, issue #1921): the
 course must be in ``PODS_COURSE_SLUGS`` or the sprint must have
 ``pods_enabled``, users outside the cohort or sprint get 404, archived pods are
 404 for members. On top of that every URL is 404 while
-``PODS_ARTIFACTS_ENABLED`` is off, and for anyone who is neither a pod member
-nor staff (requesters, waitlisted and former members included). Staff who
+``PODS_ARTIFACTS_ENABLED`` is off, and for anyone who is neither a group member
+nor staff (former members included). Staff who
 are not members read but cannot add (403). Only the author removes (403 for
 everyone else). An artifact of another pod is a 404.
 """
@@ -23,6 +23,7 @@ from pods.services import meetings as mtg
 from pods.services import membership as svc
 from pods.services.activity import activity_for_pod
 from pods.services.meeting_rules import meeting_state
+from pods.services.presentation import public_pod
 from pods.services.tab import pods_frame_context
 from pods.views.member import LOGIN_URL, _pod_for_viewer
 
@@ -87,7 +88,7 @@ def artifact_new(request, pod_id, slug=None, sprint_slug=None):
         }
     context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
-        'pod': pod,
+        'pod': public_pod(pod),
         'form': form,
         'errors': errors,
         'meeting_options': [
@@ -116,7 +117,7 @@ def artifact_detail(request, pod_id, artifact_id, slug=None, sprint_slug=None):
     numbers = meeting_state(pod).numbers
     context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
-        'pod': pod,
+        'pod': public_pod(pod),
         'artifact': artifact,
         'kind_label': artifact.get_kind_display(),
         'meta': artifact_svc.meta_line(artifact, numbers, request.user, zone_name),

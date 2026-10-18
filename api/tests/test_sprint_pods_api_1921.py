@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from accounts.models import Token
 from plans.models import Sprint, SprintEnrollment
-from pods.models import Pod, PodJoinRequest, PodMembership
+from pods.models import Pod, PodMembership
 from pods.tests.fixtures import enroll, make_cohort, make_course, make_user
 
 
@@ -64,15 +64,13 @@ class SprintPodsApiTest(TestCase):
         PodMembership.objects.create(pod=other, user=self.anna, source='api')
         cohort_pod = Pod.objects.create(cohort=self.cohort, name='Cohort', purpose='p', source='api')
         PodMembership.objects.create(pod=cohort_pod, user=self.anna, source='api')
-        waiting = Pod.objects.create(sprint=self.sprint, name='Waiting', purpose='p', source='api')
-        PodJoinRequest.objects.create(pod=waiting, user=self.mike)
         data = self.call('get', '/api/sprints/spring-sprint/members').json()
         self.assertEqual(data['sprint'], 'spring-sprint')
         self.assertEqual(data['total'], 2)
         rows = {row['email']: row for row in data['members']}
         self.assertEqual(set(rows), {'anna@test.com', 'mike@test.com'})
         self.assertEqual(rows['anna@test.com']['pod_ids'], [pod.pk])
-        self.assertEqual(rows['mike@test.com']['open_request_pod_ids'], [waiting.pk])
+        self.assertNotIn('open_request_pod_ids', rows['mike@test.com'])
         for key in ('first_name', 'tier', 'tags', 'preferred_timezone', 'slack_member',
                     'has_slack_user_id', 'enrolled_at', 'crm', 'availability'):
             self.assertIn(key, rows['anna@test.com'])

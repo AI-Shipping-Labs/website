@@ -1,15 +1,12 @@
-"""Pod, membership and join-request models (issue #1918).
+"""Pod and membership models (issues #1918 and #1984).
 
 A pod belongs to exactly one community activity: a dated course cohort or
 a community sprint (issue #1921). The DB check constraint enforces that
 exactly one activity link is set; ``pods.services.activity`` answers every
 activity question (participants, URLs, labels).
 
-``PodJoinRequest`` is the one mechanism for both approval and the waiting
-list: a request is ``pending`` while the pod has a free seat and
-``waitlisted`` while it is full. The business rules live in
-``pods.services.membership`` so member views, Studio and the staff API
-share them.
+``PodJoinRequest`` remains as historical audit storage. Issue #1984 retired
+the approval queue: eligible participants now join an open pod immediately.
 """
 
 from django.conf import settings
@@ -32,6 +29,7 @@ __all__ = [
     'MEMBERSHIP_SOURCE_API',
     'MEMBERSHIP_SOURCE_CHOICES',
     'MEMBERSHIP_SOURCE_CREATOR',
+    'MEMBERSHIP_SOURCE_MEMBER',
     'MEMBERSHIP_SOURCE_REQUEST',
     'MEMBERSHIP_SOURCE_STAFF',
     'OPEN_REQUEST_STATUSES',
@@ -73,11 +71,13 @@ MEETING_MINUTES_CHOICES = [
 ]
 
 MEMBERSHIP_SOURCE_CREATOR = 'creator'
+MEMBERSHIP_SOURCE_MEMBER = 'member'
 MEMBERSHIP_SOURCE_REQUEST = 'request'
 MEMBERSHIP_SOURCE_STAFF = 'staff'
 MEMBERSHIP_SOURCE_API = 'api'
 MEMBERSHIP_SOURCE_CHOICES = [
     (MEMBERSHIP_SOURCE_CREATOR, 'Creator'),
+    (MEMBERSHIP_SOURCE_MEMBER, 'Member'),
     (MEMBERSHIP_SOURCE_REQUEST, 'Request'),
     (MEMBERSHIP_SOURCE_STAFF, 'Staff'),
     (MEMBERSHIP_SOURCE_API, 'API'),
@@ -120,7 +120,9 @@ class Pod(TimestampedModelMixin, models.Model):
         help_text='Community sprint this pod belongs to (issue #1921).',
     )
     name = models.CharField(max_length=80)
-    purpose = models.TextField(max_length=500)
+    purpose = models.TextField(max_length=160)
+    scheduling_note = models.TextField(max_length=500, blank=True, default='', db_default='')
+    internal_notes = models.TextField(max_length=2000, blank=True, default='', db_default='')
     max_members = models.PositiveSmallIntegerField(
         default=4,
         validators=[MinValueValidator(1), MaxValueValidator(12)],
@@ -144,7 +146,7 @@ class Pod(TimestampedModelMixin, models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name='owned_pods',
-        help_text='Member who approves requests. Empty: only staff decide.',
+        help_text='Optional member responsible for this study group.',
     )
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -222,7 +224,7 @@ class PodMembership(models.Model):
 
 
 class PodJoinRequest(models.Model):
-    """A request to join a pod; also the waiting-list entry when it is full."""
+    """Historical join-request audit row; no new rows are created."""
 
     pod = models.ForeignKey(Pod, on_delete=models.CASCADE, related_name='join_requests')
     user = models.ForeignKey(

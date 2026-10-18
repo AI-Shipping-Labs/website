@@ -1,6 +1,5 @@
-"""Pods polish journeys (issue #1927): honest suggested times, the
-re-request cooldown after a decline, Studio's pending-only stale badge, and
-genuinely different suggested slots.
+"""Pods polish journeys (issue #1927): honest suggested times and genuinely
+different suggested slots.
 
 Fixtures come from ``test_pods_1918``: a published course enabled in
 ``PODS_COURSE_SLUGS`` with dated ``Cohort 4``; enrolled anna
@@ -13,8 +12,6 @@ import re
 from zoneinfo import ZoneInfo
 
 import pytest
-from django.db import connection
-from django.utils import timezone
 from playwright.sync_api import expect
 
 from playwright_tests.test_pods_1918 import (
@@ -24,7 +21,6 @@ from playwright_tests.test_pods_1918 import (
     _pod,
     _pod_url,
     _seed,
-    _set_config,
     _windows,
 )
 from scripts.browser_journey_policy import browser_journey
@@ -34,19 +30,6 @@ os.environ.setdefault('DJANGO_ALLOW_ASYNC_UNSAFE', 'true')
 pytestmark = [pytest.mark.local_only, pytest.mark.django_db(transaction=True)]
 
 PODS_TAB = f'/courses/{COURSE_SLUG}/home/pods?cohort=4'
-
-
-def _decline(pod, user, days_ago=0):
-    """Create a request from ``user`` and decline it ``days_ago`` days back."""
-    from pods.models import PodJoinRequest
-    from pods.services.membership import decline_request
-
-    join_request = PodJoinRequest.objects.create(pod=pod, user=user, status='pending')
-    decline_request(join_request, pod.owner)
-    when = timezone.now() - datetime.timedelta(days=days_ago)
-    PodJoinRequest.objects.filter(pk=join_request.pk).update(decided_at=when, created_at=when)
-    connection.close()
-    return when
 
 
 def _berlin_date(value):
@@ -102,164 +85,6 @@ def test_mike_adds_availability_and_the_pod_sees_an_everyone_fits_time(django_se
         re.compile(r'^Mike K\. \d\d:\d\d Berlin$'),
     ])
     context.close()
-
-
-@pytest.mark.core
-@browser_journey
-def test_declined_student_cannot_immediately_rerequest_the_same_pod(django_server, browser):
-    _course, cohort, users = _seed()
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    _pod(cohort, 'Pod B', [users['mike']], owner=users['mike'])
-    decided = _decline(pod_a, users['anna'])
-    ask_again = _berlin_date(decided + datetime.timedelta(days=14))
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(f'{django_server}/notifications', wait_until='domcontentloaded')
-    page.get_by_role('link', name=re.compile('Your request to join Pod A was not accepted')).click()
-    expect(page).to_have_url(re.compile(r'/home/pods\?cohort=4$'))
-    page.get_by_test_id('pod-row').filter(has_text='Pod A').get_by_role('link', name='Open pod').click()
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Not accepted')
-    expect(page.get_by_test_id('pod-request-form')).to_have_count(0)
-    expect(page.get_by_test_id('pod-request-blocked')).to_have_text(
-        f'Your request was not accepted. You can ask again on {ask_again}.',
-    )
-
-    page.goto(f'{django_server}{PODS_TAB}', wait_until='domcontentloaded')
-    page.get_by_test_id('pod-row').filter(has_text='Pod B').get_by_role('link', name='Request to join').click()
-    page.get_by_test_id('pod-request-submit').click()
-    expect(page.get_by_test_id('messages-region')).to_contain_text('Request sent.')
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Request sent')
-    context.close()
-
-
-@browser_journey
-def test_owner_is_not_pinged_again_by_a_declined_student(django_server, browser):
-    _course, cohort, users = _seed()
-    from notifications.models import Notification
-    from pods.services.membership import decline_request, request_to_join
-
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-request-form')).to_be_visible()
-
-    # Meanwhile, in another tab, anna asked and raj declined.
-    decline_request(request_to_join(pod_a, users['anna'], 'first ask'), users['raj'])
-    decided = timezone.now()
-    connection.close()
-
-    page.get_by_test_id('pod-request-message').fill('asking again')
-    page.get_by_test_id('pod-request-submit').click()
-    expect(page.get_by_test_id('messages-region')).to_contain_text(
-        f'You can ask to join this pod again on {_berlin_date(decided + datetime.timedelta(days=14))}.',
-    )
-    context.close()
-
-    assert Notification.objects.filter(user=users['raj'], title='New request to join Pod A').count() == 1
-    connection.close()
-    context, page = _page(browser, 'raj@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-requests-empty')).to_be_visible()
-    context.close()
-
-
-@pytest.mark.core
-@browser_journey
-def test_student_asks_once_more_after_the_cooldown(django_server, browser):
-    _course, cohort, users = _seed()
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    _decline(pod_a, users['anna'], days_ago=15)
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-request-retry')).to_have_text(
-        'Your last request was not accepted. You can ask once more.',
-    )
-    page.get_by_test_id('pod-request-message').fill('Shipping an eval harness now')
-    page.get_by_test_id('pod-request-submit').click()
-    expect(page.get_by_test_id('messages-region')).to_contain_text('Request sent.')
-    context.close()
-
-    context, page = _page(browser, 'raj@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    rows = page.get_by_test_id('pod-request')
-    expect(rows).to_have_count(1)
-    expect(rows.first.get_by_test_id('pod-request-message-text')).to_have_text('Shipping an eval harness now')
-    context.close()
-
-
-@browser_journey
-def test_twice_declined_student_is_pointed_to_other_pods(django_server, browser):
-    _course, cohort, users = _seed()
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    _pod(cohort, 'Pod B', [users['mike']], owner=users['mike'])
-    _decline(pod_a, users['anna'], days_ago=30)
-    _decline(pod_a, users['anna'], days_ago=2)
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-request-form')).to_have_count(0)
-    expect(page.get_by_test_id('pod-request-blocked')).to_have_text(
-        "This pod declined your request twice, so you can't ask to join it again. "
-        'Browse other pods or start your own.',
-    )
-    page.get_by_role('link', name='Browse other pods').click()
-    expect(page).to_have_url(re.compile(r'/home/pods\?cohort=4$'))
-    expect(page.get_by_test_id('pod-row-name')).to_contain_text(['Pod B'])
-    context.close()
-
-
-@browser_journey
-def test_staff_can_still_place_a_twice_declined_student(django_server, browser):
-    _course, cohort, users = _seed()
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    _decline(pod_a, users['anna'], days_ago=30)
-    _decline(pod_a, users['anna'], days_ago=2)
-
-    context, page = _page(browser, 'admin@test.com')
-    page.goto(f'{django_server}/studio/pods/{pod_a.pk}/', wait_until='domcontentloaded')
-    page.get_by_test_id('studio-pod-add-emails').fill('anna@test.com')
-    page.get_by_test_id('studio-pod-add-submit').click()
-    expect(page.get_by_test_id('studio-pod-member')).to_contain_text(['raj@test.com', 'anna@test.com'])
-    context.close()
-
-    context, page = _page(browser, 'anna@test.com')
-    page.goto(_pod_url(django_server, pod_a), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-status-badge')).to_have_text('Your pod')
-    context.close()
-
-
-@pytest.mark.core
-@browser_journey
-def test_staff_spots_a_stale_pod_in_studio(django_server, browser):
-    _course, cohort, users = _seed()
-    from pods.models import PodJoinRequest
-
-    _set_config('PODS_STALE_REQUEST_DAYS', '5')
-    pod_a = _pod(cohort, 'Pod A', [users['raj']], owner=users['raj'])
-    pod_b = _pod(cohort, 'Pod B', [users['mike']], owner=users['mike'], max_members=1)
-    now = timezone.now()
-    pending = PodJoinRequest.objects.create(pod=pod_a, user=users['anna'], status='pending')
-    waitlisted = PodJoinRequest.objects.create(pod=pod_b, user=users['anna'], status='waitlisted')
-    PodJoinRequest.objects.filter(pk=pending.pk).update(created_at=now - datetime.timedelta(days=6))
-    PodJoinRequest.objects.filter(pk=waitlisted.pk).update(created_at=now - datetime.timedelta(days=10))
-    connection.close()
-
-    context, page = _page(browser, 'admin@test.com')
-    page.goto(f'{django_server}/studio/pods/', wait_until='domcontentloaded')
-    row_a = page.get_by_test_id('studio-pod-row').filter(has_text='Pod A')
-    row_b = page.get_by_test_id('studio-pod-row').filter(has_text='Pod B')
-    expect(row_a.get_by_test_id('studio-pod-oldest').locator('span')).to_have_class(re.compile('amber'))
-    expect(row_b.get_by_test_id('studio-pod-oldest')).to_have_text('10 days ago')
-    expect(row_b.get_by_test_id('studio-pod-oldest').locator('span')).to_have_count(0)
-
-    row_a.get_by_test_id('studio-pod-name').click()
-    page.get_by_test_id('studio-pod-request-decline').click()
-    page.goto(f'{django_server}/studio/pods/', wait_until='domcontentloaded')
-    row_a = page.get_by_test_id('studio-pod-row').filter(has_text='Pod A')
-    expect(row_a.get_by_test_id('studio-pod-oldest')).to_have_text('—')
-    context.close()
-    _set_config('PODS_STALE_REQUEST_DAYS', None)
 
 
 @browser_journey

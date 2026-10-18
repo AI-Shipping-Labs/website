@@ -192,15 +192,15 @@ class PodActivity:
         if self.is_sprint:
             return {
                 'list_subtitle': 'Small groups in this sprint that meet to work on one thing together.',
-                'empty_body': 'Start a pod with a purpose and others in this sprint can ask to join.',
-                'new_subtitle': 'You become the owner and first member. Others in this sprint can ask to join.',
-                'open_label': 'Open: members of the sprint can ask to join',
+                'empty_body': 'Start a study group with a purpose and others in this sprint can join.',
+                'new_subtitle': 'You become the owner and first member. Others in this sprint can join.',
+                'open_label': 'Open: members of the sprint can join',
             }
         return {
             'list_subtitle': 'Small groups in your cohort that meet to work on one thing together.',
-            'empty_body': 'Start a pod with a purpose and others in your cohort can ask to join.',
-            'new_subtitle': 'You become the owner and first member. Others in your cohort can ask to join.',
-            'open_label': 'Open: members of the cohort can ask to join',
+            'empty_body': 'Start a study group with a purpose and others in your cohort can join.',
+            'new_subtitle': 'You become the owner and first member. Others in your cohort can join.',
+            'open_label': 'Open: members of the cohort can join',
         }
 
 

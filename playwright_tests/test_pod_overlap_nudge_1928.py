@@ -166,7 +166,7 @@ def test_cohort_member_browsing_another_pod_cannot_see_its_overlap(django_server
 
     context, page = _page(browser, 'mike@test.com')
     page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
-    expect(page.get_by_test_id('pod-request-form')).to_be_visible()
+    expect(page.get_by_test_id('pod-join')).to_be_visible()
     expect(page.get_by_test_id('pod-weekly-overlap')).to_have_count(0)
     expect(page.get_by_test_id('pod-overlap-table')).to_have_count(0)
     context.close()

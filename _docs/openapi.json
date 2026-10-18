@@ -5010,7 +5010,7 @@
     },
     "/api/courses/{slug}/cohorts/{key}/members": {
       "get": {
-        "description": "Every user with a ``CohortEnrollment`` in the cohort (and only them), ordered by enrollment time. ``<key>`` is the cohort external key (the ``?cohort=`` value), case-insensitive. ``tier`` is the effective tier slug (paid tier or active override, whichever is higher). ``crm`` is ``null`` without a CRM record; ``availability`` is ``null`` without a profile and its windows are local wall-clock times in its ``timezone``. ``pod_ids`` are the cohort pods the user is in; ``open_request_pod_ids`` the cohort pods with a pending or waitlisted request.",
+        "description": "Every user with a ``CohortEnrollment`` in the cohort (and only them), ordered by enrollment time. ``<key>`` is the cohort external key (the ``?cohort=`` value), case-insensitive. ``tier`` is the effective tier slug (paid tier or active override, whichever is higher). ``crm`` is ``null`` without a CRM record; ``availability`` is ``null`` without a profile and its windows are local wall-clock times in its ``timezone``. ``pod_ids`` are the cohort study groups the user is in.",
         "parameters": [
           {
             "in": "path",
@@ -5083,9 +5083,6 @@
                       "first_name": "Anna",
                       "has_slack_user_id": true,
                       "last_name": "Klein",
-                      "open_request_pod_ids": [
-                        9
-                      ],
                       "pod_ids": [
                         7
                       ],
@@ -15164,20 +15161,19 @@
                       "course_slug": "ai-buildcamp",
                       "created_at": "2026-10-01T09:00:00+00:00",
                       "id": 7,
-                      "max_members": 4,
+                      "internal_notes": "Imported formation history visible to staff only.",
                       "meeting_count": 3,
                       "meeting_minutes": 60,
                       "member_count": 2,
                       "name": "Agents pod",
                       "owner_email": "anna@example.com",
-                      "pending_count": 1,
                       "purpose": "Ship an agent demo",
+                      "scheduling_note": "Meet on Tuesdays when possible.",
                       "slack_channel_url": "",
                       "source": "api",
                       "sprint_name": null,
                       "sprint_slug": null,
-                      "status": "open",
-                      "waitlisted_count": 0
+                      "status": "open"
                     }
                   ],
                   "total": 1
@@ -15210,7 +15206,7 @@
         ]
       },
       "post": {
-        "description": "Creates a pod in a dated cohort (``course_slug`` + ``cohort_key``) or a sprint (``sprint_slug``) with ``source=api``. Giving both ``sprint_slug`` and a course returns 422 with ``field: sprint_slug``; giving neither returns 422 with ``field: course_slug``. The optional ``owner_email`` must be enrolled in the cohort or sprint and becomes the first member. ``member_emails`` are added up to the size limit; ``results`` sorts every email into ``added``, ``not_enrolled``, ``unknown_user``, ``already_member`` and ``over_capacity``. A self-paced cohort returns 422. Idempotent: when a non-archived pod with the same name (case-insensitive) already exists in the cohort or sprint, it is returned with 200 and only new emails are added; its settings and owner are left unchanged (use PATCH).",
+        "description": "Creates a pod in a dated cohort (``course_slug`` + ``cohort_key``) or a sprint (``sprint_slug``) with ``source=api``. Giving both ``sprint_slug`` and a course returns 422 with ``field: sprint_slug``; giving neither returns 422 with ``field: course_slug``. The optional ``owner_email`` must be enrolled in the cohort or sprint and becomes the first member. ``member_emails`` are added without a size limit; ``results`` sorts every email into ``added``, ``not_enrolled``, ``unknown_user``, ``already_member`` and no capacity bucket. A self-paced cohort returns 422. Idempotent: when a non-archived pod with the same name (case-insensitive) already exists in the cohort or sprint, it is returned with 200 and only new emails are added; its settings and owner are left unchanged (use PATCH).",
         "requestBody": {
           "content": {
             "application/json": {
@@ -15235,10 +15231,12 @@
                     "description": "With ``cohort_key``; omit for a sprint pod.",
                     "type": "string"
                   },
+                  "internal_notes": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
                   "max_members": {
-                    "maximum": 12,
-                    "minimum": 1,
-                    "type": "integer"
+                    "description": "Retired; writes return 422 validation_error."
                   },
                   "meeting_count": {
                     "maximum": 20,
@@ -15271,6 +15269,10 @@
                     ]
                   },
                   "purpose": {
+                    "maxLength": 160,
+                    "type": "string"
+                  },
+                  "scheduling_note": {
                     "maxLength": 500,
                     "type": "string"
                   },
@@ -15300,8 +15302,8 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "internal_notes": "Imported formation history visible to staff only.",
                   "last_message_at": "2026-10-05T18:30:00+00:00",
-                  "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
@@ -15347,19 +15349,7 @@
                   ],
                   "message_count": 12,
                   "name": "Agents pod",
-                  "open_requests": [
-                    {
-                      "created_at": "2026-10-02T10:00:00+00:00",
-                      "email": "mike@example.com",
-                      "id": 12,
-                      "message": "I am building a RAG eval harness",
-                      "stale_alerted_at": null,
-                      "status": "pending",
-                      "waitlist_position": null
-                    }
-                  ],
                   "owner_email": "anna@example.com",
-                  "pending_count": 1,
                   "purpose": "Ship an agent demo",
                   "results": {
                     "added": [],
@@ -15370,9 +15360,9 @@
                     "not_enrolled": [
                       "someone@example.com"
                     ],
-                    "over_capacity": [],
                     "unknown_user": []
                   },
+                  "scheduling_note": "Meet on Tuesdays when possible.",
                   "slack_channel_url": "",
                   "source": "api",
                   "sprint_name": null,
@@ -15396,8 +15386,7 @@
                       "missing": [],
                       "start": "2026-10-06T16:00:00+00:00"
                     }
-                  ],
-                  "waitlisted_count": 0
+                  ]
                 }
               }
             },
@@ -15413,8 +15402,8 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "internal_notes": "Imported formation history visible to staff only.",
                   "last_message_at": "2026-10-05T18:30:00+00:00",
-                  "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
@@ -15460,19 +15449,7 @@
                   ],
                   "message_count": 12,
                   "name": "Agents pod",
-                  "open_requests": [
-                    {
-                      "created_at": "2026-10-02T10:00:00+00:00",
-                      "email": "mike@example.com",
-                      "id": 12,
-                      "message": "I am building a RAG eval harness",
-                      "stale_alerted_at": null,
-                      "status": "pending",
-                      "waitlist_position": null
-                    }
-                  ],
                   "owner_email": "anna@example.com",
-                  "pending_count": 1,
                   "purpose": "Ship an agent demo",
                   "results": {
                     "added": [
@@ -15483,9 +15460,9 @@
                     "not_enrolled": [
                       "someone@example.com"
                     ],
-                    "over_capacity": [],
                     "unknown_user": []
                   },
+                  "scheduling_note": "Meet on Tuesdays when possible.",
                   "slack_channel_url": "",
                   "source": "api",
                   "sprint_name": null,
@@ -15509,8 +15486,7 @@
                       "missing": [],
                       "start": "2026-10-06T16:00:00+00:00"
                     }
-                  ],
-                  "waitlisted_count": 0
+                  ]
                 }
               }
             },
@@ -15553,7 +15529,7 @@
     },
     "/api/pods/{pod_id}": {
       "get": {
-        "description": "Settings, members, open requests (pending and waitlisted with their 1-based waiting-list position), the Slack channel link, the call link ``meeting_url``, ``message_count`` and ``last_message_at`` (visible pod chat messages only; ``null`` without any), ``artifact_count`` (meeting notes and transcripts), ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
+        "description": "Settings, members, public scheduling guidance, staff-only internal formation notes, the Slack channel link, the call link ``meeting_url``, ``message_count`` and ``last_message_at`` (visible pod chat messages only; ``null`` without any), ``artifact_count`` (meeting notes and transcripts), ``meetings`` (every meeting that is not cancelled, same shape as ``GET /api/pods/<id>/meetings``) and ``suggested_slots``: up to ``PODS_SUGGESTION_COUNT`` UTC slots with ``available``, ``if_needed`` and ``missing`` member emails and each member's local start time.",
         "parameters": [
           {
             "in": "path",
@@ -15575,8 +15551,8 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "internal_notes": "Imported formation history visible to staff only.",
                   "last_message_at": "2026-10-05T18:30:00+00:00",
-                  "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
@@ -15622,20 +15598,9 @@
                   ],
                   "message_count": 12,
                   "name": "Agents pod",
-                  "open_requests": [
-                    {
-                      "created_at": "2026-10-02T10:00:00+00:00",
-                      "email": "mike@example.com",
-                      "id": 12,
-                      "message": "I am building a RAG eval harness",
-                      "stale_alerted_at": null,
-                      "status": "pending",
-                      "waitlist_position": null
-                    }
-                  ],
                   "owner_email": "anna@example.com",
-                  "pending_count": 1,
                   "purpose": "Ship an agent demo",
+                  "scheduling_note": "Meet on Tuesdays when possible.",
                   "slack_channel_url": "",
                   "source": "api",
                   "sprint_name": null,
@@ -15659,8 +15624,7 @@
                       "missing": [],
                       "start": "2026-10-06T16:00:00+00:00"
                     }
-                  ],
-                  "waitlisted_count": 0
+                  ]
                 }
               }
             },
@@ -15687,7 +15651,7 @@
         ]
       },
       "patch": {
-        "description": "Partial update. ``max_members`` below the member count returns 422; raising it moves the oldest waitlisted requests back to ``pending`` (one per new seat). ``owner_email`` must be a member, or ``null`` for no owner. ``status=archived`` hides the pod from members and cancels its open requests; there is no DELETE. ``slack_channel_url`` must be an https Slack link (empty clears). ``meeting_url`` is the pod call link: https only, up to 500 characters, empty clears. ``meeting_count`` below the meetings already planned or held returns 422.",
+        "description": "Partial update. ``max_members`` is retired and returns 422. ``owner_email`` must be a member, or ``null`` for no owner. ``status=archived`` hides the pod from members; there is no DELETE. Historical requests are retained. ``slack_channel_url`` must be an https Slack link (empty clears). ``meeting_url`` is the pod call link: https only, up to 500 characters, empty clears. ``meeting_count`` below the meetings already planned or held returns 422.",
         "parameters": [
           {
             "in": "path",
@@ -15702,16 +15666,17 @@
           "content": {
             "application/json": {
               "example": {
-                "max_members": 5,
-                "meeting_url": "https://meet.google.com/abc-defg-hij",
+                "scheduling_note": "Meet on Tuesdays when possible.",
                 "status": "closed"
               },
               "schema": {
                 "properties": {
+                  "internal_notes": {
+                    "maxLength": 2000,
+                    "type": "string"
+                  },
                   "max_members": {
-                    "maximum": 12,
-                    "minimum": 1,
-                    "type": "integer"
+                    "description": "Retired; always returns 422."
                   },
                   "meeting_count": {
                     "maximum": 20,
@@ -15744,6 +15709,11 @@
                     ]
                   },
                   "purpose": {
+                    "maxLength": 160,
+                    "type": "string"
+                  },
+                  "scheduling_note": {
+                    "maxLength": 500,
                     "type": "string"
                   },
                   "slack_channel_url": {
@@ -15775,8 +15745,8 @@
                   "course_slug": "ai-buildcamp",
                   "created_at": "2026-10-01T09:00:00+00:00",
                   "id": 7,
+                  "internal_notes": "Imported formation history visible to staff only.",
                   "last_message_at": "2026-10-05T18:30:00+00:00",
-                  "max_members": 4,
                   "meeting_count": 3,
                   "meeting_minutes": 60,
                   "meeting_url": "https://meet.google.com/abc-defg-hij",
@@ -15822,20 +15792,9 @@
                   ],
                   "message_count": 12,
                   "name": "Agents pod",
-                  "open_requests": [
-                    {
-                      "created_at": "2026-10-02T10:00:00+00:00",
-                      "email": "mike@example.com",
-                      "id": 12,
-                      "message": "I am building a RAG eval harness",
-                      "stale_alerted_at": null,
-                      "status": "pending",
-                      "waitlist_position": null
-                    }
-                  ],
                   "owner_email": "anna@example.com",
-                  "pending_count": 1,
                   "purpose": "Ship an agent demo",
+                  "scheduling_note": "Meet on Tuesdays when possible.",
                   "slack_channel_url": "",
                   "source": "api",
                   "sprint_name": null,
@@ -15859,8 +15818,7 @@
                       "missing": [],
                       "start": "2026-10-06T16:00:00+00:00"
                     }
-                  ],
-                  "waitlisted_count": 0
+                  ]
                 }
               }
             },
@@ -15888,7 +15846,7 @@
               "application/json": {
                 "example": {
                   "code": "validation_error",
-                  "error": "The size limit cannot be lower than the current number of members (3)."
+                  "error": "Study groups no longer have a size limit."
                 }
               }
             },
@@ -16453,7 +16411,7 @@
     },
     "/api/pods/{pod_id}/members": {
       "post": {
-        "description": "Idempotent. Adds enrolled cohort (or sprint) members up to the size limit and closes their open requests on this pod as ``approved``. Returns the same ``results`` buckets as pod create.",
+        "description": "Idempotent. Adds enrolled cohort (or sprint) members without a size limit. Returns the same ``results`` buckets as pod create.",
         "parameters": [
           {
             "in": "path",
@@ -16502,8 +16460,8 @@
                     "course_slug": "ai-buildcamp",
                     "created_at": "2026-10-01T09:00:00+00:00",
                     "id": 7,
+                    "internal_notes": "Imported formation history visible to staff only.",
                     "last_message_at": "2026-10-05T18:30:00+00:00",
-                    "max_members": 4,
                     "meeting_count": 3,
                     "meeting_minutes": 60,
                     "meeting_url": "https://meet.google.com/abc-defg-hij",
@@ -16549,20 +16507,9 @@
                     ],
                     "message_count": 12,
                     "name": "Agents pod",
-                    "open_requests": [
-                      {
-                        "created_at": "2026-10-02T10:00:00+00:00",
-                        "email": "mike@example.com",
-                        "id": 12,
-                        "message": "I am building a RAG eval harness",
-                        "stale_alerted_at": null,
-                        "status": "pending",
-                        "waitlist_position": null
-                      }
-                    ],
                     "owner_email": "anna@example.com",
-                    "pending_count": 1,
                     "purpose": "Ship an agent demo",
+                    "scheduling_note": "Meet on Tuesdays when possible.",
                     "slack_channel_url": "",
                     "source": "api",
                     "sprint_name": null,
@@ -16586,8 +16533,7 @@
                         "missing": [],
                         "start": "2026-10-06T16:00:00+00:00"
                       }
-                    ],
-                    "waitlisted_count": 0
+                    ]
                   },
                   "results": {
                     "added": [
@@ -16598,7 +16544,6 @@
                     "not_enrolled": [
                       "someone@example.com"
                     ],
-                    "over_capacity": [],
                     "unknown_user": []
                   }
                 }
@@ -16635,7 +16580,7 @@
     },
     "/api/pods/{pod_id}/members/{email}": {
       "delete": {
-        "description": "Removes the member with the normal leave rules: an owner hands ownership to the earliest-joined remaining member, a freed seat moves the oldest waitlisted request back to pending, and an emptied member-started pod is archived.",
+        "description": "Removes the member with the normal leave rules: an owner hands ownership to the earliest-joined remaining member, and an emptied member-started pod is archived.",
         "parameters": [
           {
             "in": "path",
@@ -16914,7 +16859,7 @@
     },
     "/api/pods/{pod_id}/requests": {
       "get": {
-        "description": "Every request for the pod, oldest first; filter with ``status``.",
+        "description": "Historical requests for the pod, oldest first; filter with ``status``. Read-only.",
         "parameters": [
           {
             "in": "path",
@@ -16955,8 +16900,7 @@
                       "id": 12,
                       "message": "I am building a RAG eval harness",
                       "stale_alerted_at": null,
-                      "status": "pending",
-                      "waitlist_position": null
+                      "status": "pending"
                     }
                   ]
                 }
@@ -16990,7 +16934,7 @@
     },
     "/api/pods/{pod_id}/requests/{request_id}/approve": {
       "post": {
-        "description": "Approves a pending or waitlisted request regardless of the pod owner. A full pod returns 409 ``pod_full``; raise the size limit first.",
+        "description": "The approval queue is retired; stale writes never change requests or memberships.",
         "parameters": [
           {
             "in": "path",
@@ -17021,51 +16965,22 @@
           "required": false
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "created_at": "2026-10-02T10:00:00+00:00",
-                  "decided_at": null,
-                  "decided_by": null,
-                  "email": "mike@example.com",
-                  "id": 12,
-                  "message": "I am building a RAG eval harness",
-                  "stale_alerted_at": null,
-                  "status": "approved",
-                  "waitlist_position": null
-                }
-              }
-            },
-            "description": "The decided request."
-          },
           "401": {
             "description": "Missing or invalid staff token."
           },
-          "404": {
+          "410": {
             "content": {
               "application/json": {
                 "example": {
-                  "code": "unknown_request",
-                  "error": "Request not found"
+                  "code": "gone",
+                  "error": "Study group join requests are no longer available."
                 }
               }
             },
-            "description": "Unknown pod or request."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "request_not_open",
-                  "error": "This request has already been answered."
-                }
-              }
-            },
-            "description": "Request already decided or the pod is full."
+            "description": "Study group request actions are retired."
           }
         },
-        "summary": "Approve a request (staff override)",
+        "summary": "Retired study group request action",
         "tags": [
           "Pods"
         ]
@@ -17073,7 +16988,7 @@
     },
     "/api/pods/{pod_id}/requests/{request_id}/decline": {
       "post": {
-        "description": "Declines a pending or waitlisted request regardless of the pod owner.",
+        "description": "The approval queue is retired; stale writes never change requests or memberships.",
         "parameters": [
           {
             "in": "path",
@@ -17104,51 +17019,22 @@
           "required": false
         },
         "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "created_at": "2026-10-02T10:00:00+00:00",
-                  "decided_at": null,
-                  "decided_by": null,
-                  "email": "mike@example.com",
-                  "id": 12,
-                  "message": "I am building a RAG eval harness",
-                  "stale_alerted_at": null,
-                  "status": "declined",
-                  "waitlist_position": null
-                }
-              }
-            },
-            "description": "The decided request."
-          },
           "401": {
             "description": "Missing or invalid staff token."
           },
-          "404": {
+          "410": {
             "content": {
               "application/json": {
                 "example": {
-                  "code": "unknown_request",
-                  "error": "Request not found"
+                  "code": "gone",
+                  "error": "Study group join requests are no longer available."
                 }
               }
             },
-            "description": "Unknown pod or request."
-          },
-          "409": {
-            "content": {
-              "application/json": {
-                "example": {
-                  "code": "request_not_open",
-                  "error": "This request has already been answered."
-                }
-              }
-            },
-            "description": "Request already decided."
+            "description": "Study group request actions are retired."
           }
         },
-        "summary": "Decline a request (staff override)",
+        "summary": "Retired study group request action",
         "tags": [
           "Pods"
         ]
@@ -19104,7 +18990,7 @@
     },
     "/api/sprints/{slug}/members": {
       "get": {
-        "description": "Every user with a ``SprintEnrollment`` in the sprint (and only them), ordered by enrollment time, in the same member shape as the cohort roster (``GET /api/courses/<slug>/cohorts/<key>/members``). ``enrolled_at`` comes from the sprint enrollment. ``pod_ids`` are the sprint pods the user is in; ``open_request_pod_ids`` the sprint pods with a pending or waitlisted request.",
+        "description": "Every user with a ``SprintEnrollment`` in the sprint (and only them), ordered by enrollment time, in the same member shape as the cohort roster (``GET /api/courses/<slug>/cohorts/<key>/members``). ``enrolled_at`` comes from the sprint enrollment. ``pod_ids`` are the sprint study groups the user is in.",
         "parameters": [
           {
             "in": "path",
@@ -19167,9 +19053,6 @@
                       "first_name": "Anna",
                       "has_slack_user_id": true,
                       "last_name": "Klein",
-                      "open_request_pod_ids": [
-                        9
-                      ],
                       "pod_ids": [
                         7
                       ],

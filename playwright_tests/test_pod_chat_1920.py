@@ -117,12 +117,12 @@ def test_pod_mate_catches_up_on_new_messages_from_the_pods_tab(django_server, br
     context, page = _page(browser, 'raj@test.com')
     page.goto(f'{django_server}/courses/{COURSE_SLUG}/home/pods?cohort=4', wait_until='domcontentloaded')
     expect(_row(page, pod).get_by_test_id('pod-row-unread')).to_have_text('2 new messages')
-    _row(page, pod).get_by_test_id('pod-row-action').click()
+    _row(page, pod).get_by_test_id('pod-row-title-link').click()
     expect(_bodies(page)).to_have_text(['Pushed the eval harness skeleton', 'Can we meet Thursday?'])
 
     page.go_back(wait_until='domcontentloaded')
     page.reload(wait_until='domcontentloaded')
-    expect(_row(page, pod).get_by_test_id('pod-row-badge')).to_be_visible()
+    expect(_row(page, pod).get_by_test_id('pod-row-leave')).to_be_visible()
     expect(_row(page, pod).get_by_test_id('pod-row-unread')).to_have_count(0)
     context.close()
 
@@ -160,7 +160,7 @@ def test_member_who_is_not_in_the_pod_cannot_read_or_post(django_server, browser
     context, page = _page(browser, 'mike@test.com')
     page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
     expect(page.get_by_test_id('pod-purpose')).to_be_visible()
-    expect(page.get_by_test_id('pod-request-form')).to_be_visible()
+    expect(page.get_by_test_id('pod-join')).to_be_visible()
     expect(page.get_by_test_id('pod-chat')).to_have_count(0)
     assert 'Our private plan for week 2' not in page.content()
 
@@ -305,7 +305,7 @@ def test_operator_switches_chat_off_for_the_pilot(django_server, browser):
     try:
         context, page = _page(browser, 'anna@test.com')
         page.goto(f'{django_server}/courses/{COURSE_SLUG}/home/pods?cohort=4', wait_until='domcontentloaded')
-        expect(_row(page, pod).get_by_test_id('pod-row-badge')).to_be_visible()
+        expect(_row(page, pod).get_by_test_id('pod-row-leave')).to_be_visible()
         expect(_row(page, pod).get_by_test_id('pod-row-unread')).to_have_count(0)
         page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')
         expect(page.get_by_test_id('pod-detail')).to_be_visible()

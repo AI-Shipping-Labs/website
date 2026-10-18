@@ -33,6 +33,7 @@ from pods.services.meeting_presentation import (
     propose_url,
 )
 from pods.services.meeting_rules import meeting_state
+from pods.services.presentation import public_pod
 from pods.services.suggestions import (
     evaluate_slot,
     load_member_availability,
@@ -99,7 +100,7 @@ def _start_from_post(request, zone_name):
 def _form_base(request, pod, zone_name):
     context = pods_frame_context(activity_for_pod(pod), request.user)
     context.update({
-        'pod': pod,
+        'pod': public_pod(pod),
         'pod_url': svc.pod_url(pod),
         'viewer_zone': zone_name,
         'zone_line': f'Times are in {get_timezone_label(zone_name) or zone_name}',

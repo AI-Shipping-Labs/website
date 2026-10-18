@@ -167,6 +167,32 @@ NO_TEST_DIRS: tuple[str, ...] = ("_docs", "docs", "specs")
 #:     ``_docs/testing-guidelines.md`` -- rot guards in ``tests/``.
 PLAYWRIGHT_FILE_COMMAND_PREFIX = "uv run pytest playwright_tests/"
 
+#: Supplemental exact Playwright owners for product surfaces whose canonical
+#: journey is ``local_only`` and therefore is not covered by the core suite.
+#: These commands compose with the normal first-match rule for each source.
+SUPPLEMENTAL_PLAYWRIGHT_OWNERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "pods/services/presentation.py",
+        ("playwright_tests/test_pod_unconfirmable_1937.py",),
+    ),
+    (
+        "pods/services/pod_summary.py",
+        ("playwright_tests/test_pod_unconfirmable_1937.py",),
+    ),
+    (
+        "pods/views/member.py",
+        ("playwright_tests/test_pod_unconfirmable_1937.py",),
+    ),
+    (
+        "templates/pods/list.html",
+        ("playwright_tests/test_pod_unconfirmable_1937.py",),
+    ),
+    (
+        "templates/pods/_pod_row.html",
+        ("playwright_tests/test_pod_unconfirmable_1937.py",),
+    ),
+)
+
 #: Rule 2. Escalation triggers -> full local Playwright. Supersedes the prose
 #: list that used to live in ``_docs/PROCESS.md``.
 ESCALATION_TRIGGERS: tuple[tuple[str, str], ...] = (
@@ -950,6 +976,11 @@ def build_plan(
         for command in repo_wide_guard_commands(path):
             add_extra(command)
             repo_wide_commands.append(command) if command not in repo_wide_commands else None
+
+        for source, owners in SUPPLEMENTAL_PLAYWRIGHT_OWNERS:
+            if path == source:
+                for owner in owners:
+                    add_extra(f"uv run pytest {owner} -v")
 
         focused_contract = next(
             (labels_for_path for glob, labels_for_path in FOCUSED_CONTRACT_PATHS if fnmatch.fnmatchcase(path, glob)),

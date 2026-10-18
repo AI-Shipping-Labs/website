@@ -82,7 +82,7 @@
             {% if nav_child.syllabus_section %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-syllabus-section">{{ nav_child.syllabus_section }}</p>{% endif %}
             {% with inline_units=nav_child|inline_course_units:course.slug %}
             {% if inline_units %}
-            {% for inline_unit in inline_units %}
+            {% for inline_unit in inline_units|visible_course_units:self_paced_view %}
             <ul class="reader-nav-list">
               <li>
                 {% if inline_unit.pk == unit.pk %}
@@ -99,7 +99,7 @@
             {% else %}
             {% if homework_stepper and nav_child.pk == unit.module.pk %}
             <ul class="reader-nav-list">
-              {% for nav_unit in nav_child.units.all %}
+              {% for nav_unit in nav_child.units.all|visible_course_units:self_paced_view %}
                 {% if nav_unit.pk == unit.pk %}
                   {% include "content/reader/_homework_sidebar_unit.html" with unit=nav_unit root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus %}
                 {% else %}
@@ -121,7 +121,7 @@
                 {% if nav_child.is_bonus and not scoped_module.is_bonus and '(Optional)' not in nav_child.title %}<span class="ml-auto flex-shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">Optional</span>{% endif %}
               </summary>
               <ul class="reader-nav-list ml-4">
-                {% for nav_unit in nav_child.units.all %}
+                {% for nav_unit in nav_child.units.all|visible_course_units:self_paced_view %}
                 <li>
                   {% if nav_unit.pk == unit.pk %}
                     {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind=nav_unit|unit_nav_marker_kind:completed_unit_ids marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus ancestor_optional=nav_child.is_bonus optional_badge=nav_unit.is_bonus status_meta=nav_unit.homework_row_state %}
@@ -140,7 +140,7 @@
             {% endwith %}
           {% empty %}
           <ul class="reader-nav-list">
-            {% for nav_unit in scoped_module.units.all %}
+            {% for nav_unit in scoped_module.units.all|visible_course_units:self_paced_view %}
             <li>
               {% if nav_unit.pk == unit.pk %}
                 {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind=nav_unit|unit_nav_marker_kind:completed_unit_ids marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_anchor_class="reader-scoped-unit" extra_attrs='aria-current="page"' root_optional=scoped_module.is_bonus optional_badge=nav_unit.is_bonus status_meta=nav_unit.homework_row_state %}
@@ -173,7 +173,7 @@
               {% if nav_child.syllabus_section %}<p class="px-2 pt-3 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="reader-syllabus-section">{{ nav_child.syllabus_section }}</p>{% endif %}
               {% with inline_units=nav_child|inline_course_units:course.slug %}
               {% if inline_units %}
-              {% for inline_unit in inline_units %}
+              {% for inline_unit in inline_units|visible_course_units:self_paced_view %}
               <ul class="reader-nav-list mt-1">
                 <li>
                   {% if inline_unit.pk == unit.pk %}
@@ -190,7 +190,7 @@
               {% else %}
               {% if homework_stepper and nav_child.pk == unit.module.pk %}
               <ul class="reader-nav-list mt-1">
-                {% for nav_unit in nav_child.units.all %}
+                {% for nav_unit in nav_child.units.all|visible_course_units:self_paced_view %}
                 {% if nav_unit.pk == unit.pk %}
                   {% include "content/reader/_homework_sidebar_unit.html" with unit=nav_unit root_optional=nav_module.is_bonus ancestor_optional=nav_child.is_bonus %}
                 {% else %}
@@ -212,7 +212,7 @@
                 </summary>
                 <div>
                   <ul class="reader-nav-list mt-1">
-                    {% for nav_unit in nav_child.units.all %}
+                    {% for nav_unit in nav_child.units.all|visible_course_units:self_paced_view %}
                     <li>
                       {% if nav_unit.pk == unit.pk %}
                         {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind=nav_unit|unit_nav_marker_kind:completed_unit_ids marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' status_meta=nav_unit.homework_row_state %}
@@ -244,7 +244,7 @@
               expanded module and between sibling module sections.
             {% endcomment %}
             <ul class="reader-nav-list mt-1">
-              {% for nav_unit in nav_module.units.all %}
+              {% for nav_unit in nav_module.units.all|visible_course_units:self_paced_view %}
               <li>
                 {% if nav_unit.pk == unit.pk %}
                   {% include "includes/_list_row.html" with href=nav_unit.get_absolute_url title=nav_unit.title is_current=True marker_kind=nav_unit|unit_nav_marker_kind:completed_unit_ids marker_html=nav_unit.kind|unit_nav_marker_html trailing_icon="" extra_attrs='aria-current="page"' status_meta=nav_unit.homework_row_state %}

@@ -51,6 +51,26 @@ def _poll_token(base_url: str, device_code: str) -> tuple[int, dict]:
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
+def _assert_approved_token_is_single_use(base_url: str, device_code: str, email: str):
+    status, credential = _poll_token(base_url, device_code)
+    assert status == 200
+    assert "token" in credential
+    token = credential["token"]
+
+    req = urllib.request.Request(
+        f"{base_url}/api/whoami",
+        headers={"Authorization": f"Token {token}"},
+    )
+    with urllib.request.urlopen(req) as resp:
+        assert resp.status == 200
+        whoami = json.loads(resp.read().decode("utf-8"))
+        assert whoami["email"] == email
+
+    # Single-use check
+    status, second_poll = _poll_token(base_url, device_code)
+    assert second_poll.get("error") == "expired_token"
+
+
 @browser_journey
 def test_staff_device_login_browser_flow(django_server, browser):
     email = "device-admin-pw@test.com"
@@ -70,23 +90,7 @@ def test_staff_device_login_browser_flow(django_server, browser):
     page.wait_for_load_state("domcontentloaded")
     expect(page.get_by_role("status")).to_contain_text("Sign-in approved")
 
-    status, credential = _poll_token(django_server, device_code)
-    assert status == 200
-    assert "token" in credential
-    token = credential["token"]
-
-    req = urllib.request.Request(
-        f"{django_server}/api/whoami",
-        headers={"Authorization": f"Token {token}"},
-    )
-    with urllib.request.urlopen(req) as resp:
-        assert resp.status == 200
-        whoami = json.loads(resp.read().decode("utf-8"))
-        assert whoami["email"] == email
-
-    # Single-use check
-    status, second_poll = _poll_token(django_server, device_code)
-    assert second_poll.get("error") == "expired_token"
+    _assert_approved_token_is_single_use(django_server, device_code, email)
     context.close()
 
 

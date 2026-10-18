@@ -2060,6 +2060,14 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_imported_groups_survive_the_transition_intact",
     })
 
+    issue_1980_owners = frozenset({
+        "playwright_tests/test_self_paced_progress_1980.py::test_self_paced_learner_starts_with_real_material",
+        "playwright_tests/test_self_paced_progress_1980.py::test_self_paced_learner_finishes_without_empty_session",
+        "playwright_tests/test_self_paced_progress_1980.py::test_current_dated_learner_keeps_live_session_journey",
+        "playwright_tests/test_self_paced_progress_1980.py::test_returning_alumnus_follows_new_self_paced_path",
+        "playwright_tests/test_self_paced_progress_1980.py::test_authenticated_progress_api_matches_default_cohort",
+    })
+
     youtube_referrer_owners = frozenset({
         "playwright_tests/test_video_player.py::"
         "TestYouTubeCourseUnitSendsReferrer::"
@@ -2285,29 +2293,20 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2971)
-        self.assertEqual(len(inventory.owners), 2766)
+        self.assertEqual(inventory.item_count, 2976)
+        self.assertEqual(len(inventory.owners), 2771)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
-            | self.issue_1528_owners
-            | self.issue_1529_owners
-            | self.issue_1530_owners
-            | self.issue_1531_owners
-            | self.issue_1815_owners
-            | self.issue_1837_owners
-            | self.issue_1846_owners
-            | self.issue_1897_owners
-            | self.issue_1906_owners
-            | self.issue_1894_owners
-            | self.issue_1917_owners
-            | self.issue_1923_owners
-            | self.issue_1924_owners
-            | self.issue_1925_owners
-            | self.issue_1926_owners
-            | self.issue_1795_owners
-            | self.issue_1716_owners
-            | self.issue_1918_owners
+            | self.issue_1528_owners | self.issue_1529_owners
+            | self.issue_1530_owners | self.issue_1531_owners
+            | self.issue_1815_owners | self.issue_1837_owners
+            | self.issue_1846_owners | self.issue_1897_owners
+            | self.issue_1906_owners | self.issue_1894_owners
+            | self.issue_1917_owners | self.issue_1923_owners
+            | self.issue_1924_owners | self.issue_1925_owners
+            | self.issue_1926_owners | self.issue_1795_owners
+            | self.issue_1716_owners | self.issue_1918_owners
             | self.issue_1927_owners
             | self.issue_1929_owners
             | self.issue_1933_owners
@@ -2333,6 +2332,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1827_owners
             | self.issue_1828_owners
             | self.issue_1984_owners
+            | self.issue_1980_owners
             | self.youtube_referrer_owners
             | self.reader_mobile_polish_owners
             | self.cohort_series_owners
@@ -2400,23 +2400,13 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             load_live_manifest()["LEGACY_DECLARED_BROWSER"],
         )
         self.assertNotIn(self.campaign_owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1506_owners:
-            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
-            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1515_owners:
-            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
-            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1516_owners:
-            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
-            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1565_owners:
-            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
-            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
-        for owner in self.issue_1566_owners:
-            self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
-            self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)
         for owner in (
-            self.issue_1528_owners
+            self.issue_1506_owners
+            | self.issue_1515_owners
+            | self.issue_1516_owners
+            | self.issue_1565_owners
+            | self.issue_1566_owners
+            | self.issue_1528_owners
             | self.issue_1529_owners
             | self.issue_1530_owners
             | self.issue_1531_owners
@@ -2457,6 +2447,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1959_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
+            | self.issue_1980_owners
             | self.device_login_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])

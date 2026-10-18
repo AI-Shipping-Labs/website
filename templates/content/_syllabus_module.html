@@ -19,11 +19,11 @@
       <span class="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs font-normal text-muted-foreground" data-testid="syllabus-module-meta">
         {% if module_week_range %}<span data-testid="syllabus-module-week-range">{{ module_week_range }}</span>{% endif %}
         {% if children %}
-        {% with leaf_total=children|leaf_unit_count %}
+        {% with leaf_total=children|leaf_unit_count:self_paced_view %}
         <span data-testid="module-submodule-count">{{ topic_children|length }} topic{{ topic_children|length|pluralize }}{% if leaf_total %} &middot; {{ leaf_total }} lesson{{ leaf_total|pluralize }}{% endif %}</span>
         {% endwith %}
         {% else %}
-        {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
+        {% with module_total=module.units.all|visible_course_units:self_paced_view|length module_completed=completed_count_by_module|dict_get:module.id %}
         {% if module_total %}<span data-testid="module-lesson-count">{% if module_completed %}{{ module_completed }}/{{ module_total }}{% else %}{{ module_total }}{% endif %} lesson{{ module_total|pluralize }}</span>{% endif %}
         {% endwith %}
         {% endif %}
@@ -36,7 +36,7 @@
     <span class="flex min-w-0 flex-shrink-0 items-center justify-end gap-2">
     {% if module.is_bonus and not parent_optional and not counter %}{% member_label_badge "Optional" tone="accent" size="xs" testid="syllabus-optional-badge" %}{% endif %}
     {% if not children and not counter %}
-    {% with module_total=module.units.all|length module_completed=completed_count_by_module|dict_get:module.id %}
+    {% with module_total=module.units.all|visible_course_units:self_paced_view|length module_completed=completed_count_by_module|dict_get:module.id %}
     {% if module_total %}<span class="flex-shrink-0 text-xs text-muted-foreground" data-testid="module-lesson-count">{% if module_completed %}{{ module_completed }}/{{ module_total }}{% else %}{{ module_total }}{% endif %} lesson{{ module_total|pluralize }}</span>{% endif %}
     {% endwith %}
     {% endif %}
@@ -48,11 +48,11 @@
       {% for child in children|required_only %}
       {% with inline_units=child|inline_course_units:course_slug %}
       {% if inline_units %}
-      {% for inline_unit in inline_units %}
+      {% for inline_unit in inline_units|visible_course_units:self_paced_view %}
       {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endfor %}
       {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
       {% endif %}
       {% endwith %}
       {% endfor %}
@@ -62,21 +62,21 @@
       {% if child.syllabus_section %}<h3 class="px-3 pt-4 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground" data-testid="syllabus-module-section">{{ child.syllabus_section }}</h3>{% endif %}
       {% with inline_units=child|inline_course_units:course_slug %}
       {% if inline_units %}
-      {% for inline_unit in inline_units %}
+      {% for inline_unit in inline_units|visible_course_units:self_paced_view %}
       {% include "content/_syllabus_unit_row.html" with unit=inline_unit parent_optional=optional_here force_optional=child.is_bonus completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endfor %}
       {% else %}
-      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
+      {% include "content/_syllabus_module.html" with module=child parent_optional=optional_here completed_unit_ids=completed_unit_ids completed_count_by_module=completed_count_by_module has_access=has_access course_slug=course_slug projects_by_module=projects_by_module preview_project_ids=preview_project_ids unit_deadlines=unit_deadlines module_deadline_summaries=module_deadline_summaries schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone self_paced_view=self_paced_view only %}
       {% endif %}
       {% endwith %}
       {% endfor %}
       {% endif %}
       {% endwith %}
     {% else %}
-      {% for unit in module.units.all|required_only %}
+      {% for unit in module.units.all|visible_course_units:self_paced_view|required_only %}
       {% include "content/_syllabus_unit_row.html" with unit=unit parent_optional=optional_here completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}
       {% endfor %}
-      {% with bonus_units=module.units.all|bonus_only %}
+      {% with bonus_units=module.units.all|visible_course_units:self_paced_view|bonus_only %}
       {% if bonus_units %}
       {% for unit in bonus_units %}
       {% include "content/_syllabus_unit_row.html" with unit=unit parent_optional=optional_here completed_unit_ids=completed_unit_ids has_access=has_access unit_deadlines=unit_deadlines schedule_cohort=schedule_cohort schedule_timezone=schedule_timezone only %}

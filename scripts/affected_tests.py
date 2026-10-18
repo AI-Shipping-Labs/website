@@ -85,6 +85,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from scripts.affected_command_order import (  # noqa: E402  (same)
+    CHECK_TAILWIND_COMMAND,
+    ordered_commands,
+)
 from scripts.verify_tailwind_build import (  # noqa: E402  (needs the sys.path fix above)
     PRODUCER_FILES,
     PRODUCER_JS_FAMILY,
@@ -141,8 +145,6 @@ ASL_CLI_COMMAND = "uv run pytest asl_cli/tests"
 #: ``css-build`` + ``verify_tailwind_build.py --rebuild``. ``--collected`` is
 #: deliberately NOT part of it -- that half needs ``collectstatic`` and asserts
 #: manifest/compression/serving, which no producer-file edit can break.
-CHECK_TAILWIND_COMMAND = "make check-tailwind"
-
 DJANGO_COMMAND_PREFIX = "uv run python manage.py test"
 #: ``--parallel 4`` (not bare ``--parallel``): bare spawns one worker per core,
 #: which is what melted a 12-core box running several agents at once. CI uses
@@ -710,6 +712,7 @@ class Plan:
             "escalation_reasons": self.escalation_reasons,
             "unmapped": self.unmapped,
             "notes": self.notes,
+            "commands": self.commands(),
         }
 
     def commands(self) -> list[str]:
@@ -720,19 +723,12 @@ class Plan:
         run already covers them, and re-running them would boot another
         server + browser per changed file.
         """
-        ordered: list[str] = []
-        if self.django_command:
-            ordered.append(self.django_command)
-        ordered.extend(
-            command
-            for command in self.extra_commands
-            if not (self.playwright == "full" and command.startswith(PLAYWRIGHT_FILE_COMMAND_PREFIX))
+        return ordered_commands(
+            self.django_labels,
+            self.django_command,
+            self.extra_commands,
+            self.playwright,
         )
-        if self.playwright == "core":
-            ordered.append(PLAYWRIGHT_CORE_COMMAND)
-        elif self.playwright == "full":
-            ordered.append(PLAYWRIGHT_FULL_COMMAND)
-        return ordered
 
 
 # ---------------------------------------------------------------------------

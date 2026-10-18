@@ -532,6 +532,14 @@ Python edit can select it on a checkout with no `node_modules` and no
 `TailwindSourceContractTest`, selected by their own build inputs (`Dockerfile`,
 `tailwind.config.js`, `package.json`).
 
+The affected plan orders generated-artifact prerequisites before mapped Django
+tests. If final Django labels select `TailwindSourceContractTest`, an existing
+`make check-tailwind` moves before Django; otherwise one `make css-build` is
+added there. Supplemental commands stay after Django. The rendered and JSON
+plans expose the same command sequence that `--run` executes. A plan selecting
+only `TailwindSourceScanTest` remains build-free because that class reads source
+files rather than the generated bundle.
+
 ### Guarded doc artifacts
 
 Rule 1 would happily drop every `.md` under `_docs/`, `docs/` and `specs/` --

@@ -1185,7 +1185,7 @@ class CliTest(SimpleTestCase):
                     "playwright",
                     "escalation_reasons",
                     "unmapped",
-                    "notes",
+                    "notes", "commands",
                 ]
             ),
         )

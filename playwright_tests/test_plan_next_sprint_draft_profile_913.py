@@ -212,10 +212,10 @@ class TestDraftReflectsMemberProfile:
                 page.locator(
                     '[data-testid="studio-header-overflow"] summary'
                 ).click()
-                page.locator(
-                    '[data-testid="studio-plan-draft-next-sprint"]'
-                ).click()
-                page.wait_for_load_state("domcontentloaded")
+                with page.expect_navigation(wait_until="domcontentloaded"):
+                    page.locator(
+                        '[data-testid="studio-plan-draft-next-sprint"]'
+                    ).click()
                 assert dialogs and "held for review, not published" in dialogs[0]
 
             panel = page.locator('[data-testid="next-sprint-draft-panel"]')
@@ -270,10 +270,10 @@ class TestDraftForMemberWhoSkippedOnboarding:
                 page.locator(
                     '[data-testid="studio-header-overflow"] summary'
                 ).click()
-                page.locator(
-                    '[data-testid="studio-plan-draft-next-sprint"]'
-                ).click()
-                page.wait_for_load_state("domcontentloaded")
+                with page.expect_navigation(wait_until="domcontentloaded"):
+                    page.locator(
+                        '[data-testid="studio-plan-draft-next-sprint"]'
+                    ).click()
                 assert dialogs and "held for review, not published" in dialogs[0]
 
             # The draft still generates — no error, panel renders, editor usable.

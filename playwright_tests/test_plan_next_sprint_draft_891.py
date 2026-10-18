@@ -141,8 +141,8 @@ class TestDismissDraft:
             assert page.locator(
                 '[data-testid="next-sprint-draft-panel"]'
             ).count() == 1
-            page.locator('[data-testid="next-sprint-draft-dismiss"]').click()
-            page.wait_for_load_state("domcontentloaded")
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                page.locator('[data-testid="next-sprint-draft-dismiss"]').click()
 
             assert page.locator(
                 '[data-testid="next-sprint-draft-panel"]'
@@ -213,10 +213,10 @@ class TestDegradesWhenAiOff:
             page.locator(
                 '[data-testid="studio-header-overflow"] summary'
             ).click()
-            page.locator(
-                '[data-testid="studio-plan-draft-next-sprint"]'
-            ).click()
-            page.wait_for_load_state("domcontentloaded")
+            with page.expect_navigation(wait_until="domcontentloaded"):
+                page.locator(
+                    '[data-testid="studio-plan-draft-next-sprint"]'
+                ).click()
             assert dialogs and "draft" in dialogs[0].lower()
             assert "held for review, not published" in dialogs[0]
 

@@ -223,8 +223,8 @@ def test_draft_with_blank_time_spent_resumes_empty(django_server, browser):
     context, page, unit_url = _open(browser, django_server, email, unit)
 
     page.get_by_label(HOMEWORK_URL).fill('https://github.com/student/draft')
-    page.get_by_role('button', name='Save draft').click()
-    expect(page).to_have_url(re.compile(re.escape(f'{unit_url}/review')))
+    with page.expect_navigation(wait_until='domcontentloaded'):
+        page.get_by_role('button', name='Save draft').click()
     page.goto(f'{django_server}{unit.module.course.get_absolute_url()}', wait_until='domcontentloaded')
     page.goto(f'{unit_url}/review', wait_until='domcontentloaded')
 

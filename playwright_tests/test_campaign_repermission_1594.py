@@ -192,14 +192,28 @@ def test_staff_starts_only_the_pilot_and_repeat_submission_is_idempotent(
 ):
     from django_q.models import Schedule
 
+    from accounts.models import User
     from email_app.models import CampaignWave, EmailCampaign
     from email_app.tasks.send_campaign import send_campaign
+    from payments.models import Membership, Tier
 
     _ensure_tiers()
     _reset_campaign_data()
     _create_staff_user("pilot-admin@test.com")
-    for index in range(351):
-        _create_user(f"pilot-{index:03d}@test.com", email_verified=False)
+    free_tier = Tier.objects.get(slug="free")
+    pilot_users = User.objects.bulk_create([
+        User(
+            email=f"pilot-{index:03d}@test.com",
+            email_verified=False,
+            is_active=True,
+            password="!",
+        )
+        for index in range(351)
+    ])
+    Membership.objects.bulk_create([
+        Membership(user=user, tier=free_tier)
+        for user in pilot_users
+    ])
     campaign = EmailCampaign.objects.create(
         subject="Pilot-only release",
         body="Introduction",

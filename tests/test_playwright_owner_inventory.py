@@ -1193,6 +1193,12 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "test_reset_to_default_still_works_after_a_rejected_save",
     })
 
+    device_login_owners = frozenset({
+        "playwright_tests/test_device_login.py::test_staff_device_login_browser_flow",
+        "playwright_tests/test_device_login.py::test_non_staff_device_login_refusal",
+        "playwright_tests/test_device_login.py::test_anonymous_device_page_redirects_to_login",
+    })
+
     issue_1736_owners = frozenset({
         "playwright_tests/test_studio_user_merge.py::"
         "TestRevokedPackageApiKeyIsReported::"
@@ -2279,8 +2285,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2968)
-        self.assertEqual(len(inventory.owners), 2763)
+        self.assertEqual(inventory.item_count, 2971)
+        self.assertEqual(len(inventory.owners), 2766)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2381,7 +2387,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1802_owners
             | self.issue_1833_owners
             | self.session_join_window_owners
-            | self.template_comment_guard_owners,
+            | self.template_comment_guard_owners
+            | self.device_login_owners,
         )
         self.assertNotIn(
             self.migrated_owner,
@@ -2450,6 +2457,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1959_owners
             | self.session_join_window_owners
             | self.template_comment_guard_owners
+            | self.device_login_owners
         ):
             self.assertNotIn(owner, load_live_manifest()["LEGACY_DECLARED_BROWSER"])
             self.assertNotIn(owner, LEGACY_DECLARED_BROWSER_CEILING)

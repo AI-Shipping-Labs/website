@@ -148,6 +148,12 @@ class TestAnalyticsConsent:
         context = browser.new_context(viewport=viewport)
         page = context.new_page()
         page.goto(f'{django_server}/blog', wait_until='domcontentloaded')
+        page.evaluate(
+            """async () => {
+                if (document.fonts) await document.fonts.ready;
+                window.dispatchEvent(new Event('resize'));
+            }"""
+        )
 
         panel = page.get_by_test_id('analytics-consent-panel')
         expect(panel).to_be_visible()
@@ -182,16 +188,21 @@ class TestAnalyticsConsent:
                 document.querySelector('main').style.paddingBottom = '2000px';
             }"""
         )
-        # The page is still loading after ``domcontentloaded``: the web font
-        # swap can grow it by a few pixels after a one-shot smooth scroll has
-        # picked its target, leaving it short of the bottom for good. Re-scroll
-        # instantly on every poll so the wait converges on the settled layout.
+        # The page can reflow while web fonts or images settle: re-scroll on
+        # every poll so the wait converges on the bottom and the footer clears
+        # the fixed consent panel.
         page.wait_for_function(
             """() => {
                 const doc = document.documentElement;
                 window.scrollTo({top: doc.scrollHeight, behavior: 'instant'});
-                return window.scrollY + window.innerHeight
-                    >= doc.scrollHeight - 1;
+                const footer = document.querySelector('footer');
+                const panel = document.querySelector(
+                    '[data-testid="analytics-consent-panel"]'
+                );
+                if (!footer || !panel) return false;
+                const clearance = panel.getBoundingClientRect().top
+                    - footer.getBoundingClientRect().bottom;
+                return clearance >= 15;
             }"""
         )
         footer_clearance = page.evaluate(

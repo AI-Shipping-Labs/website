@@ -18,10 +18,14 @@ Base URL: ``ASL_BASE_URL`` env var, default ``https://aishippinglabs.com``.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
+
+from community_base.device_login.storage import (
+    read_private_json,
+    save_private_json,
+)
 
 DEFAULT_BASE_URL = "https://aishippinglabs.com"
 
@@ -92,13 +96,13 @@ def read_stored_credential(base_url: str) -> str | None:
     path = credentials_path()
     if not path.is_file():
         return None
-    if path.stat().st_mode & 0o077:
+    try:
+        profile = read_private_json(path)
+    except PermissionError as error:
         raise RuntimeError(
             f"Stored credentials at {path} must have mode 0600. "
             "Fix the permissions or run `asl logout` and `asl login` again."
-        )
-    try:
-        profile = json.loads(path.read_text(encoding="utf-8"))
+        ) from error
     except (OSError, ValueError) as error:
         raise RuntimeError(f"Cannot read stored credentials at {path}.") from error
     if not isinstance(profile, dict):
@@ -112,24 +116,7 @@ def read_stored_credential(base_url: str) -> str | None:
 def write_stored_credential(*, base_url: str, token: str, email: str = "") -> Path:
     """Atomically store the device-login credential with mode 0600."""
     path = credentials_path()
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    try:
-        os.chmod(path.parent, 0o700)
-    except OSError:
-        pass
-    payload = json.dumps({"base_url": base_url, "token": token, "email": email})
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
-    try:
-        os.fchmod(descriptor, 0o600)
-        with os.fdopen(descriptor, "w", encoding="utf-8") as output:
-            output.write(payload)
-    except BaseException:
-        try:
-            os.close(descriptor)
-        except OSError:
-            pass
-        raise
-    return path
+    return save_private_json(path, {"base_url": base_url, "token": token, "email": email})
 
 
 def clear_stored_credential() -> bool:

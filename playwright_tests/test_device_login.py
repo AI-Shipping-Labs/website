@@ -107,7 +107,9 @@ def test_non_staff_device_login_refusal(django_server, browser):
 
     page.goto(f"{django_server}/device?code={user_code}", wait_until="domcontentloaded")
     expect(page.get_by_role("heading", name="Authorize this machine?")).to_be_visible()
-    expect(page.get_by_role("alert")).to_contain_text("Only admins can approve a device login.")
+    expect(
+        page.get_by_role("region", name="Authorize this machine?").get_by_role("alert")
+    ).to_contain_text("Only admins can approve a device login.")
     expect(page.get_by_role("button", name="Authorize")).to_have_count(0)
 
     status, poll_result = _poll_token(django_server, device_code)

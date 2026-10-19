@@ -10,6 +10,7 @@ The four personas and their onboarding questionnaires (plus the generic
 ``questionnaires.0003`` and are available in the test DB.
 """
 
+from html.parser import HTMLParser
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -128,6 +129,27 @@ class SelfIdentificationRoutingTest(TestCase):
         self.assertEqual(first.status_code, 302)
 
 
+# Cohesion exception: HTMLParser helper for PersonaNameNeverLeaksTest is kept
+# co-located in test_onboarding.py where all issue #802 onboarding flow tests live.
+class _OnboardingFormContentParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.visible_text = []
+        self.data_attributes = []
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if name.startswith('data-'):
+                self.data_attributes.append(name)
+                if value:
+                    self.data_attributes.append(value)
+
+    def handle_data(self, data):
+        cleaned = data.strip()
+        if cleaned:
+            self.visible_text.append(cleaned)
+
+
 @override_settings(ONBOARDING_AI_ENABLED='false')
 class PersonaNameNeverLeaksTest(TestCase):
     @classmethod
@@ -146,15 +168,50 @@ class PersonaNameNeverLeaksTest(TestCase):
         onboarding content, so we scope to the identify form.
         """
         html = self.client.get('/onboarding/').content.decode()
-        start = html.index('data-testid="onboarding-identify-form"')
-        end = html.index('</form>', start)
+        marker = 'data-testid="onboarding-identify-form"'
+        form_idx = html.index(marker)
+        start = html.rfind('<form', 0, form_idx)
+        end = html.index('</form>', form_idx) + len('</form>')
         return html[start:end]
 
     def test_self_id_page_has_no_persona_names(self):
-        form_html = self._onboarding_form_html()
+        parser = _OnboardingFormContentParser()
+        parser.feed(self._onboarding_form_html())
+        visible_text = ' '.join(parser.visible_text)
+        data_attrs = ' '.join(parser.data_attributes)
         for name in PERSONA_NAMES:
             self.assertNotIn(
-                name, form_html, f'persona name {name} leaked to member',
+                name, visible_text, f'persona name {name} leaked in visible text',
+            )
+            self.assertNotIn(
+                name, data_attrs, f'persona name {name} leaked in data attributes',
+            )
+            self.assertNotIn(
+                name.lower(), data_attrs.lower(),
+                f'persona name {name} leaked in data attributes',
+            )
+
+    def test_csrf_token_with_persona_substring_does_not_cause_false_positive(self):
+        """Random CSRF tokens containing 'Sam' (e.g. zSamrJ2...) must not fail."""
+        parser = _OnboardingFormContentParser()
+        parser.feed(
+            '<form method="post" action="/onboarding/identify" '
+            'data-testid="onboarding-identify-form">'
+            '<input type="hidden" name="csrfmiddlewaretoken" '
+            'value="zSamrJ2AlexPriyaTaylorToken">'
+            '<label data-testid="onboarding-option">'
+            '<span data-testid="onboarding-option-label">Technical Founder</span>'
+            '</label>'
+            '</form>'
+        )
+        visible_text = ' '.join(parser.visible_text)
+        data_attrs = ' '.join(parser.data_attributes)
+        for name in PERSONA_NAMES:
+            self.assertNotIn(
+                name, visible_text, f'persona name {name} leaked in visible text',
+            )
+            self.assertNotIn(
+                name, data_attrs, f'persona name {name} leaked in data attributes',
             )
 
     def test_self_id_page_shows_archetypes_as_labels(self):

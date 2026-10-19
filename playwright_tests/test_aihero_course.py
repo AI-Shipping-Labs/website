@@ -407,10 +407,14 @@ class TestScenario5FreeMemberTracksProgress:
             page.get_by_test_id("module-lesson-count").first
         ).to_have_text("2/7 lessons")
 
+        # Expand the collapsed module so lessons and completion icons become visible
+        page.evaluate("document.querySelectorAll('details.module-details').forEach(d => d.open = true)")
+
         # Day 1 and Day 2 appear as completed (checkmark icons)
         check_icons = page.locator(
-            '[data-lucide="check-circle-2"]'
+            '[data-lucide="check-circle-2"], svg.lucide-check-circle-2'
         )
+        expect(check_icons.first).to_be_visible()
         assert check_icons.count() >= 2
 # ---------------------------------------------------------------
 # Scenario 6: Free member accesses the last unit (Day 7)

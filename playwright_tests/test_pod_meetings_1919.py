@@ -215,14 +215,15 @@ def test_member_moves_the_rest_of_the_series_to_a_new_weekly_time(django_server,
     _course, cohort, users = _seed()
     pod = _meeting_pod(cohort, [users['anna'], users['raj'], users['mike']])
     now = timezone.now()
-    days_since_tuesday = (now.weekday() - 1) % 7 or 7
-    meetings = _weekly(pod, _hour(-days_since_tuesday, 16))
+    # Meeting 1 was held 3 days ago; Meeting 2 is in 4 days (safely in the future).
+    meetings = _weekly(pod, now - datetime.timedelta(days=3))
     from pods.models import PodMeeting
 
     PodMeeting.objects.filter(pk=meetings[0].pk).update(status='held')
     connection.close()
     local_now = now.astimezone(KOLKATA)
-    thursday = local_now.date() + datetime.timedelta(days=(3 - local_now.weekday()) % 7 or 7)
+    days_until_thursday = (3 - local_now.weekday()) % 7 or 7
+    thursday = local_now.date() + datetime.timedelta(days=days_until_thursday + 7)
 
     context, page = _page(browser, 'raj@test.com')
     page.goto(_pod_url(django_server, pod), wait_until='domcontentloaded')

@@ -213,10 +213,22 @@ def test_mobile_membership_is_centered_and_has_no_page_overflow(
     ).to_be_visible()
     assert page.get_by_test_id("pricing-tier-card").count() == 4
     expect(page.get_by_test_id("timeline-day-date")).to_be_visible()
+    expect(page.get_by_test_id("upcoming-event-card")).to_be_visible()
     # On phones the date rail stacks: the date sits above a full-width card.
-    date_box = page.get_by_test_id("timeline-day-date").bounding_box()
-    day_box = page.get_by_test_id("events-timeline-day").bounding_box()
-    card_box = page.get_by_test_id("upcoming-event-card").bounding_box()
+    # Query bounding boxes atomically to guard against layout shifts between CDP calls.
+    boxes = page.evaluate("""() => {
+        const date = document.querySelector('[data-testid="timeline-day-date"]')?.getBoundingClientRect();
+        const day = document.querySelector('[data-testid="events-timeline-day"]')?.getBoundingClientRect();
+        const card = document.querySelector('[data-testid="upcoming-event-card"]')?.getBoundingClientRect();
+        return {
+            date: date ? {x: date.x, y: date.y, width: date.width, height: date.height} : null,
+            day: day ? {x: day.x, y: day.y, width: day.width, height: day.height} : null,
+            card: card ? {x: card.x, y: card.y, width: card.width, height: card.height} : null,
+        };
+    }""")
+    date_box = boxes["date"]
+    day_box = boxes["day"]
+    card_box = boxes["card"]
     assert date_box is not None
     assert day_box is not None
     assert card_box is not None

@@ -199,11 +199,11 @@ class TestDropPlanStatus728:
             f"{django_server}/sprints/{sprint.slug}/plan/{plan.pk}",
             wait_until="domcontentloaded",
         )
+        # Progress chip stays — wait for header to render before checking badge absence.
+        page.locator(
+            '[data-testid="my-plan-progress"]'
+        ).wait_for(state="visible")
         # The member-side status chip is gone.
         assert page.locator(
             '[data-testid="my-plan-status-badge"]'
         ).count() == 0
-        # Progress chip stays.
-        page.locator(
-            '[data-testid="my-plan-progress"]'
-        ).wait_for(state="visible")

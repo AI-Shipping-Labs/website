@@ -62,9 +62,14 @@ class DevEcsWakeActionTest(SimpleTestCase):
         self.assertIn("print_service_state", failure_block)
         self.assertIn("print_task_state", failure_block)
 
-        # Diagnostics are read-only: the only mutating ECS call is the one
-        # update-service that wakes the service.
-        self.assertEqual(run_script.count("update-service"), 1)
+        # Diagnostics are read-only except for the wake-up scale and the
+        # one-time stale-TG detach: the live dev service may still reference
+        # a deleted ALB target group (ELB cost-cut / shared-edge migration;
+        # Terraform defines no load_balancers), so the action retries a
+        # TG-not-found update-service with --load-balancers '[]' to align
+        # live state. No other ECS mutations are allowed.
+        self.assertEqual(run_script.count("aws ecs update-service"), 2)
+        self.assertIn("--load-balancers '[]'", run_script)
         for mutating in ("stop-task", "run-task", "deregister", "delete-"):
             with self.subTest(mutating=mutating):
                 self.assertNotIn(mutating, run_script)

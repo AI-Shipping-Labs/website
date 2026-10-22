@@ -71,6 +71,17 @@ the host-mismatch banner for a few seconds while caches drain.
 Test vs live: n/a. One value per environment. Pin to the
 environment's public hostname.
 
+Shared-container note: the Contabo `aisl-staging` service answers for
+both the production hostnames and `dev.aishippinglabs.com` with one
+configured origin (the production default). Crawler surfaces
+(`/sitemap.xml` origin, `/robots.txt` policy, the noindex header/meta,
+canonical suppression) are derived per request host in
+`website/search_indexing.py`: a dev-host request always gets dev
+treatment regardless of this setting, so dev can never look indexable
+even when the configured origin points at production. Do not pin the
+dev URL here or in the Coolify compose — on the shared box it would
+noindex production.
+
 ## SITE_BASE_URL_ALIASES
 
 Purpose: Additional hostnames the platform recognises as "this

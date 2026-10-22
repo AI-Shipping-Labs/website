@@ -10,6 +10,7 @@ the check must remain available before database-backed middleware runs.
 from urllib.parse import urlsplit
 
 from django.conf import settings
+from django.core.exceptions import DisallowedHost
 from django.urls import Resolver404, resolve
 
 DEV_SITE_HOST = 'dev.aishippinglabs.com'
@@ -125,6 +126,39 @@ def search_indexing_disabled():
     return search_indexing_environment() == SEARCH_ENVIRONMENT_DEV
 
 
+def request_targets_dev_host(request):
+    """Return whether the request targets the dev deployment hostname.
+
+    The shared Contabo container answers for both the production and the
+    dev hostnames, so the request Host is the only dev signal that
+    survives a misconfigured ``SITE_BASE_URL``. Exact hostname match
+    only: case and trailing dots are normalized, ports are ignored, and
+    a dev hostname hidden inside a longer domain does not count.
+    """
+    try:
+        host = request.get_host()
+    except DisallowedHost:
+        return False
+    hostname = (urlsplit(f'//{host}').hostname or '').lower().rstrip('.')
+    if not hostname:
+        return False
+    return hostname == DEV_SITE_HOST
+
+
+def dev_serving_disabled(request):
+    """Return whether the request is served under the dev exclusion policy.
+
+    True when the process is the dev deployment (environment-backed
+    ``SITE_BASE_URL``) or when the request targets the dev hostname on a
+    box whose configured origin still points at production (shared
+    prod+dev container, stale env). Fail-closed: either signal alone is
+    enough to noindex, because a dev URL must never look indexable.
+    """
+    if search_indexing_disabled():
+        return True
+    return request_targets_dev_host(request)
+
+
 def production_search_indexing_enabled():
     """Return whether this process is the explicitly classified production."""
     return search_indexing_environment() == SEARCH_ENVIRONMENT_PRODUCTION
@@ -199,6 +233,6 @@ def production_request_indexing_disabled(request):
 
 def request_indexing_disabled(request):
     """Compose dev-wide and production page-level exclusion policies."""
-    return search_indexing_disabled() or production_request_indexing_disabled(
-        request,
-    )
+    if dev_serving_disabled(request):
+        return True
+    return production_request_indexing_disabled(request)

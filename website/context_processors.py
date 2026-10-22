@@ -21,8 +21,8 @@ from integrations.middleware import get_announcement_banner
 from payments.models import Membership
 from website.middleware import is_web_crawler_user_agent
 from website.search_indexing import (
+    dev_serving_disabled,
     request_indexing_disabled,
-    search_indexing_disabled,
 )
 
 # Cookie name for the analytics anonymous-visitor UUID4 set by
@@ -445,9 +445,10 @@ def site_context(request):
         'site_url': site_base_url(),
         'site_description': settings.SITE_DESCRIPTION,
         'search_indexing_disabled': indexing_disabled,
-        # Canonical omission is a dev-environment rule from #1376, not a
-        # consequence of production page-level noindex from #1379.
-        'search_canonical_disabled': search_indexing_disabled(),
+        # Canonical omission is a dev-serving rule from #1376 (process
+        # identity or dev request host), not a consequence of production
+        # page-level noindex from #1379.
+        'search_canonical_disabled': dev_serving_disabled(request),
         'stripe_customer_portal_url': get_config('STRIPE_CUSTOMER_PORTAL_URL', ''),
         'google_analytics_id': google_analytics_id,
         'analytics_consent_state': consent_state,

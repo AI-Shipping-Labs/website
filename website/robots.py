@@ -7,6 +7,7 @@ from integrations.config import site_base_url
 from website.search_indexing import (
     faceted_listing_robots_disallow_patterns,
     production_search_indexing_enabled,
+    request_targets_dev_host,
 )
 
 
@@ -17,7 +18,12 @@ def robots_txt(request):
         'User-agent: *',
         'Allow: /',
     ]
-    if production_search_indexing_enabled():
+    # The shared Contabo container answers for both the production and
+    # the dev hostnames with one configured origin. A dev-host request
+    # must get the minimal non-production policy even when the
+    # configuration still points at production; otherwise dev looks
+    # indexable and advertises the production sitemap.
+    if production_search_indexing_enabled() and not request_targets_dev_host(request):
         lines.extend([
             'Disallow: /accounts/',
             'Disallow: /register',

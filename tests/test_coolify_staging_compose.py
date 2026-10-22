@@ -1,31 +1,23 @@
 """Regression coverage for the Coolify staging service identity.
 
-The box that serves https://dev.aishippinglabs.com runs from
-deploy/coolify/docker-compose.staging.yml. When that template omits
-SITE_BASE_URL, the app falls back to the production literal in
-website/settings.py and staging presents as production (canonical
-sitemap/robots/OG URLs), which fails the scheduled dev Playwright
-sitemap-origin and robots noindex smoke checks. This pins the dev
-identity in the template against the same per-environment contract the
-ECS path enforces in deploy/update_task_def.py.
+The box that serves https://dev.aishippinglabs.com is the shared
+``aisl-staging`` Coolify service, which answers for BOTH the production
+hostnames (apex, www) and the dev hostname with a single container.
+Pinning ``SITE_BASE_URL`` to the dev URL in this template (as a05609047
+tried) can never be right for every request: applied to the live
+service it would noindex production, and the Hetzner pin+deploy poller
+only replaces the image tag, so the template value never even reached
+the running container. The app therefore derives the crawler surfaces
+per request host (website/search_indexing.py: a dev-host request always
+gets the dev sitemap origin, minimal robots, and noindex, regardless of
+the configured origin). This pins the shared-container invariant: the
+template must not pin a static origin.
 """
 
-import importlib.util
 from pathlib import Path
 
 import yaml
 from django.test import SimpleTestCase
-
-
-def _load_update_task_def_module():
-    module_path = Path(__file__).resolve().parent.parent / "deploy" / "update_task_def.py"
-    spec = importlib.util.spec_from_file_location("deploy_update_task_def", module_path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-update_task_def = _load_update_task_def_module()
 
 
 class CoolifyStagingComposeTest(SimpleTestCase):
@@ -35,8 +27,5 @@ class CoolifyStagingComposeTest(SimpleTestCase):
             compose = yaml.safe_load(handle)
         return compose["services"]["web"]["environment"]
 
-    def test_staging_service_uses_dev_site_base_url(self):
-        self.assertEqual(
-            self._staging_environment().get("SITE_BASE_URL"),
-            update_task_def.SITE_BASE_URL_BY_ENV["dev"],
-        )
+    def test_staging_service_does_not_pin_a_static_site_base_url(self):
+        self.assertNotIn("SITE_BASE_URL", self._staging_environment())

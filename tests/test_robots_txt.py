@@ -139,6 +139,36 @@ class DevRobotsResponseTest(RobotsConfigMixin, TestCase):
 
 
 @tag('core')
+@override_settings(
+    SITE_BASE_URL=PRODUCTION_URL,
+    ALLOWED_HOSTS=['testserver', 'dev.aishippinglabs.com'],
+)
+class DevHostRobotsResponseTest(RobotsConfigMixin, TestCase):
+    """A dev-host request gets minimal robots with prod config (#1994).
+
+    The shared Contabo container serves prod and dev hostnames with one
+    configured production origin. Dev-host robots must stay minimal
+    (no Disallow beyond Allow, no production Sitemap) and header-tagged
+    noindex even though ``SITE_BASE_URL`` says production.
+    """
+
+    def test_dev_host_allows_crawling_without_production_sitemap(self):
+        response = self.client.get('/robots.txt', HTTP_HOST='dev.aishippinglabs.com')
+
+        self.assertEqual(response['Content-Type'], 'text/plain; charset=utf-8')
+        self.assertEqual(response.content.decode(), NON_PRODUCTION_BODY)
+        self.assertNotIn('Sitemap:', response.content.decode())
+        self.assertNotContains(response, 'aishippinglabs.com')
+        self.assertEqual(response['X-Robots-Tag'], DEV_ROBOTS_DIRECTIVE)
+        self.assertEqual(response['Cache-Control'], 'no-store, max-age=0')
+
+    def test_prod_host_keeps_full_production_robots(self):
+        response = self.client.get('/robots.txt', HTTP_HOST='testserver')
+
+        self.assertEqual(response.content.decode(), PRODUCTION_BODY)
+
+
+@tag('core')
 @override_settings(SITE_BASE_URL='http://127.0.0.1:8000')
 class LocalRobotsResponseTest(RobotsConfigMixin, TestCase):
     def test_local_allows_crawling_without_any_deployed_sitemap(self):

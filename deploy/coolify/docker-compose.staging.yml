@@ -17,14 +17,17 @@ services:
     restart: unless-stopped
     environment:
       DEBUG: "0"
-      # Staging identity. Mirrors SITE_BASE_URL_BY_ENV["dev"] in
-      # deploy/update_task_def.py for the ECS path. Without this the app
-      # falls back to the production literal in website/settings.py, so the
-      # staging box presents as production (canonical sitemap/robots/OG
-      # URLs) and the scheduled dev Playwright suite
-      # (PLAYWRIGHT_BASE_URL=https://dev.aishippinglabs.com) fails its
-      # sitemap-origin and robots noindex smoke checks.
-      SITE_BASE_URL: "https://dev.aishippinglabs.com"
+      # No SITE_BASE_URL pin here. This single service answers for both
+      # the production hostnames (apex, www) and dev.aishippinglabs.com,
+      # so one static origin cannot be right for every request: pinning
+      # the dev URL would noindex production, pinning production leaves
+      # dev presenting prod sitemap/robots. The app derives the crawler
+      # surfaces per request host instead (website/search_indexing.py:
+      # a dev-host request always gets dev sitemap origin, minimal
+      # robots, and noindex, regardless of the configured origin).
+      # Keep this in sync with SITE_BASE_URL_BY_ENV only when dev gets
+      # its own service; until then the shared box stays on the
+      # production-literal default in website/settings.py.
       RUN_MIGRATIONS: "true"
       SERVING_BOOT_SMOKE_CHECK_ENABLED: "false"
       GUNICORN_WORKERS: "2"

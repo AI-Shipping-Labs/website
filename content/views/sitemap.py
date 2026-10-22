@@ -11,10 +11,20 @@ from django.template.response import TemplateResponse
 from django.utils.http import http_date
 
 from integrations.config import site_base_url
+from website.search_indexing import DEV_SITE_HOST, request_targets_dev_host
 
 
-def _canonical_site():
-    """Return the protocol and Site-shaped domain for sitemap URL joins."""
+def _canonical_site(request):
+    """Return the protocol and Site-shaped domain for sitemap URL joins.
+
+    A request to the dev hostname always resolves to the dev origin,
+    even when the configured ``SITE_BASE_URL`` still points at
+    production (shared prod+dev container, stale env). Every other host
+    keeps the configured canonical origin, so request hosts can never
+    redirect the sitemap at an arbitrary domain.
+    """
+    if request_targets_dev_host(request):
+        return 'https', SimpleNamespace(domain=DEV_SITE_HOST)
     configured_url = str(site_base_url()).strip().rstrip('/')
     parsed = urlsplit(configured_url)
     if not parsed.scheme or not parsed.netloc:
@@ -39,7 +49,7 @@ def sitemap(
     membership, paths, pagination, metadata, templates, and response headers
     retain Django's existing behavior.
     """
-    protocol, canonical_site = _canonical_site()
+    protocol, canonical_site = _canonical_site(request)
 
     if section is not None:
         if section not in sitemaps:

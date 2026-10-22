@@ -154,3 +154,64 @@ class SitemapCanonicalOriginTest(TestCase):
             ('priority', '0.8'),
             first_entries['/blog/canonical-sitemap-article'],
         )
+
+
+@tag('core')
+@override_settings(
+    SITE_BASE_URL='https://aishippinglabs.com',
+    ALLOWED_HOSTS=['testserver', 'dev.aishippinglabs.com'],
+)
+class DevHostSitemapOriginTest(TestCase):
+    """A dev-host request gets the dev origin with prod config (#1994).
+
+    The shared Contabo container serves prod and dev hostnames with one
+    configured production origin. Dev-host sitemap entries must use the
+    dev origin even though ``SITE_BASE_URL`` says production; every
+    other host keeps the configured canonical origin.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        Article.objects.create(
+            title='Dev host sitemap article',
+            slug='dev-host-sitemap-article',
+            content_markdown='# Dev host sitemap article',
+            date=date(2026, 8, 9),
+            published=True,
+            required_level=0,
+        )
+
+    def setUp(self):
+        IntegrationSetting.objects.filter(key='SITE_BASE_URL').delete()
+        clear_config_cache()
+
+    def tearDown(self):
+        clear_config_cache()
+
+    def test_dev_host_sitemap_uses_dev_origin_despite_prod_config(self):
+        response = self.client.get(
+            '/sitemap.xml',
+            HTTP_HOST='dev.aishippinglabs.com',
+        )
+
+        locations = _locations(response)
+        self.assertTrue(locations)
+        self.assertTrue(
+            all(
+                urlsplit(location)[:2] == ('https', 'dev.aishippinglabs.com')
+                for location in locations
+            ),
+        )
+        self.assertNotContains(response, 'https://aishippinglabs.com/')
+
+    def test_other_hosts_keep_the_configured_canonical_origin(self):
+        response = self.client.get('/sitemap.xml', HTTP_HOST='testserver')
+
+        locations = _locations(response)
+        self.assertTrue(locations)
+        self.assertTrue(
+            all(
+                urlsplit(location)[:2] == ('https', 'aishippinglabs.com')
+                for location in locations
+            ),
+        )

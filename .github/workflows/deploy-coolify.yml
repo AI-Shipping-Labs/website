@@ -1,0 +1,140 @@
+name: Deploy AISHL Coolify (Contabo)
+
+# Staging CD: GHA builds linux/amd64 → GHCR → Coolify pulls image via deploy API.
+# No git SSH / deploy keys / git clone on Contabo.
+# Mirrors DataTalksClub/relay .github/workflows/deploy-coolify.yml.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "_docs/**"
+      - "specs/**"
+      - "*.md"
+      - "deploy/coolify/**"
+      - ".github/workflows/deploy-dev.yml"
+      - ".github/workflows/deploy-prod.yml"
+      - ".github/workflows/prod-emergency-*.yml"
+      - ".github/workflows/scheduled-playwright*.yml"
+
+concurrency:
+  group: aisl-coolify
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ai-shipping-labs/website
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+      - name: Install dependencies
+        run: uv sync --locked
+      - name: Lint and Django checks
+        run: |
+          uv run ruff check .
+          uv run python manage.py makemigrations --check --dry-run
+          uv run python scripts/check_migration_safety.py
+        env:
+          SECRET_KEY: ci-coolify-check-only-not-a-real-secret
+      - name: Django system check
+        run: uv run python manage.py check --fail-level ERROR
+        env:
+          DEBUG: "False"
+          SES_ENABLED: "true"
+          SECRET_KEY: ci-coolify-check-only-not-a-real-secret
+      - name: asl-cli offline unit tests
+        env:
+          ASL_API_TOKEN: ""
+          API_SHIPPING_LABS_API_TOKEN: ""
+        run: uv run python -m pytest asl_cli/ -q
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-24.04
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      image_digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest
+            type=raw,value=sha-${{ github.sha }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push (linux/amd64)
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Contabo has no GHCR login yet; try to match the public repo visibility.
+      # If the org API refuses (HTTP 404), Coolify needs a registry login
+      # (PAT with read:packages) or a public package before first pull.
+      - name: Make GHCR package public
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          for i in 1 2 3 4 5; do
+            if gh api --method PUT               "orgs/AI-Shipping-Labs/packages/container/website/visibility"               -f visibility=public; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "WARN: could not set package public; Coolify may need registry login" >&2
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-24.04
+    # Staging Contabo Coolify only — production AWS workflows stay separate.
+    environment: coolify-staging
+    steps:
+      - name: Trigger Coolify deploy (pull GHCR image)
+        env:
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_SERVICE_UUID: ${{ secrets.COOLIFY_AISL_SERVICE_UUID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${COOLIFY_URL:-}" || -z "${COOLIFY_TOKEN:-}" || -z "${COOLIFY_SERVICE_UUID:-}" ]]; then
+            echo "Missing Coolify secrets: COOLIFY_URL, COOLIFY_TOKEN, COOLIFY_AISL_SERVICE_UUID" >&2
+            exit 1
+          fi
+          # Prefer Bearer deploy API (force=true so image pull is requested).
+          # pull_policy: always must be set on the Coolify compose service.
+          curl --fail --show-error --silent --request POST             --header "Authorization: Bearer ${COOLIFY_TOKEN}"             --header "Accept: application/json"             "${COOLIFY_URL%/}/api/v1/deploy?uuid=${COOLIFY_SERVICE_UUID}&force=true"
+          echo
+          echo "Triggered Coolify deploy for ${COOLIFY_SERVICE_UUID} image ${{ needs.build-and-push.outputs.image_tag }}"

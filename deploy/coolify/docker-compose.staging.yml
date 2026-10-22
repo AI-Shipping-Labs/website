@@ -1,0 +1,34 @@
+# Coolify service template for AISHL staging (Contabo).
+# Secrets (SECRET_KEY, DATABASE_URL, etc.) live in Coolify UI / API
+# environment variables — never inline them here.
+# CD path: GitHub Actions builds → GHCR → Coolify deploy webhook (no git clone on Contabo).
+#
+# Boot path: empty argv → entrypoint.sh hands off to
+# scripts/entrypoint_init.py legacy mode. RUN_MIGRATIONS=true makes this
+# single container the sole migrator (issue #336) then serves gunicorn via
+# scripts/gunicorn_runtime.py defaults (gthread, --preload).
+# Health path: GET /ping via website.middleware.HealthCheckMiddleware
+# (200 + VERSION, no DB hit, bypasses ALLOWED_HOSTS).
+services:
+  web:
+    image: ghcr.io/ai-shipping-labs/website:latest
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      DEBUG: "0"
+      RUN_MIGRATIONS: "true"
+      SERVING_BOOT_SMOKE_CHECK_ENABLED: "false"
+      GUNICORN_WORKERS: "2"
+      GUNICORN_THREADS: "4"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/ping", timeout=2).read()
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+    expose:
+      - "8000"

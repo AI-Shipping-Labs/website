@@ -560,6 +560,52 @@ refresh_prod_service_state_before_roll() {
     fi
 }
 
+# Detach a stale ALB target group when the live ECS service still references
+# a TG that was deleted out-of-band (ELB cost-cut / shared-edge migration).
+# Terraform main/aisl/ecs.tf defines dev/prod without load_balancers; the
+# live service must be aligned by passing an empty load-balancers list, which
+# `update-service` supports ("You can remove existing loadBalancers by passing
+# an empty list"). The deploy role has ecs:UpdateService but not
+# DeleteService/CreateService, so in-place detach is the only self-healing
+# path available to CI.
+ecs_update_service() {
+    local UPDATE_OUTPUT
+    local UPDATE_STATUS
+    local DETACH_OUTPUT
+    local DETACH_STATUS
+
+    UPDATE_OUTPUT=$(mktemp)
+    set +e
+    aws ecs update-service "$@" > "${UPDATE_OUTPUT}" 2>&1
+    UPDATE_STATUS=$?
+    set -e
+    if [ "${UPDATE_STATUS}" -eq 0 ]; then
+        rm -f "${UPDATE_OUTPUT}"
+        return 0
+    fi
+    cat "${UPDATE_OUTPUT}"
+    if grep -Eq "targetgroup.*does not exist|TargetGroupNotFound|Target group.*not found" "${UPDATE_OUTPUT}"; then
+        echo "WARNING: ECS service still references a deleted ALB target group (ELB cost-cut / shared-edge migration)."
+        echo "Terraform main/aisl/ecs.tf defines this service without load_balancers; detaching the stale LB to align live state."
+        rm -f "${UPDATE_OUTPUT}"
+        DETACH_OUTPUT=$(mktemp)
+        set +e
+        aws ecs update-service "$@" --load-balancers '[]' > "${DETACH_OUTPUT}" 2>&1
+        DETACH_STATUS=$?
+        set -e
+        cat "${DETACH_OUTPUT}"
+        rm -f "${DETACH_OUTPUT}"
+        if [ "${DETACH_STATUS}" -eq 0 ]; then
+            echo "Detached stale load balancer; live service now matches Terraform (no load_balancers)."
+            return 0
+        fi
+        echo "ERROR: detach of stale load balancer failed (status=${DETACH_STATUS})."
+        return "${DETACH_STATUS}"
+    fi
+    rm -f "${UPDATE_OUTPUT}"
+    return "${UPDATE_STATUS}"
+}
+
 # Roll SERVICE to NEW_TASK_DEF_ARN and wait for steady state. Assumes the
 # pre-deploy migrate+check gate already passed.
 roll_service() {
@@ -579,19 +625,19 @@ roll_service() {
     # Worker services also run from a 0 baseline so stale tasks do not linger.
     # Each rollout that targets either path must wake the service with the new
     # task definition so ECS has a task to register with the ALB.
+    # ecs_update_service self-heals the stale-TG drift (deleted ALB TG still
+    # attached to the live service) by detaching the LB to match Terraform.
     if [ "${ENV}" = "dev" ] || [ "${ROLE}" = "worker" ]; then
-        aws ecs update-service \
+        ecs_update_service \
             --cluster ${CLUSTER} \
             --service ${SERVICE} \
             --task-definition ${NEW_TASK_DEF_ARN} \
-            --desired-count 1 \
-            > /dev/null
+            --desired-count 1
     else
-        aws ecs update-service \
+        ecs_update_service \
             --cluster ${CLUSTER} \
             --service ${SERVICE} \
-            --task-definition ${NEW_TASK_DEF_ARN} \
-            > /dev/null
+            --task-definition ${NEW_TASK_DEF_ARN}
     fi
 
     echo "Waiting for ${SERVICE} to reach steady state on ${NEW_TASK_DEF_ARN} (timeout ~10 min)..."

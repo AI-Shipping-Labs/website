@@ -128,12 +128,68 @@ runs:
         echo "::endgroup::"
 
         echo "Scaling ECS service ${ECS_SERVICE} in cluster ${ECS_CLUSTER} to desired count ${DESIRED_COUNT}..."
+        # Self-heal stale-TG drift: the live dev service may still reference a
+        # deleted ALB target group (ELB cost-cut / shared-edge migration;
+        # Terraform defines no load_balancers). update-service supports
+        # removing them via an empty list. After a detach the service has no
+        # public route, so /ping via the dev host cannot prove the ECS
+        # revision (dev traffic is served via Coolify/edge); the ECS waiter
+        # in deploy_dev.sh already proved stability, so skip HTTP polling.
+        UPDATE_LOG="$(mktemp)"
+        set +e
         aws ecs update-service \
           --region "${AWS_REGION}" \
           --cluster "${ECS_CLUSTER}" \
           --service "${ECS_SERVICE}" \
           --desired-count "${DESIRED_COUNT}" \
-          > /dev/null
+          > "${UPDATE_LOG}" 2>&1
+        UPDATE_STATUS=$?
+        set -e
+        cat "${UPDATE_LOG}"
+        DETACHED_STALE_LB=false
+        if [ "${UPDATE_STATUS}" -ne 0 ] && grep -Eq "targetgroup.*does not exist|TargetGroupNotFound|Target group.*not found" "${UPDATE_LOG}"; then
+          echo "WARNING: ECS service references a deleted ALB target group; detaching stale LB to match Terraform (no load_balancers)."
+          DETACH_LOG="$(mktemp)"
+          set +e
+          aws ecs update-service \
+            --region "${AWS_REGION}" \
+            --cluster "${ECS_CLUSTER}" \
+            --service "${ECS_SERVICE}" \
+            --desired-count "${DESIRED_COUNT}" \
+            --load-balancers '[]' \
+            > "${DETACH_LOG}" 2>&1
+          DETACH_STATUS=$?
+          set -e
+          cat "${DETACH_LOG}"
+          rm -f "${DETACH_LOG}"
+          if [ "${DETACH_STATUS}" -eq 0 ]; then
+            echo "Detached stale load balancer; live service now matches Terraform."
+            DETACHED_STALE_LB=true
+          else
+            echo "::error ::Failed to detach stale load balancer (status=${DETACH_STATUS})."
+            rm -f "${UPDATE_LOG}"
+            exit "${DETACH_STATUS}"
+          fi
+        elif [ "${UPDATE_STATUS}" -ne 0 ]; then
+          echo "::error ::ECS update-service failed (status=${UPDATE_STATUS})."
+          rm -f "${UPDATE_LOG}"
+          exit "${UPDATE_STATUS}"
+        fi
+        rm -f "${UPDATE_LOG}"
+
+        if [ "${DETACHED_STALE_LB}" = "true" ]; then
+          echo "::notice ::${ECS_SERVICE} has no load balancer after stale-TG detach (Terraform edge/Coolify path); skipping ${PING_URL} HTTP check. ECS stability was proven by the deploy waiter; dev traffic is served via Coolify."
+          exit 0
+        fi
+        # A service that already runs without a load balancer (Terraform
+        # edge/Coolify path) has no public ECS route either; same skip.
+        CURRENT_LB="$(timeout 60 aws ecs describe-services --region "${AWS_REGION}" \
+          --cluster "${ECS_CLUSTER}" --services "${ECS_SERVICE}" \
+          --query 'services[0].loadBalancers' --output json 2>/dev/null || echo "unknown")"
+        if [ "${CURRENT_LB}" = "[]" ]; then
+          echo "::notice ::${ECS_SERVICE} runs without a load balancer (Terraform edge/Coolify path); skipping ${PING_URL} HTTP check."
+          exit 0
+        fi
 
         if readiness_poll_until_stable \
             "${PING_URL}" "${EXPECTED_TEXT}" \

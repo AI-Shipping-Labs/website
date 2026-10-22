@@ -39,6 +39,21 @@ jobs:
       - uses: astral-sh/setup-uv@v7
       - name: Install dependencies
         run: uv sync --locked
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - name: Build Tailwind CSS
+        run: make css-build
+      - name: Collect static files
+        env:
+          DEBUG: "False"
+          SECRET_KEY: "ci-coolify-check-only-not-a-real-secret"
+          ALLOWED_HOSTS: "localhost"
+        run: |
+          make collectstatic
+          uv run python scripts/verify_tailwind_build.py --rebuild --collected
       - name: Lint and Django checks
         run: |
           uv run ruff check .

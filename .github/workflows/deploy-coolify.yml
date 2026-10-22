@@ -133,63 +133,16 @@ jobs:
     # Staging Contabo Coolify only — production AWS workflows stay separate.
     environment: coolify-staging
     steps:
-      - name: Pin Coolify image to ECR tag YYYYMMDD-HHMMSS-<7> and deploy
+      - name: Hand off deploy to Hetzner poller
+        # GitHub-hosted runners cannot reach the Coolify API at
+        # http://169.58.119.163:8000 (connection times out from the
+        # internet). The pin+deploy step therefore runs Hetzner-side:
+        # deploy/coolify/hetzner-auto-deploy.sh (cron on RMTHZ) picks up
+        # the pushed tag within ~5 minutes, pins it into the service
+        # compose and triggers the Coolify deploy over the DC-local API.
         env:
-          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
-          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
-          COOLIFY_SERVICE_UUID: ${{ secrets.COOLIFY_AISL_SERVICE_UUID }}
           IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
         run: |
-          set -euo pipefail
-          if [[ -z "${COOLIFY_URL:-}" || -z "${COOLIFY_TOKEN:-}" || -z "${COOLIFY_SERVICE_UUID:-}" ]]; then
-            echo "Missing Coolify secrets: COOLIFY_URL, COOLIFY_TOKEN, COOLIFY_AISL_SERVICE_UUID" >&2
-            exit 1
-          fi
-          # Exact ECR tag (YYYYMMDD-HHMMSS-<7>): pin Coolify compose, never :latest.
-          # Coolify compose services store the image in docker_compose_raw (base64 on write).
-          python3 - <<'PY'
-          import base64, json, os, re, urllib.request
-
-          base = os.environ["COOLIFY_URL"].rstrip("/")
-          token = os.environ["COOLIFY_TOKEN"]
-          uuid = os.environ["COOLIFY_SERVICE_UUID"]
-          image_ref = os.environ["IMAGE_REF"]
-          image_tag = os.environ["IMAGE_TAG"]
-          prefix = f"{image_ref}:"
-
-          def call(method, path, payload=None):
-              data = None if payload is None else json.dumps(payload).encode()
-              req = urllib.request.Request(
-                  f"{base}{path}",
-                  data=data,
-                  method=method,
-                  headers={
-                      "Authorization": f"Bearer {token}",
-                      "Accept": "application/json",
-                      "Content-Type": "application/json",
-                  },
-              )
-              with urllib.request.urlopen(req) as resp:
-                  body = resp.read()
-                  return resp.status, (json.loads(body) if body else {})
-
-          _st, svc = call("GET", f"/api/v1/services/{uuid}")
-          raw = svc["docker_compose_raw"]
-          new, n = re.subn(
-              re.escape(prefix) + r"[^\s'\"]+",
-              prefix + image_tag,
-              raw,
-              count=1,
-          )
-          if n != 1:
-              raise SystemExit(f"Could not pin image {prefix}* in Coolify compose (matches={n})")
-          call(
-              "PATCH",
-              f"/api/v1/services/{uuid}",
-              {"docker_compose_raw": base64.b64encode(new.encode()).decode()},
-          )
-          _st, out = call("POST", f"/api/v1/deploy?uuid={uuid}&force=true")
-          print(json.dumps(out))
-          print(f"Pinned {prefix}{image_tag} and triggered Coolify deploy for {uuid}")
-          PY
+          echo "Pushed ${IMAGE_REF}:${IMAGE_TAG}."
+          echo "Hetzner poller (deploy/coolify/hetzner-auto-deploy.sh) will pin+deploy it."

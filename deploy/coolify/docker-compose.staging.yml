@@ -17,6 +17,14 @@ services:
     restart: unless-stopped
     environment:
       DEBUG: "0"
+      # Staging identity. Mirrors SITE_BASE_URL_BY_ENV["dev"] in
+      # deploy/update_task_def.py for the ECS path. Without this the app
+      # falls back to the production literal in website/settings.py, so the
+      # staging box presents as production (canonical sitemap/robots/OG
+      # URLs) and the scheduled dev Playwright suite
+      # (PLAYWRIGHT_BASE_URL=https://dev.aishippinglabs.com) fails its
+      # sitemap-origin and robots noindex smoke checks.
+      SITE_BASE_URL: "https://dev.aishippinglabs.com"
       RUN_MIGRATIONS: "true"
       SERVING_BOOT_SMOKE_CHECK_ENABLED: "false"
       GUNICORN_WORKERS: "2"

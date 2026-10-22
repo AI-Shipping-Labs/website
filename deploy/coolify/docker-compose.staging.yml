@@ -1,6 +1,7 @@
 # Coolify service template for AISHL staging (Contabo).
 # Secrets (SECRET_KEY, DATABASE_URL, etc.) live in Coolify UI / API
 # environment variables — never inline them here.
+# Image tag: immutable sha-<full github.sha> (ECR-like). Never :latest.
 # CD path: GitHub Actions builds → GHCR → Coolify deploy webhook (no git clone on Contabo).
 #
 # Boot path: empty argv → entrypoint.sh hands off to
@@ -11,7 +12,7 @@
 # (200 + VERSION, no DB hit, bypasses ALLOWED_HOSTS).
 services:
   web:
-    image: ghcr.io/ai-shipping-labs/website:latest
+    image: ghcr.io/ai-shipping-labs/website:sha-f23e594ccf11821115a344adc3c625564fda8c1b
     pull_policy: always
     restart: unless-stopped
     environment:

@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -12,6 +12,15 @@ from booking.models import (
     BookingWeeklyWindow,
 )
 from questionnaires.models import Questionnaire, Response
+
+
+def _next_monday() -> date:
+    """Next Monday at least 2 days in the future (host window is weekday 0)."""
+    today = datetime.now(timezone.utc).date()
+    days_ahead = (0 - today.weekday()) % 7
+    if days_ahead < 2:
+        days_ahead += 7
+    return today + timedelta(days=days_ahead)
 
 
 class BookingViewsTest(TestCase):
@@ -71,11 +80,12 @@ class BookingViewsTest(TestCase):
     @patch("booking.services.booking_service.query_busy")
     def test_host_slots_api(self, mock_busy):
         mock_busy.return_value = []
+        target_mon = _next_monday().isoformat()
         resp = self.client.get(
             "/book/alexey/slots",
             {
-                "from": "2026-10-19",
-                "to": "2026-10-19",
+                "from": target_mon,
+                "to": target_mon,
                 "tz": "UTC",
             },
         )
@@ -93,10 +103,11 @@ class BookingViewsTest(TestCase):
         mock_gcal.return_value = {"id": "gcal-view"}
 
         self.client.force_login(self.user)
+        target_mon = _next_monday()
         resp = self.client.post(
             "/book/alexey/confirm",
             {
-                "start_iso": "2026-10-19T10:00:00+00:00",
+                "start_iso": f"{target_mon.isoformat()}T10:00:00+00:00",
                 "invitee_name": "Test User",
                 "invitee_email": "test@example.com",
                 "invitee_timezone": "UTC",
@@ -135,12 +146,17 @@ class BookingViewsTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-view", "join_url": "https://zoom.test/j/view"}
         mock_gcal.return_value = {"id": "gcal-view"}
 
+        target_mon = _next_monday()
         booking = Booking.objects.create(
             host=self.host,
             invitee_name="Test User",
             invitee_email="test@example.com",
-            start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
-            end_datetime=datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc),
+            start_datetime=datetime(
+                target_mon.year, target_mon.month, target_mon.day, 10, 0, tzinfo=timezone.utc
+            ),
+            end_datetime=datetime(
+                target_mon.year, target_mon.month, target_mon.day, 10, 30, tzinfo=timezone.utc
+            ),
             status=STATUS_CONFIRMED,
         )
         # GET reschedule page
@@ -151,12 +167,15 @@ class BookingViewsTest(TestCase):
         resp_post = self.client.post(
             f"/book/reschedule/{booking.manage_token}",
             {
-                "start_iso": "2026-10-19T10:30:00+00:00",
+                "start_iso": f"{target_mon.isoformat()}T10:30:00+00:00",
             },
         )
         self.assertRedirects(resp_post, f"/book/confirmed/{booking.manage_token}")
         booking.refresh_from_db()
-        self.assertEqual(booking.start_datetime, datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc))
+        self.assertEqual(
+            booking.start_datetime,
+            datetime(target_mon.year, target_mon.month, target_mon.day, 10, 30, tzinfo=timezone.utc),
+        )
 
     @patch("booking.services.booking_service.delete_booking_zoom_meeting")
     @patch("booking.services.booking_service.delete_calendar_event")

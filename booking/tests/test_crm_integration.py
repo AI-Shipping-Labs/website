@@ -1,4 +1,4 @@
-from datetime import datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -9,6 +9,19 @@ from booking.services.booking_service import cancel_booking, create_booking, res
 from community.models import BookedCall, CallHost
 
 User = get_user_model()
+
+
+def _next_monday() -> date:
+    """Next Monday at least 2 days in the future (host window is weekday 0)."""
+    today = datetime.now(timezone.utc).date()
+    days_ahead = (0 - today.weekday()) % 7
+    if days_ahead < 2:
+        days_ahead += 7
+    return today + timedelta(days=days_ahead)
+
+
+def _monday_at(target: date, hour: int, minute: int = 0) -> datetime:
+    return datetime(target.year, target.month, target.day, hour, minute, tzinfo=timezone.utc)
 
 
 class BookingCrmIntegrationTest(TestCase):
@@ -55,7 +68,7 @@ class BookingCrmIntegrationTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-crm", "join_url": "https://zoom.test/j/crm"}
         mock_gcal.return_value = {"id": "gcal-crm"}
 
-        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        slot_start = _monday_at(_next_monday(), 10, 0)
         booking = create_booking(
             host=self.host,
             invitee_name="Member User",
@@ -90,7 +103,8 @@ class BookingCrmIntegrationTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-crm", "join_url": "https://zoom.test/j/crm"}
         mock_gcal.return_value = {"id": "gcal-crm"}
 
-        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        target_mon = _next_monday()
+        slot_start = _monday_at(target_mon, 10, 0)
         booking = create_booking(
             host=self.host,
             invitee_name="Member User",
@@ -99,7 +113,7 @@ class BookingCrmIntegrationTest(TestCase):
         )
 
         # Reschedule
-        new_slot = datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc)
+        new_slot = _monday_at(target_mon, 10, 30)
         reschedule_booking(booking, new_slot)
         booked_call = BookedCall.objects.get(calendly_event_uri=f"aisl:booking:{booking.manage_token}")
         self.assertEqual(booked_call.scheduled_at, new_slot)
@@ -160,7 +174,7 @@ class BookingCrmCallRecordTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm", "join_url": "https://zoom.test/j/zm"}
         mock_gcal.return_value = {"id": "gcal-1"}
 
-        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        slot_start = _monday_at(_next_monday(), 10, 0)
         booking = create_booking(
             host=self.host,
             invitee_name="Member User",
@@ -188,7 +202,7 @@ class BookingCrmCallRecordTest(TestCase):
         mock_gcal.return_value = {"id": "gcal-1"}
 
         CRMRecord.objects.create(user=self.user)
-        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        slot_start = _monday_at(_next_monday(), 10, 0)
         booking = create_booking(
             host=self.host,
             invitee_name="Member User",

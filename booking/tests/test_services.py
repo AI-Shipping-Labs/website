@@ -20,6 +20,15 @@ from booking.services.booking_service import (
 )
 
 
+def _next_monday() -> date:
+    """Next Monday at least 2 days in the future (host window is weekday 0)."""
+    today = datetime.now(timezone.utc).date()
+    days_ahead = (0 - today.weekday()) % 7
+    if days_ahead < 2:
+        days_ahead += 7
+    return today + timedelta(days=days_ahead)
+
+
 class BookingServicesTest(TestCase):
     def setUp(self):
         self.host = BookingHost.objects.create(
@@ -43,7 +52,7 @@ class BookingServicesTest(TestCase):
     @patch("booking.services.booking_service.query_busy")
     def test_get_available_slots(self, mock_busy):
         mock_busy.return_value = []
-        target_mon = date(2026, 10, 19)  # Monday
+        target_mon = _next_monday()  # Monday
         slots = get_available_slots(
             self.host,
             from_date=target_mon,
@@ -62,7 +71,10 @@ class BookingServicesTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-123", "join_url": "https://zoom.test/j/123"}
         mock_gcal.return_value = {"id": "gcal-123"}
 
-        slot_start = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        target_mon = _next_monday()
+        slot_start = datetime(
+            target_mon.year, target_mon.month, target_mon.day, 10, 0, tzinfo=timezone.utc
+        )
         booking = create_booking(
             host=self.host,
             invitee_name="Invitee One",
@@ -98,7 +110,10 @@ class BookingServicesTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-123", "join_url": "https://zoom.test/j/123"}
         mock_gcal.return_value = {"id": "gcal-123"}
 
-        slot1 = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        target_mon = _next_monday()
+        slot1 = datetime(
+            target_mon.year, target_mon.month, target_mon.day, 10, 0, tzinfo=timezone.utc
+        )
         booking = create_booking(
             host=self.host,
             invitee_name="Invitee One",
@@ -106,7 +121,9 @@ class BookingServicesTest(TestCase):
             start_datetime=slot1,
         )
 
-        slot2 = datetime(2026, 10, 19, 10, 30, tzinfo=timezone.utc)
+        slot2 = datetime(
+            target_mon.year, target_mon.month, target_mon.day, 10, 30, tzinfo=timezone.utc
+        )
         rescheduled = reschedule_booking(booking, slot2)
         self.assertEqual(rescheduled.start_datetime, slot2)
         self.assertEqual(rescheduled.end_datetime, slot2 + timedelta(minutes=30))
@@ -123,7 +140,10 @@ class BookingServicesTest(TestCase):
         mock_zoom.return_value = {"meeting_id": "zm-123", "join_url": "https://zoom.test/j/123"}
         mock_gcal.return_value = {"id": "gcal-123"}
 
-        slot1 = datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc)
+        target_mon = _next_monday()
+        slot1 = datetime(
+            target_mon.year, target_mon.month, target_mon.day, 10, 0, tzinfo=timezone.utc
+        )
         booking = create_booking(
             host=self.host,
             invitee_name="Invitee One",

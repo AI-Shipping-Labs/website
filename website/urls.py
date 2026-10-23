@@ -10,6 +10,7 @@ from accounts.urls import (
     onboarding_urlpatterns,
 )
 from accounts.views.auth import signup_redirect_view
+from api.views.legacy_zoom_recovery import recover_legacy_zoom
 from api.views.runtime_settings import setting_detail_adapter, settings_list_adapter
 from content.sitemaps import sitemaps
 from content.views.marketing_pages import marketing_page_fallback
@@ -58,6 +59,11 @@ urlpatterns = [
         'api/v1/settings',
         settings_list_adapter(_community_api_dispatch('settings')),
         name='runtime_settings_list',
+    ),
+    path(
+        'api/v1/settings/recover-legacy-zoom',
+        recover_legacy_zoom,
+        name='recover_legacy_zoom',
     ),
     re_path(
         r'^api/v1/settings/(?P<key>(?!export$|import$)[^/]+)$',

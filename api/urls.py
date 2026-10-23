@@ -285,11 +285,14 @@ from api.views.worker import (
     worker_tasks_collection,
     worker_tasks_failed,
 )
+from api.views.worker_intents import worker_intents_dead_summary
 from api.views.workshop_previews import (
     workshop_preview_link,
     workshop_preview_token_regenerate,
 )
 
+# Framework URLconf: retain this existing central route table to preserve ordered
+# dispatch and OpenAPI discovery; splitting all API routes is outside this repair.
 urlpatterns = [
     # ---- API documentation (issue #722) -------------------------------
     # Staff-only Swagger UI page + raw OpenAPI JSON. These two routes
@@ -405,6 +408,11 @@ urlpatterns = [
         name="api_booking_call_request_detail",
     ),
     # ---- Worker (issue #714) ------------------------------------------
+    path(
+        "worker/intents/dead-summary",
+        worker_intents_dead_summary,
+        name="api_worker_intents_dead_summary",
+    ),
     # Read-only worker task observability. Register the ``failed`` literal
     # and the bare collection BEFORE the ``<task_id>`` capture so neither
     # is swallowed by the 32-char hex id matcher. No write endpoints --

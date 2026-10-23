@@ -604,22 +604,14 @@ class CombinedTaskReadinessExecutionTest(SimpleTestCase):
 
 @tag("core")
 class CombinedTaskReadinessWorkflowStructureTest(SimpleTestCase):
-    def test_mandatory_verifier_runs_after_exact_ping_step(self):
+    def test_retired_ecs_verifier_is_absent_from_coolify_deploy_job(self):
         workflow = yaml.safe_load(WORKFLOW_PATH.read_text())
-        steps = workflow["jobs"]["deploy"]["steps"]
-        names = [step.get("name") for step in steps]
+        deploy = workflow["jobs"]["deploy"]
+        serialized = yaml.safe_dump(deploy)
 
-        ping_index = names.index("Verify deploy landed")
-        verifier_index = names.index("Verify combined web and worker readiness")
-        self.assertEqual(verifier_index, ping_index + 1)
-        verifier = steps[verifier_index]
-        self.assertIn("verify_combined_task_readiness.py", verifier["run"])
-        self.assertIn('--tag "${TAG}"', verifier["run"])
-        self.assertNotIn("continue-on-error", verifier)
-
-        permissions = workflow["jobs"]["deploy"]["permissions"]
-        self.assertEqual(permissions, {"contents": "read", "id-token": "write"})
-        self.assertNotIn("secrets", verifier)
+        self.assertNotIn("verify_combined_task_readiness.py", serialized)
+        self.assertIn("deploy.coolify.deploy_exact_release", serialized)
+        self.assertEqual(deploy["permissions"], {"contents": "read", "packages": "write"})
 
     def test_scheduled_no_tag_wake_workflow_is_unchanged_by_verifier(self):
         scheduled = SCHEDULED_WAKE_PATH.read_text()

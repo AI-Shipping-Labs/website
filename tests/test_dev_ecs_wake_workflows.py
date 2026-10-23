@@ -10,7 +10,6 @@ SCHEDULED_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "scheduled-playw
 DEPLOY_DEV_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-dev.yml"
 CI_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "ci.yml"
 DEPLOY_PROD_WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "deploy-prod.yml"
-DEPLOY_SCRIPT_PATH = REPO_ROOT / "deploy" / "deploy_dev.sh"
 POSTGRESQL_TAGGED_TESTS = (
     "uv run python manage.py test --tag=postgresql --verbosity 2"
 )
@@ -317,82 +316,39 @@ class DeployDevWakeWorkflowTest(SimpleTestCase):
         )
         self.assertEqual(postgres_tests_step["run"], POSTGRESQL_TAGGED_TESTS)
 
-    def test_deploy_verification_uses_shared_action_with_exact_version_match(self):
+    def test_deploy_uses_exact_head_coolify_helper(self):
         workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
         deploy_job = workflow["jobs"]["deploy"]
-
-        verify_step = next(step for step in deploy_job["steps"] if step.get("name") == "Verify deploy landed")
-
-        self.assertEqual(verify_step["uses"], "./.github/actions/wake-dev-ecs")
-        self.assertEqual(verify_step["with"]["aws-region"], "${{ env.AWS_REGION }}")
-        self.assertEqual(verify_step["with"]["ecs-cluster"], "ai-shipping-labs")
-        self.assertEqual(verify_step["with"]["ecs-service"], "ai-shipping-labs-dev")
-        self.assertEqual(verify_step["with"]["desired-count"], "1")
-        self.assertEqual(verify_step["with"]["ping-url"], "https://dev.aishippinglabs.com/ping")
-        self.assertEqual(verify_step["with"]["expected-text"], "${{ env.TAG }}")
-
-        self.assertNotIn("Polling https://dev.aishippinglabs.com/ping", DEPLOY_DEV_WORKFLOW_PATH.read_text())
-
-    def test_deploy_script_and_verify_action_grace_windows_are_aligned(self):
-        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
-        deploy_job = workflow["jobs"]["deploy"]
-        deploy_env = deploy_job["env"]
-
-        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_TIMEOUT_SECONDS"], "1500")
-        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_POLL_SECONDS"], "10")
-        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_ATTEMPTS"], "150")
-        self.assertEqual(deploy_env["DEV_DEPLOY_GRACE_REQUIRED_MATCHES"], "3")
-
         deploy_step = next(step for step in deploy_job["steps"] if step.get("name") == "Deploy to Dev")
-        self.assertEqual(
-            deploy_step["env"]["DEPLOY_GRACE_TIMEOUT_SECONDS"],
-            "${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}",
-        )
-        self.assertEqual(
-            deploy_step["env"]["DEPLOY_GRACE_POLL_SECONDS"],
-            "${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}",
-        )
-        self.assertEqual(
-            deploy_step["env"]["DEPLOY_GRACE_ATTEMPTS"],
-            "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
-        )
-        self.assertEqual(
-            deploy_step["env"]["DEPLOY_GRACE_REQUIRED_MATCHES"],
-            "${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}",
-        )
+        self.assertIn("deploy.coolify.deploy_exact_release", deploy_step["run"])
+        self.assertIn("steps.identity.outputs.image", deploy_step["run"])
+        self.assertIn("steps.image.outputs.digest", deploy_step["run"])
+        self.assertIn('sha "${GITHUB_SHA}"', deploy_step["run"])
+        self.assertEqual(deploy_job["name"], "Deploy to Dev")
+        self.assertEqual(deploy_job["environment"], "coolify-staging")
 
-        verify_step = next(step for step in deploy_job["steps"] if step.get("name") == "Verify deploy landed")
-        self.assertEqual(
-            verify_step["with"]["timeout-seconds"],
-            "${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}",
-        )
-        self.assertEqual(
-            verify_step["with"]["poll-seconds"],
-            "${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}",
-        )
-        self.assertEqual(
-            verify_step["with"]["max-attempts"],
-            "${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}",
-        )
-        self.assertEqual(
-            verify_step["with"]["required-consecutive"],
-            "${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}",
-        )
+    def test_deploy_builds_one_amd64_ghcr_image_with_full_revision(self):
+        workflow = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)
+        deploy_job = workflow["jobs"]["deploy"]
+        build = next(step for step in deploy_job["steps"] if step.get("id") == "image")
+        identity = next(step for step in deploy_job["steps"] if step.get("id") == "identity")
 
-        script = DEPLOY_SCRIPT_PATH.read_text()
-        self.assertIn("DEFAULT_DEPLOY_GRACE_TIMEOUT_SECONDS=1500", script)
-        self.assertIn("DEFAULT_DEPLOY_GRACE_POLL_SECONDS=10", script)
-        self.assertIn("DEFAULT_DEPLOY_GRACE_ATTEMPTS=150", script)
-        self.assertIn("DEFAULT_DEPLOY_GRACE_REQUIRED_MATCHES=3", script)
-        self.assertIn("DataTalksClub/aws-infra#11", script)
-        self.assertIn("not IntegrationSettings", script)
+        self.assertEqual(build["uses"], "docker/build-push-action@v6")
+        self.assertEqual(build["with"]["platforms"], "linux/amd64")
+        self.assertTrue(build["with"]["push"])
+        self.assertIn("VERSION=${{ github.sha }}", build["with"]["build-args"])
+        self.assertIn("org.opencontainers.image.revision=${{ github.sha }}", build["with"]["labels"])
+        self.assertIn("GITHUB_RUN_ID", identity["run"])
+        self.assertIn("GITHUB_RUN_ATTEMPT", identity["run"])
+        self.assertIn("GITHUB_SHA", identity["run"])
 
-    def test_dev_deploy_script_sets_desired_count_for_dev_combined_service(self):
-        script = DEPLOY_SCRIPT_PATH.read_text()
+    def test_deploy_dev_contains_no_retired_aws_runtime_steps(self):
+        deploy_job = _load_yaml(DEPLOY_DEV_WORKFLOW_PATH)["jobs"]["deploy"]
+        text = yaml.safe_dump(deploy_job)
 
-        self.assertIn('if [ "${ENV}" = "dev" ] || [ "${ROLE}" = "worker" ]; then', script)
-        self.assertIn("--task-definition ${NEW_TASK_DEF_ARN}", script)
-        self.assertIn("--desired-count 1", script)
+        for retired in ("aws-actions", "aws ecr", "aws ecs", "REPO_URI", "wake-dev-ecs"):
+            with self.subTest(retired=retired):
+                self.assertNotIn(retired, text)
 
     def test_production_workflow_does_not_use_dev_wake_action(self):
         prod_workflow = DEPLOY_PROD_WORKFLOW_PATH.read_text()

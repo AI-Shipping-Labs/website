@@ -288,14 +288,14 @@ The response body is the deployed `VERSION` tag.
 
 Two GitHub Actions workflows handle deployment:
 
-- `deploy-dev.yml` — runs tests, builds Docker image, pushes to ECR, and deploys to the dev ECS service. Triggers automatically on push to `main`.
+- `deploy-dev.yml` — runs all validation gates, then builds one exact-head GHCR image and deploys the existing split Coolify runtime. Triggers automatically on push to `main`; [`coolify-deployment.md`](coolify-deployment.md) owns its target and verification contract.
 - `deploy-prod.yml` (`Manual Production Deployment`) — manual `workflow_dispatch` with a confirmation checkbox. Promotes the current dev image tag to the prod ECS service. Optionally accepts a specific tag.
 
 Manual Production Deployment (`deploy-prod.yml`), Emergency Production Web Rollback (`prod-emergency-web-rollback.yml`), and Emergency Production Worker Rollback (`prod-emergency-worker-rollback.yml`) share one non-cancelling GitHub Actions queue: `concurrency.group` `production-ecs-mutation` with `cancel-in-progress: false`. A second confirmed dispatch waits; it does not cancel an in-flight web/worker roll. Read-only diagnostics (`prod-emergency-diagnostics.yml`) stay on their own group.
 
 GitHub concurrency only serializes those workflows. It does not cover a laptop `CONFIRM_DEPLOY=true bash deploy/deploy_prod.sh` or an AWS Console / CLI click. Those still race the same ECS services and rely on the production path of `deploy/deploy_dev.sh` (and the rollback workflows) re-reading the live PRIMARY deployment and failing closed when the service already has an ACTIVE non-PRIMARY deployment.
 
-Both workflows use `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access.
+The production ECS workflow uses `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` GitHub secrets for ECR/ECS access. The Coolify workflow uses the environment names documented in [`coolify-deployment.md`](coolify-deployment.md).
 
 ### Lockfile contract
 

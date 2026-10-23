@@ -14,6 +14,10 @@ RUN npm run css:build
 
 FROM python:3.13-slim
 
+ARG VERSION=""
+ENV VERSION=${VERSION}
+LABEL org.opencontainers.image.revision=${VERSION}
+
 WORKDIR /app
 
 # System deps

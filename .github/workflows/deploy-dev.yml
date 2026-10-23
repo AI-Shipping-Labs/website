@@ -2,12 +2,6 @@ name: Deploy Dev
 
 on:
   workflow_dispatch:
-    inputs:
-      predeployMigrateCheck:
-        type: boolean
-        description: "Run the pre-deploy ECS migrate/check gate"
-        required: false
-        default: false
   push:
     branches: [main]
     paths-ignore:
@@ -555,6 +549,7 @@ jobs:
   deploy:
     name: Deploy to Dev
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     # #888/#1425/#1512: deploy gates on every Django and Playwright test shard
     # plus the one-time `checks`, PostgreSQL, and combined coverage jobs. A
     # `needs` array entry only succeeds when ALL of a matrix job's shards
@@ -563,106 +558,87 @@ jobs:
     # artifacts and fails under 85%.
     needs: [checks, test, playwright-core, postgres-verification, coverage]
     if: github.ref == 'refs/heads/main'
+    environment: coolify-staging
 
     permissions:
       contents: read
-      id-token: write # assume the AWS deploy role via OIDC
+      packages: write
 
     env:
-      AWS_REGION: eu-west-1
-      REPO_ROOT: 387546586013.dkr.ecr.eu-west-1.amazonaws.com
-      REPO_URI: 387546586013.dkr.ecr.eu-west-1.amazonaws.com/ai-shipping-labs
-      R1_PRODUCTION_TAG: 20260716-162837-dc07564
-      # Issue #1140 stopgap for the cold-start ELB health race. These
-      # intentionally align deploy/deploy_dev.sh's post-waiter /ping recovery
-      # with the follow-up wake-dev-ecs verification: a HARD monotonic 1500s
-      # deadline including curl + sleep time, 10s polls, at most 150 requests,
-      # and 3 consecutive exact VERSION responses. This covers the observed
-      # ~21 minute dev convergence on 2026-07-08 without allowing request time
-      # to silently double the deadline. They stay as CI shell env vars, not
-      # IntegrationSettings, because the runner must read them before the app
-      # is reachable. Real infra cure: DataTalksClub/aws-infra#11.
-      DEV_DEPLOY_GRACE_TIMEOUT_SECONDS: "1500"
-      DEV_DEPLOY_GRACE_POLL_SECONDS: "10"
-      DEV_DEPLOY_GRACE_ATTEMPTS: "150"
-      DEV_DEPLOY_GRACE_REQUIRED_MATCHES: "3"
-      # Fail-closed combined-task evidence (#1293). CloudWatch delivery is
-      # eventually consistent, so give exact-stream marker reads a short,
-      # bounded window after /ping proves the web revision is serving.
-      DEV_COMBINED_READINESS_TIMEOUT_SECONDS: "180"
-      DEV_COMBINED_READINESS_POLL_SECONDS: "5"
+      IMAGE_REPOSITORY: ghcr.io/ai-shipping-labs/website
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Prepare tags
-        id: prep
+      - name: Prepare immutable release identity
+        id: identity
         run: |
-          DATE=$(date +'%Y%m%d-%H%M%S')
-          SHORT_SHA=$(echo ${{ github.sha }} | cut -c 1-7)
-          echo "TAG=${DATE}-${SHORT_SHA}" >> $GITHUB_ENV
+          set -euo pipefail
+          tag="deploy-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${GITHUB_SHA}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "image=${IMAGE_REPOSITORY}:${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push exact-head image
+        id: image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.identity.outputs.image }}
+          build-args: |
+            VERSION=${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verify immutable image digest
+        env:
+          IMAGE: ${{ steps.identity.outputs.image }}
+          EXPECTED_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          resolved=$(docker buildx imagetools inspect "${IMAGE}" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          test "${resolved}" = "${EXPECTED_DIGEST}"
+          {
+            echo "Image: ${IMAGE}"
+            echo "Digest: ${EXPECTED_DIGEST}"
+            echo "Revision: ${GITHUB_SHA}"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
 
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
           python-version: "3.13"
 
-      - name: Build Docker image
-        run: docker build -t ai-shipping-labs:${{ env.TAG }} .
-
-      - name: Log in to Amazon ECR
-        run: |
-          aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ env.REPO_ROOT }}
-
-      - name: Push Docker image to ECR
-        run: |
-          docker tag ai-shipping-labs:${{ env.TAG }} ${{ env.REPO_URI }}:${{ env.TAG }}
-          docker push ${{ env.REPO_URI }}:${{ env.TAG }}
-
-      - name: Rehearse exact R1 image rollback and forward recovery
-        run: |
-          bash deploy/verify_r1_image_rollback_recovery.sh \
-            "${REPO_URI}:${TAG}" \
-            "${REPO_URI}:${R1_PRODUCTION_TAG}"
+      - name: Install deployment helper dependencies
+        run: uv sync --locked
 
       - name: Deploy to Dev
-        run: bash deploy/deploy_dev.sh ${{ env.TAG }}
         env:
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
-          PREDEPLOY_MIGRATE_CHECK_ENABLED: ${{ inputs.predeployMigrateCheck }}
-          DEPLOY_GRACE_TIMEOUT_SECONDS: ${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}
-          DEPLOY_GRACE_POLL_SECONDS: ${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}
-          DEPLOY_GRACE_ATTEMPTS: ${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}
-          DEPLOY_GRACE_REQUIRED_MATCHES: ${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}
-
-      - name: Verify deploy landed
-        uses: ./.github/actions/wake-dev-ecs
-        with:
-          aws-region: ${{ env.AWS_REGION }}
-          ecs-cluster: ai-shipping-labs
-          ecs-service: ai-shipping-labs-dev
-          desired-count: "1"
-          ping-url: https://dev.aishippinglabs.com/ping
-          expected-text: ${{ env.TAG }}
-          timeout-seconds: ${{ env.DEV_DEPLOY_GRACE_TIMEOUT_SECONDS }}
-          poll-seconds: ${{ env.DEV_DEPLOY_GRACE_POLL_SECONDS }}
-          max-attempts: ${{ env.DEV_DEPLOY_GRACE_ATTEMPTS }}
-          required-consecutive: ${{ env.DEV_DEPLOY_GRACE_REQUIRED_MATCHES }}
-
-      - name: Verify combined web and worker readiness
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_AISL_SERVICE_UUID: ${{ secrets.COOLIFY_AISL_SERVICE_UUID }}
+          COOLIFY_AISL_WEB_APPLICATION_UUID: ${{ vars.COOLIFY_AISL_WEB_APPLICATION_UUID }}
+          AISL_DEPLOY_VERIFICATION_API_TOKEN: ${{ secrets.AISL_DEPLOY_VERIFICATION_API_TOKEN }}
         run: |
-          python deploy/verify_combined_task_readiness.py \
-            --region "${AWS_REGION}" \
-            --cluster ai-shipping-labs \
-            --service ai-shipping-labs-dev \
-            --repository-uri "${REPO_URI}" \
-            --tag "${TAG}" \
-            --timeout-seconds "${DEV_COMBINED_READINESS_TIMEOUT_SECONDS}" \
-            --poll-seconds "${DEV_COMBINED_READINESS_POLL_SECONDS}"
+          uv run python -m deploy.coolify.deploy_exact_release \
+            --image "${{ steps.identity.outputs.image }}" \
+            --digest "${{ steps.image.outputs.digest }}" \
+            --sha "${GITHUB_SHA}"

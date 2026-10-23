@@ -39,16 +39,12 @@ class R1ImageRecoveryWorkflowContractTest(SimpleTestCase):
             ),
         )
 
-    def test_deploy_dev_gates_ecs_rollout_on_exact_r1_rehearsal(self):
+    def test_deploy_dev_retires_obsolete_ecr_rehearsal(self):
         workflow = WORKFLOW.read_text()
-        rehearsal_step = workflow.index(
-            "Rehearse exact R1 image rollback and forward recovery",
-        )
-        deploy_step = workflow.index("- name: Deploy to Dev")
-        self.assertLess(rehearsal_step, deploy_step)
-        self.assertIn("R1_PRODUCTION_TAG: 20260716-162837-dc07564", workflow)
-        self.assertIn("verify_r1_image_rollback_recovery.sh", workflow)
-        self.assertIn("PREDEPLOY_MIGRATE_CHECK_ENABLED", workflow)
+
+        self.assertNotIn("Rehearse exact R1 image rollback", workflow)
+        self.assertNotIn("R1_PRODUCTION_TAG", workflow)
+        self.assertNotIn("verify_r1_image_rollback_recovery.sh", workflow)
 
     def test_rehearsal_is_ephemeral_image_only_and_idempotent(self):
         script = REHEARSAL.read_text()

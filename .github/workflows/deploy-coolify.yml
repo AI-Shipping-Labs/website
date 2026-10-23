@@ -1,148 +1,20 @@
-name: Deploy AISHL Coolify (Contabo)
+name: Request gated Deploy Dev
 
-# Staging CD: GHA builds linux/amd64 → GHCR → Coolify pulls image via deploy API.
-# No git SSH / deploy keys / git clone on Contabo.
-# Mirrors DataTalksClub/relay .github/workflows/deploy-coolify.yml.
-
+# Compatibility entry point only. The authoritative workflow owns all build,
+# Coolify mutation, and verification after its eleven validation jobs pass.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "_docs/**"
-      - "specs/**"
-      - "*.md"
-      - "deploy/coolify/**"
-      - ".github/workflows/deploy-dev.yml"
-      - ".github/workflows/deploy-prod.yml"
-      - ".github/workflows/prod-emergency-*.yml"
-      - ".github/workflows/scheduled-playwright*.yml"
-
-concurrency:
-  group: aisl-coolify
-  cancel-in-progress: false
 
 permissions:
+  actions: write
   contents: read
-  packages: write
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ai-shipping-labs/website
 
 jobs:
-  test:
-    runs-on: ubuntu-24.04
+  request-deploy-dev:
+    name: Request authoritative Deploy Dev workflow
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v7
-      - name: Install dependencies
-        run: uv sync --locked
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-      - name: Build Tailwind CSS
-        run: make css-build
-      - name: Collect static files
+      - name: Dispatch Deploy Dev on main
         env:
-          DEBUG: "False"
-          SECRET_KEY: "ci-coolify-check-only-not-a-real-secret"
-          ALLOWED_HOSTS: "localhost"
-        run: |
-          make collectstatic
-          uv run python scripts/verify_tailwind_build.py --rebuild --collected
-      - name: Lint and Django checks
-        run: |
-          uv run ruff check .
-          uv run python manage.py makemigrations --check --dry-run
-          uv run python scripts/check_migration_safety.py
-        env:
-          SECRET_KEY: ci-coolify-check-only-not-a-real-secret
-      - name: Django system check
-        run: uv run python manage.py check --fail-level ERROR
-        env:
-          DEBUG: "False"
-          SES_ENABLED: "true"
-          SECRET_KEY: ci-coolify-check-only-not-a-real-secret
-      - name: asl-cli offline unit tests
-        env:
-          ASL_API_TOKEN: ""
-          API_SHIPPING_LABS_API_TOKEN: ""
-        run: uv run python -m pytest asl_cli/ -q
-
-  build-and-push:
-    needs: test
-    runs-on: ubuntu-24.04
-    outputs:
-      image_tag: ${{ steps.identity.outputs.version }}
-      image_digest: ${{ steps.push.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Construct release identity (exact ECR tag format)
-        id: identity
-        run: |
-          set -euo pipefail
-          # Same construction as website .github/workflows/deploy-dev.yml:
-          #   version="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
-          # CMP/AISHL deploy-dev: DATE=$(date +'%Y%m%d-%H%M%S'); SHORT_SHA=…; TAG=${DATE}-${SHORT_SHA}
-          # Live ECR example (CMP): 20261021-094333-f922dc4
-          version="$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA:0:7}"
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Docker metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          # Exact ECR production tag only (YYYYMMDD-HHMMSS-<7>). Never :latest. Never sha-<…>.
-          tags: |
-            type=raw,value=${{ steps.identity.outputs.version }}
-
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build and push (linux/amd64)
-        id: push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      # Packages stay private; Contabo pulls via Coolify Registries read:packages PAT.
-
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-24.04
-    # Staging Contabo Coolify only — production AWS workflows stay separate.
-    environment: coolify-staging
-    steps:
-      - name: Hand off deploy to Hetzner poller
-        # GitHub-hosted runners cannot reach the Coolify API at
-        # http://169.58.119.163:8000 (connection times out from the
-        # internet). The pin+deploy step therefore runs Hetzner-side:
-        # deploy/coolify/hetzner-auto-deploy.sh (cron on RMTHZ) picks up
-        # the pushed tag within ~5 minutes, pins it into the service
-        # compose and triggers the Coolify deploy over the DC-local API.
-        env:
-          IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
-        run: |
-          echo "Pushed ${IMAGE_REF}:${IMAGE_TAG}."
-          echo "Hetzner poller (deploy/coolify/hetzner-auto-deploy.sh) will pin+deploy it."
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy-dev.yml --repo "${GITHUB_REPOSITORY}" --ref main

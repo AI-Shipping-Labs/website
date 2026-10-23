@@ -23,7 +23,7 @@ other links to it. Current code, configuration, and tests outrank any prose.
 | UI rules and template owners | [`design-system.md`](design-system.md), surface contracts such as [`design-contract-event-detail.md`](design-contract-event-detail.md), Studio display rules in [`studio-conventions.md`](studio-conventions.md) |
 | Linting | [`lint.md`](lint.md) |
 | Operator bring-up and Studio settings | [`configuration.md`](configuration.md), with per-integration runbooks in [`integrations/`](integrations/) |
-| Infrastructure, deploy, recovery | [`setup.md`](setup.md), [`expand-contract-releases.md`](expand-contract-releases.md), [`boot-profiling.md`](boot-profiling.md) |
+| Infrastructure, deploy, recovery | [`setup.md`](setup.md), [`expand-contract-releases.md`](expand-contract-releases.md), [`boot-profiling.md`](boot-profiling.md), [`coolify-networking.md`](coolify-networking.md) |
 | Content authoring and sync | [`content.md`](content.md), [`course_yaml.md`](course_yaml.md), [`content-kinds.md`](content-kinds.md), [`event-widgets.md`](event-widgets.md) |
 | APIs | [`api.md`](api.md), [`api-delete-policy.md`](api-delete-policy.md), [`api-export-sprint-plans.md`](api-export-sprint-plans.md), member API in [`../docs/member-api/plans.md`](../docs/member-api/plans.md), CLI in [`../asl_cli/README.md`](../asl_cli/README.md) |
 | Operator field guides | [`studio-user-statuses.md`](studio-user-statuses.md), [`utm_links.md`](utm_links.md), [`course-db-import.md`](course-db-import.md), [`take-home-of-the-week.md`](take-home-of-the-week.md) |

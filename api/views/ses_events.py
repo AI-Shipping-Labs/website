@@ -53,9 +53,9 @@ campaign / verification / lead-magnet email that produced it. Events
 that do not match an ``EmailLog`` are still audited (no spam-trap loops).
 
 Idempotency: dedup on the SNS ``MessageId``. The ``SesEvent.message_id`` field
-has a unique constraint; the view checks for an existing row and bails before
-running any side-effects, so a retried delivery of the same notification skips
-user mutations and EmailLog updates.
+has a unique constraint. Bounce and complaint handlers insert that ownership
+claim before locking users or applying side effects, and a losing concurrent
+delivery returns the existing successful duplicate response.
 
 Failure handling: any 4xx/5xx from us causes SNS to retry. Returning 200 on
 unmatched recipients is intentional -- a missing user is not a webhook
@@ -77,14 +77,16 @@ from django.utils.dateparse import parse_datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 
-from accounts.utils.bounce import (
-    SOFT_BOUNCE_THRESHOLD,
-    mark_permanent_bounce,
-    record_soft_bounce,
-)
 from api.openapi import openapi_spec
 from email_app.models import EmailLog, SesEvent
-from email_app.services.ses_identity import resolve_recipient_identity
+from email_app.services.ses_feedback import (
+    FeedbackEvent,
+    process_bounce_event,
+    process_complaint_event,
+)
+from email_app.services.ses_feedback import (
+    _mark_complaint as _mark_complaint,
+)
 from integrations.config import get_config
 from integrations.services.ses import validate_sns_notification
 
@@ -356,158 +358,81 @@ def _handle_notification(payload, message_id):
 
 
 def _handle_bounce(payload, inner, message_id):
+    event, timestamp, permanent_override, override_status = _bounce_feedback(
+        payload,
+        inner,
+        message_id,
+    )
+    processed = process_bounce_event(
+        event,
+        event_timestamp=timestamp,
+        permanent_override=permanent_override,
+        override_status=override_status,
+    )
+    status = "ok" if processed else "duplicate"
+    return JsonResponse({"status": status}, status=200)
+
+
+def _bounce_feedback(payload, inner, message_id):
     bounce = inner.get("bounce", {}) or {}
     bounce_type = bounce.get("bounceType", "") or ""
     bounce_subtype = bounce.get("bounceSubType", "") or ""
     recipients = bounce.get("bouncedRecipients", []) or []
     diagnostic = _first_recipient_diagnostic(recipients)
-    raw_addresses = [
-        (r.get("emailAddress") or "").strip()
-        for r in recipients
-        if isinstance(r, dict)
-    ]
-    raw_addresses = [address for address in raw_addresses if address]
-
-    # Issue #827: SES sometimes mislabels a hard 5xx SMTP rejection as
-    # ``bounceType=Transient``. When the per-recipient SMTP status /
-    # diagnostic indicates a permanent (class 5) failure, override the
-    # transient label and suppress immediately instead of soft-counting.
-    smtp_permanent_override = (
+    addresses = _feedback_addresses(recipients)
+    permanent_override = (
         bounce_type == "Transient" and _is_permanent_smtp_failure(recipients)
     )
     override_status = (
-        _first_permanent_status(recipients) if smtp_permanent_override else ""
+        _first_permanent_status(recipients) if permanent_override else ""
     )
-
-    if bounce_type == "Permanent" or smtp_permanent_override:
-        event_type = SesEvent.EVENT_TYPE_BOUNCE_PERMANENT
-    elif bounce_type == "Transient":
-        event_type = SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT
-    else:
-        event_type = SesEvent.EVENT_TYPE_BOUNCE_OTHER
-
-    # Idempotent insert: if MessageId already exists, do nothing.
-    existing = SesEvent.objects.filter(message_id=message_id).first()
-    if existing is not None:
-        return JsonResponse({"status": "duplicate"}, status=200)
-
-    # Issue #495: correlate to the originating EmailLog by the inner SES
-    # mail.messageId. This lets staff trace a bounce back to the specific
-    # campaign / verification / lead-magnet send that produced it.
     ses_mail_id = ((inner.get("mail") or {}).get("messageId") or "").strip()
     matched_log = _find_email_log(ses_mail_id)
-    bounce_timestamp = _parse_event_timestamp(inner, "bounce")
+    event = FeedbackEvent(
+        message_id=message_id,
+        event_type=_bounce_event_type(bounce_type, permanent_override),
+        raw_payload=payload,
+        addresses=addresses,
+        email_log=matched_log,
+        diagnostic=diagnostic,
+        bounce_type=bounce_type,
+        bounce_subtype=bounce_subtype,
+    )
+    return (
+        event,
+        _parse_event_timestamp(inner, "bounce"),
+        permanent_override,
+        override_status,
+    )
 
-    if not raw_addresses:
-        _record_event(
-            message_id=message_id,
-            event_type=event_type,
-            raw_payload=payload,
-            recipient_email="",
-            user=None,
-            action_taken="no recipients in payload; logged only",
-            email_log=matched_log,
-            bounce_type=bounce_type,
-            bounce_subtype=bounce_subtype,
-            diagnostic_code=diagnostic,
-            match_status=SesEvent.MATCH_STATUS_UNMATCHED_RECIPIENT,
-        )
-        if matched_log is not None:
-            _stamp_email_log_bounce(
-                matched_log,
-                bounce_type=bounce_type,
-                bounce_subtype=bounce_subtype,
-                diagnostic=diagnostic,
-                event_timestamp=bounce_timestamp,
-            )
-        return JsonResponse({"status": "ok"}, status=200)
 
-    identities = [
-        resolve_recipient_identity(address, email_log=matched_log)
-        for address in raw_addresses
-    ]
-
-    # Single audit row -- captures the first (or only) recipient. With multiple
-    # bounced recipients in one notification, the action_taken summarises.
-    first_identity = identities[0]
-    actions = []
-    mutated_user_ids = set()
-    for identity in identities:
-        user = identity.user
-        if user is None:
-            if identity.match_status == SesEvent.MATCH_STATUS_IDENTITY_CONFLICT:
-                actions.append(f"Needs reconciliation: {identity.detail}")
-            else:
-                actions.append("No account action taken")
+def _feedback_addresses(recipients):
+    addresses = []
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
             continue
-        if user.pk in mutated_user_ids:
-            continue
-        mutated_user_ids.add(user.pk)
-        if smtp_permanent_override:
-            mark_permanent_bounce(user, diagnostic=diagnostic)
-            actions.append(
-                f"SES mislabeled Transient->permanent (status={override_status}); "
-                "unsubscribed after permanent bounce"
-            )
-        elif bounce_type == "Permanent":
-            mark_permanent_bounce(user, diagnostic=diagnostic)
-            actions.append("Unsubscribed after permanent bounce")
-        elif bounce_type == "Transient":
-            new_count, flipped = record_soft_bounce(user, diagnostic=diagnostic)
-            if flipped:
-                actions.append(
-                    f"Unsubscribed after {SOFT_BOUNCE_THRESHOLD} soft bounces"
-                )
-            else:
-                actions.append(
-                    f"Soft bounce recorded ({new_count} of "
-                    f"{SOFT_BOUNCE_THRESHOLD})"
-                )
-        else:
-            actions.append("No account action taken")
+        address = (recipient.get("emailAddress") or "").strip()
+        if address:
+            addresses.append(address)
+    return tuple(addresses)
 
-    try:
-        with transaction.atomic():
-            SesEvent.objects.create(
-                message_id=message_id,
-                event_type=event_type,
-                raw_payload=payload,
-                recipient_email=first_identity.recipient_email,
-                user=first_identity.user,
-                match_status=first_identity.match_status,
-                action_taken="; ".join(actions)[:255],
-                email_log=matched_log,
-                bounce_type=bounce_type,
-                bounce_subtype=bounce_subtype,
-                diagnostic_code=diagnostic,
-            )
-            if matched_log is not None:
-                _stamp_email_log_bounce(
-                    matched_log,
-                    bounce_type=bounce_type,
-                    bounce_subtype=bounce_subtype,
-                    diagnostic=diagnostic,
-                    event_timestamp=bounce_timestamp,
-                )
-    except IntegrityError:
-        # Another worker just wrote the audit row for the same MessageId.
-        # Side-effects above are idempotent on retry: the structured
-        # ``bounce_state`` / ``bounce_recorded_at`` writes overwrite and
-        # ``unsubscribed=True`` is idempotent. The risky one is
-        # ``soft_bounce_count`` -- but we only get here if the SesEvent
-        # write lost a race AFTER mutating the user. In practice SNS
-        # retries are spaced seconds apart and our writes are fast, so
-        # the race is vanishingly small; the duplicate-dedupe check at
-        # the top of this function catches the common case.
-        logger.warning(
-            "Duplicate SesEvent insert for MessageId=%s; user mutations stand",
-            message_id,
-        )
 
-    return JsonResponse({"status": "ok"}, status=200)
+def _bounce_event_type(bounce_type, permanent_override):
+    if bounce_type == "Permanent" or permanent_override:
+        return SesEvent.EVENT_TYPE_BOUNCE_PERMANENT
+    if bounce_type == "Transient":
+        return SesEvent.EVENT_TYPE_BOUNCE_TRANSIENT
+    return SesEvent.EVENT_TYPE_BOUNCE_OTHER
 
 
 def _handle_complaint(payload, inner, message_id):
+    event, timestamp = _complaint_feedback(payload, inner, message_id)
+    processed = process_complaint_event(event, event_timestamp=timestamp)
+    status = "ok" if processed else "duplicate"
+    return JsonResponse({"status": status}, status=200)
+
+
+def _complaint_feedback(payload, inner, message_id):
     complaint = inner.get("complaint", {}) or {}
     recipients = complaint.get("complainedRecipients", []) or []
     diagnostic = (
@@ -515,80 +440,17 @@ def _handle_complaint(payload, inner, message_id):
         or complaint.get("complaintSubType")
         or ""
     )
-    raw_addresses = [
-        (r.get("emailAddress") or "").strip()
-        for r in recipients
-        if isinstance(r, dict)
-    ]
-    raw_addresses = [address for address in raw_addresses if address]
-
-    existing = SesEvent.objects.filter(message_id=message_id).first()
-    if existing is not None:
-        return JsonResponse({"status": "duplicate"}, status=200)
-
     ses_mail_id = ((inner.get("mail") or {}).get("messageId") or "").strip()
     matched_log = _find_email_log(ses_mail_id)
-    complaint_timestamp = _parse_event_timestamp(inner, "complaint")
-
-    if not raw_addresses:
-        _record_event(
-            message_id=message_id,
-            event_type=SesEvent.EVENT_TYPE_COMPLAINT,
-            raw_payload=payload,
-            recipient_email="",
-            user=None,
-            action_taken="no recipients in payload; logged only",
-            email_log=matched_log,
-            diagnostic_code=diagnostic,
-            match_status=SesEvent.MATCH_STATUS_UNMATCHED_RECIPIENT,
-        )
-        if matched_log is not None:
-            _stamp_email_log_complaint(matched_log, complaint_timestamp)
-        return JsonResponse({"status": "ok"}, status=200)
-
-    identities = [
-        resolve_recipient_identity(address, email_log=matched_log)
-        for address in raw_addresses
-    ]
-    first_identity = identities[0]
-    actions = []
-    mutated_user_ids = set()
-    for identity in identities:
-        user = identity.user
-        if user is None:
-            if identity.match_status == SesEvent.MATCH_STATUS_IDENTITY_CONFLICT:
-                actions.append(f"Needs reconciliation: {identity.detail}")
-            else:
-                actions.append("No account action taken")
-            continue
-        if user.pk in mutated_user_ids:
-            continue
-        mutated_user_ids.add(user.pk)
-        _mark_complaint(user)
-        actions.append("Unsubscribed after complaint")
-
-    try:
-        with transaction.atomic():
-            SesEvent.objects.create(
-                message_id=message_id,
-                event_type=SesEvent.EVENT_TYPE_COMPLAINT,
-                raw_payload=payload,
-                recipient_email=first_identity.recipient_email,
-                user=first_identity.user,
-                match_status=first_identity.match_status,
-                action_taken="; ".join(actions)[:255],
-                email_log=matched_log,
-                diagnostic_code=diagnostic,
-            )
-            if matched_log is not None:
-                _stamp_email_log_complaint(matched_log, complaint_timestamp)
-    except IntegrityError:
-        logger.warning(
-            "Duplicate SesEvent insert for MessageId=%s on complaint",
-            message_id,
-        )
-
-    return JsonResponse({"status": "ok"}, status=200)
+    event = FeedbackEvent(
+        message_id=message_id,
+        event_type=SesEvent.EVENT_TYPE_COMPLAINT,
+        raw_payload=payload,
+        addresses=_feedback_addresses(recipients),
+        email_log=matched_log,
+        diagnostic=diagnostic,
+    )
+    return event, _parse_event_timestamp(inner, "complaint")
 
 
 def _handle_delivery(payload, inner, message_id):
@@ -873,51 +735,6 @@ def _first_permanent_status(recipients):
         if match:
             return match.group(0)
     return ""
-
-
-def _stamp_email_log_bounce(
-    email_log, *, bounce_type, bounce_subtype, diagnostic, event_timestamp,
-):
-    """Persist bounce correlation fields on the matched EmailLog.
-
-    Idempotent: ``bounced_at`` is only written the first time, so SNS
-    retries cannot move the timestamp forward. Subsequent bounce events
-    for the same EmailLog (rare in practice) update the type / subtype /
-    diagnostic so the latest reason wins.
-    """
-    update_fields = []
-    if email_log.bounced_at is None:
-        email_log.bounced_at = event_timestamp
-        update_fields.append("bounced_at")
-    if email_log.bounce_type != bounce_type:
-        email_log.bounce_type = bounce_type
-        update_fields.append("bounce_type")
-    if email_log.bounce_subtype != bounce_subtype:
-        email_log.bounce_subtype = bounce_subtype
-        update_fields.append("bounce_subtype")
-    if diagnostic and email_log.bounce_diagnostic != diagnostic:
-        email_log.bounce_diagnostic = diagnostic
-        update_fields.append("bounce_diagnostic")
-    if update_fields:
-        email_log.save(update_fields=update_fields)
-
-
-def _stamp_email_log_complaint(email_log, event_timestamp):
-    """Persist complaint timestamp on the matched EmailLog. Idempotent."""
-    if email_log.complained_at is None:
-        email_log.complained_at = event_timestamp
-        email_log.save(update_fields=["complained_at"])
-
-
-def _mark_complaint(user):
-    """Flip ``unsubscribed`` for a complaint. Idempotent.
-
-    The structured audit trail lives in ``SesEvent``; no per-user
-    complaint flag is needed beyond ``unsubscribed`` (issue #766).
-    """
-    if not user.unsubscribed:
-        user.unsubscribed = True
-        user.save(update_fields=["unsubscribed"])
 
 
 def _record_event(

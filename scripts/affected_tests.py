@@ -262,6 +262,8 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         for glob in _agent_tree_globs("skills/ai-shipping-labs-event-recaps/*")
     ),
     ("scripts/affected_tests.py", ("tests.test_affected_tests",)),
+    ("deploy/coolify/verify_dual_runtime.py", ("tests.test_coolify_dual_runtime",)),
+    ("deploy/coolify/dual_runtime_snapshot.py", ("tests.test_coolify_dual_runtime",)),
     # The shared scan-set policy: the Tailwind source lint reads it, and rule
     # 14 imports it. Editing it changes both, so both run.
     (

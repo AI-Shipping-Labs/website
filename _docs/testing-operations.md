@@ -859,14 +859,22 @@ local-runner schedule). It has no in-process Django server, no migrations,
 and no port 8765. The runner only hits HTTP — so any test that depends on
 local DB state cannot pass against dev.
 
-The target is one low-capacity ECS task with `256` CPU units and `512` MiB of
-memory. The workflow retains four deterministic file partitions and their
-independent reports, but `strategy.max-parallel: 1` permits only one shard to
-hit that task at a time. Serialization modestly lengthens the workflow in
-exchange for avoiding self-inflicted target saturation and rotating unrelated
-navigation timeouts. This differs intentionally from
+The target is the shared Contabo Compose service that serves the apex, `www`,
+and `dev` hostnames. Before warming or starting a shard, the workflow uses
+`deploy/readiness_poll.sh` to require three consecutive non-empty responses
+from `${PLAYWRIGHT_BASE_URL}/ping`. The readiness gate is bounded to 540
+seconds, a 10-second poll interval, and 60 attempts; failure blocks every shard
+and is included in the workflow's failure notification. This scheduled workflow
+does not assume AWS credentials, change ECS capacity, or otherwise wake a
+separate dev service.
+
+The workflow retains four deterministic file partitions and their independent
+reports, but `strategy.max-parallel: 1` permits only one shard to hit the shared
+service at a time. Serialization modestly lengthens the workflow in exchange
+for avoiding self-inflicted target saturation and rotating unrelated navigation
+timeouts across production and dev traffic. This differs intentionally from
 `scheduled-playwright.yml`: each parallel local-runner shard owns its own
-in-process Django server instead of contending for the single remote dev task.
+in-process Django server instead of contending for the shared remote service.
 
 If your test creates DB rows, relies on a session/DB fixture, or POSTs to
 a write endpoint, mark it `local_only` or `creates_data` so the dev
@@ -892,12 +900,12 @@ file; if you need ORM seeding, the test belongs in a regular
 
 Transient-navigation retry wrapper (Issues #928 and #1549): every `test_dev_smoke_*.py`
 navigates via `goto_with_retry(page, url, ...)` from
-`playwright_tests/conftest.py`, not raw `page.goto`. The dev environment
-runs on ECS and can briefly serve a 5xx (500/502/503/504) while a rolling
-deploy swaps tasks; navigation can also throw Playwright `TimeoutError` when
-the target is temporarily saturated. A single transient blip used to fail the
-whole shard and fire `[CI] Scheduled Playwright (dev) full suite failing` on a
-false red. `goto_with_retry` does a bounded retry (`attempts=3`, constant
+`playwright_tests/conftest.py`, not raw `page.goto`. The shared Contabo service
+can briefly serve a 5xx (500/502/503/504) during a Compose service replacement;
+navigation can also throw Playwright `TimeoutError` when the target is
+temporarily saturated. A single transient blip used to fail the whole shard and
+fire `[CI] Scheduled Playwright (dev) full suite failing` on a false red.
+`goto_with_retry` does a bounded retry (`attempts=3`, constant
 `backoff_seconds=2.0`, so at most two retries / ~4s of added wait beyond the
 navigation timeouts themselves) on `response is None`, `status >= 500`, or a
 thrown Playwright `TimeoutError`. Returned-status decisions remain in the pure,
@@ -923,9 +931,8 @@ The retry helper is exercised without a live dev environment by
 test-core` and push CI. The attempt count and backoff are test-harness
 tuning constants (function kwargs in `conftest.py`), not runtime product
 settings, so they intentionally do NOT go through the `IntegrationSetting`
-framework. The infra root cause (why dev 5xxes during a deploy at all)
-is tracked separately in `DataTalksClub/aws-infra` (ECS task count, ALB
-deregistration delay, health-check grace period).
+framework. Diagnose sustained failures against the shared Contabo deployment
+and proxy rather than treating the scheduled suite as an ECS capacity owner.
 
 Failure-issue lineages are intentionally separate:
 

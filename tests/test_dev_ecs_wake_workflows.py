@@ -103,55 +103,49 @@ class DevEcsWakeActionTest(SimpleTestCase):
 
 
 @tag("core")
-class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
-    def test_scheduled_workflow_wakes_dev_before_playwright_matrix(self):
+class ScheduledPlaywrightDevReadinessWorkflowTest(SimpleTestCase):
+    def test_scheduled_workflow_gates_playwright_on_contabo_readiness(self):
         workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)
         jobs = workflow["jobs"]
 
-        wake_job = jobs["wake-dev"]
+        readiness_job = jobs["dev-readiness"]
         playwright_job = jobs["playwright-dev"]
         notify_job = jobs["notify"]
 
-        self.assertEqual(playwright_job["needs"], ["wake-dev"])
-        self.assertEqual(notify_job["needs"], ["wake-dev", "playwright-dev"])
-        self.assertEqual(wake_job["timeout-minutes"], 15)
-        self.assertEqual(wake_job["permissions"]["contents"], "read")
-        self.assertEqual(wake_job["permissions"]["id-token"], "write")
+        self.assertEqual(playwright_job["needs"], ["dev-readiness"])
+        self.assertEqual(notify_job["needs"], ["dev-readiness", "playwright-dev"])
+        self.assertEqual(readiness_job["timeout-minutes"], 15)
+        self.assertEqual(readiness_job["permissions"], {"contents": "read"})
 
-        configure_step = next(
+        readiness_step = next(
             step
-            for step in wake_job["steps"]
-            if step.get("uses") == "aws-actions/configure-aws-credentials@v6"
+            for step in readiness_job["steps"]
+            if step.get("name") == "Wait for Contabo dev endpoint"
         )
-        self.assertEqual(
-            configure_step["with"]["role-to-assume"],
-            "arn:aws:iam::387546586013:role/website-deploy",
+        self.assertIn("source deploy/readiness_poll.sh", readiness_step["run"])
+        self.assertIn('${PLAYWRIGHT_BASE_URL%/}/ping', readiness_step["run"])
+        self.assertIn(
+            'readiness_poll_until_stable "${ping_url}" "" 540 10 60 3',
+            readiness_step["run"],
         )
-        self.assertEqual(configure_step["with"]["aws-region"], "eu-west-1")
-
-        wake_step = next(
-            step
-            for step in wake_job["steps"]
-            if step.get("uses") == "./.github/actions/wake-dev-ecs"
-        )
-        self.assertEqual(wake_step["with"]["aws-region"], "eu-west-1")
-        self.assertEqual(wake_step["with"]["ecs-cluster"], "ai-shipping-labs")
-        self.assertEqual(wake_step["with"]["ecs-service"], "ai-shipping-labs-dev")
-        self.assertEqual(wake_step["with"]["desired-count"], "1")
-        self.assertEqual(wake_step["with"]["ping-url"], "https://dev.aishippinglabs.com/ping")
-        self.assertEqual(wake_step["with"]["timeout-seconds"], "540")
-        self.assertEqual(wake_step["with"]["poll-seconds"], "10")
-        self.assertEqual(wake_step["with"]["max-attempts"], "60")
-        self.assertEqual(wake_step["with"]["required-consecutive"], "3")
+        self.assertNotIn("continue-on-error", readiness_step)
 
         warm_step = next(
             step
-            for step in wake_job["steps"]
+            for step in readiness_job["steps"]
             if step.get("name") == "Warm dev application endpoints"
         )
         self.assertEqual(warm_step["timeout-minutes"], 5)
+        self.assertIn('${PLAYWRIGHT_BASE_URL%/}${endpoint}', warm_step["run"])
         self.assertIn("/courses", warm_step["run"])
         self.assertIn("/sitemap.xml", warm_step["run"])
+
+    def test_scheduled_workflow_has_no_aws_or_ecs_dependency(self):
+        workflow_text = SCHEDULED_WORKFLOW_PATH.read_text().lower()
+
+        for forbidden in ("aws", "ecs", "id-token", "role-to-assume", "wake-dev"):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, workflow_text)
 
     def test_playwright_matrix_and_marker_filter_remain_unchanged(self):
         workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)
@@ -170,7 +164,7 @@ class ScheduledPlaywrightDevWakeWorkflowTest(SimpleTestCase):
         )
         self.assertIn("Open or update failure issue", workflow_text)
 
-    def test_playwright_matrix_is_serialized_for_single_low_capacity_dev_task(self):
+    def test_playwright_matrix_is_serialized_for_shared_contabo_service(self):
         workflow = _load_yaml(SCHEDULED_WORKFLOW_PATH)
         strategy = workflow["jobs"]["playwright-dev"]["strategy"]
 

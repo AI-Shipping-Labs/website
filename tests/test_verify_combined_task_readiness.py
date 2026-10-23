@@ -613,11 +613,12 @@ class CombinedTaskReadinessWorkflowStructureTest(SimpleTestCase):
         self.assertIn("deploy.coolify.deploy_exact_release", serialized)
         self.assertEqual(deploy["permissions"], {"contents": "read", "packages": "write"})
 
-    def test_scheduled_no_tag_wake_workflow_is_unchanged_by_verifier(self):
+    def test_scheduled_remote_readiness_does_not_use_combined_ecs_verifier(self):
         scheduled = SCHEDULED_WAKE_PATH.read_text()
 
         self.assertNotIn("verify_combined_task_readiness", scheduled)
-        self.assertIn("wake-dev-ecs", scheduled)
+        self.assertNotIn("wake-dev-ecs", scheduled)
+        self.assertIn("readiness_poll_until_stable", scheduled)
 
     def test_verifier_is_executable(self):
         self.assertTrue(os.access(SCRIPT_PATH, os.X_OK))

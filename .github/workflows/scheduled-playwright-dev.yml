@@ -22,42 +22,36 @@ env:
     and not visual_regression and not local_only and not creates_data
 
 jobs:
-  wake-dev:
-    name: Wake Dev ECS Service
+  dev-readiness:
+    name: Wait for Contabo dev endpoint
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
-      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
-          aws-region: eu-west-1
+      - name: Wait for Contabo dev endpoint
+        shell: bash
+        run: |
+          source deploy/readiness_poll.sh
+          ping_url="${PLAYWRIGHT_BASE_URL%/}/ping"
 
-      - name: Wake dev service
-        uses: ./.github/actions/wake-dev-ecs
-        with:
-          aws-region: eu-west-1
-          ecs-cluster: ai-shipping-labs
-          ecs-service: ai-shipping-labs-dev
-          desired-count: "1"
-          ping-url: https://dev.aishippinglabs.com/ping
-          timeout-seconds: "540"
-          poll-seconds: "10"
-          max-attempts: "60"
-          required-consecutive: "3"
+          if readiness_poll_until_stable "${ping_url}" "" 540 10 60 3; then
+            echo "Contabo dev endpoint is ready."
+            exit 0
+          fi
+
+          echo "::error ::Contabo dev endpoint did not return 3 consecutive non-empty responses within the bounded readiness window."
+          exit 1
 
       - name: Warm dev application endpoints
         timeout-minutes: 5
         shell: bash
         run: |
-          echo "Warming dev endpoints after service wake..."
+          echo "Warming dev endpoints after readiness succeeded..."
           endpoints=(
             "/"
             "/courses"
@@ -69,7 +63,7 @@ jobs:
             "/sitemap.xml"
           )
           for endpoint in "${endpoints[@]}"; do
-            url="https://dev.aishippinglabs.com${endpoint}"
+            url="${PLAYWRIGHT_BASE_URL%/}${endpoint}"
             echo "Warming ${url}..."
             curl -fsSL --retry 3 --retry-delay 2 --retry-connrefused --max-time 30 "${url}" > /dev/null || {
               echo "Warning: warming ${url} returned non-zero status"
@@ -79,7 +73,7 @@ jobs:
 
   playwright-dev:
     name: Playwright Dev Suite (${{ matrix.shard_name }})
-    needs: [wake-dev]
+    needs: [dev-readiness]
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
@@ -163,7 +157,7 @@ jobs:
 
   notify:
     name: Scheduled Playwright (dev) Failure Issue
-    needs: [wake-dev, playwright-dev]
+    needs: [dev-readiness, playwright-dev]
     if: always()
     runs-on: ubuntu-latest
     permissions:

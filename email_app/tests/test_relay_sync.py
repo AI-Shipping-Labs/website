@@ -138,6 +138,23 @@ class ContactSyncTest(RelaySyncMixin):
             with self.assertRaises(PermanentJobError):
                 relay_sync.sync_contact(job_context(), {"user_id": user.pk})
 
+    def test_unconfigured_client_fails_handlers_permanently(self):
+        from django.core.exceptions import ImproperlyConfigured
+
+        user = self.make_user()
+        handlers = (
+            relay_sync.sync_contact,
+            relay_sync.unsubscribe_contact,
+            relay_sync.request_contact_verification,
+        )
+        with patch.object(
+            relay_sync, "contacts_client", side_effect=ImproperlyConfigured("x")
+        ):
+            for handler in handlers:
+                with self.assertRaises(PermanentJobError) as raised:
+                    handler(job_context(), {"user_id": user.pk})
+                self.assertEqual(raised.exception.code, "relay_not_configured")
+
     def test_dispatch_creates_one_durable_intent_per_handler(self):
         from django.db import transaction
 

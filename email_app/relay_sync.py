@@ -59,6 +59,21 @@ def contacts_client():
     return configured_contacts_client(RELAY_CLIENT)
 
 
+def _configured_client():
+    """Return the Relay contacts client or fail the intent permanently.
+
+    An unconfigured Relay (empty ``RELAY_API_KEY``) cannot succeed on
+    retry, so durable intents fail fast with a clear code instead of
+    burning all attempts with a generic ``handler_error`` and landing in
+    ``dead``. Request paths (``confirm_subscription``) keep their own
+    soft ``unavailable`` handling.
+    """
+    try:
+        return contacts_client()
+    except ImproperlyConfigured as error:
+        raise PermanentJobError("relay_not_configured") from error
+
+
 def contact_tags(user):
     """Relay tags for a user: the tier tag plus the operator contact tags."""
     tags = []
@@ -134,7 +149,7 @@ def sync_contact(context, payload):
     if user is None:
         return
     try:
-        sync_user_to_relay(user, contacts_client())
+        sync_user_to_relay(user, _configured_client())
     except RelayContactsError as error:
         raise _job_error(error) from error
 
@@ -146,7 +161,7 @@ def unsubscribe_contact(context, payload):
     if user is None:
         return
     try:
-        contacts_client().unsubscribe(
+        _configured_client().unsubscribe(
             user.email, RELAY_AUDIENCE, scope="audience", reason="member request"
         )
     except RelayContactsError as error:
@@ -160,7 +175,7 @@ def request_contact_verification(context, payload):
     if user is None or user.email_verified:
         return
     try:
-        contacts_client().request_verification(
+        _configured_client().request_verification(
             user.email,
             RELAY_AUDIENCE,
             category=DOUBLE_OPT_IN_CATEGORY,

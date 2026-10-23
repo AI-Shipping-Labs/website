@@ -69,7 +69,7 @@ def form_self_paced_project_batches(project, assign_reviews):
     batch_size = configured_count + 1
     with transaction.atomic():
         waiting = list(
-            ProjectSubmission.objects.select_for_update().filter(
+            ProjectSubmission.objects.select_for_update(of=('self',)).filter(
                 course=project.course,
                 course_project=project,
                 cohort=project.cohort,

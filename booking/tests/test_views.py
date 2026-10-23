@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
 
 from django.test import TestCase
+from freezegun import freeze_time
 
 from accounts.models import User
 from booking.models import (
@@ -23,6 +24,8 @@ def _next_monday() -> date:
     return today + timedelta(days=days_ahead)
 
 
+# Keep the incident clock after the former hard-coded Monday fixture.
+@freeze_time("2026-10-22T07:00:00Z")
 class BookingViewsTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(

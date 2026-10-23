@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from freezegun import freeze_time
 
 from booking.models import BookingHost, BookingWeeklyWindow
 from booking.services.booking_service import cancel_booking, create_booking, reschedule_booking
@@ -24,6 +25,8 @@ def _monday_at(target: date, hour: int, minute: int = 0) -> datetime:
     return datetime(target.year, target.month, target.day, hour, minute, tzinfo=timezone.utc)
 
 
+# Keep the incident clock after the former hard-coded Monday fixture.
+@freeze_time("2026-10-22T07:00:00Z")
 class BookingCrmIntegrationTest(TestCase):
     def setUp(self):
         self.host, _ = BookingHost.objects.update_or_create(
@@ -126,6 +129,7 @@ class BookingCrmIntegrationTest(TestCase):
         self.assertIsNotNone(booked_call.canceled_at)
 
 
+@freeze_time("2026-10-22T07:00:00Z")
 class BookingCrmCallRecordTest(TestCase):
     """A confirmed booking records a crm.Call through record_call (#1949)."""
 

@@ -2,6 +2,7 @@ from datetime import date, datetime, time, timedelta, timezone
 from unittest.mock import patch
 
 from django.test import TestCase
+from freezegun import freeze_time
 
 from booking.models import (
     STATUS_CANCELED,
@@ -29,6 +30,8 @@ def _next_monday() -> date:
     return today + timedelta(days=days_ahead)
 
 
+# Keep the incident clock after the former hard-coded Monday fixture.
+@freeze_time("2026-10-22T07:00:00Z")
 class BookingServicesTest(TestCase):
     def setUp(self):
         self.host = BookingHost.objects.create(
@@ -62,6 +65,21 @@ class BookingServicesTest(TestCase):
         self.assertEqual(len(slots), 4)
         times = [s["time_display"] for s in slots]
         self.assertEqual(times, ["10:00", "10:30", "11:00", "11:30"])
+
+    @patch("booking.services.booking_service.create_booking_zoom_meeting")
+    @patch("booking.services.booking_service.create_calendar_event")
+    @patch("booking.services.booking_service.query_busy", return_value=[])
+    def test_past_slot_cannot_be_booked(self, mock_busy, mock_gcal, mock_zoom):
+        with self.assertRaises(SlotUnavailableError):
+            create_booking(
+                host=self.host,
+                invitee_name="Past Invitee",
+                invitee_email="past@example.com",
+                start_datetime=datetime(2026, 10, 19, 10, 0, tzinfo=timezone.utc),
+            )
+
+        mock_gcal.assert_not_called()
+        mock_zoom.assert_not_called()
 
     @patch("booking.services.booking_service.create_booking_zoom_meeting")
     @patch("booking.services.booking_service.create_calendar_event")

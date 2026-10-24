@@ -94,8 +94,8 @@ class ProductionIdentityTest(SimpleTestCase):
 
     def test_registry_tag_must_match_digest_recorded_by_green_deploy(self):
         receipt = f"Verified exact-head Coolify release sha={SHA} digest={DIGEST} deployment=release-1"
-        with patch.object(identity, "command_output", side_effect=[receipt, json.dumps(DIGEST)]):
-            recorded = identity.recorded_digest(3, SHA)
+        with patch.object(identity, "read_job_logs", return_value=receipt), patch.object(identity, "command_output", return_value=json.dumps(DIGEST)):
+            recorded = identity.recorded_digest(Mock(), 3, SHA)
             identity.require_registry_digest(IMAGE, recorded)
         with patch.object(identity, "command_output", return_value=json.dumps("sha256:" + "c" * 64)):
             with self.assertRaisesMessage(ReleaseError, "differs-from-green-deployment"):
@@ -104,15 +104,12 @@ class ProductionIdentityTest(SimpleTestCase):
     def test_missing_duplicate_or_wrong_revision_receipts_fail(self):
         receipt = f"Verified exact-head Coolify release sha={SHA} digest={DIGEST} deployment=x"
         for output in ("", receipt + receipt, receipt.replace(SHA, "b" * 40)):
-            with patch.object(identity, "command_output", return_value=output):
+            with patch.object(identity, "read_job_logs", return_value=output):
                 with self.assertRaises(ReleaseError):
-                    identity.recorded_digest(3, SHA)
+                    identity.recorded_digest(Mock(), 3, SHA)
 
     def test_subprocess_failure_identifies_operation_and_redacts_external_diagnostics(self):
-        operations = [
-            ("dev-job-logs", lambda: identity.recorded_digest(3, SHA)),
-            ("registry-digest", lambda: identity.require_registry_digest(IMAGE, DIGEST)),
-        ]
+        operations = [("registry-digest", lambda: identity.require_registry_digest(IMAGE, DIGEST))]
         failures = [
             (subprocess.CalledProcessError(23, ["private-command"], output="private-output", stderr="private-error"), "process-exit exit=23"),
             (subprocess.TimeoutExpired(["private-command"], 60, output="private-output", stderr="private-error"), "timeout"),
@@ -183,7 +180,8 @@ class ProductionRuntimeAttestationTest(SimpleTestCase):
             patch.dict("os.environ", {**RELEASE_ENVIRONMENT, "GH_TOKEN": "github", "REQUESTED_TAG": ""}, clear=True),
             patch.object(attestation, "JsonClient", side_effect=[coolify, github, diagnostics]),
             patch.object(attestation, "get_text", return_value=SHA),
-            patch.object(identity, "command_output", side_effect=[receipt, json.dumps(DIGEST)]),
+            patch.object(identity, "read_job_logs", return_value=receipt),
+            patch.object(identity, "command_output", return_value=json.dumps(DIGEST)),
             redirect_stdout(io.StringIO()) as output,
         ):
             self.assertEqual(attestation.main(), 0)

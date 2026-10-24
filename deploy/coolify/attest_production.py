@@ -76,7 +76,7 @@ def run():
     run_id, attempt = release_attempt(tag, sha, os.environ.get("REQUESTED_TAG", ""))
     github = JsonClient("https://api.github.com", os.environ.get("GH_TOKEN", ""))
     job_id = require_green_run(github, run_id, attempt, sha)
-    digest = recorded_digest(job_id, sha)
+    digest = recorded_digest(github, job_id, sha)
     image = f"{IMAGE_REPOSITORY}:{tag}"
     config = config_from_environment(Namespace(image=image, digest=digest, sha=sha))
     config.validate()

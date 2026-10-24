@@ -6,6 +6,7 @@ import subprocess
 
 from .contracts import DIGEST_PATTERN, TAG_PATTERN
 from .errors import ReleaseError
+from .github_job_logs import read_job_logs
 
 REPOSITORY = "AI-Shipping-Labs/website"
 REQUIRED_JOBS = {
@@ -67,7 +68,7 @@ def require_green_jobs(payload):
 
 
 def command_output(arguments, operation):
-    if operation not in {"dev-job-logs", "registry-digest"}:
+    if operation != "registry-digest":
         raise ReleaseError("release-evidence-operation-invalid")
     failure = f"release-evidence-{operation}-failed"
     try:
@@ -85,10 +86,8 @@ def command_output(arguments, operation):
     return result.stdout
 
 
-def recorded_digest(job_id, sha):
-    logs = command_output([
-        "gh", "api", f"/repos/{REPOSITORY}/actions/jobs/{job_id}/logs",
-    ], "dev-job-logs")
+def recorded_digest(github, job_id, sha):
+    logs = read_job_logs(github, job_id)
     pattern = rf"Verified exact-head Coolify release sha={sha} digest=(sha256:[0-9a-f]{{64}}) deployment="
     matches = re.findall(pattern, logs)
     if len(matches) != 1:

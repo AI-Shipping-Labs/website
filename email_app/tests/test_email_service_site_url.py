@@ -165,15 +165,18 @@ class WelcomeImportedSiteUrlOverrideTest(TestCase):
         from email_app.tasks.welcome_imported import (
             send_imported_welcome_email,
         )
-        from email_app.testing import StubSESClient, deliver_pending_mail
+        from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 
         result = send_imported_welcome_email(self.user.pk)
         self.assertEqual(result['status'], 'sent')
 
         stub = StubSESClient()
-        with patch(
-            'community_base.mail.backends.ses_local.configured_client',
-            return_value=stub,
+        with (
+            local_render_backend(),
+            patch(
+                'community_base.mail.backends.ses_local.configured_client',
+                return_value=stub,
+            ),
         ):
             deliver_pending_mail()
         self.assertEqual(len(stub.calls), 1)

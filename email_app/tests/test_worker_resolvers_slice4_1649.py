@@ -33,10 +33,15 @@ BASE_URL = "https://site.test"
 def _drain_html(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
 
+    from email_app.testing import local_render_backend
+
     stub = StubSESClient()
-    with patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=stub,
+    with (
+        local_render_backend(),
+        patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ),
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1

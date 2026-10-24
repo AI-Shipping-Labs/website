@@ -16,9 +16,28 @@ are test-environment-only:
 
 from __future__ import annotations
 
+import contextlib
 from types import SimpleNamespace
 
 from community_base.mail.relay import RelaySendResult
+
+
+@contextlib.contextmanager
+def local_render_backend():
+    """Opt the package worker into the local-render backend (Relay P4).
+
+    The runner default is the ``relay`` backend, which renders
+    server-side. Tests that assert locally-rendered HTML wrap their
+    worker drain in this so the durable delivery renders through the
+    package's local backend with the stubbed SES client.
+    """
+    from django.conf import settings  # noqa: PLC0415
+    from django.test import override_settings  # noqa: PLC0415
+
+    with override_settings(
+        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+    ):
+        yield
 
 
 class StubSESClient:

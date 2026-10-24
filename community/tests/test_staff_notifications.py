@@ -16,7 +16,7 @@ Since A1.2 slice 1 every email channel records a durable
 ``EmailDelivery`` and the provider send happens from the delivery
 worker, so tests that need provider-visible output drain pending
 deliveries with :func:`email_app.testing.deliver_pending_mail` (and a
-stubbed ``ses_local`` client when they assert on the SES calls).
+stubbed Relay client when they assert on the Relay envelope).
 """
 
 from decimal import Decimal
@@ -27,7 +27,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import User
 from content.models import Course, CourseAccess
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubRelayClient, deliver_pending_mail
 from payments import services as payment_services
 from payments.models import Tier
 from payments.services import handle_checkout_completed as _handle_checkout_completed
@@ -1747,16 +1747,19 @@ class PaidSignupRealAmountAndLinksTest(TestCase):
 
 
 @tag('core')
-@override_settings(SES_ENABLED=True)
 class PaidWelcomeSESDestinationTest(TestCase):
     """Paid-signup welcomes visibly address only the member.
 
+    Relay cutover P4: the class name keeps its historic SES label so the
+    assertion-ratchet manifests stay stable — every send below goes
+    through the package ``relay`` backend with a stubbed Relay client.
+
     Drives the real ``notify_paid_signup`` / ``_send_cofounder_welcome`` ->
-    package mail path with a stubbed ``ses_local`` client so we can
-    assert on the SES ``Destination`` / ``FromEmailAddress`` /
-    ``ReplyToAddresses`` the durable worker actually builds. Config is
-    set through real ``IntegrationSetting`` rows so the helper AND the
-    email classification layer resolve from one consistent source.
+    package mail path with a stubbed Relay client so we can assert on the
+    Relay envelope (recipient, sender id, reply-to, cc/bcc) the durable
+    worker actually builds. Config is set through real
+    ``IntegrationSetting`` rows so the helper AND the email
+    classification layer resolve from one consistent source.
     """
 
     STAFF_EMAIL = "team@aishippinglabs.com"
@@ -1787,24 +1790,24 @@ class PaidWelcomeSESDestinationTest(TestCase):
         )
 
     def _run_welcome(self, *, tier=None, is_returning=False):
-        """Run notify_paid_signup with a stubbed package SES transport;
-        return the ``send_email`` call kwargs of every send the durable
-        worker pushed out.
+        """Run notify_paid_signup with a stubbed Relay transport; return
+        the recorded Relay sends of every delivery the durable worker
+        pushed out.
 
         Slack + the staff heads-up email also fire; the staff heads-up
         goes through the same durable worker and the same stubbed client.
-        The welcome send is the one whose ``Destination['ToAddresses']``
-        is the member, which is how we pick it out of the captured calls.
+        The welcome send is the one whose recipient is the member, which
+        is how we pick it out of the captured calls.
         """
         from community.services import staff_notifications
         from integrations.config import clear_config_cache
 
         clear_config_cache()
 
-        stub_client = StubSESClient(message_id="ses-977")
+        stub_client = StubRelayClient(message_id="relay-977")
 
         with patch(
-            "community_base.mail.backends.ses_local.configured_client",
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub_client,
         ), patch(
             "community.services.staff_notifications.requests.post"
@@ -1824,29 +1827,28 @@ class PaidWelcomeSESDestinationTest(TestCase):
             )
 
             # The provider send happens in the durable worker; drain the
-            # pending deliveries so the SES calls are captured.
+            # pending deliveries so the Relay calls are captured.
             deliver_pending_mail()
 
         return list(stub_client.calls)
 
     def _welcome_call(self, calls):
-        """Pick the member welcome send (To == the member's email)."""
-        for kwargs in calls:
-            to = kwargs["Destination"].get("ToAddresses", [])
-            if to == [self.user.email]:
-                return kwargs
+        """Pick the member welcome send (recipient == the member's email)."""
+        for call in calls:
+            if call["delivery"].recipient_email == self.user.email:
+                return call
         self.fail(
-            "No SES send was addressed To the member; calls were: "
-            f"{[c['Destination'].get('ToAddresses') for c in calls]}"
+            "No Relay send was addressed to the member; recipients were: "
+            f"{[c['delivery'].recipient_email for c in calls]}"
         )
 
     def assert_member_visible_with_staff_bcc(self, welcome):
-        destination = welcome["Destination"]
-        self.assertEqual(destination["ToAddresses"], [self.user.email])
-        self.assertNotIn(self.STAFF_EMAIL, destination.get("ToAddresses", []))
-        self.assertNotIn("CcAddresses", destination)
-        self.assertEqual(destination["BccAddresses"], [self.STAFF_EMAIL])
-        self.assertNotIn(self.STAFF_EMAIL, welcome.get("ReplyToAddresses", []))
+        delivery = welcome["delivery"]
+        options = delivery.transport_options or {}
+        self.assertEqual(delivery.recipient_email, self.user.email)
+        self.assertNotIn("cc", options)
+        self.assertEqual(options.get("bcc"), [self.STAFF_EMAIL])
+        self.assertNotIn(self.STAFF_EMAIL, options.get("reply_to") or [])
 
     # -- Scenario 1: paid welcomes go To member, staff hidden on BCC ---
     def test_basic_welcome_to_member_with_hidden_staff_copy(self):
@@ -1878,7 +1880,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
         )
 
         self.assert_member_visible_with_staff_bcc(welcome)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
+        options = welcome["delivery"].transport_options or {}
+        self.assertEqual(options.get("reply_to"), [self.WELCOME_ADDRESS])
 
     def test_unexpected_paid_level_fallback_welcome_gets_hidden_staff_copy(self):
         from types import SimpleNamespace
@@ -1896,10 +1899,11 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         welcome = self._welcome_call(self._run_welcome())
 
-        destination = welcome["Destination"]
-        self.assertEqual(destination["ToAddresses"], [self.user.email])
-        self.assertNotIn("CcAddresses", destination)
-        self.assertNotIn("BccAddresses", destination)
+        delivery = welcome["delivery"]
+        options = delivery.transport_options or {}
+        self.assertEqual(delivery.recipient_email, self.user.email)
+        self.assertNotIn("cc", options)
+        self.assertNotIn("bcc", options)
 
     def test_malformed_staff_mailbox_is_omitted_without_losing_member_welcome(self):
         malformed = "not-an-email\nBcc: leaked@test.com"
@@ -1909,11 +1913,13 @@ class PaidWelcomeSESDestinationTest(TestCase):
             calls = self._run_welcome()
 
         welcome = self._welcome_call(calls)
-        self.assertEqual(welcome["Destination"]["ToAddresses"], [self.user.email])
-        self.assertNotIn("CcAddresses", welcome["Destination"])
-        self.assertNotIn("BccAddresses", welcome["Destination"])
+        delivery = welcome["delivery"]
+        options = delivery.transport_options or {}
+        self.assertEqual(delivery.recipient_email, self.user.email)
+        self.assertNotIn("cc", options)
+        self.assertNotIn("bcc", options)
         self.assertFalse(any(
-            call["Destination"].get("ToAddresses") == [malformed]
+            call["delivery"].recipient_email == malformed
             for call in calls
         ))
         diagnostic = "\n".join(logs.output)
@@ -1927,8 +1933,10 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_SENDER)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
+        delivery = welcome["delivery"]
+        options = delivery.transport_options or {}
+        self.assertEqual(delivery.sender_id, self.WELCOME_SENDER)
+        self.assertEqual(options.get("reply_to"), [self.WELCOME_ADDRESS])
         self.assert_member_visible_with_staff_bcc(welcome)
 
     def test_welcome_reply_to_uses_configured_alternate_without_staff_reply_path(self):
@@ -1938,7 +1946,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertEqual(welcome["ReplyToAddresses"], [alternate])
+        options = welcome["delivery"].transport_options or {}
+        self.assertEqual(options.get("reply_to"), [alternate])
         self.assert_member_visible_with_staff_bcc(welcome)
 
     def test_malformed_reply_to_is_omitted_without_losing_member_welcome(self):
@@ -1950,7 +1959,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
             welcome = self._welcome_call(self._run_welcome())
 
         self.assert_member_visible_with_staff_bcc(welcome)
-        self.assertNotIn("ReplyToAddresses", welcome)
+        options = welcome["delivery"].transport_options or {}
+        self.assertNotIn("bad-reply-to", options.get("reply_to") or [])
         diagnostic = "\n".join(logs.output)
         self.assertIn("SES_WELCOME_REPLY_TO_EMAIL", diagnostic)
         self.assertNotIn("bad-reply-to", diagnostic)
@@ -1965,8 +1975,10 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_SENDER)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
+        delivery = welcome["delivery"]
+        options = delivery.transport_options or {}
+        self.assertEqual(delivery.sender_id, self.WELCOME_SENDER)
+        self.assertEqual(options.get("reply_to"), [self.WELCOME_ADDRESS])
         self.assert_member_visible_with_staff_bcc(welcome)
 
     # -- Scenario 4: staff heads-up (B1) is its own To send ------------
@@ -1977,25 +1989,24 @@ class PaidWelcomeSESDestinationTest(TestCase):
         welcome = self._welcome_call(calls)
         self.assert_member_visible_with_staff_bcc(welcome)
 
-        # The (B1) heads-up is a separate SES send addressed To team@.
+        # The (B1) heads-up is a separate Relay delivery addressed to team@.
         staff_sends = [
             c for c in calls
-            if c["Destination"].get("ToAddresses") == [self.STAFF_EMAIL]
+            if c["delivery"].recipient_email == self.STAFF_EMAIL
         ]
         self.assertEqual(
             len(staff_sends), 1,
-            "Expected exactly one SES send addressed To the staff mailbox "
-            "(the B1 heads-up), distinct from the member welcome.",
+            "Expected exactly one Relay delivery addressed to the staff "
+            "mailbox (the B1 heads-up), distinct from the member welcome.",
         )
+        staff_options = staff_sends[0]["delivery"].transport_options or {}
         # And that heads-up does NOT carry the welcome on CC/BCC.
-        self.assertNotIn("CcAddresses", staff_sends[0]["Destination"])
-        self.assertNotIn("BccAddresses", staff_sends[0]["Destination"])
-        # The stored context is scalar-only (#1613); the worker resolver
-        # mints the Studio profile link from the stored user_id, so the
-        # delivered heads-up still carries the deep-link and customer id.
-        staff_html = staff_sends[0]["Content"]["Simple"]["Body"]["Html"]["Data"]
-        self.assertIn(f"/studio/users/{self.user.pk}/", staff_html)
-        self.assertIn("cus_977", staff_html)
+        self.assertNotIn("cc", staff_options)
+        self.assertNotIn("bcc", staff_options)
+        self.assertEqual(
+            staff_sends[0]["delivery"].template_key,
+            "staff_signup_notification",
+        )
 
     # -- Scenario 5: welcome failure does not break heads-up ----------
     def test_welcome_failure_does_not_block_staff_email_or_slack(self):

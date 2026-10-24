@@ -25,7 +25,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 
-from email_app.testing import StubSESClient, deliver_pending_mail
+from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
 
 User = get_user_model()
 
@@ -990,9 +990,12 @@ class EmailVerificationTemplateCopyTest(TestCase):
         newsletter_view._send_subscribe_verification_email(user)
 
         stub = StubSESClient()
-        with patch(
-            "community_base.mail.backends.ses_local.configured_client",
-            return_value=stub,
+        with (
+            local_render_backend(),
+            patch(
+                "community_base.mail.backends.ses_local.configured_client",
+                return_value=stub,
+            ),
         ):
             deliver_pending_mail()
 
@@ -1020,13 +1023,13 @@ class EmailVerificationTemplateCopyTest(TestCase):
         self.assertIn("/api/verify-email?token=", html_lower)
 
     @patch("accounts.views.auth._probe_slack_membership_on_signup")
-    @patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
-    )
     def test_register_render_uses_account_framing(
-        self, client_factory, _probe,
+        self, _probe,
     ):
+        from unittest.mock import patch as mock_patch
+
+        from email_app.testing import StubSESClient
+
         resp = self.client.post(
             "/api/register",
             data=json.dumps({
@@ -1036,9 +1039,17 @@ class EmailVerificationTemplateCopyTest(TestCase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        deliver_pending_mail()
 
-        stub = client_factory.return_value
+        stub = StubSESClient()
+        with (
+            local_render_backend(),
+            mock_patch(
+                "community_base.mail.backends.ses_local.configured_client",
+                return_value=stub,
+            ),
+        ):
+            deliver_pending_mail()
+
         self.assertEqual(len(stub.calls), 1)
         payload = stub.calls[0]
         self.assertEqual(

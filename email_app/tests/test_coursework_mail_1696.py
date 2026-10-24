@@ -19,6 +19,7 @@ from community_base.coursework.models import (
 )
 from community_base.mail.jobs import deliver as deliver_job
 from community_base.mail.models import EmailDelivery
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
@@ -39,9 +40,19 @@ def _deliver_latest(purpose):
     # The durable row stores no link (#1613); the worker renders them.
     ensure_no_rendered_urls(purpose, delivery.context_data)
     stub = StubSESClient()
-    with patch(
-        'community_base.mail.backends.ses_local.configured_client',
-        return_value=stub,
+    # This test asserts the locally-rendered HTML, so it opts the worker
+    # into the package's local-render backend explicitly (Relay cutover
+    # P4: the runner default is the relay backend, which renders
+    # server-side).
+    backend_override = override_settings(
+        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+    )
+    with (
+        backend_override,
+        patch(
+            'community_base.mail.backends.ses_local.configured_client',
+            return_value=stub,
+        ),
     ):
         deliver_job(None, {'delivery_id': str(delivery.id)})
     (call,) = stub.calls

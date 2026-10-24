@@ -92,61 +92,54 @@ class RelayEmailBackend(BaseEmailBackend):
         recipients = message.recipients()
         if not recipients:
             return False
-
-        text_body = message.body or ""
-        html_body = ""
-        if hasattr(message, "alternatives") and message.alternatives:
-            for alt_content, alt_mimetype in message.alternatives:
-                if alt_mimetype == "text/html":
-                    html_body = alt_content
-                    break
-
-        if not html_body and getattr(message, "content_subtype", "plain") == "html":
-            html_body = message.body
-            text_body = ""
-
-        from_email = message.from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@aishippinglabs.com")
-        sender_id = self._resolve_sender_id(from_email)
-
         for recipient in recipients:
-            idempotency_key = self._extract_idempotency_key(message, recipient)
-            payload = {
-                "email": recipient,
-                "template_key": RAW_TRANSACTIONAL_TEMPLATE_KEY,
-                "template_version": 1,
-                "idempotency_key": idempotency_key,
-                "context": {
-                    "subject": message.subject or "",
-                    "text_body": text_body,
-                    "html_body": html_body,
-                },
-                "from_email": sender_id,
-            }
-
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-            }
-            url = f"{self.base_url}/api/transactional/send"
-            try:
-                response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
-            except requests.RequestException as exc:
-                raise RelayEmailBackendError(f"Relay is unreachable: {exc}") from exc
-
-            if response.status_code not in (200, 202):
-                logger.error(
-                    "Relay returned HTTP %s for recipient %s (template=%s): %s",
-                    response.status_code,
-                    recipient,
-                    RAW_TRANSACTIONAL_TEMPLATE_KEY,
-                    response.text[:200],
-                )
-                raise RelayEmailBackendError(
-                    f"Relay rejected email with status {response.status_code}: {response.text[:200]}"
-                )
-
+            self._post_payload(self._message_payload(message, recipient))
         return True
+
+    def _message_payload(self, message: EmailMessage, recipient: str) -> dict:
+        text_body, html_body = _message_bodies(message)
+        from_email = message.from_email or getattr(settings, "DEFAULT_FROM_EMAIL", "noreply@aishippinglabs.com")
+        payload = {
+            "email": recipient,
+            "template_key": RAW_TRANSACTIONAL_TEMPLATE_KEY,
+            "template_version": 1,
+            "idempotency_key": self._extract_idempotency_key(message, recipient),
+            "context": {
+                "subject": message.subject or "",
+                "text_body": text_body,
+                "html_body": html_body,
+            },
+            "from_email": self._resolve_sender_id(from_email),
+        }
+        reply_to = message.reply_to or []
+        if len(reply_to) > 1:
+            raise RelayEmailBackendError("unsupported_relay_reply_to_count")
+        if reply_to:
+            payload["reply_to"] = reply_to[0]
+        return payload
+
+    def _post_payload(self, payload: dict) -> None:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        url = f"{self.base_url}/api/transactional/send"
+        try:
+            response = requests.post(url, json=payload, headers=headers, timeout=self.timeout)
+        except requests.RequestException as exc:
+            raise RelayEmailBackendError(f"Relay is unreachable: {exc}") from exc
+        if response.status_code not in (200, 202):
+            logger.error(
+                "Relay returned HTTP %s for recipient %s (template=%s): %s",
+                response.status_code,
+                payload["email"],
+                RAW_TRANSACTIONAL_TEMPLATE_KEY,
+                response.text[:200],
+            )
+            raise RelayEmailBackendError(
+                f"Relay rejected email with status {response.status_code}: {response.text[:200]}"
+            )
 
     def _extract_idempotency_key(self, message: EmailMessage, recipient: str) -> str:
         if hasattr(message, "extra_headers") and message.extra_headers:
@@ -158,3 +151,17 @@ class RelayEmailBackend(BaseEmailBackend):
             f"{recipient}:{message.subject}:{message.body}".encode("utf-8")
         ).hexdigest()[:32]
         return f"core:{digest}"
+
+
+def _message_bodies(message: EmailMessage) -> tuple[str, str]:
+    text_body = message.body or ""
+    html_body = ""
+    if hasattr(message, "alternatives") and message.alternatives:
+        for alt_content, alt_mimetype in message.alternatives:
+            if alt_mimetype == "text/html":
+                html_body = alt_content
+                break
+    if not html_body and getattr(message, "content_subtype", "plain") == "html":
+        html_body = message.body
+        text_body = ""
+    return text_body, html_body

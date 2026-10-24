@@ -72,7 +72,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
         self.assertEqual(result["ambiguous_count"], 0)
 
         # Verify Relay request payload
-        mock_request.assert_called_once()
+        self.assertEqual(mock_request.call_count, 1)
         method, url = mock_request.call_args[0]
         kwargs = mock_request.call_args[1]
 
@@ -239,7 +239,7 @@ class RelayStudioCampaignTestSendTest(TierSetupMixin, TestCase):
         )
 
         self.assertEqual(response.status_code, 302)
-        mock_request.assert_called_once()
+        self.assertEqual(mock_request.call_count, 1)
         payload = mock_request.call_args[1]["json"]
 
         self.assertEqual(payload["email"], "alexey.s.grigoriev@gmail.com")

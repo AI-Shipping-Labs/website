@@ -36,7 +36,6 @@ GROUP_LABELS = {
     "maven": "Maven",
     "observability": "Observability",
     "pods": "Pods",
-    "relay": "Relay",
     "s3_content": "S3 Content Images",
     "s3_downloads": "S3 Downloads",
     "s3_recordings": "S3 Recordings",
@@ -50,7 +49,6 @@ GROUP_LABELS = {
 
 _GROUP_ORDER = (
     "stripe",
-    "relay",
     "zoom",
     "ses",
     "s3_recordings",
@@ -149,7 +147,6 @@ _KEY_ORDER = {
         "MAVEN_REMOVAL_STUDENT_EMAIL",
     ),
     "observability": ("LOGFIRE_ENABLED", "LOGFIRE_TOKEN", "LOGFIRE_ENVIRONMENT"),
-    "relay": ("RELAY_BASE_URL", "RELAY_API_KEY"),
     "s3_content": ("AWS_S3_CONTENT_BUCKET", "AWS_S3_CONTENT_REGION", "CONTENT_CDN_BASE", "S3_ENABLED"),
     "s3_downloads": (
         "AWS_S3_DOWNLOADS_BUCKET",
@@ -588,30 +585,6 @@ ZOOM_AUTO_RECORDING = declare(
     secret=False,
     optional=True,
     docs_url="_docs/integrations/zoom.md#zoom_auto_recording",
-)
-
-# --- Relay (relay) ---
-RELAY_BASE_URL = declare(
-    key="RELAY_BASE_URL",
-    group="relay",
-    label="Relay Base URL",
-    description="Base URL of the Relay email delivery service (e.g. https://relay.datatalks.club or https://dev.relay.datatalks.club).",
-    value_type="str",
-    default="",
-    secret=False,
-    docs_url="_docs/integrations/relay.md#relay_base_url",
-    optional=False,
-)
-RELAY_API_KEY = declare(
-    key="RELAY_API_KEY",
-    group="relay",
-    label="Relay API Key",
-    description="Bearer token used to authenticate AISL requests against Relay.",
-    value_type="str",
-    default="",
-    secret=True,
-    docs_url="_docs/integrations/relay.md#relay_api_key",
-    optional=False,
 )
 
 # --- Email (SES) (ses) ---

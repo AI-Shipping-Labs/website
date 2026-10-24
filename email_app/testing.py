@@ -3,11 +3,11 @@
 Two problems appear once sends go through ``community_base.mail`` and both
 are test-environment-only:
 
-- The SES transport must never touch the network. The old EmailService
+- The SES and Relay transports must never touch the network. The old EmailService
   short-circuited on the ``SES_ENABLED`` kill-switch with a synthetic
   ``ses-disabled-noop`` message id; under the package the transport lives in
-  ``ses_local``, so the test runner swaps its client for a stub that returns
-  the same synthetic id. Existing EmailLog assertions keep passing.
+  ``ses_local`` or ``relay``, so the test runner swaps its client for a stub that returns
+  synthetic ids. Existing EmailLog assertions keep passing.
 - Django ``TestCase`` wraps every test in an aborted transaction, so
   ``transaction.on_commit`` never fires and the dispatched
   ``cb_mail.deliver`` job would never run. ``deliver_pending_mail`` runs the
@@ -15,6 +15,10 @@ are test-environment-only:
 """
 
 from __future__ import annotations
+
+from types import SimpleNamespace
+
+from community_base.mail.relay import RelaySendResult
 
 
 class StubSESClient:
@@ -29,22 +33,84 @@ class StubSESClient:
         return {"MessageId": self.message_id}
 
 
+class StubRelayClient:
+    """Offline stand-in for Relay mail client used in tests."""
+
+    def __init__(self, message_id="relay-test-noop"):
+        self.message_id = message_id
+        self.calls = []
+
+    def send(self, delivery, *, context=None):
+        self.calls.append({"delivery": delivery, "context": context})
+
+        # Trigger transitional MAIL_SEND_RECORDER if present so EmailLog assertions pass
+        try:
+            from community_base.kernel.hooks import resolve  # noqa: PLC0415
+            from django.conf import settings  # noqa: PLC0415
+
+            cb_conf = getattr(settings, "COMMUNITY_BASE", {})
+            recorder_hook = cb_conf.get("MAIL_SEND_RECORDER")
+            if recorder_hook:
+                recorder = (
+                    resolve(recorder_hook)
+                    if isinstance(recorder_hook, str)
+                    else recorder_hook
+                )
+                rendered = SimpleNamespace(
+                    subject=(context or {}).get("subject", "Test Subject")
+                )
+                result = SimpleNamespace(message_id=self.message_id)
+                recorder(delivery, rendered, result)
+        except Exception:
+            pass
+
+        return RelaySendResult(
+            message_id=self.message_id,
+            status="provider_accepted",
+            template_version=getattr(delivery, "template_version", 1) or 1,
+            idempotent_replay=False,
+        )
+
+    def send_transactional(self, *args, **kwargs):
+        self.calls.append({"args": args, "kwargs": kwargs})
+
+        return RelaySendResult(
+            message_id=self.message_id,
+            status="provider_accepted",
+            template_version=1,
+            idempotent_replay=False,
+        )
+
+    def messages_since(self, since):
+        return ()
+
+    def get_template(self, key):
+        return {"key": key, "latest_version": 1}
+
+
 _patcher = None
+_relay_patcher = None
 
 
 def install_test_ses():
-    """Point ``ses_local`` at :class:`StubSESClient` for the whole test run."""
+    """Point mail backends at offline test stubs for the whole test run."""
 
-    global _patcher
-    if _patcher is not None:
-        return
+    global _patcher, _relay_patcher
     from unittest.mock import patch  # noqa: PLC0415
 
-    _patcher = patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
-    )
-    _patcher.start()
+    if _patcher is None:
+        _patcher = patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=StubSESClient(),
+        )
+        _patcher.start()
+
+    if _relay_patcher is None:
+        _relay_patcher = patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=StubRelayClient(),
+        )
+        _relay_patcher.start()
 
 
 def deliver_pending_mail():

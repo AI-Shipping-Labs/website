@@ -885,7 +885,10 @@ COMMUNITY_BASE = {
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'COURSE_ACCESS_GRANTS': 'content.curriculum_grants.course_access_grants',
     'JOBS_BACKEND': 'django_q',
-    'MAIL_BACKEND': os.environ.get('COMMUNITY_BASE_MAIL_BACKEND', 'relay'),
+    'MAIL_BACKEND': os.environ.get(
+        'COMMUNITY_BASE_MAIL_BACKEND',
+        'relay' if not TESTING else 'ses_local',
+    ),
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',

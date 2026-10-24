@@ -209,7 +209,12 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_rescheduled')
+        self.assertEqual(call_kwargs['to_email'], self.user.email)
+        self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
+        self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
 
     @patch('events.tasks.notify_cancellation._send_raw_email')
     def test_cancelled_registration_is_skipped_before_cancellation_send(

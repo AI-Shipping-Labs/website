@@ -460,14 +460,22 @@ def _start_django_server():
     settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
     # Disable Amazon SES for E2E tests so no real emails are sent (issue #509).
-    # EmailService._send_ses and events.services.registration_email._send_raw_email
-    # both check SES_ENABLED and return a synthetic noop message id when disabled.
     # Belt-and-suspenders: blanking the AWS credentials means any future code path
     # that slips past the gate would still fail with InvalidClientTokenId rather
     # than reach a real account.
     settings.SES_ENABLED = False
     settings.AWS_ACCESS_KEY_ID = ""
     settings.AWS_SECRET_ACCESS_KEY = ""
+
+    # Direct transactional paths validate Relay config before handing a
+    # request to their transport. Give the local in-process server inert test
+    # config and replace only the adapter's requests binding, so unrelated
+    # HTTP clients keep their normal behavior and no provider is contacted.
+    from email_app.testing_relay_transactional import (  # noqa: PLC0415
+        install_test_relay_transactional_transport,
+    )
+
+    install_test_relay_transactional_transport()
 
     # Silence the SES-disabled-in-prod system check (email_app.E001) during
     # Playwright runs — we deliberately disable SES here for E2E (see above),

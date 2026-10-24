@@ -402,7 +402,7 @@ class SendRegistrationConfirmationTest(TestCase):
         )
         result = send_registration_confirmation(registration)
 
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
         call_kwargs = mock_send.call_args.kwargs
         self.assertEqual(call_kwargs['to_email'], 'test@example.com')
         self.assertEqual(call_kwargs['template_key'], 'event_registration')
@@ -651,7 +651,11 @@ class SendRegistrationConfirmationTest(TestCase):
         result = send_registration_confirmation(registration)
 
         self.assertIsNotNone(result)
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        self.assertEqual(call_kwargs['to_email'], unsubscribed_user.email)
+        self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
         self.assertEqual(result.email_type, 'event_registration')
         self.assertEqual(result.ses_message_id, 'relay-unsub')
 
@@ -696,7 +700,12 @@ class RegistrationApiEmailTest(TestCase):
         response = self.client.post(f'/api/events/{self.event.slug}/register')
 
         self.assertEqual(response.status_code, 201)
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        self.assertEqual(call_kwargs['to_email'], self.user.email)
+        self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
+        self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
 
     @patch('events.services.registration_email.send_registration_confirmation')
     def test_registration_api_returns_201_on_email_failure(self, mock_send):

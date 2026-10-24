@@ -11,9 +11,6 @@ so the recorded exempt producers keep working unchanged:
 
 - ``email_app/tasks/send_campaign.py`` and ``studio/views/campaigns.py``:
   the campaign-family transport, retired by A6.3.
-- ``accounts/services/privacy_workflow.py``: ``prepare_template`` /
-  ``send_prepared``; the package ``send`` cannot model its redacted
-  recipient (recorded at slice 1 acceptance in ``_docs/configuration.md``).
 
 Exempt producers live with the warning rather than suppressing it:
 Python's default filters hide ``DeprecationWarning`` outside ``__main__``
@@ -28,8 +25,7 @@ The class has no implementation of its own anymore: rendering lives in
 :mod:`email_app.services.ses_transport`, and the package-path hooks in
 :mod:`email_app.hooks`. Every method delegates; ``send`` routes through
 the same ``prepare_template``/``send_prepared`` seam the exempt producers
-use. The class is deleted once A6.3 retires the campaign surfaces and the
-package grows the privacy redacted-recipient seam.
+use. The class is deleted once A6.3 retires the campaign surfaces.
 
 Templates are stored as markdown files in email_app/email_templates/.
 Each template has YAML frontmatter with a subject line, and a markdown
@@ -128,7 +124,7 @@ _SHIM_DEPRECATION_MESSAGE = (
     "email_app.services.EmailService is deprecated: new callers must use "
     "email_app.package_mail.send_package_mail (the community_base.mail "
     "package app). Only the recorded exempt producers may still construct "
-    "it (send_campaign, studio campaigns, privacy_workflow); the inventory "
+    "it (send_campaign and studio campaigns); the inventory "
     "is enforced by email_app/tests/test_email_service_shim_1651.py."
 )
 

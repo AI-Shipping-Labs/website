@@ -217,7 +217,7 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         second = notify_recording_ready(event)
 
         self.assertEqual((first["status"], second["status"]), ("sent", "skipped"))
-        post.assert_called_once()
+        self.assertEqual(post.call_count, 1)
         key = f"event_recording_ready:{event.pk}:user:{host.pk}"
         payload = self.assert_request(post.call_args, "event_recording_ready", host.email, key)
         self.assertNotIn("calendar_alternative", payload)
@@ -246,7 +246,7 @@ class RelayReadyCallerTest(RelayPayloadAssertions, TestCase):
         second = notify_workshop_ready(event)
 
         self.assertEqual((first["emailed"], second["already_sent"]), (1, 1))
-        post.assert_called_once()
+        self.assertEqual(post.call_count, 1)
         key = f"event_workshop_ready:{event.pk}:user:{member.pk}"
         payload = self.assert_request(post.call_args, "event_workshop_ready", member.email, key)
         self.assertNotIn("calendar_alternative", payload)

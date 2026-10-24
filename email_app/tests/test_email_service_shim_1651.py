@@ -6,9 +6,6 @@ while the recorded exempt producers keep working unchanged:
 
 - ``email_app/tasks/send_campaign.py`` and ``studio/views/campaigns.py``:
   the campaign-family transport, retired by A6.3.
-- ``accounts/services/privacy_workflow.py``: ``prepare_template`` /
-  ``send_prepared``; the package ``send`` cannot model its redacted
-  recipient (recorded at slice 1 acceptance in ``_docs/configuration.md``).
 
 This module holds the protections:
 
@@ -19,10 +16,9 @@ This module holds the protections:
    the scan; removing an exemption without updating the recorded
    inventory fails it too, so the list cannot silently rot.
 
-The calendar lifecycle mail (``events`` raw-SES path) and the
-workshop-ready / recording-ready notifications (the synchronous
-``ses_transport`` path) are part of the proof: they own their transport
-directly and must never reference ``EmailService``.
+The privacy completion mail, calendar lifecycle mail, and workshop-ready /
+recording-ready notifications are part of the proof: they use the direct
+Relay adapter and must never reference ``EmailService``.
 """
 
 import ast
@@ -42,17 +38,18 @@ EXEMPT_EMAILSERVICE_FILES = frozenset(
         "email_app/services/email_service.py",  # the shim itself
         "email_app/tasks/send_campaign.py",
         "studio/views/campaigns.py",
-        "accounts/services/privacy_workflow.py",
     }
 )
 
 # Site-owned transport paths that replaced the shim entirely. The scan
 # proves none of them touches ``EmailService``.
 NON_SHIM_SEND_PATHS = (
-    # Calendar lifecycle mail: raw MIME with .ics parts via boto3.
+    # Privacy completion: recipient-safe state with a direct Relay handoff.
+    "accounts/services/privacy_delivery.py",
+    "accounts/services/privacy_workflow.py",
+    # Calendar lifecycle mail: Relay template plus an .ics alternative.
     "events/services/registration_email.py",
-    # Workshop-ready / recording-ready notifications: synchronous
-    # email_app.services.ses_transport.send_ses_email.
+    # Workshop-ready / recording-ready notifications: synchronous Relay.
     "events/services/workshop_ready_notification.py",
     "events/services/recording_ready_notification.py",
 )

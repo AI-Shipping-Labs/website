@@ -231,9 +231,9 @@ class HostDeliveryRecoveryTest(TestCase):
         self.assertEqual(delivery.status, HostInviteDelivery.STATUS_SENT)
         self.assertEqual(delivery.attempt_count, 2)
         self.assertEqual(mock_send.call_count, 2)
-        self.assertNotIn('cancel-registration', mock_send.call_args.kwargs['html_body'])
-        self.assertNotIn('/host/', mock_send.call_args.kwargs['html_body'])
-        self.assertNotIn('/studio/', mock_send.call_args.kwargs['html_body'])
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        self.assertTrue(call_kwargs['context']['is_host_registration'])
         self.assertEqual(
             EventRegistration.objects.filter(
                 event=self.event, user=self.host,
@@ -423,11 +423,14 @@ class HostCalendarLifecycleTest(TestCase):
         self.assertEqual(first['status'], 'sent')
         self.assertEqual(second['status'], 'deduplicated')
         self.assertEqual(mock_send.call_count, 1)
-        vevent = _vevent(mock_send.call_args.kwargs['ics_content'])
+        call_kwargs = mock_send.call_args.kwargs
+        vevent = _vevent(call_kwargs['ics_content'])
         join_url = f'{site_base_url()}{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
         self.assertEqual(str(vevent.get('location')), join_url)
-        self.assertNotIn(self.event.zoom_join_url, mock_send.call_args.kwargs['html_body'])
+        self.assertEqual(call_kwargs['template_key'], 'event_rescheduled')
+        self.assertEqual(call_kwargs['context']['join_url'], join_url)
+        self.assertNotIn(self.event.zoom_join_url, call_kwargs['context'].values())
         self.assertEqual(
             EmailLog.objects.get(email_type='event_rescheduled').event,
             self.event,

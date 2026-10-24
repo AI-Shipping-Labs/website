@@ -258,20 +258,17 @@ class HostAutoRegistrationServiceTest(TestCase):
 
         self.assertIsNotNone(registration)
         mock_send.assert_called_once()
-        self.assertEqual(mock_send.call_args.kwargs['to_email'], self.host.email)
-        html = mock_send.call_args.kwargs['html_body']
-        self.assertIn(event.get_join_url(), html)
-        self.assertNotIn('/host/', html)
-        self.assertNotIn('/studio/', html)
-        self.assertNotIn(event.zoom_join_url, html)
-        self.assertIn(
-            "You're the designated host for this event, so this registration "
-            "can't be cancelled from here. Ask an operator if the host needs "
-            'to change.',
-            html,
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['to_email'], self.host.email)
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        context = call_kwargs['context']
+        self.assertTrue(context['is_host_registration'])
+        self.assertEqual(
+            context['join_url'],
+            f'{site_base_url()}{event.get_join_url()}',
         )
-        self.assertNotIn('cancel-registration', html)
-        ics = mock_send.call_args.kwargs['ics_content'].decode()
+        self.assertNotIn(event.zoom_join_url, context.values())
+        ics = call_kwargs['ics_content'].decode()
         self.assertIn('VCALENDAR', ics)
         self.assertIn('METHOD:REQUEST', ics)
         cal = Calendar.from_ical(ics)
@@ -325,12 +322,15 @@ class HostAutoRegistrationServiceTest(TestCase):
         ) as mock_send:
             send_registration_confirmation(registration)
 
-        html = mock_send.call_args.kwargs['html_body']
-        self.assertNotIn('Host management links', html)
-        self.assertNotIn('/host/', html)
-        self.assertNotIn('/studio/', html)
-        self.assertIn(event.get_join_url(), html)
-        self.assertIn('cancel-registration', html)
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        context = call_kwargs['context']
+        self.assertFalse(context['is_host_registration'])
+        self.assertEqual(
+            context['join_url'],
+            f'{site_base_url()}{event.get_join_url()}',
+        )
+        self.assertIn('/cancel-registration?', context['cancel_url'])
 
 
 @tag('core')

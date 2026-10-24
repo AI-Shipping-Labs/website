@@ -118,9 +118,11 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
         self.assertEqual(response.status_code, 201)
         kwargs = send.call_args.kwargs
         self.assertEqual(kwargs['to_email'], self.guest.email)
-        self.assertIn(self.event.get_join_url(), kwargs['html_body'])
-        self.assertIn('cancel-registration?token=', kwargs['html_body'])
-        self.assertNotIn('Manage event', kwargs['html_body'])
+        self.assertEqual(kwargs['template_key'], 'event_registration')
+        context = kwargs['context']
+        self.assertIn(self.event.get_join_url(), context['join_url'])
+        self.assertIn('cancel-registration?token=', context['cancel_url'])
+        self.assertFalse(context['is_host_registration'])
         calendar = Calendar.from_ical(kwargs['ics_content'])
         component = calendar.walk('VEVENT')[0]
         self.assertEqual(str(calendar.get('method')), 'REQUEST')

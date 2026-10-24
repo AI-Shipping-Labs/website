@@ -181,14 +181,20 @@ class SendRescheduleNoticeOneTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        html = mock_send.call_args.kwargs['html_body']
+        context = mock_send.call_args.kwargs['context']
         # Old time (2026-06-08 16:00 UTC) in Europe/Berlin during CEST
         # = 18:00 local.
-        self.assertIn('June 08, 2026, 18:00 Europe/Berlin', html)
+        self.assertIn(
+            'June 08, 2026, 18:00 Europe/Berlin',
+            context['old_event_datetime'],
+        )
         # New time (2026-06-15 16:00 UTC) in CEST = 18:00 local.
-        self.assertIn('June 15, 2026, 18:00 Europe/Berlin', html)
+        self.assertIn(
+            'June 15, 2026, 18:00 Europe/Berlin',
+            context['new_event_datetime'],
+        )
         # No raw UTC label should leak when a valid TZ is set.
-        self.assertNotIn('16:00 UTC', html)
+        self.assertNotIn('16:00 UTC', str(context))
 
     @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-2')
     def test_send_falls_back_to_utc_when_preference_unset(self, mock_send):
@@ -198,12 +204,18 @@ class SendRescheduleNoticeOneTest(TestCase):
             self.no_tz_user.pk,
             '2026-06-08T16:00:00+00:00',
         )
-        html = mock_send.call_args.kwargs['html_body']
-        self.assertIn('June 08, 2026, 16:00 UTC', html)
-        self.assertIn('June 15, 2026, 16:00 UTC', html)
+        context = mock_send.call_args.kwargs['context']
+        self.assertIn(
+            'June 08, 2026, 16:00 UTC',
+            context['old_event_datetime'],
+        )
+        self.assertIn(
+            'June 15, 2026, 16:00 UTC',
+            context['new_event_datetime'],
+        )
         # Catches the bug where a per-user re-render forgets to rebuild
         # the context and a previous recipient's TZ leaks through.
-        self.assertNotIn('Europe/Berlin', html)
+        self.assertNotIn('Europe/Berlin', str(context))
 
     @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-3')
     def test_send_writes_email_log(self, mock_send):

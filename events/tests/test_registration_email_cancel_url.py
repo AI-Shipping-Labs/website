@@ -209,6 +209,10 @@ class RegistrationEmailLegacySesSettingTest(TestCase):
             event=self.event, user=self.user,
         )
         log = send_registration_confirmation(registration)
-        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_count, 1)
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        self.assertEqual(call_kwargs['to_email'], self.user.email)
+        self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
         self.assertEqual(log.ses_message_id, 'relay-registration')
         self.assertEqual(log.email_type, 'event_registration')

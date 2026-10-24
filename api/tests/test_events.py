@@ -1770,15 +1770,12 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
             EventRegistration.objects.filter(event=event, user=host).exists(),
         )
         mock_send.assert_called_once()
-        self.assertEqual(mock_send.call_args.kwargs["to_email"], host.email)
-        html_body = mock_send.call_args.kwargs["html_body"]
-        self.assertIn(event.get_join_url(), html_body)
-        self.assertNotIn("/host/", html_body)
-        self.assertNotIn("token=", html_body)
-        self.assertNotIn(
-            f"/studio/events/{event.pk}/create-zoom",
-            html_body,
-        )
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs["to_email"], host.email)
+        self.assertEqual(call_kwargs["template_key"], "event_registration")
+        context = call_kwargs["context"]
+        self.assertIn(event.get_join_url(), context["join_url"])
+        self.assertTrue(context["is_host_registration"])
         self.assertEqual(self._registration_logs(host).count(), 1)
 
     def test_create_without_host_email_has_no_fallback_mailbox_behavior(self):

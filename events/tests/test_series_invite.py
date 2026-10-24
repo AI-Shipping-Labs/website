@@ -214,22 +214,22 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
         self.e2 = _make_occurrence(self.series, offset_days=14, position=2,
                                    slug='woh-b')
 
-    @patch('events.services.registration_email.boto3')
-    def test_attaches_multi_event_request_ics(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'ses-123'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_attaches_multi_event_request_ics(self, mock_send):
+        mock_send.return_value = 'relay-123'
+        SeriesRegistration.objects.create(series=self.series, user=self.user)
 
         log = send_series_registration_invite(
             self.user, self.series, [self.e1, self.e2],
         )
 
         self.assertEqual(log.email_type, 'series_registration')
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        plain_text = _assert_three_part_alternative(self, raw)
-        self.assertIn("You're registered for the Weekly Office Hours series", plain_text)
-        self.assertIn('https://aishippinglabs.com/events/series/', plain_text)
-        self.assertNotIn('<html', plain_text)
-        ics, method = _ics_from_raw(raw)
+        call = mock_send.call_args.kwargs
+        ics = call['ics_content']
+        method = call['method']
+        self.assertEqual(call['template_key'], 'series_registration')
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
         cal = _parse(ics)
@@ -252,14 +252,12 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
         )
         for vevent in by_uid.values():
             self.assertEqual(_attendee_text(vevent), 'mailto:member@test.com')
-        html = _html_from_raw(raw)
-        self.assertIn('about 5 minutes before the start time', html)
-        self.assertNotIn('15 minutes', html)
+        self.assertIn('events/series/', call['context']['series_url'])
 
 
 @tag('core')
-class SesKillSwitchTest(TierSetupMixin, TestCase):
-    """All sends short-circuit to a synthetic id when SES is disabled."""
+class LegacySesSettingTest(TierSetupMixin, TestCase):
+    """The retired SES switch does not suppress Relay transactional sends."""
 
     @classmethod
     def setUpTestData(cls):
@@ -276,22 +274,24 @@ class SesKillSwitchTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.e1, user=self.user)
 
     @override_settings(SES_ENABLED=False)
-    @patch('events.services.registration_email.boto3')
-    def test_no_boto_call_and_synthetic_id_when_disabled(self, mock_boto3):
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_disabled_ses_setting_does_not_suppress_relay(self, mock_send):
+        mock_send.return_value = 'relay-message'
         log = send_series_registration_invite(self.user, self.series, [self.e1])
         send_series_update_to_subscribers(self.e1)
         send_series_cancellation_to_subscribers(self.e1)
 
-        mock_boto3.client.assert_not_called()
-        self.assertEqual(log.ses_message_id, 'ses-disabled-noop')
-        # Each path still records a log row (the attempt) with a synthetic id.
+        self.assertEqual(mock_send.call_count, 3)
+        self.assertEqual(log.ses_message_id, 'relay-message')
         for etype in ('series_registration', 'series_update', 'series_cancellation'):
             self.assertTrue(
                 EmailLog.objects.filter(
                     user=self.user, email_type=etype,
-                    ses_message_id='ses-disabled-noop',
+                    ses_message_id='relay-message',
                 ).exists(),
-                msg=f'no synthetic-id log for {etype}',
+                msg=f'no Relay log for {etype}',
             )
 
 
@@ -326,16 +326,18 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             EventRegistration.objects.create(event=self.e1, user=user)
             EventRegistration.objects.create(event=self.e2, user=user)
 
-    @patch('events.services.registration_email.boto3')
-    def test_update_carries_bumped_sequence_and_request_method(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_update_carries_bumped_sequence_and_request_method(self, mock_send):
+        mock_send.return_value = 'relay-update'
 
         sent = send_series_update_to_subscribers(self.e1)
 
         self.assertEqual(sent, 2)
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        ics, method = _ics_from_raw(raw)
+        call = mock_send.call_args.kwargs
+        ics = call['ics_content']
+        method = call['method']
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'REQUEST')
         cal = _parse(ics)
@@ -359,10 +361,11 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             EmailLog.objects.filter(email_type='series_update').count(), 2,
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_targets_only_given_user_ids(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_targets_only_given_user_ids(self, mock_send):
+        mock_send.return_value = 'relay-update'
 
         sent = send_series_update_to_subscribers(
             self.e1, user_ids=[self.alice.id],
@@ -404,12 +407,13 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             ).exists(),
         )
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_unsubscribed_subscriber_still_gets_transactional_update(
-        self, mock_boto3,
+        self, mock_send,
     ):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_send.return_value = 'relay-update'
         self.bob.unsubscribed = True
         self.bob.save(update_fields=['unsubscribed'])
 
@@ -456,23 +460,19 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         # on their calendar (no EventRegistration) — they get no CANCEL.
         SeriesRegistration.objects.create(series=self.series, user=self.other)
 
-    @patch('events.services.registration_email.boto3')
-    def test_cancel_single_vevent_bumped_sequence(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_cancel_single_vevent_bumped_sequence(self, mock_send):
+        mock_send.return_value = 'relay-cancel'
 
         sent = send_series_cancellation_to_subscribers(self.cancelled)
 
         self.assertEqual(sent, 1)
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        plain_text = _assert_three_part_alternative(self, raw)
-        self.assertIn(
-            'A session in the Weekly Office Hours series has been cancelled',
-            plain_text,
-        )
-        self.assertIn('https://aishippinglabs.com/events/series/', plain_text)
-        self.assertNotIn('<html', plain_text)
-        ics, method = _ics_from_raw(raw)
+        call = mock_send.call_args.kwargs
+        ics = call['ics_content']
+        method = call['method']
+        self.assertEqual(call['template_key'], 'series_cancellation')
         _assert_bare_organizers(ics, 'series-calendar@aishippinglabs.com')
         self.assertEqual(method, 'CANCEL')
         cal = _parse(ics)
@@ -494,10 +494,11 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
             f'https://aishippinglabs.com{self.cancelled.get_join_url()}',
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_only_registered_subscribers_get_cancel(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_only_registered_subscribers_get_cancel(self, mock_send):
+        mock_send.return_value = 'relay-cancel'
 
         send_series_cancellation_to_subscribers(self.cancelled)
 
@@ -581,15 +582,15 @@ class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.open1, user=self.free_user)
         EventRegistration.objects.create(event=self.open2, user=self.free_user)
 
-    @patch('events.services.registration_email.boto3')
-    def test_update_invite_excludes_inaccessible(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_update_invite_excludes_inaccessible(self, mock_send):
+        mock_send.return_value = 'relay-update'
 
         send_series_update_to_subscribers(self.open1)
 
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        ics, _ = _ics_from_raw(raw)
+        ics = mock_send.call_args.kwargs['ics_content']
         cal = _parse(ics)
         uids = {str(v.get('uid')) for v in _vevents(cal)}
         self.assertIn('event-woh-o1@aishippinglabs.com', uids)
@@ -630,38 +631,38 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.open1, user=self.free_user)
         EventRegistration.objects.create(event=self.open2, user=self.free_user)
 
-    def _sent_html(self, mock_boto3):
-        raw = mock_boto3.client.return_value.send_email.call_args.kwargs[
-            'Content']['Raw']['Data']
-        return _html_from_raw(raw)
+    def _sent_note(self, mock_send):
+        return mock_send.call_args.kwargs['context']['partial_note']
 
-    @patch('events.services.registration_email.boto3')
-    def test_registration_email_includes_upsell_note(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_registration_email_includes_upsell_note(self, mock_send):
+        mock_send.return_value = 'relay-message'
 
         send_series_registration_invite(
             self.free_user, self.series, [self.open1, self.open2],
         )
 
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        html = _html_from_raw(raw)
+        call = mock_send.call_args.kwargs
+        note = call['context']['partial_note']
         # Gated-session count, the unlocking tier, and the pricing link.
-        self.assertIn('1 more session', html)
-        self.assertIn('Main tier', html)
-        self.assertIn(self.PRICING_URL, html)
+        self.assertIn('1 more session', note)
+        self.assertIn('Main tier', note)
+        self.assertIn(self.PRICING_URL, note)
         # The .ics still carries only the two open VEVENTs (gated excluded).
-        ics, _ = _ics_from_raw(raw)
+        ics = call['ics_content']
         uids = {str(v.get('uid')) for v in _vevents(_parse(ics))}
         self.assertEqual(uids, {
             'event-woh-o1@aishippinglabs.com',
             'event-woh-o2@aishippinglabs.com',
         })
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_full_access_subscriber_gets_no_note(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
         # Open the gated session up so the recipient can access everything.
         self.gated.required_level = LEVEL_OPEN
         self.gated.save(update_fields=['required_level'])
@@ -672,27 +673,29 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
             [self.open1, self.open2, self.gated],
         )
 
-        html = self._sent_html(mock_boto3)
-        self.assertNotIn(self.PRICING_URL, html)
-        self.assertNotIn('Upgrade any time', html)
+        note = self._sent_note(mock_boto3)
+        self.assertNotIn(self.PRICING_URL, note)
+        self.assertNotIn('Upgrade any time', note)
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_note_singular_for_one_gated_session(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
 
         send_series_registration_invite(
             self.free_user, self.series, [self.open1, self.open2],
         )
 
-        html = self._sent_html(mock_boto3)
-        self.assertIn('1 more session in this series is', html)
-        self.assertNotIn('sessions in this series are', html)
+        note = self._sent_note(mock_boto3)
+        self.assertIn('1 more session in this series is', note)
+        self.assertNotIn('sessions in this series are', note)
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_note_plural_for_multiple_gated_sessions(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
         _make_occurrence(self.series, offset_days=28, position=4,
                          required_level=LEVEL_MAIN, slug='woh-g2')
 
@@ -700,14 +703,15 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
             self.free_user, self.series, [self.open1, self.open2],
         )
 
-        html = self._sent_html(mock_boto3)
-        self.assertIn('2 more sessions in this series are', html)
-        self.assertNotIn('1 more session in this series is', html)
+        note = self._sent_note(mock_boto3)
+        self.assertIn('2 more sessions in this series are', note)
+        self.assertNotIn('1 more session in this series is', note)
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_note_names_highest_gated_tier(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
         # gated session is Main; add a Premium-only gated session.
         _make_occurrence(self.series, offset_days=28, position=4,
                          required_level=LEVEL_PREMIUM, slug='woh-g2')
@@ -716,14 +720,15 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
             self.free_user, self.series, [self.open1, self.open2],
         )
 
-        html = self._sent_html(mock_boto3)
-        self.assertIn('Premium tier', html)
-        self.assertNotIn('Main tier', html)
+        note = self._sent_note(mock_boto3)
+        self.assertIn('Premium tier', note)
+        self.assertNotIn('Main tier', note)
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_cancellation_note_computed_against_whole_series(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
         # One open session is cancelled; the gated session remains gated.
         self.open1.status = 'cancelled'
         self.open1.save(update_fields=['status'])
@@ -731,21 +736,22 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         sent = send_series_cancellation_to_subscribers(self.open1)
 
         self.assertEqual(sent, 1)
-        html = self._sent_html(mock_boto3)
+        note = self._sent_note(mock_boto3)
         # The note reflects the still-gated Main session, not the cancelled one.
-        self.assertIn('1 more session', html)
-        self.assertIn('Main tier', html)
-        self.assertIn(self.PRICING_URL, html)
+        self.assertIn('1 more session', note)
+        self.assertIn('Main tier', note)
+        self.assertIn(self.PRICING_URL, note)
 
-    @patch('events.services.registration_email.boto3')
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
     def test_update_note_for_partial_access_subscriber(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_boto3.return_value = 'relay-message'
 
         sent = send_series_update_to_subscribers(self.open1)
 
         self.assertEqual(sent, 1)
-        html = self._sent_html(mock_boto3)
-        self.assertIn('1 more session', html)
-        self.assertIn('Main tier', html)
-        self.assertIn(self.PRICING_URL, html)
+        note = self._sent_note(mock_boto3)
+        self.assertIn('1 more session', note)
+        self.assertIn('Main tier', note)
+        self.assertIn(self.PRICING_URL, note)

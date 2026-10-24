@@ -7,6 +7,7 @@ from django.test import TestCase
 from accounts.models import Token
 from content.models import Workshop
 from email_app.models import EmailLog
+from email_app.relay_transactional import RelayTransactionalResult
 from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
@@ -21,6 +22,10 @@ from events.services.workshop_ready_notification import (
 from notifications.models import EventReminderLog, Notification
 
 User = get_user_model()
+
+
+def relay_result(message_id='relay-message'):
+    return RelayTransactionalResult(message_id, 'queued', False)
 
 
 def make_event(slug='workshop-ready-event', *, workshop_status='published'):
@@ -56,9 +61,13 @@ class WorkshopReadyServiceTest(TestCase):
         self.event.host_email = self.host_user.email
         self.event.save(update_fields=['host_email'])
 
-    @patch('events.services.workshop_ready_notification.send_ses_email')
+    @patch('events.services.workshop_ready_notification.send_relay_transactional')
     def test_sends_to_registrants_and_host_only(self, mock_send):
-        mock_send.side_effect = ['ses-a', 'ses-b', 'ses-host']
+        mock_send.side_effect = [
+            relay_result('relay-a'),
+            relay_result('relay-b'),
+            relay_result('relay-host'),
+        ]
 
         result = notify_workshop_ready(self.event)
 
@@ -79,16 +88,15 @@ class WorkshopReadyServiceTest(TestCase):
         self.assertFalse(
             Notification.objects.filter(user=self.unrelated).exists(),
         )
-        html = mock_send.call_args_list[0].args[2]
-        plain_text = mock_send.call_args_list[0].kwargs['text_body']
-        self.assertIn('Workshop Ready Event', html)
-        self.assertIn('Workshop Ready Notes', html)
-        self.assertIn('/workshops/workshop-ready-event-workshop', html)
-        self.assertIn('Workshop Ready Event', plain_text)
-        self.assertIn('Workshop Ready Notes', plain_text)
-        self.assertIn('/workshops/workshop-ready-event-workshop', plain_text)
+        context = mock_send.call_args_list[0].args[2]
+        self.assertEqual(context['event_title'], 'Workshop Ready Event')
+        self.assertEqual(context['workshop_title'], 'Workshop Ready Notes')
+        self.assertIn('/workshops/workshop-ready-event-workshop', context['workshop_url'])
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_host_already_registered_is_deduped(self, mock_send):
         EventRegistration.objects.create(event=self.event, user=self.host_user)
         host = Host.objects.create(
@@ -112,7 +120,10 @@ class WorkshopReadyServiceTest(TestCase):
         )
         self.assertEqual(mock_send.call_count, 3)
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_rerun_skips_existing_and_reaches_new_registrant(self, mock_send):
         notify_workshop_ready(self.event)
         new_user = User.objects.create_user(email='new@example.com')
@@ -132,7 +143,10 @@ class WorkshopReadyServiceTest(TestCase):
             1,
         )
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_unsubscribed_registrant_still_receives_transactional_email(self, mock_send):
         unsubscribed = User.objects.create_user(
             email='unsub@example.com',
@@ -147,7 +161,10 @@ class WorkshopReadyServiceTest(TestCase):
         )
         self.assertEqual(classify_email_type(EMAIL_TYPE), EMAIL_KIND_TRANSACTIONAL)
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_non_user_host_receives_email_only(self, mock_send):
         host = Host.objects.create(
             name='External Host',
@@ -173,7 +190,10 @@ class WorkshopReadyServiceTest(TestCase):
             any(item['email_only'] for item in result['results']),
         )
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_inactive_host_user_is_skipped_not_email_only(self, mock_send):
         inactive = User.objects.create_user(
             email='inactive-host@example.com',
@@ -191,12 +211,12 @@ class WorkshopReadyServiceTest(TestCase):
             EmailLog.objects.filter(user=inactive).exists(),
         )
 
-    @patch('events.services.workshop_ready_notification.send_ses_email')
+    @patch('events.services.workshop_ready_notification.send_relay_transactional')
     def test_recipient_failure_is_reported_and_rest_continue(self, mock_send):
         def send(to_email, *args, **kwargs):
             if to_email == 'b@example.com':
                 raise RuntimeError('SES failed')
-            return f'ses-{to_email}'
+            return relay_result(f'relay-{to_email}')
 
         mock_send.side_effect = send
 
@@ -246,7 +266,10 @@ class WorkshopReadyStudioAndApiTest(TestCase):
     def setUp(self):
         self.client.login(email='staff@example.com', password='pw')
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_studio_endpoint_sends_and_reports_counts(self, mock_send):
         response = self.client.post(
             f'/studio/events/{self.event.pk}/notify-workshop-ready',
@@ -269,7 +292,10 @@ class WorkshopReadyStudioAndApiTest(TestCase):
         self.assertContains(response, 'data-testid="notify-workshop-ready-button-disabled"')
         self.assertContains(response, 'A linked published workshop is required')
 
-    @patch('events.services.workshop_ready_notification.send_ses_email', return_value='ses')
+    @patch(
+        'events.services.workshop_ready_notification.send_relay_transactional',
+        return_value=relay_result(),
+    )
     def test_api_endpoint_success_and_error_cases(self, mock_send):
         auth = {'HTTP_AUTHORIZATION': f'Token {self.token.key}'}
 

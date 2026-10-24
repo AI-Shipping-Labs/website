@@ -1,67 +1,22 @@
-"""Series subscriber calendar-invite sends (issue #869).
-
-A series subscriber should receive the WHOLE series in their calendar
-when they register, and that calendar should stay in sync as sessions
-change. We model this as a multi-VEVENT ``.ics`` (one VEVENT per
-occurrence), reusing the per-event ``build_vevent`` machinery so the
-UID/SEQUENCE rules match the per-event invites and the platform feed.
-
-Three send entry points, all best-effort and per-recipient isolated so
-one failing recipient never blocks the rest, and all gated on the
-``SES_ENABLED`` kill-switch (returning a synthetic id when disabled):
-
-- ``send_series_registration_invite(user, series, events)`` — the
-  confirmation a subscriber gets on registration, attaching a
-  ``METHOD:REQUEST`` invite covering the occurrences they were enrolled
-  in. Called from the series-register endpoint.
-- ``send_series_update_to_subscribers(event)`` — when an occurrence's
-  time changes or a new occurrence is added, every subscriber of that
-  occurrence's series receives a refreshed ``METHOD:REQUEST`` invite
-  covering the upcoming occurrences they are registered for (the
-  changed/added occurrence carries its bumped SEQUENCE). One canonical
-  email per subscriber avoids the conflicting single + series entries
-  the intake warned about.
-- ``send_series_cancellation_to_subscribers(event)`` — when an
-  occurrence linked to a series flips to ``cancelled``, every subscriber
-  registered for it receives a single-VEVENT ``METHOD:CANCEL`` for that
-  occurrence (bumped SEQUENCE) so the entry leaves their calendar.
-
-De-dup rule (documented contract): the canonical series update for a
-time change is THIS series invite. The per-event reschedule notice
-(``events.tasks.notify_reschedule``) and this series update share the
-occurrence's UID, so a calendar merges them by UID rather than
-double-booking — but to avoid spamming a series subscriber with two
-emails for the same change, the Studio reschedule path sends the
-per-event reschedule notice to one-off registrants only and the series
-update to series subscribers (see ``studio.views.events``).
-"""
+"""Relay calendar invites for series registration, update, and cancellation."""
 
 import logging
 
-from accounts.services.timezones import (
-    CALENDAR_INVITE_DATETIME_FORMAT,
-    build_timezone_account_url,
-    build_timezone_email_line,
-    format_user_datetime,
-)
-from content.access import (
-    _resolve_required_level,
-    can_access,
-    get_required_tier_name,
-)
-from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
-    render_template_parts,
-)
+from content.access import can_access
+from email_app.relay_transactional import recipient_template_context
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.registration_email import _send_raw_email
-from events.services.series_registration import _eligible_occurrences
-from integrations.config import site_base_url
+from events.services.series_email_context import (
+    build_series_subject_context,
+    render_series_email,
+    render_series_email_parts,
+)
 
 logger = logging.getLogger(__name__)
+_render_series_email = render_series_email
+_render_series_email_parts = render_series_email_parts
 
 
 def _subscriber_upcoming_events(user, series):
@@ -92,239 +47,98 @@ def _subscriber_upcoming_events(user, series):
     return events
 
 
-def _partial_access_note(user, series, accessible_events, site_url):
-    """Build the plain-text upsell note for sessions ``user`` cannot access.
-
-    The gated set is ``_eligible_occurrences(series)`` (upcoming, non-draft,
-    non-cancelled) minus the accessible occurrences the invite already
-    covers, compared by event id, kept where ``can_access`` is False. When
-    there are none, returns ``''`` so the template's ``{% if partial_note %}``
-    guard renders nothing.
-
-    Names a single concrete upgrade target — the tier that unlocks the
-    highest-gated session — so the CTA reads cleanly even when gated
-    sessions span multiple tiers. Plain text only: the templates render
-    this through Django autoescaping, so the ``/membership`` link is a bare
-    absolute URL.
-    """
-    accessible_ids = {event.id for event in accessible_events}
-    gated = [
-        event
-        for event in _eligible_occurrences(series)
-        if event.id not in accessible_ids and not can_access(user, event)
-    ]
-    if not gated:
-        return ''
-
-    count = len(gated)
-    plural = '' if count == 1 else 's'
-    is_are = 'is' if count == 1 else 'are'
-    isnt_arent = "isn't" if count == 1 else "aren't"
-    it_them = 'it' if count == 1 else 'them'
-
-    highest_level = max(_resolve_required_level(event) for event in gated)
-    tier_name = get_required_tier_name(highest_level)
-    pricing_url = f'{site_url}/membership'
-
-    return (
-        f'Heads up: {count} more session{plural} in this series '
-        f'{is_are} available on the {tier_name} tier and {isnt_arent} '
-        f'included above. Upgrade any time to add {it_them} to your '
-        f'calendar: {pricing_url}'
-    )
-
-
-def _render_series_email_parts(
-    template_name, user, series, events, email_type,
-    changed_event=None, old_start=None,
-):
-    """Render the shared series email body for ``template_name``.
-
-    Returns ``(subject, plain_text, full_html)`` ready for ``_send_raw_email``.
-
-    Issue #1071: for the ``series_update`` template a single-occurrence
-    reschedule threads ``changed_event`` (the occurrence that moved) and
-    its ``old_start`` so the email names that session and shows old -> new
-    on its line. The changed-occurrence framing only applies when BOTH are
-    supplied AND the changed occurrence is in the subscriber's accessible
-    ``events`` list; otherwise (new-occurrence addition, or a subscriber
-    who does not hold the moved occurrence) the email gracefully falls back
-    to the whole-series framing with no dangling before/after.
-
-    Calendar-invite times are rendered with the weekday via the dedicated
-    :data:`CALENDAR_INVITE_DATETIME_FORMAT`; the global default stays
-    weekday-free (issue #1071).
-    """
-    site_url = site_base_url()
-    series_url = f'{site_url}{series.get_absolute_url()}'
-    partial_note = _partial_access_note(user, series, events, site_url)
-
-    ordered = sorted(events, key=lambda e: e.start_datetime)
-    changed_event_id = changed_event.pk if changed_event is not None else None
-    has_old_start = old_start is not None
-    # The reframed copy applies only when the moved occurrence is one the
-    # subscriber actually has on their calendar — otherwise a "(was ...)"
-    # annotation would dangle on a session they cannot see.
-    changed_in_list = has_old_start and any(
-        event.pk == changed_event_id for event in ordered
-    )
-
-    lines = []
-    for event in ordered:
-        new_time = format_user_datetime(
-            event.start_datetime, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
-        )
-        if changed_in_list and event.pk == changed_event_id:
-            old_time = format_user_datetime(
-                old_start, user, fmt=CALENDAR_INVITE_DATETIME_FORMAT,
-            )
-            lines.append(
-                f'- {event.title} — {new_time} (was {old_time})'
-            )
-        else:
-            lines.append(f'- {event.title} — {new_time}')
-    occurrences_list = '\n'.join(lines)
-    registered_count = len(ordered)
-
-    subject, body_markdown, body_html, footer_note = (
-        render_template_parts(
-            template_name,
-            user,
-            {
-            'series_name': series.name,
-            'series_url': series_url,
-            'registered_count': registered_count,
-            'registered_count_plural': '' if registered_count == 1 else 's',
-            'occurrences_list': occurrences_list,
-            'partial_note': partial_note,
-            # Issue #1071: the series_update template branches on
-            # ``changed_occurrence`` to name the moved session in the
-            # subject/lead. Inert for the registration/cancellation
-            # templates (they don't render it).
-            'changed_occurrence': changed_in_list,
-            'event_title': changed_event.title if changed_in_list else '',
-            # Issue #963: the "set/update your timezone" line. Only the
-            # series_registration template renders {{ timezone_help }};
-            # for series_update / series_cancellation it is inert context.
-            'timezone_help': build_timezone_email_line(
-                user, build_timezone_account_url(site_url),
-            ),
-            },
-        )
-    )
-    full_html = render_html_email(subject, body_html, footer_note=footer_note)
-    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
-    return subject, plain_text, full_html
-
-
-def _render_series_email(
-    template_name, user, series, events, email_type,
-    changed_event=None, old_start=None,
-):
-    """Compatibility helper for HTML-only previews and focused render tests."""
-    subject, _plain_text, full_html = _render_series_email_parts(
-        template_name,
-        user,
-        series,
-        events,
-        email_type,
-        changed_event=changed_event,
-        old_start=old_start,
-    )
-    return subject, full_html
-
-
-def _log_send(user, email_type, subject, ses_message_id):
+def _log_send(user, email_type, subject, ses_message_id, dedupe_key):
     from email_app.models import EmailLog
-    return EmailLog.objects.create(
-        user=user,
-        recipient_email=user.email,
-        email_type=email_type,
-        subject=subject,
-        ses_message_id=ses_message_id,
-    )
-
-
-def send_series_registration_invite(user, series, events):
-    """Send the registration confirmation with a multi-event ``.ics``.
-
-    ``events`` is the list of occurrences the user was just enrolled in.
-    Attaches a ``METHOD:REQUEST`` series invite covering exactly those
-    occurrences so the whole series lands in their calendar from this one
-    email. Sending nothing (empty ``events``) is the caller's job — this
-    helper assumes at least one occurrence.
-
-    Returns the ``EmailLog`` instance.
-    """
-    subject, plain_text, full_html = _render_series_email_parts(
-        'series_registration', user, series, events, 'series_registration',
-    )
-    ics_content = generate_series_ics(
-        events,
-        method='REQUEST',
-        attendee_email=user.email,
-    )
-    ses_message_id = _send_raw_email(
-        to_email=user.email,
-        subject=subject,
-        html_body=full_html,
-        ics_content=ics_content,
-        text_body=plain_text,
-        method='REQUEST',
-    )
-    email_log = _log_send(user, 'series_registration', subject, ses_message_id)
-    logger.info(
-        'Sent series registration invite to %s for series "%s" '
-        '(%d occurrences, SES: %s)',
-        user.email, series.name, len(events), ses_message_id,
+    email_log, _ = EmailLog.objects.get_or_create(
+        dedupe_key=dedupe_key,
+        defaults={
+            'user': user,
+            'recipient_email': user.email,
+            'email_type': email_type,
+            'subject': subject,
+            'ses_message_id': ses_message_id,
+        },
     )
     return email_log
 
 
+def send_series_registration_invite(user, series, events):
+    """Send one multi-event registration invite for a series lifecycle."""
+    registration = series.series_registrations.only('pk').get(user=user)
+    dedupe_key = (
+        f'series-registration:{series.pk}:{user.pk}:{registration.pk}'
+    )
+    email_log = _send_series_calendar(
+        user,
+        series,
+        events,
+        template_key='series_registration',
+        email_type='series_registration',
+        method='REQUEST',
+        dedupe_key=dedupe_key,
+    )
+    logger.info(
+        'Sent series registration invite to %s for series "%s" '
+        '(%d occurrences, Relay: %s)',
+        user.email, series.name, len(events), email_log.ses_message_id,
+    )
+    return email_log
+
+
+def _send_series_calendar(
+    user,
+    series,
+    events,
+    *,
+    template_key,
+    email_type,
+    method,
+    dedupe_key,
+    changed_event=None, old_start=None,
+):
+    subject, context = build_series_subject_context(
+        template_key,
+        user,
+        series,
+        events,
+        changed_event=changed_event,
+        old_start=old_start,
+    )
+    ics_content = _series_ics(events, user.email, method)
+    message_id = _send_raw_email(
+        to_email=user.email,
+        template_key=template_key,
+        context=recipient_template_context(user, context),
+        ics_content=ics_content,
+        idempotency_key=dedupe_key,
+        safe_correlation=f'series={series.pk} user={user.pk}',
+        method=method,
+    )
+    return _log_send(user, email_type, subject, message_id, dedupe_key)
+
+
+def _series_ics(events, attendee_email, method):
+    if len(events) == 1 and method == 'CANCEL':
+        return generate_ics(
+            events[0],
+            method=method,
+            attendee_email=attendee_email,
+        )
+    return generate_series_ics(
+        events,
+        method=method,
+        attendee_email=attendee_email,
+    )
+
+
 def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
-    """Fan an updated series invite out to subscribers of ``event``'s series.
-
-    Called when an occurrence's time changes (all subscribers) or a new
-    occurrence is added and existing subscribers were auto-enrolled (only
-    the enrolled users, passed via ``user_ids``). Each recipient receives
-    a refreshed ``METHOD:REQUEST`` invite covering the upcoming occurrences
-    they are registered for; the changed/added occurrence carries its
-    current (already-bumped where relevant) ``ics_sequence`` so calendar
-    clients UPDATE rather than duplicate by UID.
-
-    Args:
-        event: the changed/added occurrence. For a time change this IS the
-            changed occurrence (issue #1071): when ``old_start_iso`` is set
-            the email names this session and shows its old -> new time.
-        user_ids: optional iterable of subscriber user ids to target. When
-            ``None``, every subscriber of the series is targeted.
-        old_start_iso: optional ISO datetime string for the changed
-            occurrence's previous start (supplied by the Studio reschedule
-            path). When ``None`` (a brand-new occurrence was added) the
-            email keeps the whole-series framing with no before/after.
-
-    Best-effort and per-recipient isolated. Returns the number of
-    subscribers a send was attempted for.
-    """
+    """Fan one stable-key REQUEST invite to each eligible subscriber."""
     series = getattr(event, 'event_series', None)
     if series is None:
         return 0
 
-    # Re-hydrate the old start (Django-Q delivered it as a JSON string).
-    # Naive datetimes are treated as UTC, matching format_user_datetime and
-    # the reschedule-notice _parse_iso contract.
-    old_start = None
-    if old_start_iso is not None:
-        from datetime import UTC, datetime
-        old_start = datetime.fromisoformat(old_start_iso)
-        if old_start.tzinfo is None:
-            old_start = old_start.replace(tzinfo=UTC)
-
-    subscriber_user_ids = set(
-        series.series_registrations.values_list('user_id', flat=True)
-    )
-    if user_ids is not None:
-        subscriber_user_ids &= set(user_ids)
+    old_start = _parse_old_start(old_start_iso)
+    subscriber_user_ids = _subscriber_ids(series, user_ids)
     if not subscriber_user_ids:
         return 0
 
@@ -333,30 +147,7 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
     sent = 0
     for user in User.objects.filter(id__in=subscriber_user_ids):
         try:
-            if user_has_permanent_bounce(user):
-                continue
-            events = _subscriber_upcoming_events(user, series)
-            if not events:
-                continue
-            subject, plain_text, full_html = _render_series_email_parts(
-                'series_update', user, series, events, 'series_update',
-                changed_event=event, old_start=old_start,
-            )
-            ics_content = generate_series_ics(
-                events,
-                method='REQUEST',
-                attendee_email=user.email,
-            )
-            ses_message_id = _send_raw_email(
-                to_email=user.email,
-                subject=subject,
-                html_body=full_html,
-                ics_content=ics_content,
-                text_body=plain_text,
-                method='REQUEST',
-            )
-            _log_send(user, 'series_update', subject, ses_message_id)
-            sent += 1
+            sent += _send_series_update_one(event, user, series, old_start)
         except Exception:
             logger.exception(
                 'Failed to send series update to user %s for series "%s"',
@@ -370,24 +161,56 @@ def send_series_update_to_subscribers(event, user_ids=None, old_start_iso=None):
     return sent
 
 
+def _parse_old_start(old_start_iso):
+    if old_start_iso is None:
+        return None
+    from datetime import UTC, datetime
+
+    old_start = datetime.fromisoformat(old_start_iso)
+    if old_start.tzinfo is None:
+        old_start = old_start.replace(tzinfo=UTC)
+    return old_start
+
+
+def _subscriber_ids(series, user_ids):
+    subscriber_ids = set(
+        series.series_registrations.values_list('user_id', flat=True),
+    )
+    if user_ids is not None:
+        subscriber_ids &= set(user_ids)
+    return subscriber_ids
+
+
+def _send_series_update_one(event, user, series, old_start):
+    if user_has_permanent_bounce(user):
+        return 0
+    events = _subscriber_upcoming_events(user, series)
+    if not events:
+        return 0
+    dedupe_key = (
+        f'series-update:{series.pk}:{user.pk}:{event.pk}:{event.ics_sequence}'
+    )
+    _send_series_calendar(
+        user,
+        series,
+        events,
+        template_key='series_update',
+        email_type='series_update',
+        method='REQUEST',
+        dedupe_key=dedupe_key,
+        changed_event=event,
+        old_start=old_start,
+    )
+    return 1
+
+
 def send_series_cancellation_to_subscribers(event):
-    """Send a ``METHOD:CANCEL`` for ``event`` to series subscribers.
-
-    Called when an occurrence linked to a series flips to ``cancelled``
-    via Studio. Each subscriber who holds an ``EventRegistration`` for
-    the occurrence receives a single-VEVENT ``METHOD:CANCEL`` ``.ics``
-    (bumped SEQUENCE) so the entry disappears from their calendar.
-
-    Best-effort and per-recipient isolated. Returns the number of
-    subscribers a cancel was attempted for.
-    """
+    """Fan one stable-key CANCEL invite to registered series subscribers."""
     series = getattr(event, 'event_series', None)
     if series is None:
         return 0
 
-    subscriber_user_ids = set(
-        series.series_registrations.values_list('user_id', flat=True)
-    )
+    subscriber_user_ids = _subscriber_ids(series, None)
     if not subscriber_user_ids:
         return 0
 
@@ -406,27 +229,7 @@ def send_series_cancellation_to_subscribers(event):
     sent = 0
     for user in User.objects.filter(id__in=registered_user_ids):
         try:
-            if user_has_permanent_bounce(user):
-                continue
-            ics_content = generate_ics(
-                event,
-                method='CANCEL',
-                attendee_email=user.email,
-            )
-            subject, plain_text, full_html = _render_series_email_parts(
-                'series_cancellation', user, series, [event],
-                'series_cancellation',
-            )
-            ses_message_id = _send_raw_email(
-                to_email=user.email,
-                subject=subject,
-                html_body=full_html,
-                ics_content=ics_content,
-                text_body=plain_text,
-                method='CANCEL',
-            )
-            _log_send(user, 'series_cancellation', subject, ses_message_id)
-            sent += 1
+            sent += _send_series_cancellation_one(event, user, series)
         except Exception:
             logger.exception(
                 'Failed to send series cancellation to user %s for '
@@ -439,3 +242,22 @@ def send_series_cancellation_to_subscribers(event):
         event.slug, sent,
     )
     return sent
+
+
+def _send_series_cancellation_one(event, user, series):
+    if user_has_permanent_bounce(user):
+        return 0
+    dedupe_key = (
+        f'series-cancellation:{series.pk}:{user.pk}:'
+        f'{event.pk}:{event.ics_sequence}'
+    )
+    _send_series_calendar(
+        user,
+        series,
+        [event],
+        template_key='series_cancellation',
+        email_type='series_cancellation',
+        method='CANCEL',
+        dedupe_key=dedupe_key,
+    )
+    return 1

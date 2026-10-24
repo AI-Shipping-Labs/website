@@ -318,33 +318,33 @@ class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.other, user=self.alice)
         self.old_start = self.changed.start_datetime - timedelta(days=1)
 
-    @patch('events.services.registration_email.boto3')
-    def test_old_start_iso_renders_before_after(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_old_start_iso_renders_before_after(self, mock_send):
+        mock_send.return_value = 'relay-update'
 
         sent = send_series_update_to_subscribers(
             self.changed, old_start_iso=self.old_start.isoformat(),
         )
 
         self.assertEqual(sent, 1)
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        html = _html_from_raw(raw)
-        self.assertIn('(was ', html)
-        self.assertIn('The time for', html)
+        context = mock_send.call_args.kwargs['context']
+        self.assertIn('(was ', context['occurrences_list'])
+        self.assertTrue(context['changed_occurrence'])
 
-    @patch('events.services.registration_email.boto3')
-    def test_no_old_start_iso_keeps_whole_series_framing(self, mock_boto3):
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+    @patch(
+        'events.services.series_invite._send_raw_email',
+    )
+    def test_no_old_start_iso_keeps_whole_series_framing(self, mock_send):
+        mock_send.return_value = 'relay-update'
 
         sent = send_series_update_to_subscribers(self.changed)
 
         self.assertEqual(sent, 1)
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        html = _html_from_raw(raw)
-        self.assertNotIn('(was ', html)
-        self.assertIn("There's been a change to the", html)
+        context = mock_send.call_args.kwargs['context']
+        self.assertNotIn('(was ', context['occurrences_list'])
+        self.assertFalse(context['changed_occurrence'])
 
 
 @tag('core')
@@ -440,12 +440,13 @@ class RescheduleNoticeWeekdayTest(TestCase):
             event=self.event, user=self.user,
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_old_and_new_times_include_weekday(self, mock_boto3):
+    @patch(
+        'events.tasks.notify_reschedule._send_raw_email',
+    )
+    def test_old_and_new_times_include_weekday(self, mock_send):
         from events.tasks.notify_reschedule import send_reschedule_notice_one
 
-        client = mock_boto3.client.return_value
-        client.send_email.return_value = {'MessageId': 'm'}
+        mock_send.return_value = 'relay-reschedule'
         old_start = datetime(2026, 6, 24, 16, 0, tzinfo=UTC)  # Wednesday
 
         result = send_reschedule_notice_one(
@@ -453,10 +454,9 @@ class RescheduleNoticeWeekdayTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        raw = client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        html = _html_from_raw(raw)
-        self.assertIn('Wednesday, June 24, 2026, 18:00 Europe/Berlin', html)
-        self.assertIn('Thursday, June 25, 2026, 18:00 Europe/Berlin', html)
+        context = mock_send.call_args.kwargs['context']
+        self.assertIn('Wednesday, June 24, 2026, 18:00 Europe/Berlin', context['old_event_datetime'])
+        self.assertIn('Thursday, June 25, 2026, 18:00 Europe/Berlin', context['new_event_datetime'])
         self.assertEqual(
             EmailLog.objects.filter(email_type='event_rescheduled').count(), 1,
         )

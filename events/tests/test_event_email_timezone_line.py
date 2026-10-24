@@ -21,7 +21,7 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from email_app.services.email_rendering import render_template
-from events.models import Event, EventRegistration, EventSeries
+from events.models import Event, EventRegistration, EventSeries, SeriesRegistration
 from events.services.registration_email import send_registration_confirmation
 from events.services.series_invite import send_series_registration_invite
 from events.tasks.notify_reschedule import send_reschedule_notice_one
@@ -70,40 +70,42 @@ class RegistrationEmailTimezoneLineTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_html(self, user):
+    def _capture_context(self, user):
         registration = EventRegistration.objects.create(
             event=self.event, user=user,
         )
-        with patch("events.services.registration_email.boto3") as mock_boto3:
-            client = mock_boto3.client.return_value
-            client.send_email.return_value = {"MessageId": "tz-line-1"}
+        with patch(
+            "events.services.registration_email._send_raw_email",
+        ) as mock_send:
+            mock_send.return_value = "relay-tz-line-1"
             send_registration_confirmation(registration)
-            raw = client.send_email.call_args.kwargs["Content"]["Raw"]["Data"]
-        return _html_from_raw(raw)
+        return mock_send.call_args.kwargs["context"]
 
     def test_utc_fallback_recipient_sees_set_variant_and_link(self):
         user = User.objects.create_user(
             email="no-tz@example.com", preferred_timezone="",
         )
-        html = self._capture_html(user)
+        context = self._capture_context(user)
+        text = str(context)
 
-        self.assertIn("Set your timezone", html)
-        self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
+        self.assertIn("Set your timezone", text)
+        self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
         # #666 regression guard: the time still renders with the UTC token.
-        self.assertIn("16:00 UTC", html)
+        self.assertIn("16:00 UTC", text)
 
     def test_zoned_recipient_sees_change_variant_not_set(self):
         user = User.objects.create_user(
             email="ny@example.com", preferred_timezone="America/New_York",
         )
-        html = self._capture_html(user)
+        context = self._capture_context(user)
+        text = str(context)
 
-        self.assertIn("Change your timezone", html)
-        self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
-        self.assertNotIn("Set your timezone", html)
+        self.assertIn("Change your timezone", text)
+        self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
+        self.assertNotIn("Set your timezone", text)
         # Time renders in the recipient's zone, not UTC.
-        self.assertIn("America/New_York", html)
-        self.assertNotIn("16:00 UTC", html)
+        self.assertIn("America/New_York", text)
+        self.assertNotIn("16:00 UTC", text)
 
 
 @override_settings(
@@ -134,7 +136,7 @@ class RescheduleEmailTimezoneLineTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_html(self, user):
+    def _capture_context(self, user):
         EventRegistration.objects.create(event=self.event, user=user)
         old_start = "2026-06-01T16:00:00+00:00"
         # Issue #1632: stub the cancel token so the body is
@@ -142,32 +144,32 @@ class RescheduleEmailTimezoneLineTest(TestCase):
         # contains the bare ``UTC`` trigram these assertions forbid about
         # once in 6,400 renders.
         with (
-            patch("events.services.registration_email.boto3") as mock_boto3,
+            patch(
+                "events.tasks.notify_reschedule._send_raw_email",
+            ) as mock_send,
             patch(
                 "events.tasks.notify_reschedule.generate_cancel_token",
                 return_value="deterministic-cancel-token",
             ),
         ):
-            client = mock_boto3.client.return_value
-            client.send_email.return_value = {"MessageId": "tz-resched-1"}
+            mock_send.return_value = "relay-tz-resched-1"
             send_reschedule_notice_one(self.event.pk, user.pk, old_start)
-            raw = client.send_email.call_args.kwargs["Content"]["Raw"]["Data"]
-        return _html_from_raw(raw)
+        return mock_send.call_args.kwargs["context"]
 
     def test_one_line_covers_both_times_for_zoned_recipient(self):
         user = User.objects.create_user(
             email="berlin-resched@example.com",
             preferred_timezone="Europe/Berlin",
         )
-        html = self._capture_html(user)
+        text = str(self._capture_context(user))
 
         # Exactly one timezone line for an email carrying two times.
-        self.assertEqual(html.count("Change your timezone"), 1)
-        self.assertNotIn("Set your timezone", html)
-        self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
+        self.assertEqual(text.count("Change your timezone"), 1)
+        self.assertNotIn("Set your timezone", text)
+        self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
         # Both the old and new times render in the recipient's zone.
-        self.assertEqual(html.count("Europe/Berlin"), 2)
-        self.assertNotIn("UTC", html)
+        self.assertEqual(text.count("Europe/Berlin"), 2)
+        self.assertNotIn("UTC", text)
 
 
 @override_settings(
@@ -208,24 +210,17 @@ class HostRegistrationTimezoneLineTest(TestCase):
             event=self.event,
             user=host,
         )
-        with patch("events.services.registration_email.boto3") as mock_boto3:
-            client = mock_boto3.client.return_value
-            client.send_email.return_value = {"MessageId": "tz-host-1"}
+        with patch(
+            "events.services.registration_email._send_raw_email",
+        ) as mock_send:
+            mock_send.return_value = "relay-tz-host-1"
             send_registration_confirmation(registration)
-            raw = client.send_email.call_args.kwargs["Content"]["Raw"]["Data"]
-        html = _html_from_raw(raw)
+        context = mock_send.call_args.kwargs["context"]
+        text = str(context)
 
-        self.assertIn("Set your timezone", html)
-        self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
-        self.assertNotIn("Host management links", html)
-        self.assertNotIn("/host/", html)
-        self.assertNotIn("/studio/", html)
-        self.assertIn(
-            "You're the designated host for this event, so this registration "
-            "can't be cancelled from here. Ask an operator if the host needs "
-            "to change.",
-            html,
-        )
+        self.assertIn("Set your timezone", text)
+        self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
+        self.assertTrue(context['is_host_registration'])
 
 
 @override_settings(
@@ -273,21 +268,22 @@ class SeriesRegistrationTimezoneLineTest(TestCase):
         )
         EventRegistration.objects.create(event=self.e1, user=user)
         EventRegistration.objects.create(event=self.e2, user=user)
-        with patch("events.services.registration_email.boto3") as mock_boto3:
-            client = mock_boto3.client.return_value
-            client.send_email.return_value = {"MessageId": "tz-series-1"}
+        SeriesRegistration.objects.create(series=self.series, user=user)
+        with patch(
+            "events.services.series_invite._send_raw_email",
+        ) as mock_send:
+            mock_send.return_value = "relay-tz-series-1"
             send_series_registration_invite(
                 user, self.series, [self.e1, self.e2],
             )
-            raw = client.send_email.call_args.kwargs["Content"]["Raw"]["Data"]
-        html = _html_from_raw(raw)
+        text = str(mock_send.call_args.kwargs["context"])
 
         # Both occurrences listed.
-        self.assertIn("Session 1", html)
-        self.assertIn("Session 2", html)
+        self.assertIn("Session 1", text)
+        self.assertIn("Session 2", text)
         # Exactly one timezone line covers all occurrences.
-        self.assertEqual(html.count("Set your timezone"), 1)
-        self.assertIn(f'href="https://env.example.com{ACCOUNT_FRAGMENT}"', html)
+        self.assertEqual(text.count("Set your timezone"), 1)
+        self.assertIn(f'https://env.example.com{ACCOUNT_FRAGMENT}', text)
 
 
 class PostEventFollowupNoTimezoneLineTest(TestCase):

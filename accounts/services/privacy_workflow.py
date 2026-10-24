@@ -3,14 +3,10 @@
 from __future__ import annotations
 
 import logging
-import uuid
 from dataclasses import dataclass
-from datetime import timezone as datetime_timezone
-from types import SimpleNamespace
 
 from django.contrib.auth import get_user_model
 from django.db import transaction
-from django.utils import timezone
 
 from accounts.models import PrivacyCompletionDelivery, PrivacyRequestLog
 from accounts.services.privacy import (
@@ -19,27 +15,14 @@ from accounts.services.privacy import (
     notify_privacy_staff,
     write_privacy_execution_audit,
 )
-from accounts.services.privacy_recipient import decrypt_recipient, encrypt_recipient
-from email_app.models import EmailLog
-from email_app.services.email_service import (
-    EmailService,
-    EmailServiceError,
-    EmailTransportOutcomeUnknown,
-)
-from integrations.config import get_config, validate_email_config_value
+from accounts.services.privacy_delivery import deliver_deletion_confirmation as _deliver_deletion_confirmation
+from accounts.services.privacy_recipient import encrypt_recipient
 
 logger = logging.getLogger(__name__)
-
-PRIVACY_REQUEST_EMAIL_KEY = "PRIVACY_REQUEST_EMAIL"
-DEFAULT_PRIVACY_REQUEST_EMAIL = "team@aishippinglabs.com"
-PRIVACY_SAFE_RECIPIENT = "[deleted-account]"
 
 BLOCKER_IDENTITY_CHANGED = "identity_changed"
 ERROR_MISSING_USER = "missing_user"
 ERROR_EXECUTION_FAILED = "execution_failed"
-ERROR_RECIPIENT_UNAVAILABLE = "recipient_unavailable"
-ERROR_PRIVACY_MAILBOX_INVALID = "privacy_mailbox_invalid"
-ERROR_DELIVERY_FAILED = "delivery_failed"
 
 
 @dataclass(frozen=True)
@@ -244,196 +227,5 @@ def execute_deletion_request(
 
 
 def deliver_deletion_confirmation(request_id, *, retry_failed=False):
-    """Attempt one fenced completion send outside the deletion transaction."""
-    with transaction.atomic():
-        delivery = (
-            PrivacyCompletionDelivery.objects.select_for_update()
-            .select_related("request")
-            .filter(request_id=request_id)
-            .first()
-        )
-        if delivery is None:
-            return "missing"
-        if delivery.status == PrivacyCompletionDelivery.STATUS_SENT:
-            return delivery.status
-        if delivery.status == PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN:
-            return delivery.status
-        if delivery.status == PrivacyCompletionDelivery.STATUS_SENDING:
-            delivery.status = PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN
-            delivery.error_code = "transport_outcome_unknown"
-            delivery.save(update_fields=["status", "error_code", "updated_at"])
-            return delivery.status
-        if delivery.status == PrivacyCompletionDelivery.STATUS_FAILED and not retry_failed:
-            return delivery.status
-        if delivery.status not in {
-            PrivacyCompletionDelivery.STATUS_PENDING,
-            PrivacyCompletionDelivery.STATUS_FAILED,
-        }:
-            return delivery.status
-        ciphertext = delivery.recipient_ciphertext
-        request_log = delivery.request
-
-    try:
-        recipient = decrypt_recipient(ciphertext)
-    except Exception:
-        _mark_known_delivery_failure(delivery.pk, ERROR_RECIPIENT_UNAVAILABLE)
-        return PrivacyCompletionDelivery.STATUS_FAILED
-
-    privacy_email = validate_email_config_value(
-        PRIVACY_REQUEST_EMAIL_KEY,
-        get_config(PRIVACY_REQUEST_EMAIL_KEY, DEFAULT_PRIVACY_REQUEST_EMAIL),
-    )
-    if not privacy_email:
-        _mark_known_delivery_failure(delivery.pk, ERROR_PRIVACY_MAILBOX_INVALID)
-        return PrivacyCompletionDelivery.STATUS_FAILED
-
-    completed_audit = request_log.execution_audits.filter(
-        request_type=PrivacyRequestLog.REQUEST_DELETE,
-        status=PrivacyRequestLog.STATUS_COMPLETED,
-    ).first()
-    completed_at = (
-        (completed_audit or request_log)
-        .requested_at.astimezone(
-            datetime_timezone.utc,
-        )
-        .strftime("%Y-%m-%d %H:%M:%S UTC")
-    )
-    recipient_user = SimpleNamespace(
-        email=recipient,
-        pk=None,
-        email_verified=True,
-        unsubscribed=True,
-        first_name="",
-        last_name="",
-    )
-    try:
-        service = EmailService()
-        prepared = service.prepare_template(
-            recipient_user,
-            "account_deletion_completed",
-            {
-                "support_id": request_log.old_user_id,
-                "completed_at_utc": completed_at,
-                "privacy_email": privacy_email,
-            },
-            recipient_email=recipient,
-            cc=[privacy_email],
-            redact_transport_recipient=True,
-        )
-    except EmailServiceError:
-        _mark_known_delivery_failure(delivery.pk, ERROR_DELIVERY_FAILED)
-        return PrivacyCompletionDelivery.STATUS_FAILED
-
-    claim_token = uuid.uuid4()
-    with transaction.atomic():
-        claimed = PrivacyCompletionDelivery.objects.select_for_update().get(pk=delivery.pk)
-        allowed_status = (
-            PrivacyCompletionDelivery.STATUS_FAILED if retry_failed else PrivacyCompletionDelivery.STATUS_PENDING
-        )
-        if claimed.status != allowed_status:
-            if claimed.status == PrivacyCompletionDelivery.STATUS_SENDING:
-                claimed.status = PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN
-                claimed.error_code = "transport_outcome_unknown"
-                claimed.save(update_fields=["status", "error_code", "updated_at"])
-            return claimed.status
-        now = timezone.now()
-        claimed.status = PrivacyCompletionDelivery.STATUS_SENDING
-        claimed.claim_token = claim_token
-        claimed.attempt_count += 1
-        claimed.last_attempt_at = now
-        claimed.transport_started_at = now
-        claimed.error_code = ""
-        claimed.save(
-            update_fields=[
-                "status",
-                "claim_token",
-                "attempt_count",
-                "last_attempt_at",
-                "transport_started_at",
-                "error_code",
-                "updated_at",
-            ],
-        )
-
-    try:
-        ses_message_id = service.send_prepared(prepared)
-    except EmailTransportOutcomeUnknown:
-        return _mark_delivery_outcome_unknown(
-            delivery.pk,
-            claim_token=claim_token,
-        )
-    except EmailServiceError:
-        _mark_known_delivery_failure(
-            delivery.pk,
-            ERROR_DELIVERY_FAILED,
-            claim_token=claim_token,
-        )
-        return PrivacyCompletionDelivery.STATUS_FAILED
-
-    with transaction.atomic():
-        sent_delivery = PrivacyCompletionDelivery.objects.select_for_update().get(
-            pk=delivery.pk,
-        )
-        if sent_delivery.claim_token != claim_token or sent_delivery.status not in {
-            PrivacyCompletionDelivery.STATUS_SENDING,
-            PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN,
-        }:
-            return sent_delivery.status
-        email_log, _ = EmailLog.objects.get_or_create(
-            dedupe_key=sent_delivery.dedupe_key,
-            defaults={
-                "user": None,
-                "recipient_email": PRIVACY_SAFE_RECIPIENT,
-                "email_type": "account_deletion_completed",
-                "subject": prepared.subject,
-                "ses_message_id": ses_message_id,
-            },
-        )
-        sent_delivery.status = PrivacyCompletionDelivery.STATUS_SENT
-        sent_delivery.email_log = email_log
-        sent_delivery.recipient_ciphertext = ""
-        sent_delivery.error_code = ""
-        sent_delivery.sent_at = timezone.now()
-        sent_delivery.save(
-            update_fields=[
-                "status",
-                "email_log",
-                "recipient_ciphertext",
-                "error_code",
-                "sent_at",
-                "updated_at",
-            ],
-        )
-    return PrivacyCompletionDelivery.STATUS_SENT
-
-
-def _mark_delivery_outcome_unknown(delivery_id, *, claim_token):
-    with transaction.atomic():
-        delivery = PrivacyCompletionDelivery.objects.select_for_update().get(
-            pk=delivery_id,
-        )
-        if delivery.claim_token != claim_token:
-            return delivery.status
-        if delivery.status != PrivacyCompletionDelivery.STATUS_SENDING:
-            return delivery.status
-        delivery.status = PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN
-        delivery.error_code = "transport_outcome_unknown"
-        delivery.save(update_fields=["status", "error_code", "updated_at"])
-        return delivery.status
-
-
-def _mark_known_delivery_failure(delivery_id, error_code, *, claim_token=None):
-    with transaction.atomic():
-        delivery = PrivacyCompletionDelivery.objects.select_for_update().get(
-            pk=delivery_id,
-        )
-        if claim_token is not None and delivery.claim_token != claim_token:
-            return
-        if delivery.status in {
-            PrivacyCompletionDelivery.STATUS_SENT,
-            PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN,
-        }:
-            return
-        delivery.status = PrivacyCompletionDelivery.STATUS_FAILED
-        delivery.error_code = error_code
-        delivery.save(update_fields=["status", "error_code", "updated_at"])
+    """Delegate to the isolated privacy-safe Relay state machine."""
+    return _deliver_deletion_confirmation(request_id, retry_failed=retry_failed)

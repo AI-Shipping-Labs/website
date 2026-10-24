@@ -10,9 +10,8 @@ caller site — e.g. someone reintroducing ``event.formatted_start()`` —
 is caught here.
 """
 
-import email
 from datetime import UTC, datetime, timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -58,8 +57,8 @@ class RegistrationEmailTimezoneTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_html(self, user, event=None):
-        """Send the registration email and return the rendered HTML body.
+    def _capture_context(self, user, event=None):
+        """Send the registration email and return its Relay context.
 
         The cancel token is stubbed so the rendered body is
         deterministic. The production token is a JWT whose base64url
@@ -78,22 +77,17 @@ class RegistrationEmailTimezoneTest(TestCase):
             event=event or self.event, user=user,
         )
         with (
-            patch('events.services.registration_email.boto3') as mock_boto3,
+            patch(
+                'events.services.registration_email._send_raw_email',
+            ) as mock_send,
             patch(
                 'events.services.registration_email.generate_cancel_token',
                 return_value='deterministic-cancel-token',
             ),
         ):
-            mock_client = MagicMock()
-            mock_client.send_email.return_value = {'MessageId': 'tz-msg-1'}
-            mock_boto3.client.return_value = mock_client
+            mock_send.return_value = 'relay-tz-msg-1'
             send_registration_confirmation(registration)
-            raw = mock_client.send_email.call_args[1]['Content']['Raw']['Data']
-        msg = email.message_from_string(raw)
-        for part in msg.walk():
-            if part.get_content_type() == 'text/html':
-                return part.get_payload(decode=True).decode('utf-8')
-        raise AssertionError('No text/html part in registration email')
+        return mock_send.call_args.kwargs['context']
 
     def test_berlin_user_sees_cest_local_time_in_body(self):
         """Acceptance criterion: user with TZ=Europe/Berlin, event at
@@ -106,14 +100,14 @@ class RegistrationEmailTimezoneTest(TestCase):
             preferred_timezone='Europe/Berlin',
         )
 
-        html = self._capture_html(user)
+        text = str(self._capture_context(user))
 
-        self.assertIn('18:00 Europe/Berlin', html)
+        self.assertIn('18:00 Europe/Berlin', text)
         # The legacy "%H:%M UTC" string MUST be gone, and ``UTC`` MUST
         # NOT appear anywhere in the email body when the recipient has
         # a valid IANA preference set.
-        self.assertNotIn('16:00 UTC', html)
-        self.assertNotIn('UTC', html)
+        self.assertNotIn('16:00 UTC', text)
+        self.assertNotIn('UTC', text)
 
     def test_empty_preference_renders_utc_label(self):
         """Acceptance criterion: empty preferred_timezone renders the
@@ -124,7 +118,7 @@ class RegistrationEmailTimezoneTest(TestCase):
             preferred_timezone='',
         )
 
-        html = self._capture_html(user)
+        html = str(self._capture_context(user))
 
         self.assertIn('16:00 UTC', html)
         self.assertNotIn('Europe/Berlin', html)
@@ -138,7 +132,7 @@ class RegistrationEmailTimezoneTest(TestCase):
             preferred_timezone='Not/AZone',
         )
 
-        html = self._capture_html(user)
+        html = str(self._capture_context(user))
 
         self.assertIn('UTC', html)
         # Defensive: no Europe/Berlin should appear (would mean the
@@ -164,7 +158,7 @@ class RegistrationEmailTimezoneTest(TestCase):
             preferred_timezone='Asia/Kolkata',
         )
 
-        html = self._capture_html(user, event=event)
+        html = str(self._capture_context(user, event=event))
 
         self.assertIn('18:00 Asia/Kolkata', html)
 
@@ -200,11 +194,17 @@ class RegistrationEmailDoesNotUseFormattedStartTest(TestCase):
         )
 
         # Boom if anything calls formatted_start() during the send.
-        with patch(
-            'events.models.Event.formatted_start',
-            side_effect=AssertionError(
-                'formatted_start() must not be called in the email path '
-                '(issue #666)',
+        with (
+            patch(
+                'events.models.Event.formatted_start',
+                side_effect=AssertionError(
+                    'formatted_start() must not be called in the email path '
+                    '(issue #666)',
+                ),
+            ),
+            patch(
+                'events.services.registration_email._send_raw_email',
+                return_value='relay-no-formatted-start',
             ),
         ):
             send_registration_confirmation(registration)

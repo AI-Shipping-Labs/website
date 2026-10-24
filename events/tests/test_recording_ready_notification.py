@@ -9,6 +9,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from email_app.models import EmailLog
+from email_app.relay_transactional import RelayTransactionalResult
 from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
@@ -38,6 +39,10 @@ def make_event(**kwargs):
     }
     defaults.update(kwargs)
     return Event.objects.create(**defaults)
+
+
+def relay_result(message_id):
+    return RelayTransactionalResult(message_id, 'queued', False)
 
 
 class RecordingReadyRecipientResolutionTest(TestCase):
@@ -105,9 +110,9 @@ class RecordingReadyNotificationSendTest(TestCase):
     def test_event_recording_ready_is_transactional(self):
         self.assertEqual(classify_email_type(EMAIL_TYPE), EMAIL_KIND_TRANSACTIONAL)
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_sends_external_host_email_and_writes_event_scoped_log(self, mock_send):
-        mock_send.return_value = 'ses-ready-1'
+        mock_send.return_value = relay_result('relay-ready-1')
         event = make_event(host_email='external-host@example.com')
 
         result = notify_recording_ready(event)
@@ -121,29 +126,27 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertIsNone(log.user)
         self.assertEqual(log.recipient_email, 'external-host@example.com')
         self.assertEqual(log.email_type, EMAIL_TYPE)
-        self.assertEqual(log.subject, mock_send.call_args.args[1])
-        self.assertEqual(log.ses_message_id, 'ses-ready-1')
+        self.assertEqual(log.ses_message_id, 'relay-ready-1')
 
         call = mock_send.call_args
         self.assertEqual(call.args[0], 'external-host@example.com')
-        self.assertEqual(call.kwargs['email_type'], EMAIL_TYPE)
-        html = call.args[2]
-        self.assertIn(f'/studio/events/{event.pk}/edit', html)
-        self.assertIn('Ready for review/publishing', html)
-        self.assertIn('Zoom source/review fallback', html)
-        self.assertNotIn(event.recording_s3_url, html)
+        self.assertEqual(call.args[1], EMAIL_TYPE)
+        context = call.args[2]
+        self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
+        self.assertEqual(context['publish_state'], 'Ready for review/publishing')
+        self.assertNotIn(event.recording_s3_url, str(context))
         # Issue #1076: the host email carries a CTA deep-linking to the
         # pre-filled recording-available campaign draft. The ``&`` is
         # HTML-escaped in the rendered markdown link.
         self.assertIn(
             f'/studio/campaigns/new?event={event.pk}'
-            '&amp;template=recording_available',
-            html,
+            '&template=recording_available',
+            context['campaign_prefill_url'],
         )
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_registered_host_logs_user_and_recipient_snapshot(self, mock_send):
-        mock_send.return_value = 'ses-user-host'
+        mock_send.return_value = relay_result('relay-user-host')
         user = get_user_model().objects.create_user(
             email='host-user@example.com',
             password='pw',
@@ -157,7 +160,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(log.user, user)
         self.assertEqual(log.recipient_email, user.email)
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_replay_skips_existing_event_recipient_log(self, mock_send):
         event = make_event(host_email='external-host@example.com')
         existing = EmailLog.objects.create(
@@ -175,7 +178,7 @@ class RecordingReadyNotificationSendTest(TestCase):
         mock_send.assert_not_called()
         self.assertEqual(EmailLog.objects.count(), 1)
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_send_error_is_best_effort_and_does_not_write_log(self, mock_send):
         mock_send.side_effect = RuntimeError('SES unavailable')
         event = make_event(host_email='external-host@example.com')
@@ -187,9 +190,9 @@ class RecordingReadyNotificationSendTest(TestCase):
         self.assertEqual(result['email_log_ids'], [])
         self.assertEqual(EmailLog.objects.count(), 0)
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_published_event_copy_does_not_change_publish_state(self, mock_send):
-        mock_send.return_value = 'ses-published'
+        mock_send.return_value = relay_result('relay-published')
         event = make_event(
             host_email='external-host@example.com',
             published=True,
@@ -197,11 +200,8 @@ class RecordingReadyNotificationSendTest(TestCase):
 
         notify_recording_ready(event)
 
-        html = mock_send.call_args.args[2]
-        plain_text = mock_send.call_args.kwargs['text_body']
-        self.assertIn('Uploaded and currently published', html)
-        self.assertIn('Uploaded and currently published', plain_text)
-        self.assertNotIn('<html', plain_text)
+        context = mock_send.call_args.args[2]
+        self.assertEqual(context['publish_state'], 'Uploaded and currently published')
         event.refresh_from_db()
         self.assertTrue(event.published)
 
@@ -239,70 +239,69 @@ class RecordingAvailableToWatchCopyTest(TestCase):
         event.refresh_from_db()
         return event
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_published_workshop_email_says_available_to_watch_with_video_link(
         self, mock_send,
     ):
-        mock_send.return_value = 'ses-watch'
+        mock_send.return_value = relay_result('relay-watch')
         event = self._make_workshop_event(published=True)
         workshop_slug = event.workshop.slug
 
         result = notify_recording_ready(event)
 
         self.assertEqual(result['status'], 'sent')
-        subject = mock_send.call_args.args[1]
-        html = mock_send.call_args.args[2]
+        subject = EmailLog.objects.get().subject
+        context = mock_send.call_args.args[2]
 
         # Copy leads with "available to watch".
         self.assertIn('available to watch', subject.lower())
-        self.assertIn('available to watch', html.lower())
+        self.assertIn('available to watch', context['publish_copy'].lower())
 
         # The watch link points at the workshop /video page (the surface that
         # renders the player), rendered as a real <a href> — not markdown.
         self.assertIn(
-            f'href="https://aishippinglabs.com/workshops/{workshop_slug}/video"',
-            html,
+            f'https://aishippinglabs.com/workshops/{workshop_slug}/video',
+            context['watch_url'],
         )
-        self.assertNotIn('](', html)
 
         # It must NOT be the announcement-only event-detail page, nor any raw
         # or presigned S3 URL.
-        self.assertNotIn(event.get_absolute_url(), html)
-        self.assertNotIn('amazonaws.com', html)
-        self.assertNotIn(event.recording_s3_url, html)
+        self.assertNotIn(event.get_absolute_url(), context['watch_url'])
+        self.assertNotIn('amazonaws.com', str(context))
+        self.assertNotIn(event.recording_s3_url, str(context))
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_unpublished_workshop_event_keeps_ready_for_review_copy(
         self, mock_send,
     ):
-        mock_send.return_value = 'ses-review'
+        mock_send.return_value = relay_result('relay-review')
         event = self._make_workshop_event(published=False)
 
         notify_recording_ready(event)
 
-        subject = mock_send.call_args.args[1]
-        html = mock_send.call_args.args[2]
+        subject = EmailLog.objects.get().subject
+        context = mock_send.call_args.args[2]
         self.assertIn('ready for review', subject.lower())
-        self.assertIn('Ready for review/publishing', html)
-        self.assertNotIn('available to watch', html.lower())
+        self.assertEqual(context['publish_state'], 'Ready for review/publishing')
+        self.assertNotIn('available to watch', context['publish_copy'].lower())
         # Falls back to the Studio review link, not a watch link.
-        self.assertIn(f'/studio/events/{event.pk}/edit', html)
-        self.assertNotIn('/video"', html)
+        self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
+        self.assertFalse(context['is_available_to_watch'])
 
-    @patch('events.services.recording_ready_notification.send_ses_email')
+    @patch('events.services.recording_ready_notification.send_relay_transactional')
     def test_published_but_no_watchable_surface_keeps_review_framing(
         self, mock_send,
     ):
         """Published event whose workshop is a draft has no watchable surface,
         so the email must not claim "available to watch"."""
-        mock_send.return_value = 'ses-draft-ws'
+        mock_send.return_value = relay_result('relay-draft-ws')
         event = self._make_workshop_event(
             published=True, workshop_status='draft',
         )
 
         notify_recording_ready(event)
 
-        html = mock_send.call_args.args[2]
-        self.assertNotIn('available to watch', html.lower())
-        self.assertIn(f'/studio/events/{event.pk}/edit', html)
-        self.assertNotIn('/video"', html)
+        context = mock_send.call_args.args[2]
+        self.assertNotIn('available to watch', context['publish_copy'].lower())
+        self.assertIn(f'/studio/events/{event.pk}/edit', context['studio_event_url'])
+        self.assertEqual(context['watch_url'], '')

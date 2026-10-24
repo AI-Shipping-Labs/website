@@ -4,21 +4,21 @@ import logging
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
-import boto3
-from django.conf import settings
-
 from accounts.services.timezones import (
     build_timezone_account_url,
     build_timezone_email_line,
     format_user_datetime,
+)
+from email_app.relay_transactional import (
+    calendar_alternative,
+    recipient_template_context,
+    send_relay_transactional,
 )
 from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     get_sender_for_kind,
 )
 from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
     render_template_parts,
 )
 from events.services.calendar_invite import (
@@ -28,111 +28,107 @@ from events.services.calendar_invite import (
 from events.services.calendar_links import build_calendar_links
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import is_host_registration
-from integrations.config import get_config, site_base_url
+from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
 
 
 def send_registration_confirmation(registration):
-    """Send a registration confirmation email with .ics attachment.
-
-    Args:
-        registration: EventRegistration model instance.
-
-    Returns:
-        EmailLog instance for the sent registration email.
-    """
+    """Send one stable-key registration confirmation through Relay."""
     user = registration.user
-    event = registration.event
     is_host = is_host_registration(registration)
-    if is_host:
-        # Host delivery belongs to the current assignment/access generation,
-        # even when the underlying attendee registration already existed.
-        dedupe_key = (
-            f'event-host-registration:{event.pk}:{user.pk}:'
-            f'{event.host_access_version}'
-        )
-    else:
-        # An attendee may cancel and later register for the same event again.
-        # Scope idempotency to that concrete registration lifecycle so repeat
-        # processing is safe without suppressing the new calendar REQUEST.
-        dedupe_key = (
-            f'event-registration:{event.pk}:{user.pk}:{registration.pk}'
-        )
-
+    dedupe_key = _registration_dedupe_key(registration, is_host)
     from email_app.models import EmailLog
+
     existing_log = EmailLog.objects.filter(dedupe_key=dedupe_key).first()
     if existing_log is not None:
         return existing_log
+    template_context = _registration_context(registration, is_host)
+    subject, _body, _html, _footer = render_template_parts(
+        'event_registration', user, template_context,
+    )
+    message_id = _send_registration_calendar(
+        registration, template_context, dedupe_key,
+    )
+    return _create_registration_log(registration, subject, message_id, dedupe_key)
 
+
+def _registration_dedupe_key(registration, is_host):
+    event = registration.event
+    user = registration.user
+    if is_host:
+        return (
+            f'event-host-registration:{event.pk}:{user.pk}:'
+            f'{event.host_access_version}'
+        )
+    return f'event-registration:{event.pk}:{user.pk}:{registration.pk}'
+
+
+def _registration_context(registration, is_host):
+    user = registration.user
+    event = registration.event
     site_url = site_base_url()
-    # Issue #1082: id-canonical join URL via ``Event.get_join_url``.
     join_url = f'{site_url}{event.get_join_url()}'
     cancel_token = generate_cancel_token(registration)
     cancel_url = (
         f'{site_url}/events/{event.slug}/cancel-registration?token={cancel_token}'
     )
-
     calendar_links = build_calendar_links(event)
-    # Render the email template
-    subject, body_markdown, body_html, footer_note = (
-        render_template_parts(
-            'event_registration',
-            user,
-            {
-                'event_title': event.title,
-            # Issue #666: render in the recipient's preferred timezone (with
-            # IANA name appended), falling back to literal UTC when no
-            # valid preference is set. Replaces ``event.formatted_start()``
-            # which hardcoded UTC and forced the recipient to convert.
-            'event_datetime': format_user_datetime(event.start_datetime, user),
-            'timezone_help': build_timezone_email_line(
-                user, build_timezone_account_url(site_url),
-            ),
-            'join_url': join_url,
-            'cancel_url': cancel_url,
-            'google_calendar_url': calendar_links['google'],
-            'outlook_calendar_url': calendar_links['outlook'],
-            'office365_calendar_url': calendar_links['office365'],
-                'is_host_registration': is_host,
-            },
-        )
-    )
+    return {
+        'event_title': event.title,
+        'event_datetime': format_user_datetime(event.start_datetime, user),
+        'timezone_help': build_timezone_email_line(
+            user, build_timezone_account_url(site_url),
+        ),
+        'join_url': join_url,
+        'cancel_url': cancel_url,
+        'google_calendar_url': calendar_links['google'],
+        'outlook_calendar_url': calendar_links['outlook'],
+        'office365_calendar_url': calendar_links['office365'],
+        'is_host_registration': is_host,
+    }
 
-    full_html = render_html_email(subject, body_html, footer_note=footer_note)
-    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
 
+def _send_registration_calendar(registration, template_context, dedupe_key):
+    event = registration.event
+    user = registration.user
     ics_content = generate_ics(
         event,
         audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
-
-    # Send raw email with attachment
-    ses_message_id = _send_raw_email(
+    return _send_raw_email(
         to_email=user.email,
-        subject=subject,
-        html_body=full_html,
+        template_key='event_registration',
+        context=recipient_template_context(user, template_context),
         ics_content=ics_content,
-        text_body=plain_text,
+        idempotency_key=dedupe_key,
+        safe_correlation=f'event={event.pk} user={user.pk}',
     )
 
-    # Log the send
-    email_log = EmailLog.objects.create(
-        user=user,
-        event=event,
-        recipient_email=user.email,
-        email_type='event_registration',
-        subject=subject,
-        ses_message_id=ses_message_id,
+
+def _create_registration_log(registration, subject, message_id, dedupe_key):
+    from email_app.models import EmailLog
+
+    user = registration.user
+    event = registration.event
+    email_log, _ = EmailLog.objects.get_or_create(
         dedupe_key=dedupe_key,
+        defaults={
+            'user': user,
+            'event': event,
+            'recipient_email': user.email,
+            'email_type': 'event_registration',
+            'subject': subject,
+            'ses_message_id': message_id,
+        },
     )
-
     logger.info(
-        'Sent registration confirmation to %s for event "%s" (SES: %s)',
-        user.email, event.title, ses_message_id,
+        'Sent registration confirmation to %s for event "%s" (Relay: %s)',
+        registration.user.email,
+        registration.event.title,
+        message_id,
     )
-
     return email_log
 
 
@@ -193,70 +189,27 @@ def build_calendar_email_message(
 
 def _send_raw_email(
     to_email,
-    subject,
-    html_body,
+    template_key,
+    context,
     ics_content,
     *,
-    text_body,
+    idempotency_key,
+    safe_correlation,
     method='REQUEST',
     filename='event.ics',
 ):
-    """Send a raw email via SES with the .ics calendar as a body alternative.
-
-    Issue #1088: the calendar is delivered as a ``multipart/alternative``
-    sibling of the HTML body (``text/calendar; method=...``), not as a
-    ``Content-Disposition: attachment`` part.
-
-    Args:
-        to_email: Recipient email address.
-        subject: Email subject line.
-        html_body: Full HTML email body.
-        text_body: Plain-text email body derived from the resolved Markdown.
-        ics_content: .ics file content as bytes.
-        method: iCalendar method (REQUEST or CANCEL).
-
-    Returns:
-        str: SES message ID.
-    """
-    # Issue #509: kill-switch for tests / local dev. Mirrors the gate in
-    # email_app.services.ses_transport.send_ses_email so neither boto3
-    # client construction site can reach a real SES account when
-    # SES_ENABLED is False. Returns a recognisable synthetic message id so
-    # the caller's EmailLog row still records the attempt.
-    if not getattr(settings, 'SES_ENABLED', False):
-        logger.info(
-            'SES disabled - skipping registration email to %s (subject=%s)',
-            to_email,
-            subject,
-        )
-        return 'ses-disabled-noop'
-
-    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
-    msg = build_calendar_email_message(
-        to_email,
-        subject,
-        html_body,
+    """Send a Relay template with a calendar body alternative."""
+    calendar = calendar_alternative(
         ics_content,
-        text_body=text_body,
         method=method,
-        filename=filename,
+        name=filename,
     )
-
-    client = boto3.client(
-        'sesv2',
-        region_name=get_config('AWS_SES_REGION', 'us-east-1'),
-        aws_access_key_id=get_config('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=get_config('AWS_SECRET_ACCESS_KEY'),
+    result = send_relay_transactional(
+        to_email,
+        template_key,
+        context,
+        idempotency_key=idempotency_key,
+        safe_correlation=safe_correlation,
+        calendar=calendar,
     )
-    response = client.send_email(
-        FromEmailAddress=from_email,
-        Destination={
-            'ToAddresses': [to_email],
-        },
-        Content={
-            'Raw': {
-                'Data': msg.as_string(),
-            },
-        },
-    )
-    return response.get('MessageId', '')
+    return result.message_id

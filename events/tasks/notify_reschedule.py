@@ -33,9 +33,8 @@ from accounts.services.timezones import (
     build_timezone_email_line,
     format_user_datetime,
 )
+from email_app.relay_transactional import recipient_template_context
 from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
     render_template_parts,
 )
 from events.models import Event, EventRegistration, SeriesRegistration
@@ -211,12 +210,8 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             'email_log_id': existing_log.pk,
         }
 
-    subject, body_markdown, body_html, footer_note = (
-        render_template_parts(
-            'event_rescheduled',
-            user,
-            {
-                'event_title': event.title,
+    template_context = {
+        'event_title': event.title,
             # Issue #666 contract: pre-format BOTH times via
             # format_user_datetime so the template context carries
             # strings, not raw datetimes. Both render in the recipient's
@@ -235,13 +230,11 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
             ),
             'join_url': join_url,
             'cancel_url': cancel_url,
-                'is_host_registration': is_host,
-            },
-        )
+        'is_host_registration': is_host,
+    }
+    subject, _body, _html, _footer = render_template_parts(
+        'event_rescheduled', user, template_context,
     )
-
-    full_html = render_html_email(subject, body_html, footer_note=footer_note)
-    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
 
     # METHOD:REQUEST + bumped SEQUENCE so calendar clients overwrite the
     # original event entry instead of duplicating it. The SEQUENCE bump
@@ -258,10 +251,11 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
 
     ses_message_id = _send_raw_email(
         to_email=user.email,
-        subject=subject,
-        html_body=full_html,
+        template_key='event_rescheduled',
+        context=recipient_template_context(user, template_context),
         ics_content=ics_content,
-        text_body=plain_text,
+        idempotency_key=dedupe_key,
+        safe_correlation=f'event={event.pk} user={user.pk}',
         method='REQUEST',
     )
 
@@ -276,7 +270,7 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
     )
 
     logger.info(
-        'Sent reschedule notice to %s for event "%s" (SES: %s)',
+        'Sent reschedule notice to %s for event "%s" (Relay: %s)',
         user.email, event.title, ses_message_id,
     )
 

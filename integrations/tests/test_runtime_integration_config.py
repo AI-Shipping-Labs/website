@@ -123,36 +123,40 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
 
         self.assertFalse(ses_service.validate_sns_notification({}))
 
-    @override_settings(
-        SES_TRANSACTIONAL_FROM_EMAIL="settings@example.com",
-        AWS_SES_REGION="us-east-1",
-        # Issue #509: opt in so _send_raw_email exercises the boto3 path.
-        SES_ENABLED=True,
-    )
-    @patch("events.services.registration_email.boto3.client")
-    def test_registration_email_uses_db_sender_and_region(self, mock_boto_client):
+    def test_registration_email_uses_db_relay_url_and_key(self):
         from events.services.registration_email import _send_raw_email
 
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {"MessageId": "ses-message-id"}
-        mock_boto_client.return_value = mock_client
-        set_integration("SES_TRANSACTIONAL_FROM_EMAIL", "events@example.com", "email")
-        set_integration("AWS_SES_REGION", "eu-west-1", "email")
+        set_integration("RELAY_BASE_URL", "https://db-relay.example", "email")
+        set_integration("RELAY_API_KEY", "db-relay-key", "email")
+        response = MagicMock(status_code=202)
+        response.json.return_value = {
+            "message": {
+                "id": "relay-message-id",
+                "status": "queued",
+                "template_key": "event_registration",
+                "idempotency_key": "runtime-registration:1",
+            },
+            "idempotent_replay": False,
+        }
 
-        message_id = _send_raw_email(
-            to_email="member@example.com",
-            subject="Event",
-            html_body="<p>Event</p>",
-            text_body="Event",
-            ics_content="BEGIN:VCALENDAR\nEND:VCALENDAR",
-        )
+        with patch(
+            "email_app.relay_transactional.requests.post",
+            return_value=response,
+        ) as post:
+            message_id = _send_raw_email(
+                to_email="member@example.com",
+                template_key="event_registration",
+                context={"event_title": "Event"},
+                ics_content="BEGIN:VCALENDAR\nEND:VCALENDAR",
+                idempotency_key="runtime-registration:1",
+                safe_correlation="event=1 user=1",
+            )
 
-        self.assertEqual(message_id, "ses-message-id")
-        mock_boto_client.assert_called_once()
-        self.assertEqual(mock_boto_client.call_args.kwargs["region_name"], "eu-west-1")
+        self.assertEqual(message_id, "relay-message-id")
+        self.assertEqual(post.call_args.args[0], "https://db-relay.example/api/transactional/send")
         self.assertEqual(
-            mock_client.send_email.call_args.kwargs["FromEmailAddress"],
-            "events@example.com",
+            post.call_args.kwargs["headers"]["Authorization"],
+            "Bearer db-relay-key",
         )
 
     @override_settings(SES_TRANSACTIONAL_FROM_EMAIL="settings@example.com")

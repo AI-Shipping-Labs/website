@@ -1,17 +1,14 @@
 """Tests for calendar invite generation and registration email sending."""
 
 import datetime
-import email
-import re
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from icalendar import Calendar
 
 from accounts.models import User
-from email_app.tests.test_email_service import assert_no_internal_footer_text
 from events.models import Event, EventRegistration
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
@@ -394,32 +391,28 @@ class SendRegistrationConfirmationTest(TestCase):
             required_level=20,
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_calendar_invite_calls_ses(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'test-msg-123'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_calendar_invite_calls_relay_boundary(self, mock_send):
+        mock_send.return_value = 'relay-msg-123'
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         result = send_registration_confirmation(registration)
 
-        mock_client.send_email.assert_called_once()
-        call_kwargs = mock_client.send_email.call_args[1]
-
-        # Verify Raw format is used
-        self.assertIn('Raw', call_kwargs['Content'])
-
-        # Verify the email was sent to the right address
-        self.assertEqual(call_kwargs['Destination']['ToAddresses'], ['test@example.com'])
-        self.assertEqual(call_kwargs['FromEmailAddress'], 'noreply@aishippinglabs.com')
+        mock_send.assert_called_once()
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs['to_email'], 'test@example.com')
+        self.assertEqual(call_kwargs['template_key'], 'event_registration')
+        self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
 
         # Verify EmailLog was created
         self.assertIsNotNone(result)
         self.assertEqual(result.email_type, 'event_registration')
         self.assertEqual(result.user, self.user)
-        self.assertEqual(result.ses_message_id, 'test-msg-123')
+        self.assertEqual(result.ses_message_id, 'relay-msg-123')
 
     @patch('events.services.registration_email._send_raw_email')
     def test_repeat_processing_same_registration_is_idempotent(self, mock_send):
@@ -477,89 +470,20 @@ class SendRegistrationConfirmationTest(TestCase):
             calendar = Calendar.from_ical(call.kwargs['ics_content'])
             self.assertEqual(str(calendar.get('method')), 'REQUEST')
 
-    def _parse_raw_email(self, raw_data):
-        """Parse raw MIME email string into an email.message.Message."""
-        return email.message_from_string(raw_data)
-
-    def _get_parts(self, msg):
-        """Extract decoded parts from a multipart MIME message."""
-        parts = {}
-        for part in msg.walk():
-            ct = part.get_content_type()
-            payload = part.get_payload(decode=True)
-            if payload:
-                parts[ct] = payload.decode('utf-8')
-        return parts
-
-    def _get_calendar_part(self, msg):
-        for part in msg.walk():
-            if part.get_content_type() == 'text/calendar':
-                return part.get_payload(decode=True)
-        raise AssertionError('No text/calendar part found in email')
-
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_calendar_has_ordered_multipart_alternatives(self, mock_boto3):
-        """Calendar mail has plain, HTML, and calendar siblings in that order.
-
-        The calendar stays last and has no attachment disposition, preserving
-        the provider contract from #1088 while adding the #1567 text fallback.
-        """
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-456'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_passes_request_calendar_to_relay(self, mock_send):
+        mock_send.return_value = 'relay-456'
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         send_registration_confirmation(registration)
 
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-
-        # A multipart/alternative container must exist.
-        alternative_parts = [
-            part for part in msg.walk()
-            if part.get_content_type() == 'multipart/alternative'
-        ]
-        self.assertTrue(
-            alternative_parts,
-            'No multipart/alternative container found in email',
-        )
-        alternative = alternative_parts[0]
-
-        # Exactly one of each direct child, ordered least-rich to richest.
-        child_types = [
-            child.get_content_type()
-            for child in alternative.get_payload()
-        ]
-        self.assertEqual(
-            child_types,
-            ['text/plain', 'text/html', 'text/calendar'],
-        )
-
-        plain_text = alternative.get_payload()[0].get_payload(
-            decode=True,
-        ).decode('utf-8')
-        self.assertIn("You're registered for Test Event", plain_text)
-        self.assertIn(self.event.get_join_url(), plain_text)
-        self.assertNotIn('<html', plain_text)
-
-        cal_part = next(
-            child for child in alternative.get_payload()
-            if child.get_content_type() == 'text/calendar'
-        )
-
-        # method=REQUEST on the calendar part's Content-Type.
-        self.assertEqual(cal_part.get_param('method'), 'REQUEST')
-        self.assertEqual(cal_part.get_param('name'), 'event.ics')
-
-        # No Content-Disposition: attachment on the calendar part.
-        self.assertIsNone(cal_part.get('Content-Disposition'))
-        self.assertNotIn('Content-Disposition: attachment', raw_data)
-
-        # The .ics payload is unchanged and present in the sibling part.
-        ics_content = cal_part.get_payload(decode=True).decode('utf-8')
+        call_kwargs = mock_send.call_args.kwargs
+        self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
+        ics_content = call_kwargs['ics_content'].decode('utf-8')
         self.assertIn('VCALENDAR', ics_content)
         self.assertIn('VEVENT', ics_content)
         self.assertIn('UID:event-test-event@aishippinglabs.com', ics_content)
@@ -568,11 +492,11 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertIn('ORGANIZER', ics_content)
         self.assertIn('ATTENDEE', ics_content)
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_ics_attachment_uses_attendee_join_url(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-join-ics'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_ics_attachment_uses_attendee_join_url(self, mock_send):
+        mock_send.return_value = 'relay-join-ics'
         self.event.zoom_join_url = 'https://zoom.us/j/raw-secret'
         self.event.save(update_fields=['zoom_join_url'])
 
@@ -581,9 +505,7 @@ class SendRegistrationConfirmationTest(TestCase):
         )
         send_registration_confirmation(registration)
 
-        raw_data = mock_client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        ics_bytes = self._get_calendar_part(msg)
+        ics_bytes = mock_send.call_args.kwargs['ics_content']
         cal = Calendar.from_ical(ics_bytes)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
         join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
@@ -594,163 +516,105 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(str(vevent.get('uid')), 'event-test-event@aishippinglabs.com')
         self.assertNotIn('zoom.us', ics_bytes.decode('utf-8'))
 
-    @patch('events.services.registration_email.boto3')
-    def test_gated_event_ics_attachment_has_no_members_only_prefix(self, mock_boto3):
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_gated_event_ics_attachment_has_no_members_only_prefix(self, mock_send):
         """Issue #1072 regression: the reporter's registered gated event.
 
         The attendee's confirmation email ``.ics`` SUMMARY must read the
         plain event title, not ``[Members only] Exploring Vercel``.
         """
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-gated'}
-        mock_boto3.client.return_value = mock_client
+        mock_send.return_value = 'relay-gated'
 
         registration = EventRegistration.objects.create(
             event=self.gated_event, user=self.user,
         )
         send_registration_confirmation(registration)
 
-        raw_data = mock_client.send_email.call_args.kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        ics_bytes = self._get_calendar_part(msg)
+        ics_bytes = mock_send.call_args.kwargs['ics_content']
         cal = Calendar.from_ical(ics_bytes)
         vevent = [c for c in cal.walk() if c.name == 'VEVENT'][0]
         self.assertEqual(str(vevent.get('summary')), 'Exploring Vercel')
         self.assertNotIn('[Members only]', ics_bytes.decode('utf-8'))
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_html_footer_has_no_unsubscribe_link(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-clean'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_uses_transactional_template(self, mock_send):
+        mock_send.return_value = 'relay-clean'
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         send_registration_confirmation(registration)
 
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
-        html = parts['text/html']
+        self.assertEqual(
+            mock_send.call_args.kwargs['template_key'],
+            'event_registration',
+        )
 
-        self.assertIn('email-footer', html)
-        self.assertNotIn('/api/unsubscribe?token=', html)
-        self.assertNotIn('Unsubscribe', html)
-        assert_no_internal_footer_text(self, html)
-
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_subject_contains_event_title(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-789'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_subject_contains_event_title(self, mock_send):
+        mock_send.return_value = 'relay-789'
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
-        send_registration_confirmation(registration)
-
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
+        email_log = send_registration_confirmation(registration)
 
         # Issue #484: confirmation subject was rewritten to confirm
         # registration up-front rather than just naming the event.
-        self.assertEqual(msg['Subject'], "You're registered: Test Event")
+        self.assertEqual(email_log.subject, "You're registered: Test Event")
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_body_contains_join_link(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-body'}
-        mock_boto3.client.return_value = mock_client
-
-        registration = EventRegistration.objects.create(
-            event=self.event, user=self.user,
-        )
-        send_registration_confirmation(registration)
-
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
-
-        html_body = parts.get('text/html', '')
-        self.assertIn(self.event.get_join_url(), html_body)
-        self.assertIn('about 5 minutes before the start time', html_body)
-        self.assertNotIn('15 minutes', html_body)
-
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_html_body_contains_three_calendar_links(self, mock_boto3):
-        """The rendered HTML must carry Google, Outlook.com, and M365 anchors."""
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-cal-links'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_context_contains_join_link(self, mock_send):
+        mock_send.return_value = 'relay-body'
 
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         send_registration_confirmation(registration)
 
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
-        html = parts['text/html']
+        context = mock_send.call_args.kwargs['context']
+        self.assertIn(self.event.get_join_url(), context['join_url'])
 
-        # Google: anchor to calendar.google.com with the event title encoded
-        # in the ``text=`` parameter so we know the URL was built from this
-        # event (not just hard-coded in the template).
-        google_match = re.search(
-            r'href="(https://calendar\.google\.com/calendar/render\?[^"]+)"',
-            html,
-        )
-        self.assertIsNotNone(
-            google_match, 'Google Calendar link not found in HTML body',
-        )
-        self.assertIn('text=Test%20Event', google_match.group(1))
-
-        self.assertRegex(
-            html,
-            r'href="https://outlook\.live\.com/calendar/[^"]+"',
-        )
-        self.assertRegex(
-            html,
-            r'href="https://outlook\.office\.com/calendar/[^"]+"',
-        )
-
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_html_body_describes_inline_calendar_invitation(
-        self, mock_boto3,
-    ):
-        """Visible copy must match the inline calendar alternative."""
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-ics-copy'}
-        mock_boto3.client.return_value = mock_client
-
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_send_email_context_contains_three_calendar_links(self, mock_send):
+        mock_send.return_value = 'relay-cal-links'
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
+
         send_registration_confirmation(registration)
 
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
-        html = parts['text/html']
+        context = mock_send.call_args.kwargs['context']
+        self.assertIn('text=Test%20Event', context['google_calendar_url'])
+        self.assertIn('outlook.live.com/calendar', context['outlook_calendar_url'])
+        self.assertIn('outlook.office.com/calendar', context['office365_calendar_url'])
 
-        self.assertIn('includes a calendar invitation for this event', html)
-        self.assertIn('if prompted', html)
-        self.assertNotIn('attached', html.lower())
-        self.assertNotIn('.ics file', html.lower())
+    @patch('events.services.registration_email._send_raw_email')
+    def test_send_email_uses_calendar_template_contract(self, mock_send):
+        mock_send.return_value = 'relay-ics-copy'
+        registration = EventRegistration.objects.create(
+            event=self.event, user=self.user,
+        )
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_default_end_time_in_google_url(self, mock_boto3):
-        """An event without ``end_datetime`` must render dates=start/start+1h."""
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-default-end'}
-        mock_boto3.client.return_value = mock_client
+        send_registration_confirmation(registration)
 
+        call = mock_send.call_args.kwargs
+        self.assertEqual(call['template_key'], 'event_registration')
+        self.assertEqual(call.get('method', 'REQUEST'), 'REQUEST')
+
+    @patch('events.services.registration_email._send_raw_email')
+    def test_send_email_default_end_time_in_google_url(self, mock_send):
+        mock_send.return_value = 'relay-default-end'
         event_no_end = Event.objects.create(
             slug='no-end-event',
             title='No End Event',
@@ -763,33 +627,18 @@ class SendRegistrationConfirmationTest(TestCase):
         registration = EventRegistration.objects.create(
             event=event_no_end, user=self.user,
         )
+
         send_registration_confirmation(registration)
 
-        call_kwargs = mock_client.send_email.call_args[1]
-        raw_data = call_kwargs['Content']['Raw']['Data']
-        msg = self._parse_raw_email(raw_data)
-        parts = self._get_parts(msg)
-        html = parts['text/html']
-
-        google_match = re.search(
-            r'href="(https://calendar\.google\.com/calendar/render\?[^"]+)"',
-            html,
-        )
-        self.assertIsNotNone(google_match)
-        href = google_match.group(1)
-        # Markdown emits ``&amp;`` separators inside href; the ``/`` inside
-        # ``dates`` is percent-encoded as ``%2F`` because the URL builder
-        # uses ``quote(..., safe='')``.
+        href = mock_send.call_args.kwargs['context']['google_calendar_url']
         self.assertIn(
             'dates=20260901T140000Z%2F20260901T150000Z',
             href,
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_send_email_delivers_to_unsubscribed_user(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'msg-unsub'}
-        mock_boto3.client.return_value = mock_client
+    @patch('events.services.registration_email._send_raw_email')
+    def test_send_email_delivers_to_unsubscribed_user(self, mock_send):
+        mock_send.return_value = 'relay-unsub'
         unsubscribed_user = User.objects.create_user(
             email='unsub@example.com',
             password='testpass123',
@@ -800,10 +649,11 @@ class SendRegistrationConfirmationTest(TestCase):
         )
 
         result = send_registration_confirmation(registration)
+
         self.assertIsNotNone(result)
-        mock_client.send_email.assert_called_once()
+        mock_send.assert_called_once()
         self.assertEqual(result.email_type, 'event_registration')
-        self.assertEqual(result.ses_message_id, 'msg-unsub')
+        self.assertEqual(result.ses_message_id, 'relay-unsub')
 
 
 @override_settings(
@@ -812,8 +662,6 @@ class SendRegistrationConfirmationTest(TestCase):
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
-    # Issue #509: opt in so the registration API actually exercises the
-    # boto3-mocked send path instead of short-circuiting.
     SES_ENABLED=True,
 )
 class RegistrationApiEmailTest(TestCase):
@@ -838,17 +686,17 @@ class RegistrationApiEmailTest(TestCase):
             status='upcoming',
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_registration_api_sends_email(self, mock_boto3):
-        mock_client = MagicMock()
-        mock_client.send_email.return_value = {'MessageId': 'api-msg'}
-        mock_boto3.client.return_value = mock_client
+    @patch(
+        'events.services.registration_email._send_raw_email',
+    )
+    def test_registration_api_sends_email(self, mock_send):
+        mock_send.return_value = 'relay-api'
 
         self.client.login(email='api@example.com', password='testpass123')
         response = self.client.post(f'/api/events/{self.event.slug}/register')
 
         self.assertEqual(response.status_code, 201)
-        mock_client.send_email.assert_called_once()
+        mock_send.assert_called_once()
 
     @patch('events.services.registration_email.send_registration_confirmation')
     def test_registration_api_returns_201_on_email_failure(self, mock_send):

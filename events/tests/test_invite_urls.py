@@ -2,9 +2,8 @@
 respect the Studio DB override of ``SITE_BASE_URL`` (issue #435).
 """
 
-import email
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -111,44 +110,33 @@ class RegistrationEmailJoinUrlOverrideTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_raw_email(self):
+    def _capture_context(self):
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         with patch(
-            'events.services.registration_email.boto3'
-        ) as mock_boto3:
-            mock_client = MagicMock()
-            mock_client.send_email.return_value = {'MessageId': 'msg-1'}
-            mock_boto3.client.return_value = mock_client
+            'events.services.registration_email._send_raw_email',
+        ) as mock_send:
+            mock_send.return_value = 'relay-1'
             send_registration_confirmation(registration)
-            call_kwargs = mock_client.send_email.call_args[1]
-        raw = call_kwargs['Content']['Raw']['Data']
-        return email.message_from_string(raw)
-
-    def _get_html_body(self, msg):
-        for part in msg.walk():
-            if part.get_content_type() == 'text/html':
-                return part.get_payload(decode=True).decode('utf-8')
-        raise AssertionError('No text/html part in registration email')
+        return mock_send.call_args.kwargs['context']
 
     def test_registration_email_join_url_uses_db_override(self):
         _set_override('https://override.example.com')
-        msg = self._capture_raw_email()
-        html = self._get_html_body(msg)
+        context = self._capture_context()
+        text = str(context)
         self.assertIn(
             f'https://override.example.com{self.event.get_join_url()}',
-            html,
+            text,
         )
         self.assertNotIn(
             f'https://env.example.com{self.event.get_join_url()}',
-            html,
+            text,
         )
 
     def test_registration_email_join_url_falls_back_to_settings(self):
-        msg = self._capture_raw_email()
-        html = self._get_html_body(msg)
+        text = str(self._capture_context())
         self.assertIn(
             f'https://env.example.com{self.event.get_join_url()}',
-            html,
+            text,
         )

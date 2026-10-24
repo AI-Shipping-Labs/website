@@ -1,6 +1,4 @@
-"""Raw MIME regression tests for event calendar lifecycle emails (#1073)."""
-
-import email as email_lib
+"""Relay calendar regression tests for event lifecycle emails (#1073)."""
 from datetime import UTC, datetime, time, timedelta
 from unittest.mock import patch
 
@@ -21,19 +19,6 @@ from events.tasks.notify_cancellation import send_cancellation_notice_one
 from events.tasks.notify_reschedule import send_reschedule_notice_one
 
 User = get_user_model()
-
-
-def _calendar_from_raw(raw):
-    msg = email_lib.message_from_string(raw)
-    calendar_parts = [
-        part for part in msg.walk()
-        if part.get_content_type() == 'text/calendar'
-    ]
-    if len(calendar_parts) != 1:
-        raise AssertionError(f'expected one text/calendar part, got {len(calendar_parts)}')
-    part = calendar_parts[0]
-    payload = part.get_payload(decode=True).decode('utf-8')
-    return part, Calendar.from_ical(payload)
 
 
 def _vevent(cal):
@@ -81,35 +66,25 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             user=self.user,
         )
 
-    def _last_raw(self, mock_boto3):
-        return mock_boto3.client.return_value.send_email.call_args.kwargs[
-            'Content'
-        ]['Raw']['Data']
+    def _calendar(self, mock_send):
+        return Calendar.from_ical(mock_send.call_args.kwargs['ics_content'])
 
-    def _assert_formatted_from_and_bare_organizer(self, raw, cal):
-        msg = email_lib.message_from_string(raw)
-        self.assertEqual(
-            msg['From'],
-            'AI Shipping Labs <content@aishippinglabs.com>',
-        )
+    def _assert_bare_organizer(self, cal):
         self.assertEqual(
             str(_vevent(cal).get('organizer')),
             'mailto:content@aishippinglabs.com',
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_registration_email_raw_mime_is_request_with_attendee(
-        self, mock_boto3,
+    @patch('events.services.registration_email._send_raw_email')
+    def test_registration_email_relay_calendar_is_request_with_attendee(
+        self, mock_send,
     ):
-        mock_boto3.client.return_value.send_email.return_value = {
-            'MessageId': 'ses-registration',
-        }
+        mock_send.return_value = 'relay-registration'
 
         send_registration_confirmation(self.registration)
 
-        raw = self._last_raw(mock_boto3)
-        part, cal = _calendar_from_raw(raw)
-        self.assertEqual(part.get_param('method'), 'REQUEST')
+        cal = self._calendar(mock_send)
+        self.assertEqual(mock_send.call_args.kwargs.get('method', 'REQUEST'), 'REQUEST')
         self.assertEqual(str(cal.get('method')), 'REQUEST')
         vevent = _vevent(cal)
         self.assertEqual(
@@ -117,7 +92,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             'event-calendar-lifecycle-1073@aishippinglabs.com',
         )
         self.assertEqual(int(vevent.get('sequence')), 0)
-        self._assert_formatted_from_and_bare_organizer(raw, cal)
+        self._assert_bare_organizer(cal)
         self.assertEqual(_attendee_text(vevent), 'mailto:attendee1073@test.com')
         join_url = f'https://aishippinglabs.com{self.event.get_join_url()}'
         self.assertEqual(str(vevent.get('url')), join_url)
@@ -125,13 +100,11 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
         self.assertNotIn('zoom.us/j/raw-secret', str(vevent.to_ical()))
 
-    @patch('events.services.registration_email.boto3')
-    def test_reschedule_email_raw_mime_updates_same_uid_with_higher_sequence(
-        self, mock_boto3,
+    @patch('events.tasks.notify_reschedule._send_raw_email')
+    def test_reschedule_relay_calendar_updates_same_uid_with_higher_sequence(
+        self, mock_send,
     ):
-        mock_boto3.client.return_value.send_email.return_value = {
-            'MessageId': 'ses-update',
-        }
+        mock_send.return_value = 'relay-update'
         self.event.start_datetime = self.start + timedelta(days=1)
         self.event.end_datetime = self.start + timedelta(days=1, hours=2)
         self.event.ics_sequence = 1
@@ -144,12 +117,11 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        raw = self._last_raw(mock_boto3)
-        part, cal = _calendar_from_raw(raw)
-        self.assertEqual(part.get_param('method'), 'REQUEST')
+        cal = self._calendar(mock_send)
+        self.assertEqual(mock_send.call_args.kwargs['method'], 'REQUEST')
         self.assertEqual(str(cal.get('method')), 'REQUEST')
         vevent = _vevent(cal)
-        self._assert_formatted_from_and_bare_organizer(raw, cal)
+        self._assert_bare_organizer(cal)
         self.assertEqual(
             str(vevent.get('uid')),
             'event-calendar-lifecycle-1073@aishippinglabs.com',
@@ -166,12 +138,14 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             self.start + timedelta(days=1, hours=2),
         )
 
-    @patch('events.services.registration_email.boto3')
-    def test_rename_reschedule_and_cancel_reuse_original_uid(self, mock_boto3):
+    @patch('events.tasks.notify_cancellation._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_raw_email')
+    def test_rename_reschedule_and_cancel_reuse_original_uid(
+        self, mock_reschedule, mock_cancel,
+    ):
         """Mutable public slugs never split one event into duplicate entries."""
-        mock_boto3.client.return_value.send_email.return_value = {
-            'MessageId': 'ses-lifecycle',
-        }
+        mock_reschedule.return_value = 'relay-reschedule'
+        mock_cancel.return_value = 'relay-cancel'
         original_uid = self.event.calendar_uid
         self.event.slug = 'renamed-calendar-lifecycle-1073'
         self.event.start_datetime = self.start + timedelta(days=1)
@@ -182,23 +156,21 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             self.user.pk,
             self.start.isoformat(),
         )
-        _, reschedule_cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        reschedule_cal = self._calendar(mock_reschedule)
         self.assertEqual(str(_vevent(reschedule_cal).get('uid')), original_uid)
 
         self.event.status = 'cancelled'
         self.event.ics_sequence += 1
         self.event.save(update_fields=['status', 'ics_sequence'])
         send_cancellation_notice_one(self.event.pk, self.user.pk)
-        _, cancellation_cal = _calendar_from_raw(self._last_raw(mock_boto3))
+        cancellation_cal = self._calendar(mock_cancel)
         self.assertEqual(str(_vevent(cancellation_cal).get('uid')), original_uid)
 
-    @patch('events.services.registration_email.boto3')
-    def test_cancellation_email_raw_mime_is_cancel_with_status_cancelled(
-        self, mock_boto3,
+    @patch('events.tasks.notify_cancellation._send_raw_email')
+    def test_cancellation_relay_calendar_is_cancel_with_status_cancelled(
+        self, mock_send,
     ):
-        mock_boto3.client.return_value.send_email.return_value = {
-            'MessageId': 'ses-cancel',
-        }
+        mock_send.return_value = 'relay-cancel'
         self.event.status = 'cancelled'
         self.event.ics_sequence = 2
         self.event.save(update_fields=['status', 'ics_sequence'])
@@ -206,22 +178,12 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         result = send_cancellation_notice_one(self.event.pk, self.user.pk)
 
         self.assertEqual(result['status'], 'sent')
-        raw = self._last_raw(mock_boto3)
-        message = email_lib.message_from_string(raw)
-        self.assertEqual(
-            [part.get_content_type() for part in message.get_payload()],
-            ['text/plain', 'text/html', 'text/calendar'],
-        )
-        plain_text = message.get_payload()[0].get_payload(decode=True).decode('utf-8')
-        self.assertIn('Calendar Lifecycle has been cancelled', plain_text)
-        self.assertNotIn('<html', plain_text)
-        part, cal = _calendar_from_raw(raw)
-        self.assertEqual(part.get_param('method'), 'CANCEL')
-        self.assertEqual(part.get_param('name'), 'event.ics')
-        self.assertIsNone(part.get('Content-Disposition'))
+        cal = self._calendar(mock_send)
+        self.assertEqual(mock_send.call_args.kwargs['method'], 'CANCEL')
+        self.assertEqual(mock_send.call_args.kwargs['template_key'], 'event_cancelled')
         self.assertEqual(str(cal.get('method')), 'CANCEL')
         vevent = _vevent(cal)
-        self._assert_formatted_from_and_bare_organizer(raw, cal)
+        self._assert_bare_organizer(cal)
         self.assertEqual(
             str(vevent.get('uid')),
             'event-calendar-lifecycle-1073@aishippinglabs.com',
@@ -230,13 +192,11 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertEqual(int(vevent.get('sequence')), 2)
         self.assertEqual(str(vevent.get('status')), 'CANCELLED')
 
-    @patch('events.services.registration_email.boto3')
+    @patch('events.tasks.notify_reschedule._send_raw_email')
     def test_unsubscribed_attendee_still_receives_transactional_update(
-        self, mock_boto3,
+        self, mock_send,
     ):
-        mock_boto3.client.return_value.send_email.return_value = {
-            'MessageId': 'ses-unsub',
-        }
+        mock_send.return_value = 'relay-unsub'
         self.user.unsubscribed = True
         self.user.save(update_fields=['unsubscribed'])
         self.event.ics_sequence = 1
@@ -249,11 +209,11 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         )
 
         self.assertEqual(result['status'], 'sent')
-        self.assertEqual(mock_boto3.client.return_value.send_email.call_count, 1)
+        mock_send.assert_called_once()
 
-    @patch('events.services.registration_email.boto3')
+    @patch('events.tasks.notify_cancellation._send_raw_email')
     def test_cancelled_registration_is_skipped_before_cancellation_send(
-        self, mock_boto3,
+        self, mock_send,
     ):
         self.registration.delete()
 
@@ -261,7 +221,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
 
         self.assertEqual(result['status'], 'skipped')
         self.assertEqual(result['reason'], 'registration_cancelled')
-        mock_boto3.client.return_value.send_email.assert_not_called()
+        mock_send.assert_not_called()
         self.assertFalse(
             EmailLog.objects.filter(
                 user=self.user,

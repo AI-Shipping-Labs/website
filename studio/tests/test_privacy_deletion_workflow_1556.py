@@ -1,13 +1,13 @@
 """Authoritative Studio account-deletion workflow coverage for #1556."""
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import Mock, patch
 
-from botocore.exceptions import ClientError, ReadTimeoutError
+import requests
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ImproperlyConfigured
 from django.db import IntegrityError, transaction
-from django.test import Client, TestCase, override_settings, tag
+from django.test import Client, TestCase, tag
 from django.urls import reverse
 
 from accounts.models import PrivacyCompletionDelivery, PrivacyRequestLog
@@ -17,6 +17,10 @@ from accounts.services.privacy import (
 )
 from accounts.services.privacy_recipient import decrypt_recipient, encrypt_recipient
 from email_app.models import EmailLog
+from email_app.relay_transactional import (
+    RelayTransactionalError,
+    RelayTransactionalResult,
+)
 from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
@@ -24,11 +28,32 @@ from email_app.services.email_classification import (
 from email_app.services.email_service import (
     EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
     EmailService,
-    EmailServiceError,
 )
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
+
+
+def relay_config(key, default=""):
+    values = {
+        "RELAY_BASE_URL": "https://relay.example.test",
+        "RELAY_API_KEY": "test-relay-key",
+    }
+    return values.get(key, default)
+
+
+def relay_response(request_id, *, status="queued"):
+    response = Mock(status_code=202)
+    response.json.return_value = {
+        "message": {
+            "id": f"relay-privacy-{request_id}",
+            "status": status,
+            "template_key": "account_deletion_completed",
+            "idempotency_key": f"account-deletion-completed:{request_id}",
+        },
+        "idempotent_replay": False,
+    }
+    return response
 
 
 @tag("core")
@@ -141,8 +166,11 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         self.assertTrue(User.objects.filter(pk=self.member.pk).exists())
         self.assertEqual(request_log.execution_audits.count(), 0)
 
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-completed-1556")
-    def test_canonical_success_links_audit_and_sends_one_scrubbed_confirmation(self, send_ses):
+    @patch(
+        "accounts.services.privacy_delivery.send_relay_transactional",
+        return_value=RelayTransactionalResult("relay-completed-1556", "queued", False),
+    )
+    def test_canonical_success_links_audit_and_sends_one_scrubbed_confirmation(self, send_relay):
         request_log = self.accepted_request()
         old_user_id = self.member.pk
         with patch(
@@ -181,13 +209,67 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             delivery.email_log.dedupe_key,
             f"account-deletion-completed:{request_log.pk}",
         )
-        args, kwargs = send_ses.call_args
+        args, kwargs = send_relay.call_args
         self.assertEqual(args[0], "privacy-member@test.com")
+        self.assertEqual(args[1], "account_deletion_completed")
         self.assertEqual(kwargs["cc"], ["team@aishippinglabs.com"])
-        self.assertTrue(kwargs["redact_recipient"])
-        self.assertNotIn("unsubscribe", args[2].lower())
-        self.assertNotIn("verify your email", args[2].lower())
-        self.assertNotIn("/studio/users/", args[2])
+        self.assertEqual(args[2]["support_id"], old_user_id)
+
+    @patch("email_app.relay_transactional.is_enabled", return_value=False)
+    @patch("email_app.relay_transactional.get_config", side_effect=relay_config)
+    def test_relay_request_uses_real_recipient_cc_and_redacted_local_state(
+        self,
+        _config,
+        _enabled,
+    ):
+        request_log = self.accepted_request()
+        old_user_id = self.member.pk
+        response = relay_response(request_log.pk)
+
+        with patch(
+            "email_app.relay_transactional.requests.post",
+            return_value=response,
+        ) as post:
+            result = self.confirm(request_log)
+
+        self.assertEqual(result.status_code, 302)
+        payload = post.call_args.kwargs["json"]
+        self.assertEqual(payload["email"], "privacy-member@test.com")
+        self.assertEqual(payload["cc"], ["team@aishippinglabs.com"])
+        self.assertEqual(payload["template_key"], "account_deletion_completed")
+        self.assertEqual(payload["context"]["support_id"], old_user_id)
+        delivery = PrivacyCompletionDelivery.objects.get(request=request_log)
+        self.assertEqual(delivery.status, PrivacyCompletionDelivery.STATUS_SENT)
+        self.assertEqual(delivery.recipient_ciphertext, "")
+        self.assertEqual(delivery.email_log.recipient_email, "[deleted-account]")
+
+    @patch("email_app.relay_transactional.is_enabled", return_value=False)
+    @patch("email_app.relay_transactional.get_config", side_effect=relay_config)
+    def test_relay_timeout_is_fenced_and_diagnostics_are_redacted(
+        self,
+        _config,
+        _enabled,
+    ):
+        request_log = self.accepted_request()
+        recipient = self.member.email
+
+        with self.assertLogs("email_app.relay_transactional", level="ERROR") as logs:
+            with patch(
+                "email_app.relay_transactional.requests.post",
+                side_effect=requests.Timeout(),
+            ):
+                result = self.confirm(request_log)
+
+        self.assertEqual(result.status_code, 302)
+        delivery = PrivacyCompletionDelivery.objects.get(request=request_log)
+        self.assertEqual(
+            delivery.status,
+            PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN,
+        )
+        diagnostics = " ".join(logs.output)
+        self.assertNotIn(recipient, diagnostics)
+        self.assertNotIn("test-relay-key", diagnostics)
+        self.assertFalse(EmailLog.objects.filter(recipient_email=recipient).exists())
 
     def test_confirmation_requires_exact_email_and_ack_without_retargeting(self):
         other = User.objects.create_user(email="other-target@test.com", password="testpass")
@@ -352,8 +434,8 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         request_log = self.accepted_request()
         old_user_id = self.member.pk
         with patch(
-            "email_app.services.email_service.EmailService.send_prepared",
-            side_effect=EmailServiceError("private recipient failure"),
+            "accounts.services.privacy_delivery.send_relay_transactional",
+            side_effect=RelayTransactionalError("relay_rejected"),
         ):
             self.confirm(request_log)
 
@@ -368,9 +450,9 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         )
 
         with patch(
-            "email_app.services.email_service.EmailService._send_ses",
-            return_value="ses-retry-1556",
-        ) as send_ses:
+            "accounts.services.privacy_delivery.send_relay_transactional",
+            return_value=RelayTransactionalResult("relay-retry-1556", "queued", False),
+        ) as send_relay:
             retried = self.client.post(
                 f"/studio/privacy/deletion-requests/{request_log.pk}/retry-confirmation",
             )
@@ -384,21 +466,19 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         self.assertEqual(delivery.status, PrivacyCompletionDelivery.STATUS_SENT)
         self.assertEqual(delivery.attempt_count, 2)
         self.assertEqual(delivery.recipient_ciphertext, "")
-        self.assertEqual(send_ses.call_count, 1)
+        self.assertEqual(send_relay.call_count, 1)
         self.assertEqual(request_log.execution_audits.filter(status="completed").count(), 1)
 
-    @override_settings(SES_ENABLED=True)
-    def test_ambiguous_botocore_transport_failure_is_fenced_from_retry(self):
+    def test_ambiguous_relay_transport_failure_is_fenced_from_retry(self):
         request_log = self.accepted_request()
-        ses_client = MagicMock()
-        ses_client.send_email.side_effect = ReadTimeoutError(
-            endpoint_url="https://email.us-east-1.amazonaws.com",
-        )
 
         with patch(
-            "email_app.services.ses_transport.build_ses_client",
-            return_value=ses_client,
-        ):
+            "accounts.services.privacy_delivery.send_relay_transactional",
+            side_effect=RelayTransactionalError(
+                "relay_ack_unknown",
+                outcome_unknown=True,
+            ),
+        ) as send_relay:
             response = self.confirm(request_log)
 
         self.assertEqual(response.status_code, 302)
@@ -409,9 +489,8 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         )
         self.assertEqual(delivery.error_code, "transport_outcome_unknown")
         self.assertEqual(delivery.attempt_count, 1)
-        self.assertEqual(ses_client.send_email.call_count, 1)
+        self.assertEqual(send_relay.call_count, 1)
 
-        ses_client.send_email.reset_mock()
         retry = self.client.post(
             f"/studio/privacy/deletion-requests/{request_log.pk}/retry-confirmation",
         )
@@ -423,42 +502,26 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             PrivacyCompletionDelivery.STATUS_OUTCOME_UNKNOWN,
         )
         self.assertEqual(delivery.attempt_count, 1)
-        self.assertEqual(ses_client.send_email.call_count, 0)
+        self.assertEqual(send_relay.call_count, 1)
 
-    @override_settings(SES_ENABLED=True)
-    def test_redacted_client_error_does_not_log_deleted_recipient(self):
+    def test_relay_rejection_does_not_persist_deleted_recipient(self):
         request_log = self.accepted_request()
         private_sentinel = "deleted-person-1556@example.com"
-        ses_client = MagicMock()
-        ses_client.send_email.side_effect = ClientError(
-            {
-                "Error": {
-                    "Code": "MessageRejected",
-                    "Message": f"invalid destination {private_sentinel}",
-                },
-            },
-            "SendEmail",
-        )
-
-        with self.assertLogs(
-            "email_app.services.ses_transport",
-            level="ERROR",
-        ) as captured_logs:
-            with patch(
-                "email_app.services.ses_transport.build_ses_client",
-                return_value=ses_client,
-            ):
-                response = self.confirm(request_log)
+        with patch(
+            "accounts.services.privacy_delivery.send_relay_transactional",
+            side_effect=RelayTransactionalError("relay_rejected"),
+        ) as send_relay:
+            response = self.confirm(request_log)
 
         self.assertEqual(response.status_code, 302)
         delivery = PrivacyCompletionDelivery.objects.get(request=request_log)
         self.assertEqual(delivery.status, PrivacyCompletionDelivery.STATUS_FAILED)
         self.assertEqual(delivery.error_code, "delivery_failed")
-        self.assertEqual(ses_client.send_email.call_count, 1)
-        rendered_logs = "\n".join(captured_logs.output)
-        self.assertNotIn(private_sentinel, rendered_logs)
-        self.assertNotIn("invalid destination", rendered_logs)
-        self.assertIn("error_code=MessageRejected", rendered_logs)
+        self.assertEqual(send_relay.call_count, 1)
+        self.assertNotIn(private_sentinel, delivery.recipient_ciphertext)
+        self.assertFalse(
+            EmailLog.objects.filter(recipient_email=private_sentinel).exists(),
+        )
 
     def test_lingering_transport_claim_becomes_unknown_and_never_resends(self):
         request_log = self.accepted_request()
@@ -482,7 +545,9 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             dedupe_key=f"account-deletion-completed:{request_log.pk}",
         )
 
-        with patch.object(EmailService, "send_prepared") as send:
+        with patch(
+            "accounts.services.privacy_delivery.send_relay_transactional",
+        ) as send:
             response = self.client.post(
                 f"/studio/privacy/deletion-requests/{request_log.pk}/retry-confirmation",
             )
@@ -495,8 +560,11 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
         send.assert_not_called()
         self.assertTrue(audit.pk)
 
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="ses-once-1556")
-    def test_two_tab_replay_converges_on_one_delete_audit_and_email(self, send_ses):
+    @patch(
+        "accounts.services.privacy_delivery.send_relay_transactional",
+        return_value=RelayTransactionalResult("relay-once-1556", "queued", False),
+    )
+    def test_two_tab_replay_converges_on_one_delete_audit_and_email(self, send_relay):
         request_log = self.accepted_request()
         stale_version = request_log.workflow_version
         first = self.confirm(request_log, workflow_version=stale_version)
@@ -517,7 +585,7 @@ class StudioPrivacyDeletionWorkflowTest(TestCase):
             EmailLog.objects.filter(email_type="account_deletion_completed").count(),
             1,
         )
-        self.assertEqual(send_ses.call_count, 1)
+        self.assertEqual(send_relay.call_count, 1)
 
         with self.assertRaises(IntegrityError), transaction.atomic():
             PrivacyRequestLog.objects.create(

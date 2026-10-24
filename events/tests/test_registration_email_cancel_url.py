@@ -1,9 +1,8 @@
 """Registration confirmation email contains a working cancel URL (issue #588)."""
 
-import email
 import re
 from datetime import timedelta
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from django.utils import timezone
@@ -58,28 +57,22 @@ class RegistrationEmailCancelUrlTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_html(self):
+    def _capture_cancel_url(self):
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
-        with patch('events.services.registration_email.boto3') as mock_boto3:
-            mock_client = MagicMock()
-            mock_client.send_email.return_value = {'MessageId': 'msg-1'}
-            mock_boto3.client.return_value = mock_client
+        with patch(
+            'events.services.registration_email._send_raw_email',
+        ) as mock_send:
+            mock_send.return_value = 'relay-1'
             send_registration_confirmation(registration)
-            call_kwargs = mock_client.send_email.call_args[1]
-        msg = email.message_from_string(call_kwargs['Content']['Raw']['Data'])
-        for part in msg.walk():
-            if part.get_content_type() == 'text/html':
-                return registration, part.get_payload(decode=True).decode('utf-8')
-        raise AssertionError('No text/html part in registration email')
+        return registration, mock_send.call_args.kwargs['context']['cancel_url']
 
     def test_cancel_url_present_and_decodes_to_this_registration(self):
-        registration, html = self._capture_html()
-        match = CANCEL_RE.search(html)
+        registration, url = self._capture_cancel_url()
+        match = CANCEL_RE.search(url)
         self.assertIsNotNone(match, 'cancel URL not found in email body')
 
-        url = match.group(0)
         self.assertIn('/events/cancel-url-event/cancel-registration', url)
 
         token = match.group(1)
@@ -89,7 +82,7 @@ class RegistrationEmailCancelUrlTest(TestCase):
         self.assertEqual(payload['user_id'], self.user.pk)
 
     def test_send_records_email_log_row(self):
-        registration, _html = self._capture_html()
+        registration, _url = self._capture_cancel_url()
         log = EmailLog.objects.filter(
             user=registration.user, email_type='event_registration',
         ).first()
@@ -188,8 +181,8 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
 
 
 @override_settings(SES_ENABLED=False)
-class RegistrationEmailCancelUrlSesDisabledTest(TestCase):
-    """SES-disabled path still records an EmailLog and renders the cancel URL."""
+class RegistrationEmailLegacySesSettingTest(TestCase):
+    """The retired SES switch does not suppress Relay registration mail."""
 
     @classmethod
     def setUpTestData(cls):
@@ -207,10 +200,15 @@ class RegistrationEmailCancelUrlSesDisabledTest(TestCase):
             status='upcoming',
         )
 
-    def test_email_log_recorded_with_synthetic_message_id(self):
+    @patch(
+        'events.services.registration_email._send_raw_email',
+        return_value='relay-registration',
+    )
+    def test_email_log_records_relay_message_id(self, mock_send):
         registration = EventRegistration.objects.create(
             event=self.event, user=self.user,
         )
         log = send_registration_confirmation(registration)
-        self.assertEqual(log.ses_message_id, 'ses-disabled-noop')
+        mock_send.assert_called_once()
+        self.assertEqual(log.ses_message_id, 'relay-registration')
         self.assertEqual(log.email_type, 'event_registration')

@@ -2,25 +2,27 @@
 
 import logging
 from dataclasses import dataclass
+from hashlib import sha256
 from types import SimpleNamespace
 
-from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import Q
 
 from accounts.services.email_resolution import resolve_user_by_email
+from email_app.relay_transactional import (
+    recipient_template_context,
+    send_relay_transactional,
+)
 from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
     render_template_parts,
 )
-from email_app.services.ses_transport import send_ses_email
-from events.services.display_time import format_event_time_range
-from integrations.config import get_config, site_base_url
+from events.services.recording_ready_context import build_recording_ready_context
+from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
 
 EMAIL_TYPE = 'event_recording_ready'
+_build_context = build_recording_ready_context
 
 
 @dataclass(frozen=True)
@@ -147,49 +149,45 @@ def notify_recording_ready(event):
 def _send_one(event, recipient):
     from email_app.models import EmailLog
 
+    existing = _existing_log(event, recipient)
+    if existing is not None:
+        return _already_sent_result(recipient, existing)
+    user = _render_user(recipient)
+    context = build_recording_ready_context(event)
+    subject, _body, _html, _footer = render_template_parts(
+        EMAIL_TYPE,
+        user,
+        context,
+    )
+    dedupe_key = f'{EMAIL_TYPE}:{event.pk}:{_recipient_identity(recipient)}'
+    result = send_relay_transactional(
+        recipient.email,
+        EMAIL_TYPE,
+        recipient_template_context(user, context),
+        idempotency_key=dedupe_key,
+        safe_correlation=f'event={event.pk} recipient={_recipient_identity(recipient)}',
+    )
     with transaction.atomic():
-        existing = _existing_log(event, recipient)
+        existing = _existing_log(event, recipient, for_update=True)
         if existing is not None:
-            return {
-                'email': recipient.email,
-                'source': recipient.source,
-                'status': 'skipped',
-                'reason': 'already_sent',
-                'email_log_id': existing.pk,
-            }
-
-        subject, body_markdown, body_html, footer_note = (
-            render_template_parts(
-                EMAIL_TYPE,
-                _render_user(recipient),
-                _build_context(event),
-            )
-        )
-        full_html = render_html_email(subject, body_html, footer_note=footer_note)
-        plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
-        ses_message_id = send_ses_email(
-            recipient.email,
-            subject,
-            full_html,
-            text_body=plain_text,
-            email_type=EMAIL_TYPE,
-        )
+            return _already_sent_result(recipient, existing)
         email_log = EmailLog.objects.create(
             event=event,
             user=recipient.user,
             recipient_email=recipient.email,
             email_type=EMAIL_TYPE,
             subject=subject,
-            ses_message_id=ses_message_id,
+            ses_message_id=result.message_id,
+            dedupe_key=dedupe_key,
         )
 
     logger.info(
-        'Sent %s to %s for event "%s" (EmailLog %s, SES %s)',
+        'Sent %s to %s for event "%s" (EmailLog %s, Relay %s)',
         EMAIL_TYPE,
         recipient.email,
         event.title,
         email_log.pk,
-        ses_message_id,
+        result.message_id,
     )
     return {
         'email': recipient.email,
@@ -199,18 +197,33 @@ def _send_one(event, recipient):
     }
 
 
-def _existing_log(event, recipient):
+def _already_sent_result(recipient, email_log):
+    return {
+        'email': recipient.email,
+        'source': recipient.source,
+        'status': 'skipped',
+        'reason': 'already_sent',
+        'email_log_id': email_log.pk,
+    }
+
+
+def _recipient_identity(recipient):
+    if recipient.user is not None:
+        return f'user:{recipient.user.pk}'
+    digest = sha256(recipient.email.strip().lower().encode('utf-8')).hexdigest()
+    return f'email-sha256:{digest}'
+
+
+def _existing_log(event, recipient, *, for_update=False):
     from email_app.models import EmailLog
 
     query = Q(recipient_email__iexact=recipient.email)
     if recipient.user is not None:
         query |= Q(user=recipient.user)
-    return (
-        EmailLog.objects.select_for_update()
-        .filter(event=event, email_type=EMAIL_TYPE)
-        .filter(query)
-        .first()
-    )
+    queryset = EmailLog.objects.filter(event=event, email_type=EMAIL_TYPE)
+    if for_update:
+        queryset = queryset.select_for_update()
+    return queryset.filter(query).first()
 
 
 def _render_user(recipient):
@@ -222,77 +235,6 @@ def _render_user(recipient):
         last_name='',
         email_verified=True,
     )
-
-
-def _resolve_watch_url(event):
-    """Return the site-absolute URL of a surface that actually plays the recording.
-
-    Issue #1134 (Phase B), per the PM watch-link caveat: the "available to
-    watch" link must point at a page that renders the in-app player. For a
-    workshop-kind event that is the linked, published workshop's ``/video``
-    page — NOT the announcement-only event-detail page (``event.get_absolute_url``)
-    and never the raw/presigned S3 URL. Returns ``''`` when there is no
-    watchable surface (no linked workshop, or the workshop is unpublished), so
-    the caller falls back to the "ready for review/publishing" framing.
-    """
-    try:
-        workshop = event.workshop
-    except ObjectDoesNotExist:
-        return ''
-    if workshop is None or getattr(workshop, 'status', '') != 'published':
-        return ''
-    return f'{site_base_url()}{workshop.get_absolute_url()}/video'
-
-
-def _build_context(event):
-    studio_event_url = f'{site_base_url()}{event.get_studio_edit_url()}'
-    event_datetime = format_event_time_range(
-        event.start_datetime,
-        event.end_datetime,
-        event.timezone or 'Europe/Berlin',
-    )
-    # Issue #1134 (Phase B): the recording is "available to watch" only when
-    # the event is published AND there is a surface that renders the player.
-    # Otherwise keep the existing review-first framing + Studio link.
-    watch_url = _resolve_watch_url(event)
-    is_available_to_watch = bool(event.published and watch_url)
-    if is_available_to_watch:
-        publish_state = 'Published and available to watch'
-        publish_copy = (
-            'The recording is now available to watch. Members with access can '
-            'watch it right away on the workshop video page.'
-        )
-    elif event.published:
-        publish_state = 'Uploaded and currently published'
-        publish_copy = (
-            'The event is currently published. Review the uploaded recording '
-            'in Studio and confirm the member-facing page is still correct.'
-        )
-    else:
-        publish_state = 'Ready for review/publishing'
-        publish_copy = (
-            'The event is not public yet. Review the upload, then publish '
-            'and send the attendee follow-up when ready.'
-        )
-
-    # Issue #1076: CTA deep-link to the pre-filled "recording available"
-    # campaign draft. Opens a draft for review in Studio — it never sends.
-    campaign_prefill_url = (
-        f'{site_base_url()}/studio/campaigns/new'
-        f'?event={event.pk}&template=recording_available'
-    )
-
-    return {
-        'event_title': event.title,
-        'event_datetime': event_datetime,
-        'publish_state': publish_state,
-        'publish_copy': publish_copy,
-        'is_available_to_watch': is_available_to_watch,
-        'watch_url': watch_url,
-        'studio_event_url': studio_event_url,
-        'zoom_recording_url': (event.recording_url or '').strip(),
-        'campaign_prefill_url': campaign_prefill_url,
-    }
 
 
 def _skipped_result(reason):

@@ -9,9 +9,8 @@ from accounts.services.timezones import (
     build_timezone_email_line,
     format_user_datetime,
 )
+from email_app.relay_transactional import recipient_template_context
 from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
     render_template_parts,
 )
 from events.models import Event, EventRegistration, SeriesRegistration
@@ -122,21 +121,16 @@ def send_cancellation_notice_one(event_id, user_id):
             'user_id': user_id,
             'email_log_id': existing_log.pk,
         }
-    subject, body_markdown, body_html, footer_note = (
-        render_template_parts(
-            'event_cancelled',
-            user,
-            {
-                'event_title': event.title,
+    template_context = {
+        'event_title': event.title,
             'event_datetime': format_user_datetime(event.start_datetime, user),
             'timezone_help': build_timezone_email_line(
                 user, build_timezone_account_url(site_url),
             ),
-            },
-        )
+    }
+    subject, _body, _html, _footer = render_template_parts(
+        'event_cancelled', user, template_context,
     )
-    full_html = render_html_email(subject, body_html, footer_note=footer_note)
-    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
     ics_content = generate_ics(
         event,
         method='CANCEL',
@@ -145,10 +139,11 @@ def send_cancellation_notice_one(event_id, user_id):
     )
     ses_message_id = _send_raw_email(
         to_email=user.email,
-        subject=subject,
-        html_body=full_html,
+        template_key='event_cancelled',
+        context=recipient_template_context(user, template_context),
         ics_content=ics_content,
-        text_body=plain_text,
+        idempotency_key=dedupe_key,
+        safe_correlation=f'event={event.pk} user={user.pk}',
         method='CANCEL',
     )
 
@@ -163,7 +158,7 @@ def send_cancellation_notice_one(event_id, user_id):
     )
 
     logger.info(
-        'Sent cancellation notice to %s for event "%s" (SES: %s)',
+        'Sent cancellation notice to %s for event "%s" (Relay: %s)',
         user.email, event.title, ses_message_id,
     )
     return {"status": "sent", "user_id": user_id, "email_log_id": email_log.pk}

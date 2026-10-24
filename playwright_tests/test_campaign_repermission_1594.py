@@ -126,10 +126,10 @@ def test_staff_proves_the_controlled_consent_action_before_release(
     campaign_id = campaign.pk
     connection.close()
 
-    prepared_messages = []
+    delivered_messages = []
 
-    def capture(prepared):
-        prepared_messages.append(prepared)
+    def capture(**message):
+        delivered_messages.append(message)
         return "controlled-test-message"
 
     context = _auth_context(browser, "consent-admin@test.com")
@@ -148,15 +148,16 @@ def test_staff_proves_the_controlled_consent_action_before_release(
 
     page.locator("#test-recipients").fill(controlled.email)
     with mock.patch(
-        "studio.views.campaigns.EmailService.send_prepared",
+        "studio.views.campaigns.send_campaign_delivery_to_relay",
         side_effect=capture,
     ):
-        page.get_by_role("button", name="Send Test", exact=True).click()
-        page.wait_for_load_state("domcontentloaded")
+        with page.expect_navigation(wait_until="domcontentloaded"):
+            page.get_by_role("button", name="Send Test", exact=True).click()
 
-    assert len(prepared_messages) == 1
-    prepared = prepared_messages[0]
-    for rendered in (prepared.full_html, prepared.plain_text):
+    assert len(delivered_messages) == 1
+    delivered = delivered_messages[0]
+    assert delivered["recipient_email"] == controlled.email
+    for rendered in (delivered["html_body"], delivered["text_body"]):
         assert REPERMISSION_COPY in rendered
         assert REPERMISSION_CTA in rendered
         assert rendered.count("/api/verify-and-subscribe") == 1
@@ -164,7 +165,7 @@ def test_staff_proves_the_controlled_consent_action_before_release(
         assert "/api/verify-email" not in rendered
     match = re.search(
         r"https?://[^\s)]+/api/verify-and-subscribe\?token=[^\s)]+",
-        prepared.plain_text,
+        delivered["text_body"],
     )
     assert match is not None
 

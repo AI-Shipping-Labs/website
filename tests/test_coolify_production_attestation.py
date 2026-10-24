@@ -108,12 +108,27 @@ class ProductionIdentityTest(SimpleTestCase):
                 with self.assertRaises(ReleaseError):
                     identity.recorded_digest(3, SHA)
 
-    def test_command_failure_never_exposes_captured_secret(self):
-        error = subprocess.CalledProcessError(1, ["gh"], output="secret", stderr="secret")
-        with patch.object(identity.subprocess, "run", side_effect=error):
-            with self.assertRaisesMessage(ReleaseError, "release-evidence-command-failed") as raised:
-                identity.command_output(["gh", "api"])
-        self.assertNotIn("secret", str(raised.exception))
+    def test_subprocess_failure_identifies_operation_and_redacts_external_diagnostics(self):
+        operations = [
+            ("dev-job-logs", lambda: identity.recorded_digest(3, SHA)),
+            ("registry-digest", lambda: identity.require_registry_digest(IMAGE, DIGEST)),
+        ]
+        failures = [
+            (subprocess.CalledProcessError(23, ["private-command"], output="private-output", stderr="private-error"), "process-exit exit=23"),
+            (subprocess.TimeoutExpired(["private-command"], 60, output="private-output", stderr="private-error"), "timeout"),
+            (OSError("private-error"), "unavailable"),
+        ]
+        for operation, execute in operations:
+            for error, category in failures:
+                with self.subTest(operation=operation, category=category):
+                    with patch.object(identity.subprocess, "run", side_effect=error) as run:
+                        with self.assertRaises(ReleaseError) as raised:
+                            execute()
+                    self.assertEqual(str(raised.exception), f"release-evidence-{operation}-failed category={category}")
+                    self.assertEqual(run.call_count, 1)
+                    self.assertEqual(run.call_args.kwargs, {
+                        "capture_output": True, "text": True, "check": True, "timeout": 60,
+                    })
 
 
 @tag("core")

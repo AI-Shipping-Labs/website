@@ -66,20 +66,29 @@ def require_green_jobs(payload):
     return deploy_job
 
 
-def command_output(arguments):
+def command_output(arguments, operation):
+    if operation not in {"dev-job-logs", "registry-digest"}:
+        raise ReleaseError("release-evidence-operation-invalid")
+    failure = f"release-evidence-{operation}-failed"
     try:
         result = subprocess.run(
             arguments, capture_output=True, text=True, check=True, timeout=60,
         )
-    except (subprocess.SubprocessError, OSError):
-        raise ReleaseError("release-evidence-command-failed") from None
+    except subprocess.TimeoutExpired:
+        raise ReleaseError(f"{failure} category=timeout") from None
+    except subprocess.CalledProcessError as error:
+        raise ReleaseError(f"{failure} category=process-exit exit={error.returncode}") from None
+    except OSError:
+        raise ReleaseError(f"{failure} category=unavailable") from None
+    except subprocess.SubprocessError:
+        raise ReleaseError(f"{failure} category=subprocess-error") from None
     return result.stdout
 
 
 def recorded_digest(job_id, sha):
     logs = command_output([
         "gh", "api", f"/repos/{REPOSITORY}/actions/jobs/{job_id}/logs",
-    ])
+    ], "dev-job-logs")
     pattern = rf"Verified exact-head Coolify release sha={sha} digest=(sha256:[0-9a-f]{{64}}) deployment="
     matches = re.findall(pattern, logs)
     if len(matches) != 1:
@@ -91,7 +100,7 @@ def require_registry_digest(image, expected):
     output = command_output([
         "docker", "buildx", "imagetools", "inspect", image,
         "--format", "{{json .Manifest.Digest}}",
-    ])
+    ], "registry-digest")
     try:
         actual = json.loads(output)
     except json.JSONDecodeError:

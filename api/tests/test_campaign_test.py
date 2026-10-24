@@ -30,7 +30,7 @@ class CampaignTestTokenTest(TestCase):
             content_type="application/json", HTTP_AUTHORIZATION=f"Token {self.token.key}")
         self.assertEqual(result.status_code, 200)
         self.assertEqual(result.json()["relay_message_id"], "relay-json-42")
-        send.assert_called_once()
+        self.assertEqual(send.call_count, 1)
         self.assertEqual(send.call_args.kwargs["recipient_email"], "controlled@example.com")
 
     @patch("studio.views.campaigns.send_campaign_delivery_to_relay")
@@ -59,7 +59,7 @@ class CampaignTestTokenTest(TestCase):
         self.assertEqual(result.json(), {
             "campaign_id": self.campaign.pk, "relay_message_id": "relay-test-42", "status": "accepted",
         })
-        request.assert_called_once()
+        self.assertEqual(request.call_count, 1)
         payload = request.call_args.kwargs["json"]
         self.assertEqual(payload["email"], "controlled@example.com")
         self.assertEqual(payload["context"]["subject"], "[TEST] Proof")

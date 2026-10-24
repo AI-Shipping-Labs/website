@@ -1,3 +1,5 @@
+from unittest.mock import call, patch
+
 import requests
 from django.conf import settings
 from django.test import SimpleTestCase
@@ -99,3 +101,38 @@ class StubRelayTransactionalTransportTest(SimpleTestCase):
             relay_transactional.requests = original_binding
             relay_transactional.get_config = original_adapter_get_config
             relay_testing._transport = original_transport
+
+    def test_adapter_config_prefers_explicit_values_and_defaults_offline(self):
+        configured = {
+            "RELAY_BASE_URL": "https://configured-relay.example",
+            "RELAY_API_KEY": "configured-relay-key",
+        }
+
+        with patch.object(
+            integration_config,
+            "get_config",
+            side_effect=lambda key, default="", **kwargs: configured.get(key, default),
+        ) as get_config:
+            self.assertEqual(
+                relay_testing._test_relay_config("RELAY_BASE_URL"),
+                "https://configured-relay.example",
+            )
+            self.assertEqual(
+                relay_testing._test_relay_config("RELAY_API_KEY"),
+                "configured-relay-key",
+            )
+
+        self.assertEqual(
+            get_config.call_args_list,
+            [call("RELAY_BASE_URL", ""), call("RELAY_API_KEY", "")],
+        )
+
+        with patch.object(integration_config, "get_config", return_value=""):
+            self.assertEqual(
+                relay_testing._test_relay_config("RELAY_BASE_URL"),
+                "https://relay.test",
+            )
+            self.assertEqual(
+                relay_testing._test_relay_config("RELAY_API_KEY"),
+                "test-relay-key",
+            )

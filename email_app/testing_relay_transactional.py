@@ -70,15 +70,18 @@ _transport = None
 
 
 def _test_relay_config(key, default="", **kwargs):
-    """Supply inert credentials only to the direct transactional adapter."""
+    """Use configured Relay values before offline adapter defaults."""
     values = {
         "RELAY_BASE_URL": "https://relay.test",
         "RELAY_API_KEY": "test-relay-key",
     }
-    if key in values:
-        return values[key]
     from integrations.config import get_config  # noqa: PLC0415
 
+    if key in values:
+        configured = get_config(key, "", **kwargs)
+        if configured not in (None, ""):
+            return configured
+        return values[key]
     return get_config(key, default, **kwargs)
 
 

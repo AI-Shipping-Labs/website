@@ -109,18 +109,15 @@ NOTHING else:
 | `PYTHONUNBUFFERED` | `1` |
 | `LOGFIRE_ENABLED` | `true` or `false` |
 | `LOGFIRE_TOKEN` | dummy, only on the Logfire-on run |
-| `SES_ENABLED` | `true` (the real production web-task value) |
+| `RELAY_BASE_URL` / `RELAY_API_KEY` | set (the real production values) |
 
-No AWS credentials are passed. `SES_ENABLED=true` is set because it is exactly
-what the production web task sets: under `DEBUG=False`, the pre-Django
+No AWS credentials are passed. The Relay values are set because they are
+exactly what the production task sets: under `DEBUG=False`, the pre-Django
 `smoke_check` phase (`_run_serving_boot_smoke_check`) raises a `RuntimeError`
-("DEBUG=false but SES_ENABLED is not true") and aborts the boot before
-`django.setup` when `SES_ENABLED` is false, so a faithful boot must set it true.
-It only flips a settings flag — no boto3/SES/Secrets-Manager round trip happens
-at boot (those are send-time only), and because no AWS credentials are passed
-the keys stay blank, so nothing can authenticate against AWS. (The earlier
-"disable SES by omission" plan was corrected here after a real run showed the
-`smoke_check` `RuntimeError` aborting the boot.)
+("Relay is not configured") and aborts the boot before
+`django.setup` when both are missing, so a faithful boot must set them.
+They only fill settings values — no email/SES/Secrets-Manager round trip happens
+at boot (those are send-time only).
 
 ## Faithfulness caveats (READ THIS)
 

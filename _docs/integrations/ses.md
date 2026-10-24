@@ -8,16 +8,17 @@ to set this right now, or can I defer it?" without leaving the page.
 
 All transactional email (verification, password reset, paid-tier
 notifications) and promotional email (newsletters, course campaigns)
-flow through Amazon SES. Direct deep-link URLs are intentionally
+flow through Relay, which delivers via Amazon SES. The site itself
+holds no SES send path. Direct deep-link URLs are intentionally
 written in code blocks so they do not render as clickable links. Copy
 them into the browser.
 
 Campaign consent is enforced in two phases. Fan-out materializes only users
 who are eligible and globally subscribed at enqueue time. Each delayed batch
 then re-reads every recipient's current `unsubscribed` value immediately before
-building their unsubscribe/verification footer and calling SES. A recipient
+building their unsubscribe/verification footer and handing the send to Relay. A recipient
 who opts out, permanently bounces, reaches the third-soft-bounce threshold, or
-complains after fan-out is skipped without an SES call or `EmailLog`; a soft
+complains after fan-out is skipped without a Relay send or `EmailLog`; a soft
 bounce below that threshold remains subscribed and sendable. SES account-level
 suppression remains enforced by SES itself—campaign workers do not perform a
 live suppression-list lookup. Transactional mail and explicit operator test
@@ -25,20 +26,17 @@ sends keep their separate delivery semantics.
 
 ## AWS_ACCESS_KEY_ID
 
-Purpose: AWS access key for the IAM user the platform uses to talk to
-SES. Read by `email_app/services/email_service.py` and
-`events/services/registration_email.py` when constructing the boto3
-SES client. The same key is reused by recordings uploads
-(`jobs/tasks/recordings_s3.py`) and content-image uploads
-(`integrations/services/github_sync/media.py`), so a single IAM user
-holds permissions for SES + both S3 buckets.
+Purpose: AWS access key for the IAM user the platform uses for S3
+(recordings uploads at `jobs/tasks/recordings_s3.py`, content-image
+uploads at `integrations/services/github_sync/media.py`, and the
+GitHub App key fallback in `integrations/services/github_app.py`).
+Outbound email needs no AWS key on the site: all sends go through
+Relay. The same key is reused across S3, so a single IAM user holds
+permissions for both S3 buckets.
 
-Without it: Every outbound email returns
-`NoCredentialsError` from boto3 — verification email never sends, new
-users cannot confirm their account, and the paid-checkout
-notification email is silently dropped (the webhook handler logs but
-does not retry). Existing users are unaffected; only new outbound
-mail breaks.
+Without it: S3 uploads fail — new recordings cannot upload and synced
+content images are skipped (existing CDN URLs keep resolving). Outbound
+mail is unaffected (Relay sends with its own credentials).
 
 Where to find it:
 
@@ -53,9 +51,6 @@ Where to find it:
 
 Prereqs:
 - An IAM user attached to a policy that grants:
-  - `ses:SendEmail`, `ses:SendRawEmail`
-  - `ses:GetSuppressedDestination`, `ses:ListSuppressedDestinations`,
-    `ses:PutSuppressedDestination`, `ses:DeleteSuppressedDestination`
   - `s3:PutObject`, `s3:GetObject` on the recordings and content
     buckets (these are scoped per-bucket; see `s3_recordings` /
     `s3_content` groups).
@@ -91,12 +86,14 @@ https://console.aws.amazon.com/ses/home#/account
 ## AWS_SECRET_ACCESS_KEY
 
 Purpose: AWS secret key paired with `AWS_ACCESS_KEY_ID`. Used by
-boto3 to sign every SES (and S3) request. The platform stores it as
+boto3 to sign S3 requests (site email needs no AWS key — Relay sends
+with its own credentials). The platform stores it as
 the package secret store, so it is masked in Studio after
 saving.
 
 Without it: Same failure mode as a missing `AWS_ACCESS_KEY_ID` — boto3
-raises `NoCredentialsError`, no email or S3 traffic leaves the box.
+raises `NoCredentialsError`, no S3 traffic leaves the box. Outbound
+mail is unaffected.
 
 Where to find it: AWS shows the secret key exactly once, at the moment
 you create the access key. There is no way to retrieve it later — if
@@ -115,45 +112,6 @@ pair (they are minted together).
    keys per user precisely to enable zero-downtime rotation.
 
 Test vs live: n/a. Same as `AWS_ACCESS_KEY_ID`.
-
-## AWS_SES_REGION
-
-Purpose: AWS region the SES client targets (e.g. `eu-west-1`,
-`us-east-1`). Read by `email_app/services/email_service.py:77`,
-`events/services/registration_email.py:139`, and the registration
-email helpers. Must match the region where the sending identities
-(domain or email) are verified — SES is region-scoped.
-
-Without it: Defaults to `us-east-1`. If your verified identities live
-in a different region (e.g. you onboarded SES in `eu-west-1` for
-GDPR locality), boto3 will succeed in connecting but every
-`SendEmail` call returns `MessageRejected: Email address is not
-verified`.
-
-Where to find it:
-
-- AWS console > SES > pick the region from the region dropdown (top
-  right). Verified identities and configuration sets are listed for
-  the currently selected region only.
-- Direct link:
-
-  ```
-  https://console.aws.amazon.com/ses/home
-  ```
-
-  Then read the region segment of the URL (e.g.
-  `?region=eu-west-1`).
-
-Prereqs: SES must be configured in that region — at minimum, a
-verified domain and a request for production access. Sending from a
-sandbox region only works to verified recipient addresses.
-
-Rotation: n/a routine. Change the value if you migrate SES to a new
-region; you must also re-verify the sending domain and configuration
-sets in the new region first.
-
-Test vs live: n/a. The region is the same per-environment — pin it to
-where your verified identities live.
 
 ## SES_TRANSACTIONAL_FROM_EMAIL
 
@@ -296,63 +254,6 @@ Rotation: Change the Studio override (or env var) to a new monitored
 inbox; no redeploy needed.
 
 Test vs live: n/a beyond per-environment override.
-
-## SES_CONFIGURATION_SET_NAME
-
-Purpose: SES configuration-set name applied to every outbound email
-via the boto3 `ConfigurationSetName` send argument. Read by
-`email_app/services/email_service.py:572-574`. A configuration set is
-the SES feature that publishes per-message delivery, open, bounce, and
-click events to SNS (and from there to the platform's webhook at
-`/api/ses-events`).
-
-Required in production: set to `aishippinglabs` to match the
-configuration set defined in
-`DataTalksClub/aws-infra` at `main/aisl/email.tf`. When this value is blank, SES
-publishes no events to SNS regardless of how the HTTPS subscription
-is wired — the bounce / complaint webhook never fires and bounced
-users are never unsubscribed. The "Optional" label in older docs
-referred to the local-dev case only.
-
-Without it: Outbound mail still sends — SES does not require a
-configuration set. But the platform loses delivery / bounce / open
-telemetry. Suppression-list updates from hard bounces stop, so
-repeated sends to bad addresses degrade the sending domain's
-reputation, and the entire bounce-handling pipeline silently
-no-ops in prod.
-
-Where to find it:
-
-- AWS console > SES > "Configuration sets" > "Create set" in the
-  active region.
-- Direct link:
-
-  ```
-  https://console.aws.amazon.com/ses/home#/configuration-sets
-  ```
-
-- After creating the set, add an "Event destination" pointing at an
-  SNS topic that fans out to the platform's
-  `/api/ses-events` endpoint.
-- Copy the configuration-set name (a free-form string, e.g.
-  `platform-prod-deliveries`) and paste it into Studio.
-
-Prereqs:
-- An SNS topic subscribed to the relevant event types
-  (`Bounce`, `Complaint`, `Delivery`, `Open`, `Click`).
-- An HTTPS subscription on that SNS topic pointing at the platform's
-  SES-events webhook (subscription must be confirmed — SNS sends a
-  one-time confirmation URL that the webhook view auto-confirms).
-- Optionally enable `SES_WEBHOOK_VALIDATION_ENABLED` so the platform
-  verifies SNS signatures before processing.
-
-Rotation: n/a. Configuration sets are stable — replace the value only
-if you cut over to a new set (e.g. promoting from a staging set to
-a production set).
-
-Test vs live: n/a in SES terms. Use a different configuration set per
-environment if you want clean telemetry separation, and pin each
-environment to its own set via the per-environment override.
 
 ## SES_WEBHOOK_VALIDATION_ENABLED
 

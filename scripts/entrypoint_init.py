@@ -387,9 +387,9 @@ def _run_check(phases):
     """Run the #529 system-check gate, timed. Propagates on Error-level checks.
 
     Issue #529: defence-in-depth gate against a misconfigured deploy. Runs
-    against the actual platform env vars (real DEBUG, real SES_ENABLED). If a
-    registered system check fires at Error level (e.g. email_app.E001 when
-    SES_ENABLED is missing from the task definition), ``call_command`` raises,
+    against the actual platform env vars (real DEBUG, real Relay values). If a
+    registered system check fires at Error level (e.g. email_app.E002 when
+    Relay credentials are missing from the task definition), ``call_command`` raises,
     the process exits non-zero, and the deploy halts. Under ``BOOT_MODE`` this
     runs in the ``predeploy`` one-off task (so a bad config fails the DEPLOY
     before any container serves); in the legacy fallback it runs on the

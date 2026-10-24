@@ -21,7 +21,6 @@ from email_app.backends.relay import (
 from email_app.checks import (
     check_email_backend_selection,
     check_relay_configuration_in_production,
-    check_ses_enabled_in_production,
 )
 from email_app.health import get_relay_health_status, validate_relay_config
 from email_app.package_mail import send_package_mail
@@ -31,7 +30,7 @@ from email_app.template_catalog import get_template_catalog
 class TestRelayBackendSelection(SimpleTestCase):
     def test_community_base_mail_backend_defaults_to_relay(self):
         backend = settings.COMMUNITY_BASE.get("MAIL_BACKEND")
-        self.assertIn(backend, ("relay", "ses_local"))
+        self.assertEqual(backend, "relay")
 
     def test_relay_email_backend_instantiation(self):
         backend = RelayEmailBackend(
@@ -255,16 +254,6 @@ class TestRelayHealthAndSystemChecks(SimpleTestCase):
         ), patch("email_app.checks.get_config", return_value=""):
             errors = check_relay_configuration_in_production(None)
             self.assertTrue(any(e.id == "email_app.E002" for e in errors))
-
-    def test_check_ses_enabled_skipped_when_relay(self):
-        with override_settings(
-            COMMUNITY_BASE={"MAIL_BACKEND": "relay"},
-            DEBUG=False,
-            TESTING=False,
-            SES_ENABLED=False,
-        ):
-            errors = check_ses_enabled_in_production(None)
-            self.assertEqual(errors, [])
 
 
 class TestTemplateCatalogIntegrity(SimpleTestCase):

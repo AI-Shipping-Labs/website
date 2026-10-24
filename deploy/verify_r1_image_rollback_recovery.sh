@@ -87,7 +87,6 @@ manage() {
         -e DATABASE_URL="${DATABASE_URL}" \
         -e SECRET_KEY=ci-r1-image-recovery-only \
         -e DEBUG=False \
-        -e SES_ENABLED=true \
         "${image}" /app/manage.py "$@"
 }
 

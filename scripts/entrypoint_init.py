@@ -319,13 +319,12 @@ def _run_serving_boot_smoke_check():
         return
 
     debug = _truthy_env("DEBUG", default=True)
-    ses_enabled = _truthy_env("SES_ENABLED", default=False)
     relay_enabled = bool(os.environ.get("RELAY_API_KEY", "").strip() or os.environ.get("RELAY_BASE_URL", "").strip())
-    if not debug and not ses_enabled and not relay_enabled:
+    if not debug and not relay_enabled:
         raise RuntimeError(
             "SERVING_BOOT_SMOKE_CHECK failed: DEBUG=false but "
-            "SES_ENABLED is not true (and RELAY_API_KEY is not configured). Transactional email would silently "
-            "no-op. Set RELAY_API_KEY / SES_ENABLED=true or set "
+            "Relay is not configured (and SES send paths no longer exist). Transactional email would fail. "
+            "Set RELAY_API_KEY / RELAY_BASE_URL or set "
             "SERVING_BOOT_SMOKE_CHECK_ENABLED=false for an intentional "
             "non-sending environment."
         )

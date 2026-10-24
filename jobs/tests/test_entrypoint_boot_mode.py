@@ -385,14 +385,14 @@ class ServingBootSmokeCheckTest(SimpleTestCase):
     def test_smoke_check_fails_when_production_email_is_disabled(self):
         with mock.patch.dict(os.environ, {"DEBUG": "false"}, clear=True):
             with self.assertRaisesMessage(
-                RuntimeError, "DEBUG=false but SES_ENABLED is not true",
+                RuntimeError, "Relay is not configured",
             ):
                 entry._run_serving_boot_smoke_check()
 
     def test_smoke_check_passes_when_production_email_is_enabled(self):
         with mock.patch.dict(
             os.environ,
-            {"DEBUG": "false", "SES_ENABLED": "true"},
+            {"DEBUG": "false", "RELAY_API_KEY": "test-relay-key"},
             clear=True,
         ):
             with mock.patch("builtins.print") as print_:

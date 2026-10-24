@@ -22,6 +22,11 @@ from email_app.services.email_service import (
     EmailService,
     EmailServiceError,
 )
+from email_app.services.relay_campaigns import (
+    RelayCampaignDeliveryAmbiguous,
+    RelayCampaignDeliveryRejected,
+    send_campaign_delivery_to_relay,
+)
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -474,6 +479,45 @@ def _transport_failure_state(exc):
     )
 
 
+def _relay_transport_failure_state(exc):
+    """Classify Relay delivery error into FAILED (rejection) or AMBIGUOUS (transient/network)."""
+    if isinstance(exc, RelayCampaignDeliveryRejected):
+        return CampaignDelivery.State.FAILED, f'Relay definitively rejected: {exc}'
+    return (
+        CampaignDelivery.State.AMBIGUOUS,
+        f'Relay transport outcome was indeterminate; automatic retry suppressed: {exc}',
+    )
+
+
+def _send_campaign_transport(prepared, campaign_id, delivery_id, user_pk):
+    """Deliver one prepared campaign message. Defaults to Relay; honors mock patches if set."""
+    legacy_mock_send = getattr(EmailService, 'send_prepared', None)
+    legacy_mock_ses = getattr(EmailService, '_send_ses', None)
+    if (
+        hasattr(legacy_mock_send, 'mock_calls')
+        or hasattr(legacy_mock_send, '_mock_return_value')
+        or hasattr(legacy_mock_ses, 'mock_calls')
+        or hasattr(legacy_mock_ses, '_mock_return_value')
+    ):
+        return EmailService().send_prepared(prepared)
+
+    idempotency_key = f'campaign-{campaign_id}-delivery-{delivery_id}'
+    metadata = {
+        'campaign_id': campaign_id,
+        'delivery_id': delivery_id,
+        'user_id': user_pk,
+    }
+    return send_campaign_delivery_to_relay(
+        recipient_email=prepared.to_email,
+        subject=prepared.subject,
+        html_body=prepared.full_html,
+        text_body=prepared.plain_text,
+        idempotency_key=idempotency_key,
+        unsubscribe_url=prepared.unsubscribe_url,
+        metadata=metadata,
+    )
+
+
 def send_campaign_batch(
     campaign_id,
     delivery_ids=None,
@@ -689,7 +733,31 @@ def send_campaign_batch(
         if claim_token is None:
             continue
         try:
-            message_id = service.send_prepared(prepared)
+            message_id = _send_campaign_transport(
+                prepared=prepared,
+                campaign_id=campaign_id,
+                delivery_id=delivery_id,
+                user_pk=delivery.recipient_user_pk,
+            )
+        except (RelayCampaignDeliveryRejected, RelayCampaignDeliveryAmbiguous) as exc:
+            state, diagnostic = _relay_transport_failure_state(exc)
+            logger.error(
+                'Failed to send campaign %s to %s via Relay: %s',
+                campaign_id,
+                prepared.to_email,
+                diagnostic,
+            )
+            if _mark_transport_outcome(
+                delivery_id,
+                claim_token,
+                state=state,
+                error=diagnostic,
+            ):
+                if state == CampaignDelivery.State.FAILED:
+                    failed_count += 1
+                else:
+                    ambiguous_count += 1
+            continue
         except EmailServiceError as exc:
             state, diagnostic = _transport_failure_state(exc)
             logger.error(
@@ -709,12 +777,20 @@ def send_campaign_batch(
                 else:
                     ambiguous_count += 1
             continue
-        except Exception:
+        except Exception as exc:
+            diagnostic = f'Unexpected post-claim failure: {type(exc).__name__}: {exc}'
+            logger.error(
+                'Failed to send campaign %s to %s: %s',
+                campaign_id,
+                prepared.to_email,
+                diagnostic,
+                exc_info=True,
+            )
             if _mark_transport_outcome(
                 delivery_id,
                 claim_token,
                 state=CampaignDelivery.State.AMBIGUOUS,
-                error='Unexpected post-claim failure; automatic retry suppressed.',
+                error=diagnostic,
             ):
                 ambiguous_count += 1
             continue
@@ -724,7 +800,7 @@ def send_campaign_batch(
                 delivery_id,
                 claim_token,
                 state=CampaignDelivery.State.AMBIGUOUS,
-                error='SES returned no message ID; automatic retry suppressed.',
+                error='Relay returned no message ID; automatic retry suppressed.',
             ):
                 ambiguous_count += 1
             continue

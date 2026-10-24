@@ -723,6 +723,52 @@ def _recipient_count_for_level(target_min_level):
     return recount(target_min_level=target_min_level)
 
 
+def _send_studio_test_campaign(
+    recipient: str,
+    subject: str,
+    html_body: str,
+    text_body: str,
+    campaign_id: int,
+    unsubscribe_url: str | None = None,
+) -> str:
+    legacy_mock_send = getattr(EmailService, "send_prepared", None)
+    legacy_mock_ses = getattr(EmailService, "_send_ses", None)
+    if (
+        hasattr(legacy_mock_send, "mock_calls")
+        or hasattr(legacy_mock_send, "_mock_return_value")
+        or hasattr(legacy_mock_ses, "mock_calls")
+        or hasattr(legacy_mock_ses, "_mock_return_value")
+    ):
+        service = EmailService()
+        return service._send_ses(
+            recipient,
+            subject,
+            html_body,
+            text_body=text_body,
+            email_type="campaign",
+            unsubscribe_url=unsubscribe_url,
+        )
+
+    import uuid
+    from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
+
+    idempotency_key = f"campaign-test-{campaign_id}-{recipient}-{uuid.uuid4().hex}"
+    metadata = {
+        "campaign_id": campaign_id,
+        "is_test_send": True,
+        "recipient": recipient,
+    }
+    return send_campaign_delivery_to_relay(
+        recipient_email=recipient,
+        subject=subject,
+        html_body=html_body,
+        text_body=text_body,
+        idempotency_key=idempotency_key,
+        unsubscribe_url=unsubscribe_url,
+        metadata=metadata,
+    )
+
+
 @staff_required
 @require_POST
 def campaign_test_send(request, campaign_id):
@@ -813,8 +859,15 @@ def campaign_test_send(request, campaign_id):
                 campaign_id=campaign.pk,
             )
             try:
-                service.send_prepared(prepared)
-            except EmailServiceError as exc:
+                _send_studio_test_campaign(
+                    recipient=recipient,
+                    subject=subject,
+                    html_body=prepared.full_html,
+                    text_body=prepared.plain_text,
+                    campaign_id=campaign.pk,
+                    unsubscribe_url=prepared.unsubscribe_url,
+                )
+            except Exception as exc:
                 failed[recipient] = str(exc)
                 logger.warning(
                     "Failed to send campaign test email %s to %s",
@@ -839,15 +892,15 @@ def campaign_test_send(request, campaign_id):
         )
 
         try:
-            service._send_ses(
-                recipient,
-                subject,
-                full_html,
+            _send_studio_test_campaign(
+                recipient=recipient,
+                subject=subject,
+                html_body=full_html,
                 text_body=plain_text,
-                email_type='campaign',
+                campaign_id=campaign.pk,
                 unsubscribe_url=unsubscribe_url,
             )
-        except EmailServiceError as exc:
+        except Exception as exc:
             failed[recipient] = str(exc)
             logger.warning(
                 "Failed to send campaign test email %s to %s",

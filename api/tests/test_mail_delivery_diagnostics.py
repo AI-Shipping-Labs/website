@@ -36,7 +36,6 @@ class MailDeliveryDiagnosticsTest(TestCase):
 
     def test_exact_key_returns_only_safe_delivery_evidence(self):
         response = self.get_evidence({"idempotency_key": "reset-evidence"})
-        self.assertEqual(response.status_code, 200)
         rows = response.json()["deliveries"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0], {

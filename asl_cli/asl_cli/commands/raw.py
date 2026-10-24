@@ -15,8 +15,10 @@ groups = []
 @json_option("data", required=False)
 @click.option("-p", "--param", "params", multiple=True, help="Query params as key=value (repeatable).")
 @click.option("--raw-output", is_flag=True, default=False, help="Return raw text instead of JSON.")
+@click.option("--single-attempt", is_flag=True, default=False,
+    help="Make one HTTP request without redirects or throttle retries.")
 @format_option
-def raw(method, path, data, params, raw_output, fmt):
+def raw(method, path, data, params, raw_output, single_attempt, fmt):
     """Call any API path directly.
 
     PATH is the full path after the base URL, e.g. /api/events.
@@ -37,6 +39,7 @@ def raw(method, path, data, params, raw_output, fmt):
 
     result = get_client().request(
         method.upper(), path, params=query or None, json_body=data, raw=raw_output,
+        single_attempt=single_attempt,
     )
     if raw_output:
         click.echo(result)

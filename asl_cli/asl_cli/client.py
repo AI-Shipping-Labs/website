@@ -91,39 +91,32 @@ class Client:
         json_body: Any | None = None,
         headers: dict[str, str] | None = None,
         raw: bool = False,
+        single_attempt: bool = False,
     ) -> Any:
         """Send a request and return decoded JSON (or raw text if ``raw``)."""
-        # No trailing slashes — the site middleware 301s them.
         if path != "/" and path.endswith("/"):
             path = path.rstrip("/")
+        send = self._send_with_backoff
+        if single_attempt:
+            send = self._send_single_attempt
+        response = send(
+            method, path, params=params, json=json_body,
+            headers=self._request_headers(path, headers),
+        )
+        return _decode_response(response, raw=raw, reject_redirects=single_attempt)
 
+    def _request_headers(self, path, headers):
         request_headers = {"Authorization": f"Token {self._token}"}
-        # community-base operator endpoints use bearer API keys. Keep the
-        # legacy Token header for the site's existing /api compatibility
-        # routes until those routes migrate in their owning issues.
+        # Package operator endpoints use bearer keys; compatibility endpoints
+        # retain their existing Token scheme.
         if path.lstrip("/").startswith("api/v1/"):
             request_headers["Authorization"] = f"Bearer {self._token}"
         if headers:
             request_headers.update(headers)
-        response = self._send_with_backoff(
-            method, path, params=params, json=json_body, headers=request_headers,
-        )
+        return request_headers
 
-        if response.status_code >= 400:
-            try:
-                error_body = response.json()
-            except Exception:
-                error_body = response.text
-            raise APIError(response.status_code, error_body, str(response.url))
-
-        if raw:
-            return response.text
-        if response.status_code == 204 or not response.content:
-            return None
-        try:
-            return response.json()
-        except json.JSONDecodeError:
-            return response.text
+    def _send_single_attempt(self, method, path, **kwargs):
+        return self._http.request(method, path, follow_redirects=False, **kwargs)
 
     def _send_with_backoff(self, method: str, path: str, **kwargs) -> httpx.Response:
         """Send once, retrying throttled 429s at most ``MAX_THROTTLE_RETRIES`` times."""
@@ -169,3 +162,20 @@ class Client:
 def staff_client() -> Client:
     """Convenience factory for the staff API client."""
     return Client()
+
+
+def _decode_response(response, *, raw, reject_redirects):
+    if response.status_code >= 400 or (reject_redirects and 300 <= response.status_code < 400):
+        try:
+            error_body = response.json()
+        except ValueError:
+            error_body = response.text
+        raise APIError(response.status_code, error_body, str(response.url))
+    if raw:
+        return response.text
+    if response.status_code == 204 or not response.content:
+        return None
+    try:
+        return response.json()
+    except json.JSONDecodeError:
+        return response.text

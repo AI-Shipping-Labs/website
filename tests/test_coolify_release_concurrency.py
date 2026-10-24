@@ -52,13 +52,13 @@ class ReleaseConcurrencyTest(SimpleTestCase):
             deployer.deploy(timeout=1, interval=0.01)
         self.assertEqual(len(ping_calls), 2)
 
-    def test_worker_loss_during_third_ping_fails_terminal_health_check(self):
+    def test_worker_loss_during_last_dev_ping_fails_terminal_health_check(self):
         coolify = FakeCoolify()
         ping_calls = []
 
         def ping_reader(url):
             ping_calls.append(url)
-            if len(ping_calls) == 3:
+            if len(ping_calls) == 6:
                 for item in coolify.service["applications"]:
                     if item["name"] == "worker":
                         item["status"] = "running:unhealthy"
@@ -69,7 +69,7 @@ class ReleaseConcurrencyTest(SimpleTestCase):
         )
         with self.assertRaisesMessage(ReleaseError, "source-runtime-not-exact"):
             deployer.deploy(timeout=1, interval=0.01)
-        self.assertEqual(len(ping_calls), 3)
+        self.assertEqual(len(ping_calls), 6)
 
     def test_source_compose_edit_during_wait_blocks_public_application(self):
         coolify = FakeCoolify()

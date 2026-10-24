@@ -52,9 +52,13 @@ boot phases or raw diagnostics.
 Only after that proof does the helper update the existing rolling Application.
 It captures the real Application deployment UUID returned by Coolify, polls
 that exact deployment to terminal `finished`, and requires three consecutive
-public `/ping` responses equal to the full SHA. Configuration drift, redirects,
+probe cycles where production and DEV `/ping` both equal the full SHA. Configuration drift, redirects,
 stale evidence, unhealthy containers, failed or unknown deployment states, and
 timeouts fail the job closed.
+
+The independent DEV hostname uses the file-provider route documented in
+[`coolify-dev-route.md`](coolify-dev-route.md). A healthy rolling production
+application alone does not prove that DEV has a router or a healthy backend.
 
 ## GitHub environment
 

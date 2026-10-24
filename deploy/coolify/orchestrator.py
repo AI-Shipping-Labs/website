@@ -16,6 +16,7 @@ from .contracts import (
     web_runtime_fingerprint,
 )
 from .errors import ReleaseError
+from .public_readiness import public_endpoints_ready
 from .verification import (
     application_deployment_uuid,
     boot_evidence_ready,
@@ -256,7 +257,7 @@ class ReleaseDeployer:
             app = self._verify_web_runtime(plan, require_image=True)
             if not web_application_ready(app, self.config.web_app_uuid, self.config.image):
                 return False
-            return self.ping_reader(self.config.ping_url) == self.config.sha
+            return public_endpoints_ready(self.ping_reader, self.config.ping_url, self.config.sha)
 
         wait_for_consecutive(public_web_ready, 3, timeout, interval)
         self._require_source_runtime(plan)

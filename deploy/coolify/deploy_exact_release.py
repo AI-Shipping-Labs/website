@@ -84,7 +84,7 @@ def write_summary(config, result):
         f"- Full revision: `{config.sha}`\n",
         f"- Application deployment: `{result.deployment_uuid}` (`finished`)\n",
         "- Source Service: web and worker exact revision, `running:healthy`\n",
-        "- Public `/ping`: three consecutive exact-revision responses\n",
+        "- Production and DEV `/ping`: three consecutive exact-revision responses each\n",
     ]
     lines.extend(source_receipt_lines(result.source_receipt))
     with Path(summary_path).open("a", encoding="utf-8") as stream:

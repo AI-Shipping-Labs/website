@@ -89,6 +89,7 @@ from scripts.affected_command_order import (  # noqa: E402  (same)
     CHECK_TAILWIND_COMMAND,
     ordered_commands,
 )
+from scripts.affected_coolify import FOCUSED_COOLIFY_CONTRACT_PATHS, coolify_playwright_scope  # noqa: E402
 from scripts.verify_tailwind_build import (  # noqa: E402  (needs the sys.path fix above)
     PRODUCER_FILES,
     PRODUCER_JS_FAMILY,
@@ -262,8 +263,7 @@ FOCUSED_CONTRACT_PATHS: tuple[tuple[str, tuple[str, ...]], ...] = (
         for glob in _agent_tree_globs("skills/ai-shipping-labs-event-recaps/*")
     ),
     ("scripts/affected_tests.py", ("tests.test_affected_tests",)),
-    ("deploy/coolify/verify_dual_runtime.py", ("tests.test_coolify_dual_runtime",)),
-    ("deploy/coolify/dual_runtime_snapshot.py", ("tests.test_coolify_dual_runtime",)),
+    *FOCUSED_COOLIFY_CONTRACT_PATHS,
     # The shared scan-set policy: the Tailwind source lint reads it, and rule
     # 14 imports it. Editing it changes both, so both run.
     (
@@ -1159,7 +1159,7 @@ def build_plan(
     plan.django_labels = _collapse_labels(labels)
     if plan.django_labels:
         plan.django_command = f"{DJANGO_COMMAND_PREFIX} {' '.join(plan.django_labels)} {DJANGO_COMMAND_SUFFIX}"
-    plan.playwright = "full" if escalations else "core"
+    plan.playwright = coolify_playwright_scope(escalations, relevant)
 
     if plan.playwright == "full":
         # The full suite already runs every Playwright file, so per-file
@@ -1265,7 +1265,7 @@ def render_text(plan: Plan, merge_base: str) -> str:
         lines.append("Playwright: full (escalated)")
         lines.extend(f"  ESCALATE {reason}" for reason in plan.escalation_reasons)
     else:
-        lines.append("Playwright: core")
+        lines.append(f"Playwright: {plan.playwright}")
     lines.append("")
 
     lines.append("Commands:")

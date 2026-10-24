@@ -86,13 +86,16 @@ def send_package_mail(
             extra["reply_to"] = [reply_to]
 
     with transaction.atomic():
+        sender = get_sender_for_email_type(template_name)
+        if "@" in sender:
+            sender = sender.split("@")[0]
         return package_send(
             purpose=template_name,
             to=to_email,
             context=context,
             idempotency_key=key,
             user=user if isinstance(user, Model) and getattr(user, "pk", None) else None,
-            sender=get_sender_for_email_type(template_name),
+            sender=sender,
             extra=extra or None,
             related=related,
             category=category,

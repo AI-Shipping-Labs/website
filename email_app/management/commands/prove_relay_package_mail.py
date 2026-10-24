@@ -7,6 +7,7 @@ from uuid import uuid4
 from community_base.mail import send as package_send
 from community_base.mail.jobs import deliver as deliver_job
 from django.core.management.base import BaseCommand, CommandError
+from django.db import transaction
 
 from email_app.services.email_classification import get_sender_for_email_type
 
@@ -52,6 +53,8 @@ class Command(BaseCommand):
         context = {
             "token": "proof-verification-token",
             "greeting_name": "Alexey",
+            "user_name": "Alexey",
+            "reset_url": "https://aishippinglabs.com/reset/token",
         }
 
         if not options["send"]:
@@ -60,14 +63,19 @@ class Command(BaseCommand):
             )
             return
 
+        sender = get_sender_for_email_type(template_name)
+        if "@" in sender:
+            sender = sender.split("@")[0]
+
         try:
-            delivery = package_send(
-                purpose=template_name,
-                to=RECIPIENT_EMAIL,
-                context=context,
-                idempotency_key=idempotency_key,
-                sender=get_sender_for_email_type(template_name),
-            )
+            with transaction.atomic():
+                delivery = package_send(
+                    purpose=template_name,
+                    to=RECIPIENT_EMAIL,
+                    context=context,
+                    idempotency_key=idempotency_key,
+                    sender=sender,
+                )
             # Synchronously deliver through configured backend
             deliver_job(None, {"delivery_id": str(delivery.id)})
             delivery.refresh_from_db()

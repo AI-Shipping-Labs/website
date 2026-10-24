@@ -1,6 +1,6 @@
 """Playwright E2E for series subscriber calendar invites (issue #869).
 
-SES is disabled in tests (``_send_raw_email`` returns a synthetic id), so
+The Relay transport is stubbed in tests, so
 these scenarios assert the registration/enrollment flow and the
 ``EmailLog`` rows produced — the calendar-client behaviour (entries
 added/updated/removed) is the ``[HUMAN]`` acceptance criterion. The exact

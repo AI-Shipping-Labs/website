@@ -75,7 +75,7 @@ class RegistrationEmailTimezoneLineTest(TestCase):
             event=self.event, user=user,
         )
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
         ) as mock_send:
             mock_send.return_value = "relay-tz-line-1"
             send_registration_confirmation(registration)
@@ -145,7 +145,7 @@ class RescheduleEmailTimezoneLineTest(TestCase):
         # once in 6,400 renders.
         with (
             patch(
-                "events.tasks.notify_reschedule._send_raw_email",
+                "events.tasks.notify_reschedule._send_calendar_email",
             ) as mock_send,
             patch(
                 "events.tasks.notify_reschedule.generate_cancel_token",
@@ -211,7 +211,7 @@ class HostRegistrationTimezoneLineTest(TestCase):
             user=host,
         )
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
         ) as mock_send:
             mock_send.return_value = "relay-tz-host-1"
             send_registration_confirmation(registration)
@@ -270,7 +270,7 @@ class SeriesRegistrationTimezoneLineTest(TestCase):
         EventRegistration.objects.create(event=self.e2, user=user)
         SeriesRegistration.objects.create(series=self.series, user=user)
         with patch(
-            "events.services.series_invite._send_raw_email",
+            "events.services.series_invite._send_calendar_email",
         ) as mock_send:
             mock_send.return_value = "relay-tz-series-1"
             send_series_registration_invite(

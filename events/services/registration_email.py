@@ -1,8 +1,6 @@
 """Send registration confirmation emails with .ics calendar attachments."""
 
 import logging
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
 
 from accounts.services.timezones import (
     build_timezone_account_url,
@@ -13,10 +11,6 @@ from email_app.relay_transactional import (
     calendar_alternative,
     recipient_template_context,
     send_relay_transactional,
-)
-from email_app.services.email_classification import (
-    EMAIL_KIND_TRANSACTIONAL,
-    get_sender_for_kind,
 )
 from email_app.services.email_rendering import (
     render_template_parts,
@@ -97,7 +91,7 @@ def _send_registration_calendar(registration, template_context, dedupe_key):
         audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
-    return _send_raw_email(
+    return _send_calendar_email(
         to_email=user.email,
         template_key='event_registration',
         context=recipient_template_context(user, template_context),
@@ -132,62 +126,7 @@ def _create_registration_log(registration, subject, message_id, dedupe_key):
     return email_log
 
 
-def build_calendar_email_message(
-    to_email,
-    subject,
-    html_body,
-    ics_content,
-    *,
-    text_body,
-    method='REQUEST',
-    filename='event.ics',
-):
-    """Build the raw MIME message used for calendar lifecycle emails.
-
-    Issue #1088: the ``text/calendar`` part is delivered as a
-    ``multipart/alternative`` SIBLING of the HTML body rather than a
-    ``Content-Disposition: attachment`` part. Gmail/Google Calendar only
-    fire their heuristic "this email updates your calendar / merge by UID"
-    handling when the invite arrives as an alternative body representation
-    of an ``METHOD:REQUEST``/``CANCEL`` message, not as a named attachment.
-    This is also the RFC-correct delivery for itip calendar messages.
-
-    Container shape: ``multipart/alternative[ text/plain, text/html,
-    text/calendar; method=<METHOD> ]``. The calendar remains last so
-    calendar-aware clients pick the richest alternative.
-    """
-    from_email = get_sender_for_kind(EMAIL_KIND_TRANSACTIONAL)
-    normalized_method = method.upper()
-
-    msg = MIMEMultipart('alternative')
-    msg['Subject'] = subject
-    msg['From'] = from_email
-    msg['To'] = to_email
-
-    # Human-readable alternatives first, with plain text as the universal
-    # fallback and HTML as the richer representation.
-    msg.attach(MIMEText(text_body, 'plain', 'utf-8'))
-    body = MIMEText(html_body, 'html', 'utf-8')
-    msg.attach(body)
-
-    ics_str = (
-        ics_content.decode('utf-8')
-        if isinstance(ics_content, bytes)
-        else ics_content
-    )
-    # Calendar last: the "richest" alternative. Carries the itip ``method``
-    # param on its Content-Type (preserved unchanged). Deliberately NO
-    # ``Content-Disposition: attachment`` so Gmail treats it as a calendar
-    # update to merge by UID, not a downloadable file. We keep a ``name``
-    # hint on the Content-Type for clients that still offer a download.
-    cal_part = MIMEText(ics_str, 'calendar', 'utf-8')
-    cal_part.set_param('method', normalized_method, header='Content-Type')
-    cal_part.set_param('name', filename, header='Content-Type')
-    msg.attach(cal_part)
-    return msg
-
-
-def _send_raw_email(
+def _send_calendar_email(
     to_email,
     template_key,
     context,

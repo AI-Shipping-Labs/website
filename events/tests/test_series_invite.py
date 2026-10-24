@@ -215,7 +215,7 @@ class SendSeriesRegistrationInviteTest(TierSetupMixin, TestCase):
                                    slug='woh-b')
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_attaches_multi_event_request_ics(self, mock_send):
         mock_send.return_value = 'relay-123'
@@ -275,7 +275,7 @@ class LegacySesSettingTest(TierSetupMixin, TestCase):
 
     @override_settings(SES_ENABLED=False)
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_disabled_ses_setting_does_not_suppress_relay(self, mock_send):
         mock_send.return_value = 'relay-message'
@@ -327,7 +327,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             EventRegistration.objects.create(event=self.e2, user=user)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_update_carries_bumped_sequence_and_request_method(self, mock_send):
         mock_send.return_value = 'relay-update'
@@ -362,7 +362,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_targets_only_given_user_ids(self, mock_send):
         mock_send.return_value = 'relay-update'
@@ -383,7 +383,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
             ).exists(),
         )
 
-    @patch('events.services.series_invite._send_raw_email')
+    @patch('events.services.series_invite._send_calendar_email')
     def test_per_recipient_failure_isolated(self, mock_send):
         # Alice's send raises; Bob's must still go through.
         def side_effect(to_email, **kwargs):
@@ -408,7 +408,7 @@ class SendSeriesUpdateTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_unsubscribed_subscriber_still_gets_transactional_update(
         self, mock_send,
@@ -461,7 +461,7 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         SeriesRegistration.objects.create(series=self.series, user=self.other)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_cancel_single_vevent_bumped_sequence(self, mock_send):
         mock_send.return_value = 'relay-cancel'
@@ -495,7 +495,7 @@ class SendSeriesCancellationTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_only_registered_subscribers_get_cancel(self, mock_send):
         mock_send.return_value = 'relay-cancel'
@@ -583,7 +583,7 @@ class AccessFilteredSubsetTest(TierSetupMixin, TestCase):
         EventRegistration.objects.create(event=self.open2, user=self.free_user)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_update_invite_excludes_inaccessible(self, mock_send):
         mock_send.return_value = 'relay-update'
@@ -635,7 +635,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         return mock_send.call_args.kwargs['context']['partial_note']
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_registration_email_includes_upsell_note(self, mock_send):
         mock_send.return_value = 'relay-message'
@@ -659,7 +659,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         })
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_full_access_subscriber_gets_no_note(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'
@@ -678,7 +678,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertNotIn('Upgrade any time', note)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_note_singular_for_one_gated_session(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'
@@ -692,7 +692,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertNotIn('sessions in this series are', note)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_note_plural_for_multiple_gated_sessions(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'
@@ -708,7 +708,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertNotIn('1 more session in this series is', note)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_note_names_highest_gated_tier(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'
@@ -725,7 +725,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertNotIn('Main tier', note)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_cancellation_note_computed_against_whole_series(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'
@@ -743,7 +743,7 @@ class PartialAccessNoteTest(TierSetupMixin, TestCase):
         self.assertIn(self.PRICING_URL, note)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_update_note_for_partial_access_subscriber(self, mock_boto3):
         mock_boto3.return_value = 'relay-message'

@@ -98,3 +98,25 @@ def check_email_backend_selection(app_configs, **kwargs):
             )
         ]
     return []
+
+
+@register(Tags.security)
+def check_package_mail_backend_relay(app_configs, **kwargs):
+    """Refuse a production-like deploy when package mail is not on Relay (P4)."""
+    if getattr(settings, "TESTING", False):
+        return []
+    if getattr(settings, "DEBUG", False):
+        return []
+
+    backend = getattr(settings, "COMMUNITY_BASE", {}).get("MAIL_BACKEND", "")
+    if backend == "relay":
+        return []
+    return [
+        Error(
+            f"COMMUNITY_BASE['MAIL_BACKEND'] is set to '{backend or '<unset>'}'. "
+            "Package mail must route through Relay; the local SES backend "
+            "is test-only.",
+            hint="Set COMMUNITY_BASE_MAIL_BACKEND=relay in the deploy environment.",
+            id="email_app.E005",
+        )
+    ]

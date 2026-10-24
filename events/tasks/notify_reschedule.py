@@ -42,7 +42,7 @@ from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
 from events.services.cancel_token import generate_cancel_token
 from events.services.host_registration import is_host_registration
-from events.services.registration_email import _send_raw_email
+from events.services.registration_email import _send_calendar_email
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -249,7 +249,7 @@ def send_reschedule_notice_one(event_id, user_id, old_start_iso):
         attendee_email=user.email,
     )
 
-    ses_message_id = _send_raw_email(
+    ses_message_id = _send_calendar_email(
         to_email=user.email,
         template_key='event_rescheduled',
         context=recipient_template_context(user, template_context),

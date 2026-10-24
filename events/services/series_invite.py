@@ -7,7 +7,7 @@ from email_app.relay_transactional import recipient_template_context
 from events.models import EventRegistration
 from events.services.calendar_invite import generate_ics, generate_series_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
-from events.services.registration_email import _send_raw_email
+from events.services.registration_email import _send_calendar_email
 from events.services.series_email_context import (
     build_series_subject_context,
     render_series_email,
@@ -105,7 +105,7 @@ def _send_series_calendar(
         old_start=old_start,
     )
     ics_content = _series_ics(events, user.email, method)
-    message_id = _send_raw_email(
+    message_id = _send_calendar_email(
         to_email=user.email,
         template_key=template_key,
         context=recipient_template_context(user, context),

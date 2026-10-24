@@ -659,8 +659,7 @@ class EmailService:
     ):
         """Deliver one prepared message through Relay (historic seam name).
 
-        Relay cutover P4: the direct SES v2 implementation (boto3
-        ``sesv2.send_email``) is gone. This keeps its name and signature
+        Relay cutover P4: the direct SES implementation is gone. This keeps its name and signature
         so the suite's transport mocks keep intercepting exactly one
         seam, and so the Studio/campaign mock branches keep routing
         through ``send_prepared`` unchanged.

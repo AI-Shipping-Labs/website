@@ -78,7 +78,7 @@ class RegistrationEmailTimezoneTest(TestCase):
         )
         with (
             patch(
-                'events.services.registration_email._send_raw_email',
+                'events.services.registration_email._send_calendar_email',
             ) as mock_send,
             patch(
                 'events.services.registration_email.generate_cancel_token',
@@ -203,7 +203,7 @@ class RegistrationEmailDoesNotUseFormattedStartTest(TestCase):
                 ),
             ),
             patch(
-                'events.services.registration_email._send_raw_email',
+                'events.services.registration_email._send_calendar_email',
                 return_value='relay-no-formatted-start',
             ),
         ):

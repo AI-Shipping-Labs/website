@@ -124,7 +124,7 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
         self.assertFalse(ses_service.validate_sns_notification({}))
 
     def test_registration_email_uses_db_relay_url_and_key(self):
-        from events.services.registration_email import _send_raw_email
+        from events.services.registration_email import _send_calendar_email
 
         set_integration("RELAY_BASE_URL", "https://db-relay.example", "email")
         set_integration("RELAY_API_KEY", "db-relay-key", "email")
@@ -143,7 +143,7 @@ class SESRuntimeConfigTest(RuntimeConfigTestCase):
             "email_app.relay_transactional.requests.post",
             return_value=response,
         ) as post:
-            message_id = _send_raw_email(
+            message_id = _send_calendar_email(
                 to_email="member@example.com",
                 template_key="event_registration",
                 context={"event_title": "Event"},

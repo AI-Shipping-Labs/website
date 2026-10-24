@@ -9,14 +9,11 @@ and a stable idempotency_key to ensure strict deduplication across retries and w
 
 from __future__ import annotations
 
-import copy
 import logging
-from dataclasses import dataclass
 from typing import Any
 
 import requests
 from django.conf import settings
-from django.core.exceptions import ImproperlyConfigured
 
 from integrations.config import get_config
 

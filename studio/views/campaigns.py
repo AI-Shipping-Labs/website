@@ -2,6 +2,7 @@
 
 import logging
 import re
+import uuid
 
 from django.contrib import messages
 from django.contrib.auth import get_user_model
@@ -34,11 +35,12 @@ from email_app.services.campaign_waves import (
     campaign_wave_summary,
     release_next_wave,
 )
-from email_app.services.email_service import EmailService, EmailServiceError
+from email_app.services.email_service import EmailService
 from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
     build_recording_available_prefill,
 )
+from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
 from events.models import Event
 from integrations.config import get_config
 from studio.decorators import staff_required
@@ -748,9 +750,6 @@ def _send_studio_test_campaign(
             email_type="campaign",
             unsubscribe_url=unsubscribe_url,
         )
-
-    import uuid
-    from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
 
     idempotency_key = f"campaign-test-{campaign_id}-{recipient}-{uuid.uuid4().hex}"
     metadata = {

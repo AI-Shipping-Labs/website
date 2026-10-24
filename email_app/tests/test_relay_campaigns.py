@@ -10,19 +10,9 @@ from django.urls import reverse
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
-from email_app.services.campaign_repermission import REPERMISSION_EMAIL_TYPE
-from email_app.services.relay_campaigns import (
-    RelayCampaignDeliveryAmbiguous,
-    RelayCampaignDeliveryRejected,
-    send_campaign_delivery_to_relay,
-)
 from email_app.tasks.send_campaign import (
-    _finalize_delivery_sent,
-    refresh_campaign_status,
-    send_campaign,
     send_campaign_batch,
 )
-from payments.models import Tier
 from tests.fixtures import TierSetupMixin, create_user_with_membership
 
 User = get_user_model()

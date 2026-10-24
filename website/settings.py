@@ -860,15 +860,21 @@ def _package_github_app_private_key():
 
 
 def _package_relay_base_url():
-    from integrations.config import get_config
+    try:
+        from integrations.config import get_config
 
-    return get_config('RELAY_BASE_URL', os.getenv('RELAY_BASE_URL', ''))
+        return get_config('RELAY_BASE_URL', os.getenv('RELAY_BASE_URL', ''))
+    except Exception:
+        return os.getenv('RELAY_BASE_URL', '')
 
 
 def _package_relay_api_key():
-    from integrations.config import get_config
+    try:
+        from integrations.config import get_config
 
-    return get_config('RELAY_API_KEY', os.getenv('RELAY_API_KEY', ''))
+        return get_config('RELAY_API_KEY', os.getenv('RELAY_API_KEY', ''))
+    except Exception:
+        return os.getenv('RELAY_API_KEY', '')
 
 
 COMMUNITY_BASE = {

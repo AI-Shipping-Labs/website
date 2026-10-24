@@ -136,6 +136,8 @@ jobs:
         env:
           DEBUG: "False"
           SES_ENABLED: "true"
+          RELAY_BASE_URL: "https://relay.datatalks.club"
+          RELAY_API_KEY: "ci-dummy-relay-api-key"
           SECRET_KEY: "ci-system-check-only-not-a-real-secret"
         run: |
           start=$(date +%s)

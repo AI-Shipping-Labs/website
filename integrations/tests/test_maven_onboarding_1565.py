@@ -665,7 +665,8 @@ class MavenCourseChannelTest(MavenWebhookMixin):
                 "access to the community channels automatically.",
                 expected_main_claim,
                 "To get the personalized plan, fill in your onboarding form — it takes "
-                "a few minutes and tells us about your background and goals.",
+                "a few minutes and tells us about your background and goals. "
+                "After the onboarding form, you can book a 1:1 call with Alexey.",
             ],
         )
 

@@ -678,6 +678,17 @@ SLACK_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_ANNOUNCEMENTS_CHANNEL_ID'
 SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_DEV_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID = os.environ.get('SLACK_TEST_ANNOUNCEMENTS_CHANNEL_ID', '') if SLACK_ENABLED else ''
 
+# Outbound email backend (A1.1 / AC 3): all core Django mail (send_mail,
+# mail_admins, EmailMessage) delivers through Relay's raw_transactional
+# template via RelayEmailBackend. Never falls back to Django SMTP default
+# or SES. In test runner, locmem backend is used unless overridden.
+EMAIL_BACKEND = os.environ.get(
+    'EMAIL_BACKEND',
+    'email_app.backends.relay.RelayEmailBackend' if not TESTING else 'django.core.mail.backends.locmem.EmailBackend',
+)
+DEFAULT_FROM_EMAIL = 'AI Shipping Labs <noreply@aishippinglabs.com>'
+SERVER_EMAIL = DEFAULT_FROM_EMAIL
+
 # Amazon SES kill-switch (issue #509)
 # Mirrors the SLACK_ENABLED pattern above. Production deploys MUST set
 # SES_ENABLED=true to enable transactional + campaign mail; every other
@@ -848,6 +859,18 @@ def _package_github_app_private_key():
     return _resolve_github_app_private_key()
 
 
+def _package_relay_base_url():
+    from integrations.config import get_config
+
+    return get_config('RELAY_BASE_URL', os.getenv('RELAY_BASE_URL', ''))
+
+
+def _package_relay_api_key():
+    from integrations.config import get_config
+
+    return get_config('RELAY_API_KEY', os.getenv('RELAY_API_KEY', ''))
+
+
 COMMUNITY_BASE = {
     'SITE_KEY': 'aisl',
     # Canonical origin used by shared public-resource API URLs. Keep this
@@ -856,7 +879,7 @@ COMMUNITY_BASE = {
     'ACCESS_POLICY': 'content.access_policy.TierAccessPolicy',
     'COURSE_ACCESS_GRANTS': 'content.curriculum_grants.course_access_grants',
     'JOBS_BACKEND': 'django_q',
-    'MAIL_BACKEND': 'ses_local',
+    'MAIL_BACKEND': os.environ.get('COMMUNITY_BASE_MAIL_BACKEND', 'relay'),
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
@@ -870,8 +893,8 @@ COMMUNITY_BASE = {
     # A6.2: the Relay contacts/subscriptions mirror. BASE_URL/API_KEY point
     # at the Relay tenant serving the AISL audience; WEBHOOK_SECRET verifies
     # the signed callback ingress mounted from community_base.mail.urls.
-    'RELAY_BASE_URL': os.getenv('RELAY_BASE_URL', ''),
-    'RELAY_API_KEY': os.getenv('RELAY_API_KEY', ''),
+    'RELAY_BASE_URL': _lazy_package_setting(_package_relay_base_url),
+    'RELAY_API_KEY': _lazy_package_setting(_package_relay_api_key),
     'RELAY_WEBHOOK_SECRET': os.getenv('RELAY_WEBHOOK_SECRET', ''),
     'STUDIO_TITLE': 'AI Shipping Labs Studio',
     # Issue #1696 phase 4: coursework without its Studio section (it needs

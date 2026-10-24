@@ -313,7 +313,7 @@ def _send_failure_alert(*, event_id, event_type, outcome, attempt,
         lines.append(f"Detail: {detail}")
     lines.append(f"Diagnostics: {_diagnostics_url()}")
     try:
-        mail_admins(subject, "\n".join(lines), fail_silently=True)
+        mail_admins(subject, "\n".join(lines), fail_silently=False)
     except Exception:  # pragma: no cover - alert must never break dispatch
         logger.exception("Failed to send cancellation failure alert for %s", event_id)
 
@@ -379,7 +379,7 @@ def _send_review_alert(*, event_id, livemode, attempt, review):
         f"Diagnostics: {_diagnostics_url()}",
     ])
     try:
-        mail_admins(subject, "\n".join(lines), fail_silently=True)
+        mail_admins(subject, "\n".join(lines), fail_silently=False)
     except Exception:  # pragma: no cover - alert must never break dispatch
         logger.exception("Failed to send payment review alert for %s", event_id)
 

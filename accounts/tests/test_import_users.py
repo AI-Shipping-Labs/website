@@ -2,6 +2,7 @@ from datetime import timedelta
 from io import StringIO
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
@@ -502,9 +503,17 @@ class WelcomeImportedEmailTaskTest(TestCase):
         from email_app.testing import StubSESClient
 
         stub = StubSESClient()
-        with patch(
-            "community_base.mail.backends.ses_local.configured_client",
-            return_value=stub,
+        with (
+            self.settings(
+                COMMUNITY_BASE={
+                    **settings.COMMUNITY_BASE,
+                    "MAIL_BACKEND": "ses_local",
+                }
+            ),
+            patch(
+                "community_base.mail.backends.ses_local.configured_client",
+                return_value=stub,
+            ),
         ):
             pending = EmailDelivery.objects.filter(
                 state=EmailDelivery.State.PENDING,

@@ -129,7 +129,7 @@ def _maybe_send_actionable_alert(run):
             f"New/changed actionable findings: {len(new_or_changed)}\n"
             f"Report: {STUDIO_REPORT_PATH}"
         ),
-        fail_silently=True,
+        fail_silently=False,
     )
 
 
@@ -151,7 +151,7 @@ def _maybe_send_failure_alert():
             f"Latest error: {latest.error_message}\n"
             f"Report: {STUDIO_REPORT_PATH}"
         ),
-        fail_silently=True,
+        fail_silently=False,
     )
     latest.error_message = f"{latest.error_message} [alerted]"
     latest.save(update_fields=["error_message"])

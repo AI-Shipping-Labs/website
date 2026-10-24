@@ -1,49 +1,28 @@
-"""Django system checks for the ``email_app``.
+"""Django system checks for the ``email_app`` (AC 5)."""
 
-Issue #521 — surface a deploy-blocking error when a production-like
-environment boots without ``SES_ENABLED=true``. Issue #509 introduced the
-SES kill-switch (off by default everywhere except prod, where the
-operator must opt in) and an operator who forgets to flip the switch in
-production silently breaks every transactional email path: account
-verification, password reset, newsletter double opt-in, event
-registration confirmations, and campaign sends. The user sees a 200
-response and the standard "check your email" UI but never gets the
-email; the only signal in the logs is a single ``logger.info("SES
-disabled - skipping send ...")`` line per send, which is too quiet to
-catch in a routine deploy.
+from __future__ import annotations
 
-The check below converts that silent misconfiguration into a loud
-``manage.py check`` failure: ``Error`` level is high enough to make
-``manage.py check`` exit non-zero (so a deploy pipeline that runs
-``manage.py check`` as a pre-flight step will block before the new
-container is promoted) but does not stop ``runserver`` / ``migrate``
-from running, which means a container that has already started keeps
-serving the rest of the site even if email is broken.
-"""
+from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.checks import Error, Tags, register
 
+from integrations.config import get_config
+
 
 @register(Tags.security)
 def check_ses_enabled_in_production(app_configs, **kwargs):
-    """Refuse a production-like deploy when SES is disabled.
-
-    Returns a single ``email_app.E001`` error when ``DEBUG=False`` and
-    ``SES_ENABLED`` is missing or ``False``. ``DEBUG=True`` and the
-    ``TESTING`` flag (set by ``website/settings.py`` when ``manage.py
-    test`` is on the command line) both skip the check entirely so
-    local dev and the test runner stay silent. Django's test runner
-    flips ``settings.DEBUG`` to ``False`` before running system
-    checks, so the ``TESTING`` short-circuit is what keeps
-    ``manage.py test`` quiet — without it every test invocation would
-    fail. ``SES_ENABLED`` defaults to ``False`` if the attribute is
-    missing — same behaviour as the settings-level kill-switch.
-    """
+    """Refuse a production-like deploy when SES is disabled and MAIL_BACKEND is ses_local."""
     if getattr(settings, "TESTING", False):
         return []
     if getattr(settings, "DEBUG", False):
         return []
+
+    # If package mail is routed to Relay, SES_ENABLED is no longer required for sending.
+    community_base = getattr(settings, "COMMUNITY_BASE", {})
+    if community_base.get("MAIL_BACKEND") == "relay":
+        return []
+
     if getattr(settings, "SES_ENABLED", False):
         return []
     return [
@@ -66,3 +45,87 @@ def check_ses_enabled_in_production(app_configs, **kwargs):
             id="email_app.E001",
         )
     ]
+
+
+@register(Tags.security)
+def check_relay_configuration_in_production(app_configs, **kwargs):
+    """Refuse a production-like deploy when Relay is enabled but misconfigured (AC 5)."""
+    if getattr(settings, "TESTING", False):
+        return []
+    if getattr(settings, "DEBUG", False):
+        return []
+
+    community_base = getattr(settings, "COMMUNITY_BASE", {})
+    if community_base.get("MAIL_BACKEND") != "relay":
+        return []
+
+    errors = []
+    base_url = (get_config("RELAY_BASE_URL", getattr(settings, "RELAY_BASE_URL", "")) or "").strip()
+    api_key = (get_config("RELAY_API_KEY", getattr(settings, "RELAY_API_KEY", "")) or "").strip()
+
+    if not base_url:
+        errors.append(
+            Error(
+                "COMMUNITY_BASE['MAIL_BACKEND']='relay' but RELAY_BASE_URL is not configured.",
+                hint="Set RELAY_BASE_URL (e.g. https://relay.datatalks.club) in environment or Studio settings.",
+                id="email_app.E002",
+            )
+        )
+    else:
+        parsed = urlsplit(base_url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            errors.append(
+                Error(
+                    f"RELAY_BASE_URL '{base_url}' is not a valid absolute HTTP(S) URL.",
+                    hint="Configure a valid URL like https://relay.datatalks.club.",
+                    id="email_app.E002",
+                )
+            )
+
+    if not api_key:
+        errors.append(
+            Error(
+                "COMMUNITY_BASE['MAIL_BACKEND']='relay' but RELAY_API_KEY is not configured.",
+                hint="Set the AISL client Relay API key in environment or Studio settings.",
+                id="email_app.E002",
+            )
+        )
+
+    # Dry-run guard on production
+    dry_run = bool(get_config("RELAY_TRANSACTIONAL_DRY_RUN", False))
+    env_name = (
+        get_config("OBSERVABILITY_ENVIRONMENT", "")
+        or getattr(settings, "ENVIRONMENT", "")
+    ).lower()
+    is_prod = env_name in {"production", "prod"} or "aishippinglabs.com" in getattr(settings, "ALLOWED_HOSTS", [])
+    if is_prod and dry_run:
+        errors.append(
+            Error(
+                "RELAY_TRANSACTIONAL_DRY_RUN is enabled in production! Real transactional mail will not be sent.",
+                hint="Disable RELAY_TRANSACTIONAL_DRY_RUN in production.",
+                id="email_app.E003",
+            )
+        )
+
+    return errors
+
+
+@register(Tags.compatibility)
+def check_email_backend_selection(app_configs, **kwargs):
+    """Ensure Django core mail EMAIL_BACKEND is Relay-backed and never SMTP/SES default (AC 3)."""
+    if getattr(settings, "TESTING", False):
+        return []
+
+    backend = getattr(settings, "EMAIL_BACKEND", "")
+    if not backend or backend in {
+        "django.core.mail.backends.smtp.EmailBackend",
+        "django_ses.SESBackend",
+    }:
+        return [
+            Error(
+                f"EMAIL_BACKEND is set to '{backend or '<unset>'}'. Django core mail must route through Relay.",
+                hint="Set EMAIL_BACKEND = 'email_app.backends.relay.RelayEmailBackend'.",
+                id="email_app.E004",
+            )
+        ]
+    return []

@@ -177,7 +177,7 @@ def _maybe_send_scheduled_failure_alert(batch):
             f"Latest failure summary: {batch.summary}\n"
             f"Review: {review_path}"
         ),
-        fail_silently=True,
+        fail_silently=False,
     )
     params = dict(batch.params or {})
     params["failure_alert_sent"] = True

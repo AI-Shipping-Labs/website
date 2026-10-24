@@ -214,7 +214,7 @@ def send_call_request_notification(call_request: CallRequest) -> bool:
             message=body,
             from_email=from_email,
             recipient_list=[recipient],
-            fail_silently=True,
+            fail_silently=False,
         )
         return True
     except Exception:

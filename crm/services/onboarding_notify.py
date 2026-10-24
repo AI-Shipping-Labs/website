@@ -207,7 +207,7 @@ def _email_staff_about_onboarding(*, member, target_url, updated=False):
         message=body,
         from_email=from_email,
         recipient_list=recipients,
-        fail_silently=True,
+        fail_silently=False,
     )
     return len(recipients)
 

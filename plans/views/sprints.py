@@ -615,7 +615,7 @@ def _email_shared_plan_request_confirmation(
         to=to,
         cc=cc,
     )
-    email.send(fail_silently=True)
+    email.send(fail_silently=False)
     return len(to) + len(cc)
 
 

@@ -4,15 +4,13 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from community_base.mail import send as package_send
 from community_base.mail.jobs import deliver as deliver_job
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
 
-from email_app.services.email_classification import get_sender_for_email_type
+from email_app.package_mail import send_package_mail
 
 RECIPIENT_EMAIL = "alexey.s.grigoriev@gmail.com"
-DEFAULT_TEMPLATE = "password_reset"
+DEFAULT_TEMPLATE = "onboarding_reminder"
 SAFE_KEY_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,199}")
 
 
@@ -51,10 +49,7 @@ class Command(BaseCommand):
         )
 
         context = {
-            "token": "proof-verification-token",
-            "greeting_name": "Alexey",
             "user_name": "Alexey",
-            "reset_url": "https://aishippinglabs.com/reset/token",
         }
 
         if not options["send"]:
@@ -63,19 +58,14 @@ class Command(BaseCommand):
             )
             return
 
-        sender = get_sender_for_email_type(template_name)
-        if "@" in sender:
-            sender = sender.split("@")[0]
-
         try:
-            with transaction.atomic():
-                delivery = package_send(
-                    purpose=template_name,
-                    to=RECIPIENT_EMAIL,
-                    context=context,
-                    idempotency_key=idempotency_key,
-                    sender=sender,
-                )
+            delivery = send_package_mail(
+                None,
+                template_name,
+                context,
+                recipient_email=RECIPIENT_EMAIL,
+                idempotency_key=idempotency_key,
+            )
             # Synchronously deliver through configured backend
             deliver_job(None, {"delivery_id": str(delivery.id)})
             delivery.refresh_from_db()

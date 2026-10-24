@@ -4,7 +4,7 @@ from django.test import SimpleTestCase
 
 from email_app import relay_transactional
 from email_app import testing_relay_transactional as relay_testing
-from integrations.config import reset_local_config_cache
+from integrations import config as integration_config
 
 
 def _payload(key, template_key="event_registration"):
@@ -66,8 +66,10 @@ class StubRelayTransactionalTransportTest(SimpleTestCase):
 
     def test_install_is_scoped_to_direct_adapter_requests_binding(self):
         original_binding = relay_transactional.requests
+        original_adapter_get_config = relay_transactional.get_config
         original_transport = relay_testing._transport
         original_post = requests.post
+        original_global_get_config = integration_config.get_config
         original_base_url = getattr(settings, "RELAY_BASE_URL", None)
         original_api_key = getattr(settings, "RELAY_API_KEY", None)
         try:
@@ -76,11 +78,24 @@ class StubRelayTransactionalTransportTest(SimpleTestCase):
 
             self.assertIs(relay_transactional.requests, transport)
             self.assertIs(requests.post, original_post)
-            self.assertEqual(settings.RELAY_BASE_URL, "https://relay.test")
-            self.assertEqual(settings.RELAY_API_KEY, "test-relay-key")
+            self.assertIs(integration_config.get_config, original_global_get_config)
+            self.assertEqual(
+                relay_transactional.get_config("RELAY_BASE_URL"),
+                "https://relay.test",
+            )
+            self.assertEqual(
+                relay_transactional.get_config("RELAY_API_KEY"),
+                "test-relay-key",
+            )
+            self.assertEqual(
+                getattr(settings, "RELAY_BASE_URL", None),
+                original_base_url,
+            )
+            self.assertEqual(
+                getattr(settings, "RELAY_API_KEY", None),
+                original_api_key,
+            )
         finally:
             relay_transactional.requests = original_binding
+            relay_transactional.get_config = original_adapter_get_config
             relay_testing._transport = original_transport
-            settings.RELAY_BASE_URL = original_base_url
-            settings.RELAY_API_KEY = original_api_key
-            reset_local_config_cache()

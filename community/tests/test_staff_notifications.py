@@ -1760,7 +1760,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
     """
 
     STAFF_EMAIL = "team@aishippinglabs.com"
-    WELCOME_FROM = "welcome@aishippinglabs.com"
+    WELCOME_SENDER = "welcome"
+    WELCOME_ADDRESS = "welcome@aishippinglabs.com"
 
     @classmethod
     def setUpTestData(cls):
@@ -1877,7 +1878,7 @@ class PaidWelcomeSESDestinationTest(TestCase):
         )
 
         self.assert_member_visible_with_staff_bcc(welcome)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
 
     def test_unexpected_paid_level_fallback_welcome_gets_hidden_staff_copy(self):
         from types import SimpleNamespace
@@ -1926,8 +1927,8 @@ class PaidWelcomeSESDestinationTest(TestCase):
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_FROM)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_SENDER)
+        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
         self.assert_member_visible_with_staff_bcc(welcome)
 
     def test_welcome_reply_to_uses_configured_alternate_without_staff_reply_path(self):
@@ -1960,12 +1961,12 @@ class PaidWelcomeSESDestinationTest(TestCase):
         # From down when SES_WELCOME_FROM_EMAIL=welcome@ is pinned.
         self._set("STAFF_SIGNUP_NOTIFY_EMAIL", self.STAFF_EMAIL)
         self._set("SES_FROM_EMAIL", "noreply@aishippinglabs.com", group="ses")
-        self._set("SES_WELCOME_FROM_EMAIL", self.WELCOME_FROM, group="ses")
+        self._set("SES_WELCOME_FROM_EMAIL", self.WELCOME_ADDRESS, group="ses")
 
         welcome = self._welcome_call(self._run_welcome())
 
-        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_FROM)
-        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_FROM])
+        self.assertEqual(welcome["FromEmailAddress"], self.WELCOME_SENDER)
+        self.assertEqual(welcome["ReplyToAddresses"], [self.WELCOME_ADDRESS])
         self.assert_member_visible_with_staff_bcc(welcome)
 
     # -- Scenario 4: staff heads-up (B1) is its own To send ------------

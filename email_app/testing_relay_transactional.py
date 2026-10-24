@@ -69,19 +69,26 @@ def _message_id(idempotency_key):
 _transport = None
 
 
+def _test_relay_config(key, default="", **kwargs):
+    """Supply inert credentials only to the direct transactional adapter."""
+    values = {
+        "RELAY_BASE_URL": "https://relay.test",
+        "RELAY_API_KEY": "test-relay-key",
+    }
+    if key in values:
+        return values[key]
+    from integrations.config import get_config  # noqa: PLC0415
+
+    return get_config(key, default, **kwargs)
+
+
 def install_test_relay_transactional_transport():
     """Install the offline transport only on the AISL direct adapter module."""
     global _transport
-    from django.conf import settings  # noqa: PLC0415
+    from email_app import relay_transactional  # noqa: PLC0415
 
-    from integrations.config import reset_local_config_cache  # noqa: PLC0415
-
-    settings.RELAY_BASE_URL = "https://relay.test"
-    settings.RELAY_API_KEY = "test-relay-key"
-    reset_local_config_cache()
     if _transport is None:
-        from email_app import relay_transactional  # noqa: PLC0415
-
         _transport = StubRelayTransactionalTransport()
-        relay_transactional.requests = _transport
+    relay_transactional.requests = _transport
+    relay_transactional.get_config = _test_relay_config
     return _transport

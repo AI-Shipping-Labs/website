@@ -80,7 +80,10 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
         self.assertContains(detail, REPERMISSION_CTA)
         self.assertContains(detail, "preview-only")
 
-    @patch("studio.views.campaigns.EmailService.send_prepared", return_value="ses-test")
+    @patch(
+        "studio.views.campaigns.send_campaign_delivery_to_relay",
+        return_value="relay-test",
+    )
     def test_test_send_requires_existing_user_and_uses_real_consent_renderer(self, send):
         campaign = self.make_campaign()
         missing = self.client.post(
@@ -102,11 +105,19 @@ class StudioRepermissionAuthoringTest(StudioRepermissionBase):
         self.assertRedirects(
             response, reverse("studio_campaign_detail", args=[campaign.pk]),
         )
-        prepared = send.call_args.args[0]
-        self.assertIn(REPERMISSION_COPY, prepared.full_html)
-        self.assertEqual(prepared.full_html.count("/api/verify-and-subscribe"), 1)
-        self.assertNotIn("/api/verify-email", prepared.full_html)
-        self.assertIsNotNone(prepared.unsubscribe_url)
+        self.assertEqual(send.call_count, 1)
+        payload = send.call_args.kwargs
+        self.assertEqual(payload["recipient_email"], controlled.email)
+        self.assertEqual(payload["subject"], "[TEST] Confirm your subscription")
+        self.assertIn(REPERMISSION_COPY, payload["html_body"])
+        self.assertIn(REPERMISSION_COPY, payload["text_body"])
+        self.assertEqual(
+            payload["html_body"].count("/api/verify-and-subscribe"),
+            1,
+        )
+        self.assertNotIn("/api/verify-email", payload["html_body"])
+        self.assertIsNotNone(payload["unsubscribe_url"])
+        self.assertEqual(payload["metadata"]["recipient"], controlled.email)
 
         controlled.email_verified = True
         controlled.save(update_fields=["email_verified"])

@@ -14,7 +14,7 @@ from accounts.services.privacy import (
     request_account_deletion,
 )
 from accounts.services.privacy_recipient import encrypt_recipient
-from email_app.services.email_service import EmailServiceError
+from email_app.relay_transactional import RelayTransactionalError
 from playwright_tests.conftest import auth_context, create_staff_user, create_user
 from scripts.browser_journey_policy import browser_journey
 from tests.fixtures import set_membership
@@ -234,16 +234,15 @@ def test_known_confirmation_failure_is_visible_and_recoverable(
     admin = create_staff_user("privacy-retry-admin@test.com")
     member = create_user("privacy-retry-member@test.com")
     request_log = _accepted_request(member)
-    original_send = __import__(
-        "email_app.services.email_service",
-        fromlist=["EmailService"],
-    ).EmailService.send_prepared
+    from accounts.services import privacy_delivery
 
-    def fail_known(_service, _prepared):
-        raise EmailServiceError("known test transport failure")
+    original_send = privacy_delivery.send_relay_transactional
+
+    def fail_known(*args, **kwargs):
+        raise RelayTransactionalError("relay_rejected")
 
     monkeypatch.setattr(
-        "email_app.services.email_service.EmailService.send_prepared",
+        "accounts.services.privacy_delivery.send_relay_transactional",
         fail_known,
     )
     context, page = _review_page(browser, django_server, admin.email, request_log.pk)
@@ -254,7 +253,7 @@ def test_known_confirmation_failure_is_visible_and_recoverable(
     assert not User.objects.filter(pk=member.pk).exists()
 
     monkeypatch.setattr(
-        "email_app.services.email_service.EmailService.send_prepared",
+        "accounts.services.privacy_delivery.send_relay_transactional",
         original_send,
     )
     page.get_by_test_id("privacy-confirmation-retry").click()

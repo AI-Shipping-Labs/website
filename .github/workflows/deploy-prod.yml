@@ -10,53 +10,35 @@ on:
         default: false
       deployTag:
         type: string
-        description: "Tag to deploy to production (optional, defaults to current dev tag)"
+        description: "Release tag or full SHA (optional, defaults to current DEV release)"
         required: false
-      predeployMigrateCheck:
-        type: boolean
-        description: "Run the pre-deploy ECS migrate/check gate"
-        required: false
-        default: false
 
-# Shared with emergency production rollback. cancel-in-progress must stay
-# false: cancelling a mid-rollout confirmed deploy can leave web and worker
-# on different tags.
+# Retain conservative serialization with emergency production operations.
+# Deploy Dev already deploys both Coolify runtimes; this workflow attests the
+# exact fully green release without restarting either runtime a second time.
 concurrency:
   group: production-ecs-mutation
   cancel-in-progress: false
 
 jobs:
   deploy:
-    name: Deploy to Production
+    name: Verify production promotion
     runs-on: ubuntu-latest
-
-    # The "Commit and push .prod-versions" step writes to main; the
-    # default GITHUB_TOKEN is read-only without this. Run 25051473553
-    # failed at that step with a 403 because of the missing grant.
+    timeout-minutes: 10
+    environment: coolify-staging
     permissions:
-      contents: write
-      id-token: write # assume the AWS deploy role via OIDC
-
-    env:
-      AWS_REGION: eu-west-1
-      # Hostname the verify step polls. Production users land on the
-      # canonical apex hostname.
-      PROD_HOST: aishippinglabs.com
+      contents: read
+      packages: read
+      actions: read
 
     steps:
-      - name: Echo Inputs
-        run: |
-          echo "Confirm Production Deploy: ${{ github.event.inputs.confirmProdDeploy }}"
-          echo "Deploy Tag: ${{ github.event.inputs.deployTag }}"
+      - name: Require explicit production confirmation
+        env:
+          CONFIRM_DEPLOY: ${{ inputs.confirmProdDeploy }}
+        run: test "${CONFIRM_DEPLOY}" = true
 
       - name: Checkout code
         uses: actions/checkout@v5
-
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v6
-        with:
-          role-to-assume: arn:aws:iam::387546586013:role/website-deploy
-          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v7
@@ -66,114 +48,36 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "24"
-          cache: npm
-
-      # We use `--locked` so any drift between pyproject.toml and uv.lock
-      # fails the install step loudly with "requirements are unsatisfiable"
-      # rather than silently re-resolving (which `--frozen` would mask: it
-      # exits 0 on drift in uv 0.10.11). `--locked` asserts the lock is
-      # already in sync with pyproject.toml and refuses to mutate it — so
-      # the install is deterministic AND drift is a hard failure. The flags
-      # `--frozen` and `--locked` are mutually exclusive in uv 0.10.11, so
-      # we cannot combine them. If this step fails with "requirements are
-      # unsatisfiable" or "lockfile out of date", regenerate uv.lock locally
-      # with `uv sync` and commit it. Refs #657.
-      - name: Install dependencies
+      - name: Install deployment helper dependencies
         run: uv sync --locked
 
-      # Issue #1769: collect static files BEFORE the system check. Under
-      # DEBUG=False the manifest staticfiles storage raises on any
-      # `{% static %}` whose asset is not in the manifest, and the
-      # community_base.studio.E001 probe render swallows that exception and
-      # misreports it as a missing Studio content block. The Deploy Dev
-      # gates job has always collected statics first; this restores that
-      # ordering here.
-      - name: Collect static files
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Attest green DEV release in production
         env:
-          DEBUG: "False"
-          SECRET_KEY: "ci-static-build-only-not-a-real-secret"
-          ALLOWED_HOSTS: "localhost"
+          REQUESTED_TAG: ${{ inputs.deployTag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+          COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+          COOLIFY_AISL_SERVICE_UUID: ${{ secrets.COOLIFY_AISL_SERVICE_UUID }}
+          COOLIFY_AISL_WEB_APPLICATION_UUID: ${{ vars.COOLIFY_AISL_WEB_APPLICATION_UUID }}
+          AISL_DEPLOY_VERIFICATION_API_TOKEN: ${{ secrets.AISL_DEPLOY_VERIFICATION_API_TOKEN }}
+        run: uv run python -m deploy.coolify.attest_production
+
+      - name: Verify production sitemap and robots
         run: |
-          start=$(date +%s)
-          make collectstatic
-          uv run python scripts/verify_tailwind_build.py --rebuild --collected
-          end=$(date +%s)
-          echo "CI_TIMING phase=collectstatic seconds=$((end - start))"
-
-      - name: Run Django system checks
-        # Issue #529: verify the source tree being deployed passes its own
-        # `manage.py check --fail-level ERROR`. SES_ENABLED=true here is a
-        # wiring check on the source tree; the prod-env enforcement is
-        # provided by entrypoint.sh running inside the new ECS task.
-        # SECRET_KEY is a synthetic CI value — settings.py rejects an
-        # unset SECRET_KEY when DEBUG=False so the check would never get
-        # to run without one; the value is not used to sign anything real.
-        env:
-          DEBUG: "False"
-          SES_ENABLED: "true"
-          SECRET_KEY: "ci-system-check-only-not-a-real-secret"
-        run: uv run python manage.py check --fail-level ERROR
-
-      - name: Deploy to Production
-        run: bash deploy/deploy_prod.sh ${{ github.event.inputs.deployTag }}
-        env:
-          CONFIRM_DEPLOY: ${{ github.event.inputs.confirmProdDeploy }}
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
-          PREDEPLOY_MIGRATE_CHECK_ENABLED: ${{ inputs.predeployMigrateCheck }}
-
-      - name: Verify prod deploy landed
-        run: |
-          set -e
-          EXPECTED_TAG="${{ github.event.inputs.deployTag }}"
-          if [ -z "$EXPECTED_TAG" ]; then
-            EXPECTED_TAG=$(tail -n1 .prod-versions)
-          fi
-          echo "Polling https://${PROD_HOST}/ping for tag matching ${EXPECTED_TAG}..."
-          for i in $(seq 1 30); do
-            DEPLOYED=$(curl -fsSL --max-time 10 "https://${PROD_HOST}/ping" 2>/dev/null || echo "")
-            if [ -n "${DEPLOYED}" ] && [ "${DEPLOYED}" = "${EXPECTED_TAG}" ]; then
-              echo "::notice ::Prod verified — /ping returned ${DEPLOYED} after ${i} attempt(s)."
-              uv run python deploy/verify_sitemap.py \
-                "https://${PROD_HOST}/sitemap.xml" \
-                "https://${PROD_HOST}"
-              uv run python deploy/verify_robots.py \
-                "https://${PROD_HOST}/robots.txt" \
-                "https://${PROD_HOST}/sitemap.xml"
-              exit 0
-            fi
-            echo "Attempt ${i}/30: prod /ping returned '${DEPLOYED:-<unreachable>}'; expected ${EXPECTED_TAG}. Sleeping 10s..."
-            sleep 10
-          done
-          echo "::error ::Prod verification timeout — /ping never returned ${EXPECTED_TAG}."
-          exit 1
-
-      - name: Commit and push .prod-versions
-        run: |
-          set -e
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          # Rebase any commits that landed on main while we were deploying so
-          # our push isn't rejected as a non-fast-forward. Use --autostash so
-          # any tracked files left dirty by earlier steps (e.g. uv.lock after
-          # uv sync regenerates it) don't block the rebase. Refs #657.
-          git pull --rebase --autostash origin main
-          git add .prod-versions
-          if git diff --cached --quiet; then
-            echo "No changes to .prod-versions (already on main); skipping commit."
-            exit 0
-          fi
-          git commit -m "Update production versions: ${{ github.event.inputs.deployTag || 'auto-detected' }}"
-          for attempt in 1 2 3 4 5; do
-            if git push; then
-              echo "Push succeeded on attempt ${attempt}."
-              exit 0
-            fi
-            echo "Push attempt ${attempt} failed; rebasing onto latest main and retrying."
-            git pull --rebase --autostash origin main
-          done
-          echo "::error ::Failed to push .prod-versions after 5 attempts."
-          exit 1
+          set -euo pipefail
+          echo "Prod verified — /ping returned the green DEV revision."
+          uv run python deploy/verify_sitemap.py \
+            https://aishippinglabs.com/sitemap.xml https://aishippinglabs.com
+          uv run python deploy/verify_robots.py \
+            https://aishippinglabs.com/robots.txt https://aishippinglabs.com/sitemap.xml
+          exit 0

@@ -808,7 +808,7 @@ IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_H
 # the site hooks in email_app.hooks keeping the EmailLog audit row,
 # template overrides, newsletter opt-out and the unsubscribe /
 # verify-email footers. Tests that assert locally-rendered HTML opt into
-# the package's ``ses_local`` backend explicitly with a stubbed client.
+# the package's local-render backend explicitly with a stubbed client.
 def _lazy_package_setting(getter):
     """Wrap a COMMUNITY_BASE value so it resolves on first use.
 

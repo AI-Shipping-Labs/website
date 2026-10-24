@@ -251,7 +251,7 @@ class HostAutoRegistrationServiceTest(TestCase):
         )
 
         with patch(
-            'events.services.registration_email._send_raw_email',
+            'events.services.registration_email._send_calendar_email',
             return_value='ses-host-registration',
         ) as mock_send:
             registration = maybe_register_host_as_attendee(event)
@@ -317,7 +317,7 @@ class HostAutoRegistrationServiceTest(TestCase):
         )
 
         with patch(
-            'events.services.registration_email._send_raw_email',
+            'events.services.registration_email._send_calendar_email',
             return_value='ses-attendee',
         ) as mock_send:
             send_registration_confirmation(registration)

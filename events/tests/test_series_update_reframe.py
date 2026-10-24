@@ -319,7 +319,7 @@ class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
         self.old_start = self.changed.start_datetime - timedelta(days=1)
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_old_start_iso_renders_before_after(self, mock_send):
         mock_send.return_value = 'relay-update'
@@ -334,7 +334,7 @@ class SendSeriesUpdateWithOldStartTest(TierSetupMixin, TestCase):
         self.assertTrue(context['changed_occurrence'])
 
     @patch(
-        'events.services.series_invite._send_raw_email',
+        'events.services.series_invite._send_calendar_email',
     )
     def test_no_old_start_iso_keeps_whole_series_framing(self, mock_send):
         mock_send.return_value = 'relay-update'
@@ -441,7 +441,7 @@ class RescheduleNoticeWeekdayTest(TestCase):
         )
 
     @patch(
-        'events.tasks.notify_reschedule._send_raw_email',
+        'events.tasks.notify_reschedule._send_calendar_email',
     )
     def test_old_and_new_times_include_weekday(self, mock_send):
         from events.tasks.notify_reschedule import send_reschedule_notice_one

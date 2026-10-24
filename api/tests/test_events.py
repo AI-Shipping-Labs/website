@@ -1755,7 +1755,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
         host = User.objects.create_user(email="host@test.com", password="pw")
 
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
             return_value="ses-1",
         ) as mock_send:
             response = self._post(
@@ -1780,7 +1780,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
 
     def test_create_without_host_email_has_no_fallback_mailbox_behavior(self):
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
         ) as mock_send, self.assertLogs(
             "events.services.host_registration",
             level="WARNING",
@@ -1798,7 +1798,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
 
     def test_create_with_non_user_host_email_skips_registration_and_email(self):
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
         ) as mock_send, self.assertLogs(
             "events.services.host_registration",
             level="WARNING",
@@ -1819,7 +1819,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
     def test_create_draft_does_not_register_or_email_host(self):
         host = User.objects.create_user(email="host@test.com", password="pw")
 
-        with patch("events.services.registration_email._send_raw_email") as mock_send:
+        with patch("events.services.registration_email._send_calendar_email") as mock_send:
             response = self._post(
                 self._create_payload(
                     status="draft", published=False, host_email=host.email,
@@ -1847,7 +1847,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
         )
 
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
             return_value="ses-1",
         ) as mock_send:
             first = self._patch(
@@ -1859,7 +1859,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
         self.assertEqual(mock_send.call_args.kwargs["to_email"], host.email)
 
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
         ) as mock_send_again:
             second = self._patch(draft.slug, {"published": True})
         self.assertEqual(second.status_code, 200)
@@ -1880,7 +1880,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
         )
 
         with patch(
-            "events.services.registration_email._send_raw_email",
+            "events.services.registration_email._send_calendar_email",
             return_value="ses-1",
         ) as mock_send:
             response = self._patch(
@@ -1897,7 +1897,7 @@ class EventsHostAutoRegistrationTest(EventsApiTestBase):
 
     def test_invalid_host_email_is_rejected_and_nothing_created(self):
         before_count = Event.objects.count()
-        with patch("events.services.registration_email._send_raw_email") as mock_send:
+        with patch("events.services.registration_email._send_calendar_email") as mock_send:
             response = self._post(
                 self._create_payload(host_email="not-an-email")
             )

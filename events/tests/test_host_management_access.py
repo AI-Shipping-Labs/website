@@ -164,7 +164,7 @@ class HostDeliveryRecoveryTest(TestCase):
         self.host = User.objects.create_user(email='delivery-host@test.com')
         self.event = _event(self.host)
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_failure_is_visible_retryable_and_bounded(self, mock_send):
         mock_send.side_effect = RuntimeError('provider unavailable')
         for _ in range(4):
@@ -180,7 +180,7 @@ class HostDeliveryRecoveryTest(TestCase):
         self.assertEqual(delivery.last_error, HostInviteDelivery.ERROR_PROVIDER)
         self.assertEqual(mock_send.call_count, HostInviteDelivery.MAX_ATTEMPTS)
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_provider_exception_detail_is_never_persisted_or_rendered(
         self, mock_send,
     ):
@@ -216,7 +216,7 @@ class HostDeliveryRecoveryTest(TestCase):
         self.assertNotContains(response, private_detail)
         self.assertContains(response, 'Delivery failed; review application logs.')
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_retry_succeeds_once_without_duplicate_registration(self, mock_send):
         mock_send.side_effect = [RuntimeError('temporary'), 'ses-recovered']
         maybe_register_host_as_attendee(self.event)
@@ -249,7 +249,7 @@ class HostDeliveryRecoveryTest(TestCase):
         self.assertEqual(log.event, self.event)
         self.assertEqual(delivery.email_log, log)
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_reassignment_back_to_former_host_sends_fresh_invitation(
         self, mock_send,
     ):
@@ -406,7 +406,7 @@ class HostCalendarLifecycleTest(TestCase):
             event=self.event, user=self.host,
         )
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-update')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-update')
     def test_reschedule_uses_attendee_audience_and_deduplicates(self, mock_send):
         self.event.ics_sequence = 2
         self.event.save(update_fields=['ics_sequence'])
@@ -436,7 +436,7 @@ class HostCalendarLifecycleTest(TestCase):
             self.event,
         )
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_new_host_initial_invite_at_current_sequence_wins_race(self, mock_send):
         self.event.ics_sequence = 4
         self.event.save(update_fields=['ics_sequence'])
@@ -461,7 +461,7 @@ class HostCalendarLifecycleTest(TestCase):
         mock_send.assert_not_called()
 
     @patch(
-        'events.tasks.notify_cancellation._send_raw_email',
+        'events.tasks.notify_cancellation._send_calendar_email',
         return_value='ses-cancel',
     )
     def test_cancel_uses_attendee_audience_and_deduplicates(self, mock_send):

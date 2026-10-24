@@ -115,7 +115,7 @@ class RegistrationEmailJoinUrlOverrideTest(TestCase):
             event=self.event, user=self.user,
         )
         with patch(
-            'events.services.registration_email._send_raw_email',
+            'events.services.registration_email._send_calendar_email',
         ) as mock_send:
             mock_send.return_value = 'relay-1'
             send_registration_confirmation(registration)

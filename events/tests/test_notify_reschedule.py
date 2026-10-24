@@ -171,7 +171,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         EventRegistration.objects.create(event=self.event, user=self.no_tz_user)
         EventRegistration.objects.create(event=self.event, user=self.unsub_user)
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-1')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-1')
     def test_send_renders_both_times_in_berlin(self, mock_send):
         """Berlin user sees BOTH old and new times in Europe/Berlin."""
         result = send_reschedule_notice_one(
@@ -196,7 +196,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         # No raw UTC label should leak when a valid TZ is set.
         self.assertNotIn('16:00 UTC', str(context))
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-2')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-2')
     def test_send_falls_back_to_utc_when_preference_unset(self, mock_send):
         """Unset preferred_timezone renders both times in UTC."""
         send_reschedule_notice_one(
@@ -217,7 +217,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         # the context and a previous recipient's TZ leaks through.
         self.assertNotIn('Europe/Berlin', str(context))
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-3')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-3')
     def test_send_writes_email_log(self, mock_send):
         before = EmailLog.objects.filter(email_type='event_rescheduled').count()
         send_reschedule_notice_one(
@@ -232,7 +232,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         ).get()
         self.assertEqual(log.ses_message_id, 'ses-3')
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-unsub')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-unsub')
     def test_send_does_not_skip_unsubscribed_user(self, mock_send):
         result = send_reschedule_notice_one(
             self.event.pk,
@@ -247,7 +247,7 @@ class SendRescheduleNoticeOneTest(TestCase):
             ).exists(),
         )
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-4')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-4')
     def test_send_passes_method_request_to_raw_email(self, mock_send):
         """The per-user send re-issues the .ics as METHOD:REQUEST."""
         send_reschedule_notice_one(
@@ -260,7 +260,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         cal = _parse_ics(ics_bytes)
         self.assertEqual(str(cal.get('method')), 'REQUEST')
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-5')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-5')
     def test_resent_ics_sequence_strictly_greater_than_original(self, mock_send):
         """SEQUENCE bump means calendar clients overwrite the original."""
         # Original registration invite would have used SEQUENCE=0 (the
@@ -292,7 +292,7 @@ class SendRescheduleNoticeOneTest(TestCase):
 
         self.assertGreater(new_seq, original_seq)
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-6')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-6')
     def test_resent_ics_uses_attendee_join_url_with_bumped_sequence(
         self, mock_send,
     ):
@@ -320,7 +320,7 @@ class SendRescheduleNoticeOneTest(TestCase):
             f'https://aishippinglabs.com{self.event.get_absolute_url()}',
         )
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_send_skips_cancelled_registration(self, mock_send):
         """A user who cancelled between fan-out and send is not emailed."""
         EventRegistration.objects.filter(
@@ -335,7 +335,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         self.assertEqual(result['reason'], 'registration_cancelled')
         mock_send.assert_not_called()
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_send_missing_event_returns_skipped(self, mock_send):
         result = send_reschedule_notice_one(
             999_999,
@@ -346,7 +346,7 @@ class SendRescheduleNoticeOneTest(TestCase):
         self.assertEqual(result['reason'], 'missing_event')
         mock_send.assert_not_called()
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_send_missing_user_returns_skipped(self, mock_send):
         result = send_reschedule_notice_one(
             self.event.pk,
@@ -412,7 +412,7 @@ class SeriesSubscriberDedupTest(TestCase):
         )
         EventRegistration.objects.create(event=self.event, user=self.one_off)
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-x')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-x')
     def test_series_subscriber_skipped(self, mock_send):
         """(a) Dual-enrolled subscriber is skipped with reason
         ``series_subscriber`` — no per-event email, no EmailLog row."""
@@ -431,7 +431,7 @@ class SeriesSubscriberDedupTest(TestCase):
             ).exists(),
         )
 
-    @patch('events.tasks.notify_reschedule._send_raw_email', return_value='ses-y')
+    @patch('events.tasks.notify_reschedule._send_calendar_email', return_value='ses-y')
     def test_one_off_registrant_still_notified(self, mock_send):
         """(b) A one-off registrant without a SeriesRegistration still gets
         the per-event reschedule notice."""

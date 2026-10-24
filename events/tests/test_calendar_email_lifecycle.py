@@ -75,7 +75,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             'mailto:content@aishippinglabs.com',
         )
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_registration_email_relay_calendar_is_request_with_attendee(
         self, mock_send,
     ):
@@ -100,7 +100,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertIn(f'Join: {join_url}', str(vevent.get('description')))
         self.assertNotIn('zoom.us/j/raw-secret', str(vevent.to_ical()))
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_reschedule_relay_calendar_updates_same_uid_with_higher_sequence(
         self, mock_send,
     ):
@@ -138,8 +138,8 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
             self.start + timedelta(days=1, hours=2),
         )
 
-    @patch('events.tasks.notify_cancellation._send_raw_email')
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_cancellation._send_calendar_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_rename_reschedule_and_cancel_reuse_original_uid(
         self, mock_reschedule, mock_cancel,
     ):
@@ -166,7 +166,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         cancellation_cal = self._calendar(mock_cancel)
         self.assertEqual(str(_vevent(cancellation_cal).get('uid')), original_uid)
 
-    @patch('events.tasks.notify_cancellation._send_raw_email')
+    @patch('events.tasks.notify_cancellation._send_calendar_email')
     def test_cancellation_relay_calendar_is_cancel_with_status_cancelled(
         self, mock_send,
     ):
@@ -192,7 +192,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertEqual(int(vevent.get('sequence')), 2)
         self.assertEqual(str(vevent.get('status')), 'CANCELLED')
 
-    @patch('events.tasks.notify_reschedule._send_raw_email')
+    @patch('events.tasks.notify_reschedule._send_calendar_email')
     def test_unsubscribed_attendee_still_receives_transactional_update(
         self, mock_send,
     ):
@@ -216,7 +216,7 @@ class SingleEventCalendarEmailLifecycleTest(TestCase):
         self.assertEqual(call_kwargs['context']['event_title'], self.event.title)
         self.assertEqual(call_kwargs.get('method', 'REQUEST'), 'REQUEST')
 
-    @patch('events.tasks.notify_cancellation._send_raw_email')
+    @patch('events.tasks.notify_cancellation._send_calendar_email')
     def test_cancelled_registration_is_skipped_before_cancellation_send(
         self, mock_send,
     ):
@@ -278,7 +278,7 @@ class CancellationSeriesSubscriberDedupTest(TestCase):
         )
 
     @patch(
-        'events.tasks.notify_cancellation._send_raw_email',
+        'events.tasks.notify_cancellation._send_calendar_email',
         return_value='ses-one-off-cancel',
     )
     def test_series_subscriber_skips_standalone_send_but_one_off_receives_it(

@@ -16,7 +16,7 @@ from email_app.services.email_rendering import (
 from events.models import Event, EventRegistration, SeriesRegistration
 from events.services.calendar_invite import AUDIENCE_ATTENDEE, generate_ics
 from events.services.calendar_lifecycle import user_has_permanent_bounce
-from events.services.registration_email import _send_raw_email
+from events.services.registration_email import _send_calendar_email
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -137,7 +137,7 @@ def send_cancellation_notice_one(event_id, user_id):
         audience=AUDIENCE_ATTENDEE,
         attendee_email=user.email,
     )
-    ses_message_id = _send_raw_email(
+    ses_message_id = _send_calendar_email(
         to_email=user.email,
         template_key='event_cancelled',
         context=recipient_template_context(user, template_context),

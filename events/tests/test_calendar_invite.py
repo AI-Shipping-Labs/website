@@ -392,7 +392,7 @@ class SendRegistrationConfirmationTest(TestCase):
         )
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_calendar_invite_calls_relay_boundary(self, mock_send):
         mock_send.return_value = 'relay-msg-123'
@@ -414,7 +414,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(result.user, self.user)
         self.assertEqual(result.ses_message_id, 'relay-msg-123')
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_repeat_processing_same_registration_is_idempotent(self, mock_send):
         mock_send.return_value = 'same-registration-message'
         registration = EventRegistration.objects.create(
@@ -432,7 +432,7 @@ class SendRegistrationConfirmationTest(TestCase):
             f'{registration.pk}',
         )
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_reregister_after_cancellation_sends_fresh_invitation(
         self, mock_send,
     ):
@@ -471,7 +471,7 @@ class SendRegistrationConfirmationTest(TestCase):
             self.assertEqual(str(calendar.get('method')), 'REQUEST')
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_passes_request_calendar_to_relay(self, mock_send):
         mock_send.return_value = 'relay-456'
@@ -493,7 +493,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertIn('ATTENDEE', ics_content)
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_ics_attachment_uses_attendee_join_url(self, mock_send):
         mock_send.return_value = 'relay-join-ics'
@@ -517,7 +517,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertNotIn('zoom.us', ics_bytes.decode('utf-8'))
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_gated_event_ics_attachment_has_no_members_only_prefix(self, mock_send):
         """Issue #1072 regression: the reporter's registered gated event.
@@ -539,7 +539,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertNotIn('[Members only]', ics_bytes.decode('utf-8'))
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_uses_transactional_template(self, mock_send):
         mock_send.return_value = 'relay-clean'
@@ -555,7 +555,7 @@ class SendRegistrationConfirmationTest(TestCase):
         )
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_subject_contains_event_title(self, mock_send):
         mock_send.return_value = 'relay-789'
@@ -570,7 +570,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(email_log.subject, "You're registered: Test Event")
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_context_contains_join_link(self, mock_send):
         mock_send.return_value = 'relay-body'
@@ -584,7 +584,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertIn(self.event.get_join_url(), context['join_url'])
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_send_email_context_contains_three_calendar_links(self, mock_send):
         mock_send.return_value = 'relay-cal-links'
@@ -599,7 +599,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertIn('outlook.live.com/calendar', context['outlook_calendar_url'])
         self.assertIn('outlook.office.com/calendar', context['office365_calendar_url'])
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_send_email_uses_calendar_template_contract(self, mock_send):
         mock_send.return_value = 'relay-ics-copy'
         registration = EventRegistration.objects.create(
@@ -612,7 +612,7 @@ class SendRegistrationConfirmationTest(TestCase):
         self.assertEqual(call['template_key'], 'event_registration')
         self.assertEqual(call.get('method', 'REQUEST'), 'REQUEST')
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_send_email_default_end_time_in_google_url(self, mock_send):
         mock_send.return_value = 'relay-default-end'
         event_no_end = Event.objects.create(
@@ -636,7 +636,7 @@ class SendRegistrationConfirmationTest(TestCase):
             href,
         )
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_send_email_delivers_to_unsubscribed_user(self, mock_send):
         mock_send.return_value = 'relay-unsub'
         unsubscribed_user = User.objects.create_user(
@@ -691,7 +691,7 @@ class RegistrationApiEmailTest(TestCase):
         )
 
     @patch(
-        'events.services.registration_email._send_raw_email',
+        'events.services.registration_email._send_calendar_email',
     )
     def test_registration_api_sends_email(self, mock_send):
         mock_send.return_value = 'relay-api'

@@ -110,7 +110,7 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
         self.assertEqual(readback.json()['guest_email'], self.guest.email)
         self.assertEqual(readback.json()['email_status'], 'sent')
 
-    @patch('events.services.registration_email._send_raw_email')
+    @patch('events.services.registration_email._send_calendar_email')
     def test_guest_delivery_uses_attendee_calendar_and_cancel_join_links(self, send):
         send.return_value = 'guest-message-id'
         response = self.post(email=self.guest.email)
@@ -256,7 +256,7 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
         ])
 
         with patch(
-            'events.tasks.notify_reschedule._send_raw_email',
+            'events.tasks.notify_reschedule._send_calendar_email',
             return_value='guest-reschedule',
         ) as reschedule_send:
             rescheduled = send_reschedule_notice_one(
@@ -267,7 +267,7 @@ class EventGuestInvitationApiTest(TierSetupMixin, TestCase):
         self.event.ics_sequence += 1
         self.event.save(update_fields=['status', 'ics_sequence'])
         with patch(
-            'events.tasks.notify_cancellation._send_raw_email',
+            'events.tasks.notify_cancellation._send_calendar_email',
             return_value='guest-cancellation',
         ) as cancellation_send:
             cancelled = send_cancellation_notice_one(

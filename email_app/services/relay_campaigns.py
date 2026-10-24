@@ -10,11 +10,13 @@ and a stable idempotency_key to ensure strict deduplication across retries and w
 from __future__ import annotations
 
 import logging
+from email.utils import parseaddr
 from typing import Any
 
 import requests
 from django.conf import settings
 
+from email_app.services.email_classification import get_sender_for_email_type
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -72,10 +74,10 @@ def get_relay_template_key() -> str:
 
 
 def get_relay_from_email() -> str:
-    email = get_config("SES_DEFAULT_FROM_EMAIL", "")
-    if not email:
-        email = get_config("SES_FROM_EMAIL", "")
-    return email.strip()
+    """Resolve the campaign's configured mailbox to its registered Relay ID."""
+    sender = get_sender_for_email_type("campaign")
+    _name, address = parseaddr(sender)
+    return (address or sender).strip().split("@", 1)[0].lower()
 
 
 def build_relay_unsubscribe_headers(unsubscribe_url: str | None) -> dict[str, str]:

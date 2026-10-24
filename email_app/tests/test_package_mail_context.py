@@ -36,10 +36,20 @@ TEST_PURPOSE = "email_verification_signup"
 def _drain(deliveries):
     """Deliver exactly the given deliveries with a local stub; return HTML."""
 
+    # These tests assert the locally-rendered HTML, so they opt the worker
+    # into the package's local-render backend explicitly (Relay cutover P4:
+    # the runner default is now the relay backend, which renders
+    # server-side and returns no local HTML).
     stub = StubSESClient()
-    with patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=stub,
+    backend_override = override_settings(
+        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+    )
+    with (
+        backend_override,
+        patch(
+            "community_base.mail.backends.ses_local.configured_client",
+            return_value=stub,
+        ),
     ):
         for delivery in deliveries:
             deliver_job(None, {"delivery_id": str(delivery.id)})

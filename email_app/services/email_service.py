@@ -10,7 +10,7 @@ Construction emits a ``DeprecationWarning`` — a warning, never an error —
 so the recorded exempt producers keep working unchanged:
 
 - ``email_app/tasks/send_campaign.py`` and ``studio/views/campaigns.py``:
-  the campaign-family transport, retired by A6.3.
+  the campaign-family transport, which now delivers through Relay.
 
 Exempt producers live with the warning rather than suppressing it:
 Python's default filters hide ``DeprecationWarning`` outside ``__main__``
@@ -20,12 +20,14 @@ still fires. Do not wrap the exempt call sites in
 ``warnings.catch_warnings()`` — a suppressed construction is invisible
 to exactly the check that guards this inventory.
 
-The class has no implementation of its own anymore: rendering lives in
-:mod:`email_app.services.email_rendering`, the SES transport in
-:mod:`email_app.services.ses_transport`, and the package-path hooks in
+All transport goes through Relay
+(:mod:`email_app.services.relay_campaigns`); no SES, SMTP, or boto3 send
+path remains in this module. Rendering lives in
+:mod:`email_app.services.email_rendering` and the package-path hooks in
 :mod:`email_app.hooks`. Every method delegates; ``send`` routes through
 the same ``prepare_template``/``send_prepared`` seam the exempt producers
-use. The class is deleted once A6.3 retires the campaign surfaces.
+use. The class is deleted once the campaign surfaces no longer need its
+prepare/render seam.
 
 Templates are stored as markdown files in email_app/email_templates/.
 Each template has YAML frontmatter with a subject line, and a markdown
@@ -55,17 +57,42 @@ from email_app.services.email_rendering import (
     render_template_parts,
     render_template_with_footer,
 )
-from email_app.services.ses_transport import (
-    DEFAULT_WELCOME_REPLY_TO_EMAIL,  # noqa: F401 (compatibility re-export)
-    WELCOME_REPLY_TO_KEY,  # noqa: F401 (compatibility re-export)
-    build_ses_client,
-    build_unsubscribe_headers,
-    normalize_cc,  # noqa: F401 (compatibility re-export)
-    send_ses_email,
+from email_app.services.relay_campaigns import (
+    RelayCampaignDeliveryAmbiguous,
+    RelayCampaignDeliveryRejected,
+    get_relay_api_key,
+    get_relay_base_url,
+    send_campaign_delivery_to_relay,
 )
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
+
+# Issue #950: welcome emails carry a Reply-To pointing at a monitored,
+# team-forwarded inbox so a reply to a welcome reaches a human instead of
+# bouncing off the noreply/welcome send-only mailbox. The address is
+# editable from Studio via this IntegrationSetting key; an empty value
+# omits the Reply-To header entirely. (Relay cutover P4: these constants
+# moved here from the deleted ``ses_transport`` — the welcome Reply-To is
+# still applied by the package-mail path.)
+WELCOME_REPLY_TO_KEY = "SES_WELCOME_REPLY_TO_EMAIL"
+DEFAULT_WELCOME_REPLY_TO_EMAIL = "welcome@aishippinglabs.com"
+
+
+def normalize_cc(cc):
+    """Normalize a ``cc`` argument into a list of non-empty email strings.
+
+    Accepts ``None``, a single string, or any iterable of strings.
+    Empty / whitespace-only entries are filtered out. Returns ``[]`` when
+    nothing usable remains. (Relay cutover P4: moved here from the deleted
+    ``ses_transport``; kept for the transport-seam kwargs contract.)
+    """
+    if not cc:
+        return []
+    if isinstance(cc, str):
+        cc = [cc]
+    return [c.strip() for c in cc if c and c.strip()]
+
 
 # Old private name kept importable for existing callers and tests.
 _normalize_cc = normalize_cc
@@ -162,9 +189,9 @@ class EmailService:
 
     Loads markdown templates from email_app/email_templates/, renders
     them with context variables, wraps in HTML email template, sends via
-    SES, and logs every send to EmailLog — all by delegating to
+    Relay, and logs every send to EmailLog — all by delegating to
     :mod:`email_app.services.email_rendering` and
-    :mod:`email_app.services.ses_transport`. Construction warns.
+    :mod:`email_app.services.relay_campaigns`. Construction warns.
     """
 
     def __init__(self):
@@ -173,14 +200,6 @@ class EmailService:
             DeprecationWarning,
             stacklevel=2,
         )
-        self._ses_client = None
-
-    @property
-    def ses_client(self):
-        """Lazy-initialize the SES v2 client."""
-        if self._ses_client is None:
-            self._ses_client = build_ses_client()
-        return self._ses_client
 
     def send(
         self,
@@ -225,7 +244,7 @@ class EmailService:
             EmailLog instance for the sent email.
 
         Raises:
-            EmailServiceError: If template not found or SES send fails.
+            EmailServiceError: If template not found or Relay send fails.
         """
         if dedupe_key:
             from email_app.models import EmailLog
@@ -275,7 +294,7 @@ class EmailService:
             email_log = None
 
         logger.info(
-            'Sent "%s" email to %s (SES message ID: %s)',
+            'Sent "%s" email to %s (Relay message ID: %s)',
             template_name,
             prepared.to_email,
             ses_message_id,
@@ -305,7 +324,7 @@ class EmailService:
         The caller remains responsible for its domain-specific ``EmailLog``
         row because already-rendered sends may need associations such as a
         campaign or event. A promotional opt-out returns a distinct no-send
-        result and never reaches the private SES transport.
+        result and never reaches the transport.
         """
         prepared = self.prepare_rendered(
             user,
@@ -383,7 +402,14 @@ class EmailService:
         )
 
     def send_prepared(self, prepared):
-        """Cross only the SES transport boundary for a prepared message."""
+        """Cross only the transport boundary for a prepared message.
+
+        Historic seam name kept so the suite's transport mocks
+        (``send_prepared`` / ``_send_ses`` patches across the campaign,
+        studio, analytics, api, accounts, community, plans, and events
+        suites, plus the Playwright campaign specs) keep intercepting
+        here. The implementation delivers through Relay.
+        """
         return self._send_ses(
             prepared.to_email,
             prepared.subject,
@@ -616,10 +642,6 @@ class EmailService:
             verify_email_url=verify_email_url,
         )
 
-    def _build_unsubscribe_headers(self, unsubscribe_url):
-        """Build SES-compatible one-click unsubscribe headers."""
-        return build_unsubscribe_headers(unsubscribe_url)
-
     def _send_ses(
         self,
         to_email,
@@ -632,43 +654,67 @@ class EmailService:
         cc=None,
         bcc=None,
         redact_recipient=False,
+        idempotency_key=None,
+        metadata=None,
     ):
-        """Send an email via Amazon SES v2 SendEmail API.
+        """Deliver one prepared message through Relay (historic seam name).
 
-        Args:
-            to_email: Recipient email address.
-            subject: Email subject line.
-            html_body: Full HTML email body.
-            text_body: Full plain-text email body derived from the same source.
-            email_type: The email template name (e.g. 'welcome',
-                'password_reset'). Used to resolve the From address via
-                ``get_sender_for_email_type`` so welcome types pick up the
-                dedicated welcome sender while every other type resolves by
-                its kind exactly as before (issue #937). Welcome types
-                (issue #950) also get a Reply-To set to a monitored inbox.
-            unsubscribe_url: Optional one-click unsubscribe URL for
-                campaign-style mail.
-            cc: Optional CC recipient(s) (string or list). Empty values
-                are treated as "no CC" and the ``CcAddresses`` key is
-                omitted from the SES payload.
-            bcc: Optional BCC recipient(s) (string or list). Same
-                normalisation as ``cc``; empty values omit the
-                ``BccAddresses`` key (issue #950).
+        Relay cutover P4: the direct SES v2 implementation (boto3
+        ``sesv2.send_email``) is gone. This keeps its name and signature
+        so the suite's transport mocks keep intercepting exactly one
+        seam, and so the Studio/campaign mock branches keep routing
+        through ``send_prepared`` unchanged.
+
+        When Relay is not configured (tests, local dev without Relay
+        credentials) the send short-circuits with a recognisable
+        ``relay-not-configured-noop`` id and no network call — the same
+        safety posture the old ``SES_ENABLED`` kill-switch provided.
+
+        ``cc``/``bcc`` are accepted for seam compatibility and ignored:
+        the Relay campaign transport is per-recipient and no production
+        caller passes them.
 
         Returns:
-            str: SES message ID.
+            str: Relay message ID.
 
         Raises:
-            EmailServiceError: If SES API call fails.
+            EmailServiceError: If Relay definitively rejects the send.
+            EmailTransportOutcomeUnknown: If the outcome is indeterminate.
         """
-        return send_ses_email(
-            to_email,
-            subject,
-            html_body,
-            text_body=text_body,
-            email_type=email_type,
-            unsubscribe_url=unsubscribe_url,
-            cc=cc,
-            bcc=bcc,
-            redact_recipient=redact_recipient,
-        )
+        from uuid import uuid4
+
+        recipient_label = "[privacy-recipient]" if redact_recipient else to_email
+        if not get_relay_base_url() or not get_relay_api_key():
+            logger.info(
+                "Relay not configured - skipping send to %s (subject=%s)",
+                recipient_label,
+                subject,
+            )
+            return "relay-not-configured-noop"
+        key = idempotency_key or f"shim-{uuid4().hex}"
+        try:
+            return send_campaign_delivery_to_relay(
+                recipient_email=to_email,
+                subject=subject,
+                html_body=html_body,
+                text_body=text_body,
+                idempotency_key=key,
+                unsubscribe_url=unsubscribe_url,
+                metadata=metadata,
+            )
+        except RelayCampaignDeliveryRejected as e:
+            if redact_recipient:
+                logger.error("Relay rejected redacted recipient request")
+                raise EmailServiceError("Relay privacy send failed") from None
+            logger.exception("Failed to send email via Relay to %s", recipient_label)
+            raise EmailServiceError(f"Relay send failed for {to_email}: {e}") from e
+        except RelayCampaignDeliveryAmbiguous as e:
+            if redact_recipient:
+                logger.error("Relay transport outcome is unknown for redacted recipient")
+                raise EmailTransportOutcomeUnknown(
+                    "Relay privacy send outcome is unknown",
+                ) from None
+            logger.exception("Relay transport outcome is unknown for %s", recipient_label)
+            raise EmailTransportOutcomeUnknown(
+                f"Relay send outcome is unknown for {to_email}: {e}",
+            ) from e

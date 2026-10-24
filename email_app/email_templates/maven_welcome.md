@@ -24,6 +24,7 @@ content at Basic and Main level.
 
 To get the personalized plan, [fill in your onboarding form]({{ onboarding_url }}) —
 it takes a few minutes and tells us about your background and goals.
+After the [onboarding form]({{ onboarding_url }}), you can book a 1:1 call with Alexey.
 
 ---
 

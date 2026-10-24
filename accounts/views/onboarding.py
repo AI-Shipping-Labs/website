@@ -17,7 +17,8 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
-from community.models import CallHost
+from accounts.services.onboarding_booking import get_founder_booking_urls
+from accounts.services.onboarding_mail import send_onboarding_submitted_mail
 from crm.services.onboarding_notify import notify_staff_onboarding_submitted
 from questionnaires.models import OnboardingConversation, Response
 from questionnaires.onboarding import (
@@ -197,25 +198,13 @@ def _get_member_onboarding_response_or_404(request, response_id):
 
 
 def _founder_booking_urls():
-    """Founder booking URLs for the completion screen CTAs (#951).
+    """Founder booking URLs for the completion screen CTAs (#951, #2006).
 
-    Reads the per-founder scheduler links from the Studio-editable
-    ``CallHost`` store (the same source ``/request-a-call`` uses) rather
-    than forking them into IntegrationSetting keys. A blank ``booking_url``
-    yields ``''`` so the template hides that founder's CTA cleanly.
+    Links to the native booking page (/book/<slug>) when an active
+    booking.BookingHost exists for that founder. Falls back to CallHost
+    booking_url only when no active native host exists.
     """
-    by_slug = {
-        host.slug: host.usable_booking_url
-        for host in CallHost.objects.filter(
-            slug__in=['valeria', 'alexey'],
-            is_active=True,
-        )
-        if host.is_available
-    }
-    return {
-        'valeria_booking_url': by_slug.get('valeria', ''),
-        'alexey_booking_url': by_slug.get('alexey', ''),
-    }
+    return get_founder_booking_urls()
 
 
 def _render_onboarding_complete(request, response):
@@ -435,6 +424,8 @@ def _submit_onboarding_answers(request, response):
 
     response.mark_submitted()
     notify_staff_onboarding_submitted(request.user, updated=is_update)
+    if not is_update:
+        send_onboarding_submitted_mail(response)
     if is_update:
         messages.success(request, 'Your answers were updated.')
     else:

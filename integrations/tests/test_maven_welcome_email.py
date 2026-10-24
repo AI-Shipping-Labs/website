@@ -267,3 +267,13 @@ class MavenWelcomeEmailContentTest(TestCase):
         # The authoring comment must never reach the rendered output.
         self.assertNotIn("DRAFT COPY", body_html)
         self.assertNotIn("issue #960", body_html)
+
+    def test_rendered_email_mentions_booking_call_after_onboarding(self):
+        """AC4: Maven welcome mentions 1:1 call with Alexey after onboarding form."""
+        user = User.objects.create_user(
+            email="call_mention@test.com", password="x", first_name="Sam",
+        )
+        _subject, body_html = _welcome_html(user, "LLM Zoomcamp")
+        self.assertIn("book a 1:1 call with Alexey", body_html)
+        self.assertIn("https://aishippinglabs.com/onboarding/", body_html)
+        self.assertNotIn("/book/", body_html)

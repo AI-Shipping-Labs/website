@@ -105,6 +105,9 @@ class CompletionScreenBookingCtasTest(TestCase):
         set_membership(cls.member, tier=_basic_tier())
 
     def setUp(self):
+        from booking.models import BookingHost
+
+        BookingHost.objects.filter(slug__in=['valeria', 'alexey']).update(is_active=False)
         self.client.force_login(self.member)
         _submit_onboarding(self.client)
 

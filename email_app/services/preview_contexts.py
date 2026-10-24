@@ -567,6 +567,11 @@ PREVIEW_CONTEXTS = {
         ],
         'board_url': 'https://aishippinglabs.com/plans/sprints/ship-it-sprint/board/',
     },
+    'onboarding_submitted': {
+        'user_name': 'Ada',
+        'booking_url': 'https://aishippinglabs.com/book/alexey',
+        'site_url': 'https://aishippinglabs.com',
+    },
 }
 
 

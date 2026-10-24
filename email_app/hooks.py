@@ -1176,6 +1176,12 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_maven_welcome_context(delivery, context)
     elif delivery.purpose == "maven_removal":
         _resolve_maven_removal_context(delivery, context)
+    elif delivery.purpose == "onboarding_submitted":
+        from accounts.services.onboarding_mail import (  # noqa: PLC0415
+            resolve_onboarding_submitted_context,
+        )
+
+        resolve_onboarding_submitted_context(delivery, context)
     elif delivery.purpose == "lead_magnet_delivery":
         _resolve_lead_magnet_context(delivery, context)
     elif delivery.purpose == "welcome_imported":

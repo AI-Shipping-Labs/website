@@ -140,6 +140,7 @@ TEMPLATE_SENT_WHEN = {
     'maven_enrollment_notification': 'Sent to staff when a new Maven enrollment occurrence is admitted.',
     'maven_removal': 'Sent to a student after a Maven cohort removal ends their course and membership access.',
     'maven_welcome': 'Sent when a Maven enrollee receives course access.',
+    'onboarding_submitted': 'Sent to members upon completing their onboarding submission.',
     'onboarding_reminder': 'Sent when a paid member has not completed onboarding after one week.',
     'password_reset': 'Sent when someone requests a password-reset link.',
     'payment_failed': 'Sent when a paid membership invoice payment fails.',

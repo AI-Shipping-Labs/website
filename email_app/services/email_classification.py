@@ -47,6 +47,7 @@ TRANSACTIONAL_EMAIL_TYPES = {
     "event_registration",
     "event_rescheduled",
     "event_cancelled",
+    "onboarding_submitted",
     "welcome_imported",
     # Issue #703: paid-signup automation.
     "cofounder_welcome",

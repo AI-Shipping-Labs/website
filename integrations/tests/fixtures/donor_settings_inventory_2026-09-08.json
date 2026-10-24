@@ -176,12 +176,6 @@
     "docs_url": "_docs/integrations/ses.md#aws_secret_access_key"
    },
    {
-    "key": "AWS_SES_REGION",
-    "is_secret": false,
-    "description": "AWS region for SES (e.g. eu-west-1). Must match the verified domain region.",
-    "docs_url": "_docs/integrations/ses.md#aws_ses_region"
-   },
-   {
     "key": "SES_TRANSACTIONAL_FROM_EMAIL",
     "is_secret": false,
     "description": "Sender address for required account and service email. Must be verified in SES.",
@@ -207,12 +201,6 @@
     "default": "welcome@aishippinglabs.com",
     "description": "Reply-To address set on welcome emails so a member who replies reaches a monitored, team-forwarded inbox instead of the send-only welcome/noreply mailbox. Defaults to welcome@aishippinglabs.com (forwarded to the founders by the inbound email-forwarder Lambda). Leave blank to send welcome emails with no Reply-To header.",
     "docs_url": "_docs/integrations/ses.md#ses_welcome_reply_to_email"
-   },
-   {
-    "key": "SES_CONFIGURATION_SET_NAME",
-    "is_secret": false,
-    "description": "SES configuration set name that publishes delivery, open, bounce, and click events to SNS. Required in production: set to \"aishippinglabs\" (matches the configuration set in DataTalksClub/aws-infra at main/aisl/email.tf). When blank, SES publishes no events to SNS regardless of the HTTPS subscription wiring, so the bounce / complaint webhook never fires. Safe to leave blank only in local dev.",
-    "docs_url": "_docs/integrations/ses.md#ses_configuration_set_name"
    },
    {
     "key": "SES_WEBHOOK_VALIDATION_ENABLED",

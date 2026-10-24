@@ -1,0 +1,34 @@
+# File-provider route: install atomically in Coolify's watched dynamic directory.
+# The source Service owns this stable Docker name on the proxy's UUID network.
+http:
+  routers:
+    aisl-dev-https:
+      rule: Host(`dev.aishippinglabs.com`)
+      entryPoints:
+        - https
+      service: aisl-dev-source-web
+      tls:
+        certResolver: letsencrypt
+    aisl-dev-http:
+      rule: Host(`dev.aishippinglabs.com`)
+      entryPoints:
+        - http
+      middlewares:
+        - aisl-dev-redirect-https
+      service: aisl-dev-source-web
+  middlewares:
+    aisl-dev-redirect-https:
+      redirectScheme:
+        scheme: https
+        permanent: true
+  services:
+    aisl-dev-source-web:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: http://web-mekt9kz74fvbixla6olinuma:8000
+        healthCheck:
+          path: /ping
+          hostname: dev.aishippinglabs.com
+          interval: 10s
+          timeout: 3s

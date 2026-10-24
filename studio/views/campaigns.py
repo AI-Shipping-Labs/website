@@ -28,9 +28,9 @@ from email_app.services.campaign_recipients import (
     campaign_recipient_mode,
 )
 from email_app.services.campaign_repermission import (
-    REPERMISSION_EMAIL_TYPE,
     repermission_body,
 )
+from email_app.services.campaign_test_send import TEST_EMAIL_FOOTER_NOTE as TEST_EMAIL_FOOTER_NOTE
 from email_app.services.campaign_waves import (
     campaign_wave_summary,
     release_next_wave,
@@ -45,6 +45,7 @@ from events.models import Event
 from integrations.config import get_config
 from studio.decorators import staff_required
 from studio.utils import studio_pagination_context
+from studio.views.campaign_tests import campaign_test_access, campaign_test_send_response
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +62,6 @@ TEST_RECIPIENT_SUGGESTIONS_CAP = 8
 # in the include/exclude inputs (issue #357). The form also submits HTML
 # multi-select values as a list, so we accept both shapes.
 TAG_INPUT_SPLIT_RE = re.compile(r"[\s,;]+")
-TEST_EMAIL_FOOTER_NOTE = (
-    "Test send only. This address is not linked to a subscriber record, so no unsubscribe link is included."
-)
 User = get_user_model()
 
 
@@ -768,181 +766,13 @@ def _send_studio_test_campaign(
     )
 
 
-@staff_required
+@campaign_test_access
 @require_POST
 def campaign_test_send(request, campaign_id):
-    """Send a campaign test email to one or more explicit addresses."""
-    campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
-    raw_test_recipients = request.POST.get("test_recipients", "").strip()
-
-    if not raw_test_recipients:
-        messages.error(request, "Provide at least one email address for the test send.")
-        return render(
-            request,
-            "studio/campaigns/detail.html",
-            _build_campaign_detail_context(
-                campaign,
-                test_recipients=raw_test_recipients,
-                test_recipient_suggestions=_test_recipient_suggestions(request),
-            ),
-        )
-
-    recipients, invalid = _parse_test_recipients(raw_test_recipients)
-    if invalid:
-        messages.error(
-            request,
-            f"Invalid email address(es): {', '.join(invalid)}.",
-        )
-        return render(
-            request,
-            "studio/campaigns/detail.html",
-            _build_campaign_detail_context(
-                campaign,
-                test_recipients=raw_test_recipients,
-                test_recipient_suggestions=_test_recipient_suggestions(request),
-            ),
-        )
-
-    if not recipients:
-        messages.error(request, "Provide at least one valid email address for the test send.")
-        return render(
-            request,
-            "studio/campaigns/detail.html",
-            _build_campaign_detail_context(
-                campaign,
-                test_recipients=raw_test_recipients,
-                test_recipient_suggestions=_test_recipient_suggestions(request),
-            ),
-        )
-
-    service = EmailService()
-    subject = f"[TEST] {campaign.subject}"
-    sent = []
-    failed = {}
-
-    for recipient in recipients:
-        user = User.objects.filter(email__iexact=recipient).first()
-        unsubscribe_url = None
-        footer_note = TEST_EMAIL_FOOTER_NOTE
-
-        is_monitored = (
-            campaign.audience_verification
-            == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
-        )
-        if is_monitored and user is None:
-            failed[recipient] = (
-                "Re-permission test sends require an existing controlled user."
-            )
-            continue
-
-        if user is not None:
-            unsubscribe_url = service._build_unsubscribe_url(user)
-            footer_note = None
-
-        if is_monitored:
-            if (
-                not user.is_active
-                or user.unsubscribed
-                or user.email_verified
-                or user.bounce_state == User.BounceState.PERMANENT
-            ):
-                failed[recipient] = (
-                    "Re-permission test sends require an active subscribed user."
-                )
-                continue
-            prepared = service.prepare_rendered(
-                user,
-                subject,
-                repermission_body(campaign.body, user=user),
-                email_type=REPERMISSION_EMAIL_TYPE,
-                campaign_id=campaign.pk,
-            )
-            try:
-                _send_studio_test_campaign(
-                    recipient=recipient,
-                    subject=subject,
-                    html_body=prepared.full_html,
-                    text_body=prepared.plain_text,
-                    campaign_id=campaign.pk,
-                    unsubscribe_url=prepared.unsubscribe_url,
-                )
-            except Exception as exc:
-                failed[recipient] = str(exc)
-                logger.warning(
-                    "Failed to send campaign test email %s to %s",
-                    campaign.pk,
-                    recipient,
-                    exc_info=True,
-                )
-            else:
-                sent.append(recipient)
-            continue
-
-        full_html = service.render_markdown_email(
-            subject,
-            campaign.body,
-            unsubscribe_url=unsubscribe_url,
-            footer_note=footer_note,
-        )
-        plain_text = service.render_plain_text_email(
-            campaign.body,
-            unsubscribe_url=unsubscribe_url,
-            footer_note=footer_note,
-        )
-
-        try:
-            _send_studio_test_campaign(
-                recipient=recipient,
-                subject=subject,
-                html_body=full_html,
-                text_body=plain_text,
-                campaign_id=campaign.pk,
-                unsubscribe_url=unsubscribe_url,
-            )
-        except Exception as exc:
-            failed[recipient] = str(exc)
-            logger.warning(
-                "Failed to send campaign test email %s to %s",
-                campaign.pk,
-                recipient,
-                exc_info=True,
-            )
-        else:
-            sent.append(recipient)
-
-    if failed and sent:
-        _remember_recent_test_recipients(request, sent)
-        messages.warning(
-            request,
-            "Sent test email to "
-            f"{len(sent)} of {len(recipients)} address(es): "
-            f"{_summarize_recipients(sent)}. "
-            f"Failed: {_summarize_recipients(list(failed))}.",
-        )
-        return redirect("studio_campaign_detail", campaign_id=campaign.pk)
-
-    if failed:
-        first_error = next(iter(failed.values()))
-        messages.error(
-            request,
-            f"Failed to send test email to {_summarize_recipients(list(failed))}. {first_error}",
-        )
-        return render(
-            request,
-            "studio/campaigns/detail.html",
-            _build_campaign_detail_context(
-                campaign,
-                test_recipients=raw_test_recipients,
-                test_recipient_suggestions=_test_recipient_suggestions(request),
-            ),
-        )
-
-    _remember_recent_test_recipients(request, sent)
-    messages.success(
-        request,
-        f"Test email sent to {len(sent)} address(es): {_summarize_recipients(sent)}.",
+    """Send explicit tests; staff tokens accept one recipient and receive JSON."""
+    return campaign_test_send_response(
+        request, campaign_id, service_factory=EmailService, send=_send_studio_test_campaign,
     )
-    return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
 
 @staff_required

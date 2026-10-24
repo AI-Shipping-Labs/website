@@ -6103,6 +6103,97 @@
         ]
       }
     },
+    "/api/diagnostics/mail-deliveries": {
+      "get": {
+        "description": "Requires an exact idempotency_key, or both an exact recipient address and purpose. Returns at most 20 newest deliveries. Omits recipients, durable context, transport options and errors.",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "idempotency_key",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipient",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "purpose",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "deliveries": {
+                      "items": {
+                        "properties": {
+                          "created_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          },
+                          "external_message_id": {
+                            "type": "string"
+                          },
+                          "id": {
+                            "format": "uuid",
+                            "type": "string"
+                          },
+                          "purpose": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string"
+                          },
+                          "template_key": {
+                            "type": "string"
+                          },
+                          "updated_at": {
+                            "format": "date-time",
+                            "type": "string"
+                          }
+                        },
+                        "type": "object"
+                      },
+                      "maxItems": 20,
+                      "type": "array"
+                    },
+                    "limit": {
+                      "type": "integer"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Sanitized package delivery evidence."
+          },
+          "401": {
+            "description": "Missing, invalid, or non-staff token."
+          },
+          "422": {
+            "description": "Supply an exact key or recipient and purpose."
+          }
+        },
+        "summary": "Inspect package mail delivery evidence",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
     "/api/diagnostics/schedules": {
       "get": {
         "description": "Returns the latest validated schedule-set reconciliation result. Staff-token only and read-only.",

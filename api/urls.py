@@ -139,6 +139,7 @@ from api.views.interview_notes import (
     plan_interview_notes,
     user_interview_notes,
 )
+from api.views.mail_deliveries import mail_delivery_diagnostics
 from api.views.marketing_pages import (
     marketing_page_detail,
     marketing_page_preview_link,
@@ -321,6 +322,11 @@ urlpatterns = [
         "email-log",
         email_log_list,
         name="api_email_log_list",
+    ),
+    path(
+        "diagnostics/mail-deliveries",
+        mail_delivery_diagnostics,
+        name="api_mail_delivery_diagnostics",
     ),
     path(
         "docs",

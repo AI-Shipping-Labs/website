@@ -165,12 +165,10 @@ _KEY_ORDER = {
     "ses": (
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
-        "AWS_SES_REGION",
         "SES_TRANSACTIONAL_FROM_EMAIL",
         "SES_PROMOTIONAL_FROM_EMAIL",
         "SES_WELCOME_FROM_EMAIL",
         "SES_WELCOME_REPLY_TO_EMAIL",
-        "SES_CONFIGURATION_SET_NAME",
         "SES_WEBHOOK_VALIDATION_ENABLED",
         "SES_WEBHOOK_SHARED_SECRET",
         "EMAIL_BATCH_SIZE",
@@ -289,7 +287,6 @@ _KEYS_WITHOUT_DONOR_DEFAULT = frozenset(
         "AWS_S3_RECORDINGS_BUCKET",
         "AWS_S3_RECORDINGS_REGION",
         "AWS_SECRET_ACCESS_KEY",
-        "AWS_SES_REGION",
         "BANNER_GENERATOR_AUTH_TOKEN",
         "BANNER_GENERATOR_FUNCTION_URL",
         "BOOK_CLUB_SLACK_URL",
@@ -321,7 +318,6 @@ _KEYS_WITHOUT_DONOR_DEFAULT = frozenset(
         "PLAN_SPRINTS_THREAD_REFRESH_DAYS",
         "RECORDING_AVAILABLE_BODY_TEMPLATE",
         "RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
-        "SES_CONFIGURATION_SET_NAME",
         "SES_PROMOTIONAL_FROM_EMAIL",
         "SES_TRANSACTIONAL_FROM_EMAIL",
         "SES_WEBHOOK_SHARED_SECRET",
@@ -608,17 +604,6 @@ AWS_SECRET_ACCESS_KEY = declare(
     secret=True,
     docs_url="_docs/integrations/ses.md#aws_secret_access_key",
 )
-AWS_SES_REGION = declare(
-    key="AWS_SES_REGION",
-    group="ses",
-    label="Aws SES Region",
-    description="AWS region for SES (e.g. eu-west-1). Must match the verified domain region.",
-    value_type="str",
-    default="",
-    secret=False,
-    docs_url="_docs/integrations/ses.md#aws_ses_region",
-    optional=True,
-)
 SES_TRANSACTIONAL_FROM_EMAIL = declare(
     key="SES_TRANSACTIONAL_FROM_EMAIL",
     group="ses",
@@ -663,17 +648,6 @@ SES_WELCOME_REPLY_TO_EMAIL = declare(
     optional=True,
     is_email=True,
     docs_url="_docs/integrations/ses.md#ses_welcome_reply_to_email",
-)
-SES_CONFIGURATION_SET_NAME = declare(
-    key="SES_CONFIGURATION_SET_NAME",
-    group="ses",
-    label="SES Configuration Set Name",
-    description='SES configuration set name that publishes delivery, open, bounce, and click events to SNS. Required in production: set to "aishippinglabs" (matches the configuration set in DataTalksClub/aws-infra at main/aisl/email.tf). When blank, SES publishes no events to SNS regardless of the HTTPS subscription wiring, so the bounce / complaint webhook never fires. Safe to leave blank only in local dev.',
-    value_type="str",
-    default="",
-    secret=False,
-    docs_url="_docs/integrations/ses.md#ses_configuration_set_name",
-    optional=True,
 )
 SES_WEBHOOK_VALIDATION_ENABLED = declare(
     key="SES_WEBHOOK_VALIDATION_ENABLED",

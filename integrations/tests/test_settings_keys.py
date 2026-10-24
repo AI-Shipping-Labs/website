@@ -29,7 +29,6 @@ SITE_OPTIONAL_ADDITIONS = frozenset({
     "AWS_S3_DOWNLOADS_BUCKET",
     "AWS_S3_RECORDINGS_BUCKET",
     "AWS_S3_RECORDINGS_REGION",
-    "AWS_SES_REGION",
     "BANNER_GENERATOR_FUNCTION_URL",
     "CONTENT_CDN_BASE",
     "DAPIER_AGENT_NAME",
@@ -39,7 +38,6 @@ SITE_OPTIONAL_ADDITIONS = frozenset({
     "GITHUB_APP_ID",
     "GITHUB_APP_INSTALLATION_ID",
     "GOOGLE_CALENDAR_ID",
-    "SES_CONFIGURATION_SET_NAME",
     "SES_PROMOTIONAL_FROM_EMAIL",
     "SES_TRANSACTIONAL_FROM_EMAIL",
     "SES_WELCOME_FROM_EMAIL",
@@ -91,7 +89,7 @@ class DonorInventoryEquivalenceTest(SimpleTestCase):
 
     def test_group_and_key_counts(self):
         self.assertEqual(len(INTEGRATION_GROUPS), 20)
-        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 176)
+        self.assertEqual(sum(len(group["keys"]) for group in INTEGRATION_GROUPS), 174)
 
 
 class DeclarationIdempotenceTest(SimpleTestCase):

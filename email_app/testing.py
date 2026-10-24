@@ -3,11 +3,11 @@
 Two problems appear once sends go through ``community_base.mail`` and both
 are test-environment-only:
 
-- The SES and Relay transports must never touch the network. The old EmailService
-  short-circuited on the ``SES_ENABLED`` kill-switch with a synthetic
-  ``ses-disabled-noop`` message id; under the package the transport lives in
-  ``ses_local`` or ``relay``, so the test runner swaps its client for a stub that returns
-  synthetic ids. Existing EmailLog assertions keep passing.
+- The Relay transport must never touch the network in tests, so the test
+  runner swaps its client for a stub that returns synthetic ids.
+  ``StubSESClient`` remains for the suites that explicitly opt into the
+  package's local-render backend to assert rendered HTML. Existing
+  EmailLog assertions keep passing either way.
 - Django ``TestCase`` wraps every test in an aborted transaction, so
   ``transaction.on_commit`` never fires and the dispatched
   ``cb_mail.deliver`` job would never run. ``deliver_pending_mail`` runs the

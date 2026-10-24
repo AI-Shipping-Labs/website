@@ -87,22 +87,22 @@ run_boot() {
         -e "RUN_MIGRATIONS=true"
         -e "PYTHONUNBUFFERED=1"
         -e "LOGFIRE_ENABLED=${logfire}"
-        # SES_ENABLED=true is the REAL production web-task config. Under
-        # DEBUG=False the `check` phase raises email_app.E001 and aborts the
-        # boot when SES_ENABLED is false, so a faithful boot MUST set it true
-        # (this is exactly what prod does). It only flips a settings flag: no
-        # boto3/Secrets-Manager/SES round trip happens at boot (those are
-        # send-time only), and we still pass NO AWS credentials — the keys
-        # stay blank, so nothing can authenticate against AWS.
-        -e "SES_ENABLED=true"
+        # RELAY_BASE_URL/API_KEY are the REAL production web-task config. Under
+        # DEBUG=False the `check` phase raises email_app.E002 and aborts the
+        # boot when both are missing, so a faithful boot MUST set them
+        # (this is exactly what prod does). They only fill settings values:
+        # no email/Secrets-Manager round trip happens at boot (those are
+        # send-time only), and we still pass NO AWS credentials.
+        -e "RELAY_BASE_URL=https://relay.datatalks.club"
+        -e "RELAY_API_KEY=boot-profile-dummy-relay-key"
     )
     # Dummy token ONLY on the Logfire-on run: opens the 3-part gate so
     # integrations.apps.ready() pays the import+configure tax in django_setup.
     if [ "${logfire}" = "true" ]; then
         env_args+=(-e "LOGFIRE_TOKEN=pylf_dummy_boot_profile_token")
     fi
-    # NOTE: deliberately NO AWS creds passed — SES_ENABLED=true only sets the
-    # flag; the AWS keys are blanked by settings, so no boot-time boto3 auth.
+    # NOTE: deliberately NO AWS creds passed — the Relay values only fill
+    # settings; no boot-time network auth happens.
 
     docker run -d --name aisl-boot-run \
         --network "${NETWORK}" \

@@ -1,10 +1,9 @@
 """Site defaults for sends through ``community_base.mail`` (plan issue A1.2).
 
 The package owns the durable delivery and the worker; this helper layers the
-transport decisions the old ``EmailService._send_ses`` made at call time onto
-the package's ``send``: the per-type sender, the welcome Reply-To, the SES
-configuration set that the site-owned SNS event ingress is keyed on, and
-cc/bcc passthrough. Callers keep passing ``dedupe_key`` semantics through
+transport decisions the old ``EmailService`` made at call time onto the
+package's ``send``: the per-type sender, the welcome Reply-To, and cc/bcc
+passthrough. Callers keep passing ``dedupe_key`` semantics through
 ``idempotency_key``; without one, every call is its own logical send (a
 password-reset request sends a new mail each time, as before).
 """
@@ -71,9 +70,6 @@ def send_package_mail(
         extra["cc"] = cc
     if bcc is not None:
         extra["bcc"] = bcc
-    configuration_set = get_config("SES_CONFIGURATION_SET_NAME", "")
-    if configuration_set and configuration_set.strip():
-        extra["configuration_set"] = configuration_set.strip()
     if template_name in WELCOME_EMAIL_TYPES:
         reply_to = validate_email_config_value(
             WELCOME_REPLY_TO_KEY,

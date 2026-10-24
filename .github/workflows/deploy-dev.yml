@@ -126,16 +126,15 @@ jobs:
       - name: Run Django system checks
         # Issue #529: gate deploys on `manage.py check --fail-level ERROR`
         # so a misconfiguration that trips a registered system check (e.g.
-        # email_app.E001 when SES is disabled in a prod-like env) blocks
-        # promotion before the image is built. SES_ENABLED=true here is a
-        # wiring check on the source tree; the platform-env enforcement
-        # happens in entrypoint.sh against real ECS task-def env vars.
+        # email_app.E002 when Relay is misconfigured in a prod-like env)
+        # blocks promotion before the image is built. The Relay values here
+        # are a wiring check on the source tree; the platform-env
+        # enforcement happens in entrypoint.sh against real env vars.
         # SECRET_KEY is a synthetic CI value; settings.py rejects an
         # unset SECRET_KEY when DEBUG=False so the check would never get
         # to run without one; the value is not used to sign anything real.
         env:
           DEBUG: "False"
-          SES_ENABLED: "true"
           RELAY_BASE_URL: "https://relay.datatalks.club"
           RELAY_API_KEY: "ci-dummy-relay-api-key"
           SECRET_KEY: "ci-system-check-only-not-a-real-secret"

@@ -494,7 +494,6 @@ ZOOM_ACCOUNT_ID = os.environ.get('ZOOM_ACCOUNT_ID', '')
 # Amazon SES configuration (set via environment variables in production)
 AWS_ACCESS_KEY_ID = os.environ.get('AWS_ACCESS_KEY_ID', '')
 AWS_SECRET_ACCESS_KEY = os.environ.get('AWS_SECRET_ACCESS_KEY', '')
-AWS_SES_REGION = os.environ.get('AWS_SES_REGION', 'us-east-1')
 
 # S3 configuration for recording uploads
 AWS_S3_RECORDINGS_BUCKET = os.environ.get('AWS_S3_RECORDINGS_BUCKET', '')
@@ -504,6 +503,10 @@ AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-centra
 AWS_S3_CONTENT_BUCKET = os.environ.get('AWS_S3_CONTENT_BUCKET', '')
 AWS_S3_CONTENT_REGION = os.environ.get('AWS_S3_CONTENT_REGION', 'eu-west-1')
 
+# Sender identity (Relay cutover P4): the SES_*_FROM_EMAIL keys below are
+# the per-kind sender addresses resolved by
+# email_app.services.email_classification for every Relay send. They are
+# unrelated to SES transport, which no longer exists in this repo.
 SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', '')
 SES_TRANSACTIONAL_FROM_EMAIL = os.environ.get(
     'SES_TRANSACTIONAL_FROM_EMAIL',
@@ -517,9 +520,6 @@ SES_WELCOME_FROM_EMAIL = os.environ.get(
     'SES_WELCOME_FROM_EMAIL',
     SES_FROM_EMAIL or 'welcome@aishippinglabs.com',
 )
-SES_CONFIGURATION_SET_NAME = (
-    '' if TESTING else os.environ.get('SES_CONFIGURATION_SET_NAME', '')
-)
 SES_WEBHOOK_VALIDATION_ENABLED = (
     not TESTING
     and os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
@@ -529,7 +529,7 @@ SES_WEBHOOK_SHARED_SECRET = (
 )
 
 # Email campaign chunking: number of recipients per chunked send_campaign_batch task.
-# At ~0.05s/email + SES network latency, a 200-recipient batch finishes in roughly
+# At ~0.05s/email + Relay network latency, a 200-recipient batch finishes in roughly
 # 10-30s, well under the 300s Q_CLUSTER worker timeout, while keeping the queue
 # row count manageable (5000 recipients => 25 chunks).
 EMAIL_BATCH_SIZE = int(os.environ.get('EMAIL_BATCH_SIZE', 200))
@@ -689,25 +689,15 @@ EMAIL_BACKEND = os.environ.get(
 DEFAULT_FROM_EMAIL = 'AI Shipping Labs <noreply@aishippinglabs.com>'
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
-# Amazon SES kill-switch (issue #509)
-# Mirrors the SLACK_ENABLED pattern above. Production deploys MUST set
-# SES_ENABLED=true to enable transactional + campaign mail; every other
-# environment (local dev, CI, Playwright, manage.py test) defaults to off so
-# that no real emails are sent. Both code paths that build a boto3 SES client
-# (email_app.services.ses_transport.send_ses_email and
-# events.services.registration_email._send_raw_email) short-circuit when
-# this flag is False, returning a synthetic
-# ``ses-disabled-noop`` message id so EmailLog rows still record the attempt.
-# As a belt-and-suspenders defence we also blank the AWS access keys here so
-# that any future code path that slips past the gate cannot authenticate
-# against a real SES account using leaked env credentials.
-SES_ENABLED = (
-    not TESTING
-    and os.environ.get('SES_ENABLED', 'false').lower() == 'true'
-)
-if not SES_ENABLED:
-    AWS_ACCESS_KEY_ID = ''
-    AWS_SECRET_ACCESS_KEY = ''
+# Outbound email transport (Relay cutover P4, issue #509 retired)
+# All transactional + campaign mail delivers through Relay — the
+# community_base ``relay`` backend (package mail), the Relay
+# transactional adapter (site-owned paths), and RelayEmailBackend (Django
+# core mail). There is no SES send path left in this repo and no
+# kill-switch: a production-like environment without Relay credentials
+# fails loudly at send time and at ``manage.py check`` (email_app.E002).
+# AWS access keys below are still required for S3 content/recording
+# uploads and are always populated from the environment.
 
 # S3 content-image uploads (issues #532, #1068, #1131)
 # S3_ENABLED is a registered package configuration key declared by
@@ -718,13 +708,6 @@ if not SES_ENABLED:
 # disable uploads; only an explicit falsey value turns it off. It is no longer
 # read from settings here — the gate lives in
 # ``integrations/services/github_sync/media.py:upload_images_to_s3``.
-#
-# The AWS access-key blanking below stays as a belt-and-suspenders defence:
-# when SES_ENABLED is False the keys are already blanked above, but this
-# keeps the blanking idempotent so any code path that slips past the
-# ``s3_content_upload_enabled()`` gate still cannot authenticate against AWS
-# with leaked env credentials. (When SES_ENABLED is True the keys are
-# populated and S3_ENABLED controls whether the content pipeline uses them.)
 #
 # ``TESTING`` (set above) is still consulted by ``upload_images_to_s3`` as
 # an unconditional short-circuit so no real boto3 round-trips happen under
@@ -820,10 +803,12 @@ IMPORT_WELCOME_EMAILS_PER_HOUR = int(os.environ.get('IMPORT_WELCOME_EMAILS_PER_H
 # Community-base package configuration. The access policy wires the site's
 # tier semantics into the kernel protocol. JOBS_BACKEND (A1.1) runs the
 # package's durable job intents on this site's django-q cluster. MAIL_BACKEND
-# (A1.2) routes transactional mail through the package on the transitional
-# ses_local backend, with the site hooks in email_app.hooks keeping the
-# EmailLog audit row, template overrides, newsletter opt-out and the
-# unsubscribe / verify-email footers.
+# (Relay cutover P4) routes transactional mail through the package on the
+# ``relay`` backend in every environment including the test runner, with
+# the site hooks in email_app.hooks keeping the EmailLog audit row,
+# template overrides, newsletter opt-out and the unsubscribe /
+# verify-email footers. Tests that assert locally-rendered HTML opt into
+# the package's ``ses_local`` backend explicitly with a stubbed client.
 def _lazy_package_setting(getter):
     """Wrap a COMMUNITY_BASE value so it resolves on first use.
 
@@ -887,7 +872,7 @@ COMMUNITY_BASE = {
     'JOBS_BACKEND': 'django_q',
     'MAIL_BACKEND': os.environ.get(
         'COMMUNITY_BASE_MAIL_BACKEND',
-        'relay' if not TESTING else 'ses_local',
+        'relay',
     ),
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
     'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',

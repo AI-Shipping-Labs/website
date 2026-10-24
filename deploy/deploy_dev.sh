@@ -386,11 +386,11 @@ print_r1_web_recovery() {
 # Run migrate + `check --fail-level
 # ERROR` ONCE in a one-off ECS task (BOOT_MODE=predeploy) BEFORE any service
 # is rolled, using the SAME registered task-def ARN that the service will run
-# (same image, secrets, DEBUG/SES_ENABLED/ALLOWED_HOSTS). This:
+# (same image, secrets, DEBUG/ALLOWED_HOSTS). This:
 #   * moves the two RDS-bound costs (check ~28s + migrate ~8.8s) off every
 #     serving container's pre-bind path;
 #   * makes the pre-deploy task the SINGLE migrator (#336);
-#   * STRENGTHENS the #529 misconfig gate — a bad config (e.g. email_app.E001)
+#   * STRENGTHENS the #529 misconfig gate — a bad config (e.g. email_app.E002)
 #     now fails the DEPLOY before any container serves, instead of promoting a
 #     crash-looping container.
 #

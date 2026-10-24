@@ -1,4 +1,9 @@
-"""Django system checks for the ``email_app`` (AC 5)."""
+"""Django system checks for the ``email_app`` (Relay cutover P4).
+
+The SES_ENABLED E001 production gate is gone with the SES send paths:
+every send goes through Relay, and a production-like environment without
+Relay credentials fails the E002 check below instead.
+"""
 
 from __future__ import annotations
 
@@ -8,43 +13,6 @@ from django.conf import settings
 from django.core.checks import Error, Tags, register
 
 from integrations.config import get_config
-
-
-@register(Tags.security)
-def check_ses_enabled_in_production(app_configs, **kwargs):
-    """Refuse a production-like deploy when SES is disabled and MAIL_BACKEND is ses_local."""
-    if getattr(settings, "TESTING", False):
-        return []
-    if getattr(settings, "DEBUG", False):
-        return []
-
-    # If package mail is routed to Relay, SES_ENABLED is no longer required for sending.
-    community_base = getattr(settings, "COMMUNITY_BASE", {})
-    if community_base.get("MAIL_BACKEND") == "relay":
-        return []
-
-    if getattr(settings, "SES_ENABLED", False):
-        return []
-    return [
-        Error(
-            (
-                "SES is disabled in a production-like environment "
-                "(DEBUG=False, SES_ENABLED=False). Transactional email "
-                "(registration, password reset, newsletter, event "
-                "confirmations) will silently no-op. "
-                "Set the env var SES_ENABLED=true in your deploy environment."
-            ),
-            hint=(
-                "See _docs/configuration.md section 5 (Email (Amazon SES)) "
-                "for the full list of SES env vars. To intentionally run a "
-                "production-like environment without SES (for example a "
-                "staging box that does not send real mail), silence this "
-                "check with SILENCED_SYSTEM_CHECKS = ['email_app.E001'] in "
-                "your settings."
-            ),
-            id="email_app.E001",
-        )
-    ]
 
 
 @register(Tags.security)

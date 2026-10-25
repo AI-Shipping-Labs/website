@@ -40,12 +40,21 @@ def test_series_email_editor_previews_through_relay(
 ):
     from email_app.testing import StubRelayTemplateClient
 
-    expected_guidance = EXPECTED_GUIDANCE[template_name]
     _create_staff_user("staff-series-preview@test.com")
     relay = StubRelayTemplateClient()
     context = _auth_context(browser, "staff-series-preview@test.com")
     page = context.new_page()
+    _open_and_preview(page, django_server, template_name, relay)
 
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    page.screenshot(
+        path=SCREENSHOT_DIR / f"series-{screenshot_name}-preview.png",
+        full_page=True,
+    )
+    context.close()
+
+
+def _open_and_preview(page, django_server, template_name, relay):
     with mock.patch(
         "studio.views.email_templates.configured_template_client",
         return_value=relay,
@@ -58,21 +67,17 @@ def test_series_email_editor_previews_through_relay(
         sent_when = page.get_by_test_id("template-sent-when")
         expect(sent_when).to_be_visible()
         expect(sent_when).to_contain_text("Sent when:")
-        expect(sent_when).to_contain_text(expected_guidance)
-
+        expect(sent_when).to_contain_text(EXPECTED_GUIDANCE[template_name])
         page.get_by_role("button", name="Preview through Relay").click()
         preview = page.frame_locator('[data-testid="email-template-preview"]')
         expect(preview.locator("body")).to_contain_text("Relay preview")
-        call = next(
-            call for call in relay.calls
-            if isinstance(call, dict) and call.get("operation") == "preview"
-        )
+        call = _preview_call(relay.calls)
         assert call["template_key"] == template_name
         assert call["draft"] is True
 
-    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
-    page.screenshot(
-        path=SCREENSHOT_DIR / f"series-{screenshot_name}-preview.png",
-        full_page=True,
-    )
-    context.close()
+
+def _preview_call(calls):
+    for call in calls:
+        if isinstance(call, dict) and call.get("operation") == "preview":
+            return call
+    raise AssertionError("Relay preview was not requested")

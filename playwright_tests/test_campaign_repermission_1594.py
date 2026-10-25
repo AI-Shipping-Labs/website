@@ -144,15 +144,7 @@ def test_staff_proves_the_controlled_consent_action_before_release(
             f"{django_server}/studio/campaigns/{campaign_id}/",
             wait_until="domcontentloaded",
         )
-        preview = page.frame_locator('[data-testid="campaign-preview-iframe"]')
-        expect(preview.locator("body")).to_contain_text("Relay preview")
-        preview_call = next(
-            call for call in relay_templates.calls
-            if isinstance(call, dict) and call.get("operation") == "preview"
-        )
-        assert REPERMISSION_COPY in preview_call["context"]["body_markdown"]
-        assert REPERMISSION_CTA in preview_call["context"]["body_markdown"]
-        assert "preview-only" in preview_call["context"]["body_markdown"]
+        _assert_repermission_preview(page, relay_templates)
 
         page.locator("#test-recipients").fill(controlled.email)
         with mock.patch(
@@ -191,6 +183,27 @@ def test_staff_proves_the_controlled_consent_action_before_release(
     assert controlled.email_preferences["newsletter"] is True
     connection.close()
     context.close()
+
+
+def _assert_repermission_preview(page, relay_templates):
+    from email_app.services.campaign_repermission import (
+        REPERMISSION_COPY,
+        REPERMISSION_CTA,
+    )
+
+    preview = page.frame_locator('[data-testid="campaign-preview-iframe"]')
+    expect(preview.locator("body")).to_contain_text("Relay preview")
+    preview_call = _preview_call(relay_templates.calls)
+    assert REPERMISSION_COPY in preview_call["context"]["body_markdown"]
+    assert REPERMISSION_CTA in preview_call["context"]["body_markdown"]
+    assert "preview-only" in preview_call["context"]["body_markdown"]
+
+
+def _preview_call(calls):
+    for call in calls:
+        if isinstance(call, dict) and call.get("operation") == "preview":
+            return call
+    raise AssertionError("Relay preview was not requested")
 
 
 @pytest.mark.django_db(transaction=True)

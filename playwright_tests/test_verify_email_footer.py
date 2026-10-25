@@ -101,6 +101,7 @@ class TestVerifyEmailFooterRoundTrip:
             django_server,
             verify_url,
         )
+        assert browser_url.startswith(f"{django_server}/api/verify-email?token=")
 
         # Step 3: open the verify URL anonymously.
         response = page.goto(

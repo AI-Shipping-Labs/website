@@ -15,7 +15,7 @@ from unittest.mock import patch
 from django.test import TestCase, override_settings
 
 from accounts.models import User
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 
@@ -45,8 +45,8 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
     override."""
 
     @patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
+        "community_base.mail.backends.relay.configured_client",
+        return_value=StubRelayClient(),
     )
     def test_verification_email_uses_db_override_when_set(self, client_factory):
         _set_override('https://override.example.com')
@@ -59,7 +59,7 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        with local_render_backend():
+        with relay_test_backend():
             deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
@@ -69,8 +69,8 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
         self.assertNotIn('https://env.example.com/api/verify-email', html)
 
     @patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
+        "community_base.mail.backends.relay.configured_client",
+        return_value=StubRelayClient(),
     )
     def test_verification_email_uses_settings_when_no_override(self, client_factory):
         # Regression guard: with no DB row, the env value is used.
@@ -86,7 +86,7 @@ class VerificationEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 201)
-        with local_render_backend():
+        with relay_test_backend():
             deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
@@ -100,8 +100,8 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
     """Password-reset email URL also follows the override."""
 
     @patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
+        "community_base.mail.backends.relay.configured_client",
+        return_value=StubRelayClient(),
     )
     def test_password_reset_email_uses_db_override_when_set(self, client_factory):
         User.objects.create_user(
@@ -115,7 +115,7 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        with local_render_backend():
+        with relay_test_backend():
             deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(
@@ -125,8 +125,8 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
         self.assertNotIn('https://env.example.com/api/password-reset', html)
 
     @patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
+        "community_base.mail.backends.relay.configured_client",
+        return_value=StubRelayClient(),
     )
     def test_password_reset_email_uses_settings_when_no_override(self, client_factory):
         User.objects.create_user(
@@ -138,7 +138,7 @@ class PasswordResetEmailUrlTest(_AuthEmailUrlBase):
             content_type='application/json',
         )
         self.assertEqual(resp.status_code, 200)
-        with local_render_backend():
+        with relay_test_backend():
             deliver_pending_mail()
         html = self._captured_email_html(client_factory.return_value)
         self.assertIn(

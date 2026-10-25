@@ -19,7 +19,7 @@ from email_app.services.email_classification import (
     TRANSACTIONAL_EMAIL_TYPES,
     classify_email_type,
 )
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from plans.models import (
     PARTNER_INTRO_EMAIL_STATUS_FAILED,
     PARTNER_INTRO_EMAIL_STATUS_SENT,
@@ -203,11 +203,11 @@ class PartnerIntroEmailServiceTest(TestCase):
 
         from community_base.mail.jobs import deliver as deliver_job
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             for delivery in EmailDelivery.objects.filter(

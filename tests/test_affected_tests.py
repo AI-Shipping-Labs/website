@@ -34,7 +34,6 @@ from django.test import SimpleTestCase, tag
 # enumerators and predicates, which is what stops a row from being narrower
 # than the checker it stands for.
 from content.tests import test_design_system_lint, test_template_comment_lint
-from email_app.tests import test_email_service_shim_1651
 from jobs.tests import test_async_task_names
 from scripts import verify_tailwind_build
 from scripts.affected_tests import (
@@ -49,7 +48,6 @@ from scripts.affected_tests import (
     PLAYWRIGHT_CORE_COMMAND,
     PLAYWRIGHT_FULL_COMMAND,
     REPO_WIDE_GUARDS,
-    REPO_WIDE_TEMPLATE_LINT_LABELS,
     REVERSE_IMPORT_APP_CAP,
     SUPPLEMENTAL_PLAYWRIGHT_OWNERS,
     TAILWIND_INPUT_CSS_GLOBS,
@@ -301,7 +299,6 @@ class RuleChainTest(SimpleTestCase):
             with self.subTest(path=path):
                 self.assertTrue(is_no_test_path(path))
         for path in (
-            "email_app/email_templates/welcome.md",
             "integrations/services/ai_eval/README.md",
             "asl_cli/README.md",
             "skills/ai-shipping-labs-member-api/SKILL.md",
@@ -313,19 +310,6 @@ class RuleChainTest(SimpleTestCase):
         ):
             with self.subTest(path=path):
                 self.assertFalse(is_no_test_path(path))
-
-    def test_email_template_markdown_maps_to_its_app(self):
-        # email_app/email_templates/*.md are shipped email bodies asserted by
-        # email_app tests -- an email-template-only diff must not report
-        # "NO TESTS REQUIRED". Since #1750 the rule-14 comment lint rides
-        # along, because it compiles this tree too (pinned in detail by
-        # test_email_template_markdown_selects_the_template_comment_lint).
-        plan = plan_for(["email_app/email_templates/welcome_paid.md"])
-        self.assertFalse(plan.no_tests_required)
-        self.assertEqual(
-            plan.django_labels,
-            collapsed("email_app", *guards("email_app/email_templates/welcome_paid.md")),
-        )
 
     def test_readme_inside_an_app_maps_to_its_app(self):
         plan = plan_for(["integrations/services/ai_eval/README.md"])
@@ -785,28 +769,6 @@ class RuleChainTest(SimpleTestCase):
         self.assertEqual(plan.django_labels, collapsed("plans", *TEMPLATE_GUARD_LABELS))
         self.assertEqual(plan.playwright, "core")
         self.assertIn(PLAYWRIGHT_CORE_COMMAND, plan.commands())
-
-    def test_email_template_markdown_selects_the_template_comment_lint(self):
-        """The one compiled-template tree that is not ``templates/**`` (#1750).
-
-        ``email_app/email_templates/*.md`` is compiled by
-        ``django.template.Template`` in
-        ``email_app/services/email_rendering.py``, so the single-line-token
-        lint reads it. Until this row existed the plan for such a diff was
-        ``email_app`` alone -- the lint that guards the file could not run on
-        the diff that changed it.
-        """
-        plan = plan_for(["email_app/email_templates/welcome.md"])
-
-        self.assertIn("content.tests.test_template_comment_lint", plan.django_labels)
-        self.assertEqual(
-            plan.django_labels,
-            collapsed("email_app", "content.tests.test_template_comment_lint"),
-        )
-        # Only that lint: the other six template lints read `*.html` and never
-        # open a `.md`, so a grouped row would have over-selected here.
-        for label in REPO_WIDE_TEMPLATE_LINT_LABELS:
-            self.assertNotIn(label, plan.django_labels)
 
     def test_shared_template_fragment_adds_content_core_and_full_playwright(self):
         plan = plan_for(["templates/includes/header.html"])
@@ -1613,7 +1575,6 @@ class RepoWideScannerDiscoveryTest(SimpleTestCase):
             ("tests/test_tailwind_build.py", "templates"),
             ("tests/test_tailwind_build.py", "static/js"),
             ("tests/test_tailwind_build.py", ""),
-            ("email_app/tests/test_email_service_shim_1651.py", ""),
             ("jobs/tests/test_async_task_names.py", ""),
             ("tests/test_unreachable_legacy_templates_1543.py", ""),
         ):
@@ -1867,21 +1828,6 @@ def _async_task_scan_evidence(testcase):
     testcase.assertTrue(any("/migrations/" in relative for relative in yielded))
 
 
-def _emailservice_scan_evidence(testcase):
-    """Evidence: the checker's own skip predicate rejects every excluded path."""
-    row = _row("emailservice-inventory-scan")
-    for excluded in (
-        "tests/test_probe_1755.py",
-        "content/tests/test_probe_1755.py",
-        "playwright_tests/test_probe_1755.py",
-    ):
-        testcase.assertFalse(row.matches(excluded))
-        testcase.assertTrue(test_email_service_shim_1651._is_test_path(Path(excluded)))
-    for scanned in ("events/views/detail.py", "events/migrations/0042_probe_1755.py"):
-        testcase.assertTrue(row.matches(scanned))
-        testcase.assertFalse(test_email_service_shim_1651._is_test_path(Path(scanned)))
-
-
 #: Suffixes a checker reads that its row deliberately does not declare. One
 #: entry, recorded rather than hidden: `studio/tests/test_admin_links.py` also
 #: scans `.md` under `_docs/`, `docs/`, `specs/` and `README.md`, which collides
@@ -1939,7 +1885,6 @@ CHECKER_EVIDENCE = {
     "tailwind-producers": _tailwind_producer_evidence,
     "admin-link-scan": _admin_link_scan_evidence,
     "async-task-name-scan": _async_task_scan_evidence,
-    "emailservice-inventory-scan": _emailservice_scan_evidence,
     "tailwind-source-scan": _tailwind_source_scan_evidence,
 }
 
@@ -1964,9 +1909,7 @@ def _enumerated_files():
             _relative(path)
             for path in test_design_system_lint.discover_templates(REPO_ROOT / "templates")
         ],
-        # Both trees, from the lint's own enumerator: this is what binds the
-        # row's `email_app/email_templates/*.md` glob to the files the lint
-        # really opens, rather than to a glob someone believed was right.
+        # The lint's enumerator binds the row to the files it really opens.
         "template-comment-lint": [
             _relative(path) for path in test_template_comment_lint.discover_all_sources(REPO_ROOT)
         ],
@@ -2078,9 +2021,7 @@ class RepoWideGuardEvidenceTest(SimpleTestCase):
         # Every label in a multi-label row must be a discovered scanner of the
         # same tree with no exclusions of its own; the eight pure-`templates/`
         # lints are the only group that qualifies today. The comment lint is
-        # deliberately outside it -- it also reads
-        # `email_app/email_templates/*.md`, so grouping it here would declare
-        # eight checkers as reading a tree they never open.
+        # deliberately outside it because it has separate enumerator evidence.
         grouped = [guard for guard in REPO_WIDE_GUARDS if len(guard.labels) > 1]
         self.assertEqual([guard.name for guard in grouped], ["repo-wide-template-lints"])
         row = _row("repo-wide-template-lints")
@@ -2166,11 +2107,7 @@ class RepoWideGuardTest(SimpleTestCase):
                 "templates/community_base/public/base.html",
                 "templates/includes/header.html",
             ),
-            "template-comment-lint": (
-                "templates/plans/my_plan_detail.html",
-                "email_app/email_templates/welcome.md",
-                "email_app/email_templates/event_registration_confirmation.md",
-            ),
+            "template-comment-lint": ("templates/plans/my_plan_detail.html",),
             "tailwind-source-scan": (
                 "events/views/detail.py",
                 "templates/plans/my_plan_detail.html",
@@ -2183,7 +2120,6 @@ class RepoWideGuardTest(SimpleTestCase):
                 "static/vendor/probe_1755.js",
             ),
             "async-task-name-scan": ("events/views/detail.py", "playwright_tests/test_probe_1755.py"),
-            "emailservice-inventory-scan": ("events/views/detail.py", "events/migrations/0042_probe.py"),
             "package-mail-boundary-scan": ("events/views/detail.py", "tests/test_probe_1755.py"),
             "no-direct-ses-send-scan": ("events/views/detail.py", "tests/test_probe_1755.py"),
         }

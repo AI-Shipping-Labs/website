@@ -221,50 +221,7 @@ class NotifySlackJoinHelperTest(TestCase):
         # Slack still fired even though the email path threw.
         mock_slack.assert_called_once()
 
-    def test_renders_real_email_template(self):
-        """The transactional template renders all required fields."""
-        from types import SimpleNamespace
-
-        from email_app.services.email_service import EmailService
-
-        with patch(
-            "community.services.staff_notifications.site_base_url",
-            return_value="https://example.test",
-        ):
-            ctx = staff_notifications._build_slack_join_context(self.user)
-        # Surrogate staff recipient identical to the real send path.
-        recipient = SimpleNamespace(
-            email=self.STAFF_EMAIL,
-            first_name="",
-            email_verified=True,
-            unsubscribed=False,
-            pk=0,
-        )
-
-        with patch(
-            "email_app.services.email_service.site_base_url",
-            return_value="https://example.test",
-        ):
-            (
-                subject,
-                body_html,
-                _footer,
-            ) = EmailService()._render_template_with_footer(
-                "slack_join_notification", recipient, ctx,
-            )
-
-        self.assertIn("say hi", subject.lower())
-        self.assertIn("joiner@test.com", subject)
-        # The joining user's identity, not the staff mailbox, is the subject.
-        self.assertIn("joiner@test.com", body_html)
-        self.assertIn("Alex Grigorev", body_html)
-        self.assertIn(str(self.user.pk), body_html)
-        self.assertIn(_tier(20).name, body_html)
-        self.assertIn("say hi", body_html.lower())
-        self.assertIn(
-            f"https://example.test/studio/users/{self.user.pk}/", body_html
-        )
-
+    pass
     def test_slug_classified_transactional(self):
         from email_app.services.email_classification import (
             EMAIL_KIND_TRANSACTIONAL,

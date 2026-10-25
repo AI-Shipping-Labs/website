@@ -29,7 +29,7 @@ from content.services.download_delivery import (
     unpack_delivery_grant_token,
 )
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient
+from email_app.testing import StubRelayClient
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from integrations.services.maven import (
@@ -43,10 +43,10 @@ BASE_URL = "https://site.test"
 def _drain_html(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
 
-    from email_app.testing import local_render_backend
+    from email_app.testing import relay_test_backend
 
-    stub = StubSESClient()
-    with local_render_backend(), patch_configured_client(stub):
+    stub = StubRelayClient()
+    with relay_test_backend(), patch_configured_client(stub):
         deliver_job(None, {"delivery_id": str(delivery.id)})
     assert len(stub.calls) == 1
     call = stub.calls[0]
@@ -58,7 +58,7 @@ def patch_configured_client(stub):
     from unittest.mock import patch  # noqa: PLC0415
 
     return patch(
-        "community_base.mail.backends.ses_local.configured_client",
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     )
 
@@ -66,9 +66,9 @@ def patch_configured_client(stub):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    from email_app.testing import local_render_backend
+    from email_app.testing import relay_test_backend
 
-    with local_render_backend(), patch_configured_client(StubSESClient()):
+    with relay_test_backend(), patch_configured_client(StubRelayClient()):
         with test.assertRaises(PermanentJobError) as caught:
             deliver_job(None, {"delivery_id": str(delivery.id)})
     test.assertEqual(caught.exception.code, reason)

@@ -16,7 +16,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from email_app.models import EmailLog
-from email_app.testing import deliver_pending_mail, local_render_backend
+from email_app.testing import deliver_pending_mail, relay_test_backend
 from events.models import Event, EventRegistration
 from events.services.event_recap_notification import (
     EventRecapNotReady,
@@ -143,11 +143,11 @@ class EventRecapNotificationServiceTest(TestCase):
         self.assertEqual(len(deliveries), 2)
         self.assertTrue(all(d.context_data == {} for d in deliveries))
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()

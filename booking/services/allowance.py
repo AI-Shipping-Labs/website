@@ -206,7 +206,7 @@ def send_call_request_notification(call_request: CallRequest) -> bool:
     ])
     body = "\n".join(lines)
 
-    from_email = get_config("SES_FROM_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "community@aishippinglabs.com"))
+    from_email = get_config("RELAY_TRANSACTIONAL_FROM_EMAIL", getattr(settings, "DEFAULT_FROM_EMAIL", "community@aishippinglabs.com"))
 
     try:
         send_mail(

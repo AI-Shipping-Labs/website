@@ -16,7 +16,7 @@ from community.services.import_slack import (
 from community.services.slack import SlackAPIError
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from integrations.config import clear_config_cache
 from payments.models import TierOverride
 
@@ -262,7 +262,7 @@ class SlackImportWelcomeEmailTest(TestCase):
         from community_base.mail.jobs import deliver as deliver_job
         from community_base.mail.models import EmailDelivery
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
         user = User.objects.create_user(
             email="welcome-slack@example.com",
@@ -274,9 +274,9 @@ class SlackImportWelcomeEmailTest(TestCase):
         result = send_imported_welcome_email(user.pk)
 
         self.assertEqual(result["status"], "sent")
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             for delivery in EmailDelivery.objects.filter(

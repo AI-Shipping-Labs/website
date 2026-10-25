@@ -14,8 +14,7 @@ selection"):
 
  1. No-test paths (the ``_docs`` / ``docs`` / ``specs`` trees and top-level
     markdown) contribute nothing. A docs-only diff short-circuits to
-    ``NO TESTS REQUIRED``. Markdown that lives beside code -- notably
-    ``email_app/email_templates/*.md`` -- is NOT a no-test path.
+    ``NO TESTS REQUIRED``.
  2. Escalation-trigger paths set the full-Playwright flag and fall through.
  3. Contract paths: CI / build tooling targets the top-level ``tests``
     package, and doc artifacts that a real test reads (``skills/**``,
@@ -160,8 +159,6 @@ NO_TEST_DIRS: tuple[str, ...] = ("_docs", "docs", "specs")
 #: everything a real test reads. Markdown that lives anywhere else is treated
 #: as code and falls through the rest of the chain, because plenty of it is
 #: asserted:
-#:   * ``email_app/email_templates/*.md`` -- the shipped email bodies, covered
-#:     by email_app tests (double-dash, markdown parity, verification copy);
 #:   * ``.claude/**`` -- agent/skill content guards in ``tests/``;
 #:   * ``skills/**`` and ``docs/member-api/**`` -- read by
 #:     ``member_api/tests/test_usage_docs_1112.py`` and served by
@@ -557,7 +554,7 @@ TAILWIND_PRODUCER_GLOBS: tuple[str, ...] = (
 #: checker, not to a row that happens to collect several
 #: (``tests/test_affected_tests.py`` enforces both halves). That is why
 #: ``content.tests.test_template_comment_lint`` is NOT in this tuple: it also
-#: reads ``email_app/email_templates/*.md``, so it gets its own row below.
+#: the comment lint stays separate because it exposes its own enumerator.
 #:
 #: Selected by explicit label, not through ``make test-core``: three of these
 #: are not ``core``-tagged, and the tagged ones could lose the tag in an
@@ -595,17 +592,10 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         labels=REPO_WIDE_TEMPLATE_LINT_LABELS,
     ),
     RepoWideGuard(
-        # The one template lint whose scan set is wider than ``templates/**``:
-        # it also reads the transactional email bodies, which are compiled by
-        # the same ``django.template.Template`` call in
-        # ``email_app/services/email_rendering.py`` and carry the same
-        # single-line-token defect. A separate row rather than a glob bolted
-        # onto the group above -- the other eight never open a ``.md``, and a
-        # grouped row must read the same files for every label it carries.
-        # ``discover_all_sources()`` is the enumerator evidence binding this
-        # row to what the lint really reads.
+        # Kept separate because ``discover_all_sources()`` supplies direct
+        # enumerator evidence for this lint.
         name="template-comment-lint",
-        globs=("templates/*.html", "email_app/email_templates/*.md"),
+        globs=("templates/*.html",),
         labels=("content.tests.test_template_comment_lint",),
     ),
     RepoWideGuard(
@@ -639,14 +629,6 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         globs=("*.py",),
         excludes=("tests/*", "*/tests/*"),
         labels=("jobs.tests.test_async_task_names",),
-    ),
-    RepoWideGuard(
-        # ``_is_test_path`` skips ``tests`` parts and ``playwright_tests``;
-        # migrations are scanned.
-        name="emailservice-inventory-scan",
-        globs=("*.py",),
-        excludes=("tests/*", "*/tests/*", "playwright_tests/*"),
-        labels=("email_app.tests.test_email_service_shim_1651",),
     ),
     RepoWideGuard(
         # The scan filter is inline in the test method, so there is no evidence

@@ -13,7 +13,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from freezegun import freeze_time
 
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from events.models import Event, EventRegistration, EventSeries
 from events.services.host_registration import maybe_register_host_as_attendee
 from notifications.models import EventReminderLog, Notification
@@ -159,9 +159,9 @@ class CheckEventRemindersTest(TestCase):
                 self.assertEqual(notification.notification_type, 'event_reminder')
                 self.assertEqual(notification.url, event.get_absolute_url())
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
@@ -216,9 +216,9 @@ class CheckEventRemindersTest(TestCase):
         )
         self.assertEqual(notification.notification_type, 'event_reminder')
         self.assertEqual(notification.url, event.get_absolute_url())
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
@@ -815,9 +815,9 @@ class CheckEventRemindersTest(TestCase):
 
         check_event_reminders()
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
@@ -862,9 +862,9 @@ class CheckEventRemindersTest(TestCase):
         with freeze_time(start - timedelta(minutes=20)):
             check_event_reminders()
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
@@ -908,9 +908,9 @@ class CheckEventRemindersTest(TestCase):
             event, self.user, '24h', 'Reminder', 'Soon',
         )
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()
@@ -946,9 +946,9 @@ class CheckEventRemindersTest(TestCase):
             event, self.user, '24h', 'Reminder', 'Soon',
         )
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()

@@ -13,9 +13,7 @@ from email_app.relay_transactional import (
     recipient_template_context,
     send_relay_transactional,
 )
-from email_app.services.email_rendering import (
-    render_template_parts,
-)
+from email_app.services.relay_templates import relay_template_subject
 from events.services.recording_ready_context import build_recording_ready_context
 from integrations.config import get_config
 
@@ -154,10 +152,8 @@ def _send_one(event, recipient):
         return _already_sent_result(recipient, existing)
     user = _render_user(recipient)
     context = build_recording_ready_context(event)
-    subject, _body, _html, _footer = render_template_parts(
-        EMAIL_TYPE,
-        user,
-        context,
+    subject = relay_template_subject(
+        EMAIL_TYPE, recipient_template_context(user, context),
     )
     dedupe_key = f'{EMAIL_TYPE}:{event.pk}:{_recipient_identity(recipient)}'
     result = send_relay_transactional(

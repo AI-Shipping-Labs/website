@@ -25,7 +25,7 @@ from tests.fixtures import set_membership
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
+    RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
 )
 class GenerateIcsTest(TestCase):
     """Tests for .ics calendar file generation."""
@@ -145,7 +145,7 @@ class GenerateIcsTest(TestCase):
         self.assertEqual(str(organizer.params['CN']), 'AI Shipping Labs')
 
     @override_settings(
-        SES_TRANSACTIONAL_FROM_EMAIL=(
+        RELAY_TRANSACTIONAL_FROM_EMAIL=(
             'AI Shipping Labs <content@aishippinglabs.com>'
         ),
     )
@@ -156,13 +156,13 @@ class GenerateIcsTest(TestCase):
         self.assertEqual(str(organizer.params['CN']), 'AI Shipping Labs')
         self.assertNotIn('AI Shipping Labs <', str(organizer))
 
-    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='')
+    @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='')
     def test_missing_sender_uses_existing_transactional_default(self):
         organizer = self._vevent(generate_ics(self.event)).get('organizer')
 
         self.assertEqual(str(organizer), 'mailto:noreply@aishippinglabs.com')
 
-    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='not-an-email')
+    @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='not-an-email')
     def test_invalid_resolved_sender_prevents_calendar_generation(self):
         with self.assertRaises(InvalidCalendarOrganizerError):
             generate_ics(self.event)
@@ -348,7 +348,7 @@ class MembersOnlySummaryAudienceTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
+    RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
@@ -662,7 +662,7 @@ class SendRegistrationConfirmationTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL='https://aishippinglabs.com',
-    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
+    RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',

@@ -61,7 +61,7 @@ class RuntimeValueSourceTest(SimpleTestCase):
 
 class SenderFallbackSourceTest(SimpleTestCase):
     @override_settings(
-        SES_TRANSACTIONAL_FROM_EMAIL=DEFAULT_TRANSACTIONAL_FROM_EMAIL,
+        RELAY_TRANSACTIONAL_FROM_EMAIL=DEFAULT_TRANSACTIONAL_FROM_EMAIL,
     )
     @patch('email_app.services.email_classification.get_config')
     @patch('email_app.services.email_classification.resolve_source')
@@ -89,7 +89,7 @@ class SenderFallbackSourceTest(SimpleTestCase):
             DEFAULT_TRANSACTIONAL_FROM_EMAIL,
         )
 
-    @override_settings(SES_TRANSACTIONAL_FROM_EMAIL='configured@example.com')
+    @override_settings(RELAY_TRANSACTIONAL_FROM_EMAIL='configured@example.com')
     @patch('email_app.services.email_classification.get_config')
     @patch('email_app.services.email_classification.resolve_source')
     def test_non_default_django_setting_keeps_primary_precedence(

@@ -31,7 +31,7 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from content.models import Course, Enrollment
 from email_app.models import EmailLog
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from payments.models import Membership, Tier, TierOverride
 from payments.models import MonthlyPaymentGrace as Grace
 from payments.models import MonthlyPaymentGraceDelivery as Delivery
@@ -90,11 +90,11 @@ class GraceBase(TestCase):
         """
         from community_base.mail.jobs import deliver as deliver_job
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             for delivery in EmailDelivery.objects.filter(

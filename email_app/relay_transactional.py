@@ -11,6 +11,7 @@ from django.utils import timezone
 from accounts.models import User
 from accounts.utils.display import GREETING_FALLBACK, greeting_name
 from email_app.models import RelayTransactionalDelivery
+from email_app.relay_versions import template_version_for
 from integrations.config import get_config, is_enabled
 from notifications.models import Notification
 from notifications.services.staff_slack import (
@@ -133,6 +134,7 @@ def _build_payload(recipient, template_key, context, idempotency_key, *, cc, cal
     payload = {
         "email": recipient,
         "template_key": template_key,
+        "template_version": template_version_for(template_key),
         "idempotency_key": idempotency_key,
         "context": context,
     }

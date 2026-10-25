@@ -36,7 +36,7 @@ def test_paid_welcome_addresses_use_browser_email_validation(
         "#integration-site input[name='STAFF_SIGNUP_NOTIFY_EMAIL']"
     )
     reply_to = page.locator(
-        "#integration-relay input[name='SES_WELCOME_REPLY_TO_EMAIL']"
+        "#integration-relay input[name='RELAY_WELCOME_REPLY_TO_EMAIL']"
     )
     assert staff_email.get_attribute("type") == "email"
     assert reply_to.get_attribute("type") == "email"

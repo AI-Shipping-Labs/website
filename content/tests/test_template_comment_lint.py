@@ -8,19 +8,12 @@ leaked to real pages repeatedly (book-club issues), caught only at design
 review.  The previous mitigation was a per-page ``assertNotContains`` guard on
 the opening marker, which is reactive and misses untested branches.
 
-This lint scans, as RAW TEXT, every file Django compiles as a template:
+This lint scans, as RAW TEXT, every site-owned file Django compiles as a template:
 
 * ``templates/**/*.html`` -- the only HTML template root (``website/settings.py``
   sets ``DIRS: [BASE_DIR / 'templates']``, and no app-level template directory
   is tracked despite ``APP_DIRS``).
-* ``email_app/email_templates/*.md`` -- the shipped transactional email bodies,
-  compiled by ``django.template.Template`` in
-  ``email_app/services/email_rendering.py``.
-
-The detection rule itself lives in ``content/utils/template_comments.py`` so the
-Studio email-template editor can reject the same defect in operator-authored
-``EmailTemplateOverride`` copy, which no file lint can see.  There is exactly
-one implementation of the rule.
+Email source lives in Relay and is validated there.
 
 Nothing else is scanned.  ``.py``, ``_docs/``, ``specs/``, ``.claude/`` and
 ``skills/`` carry roughly 38 legitimate lone opening markers -- assertion
@@ -76,15 +69,6 @@ def discover_templates(template_root: Path) -> tuple[Path, ...]:
     return _sorted_files(template_root.rglob("*.html"))
 
 
-def discover_email_templates(email_template_root: Path) -> tuple[Path, ...]:
-    """Return every transactional email body in ``email_template_root``.
-
-    The directory is flat and non-recursive on purpose: it is the exact set
-    ``email_app/services/email_rendering.py`` compiles.
-    """
-    return _sorted_files(email_template_root.glob("*.md"))
-
-
 #: ``(repo-relative root, discovery function)`` for every tree Django compiles.
 #: Two named functions with LITERAL glob patterns, rather than one table-driven
 #: ``root.rglob(pattern)`` call: the rule-14 discovery census in
@@ -93,7 +77,6 @@ def discover_email_templates(email_template_root: Path) -> tuple[Path, ...]:
 #: that keeps ``REPO_WIDE_GUARDS`` honest (#1755).
 SCAN_ROOTS: tuple[tuple[str, Callable[[Path], tuple[Path, ...]]], ...] = (
     ("templates", discover_templates),
-    ("email_app/email_templates", discover_email_templates),
 )
 
 
@@ -143,7 +126,6 @@ class TemplateCommentLintTest(SimpleTestCase):
         super().setUpClass()
         cls.base_dir = Path(settings.BASE_DIR)
         cls.template_root = cls.base_dir / "templates"
-        cls.email_template_root = cls.base_dir / "email_app/email_templates"
         cls.sources = discover_all_sources(cls.base_dir)
         cls.results = scan_all_sources(cls.base_dir)
 
@@ -170,13 +152,6 @@ class TemplateCommentLintTest(SimpleTestCase):
         self.assertGreater(len(templates), 50)
         self.assertIn("templates/base.html", discovered)
 
-    def test_discovery_finds_the_email_template_tree(self):
-        """A path change must fail loudly, not degrade into a scan of nothing."""
-        email_templates = discover_email_templates(self.email_template_root)
-        discovered = {_relative_posix(path, self.base_dir) for path in email_templates}
-        self.assertGreater(len(email_templates), 40)
-        self.assertIn("email_app/email_templates/welcome.md", discovered)
-
     def test_only_compiled_template_trees_are_scanned(self):
         """Prose and Python string literals must stay out of the scan.
 
@@ -189,22 +164,20 @@ class TemplateCommentLintTest(SimpleTestCase):
 
         self.assertEqual(
             {root for root, _discover in SCAN_ROOTS},
-            {"templates", "email_app/email_templates"},
+            {"templates"},
         )
         # The table and the two named discovery functions cannot drift apart:
         # what the class scanned is exactly their union.
         self.assertEqual(
             self.sources,
-            discover_templates(self.template_root)
-            + discover_email_templates(self.email_template_root),
+            discover_templates(self.template_root),
         )
         for path in relative:
             self.assertTrue(
-                path.startswith("templates/")
-                or path.startswith("email_app/email_templates/"),
+                path.startswith("templates/"),
                 path,
             )
-            self.assertTrue(path.endswith((".html", ".md")), path)
+            self.assertTrue(path.endswith(".html"), path)
 
     def test_multiline_comment_is_detected(self):
         source = "<p>x</p>\n{# line one\n line two #}\n<p>y</p>"
@@ -306,33 +279,6 @@ class TemplateCommentLintTest(SimpleTestCase):
             offenders = results["templates/new/untracked.html"]
             self.assertEqual(len(offenders), 1)
             self.assertEqual(offenders[0].kind, KIND_MULTILINE)
-            self.assertEqual(offenders[0].line, 2)
-
-    def test_malformed_email_template_markdown_is_reported(self):
-        """The guard fails on a bad email template, not only passes on good ones."""
-        with self._temporary_tree() as temporary_base:
-            email_templates = temporary_base / "email_app" / "email_templates"
-            email_templates.mkdir(parents=True)
-            (email_templates / "broken.md").write_text(
-                "Hi {{ user_name }}\n{# note about the CTA\n   continued here #}\nThanks",
-                encoding="utf-8",
-            )
-            (email_templates / "good.md").write_text(
-                "Hi {{ user_name }}\n"
-                "{% comment %}\nnote about the CTA\ncontinued here\n{% endcomment %}\n"
-                "{# short note #}\nThanks",
-                encoding="utf-8",
-            )
-
-            results = scan_root(
-                email_templates, temporary_base, discover_email_templates
-            )
-
-            self.assertEqual(sorted(results), ["email_app/email_templates/broken.md"])
-            offenders = results["email_app/email_templates/broken.md"]
-            self.assertEqual(len(offenders), 1)
-            self.assertEqual(offenders[0].kind, KIND_MULTILINE)
-            self.assertEqual(offenders[0].token, COMMENT_TOKEN)
             self.assertEqual(offenders[0].line, 2)
 
     def _temporary_tree(self):

@@ -7,7 +7,7 @@ identifier. ``email_app.hooks._resolve_maven_welcome_context`` reads the
 title from that relation at delivery time, so the SES-bound subject and
 body carry the human title — or the template's generic course-free copy
 when no course resolves. These tests drain real ``EmailDelivery`` rows
-through the worker and assert on the exact SES payload (StubSESClient),
+through the worker and assert on the exact SES payload (StubRelayClient),
 the same authoritative surface as the #960/#1647 welcome suites.
 """
 
@@ -20,7 +20,7 @@ from django.test import TestCase
 
 from content.models import Cohort, Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.testing import StubRelayClient, relay_test_backend
 from integrations.models import MavenEnrollmentEvent
 from integrations.services.maven import run_occurrence_steps
 from tests.fixtures import create_user_with_membership
@@ -37,9 +37,9 @@ COHORT_LABEL = "Cohort 1"
 def _drain(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
 
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})

@@ -12,15 +12,8 @@ renders on the page (book-club regressions) or inside a transactional email
 body.  For ``{% %}`` and ``{{ }}`` it means the tag or variable silently stops
 working and shows up as literal braces.
 
-This module is deliberately a runtime module, not a test helper, because two
-callers need the identical rule:
-
-* ``content/tests/test_template_comment_lint.py`` -- the ``core``-tagged file
-  lint over ``templates/**/*.html`` and ``email_app/email_templates/*.md``.
-* ``studio/views/email_templates.py`` -- operator-authored
-  ``EmailTemplateOverride`` copy, which no file lint can ever see because it
-  lives in the database and is compiled by the same ``django.template.Template``
-  call in ``email_app/services/email_rendering.py``.
+This module owns the rule used by the repository template lint over
+``templates/**/*.html``.
 
 A single-line ``{# ... #}`` is correct and stays fully supported: this is a rule
 about span, not a deprecation of the construct.

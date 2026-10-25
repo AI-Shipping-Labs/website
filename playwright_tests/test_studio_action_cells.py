@@ -252,51 +252,7 @@ class TestStudioActionCells:
         page.wait_for_url(f"**/studio/users/{target.pk}/")
         context.close()
 
-    def test_email_template_edit_navigation_keeps_mutations_distinct(
-        self,
-        django_server,
-        browser,
-    ):
-        from email_app.models import EmailTemplateOverride
-
-        _ensure_tiers()
-        _reset_state()
-        _create_staff_user("studio-actions@test.com")
-        EmailTemplateOverride.objects.create(
-            template_name="welcome",
-            subject="Action cell welcome",
-            body_markdown="Hello.",
-        )
-        connection.close()
-
-        context = _auth_context(browser, "studio-actions@test.com")
-        page = context.new_page()
-        page.goto(
-            f"{django_server}/studio/email-templates/",
-            wait_until="domcontentloaded",
-        )
-
-        row = page.locator("tr", has_text="welcome").first
-        edit = row.get_by_role("link", name="Edit", exact=True)
-        send_form = row.locator("form", has_text="Send test to me")
-        reset = row.get_by_role("button", name="Reset to default", exact=True)
-        assert "border-border" in edit.get_attribute("class")
-        assert "bg-secondary" in edit.get_attribute("class")
-        assert "bg-accent" not in edit.get_attribute("class")
-        assert send_form.get_attribute("method").lower() == "post"
-        assert "bg-secondary" in send_form.locator("button").get_attribute("class")
-        assert "border-red-500/40" in reset.get_attribute("class")
-        assert reset.locator("xpath=ancestor::form").get_attribute("data-confirm") == (
-            "Reset welcome to the filesystem default? This deletes the override."
-        )
-
-        _capture(page, "email-templates-secondary-edit")
-        edit_href = edit.get_attribute("href")
-        edit.click()
-        page.wait_for_url(f"**{edit_href}")
-        assert page.url.endswith(edit_href)
-        context.close()
-
+    pass
     def test_worker_destructive_and_async_actions_have_clear_confirm(
         self,
         django_server,

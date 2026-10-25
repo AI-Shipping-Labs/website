@@ -503,23 +503,10 @@ AWS_S3_RECORDINGS_REGION = os.environ.get('AWS_S3_RECORDINGS_REGION', 'eu-centra
 AWS_S3_CONTENT_BUCKET = os.environ.get('AWS_S3_CONTENT_BUCKET', '')
 AWS_S3_CONTENT_REGION = os.environ.get('AWS_S3_CONTENT_REGION', 'eu-west-1')
 
-# Sender identity (Relay cutover P4): the SES_*_FROM_EMAIL keys below are
-# the per-kind sender addresses resolved by
-# email_app.services.email_classification for every Relay send. They are
-# unrelated to SES transport, which no longer exists in this repo.
-SES_FROM_EMAIL = os.environ.get('SES_FROM_EMAIL', '')
-SES_TRANSACTIONAL_FROM_EMAIL = os.environ.get(
-    'SES_TRANSACTIONAL_FROM_EMAIL',
-    SES_FROM_EMAIL or 'noreply@aishippinglabs.com',
-)
-SES_PROMOTIONAL_FROM_EMAIL = os.environ.get(
-    'SES_PROMOTIONAL_FROM_EMAIL',
-    SES_FROM_EMAIL or 'content@aishippinglabs.com',
-)
-SES_WELCOME_FROM_EMAIL = os.environ.get(
-    'SES_WELCOME_FROM_EMAIL',
-    SES_FROM_EMAIL or 'welcome@aishippinglabs.com',
-)
+# Relay sender identities. Studio database values override these defaults.
+RELAY_TRANSACTIONAL_FROM_EMAIL = 'noreply@aishippinglabs.com'
+RELAY_PROMOTIONAL_FROM_EMAIL = 'content@aishippinglabs.com'
+RELAY_WELCOME_FROM_EMAIL = 'welcome@aishippinglabs.com'
 SES_WEBHOOK_VALIDATION_ENABLED = (
     not TESTING
     and os.environ.get('SES_WEBHOOK_VALIDATION_ENABLED', '') == 'true'
@@ -875,11 +862,10 @@ COMMUNITY_BASE = {
         'relay',
     ),
     'MAIL_CONTEXT_RESOLVER': 'email_app.hooks.resolve_auth_mail_context',
-    'MAIL_TEMPLATE_DIR': BASE_DIR / 'email_app' / 'email_templates',
     'MAIL_PREFERENCE_RESOLVER': 'email_app.hooks.preference_resolver',
+    'MAIL_TEMPLATE_VERSION_RESOLVER': 'email_app.relay_versions.template_version_for',
     'MAIL_UNSUBSCRIBE_URL_BUILDER': 'email_app.hooks.unsubscribe_url_builder',
     'MAIL_VERIFY_EMAIL_URL_BUILDER': 'email_app.hooks.verify_email_url_builder',
-    'MAIL_TEMPLATE_OVERRIDE_LOADER': 'email_app.hooks.template_override_loader',
     'MAIL_SEND_RECORDER': 'email_app.hooks.record_send',
     # Admin CLI device login (community_base.device_login): approval mints a
     # staff accounts.Token, the same credential operators used to copy by hand.

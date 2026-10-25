@@ -36,7 +36,7 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
 )
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from events.models import Event, EventRegistration
 from events.tasks.send_post_event_followup import (
     enqueue_post_event_followup,
@@ -50,9 +50,9 @@ User = get_user_model()
 
 def _drain_and_get_sent_html():
     """Drain pending deliveries through a stub SES and return the HTML."""
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        'community_base.mail.backends.ses_local.configured_client',
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        'community_base.mail.backends.relay.configured_client',
         return_value=stub,
     ):
         deliver_pending_mail()

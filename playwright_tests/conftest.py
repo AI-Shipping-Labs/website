@@ -483,9 +483,9 @@ def _start_django_server():
         **settings.COMMUNITY_BASE,
         "JOBS_BACKEND": "sync",
     }
-    from email_app.testing import install_test_ses  # noqa: PLC0415
+    from email_app.testing import install_test_relay  # noqa: PLC0415
 
-    install_test_ses()
+    install_test_relay()
 
     assert_playwright_database_is_safe(connection.settings_dict)
 

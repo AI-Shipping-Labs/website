@@ -89,8 +89,7 @@ Set in the ECS task definition (plain environment variables):
 | `ANALYTICS_COOKIE_DOMAIN` | `.aishippinglabs.com` | Optional analytics cookie domain override. |
 | `EMAIL_BATCH_SIZE` | `200` | Optional campaign-send chunk size. |
 | `IMPORT_WELCOME_EMAILS_PER_HOUR` | `50` | Optional throttle for imported-user welcome emails. |
-| `SES_FROM_EMAIL` | `noreply@aishippinglabs.com` | Optional legacy email sender fallback. Prefer the explicit Studio keys `SES_TRANSACTIONAL_FROM_EMAIL` and `SES_PROMOTIONAL_FROM_EMAIL`. |
-| `SES_UNSUBSCRIBE_EMAIL` | `unsubscribe@aishippinglabs.com` | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
+| `RELAY_UNSUBSCRIBE_EMAIL` | `unsubscribe@aishippinglabs.com` | Optional mailto address for the `List-Unsubscribe` email header. Not rendered in Studio. |
 | `LOGIN_API_SLOW_MS` | `750` | Optional slow-login instrumentation threshold in milliseconds. |
 
 Configure the following runtime controls in Studio > Settings > Site. Their

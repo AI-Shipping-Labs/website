@@ -277,8 +277,8 @@ given row and a person needs a manual nudge.
   and lands on a page that states plainly what just happened and offers a
   no-login unsubscribe link next to it.
   - `maven_welcome` is in `EMAIL_TYPES_WITHOUT_VERIFY_FOOTER`
-    (`email_app/services/email_service.py`). Without that exemption
-    `EmailService` appends its generic "your email is not verified — to
+    (`email_app/services/footer_context.py`). Without that exemption
+    the website supplies its generic "your email is not verified — to
     verify it, click here" footer for unverified recipients, pointing at
     `/api/verify-email`. That put two links for one verb in the same message,
     and the more directive of the two verifies WITHOUT subscribing and says
@@ -286,8 +286,7 @@ given row and a person needs a manual nudge.
     subscribed. The footer token also lives 7 days against the opt-in's 30, so
     the exemption is what keeps the consent-bearing link the only "verify"
     instruction in the email. Regression coverage asserts on the HTML handed
-    to `_send_relay`, not on the template — the footer does not exist at
-    template level, which is how this shipped unnoticed.
+    to Relay. The footer is layout context rather than template body copy.
   - It is a SIBLING endpoint of `/api/verify-email`, not an intent flag on it.
     The token's action name is the consent record, so an ordinary
     `verify_email` token can never subscribe anyone however the endpoints are

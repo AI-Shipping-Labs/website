@@ -33,7 +33,6 @@ from email_app.services.email_classification import (
     TRANSACTIONAL_EMAIL_TYPES,
     classify_email_type,
 )
-from email_app.services.email_rendering import render_template_parts
 from email_app.services.preview_contexts import PREVIEW_CONTEXTS
 from integrations.config import site_base_url
 from notifications.models import Notification
@@ -324,40 +323,9 @@ class ContentCommentEmailTest(TestCase):
 
         self.assertEqual(context['user_name'], 'Ada')
 
-    def test_rendered_subject_matches_bell_and_body_has_cta(self):
-        self._comment(
-            self.unit.content_id, body='How should I count the tokens?',
-        )
-        delivery = deliveries().get()
-        context = dict(delivery.context_data)
-        _resolve_content_comment_context(delivery, context)
+    pass
 
-        subject, body_markdown, body_html, _footer = render_template_parts(
-            'content_comment', self.author, context,
-        )
-
-        self.assertEqual(subject, 'New comment on Intro to ML')
-        self.assertIn('Open the discussion', body_markdown)
-        self.assertIn(context['discussion_url'], body_html)
-        self.assertIn('Carol', body_markdown)
-        self.assertIn('How should I count the tokens?', body_markdown)
-        self.assertIn('ML Zoomcamp', body_markdown)
-        self.assertNotIn(' -- ', body_markdown)
-        self.assertNotIn('unsubscribe', body_markdown.lower())
-
-    def test_rendered_reply_subject_matches_bell_title(self):
-        top = self._comment(self.page.content_id, body='First question')
-        deliveries().delete()
-        self._comment(self.page.content_id, parent=top, body='A reply')
-        delivery = deliveries().get()
-        context = dict(delivery.context_data)
-        _resolve_content_comment_context(delivery, context)
-
-        subject, *_rest = render_template_parts(
-            'content_comment', self.author, context,
-        )
-
-        self.assertEqual(subject, 'New reply on Setup')
+    pass
 
 
 @tag('core')

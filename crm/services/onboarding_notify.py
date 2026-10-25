@@ -201,7 +201,7 @@ def _email_staff_about_onboarding(*, member, target_url, updated=False):
         f'{member_name} ({member.email}) {_event_phrase(updated)}.\n\n'
         f'Open onboarding in CRM: {target_url}\n'
     )
-    from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
+    from_email = get_config('RELAY_TRANSACTIONAL_FROM_EMAIL', 'community@aishippinglabs.com')
     send_mail(
         subject=subject,
         message=body,

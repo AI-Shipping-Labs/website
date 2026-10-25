@@ -17,7 +17,7 @@ from accounts.models import User
 from community.models import CommunityAuditLog
 from community.services.staff_notifications import _build_removal_context
 from community.tasks.hooks import community_invite_task
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from payments.models import Tier
@@ -49,9 +49,9 @@ class PaidCheckoutInviteEmailTest(TestCase):
     def test_invite_task_sends_community_invite_with_the_gated_link(
         self, _lookup,
     ):
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             with self.assertLogs("community.services.slack", level="INFO") as logs:

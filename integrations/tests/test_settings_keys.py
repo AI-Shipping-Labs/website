@@ -38,9 +38,9 @@ SITE_OPTIONAL_ADDITIONS = frozenset({
     "GITHUB_APP_ID",
     "GITHUB_APP_INSTALLATION_ID",
     "GOOGLE_CALENDAR_ID",
-    "SES_PROMOTIONAL_FROM_EMAIL",
-    "SES_TRANSACTIONAL_FROM_EMAIL",
-    "SES_WELCOME_FROM_EMAIL",
+    "RELAY_PROMOTIONAL_FROM_EMAIL",
+    "RELAY_TRANSACTIONAL_FROM_EMAIL",
+    "RELAY_WELCOME_FROM_EMAIL",
     "SITE_BASE_URL",
     "SITE_BASE_URL_ALIASES",
     "SLACK_ANNOUNCEMENTS_CHANNEL_ID",
@@ -177,15 +177,15 @@ class RelaySettingsGroupsTest(SimpleTestCase):
         from integrations.settings_keys import (
             AWS_ACCESS_KEY_ID,
             AWS_SECRET_ACCESS_KEY,
-            SES_PROMOTIONAL_FROM_EMAIL,
-            SES_TRANSACTIONAL_FROM_EMAIL,
-            SES_WELCOME_FROM_EMAIL,
-            SES_WELCOME_REPLY_TO_EMAIL,
+            RELAY_PROMOTIONAL_FROM_EMAIL,
+            RELAY_TRANSACTIONAL_FROM_EMAIL,
+            RELAY_WELCOME_FROM_EMAIL,
+            RELAY_WELCOME_REPLY_TO_EMAIL,
         )
 
         for definition in (
-            SES_TRANSACTIONAL_FROM_EMAIL, SES_PROMOTIONAL_FROM_EMAIL,
-            SES_WELCOME_FROM_EMAIL, SES_WELCOME_REPLY_TO_EMAIL,
+            RELAY_TRANSACTIONAL_FROM_EMAIL, RELAY_PROMOTIONAL_FROM_EMAIL,
+            RELAY_WELCOME_FROM_EMAIL, RELAY_WELCOME_REPLY_TO_EMAIL,
         ):
             with self.subTest(key=definition.key):
                 self.assertEqual(definition.group, "relay")

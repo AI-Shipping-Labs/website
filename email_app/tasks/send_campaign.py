@@ -12,14 +12,13 @@ from django.db.models import Count, F, Q
 from django.utils import timezone
 
 from email_app.models import CampaignDelivery, CampaignWave, EmailCampaign, EmailLog
+from email_app.services.campaign_message import (
+    UNSUBSCRIBED_AT_SEND,
+    prepare_campaign_message,
+)
 from email_app.services.campaign_repermission import (
     REPERMISSION_EMAIL_TYPE,
     repermission_body,
-)
-from email_app.services.email_service import (
-    UNSUBSCRIBED_AT_SEND,
-    EmailService,
-    EmailServiceError,
 )
 from email_app.services.relay_campaigns import (
     RelayCampaignDeliveryAmbiguous,
@@ -468,16 +467,6 @@ def _finalize_delivery_sent(delivery_id, claim_token, message_id):
         return True
 
 
-def _transport_failure_state(exc):
-    """Only a structured Relay rejection proves a definitive failure."""
-    if isinstance(exc.__cause__, RelayCampaignDeliveryRejected):
-        return CampaignDelivery.State.FAILED, 'Relay definitively rejected the request.'
-    return (
-        CampaignDelivery.State.AMBIGUOUS,
-        'Relay transport outcome was indeterminate; automatic retry suppressed.',
-    )
-
-
 def _relay_transport_failure_state(exc):
     """Classify Relay delivery error into FAILED (rejection) or AMBIGUOUS (transient/network)."""
     if isinstance(exc, RelayCampaignDeliveryRejected):
@@ -489,17 +478,7 @@ def _relay_transport_failure_state(exc):
 
 
 def _send_campaign_transport(prepared, campaign_id, delivery_id, user_pk):
-    """Deliver one prepared campaign message. Defaults to Relay; honors mock patches if set."""
-    legacy_mock_send = getattr(EmailService, 'send_prepared', None)
-    legacy_mock_ses = getattr(EmailService, '_send_relay', None)
-    if (
-        hasattr(legacy_mock_send, 'mock_calls')
-        or hasattr(legacy_mock_send, '_mock_return_value')
-        or hasattr(legacy_mock_ses, 'mock_calls')
-        or hasattr(legacy_mock_ses, '_mock_return_value')
-    ):
-        return EmailService().send_prepared(prepared)
-
+    """Deliver one policy-checked campaign message through Relay v2."""
     idempotency_key = f'campaign-{campaign_id}-delivery-{delivery_id}'
     metadata = {
         'campaign_id': campaign_id,
@@ -507,12 +486,13 @@ def _send_campaign_transport(prepared, campaign_id, delivery_id, user_pk):
         'user_id': user_pk,
     }
     return send_campaign_delivery_to_relay(
-        recipient_email=prepared.to_email,
+        recipient_email=prepared.recipient,
         subject=prepared.subject,
-        html_body=prepared.full_html,
-        text_body=prepared.plain_text,
+        body_markdown=prepared.body_markdown,
         idempotency_key=idempotency_key,
         unsubscribe_url=prepared.unsubscribe_url,
+        verify_email_url=prepared.verify_email_url,
+        footer_note=prepared.footer_note,
         metadata=metadata,
     )
 
@@ -606,7 +586,6 @@ def send_campaign_batch(
             'legacy_quarantined': True,
         }
 
-    service = EmailService()
     sent_count = 0
     skipped_count = already_sent_count
     failed_count = 0
@@ -679,7 +658,7 @@ def send_campaign_batch(
                 campaign.audience_verification
                 == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
             )
-            prepared = service.prepare_rendered(
+            prepared = prepare_campaign_message(
                 user,
                 campaign.subject,
                 (
@@ -687,7 +666,6 @@ def send_campaign_batch(
                     if monitored else campaign.body
                 ),
                 email_type=(REPERMISSION_EMAIL_TYPE if monitored else 'campaign'),
-                campaign_id=campaign_id,
             )
         except ObjectDoesNotExist:
             if _mark_pending_terminal(
@@ -719,7 +697,7 @@ def send_campaign_batch(
             claim_token, eligibility_skip = _claim_monitored_delivery(
                 delivery_id,
                 user_id=delivery.recipient_user_pk,
-                recipient_email=prepared.to_email,
+                recipient_email=prepared.recipient,
             )
             if eligibility_skip is not None:
                 skipped_count += 1
@@ -727,7 +705,7 @@ def send_campaign_batch(
         else:
             claim_token = _claim_delivery(
                 delivery_id,
-                recipient_email=prepared.to_email,
+                recipient_email=prepared.recipient,
             )
         if claim_token is None:
             continue
@@ -743,26 +721,7 @@ def send_campaign_batch(
             logger.error(
                 'Failed to send campaign %s to %s via Relay: %s',
                 campaign_id,
-                prepared.to_email,
-                diagnostic,
-            )
-            if _mark_transport_outcome(
-                delivery_id,
-                claim_token,
-                state=state,
-                error=diagnostic,
-            ):
-                if state == CampaignDelivery.State.FAILED:
-                    failed_count += 1
-                else:
-                    ambiguous_count += 1
-            continue
-        except EmailServiceError as exc:
-            state, diagnostic = _transport_failure_state(exc)
-            logger.error(
-                'Failed to send campaign %s to %s: %s',
-                campaign_id,
-                prepared.to_email,
+                prepared.recipient,
                 diagnostic,
             )
             if _mark_transport_outcome(
@@ -781,7 +740,7 @@ def send_campaign_batch(
             logger.error(
                 'Failed to send campaign %s to %s: %s',
                 campaign_id,
-                prepared.to_email,
+                prepared.recipient,
                 diagnostic,
                 exc_info=True,
             )

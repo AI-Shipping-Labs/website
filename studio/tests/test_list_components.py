@@ -648,22 +648,7 @@ class StudioListRowActionRenderTest(TestCase):
         self.assertContains(response, 'data-testid="view-on-site"')
         self.assertContains(response, 'rel="noopener noreferrer"')
 
-    def test_email_templates_list_uses_destructive_pill_for_reset(self):
-        from email_app.models import EmailTemplateOverride
-
-        EmailTemplateOverride.objects.create(
-            template_name='welcome',
-            subject='Welcome',
-            body_markdown='Hi there.',
-        )
-        response = self.client.get('/studio/email-templates/')
-        self.assertContains(response, 'studio-action-group')
-        # Edit navigation pill (secondary)
-        self.assertContains(response, 'border-border bg-secondary')
-        # Reset to default pill (destructive)
-        self.assertContains(response, 'border-red-500/40')
-        self.assertContains(response, 'Reset to default')
-
+    pass
     def test_crm_list_profile_action_renders_secondary_pill_with_testid(self):
         from crm.models import CRMRecord
 

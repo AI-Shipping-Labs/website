@@ -1,18 +1,4 @@
-"""Test-support for the package mail adoption (plan issue A1.2).
-
-Two problems appear once sends go through ``community_base.mail`` and both
-are test-environment-only:
-
-- The Relay transport must never touch the network in tests, so the test
-  runner swaps its client for a stub that returns synthetic ids.
-  ``StubSESClient`` remains for the suites that explicitly opt into the
-  package's local-render backend to assert rendered HTML. Existing
-  EmailLog assertions keep passing either way.
-- Django ``TestCase`` wraps every test in an aborted transaction, so
-  ``transaction.on_commit`` never fires and the dispatched
-  ``cb_mail.deliver`` job would never run. ``deliver_pending_mail`` runs the
-  pending deliveries synchronously so tests can assert EmailLog rows.
-"""
+"""Offline Relay helpers for Django and Playwright tests."""
 
 from __future__ import annotations
 
@@ -21,59 +7,17 @@ from types import SimpleNamespace
 
 from community_base.mail.relay import RelaySendResult
 
+from email_app.relay_versions import RELAY_V2_TEMPLATE_KEYS
+
 
 @contextlib.contextmanager
-def local_render_backend():
-    """Opt the package worker into the local-render backend (Relay P4).
-
-    The runner default is the ``relay`` backend, which renders
-    server-side. Tests that assert locally-rendered HTML wrap their
-    worker drain in this so the durable delivery renders through the
-    package's local backend with the stubbed SES client.
-    """
-    from django.conf import settings  # noqa: PLC0415
-    from django.test import override_settings  # noqa: PLC0415
-
-    if not settings.TESTING:
-        raise RuntimeError("local_render_backend requires TESTING=True")
-
-    with (
-        override_settings(
-            COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
-        ),
-        _offline_ses_client_patch(),
-    ):
-        yield
-
-
-def _offline_ses_client_patch():
-    from unittest.mock import Mock, patch  # noqa: PLC0415
-
-    from community_base.mail.backends import ses_local  # noqa: PLC0415
-
-    if isinstance(ses_local.configured_client, Mock):
-        return contextlib.nullcontext()
-    return patch.object(
-        ses_local,
-        "configured_client",
-        return_value=StubSESClient(),
-    )
-
-
-class StubSESClient:
-    """Offline stand-in for the SES v2 client used by ``ses_local``."""
-
-    def __init__(self, message_id="ses-disabled-noop"):
-        self.message_id = message_id
-        self.calls = []
-
-    def send_email(self, **kwargs):
-        self.calls.append(kwargs)
-        return {"MessageId": self.message_id}
+def relay_test_backend():
+    """Keep compatibility suites on the already-installed offline Relay."""
+    yield
 
 
 class StubRelayClient:
-    """Offline stand-in for Relay mail client used in tests."""
+    """Offline stand-in for the Relay mail client used in tests."""
 
     def __init__(self, message_id="relay-test-noop"):
         self.message_id = message_id
@@ -81,31 +25,71 @@ class StubRelayClient:
 
     def send(self, delivery, *, context=None):
         self.calls.append({"delivery": delivery, "context": context})
-
         _record_send(delivery, context or {}, self.message_id)
-
         return RelaySendResult(
             message_id=self.message_id,
             status="provider_accepted",
-            template_version=getattr(delivery, "template_version", 1) or 1,
-            idempotent_replay=False,
-        )
-
-    def send_transactional(self, *args, **kwargs):
-        self.calls.append({"args": args, "kwargs": kwargs})
-
-        return RelaySendResult(
-            message_id=self.message_id,
-            status="provider_accepted",
-            template_version=1,
+            template_version=delivery.template_version,
             idempotent_replay=False,
         )
 
     def messages_since(self, since):
         return ()
 
-    def get_template(self, key):
-        return {"key": key, "latest_version": 1}
+
+class StubRelayTemplateClient:
+    """Offline Relay template API boundary with no local rendering."""
+
+    def templates(self):
+        return tuple(
+            {
+                "key": key,
+                "name": key.replace("_", " ").replace(".", " ").title(),
+                "subject": "Test Subject",
+                "latest_version": 2,
+                "updated_at": "",
+            }
+            for key in sorted(RELAY_V2_TEMPLATE_KEYS)
+        )
+
+    def template(self, template_key):
+        return {
+            "key": template_key,
+            "name": template_key,
+            "description": "",
+            "subject": "Test Subject",
+            "html_body": "",
+            "text_body": "",
+            "markdown_body": "Test body",
+            "category": "transactional",
+            "required_context": [],
+            "example_context": {},
+            "default_sender_id": "",
+            "markdown_layout_context": True,
+            "is_active": True,
+            "latest_version": 2,
+        }
+
+    def save_draft(self, template_key, draft):
+        return {"key": template_key, **draft}
+
+    def publish(self, template_key):
+        return 2
+
+    def versions(self, template_key):
+        return ({"template_key": template_key, "version": 2},)
+
+    def preview(self, template_key, context, *, version=None, draft=False):
+        subject = str(context.get("subject") or "Test Subject")
+        return {
+            "subject": subject,
+            "html_body": "<!doctype html><html><body><p>Relay preview</p></body></html>",
+            "text_body": "Relay preview",
+            "template_key": template_key,
+            "template_version": version or 2,
+            "published": not draft,
+            "missing_context": [],
+        }
 
 
 def _record_send(delivery, context, message_id):
@@ -115,42 +99,37 @@ def _record_send(delivery, context, message_id):
     recorder_hook = settings.COMMUNITY_BASE.get("MAIL_SEND_RECORDER")
     if not recorder_hook:
         return
-    recorder = recorder_hook
-    if isinstance(recorder_hook, str):
-        recorder = resolve(recorder_hook)
+    recorder = resolve(recorder_hook) if isinstance(recorder_hook, str) else recorder_hook
     rendered = SimpleNamespace(subject=context.get("subject", "Test Subject"))
     result = SimpleNamespace(message_id=message_id)
     recorder(delivery, rendered, result)
 
 
-_patcher = None
-_relay_patcher = None
+_relay_patchers = []
 
 
-def install_test_ses():
-    """Point mail backends at offline test stubs for the whole test run."""
-
-    global _patcher, _relay_patcher
+def install_test_relay():
+    """Point package mail at an offline Relay client for the test run."""
+    global _relay_patchers
     from unittest.mock import patch  # noqa: PLC0415
 
-    if _patcher is None:
-        _patcher = patch(
-            "community_base.mail.backends.ses_local.configured_client",
-            return_value=StubSESClient(),
-        )
-        _patcher.start()
-
-    if _relay_patcher is None:
-        _relay_patcher = patch(
-            "community_base.mail.backends.relay.configured_client",
-            return_value=StubRelayClient(),
-        )
-        _relay_patcher.start()
+    if _relay_patchers:
+        return
+    template_client = StubRelayTemplateClient()
+    targets = (
+        ("community_base.mail.backends.relay.configured_client", StubRelayClient()),
+        ("email_app.services.relay_templates.configured_template_client", template_client),
+        ("studio.views.campaigns.configured_template_client", template_client),
+        ("studio.views.email_templates.configured_template_client", template_client),
+    )
+    for target, client in targets:
+        patcher = patch(target, return_value=client)
+        patcher.start()
+        _relay_patchers.append(patcher)
 
 
 def deliver_pending_mail():
-    """Run every pending mail delivery through its backend immediately."""
-
+    """Run pending durable mail through the offline Relay immediately."""
     from community_base.mail.jobs import deliver as deliver_job  # noqa: PLC0415
     from community_base.mail.models import EmailDelivery  # noqa: PLC0415
 

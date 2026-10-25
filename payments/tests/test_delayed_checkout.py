@@ -20,7 +20,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course, CourseAccess
 from email_app.models import EmailLog
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from payments.models import (
     CheckoutAccountBinding,
     CheckoutFulfillment,
@@ -177,7 +177,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             deliveries.get().idempotency_key,
             "checkout-payment-failed:cs_delayed",
         )
-        with local_render_backend():
+        with relay_test_backend():
             deliver_pending_mail()
         logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
         self.assertEqual(logs.count(), 1)
@@ -278,7 +278,7 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             EmailLog.objects.filter(email_type="checkout_payment_failed").exists(),
         )
 
-        class TimedOutSESClient(StubSESClient):
+        class TimedOutSESClient(StubRelayClient):
             """A transport whose first call times out (worker retry)."""
 
             def send_email(self, **kwargs):
@@ -286,8 +286,8 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
 
                 raise ConnectTimeoutError(endpoint_url="https://ses.test")
 
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=TimedOutSESClient(),
         ):
             with self.assertRaises(RetryableJobError):
@@ -296,9 +296,9 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
         self.assertEqual(delivery.state, EmailDelivery.State.RETRYABLE)
 
         # The retried worker job completes the provider send.
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
-            return_value=StubSESClient(),
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=StubRelayClient(),
         ):
             deliver_job(None, {"delivery_id": str(delivery.id)})
         self.assertEqual(

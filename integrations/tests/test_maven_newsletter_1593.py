@@ -26,8 +26,8 @@ from accounts.utils.tokens import (
 )
 from email_app.package_mail import send_package_mail
 from email_app.services.campaign_audience import eligible_campaign_recipients
-from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.services.footer_context import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
+from email_app.testing import StubRelayClient, relay_test_backend
 from integrations.models import IntegrationSetting
 from integrations.services.maven import _welcome_context
 from payments.models import Tier
@@ -57,9 +57,9 @@ def welcome_opt_in_url(user):
     delivery = send_package_mail(
         user, "maven_welcome", _welcome_context("Course"),
     )
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
@@ -386,9 +386,9 @@ class MavenWelcomeSentMessageTest(TestCase):
         delivery = send_package_mail(
             user, "maven_welcome", _welcome_context("Course"),
         )
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             deliver_job(None, {"delivery_id": str(delivery.id)})

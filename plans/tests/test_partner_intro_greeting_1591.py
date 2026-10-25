@@ -12,7 +12,7 @@ from community_base.mail.models import EmailDelivery
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from plans.models import Plan, Sprint, SprintEnrollment
 from plans.services import assign_accountability_partners
 from plans.services.partner_intro_emails import (
@@ -100,11 +100,11 @@ class PartnerIntroGreetingTest(TestCase):
         send_partner_intro_emails(sprint=self.sprint, actor=self.staff)
         from community_base.mail.jobs import deliver as deliver_job
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             for delivery in EmailDelivery.objects.filter(

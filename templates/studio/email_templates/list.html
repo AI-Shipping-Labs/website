@@ -7,9 +7,8 @@
 <div class="mb-8">
   <h1 class="text-2xl font-semibold text-foreground">Email templates</h1>
   <p class="text-muted-foreground mt-1 hidden md:block">
-    Edit the subject, body, and footer note for each transactional email.
-    Changes here override the on-disk markdown files. Use
-    <code>Reset to default</code> to revert.
+    Relay is the source of truth. Save a draft, preview it through Relay,
+    then publish an immutable version explicitly.
   </p>
 </div>
 
@@ -20,8 +19,8 @@
         <th class="text-left px-4 py-3">Template</th>
         <th class="text-left px-4 py-3">Subject</th>
         <th class="text-left px-4 py-3 min-w-64">Sent when</th>
-        <th class="text-left px-4 py-3">Status</th>
-        <th class="text-left px-4 py-3">Last edited</th>
+        <th class="text-left px-4 py-3">Published version</th>
+        <th class="text-left px-4 py-3">Updated</th>
         <th class="text-right px-4 py-3">Actions</th>
       </tr>
     </thead>
@@ -36,36 +35,18 @@
         </td>
         <td class="px-4 py-3 text-xs text-muted-foreground md:text-sm" data-label="Sent when" data-testid="template-sent-when">{{ row.sent_when }}</td>
         <td class="px-4 py-3" data-label="Status">
-          {% if row.edited %}
-            <span class="inline-flex items-center gap-1 rounded-full bg-accent/15 px-2 py-0.5 text-xs font-medium text-accent" data-testid="edited-badge">
-              <span class="h-1.5 w-1.5 rounded-full bg-accent"></span>
-              Edited
-            </span>
-          {% else %}
-            <span class="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              Default
-            </span>
-          {% endif %}
+          {% if row.latest_version %}v{{ row.latest_version }}{% else %}Not published{% endif %}
         </td>
         <td class="px-4 py-3 text-muted-foreground" data-label="Last edited">
-          {% if row.updated_at %}{{ row.updated_at|operator_datetime }}{% else %}&mdash;{% endif %}
+          {% if row.updated_at %}{{ row.updated_at }}{% else %}&mdash;{% endif %}
         </td>
         <td class="px-4 py-3 {% studio_list_class 'action_cell' %}" data-label="Actions">
           <div class="{% studio_list_class 'action_group' %}">
-            {% url 'studio_email_template_edit' row.template_name as edit_url %}
-            {% studio_list_action edit_url 'Edit' 'secondary' %}
-            <form method="post" action="{% url 'studio_email_template_send_test' row.template_name %}" class="{% studio_list_class 'action_form' %}">
-              {% csrf_token %}
-              <button type="submit" class="{% studio_action_class 'secondary' %}">Send test to me</button>
-            </form>
-            {% if row.edited %}
-            <form method="post"
-                  action="{% url 'studio_email_template_reset' row.template_name %}"
-                  class="{% studio_list_class 'action_form' %}"
-                  data-confirm="Reset {{ row.template_name }} to the filesystem default? This deletes the override.">
-              {% csrf_token %}
-              <button type="submit" class="{% studio_action_class 'destructive' %}">Reset to default</button>
-            </form>
+            {% if row.read_only %}
+              <span class="text-xs text-muted-foreground">Compatibility template</span>
+            {% else %}
+              {% url 'studio_email_template_edit' row.template_name as edit_url %}
+              {% studio_list_action edit_url 'Edit in Relay' 'secondary' %}
             {% endif %}
           </div>
         </td>

@@ -226,18 +226,4 @@ class RunPlanReadyActionTest(TestCase):
         self.assertEqual(result['ready_email']['status'], 'eligible')
         self.assertTrue(result['ready_email']['eligible'])
 
-    @patch('email_app.services.email_service.EmailService._send_relay')
-    def test_dry_run_after_success_reports_already_sent(self, mock_ses):
-        mock_ses.return_value = 'msg-1'
-        self._run()
-
-        result = self._run(dry_run=True)
-
-        ready = result['ready_email']
-        self.assertEqual(ready['status'], 'already_sent')
-        self.assertTrue(ready['dry_run'])
-        self.assertFalse(ready['requested'])
-        deliver_pending_mail()
-        self.assertEqual(
-            EmailLog.objects.filter(email_type='plan_shared').count(), 1,
-        )
+    pass

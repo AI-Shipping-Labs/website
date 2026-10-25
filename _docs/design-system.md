@@ -542,7 +542,7 @@ Mobile carousel convention:
 
 Hand-rolling markup or classes for a role owned by the index is a review-blocking defect, even when the duplicate renders identically.
 
-Django `{# #}`, `{% %}` and `{{ }}` are single-line only — a single-line `{# note #}` stays fine, but use `{% comment %} ... {% endcomment %}` for a longer note, and keep a tag's or variable's opening and closing markers on one line; a multi-line construct renders as visible text and is blocked in `templates/**/*.html` and `email_app/email_templates/*.md` by `content/tests/test_template_comment_lint.py`, and in operator-authored `EmailTemplateOverride` copy by the Studio email-template editor.
+Django `{# #}`, `{% %}` and `{{ }}` are single-line only — a single-line `{# note #}` stays fine, but use `{% comment %} ... {% endcomment %}` for a longer note, and keep a tag's or variable's opening and closing markers on one line; a multi-line construct renders as visible text and is blocked in `templates/**/*.html` by `content/tests/test_template_comment_lint.py`.
 
 ## Partials and Component Index
 

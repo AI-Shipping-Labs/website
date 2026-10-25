@@ -12,10 +12,10 @@ from accounts.services.privacy_recipient import decrypt_recipient
 from email_app.models import EmailLog
 from email_app.relay_transactional import (
     RelayTransactionalError,
+    recipient_template_context,
     send_relay_transactional,
 )
-from email_app.services.email_errors import EmailServiceError
-from email_app.services.email_rendering import render_template_parts
+from email_app.services.relay_templates import RelayTemplateError, relay_template_subject
 from integrations.config import get_config, validate_email_config_value
 
 PRIVACY_REQUEST_EMAIL_KEY = "PRIVACY_REQUEST_EMAIL"
@@ -105,12 +105,11 @@ def _prepare_delivery(delivery, request_log, ciphertext):
     context = _privacy_context(request_log, privacy_email)
     user = SimpleNamespace(email=recipient, first_name="", last_name="")
     try:
-        subject, _body, _html, _footer = render_template_parts(
+        subject = relay_template_subject(
             "account_deletion_completed",
-            user,
-            context,
+            recipient_template_context(user, context),
         )
-    except EmailServiceError:
+    except RelayTemplateError:
         _mark_known_failure(delivery.pk, ERROR_DELIVERY_FAILED)
         return None
     return recipient, privacy_email, subject, context

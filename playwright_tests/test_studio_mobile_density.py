@@ -55,30 +55,15 @@ SCREENSHOT_DIR = Path(".tmp/screenshots/issue-620")
 # Seed helpers
 # ---------------------------------------------------------------------------
 
-
 def _reset_density_data():
-    """Wipe content created by previous scenarios so each test is hermetic.
-
-    Uses the pattern from ``test_studio_mobile_lists.py`` — the dev DB
-    is shared across scenarios in a single ``--noreload`` server, so we
-    delete whatever the previous test inserted before seeding fresh.
-    """
     from accounts.models import User
     from content.models import Article, Course, Project
-    from email_app.models import EmailTemplateOverride
     from events.models import Event
 
-    # Drop overrides too — the email-templates scenario asserts ≥ 5 rows
-    # which the filesystem templates already provide; overrides from
-    # other tests can change the row count and "Edited" status.
-    EmailTemplateOverride.objects.all().delete()
     Project.objects.all().delete()
     Event.objects.all().delete()
     Course.objects.all().delete()
     Article.objects.all().delete()
-    # Drop every non-staff user so /studio/users/ row counts are
-    # predictable. We keep is_staff users so the auth_context cookie
-    # still authenticates.
     User.objects.filter(is_staff=False).delete()
     connection.close()
 

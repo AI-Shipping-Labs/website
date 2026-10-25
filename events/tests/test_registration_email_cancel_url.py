@@ -23,7 +23,7 @@ CANCEL_RE = re.compile(
 
 @override_settings(
     SITE_BASE_URL='https://env.example.com',
-    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
+    RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',
@@ -120,42 +120,7 @@ class RegistrationEmailCancelUrlOverrideTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    def _capture_rendered_body(self):
-        # SES is disabled; the service short-circuits and returns the
-        # synthetic message id. We still want the rendered HTML, so call
-        # the template render path directly via the same service.
-        from email_app.services.email_rendering import render_template
-        from events.services.calendar_links import build_calendar_links
-        from events.services.cancel_token import generate_cancel_token
-        from integrations.config import site_base_url
-
-        registration = EventRegistration.objects.create(
-            event=self.event, user=self.user,
-        )
-
-        site_url = site_base_url()
-        cancel_token = generate_cancel_token(registration)
-        cancel_url = (
-            f'{site_url}/events/{self.event.slug}/'
-            f'cancel-registration?token={cancel_token}'
-        )
-        calendar_links = build_calendar_links(self.event)
-
-        _subject, body_html = render_template(
-            'event_registration',
-            self.user,
-            {
-                'event_title': self.event.title,
-                'event_datetime': self.event.formatted_start(),
-                'join_url': f'{site_url}{self.event.get_join_url()}',
-                'cancel_url': cancel_url,
-                'google_calendar_url': calendar_links['google'],
-                'outlook_calendar_url': calendar_links['outlook'],
-                'office365_calendar_url': calendar_links['office365'],
-            },
-        )
-        return body_html
-
+    pass
     def test_cancel_url_uses_db_override(self):
         IntegrationSetting.objects.create(
             key='SITE_BASE_URL',

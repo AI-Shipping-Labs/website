@@ -607,7 +607,7 @@ def _email_shared_plan_request_confirmation(
     else:
         body += '\nThe team has the request and will prepare the plan.\n'
 
-    from_email = get_config('SES_FROM_EMAIL', 'community@aishippinglabs.com')
+    from_email = get_config('RELAY_TRANSACTIONAL_FROM_EMAIL', 'community@aishippinglabs.com')
     email = EmailMessage(
         subject=subject,
         body=body,

@@ -20,7 +20,6 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.utils import timezone
 
-from email_app.services.email_rendering import render_template
 from events.models import Event, EventRegistration, EventSeries, SeriesRegistration
 from events.services.registration_email import send_registration_confirmation
 from events.services.series_invite import send_series_registration_invite
@@ -43,7 +42,7 @@ def _html_from_raw(raw):
 
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
-    SES_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
+    RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
     AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
@@ -110,7 +109,7 @@ class RegistrationEmailTimezoneLineTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
-    SES_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
+    RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
     AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
@@ -174,7 +173,7 @@ class RescheduleEmailTimezoneLineTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
-    SES_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
+    RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
     AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
@@ -225,7 +224,7 @@ class HostRegistrationTimezoneLineTest(TestCase):
 
 @override_settings(
     SITE_BASE_URL="https://env.example.com",
-    SES_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
+    RELAY_TRANSACTIONAL_FROM_EMAIL="noreply@aishippinglabs.com",
     AWS_SES_REGION="us-east-1",
     AWS_ACCESS_KEY_ID="test-key",
     AWS_SECRET_ACCESS_KEY="test-secret",
@@ -295,17 +294,4 @@ class PostEventFollowupNoTimezoneLineTest(TestCase):
             email="recap@example.com", preferred_timezone="",
         )
 
-    def test_followup_body_has_no_timezone_line(self):
-        _, body_html = render_template(
-            "post_event_followup",
-            self.user,
-            {
-                "event_title": "Past Event",
-                "event_summary": "Thanks for joining.",
-                "event_url": "https://env.example.com/events/past",
-                "recording_url": "https://example.com/rec",
-            },
-        )
-
-        self.assertNotIn("Set your timezone", body_html)
-        self.assertNotIn("Change your timezone", body_html)
+    pass

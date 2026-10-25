@@ -16,7 +16,7 @@ from accounts.services.import_course_db import (
 from accounts.services.import_users import run_import_batch
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -262,7 +262,7 @@ class CourseDbWelcomeEmailTest(TestCase):
         from community_base.mail.jobs import deliver as deliver_job
         from community_base.mail.models import EmailDelivery
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
         user = User.objects.create_user(
             email="welcome-course@example.com",
@@ -278,9 +278,9 @@ class CourseDbWelcomeEmailTest(TestCase):
         result = send_imported_welcome_email(user.pk)
 
         self.assertEqual(result["status"], "sent")
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             for delivery in EmailDelivery.objects.filter(

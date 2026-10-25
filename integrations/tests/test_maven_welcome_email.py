@@ -24,8 +24,8 @@ from accounts.utils.tokens import (
     resolve_password_reset_token,
 )
 from email_app.package_mail import send_package_mail
-from email_app.services.email_service import VERIFY_FOOTER_TOKEN_EXPIRY_HOURS
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.services.footer_context import VERIFY_FOOTER_TOKEN_EXPIRY_HOURS
+from email_app.testing import StubRelayClient, relay_test_backend
 from integrations.services.maven import (
     NEWSLETTER_OPT_IN_TOKEN_EXPIRY_HOURS,
     _welcome_context,
@@ -40,9 +40,9 @@ def _welcome_html(user, course="Course"):
     delivery = send_package_mail(
         user, "maven_welcome", _welcome_context(course),
     )
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})

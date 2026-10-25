@@ -166,8 +166,9 @@ _KEY_ORDER = {
     ),
     "ses": ("SES_WEBHOOK_VALIDATION_ENABLED", "SES_WEBHOOK_SHARED_SECRET"),
     "relay": (
-        "SES_TRANSACTIONAL_FROM_EMAIL", "SES_PROMOTIONAL_FROM_EMAIL",
-        "SES_WELCOME_FROM_EMAIL", "SES_WELCOME_REPLY_TO_EMAIL",
+        "RELAY_TRANSACTIONAL_FROM_EMAIL", "RELAY_PROMOTIONAL_FROM_EMAIL",
+        "RELAY_WELCOME_FROM_EMAIL", "RELAY_WELCOME_REPLY_TO_EMAIL",
+        "RELAY_UNSUBSCRIBE_EMAIL",
         "EMAIL_BATCH_SIZE", "CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
         "CAMPAIGN_BATCH_INTERVAL_SECONDS", "CAMPAIGN_TEST_RECIPIENTS",
         "RECORDING_AVAILABLE_SUBJECT_TEMPLATE", "RECORDING_AVAILABLE_BODY_TEMPLATE",
@@ -312,11 +313,13 @@ _KEYS_WITHOUT_DONOR_DEFAULT = frozenset(
         "PLAN_SPRINTS_THREAD_REFRESH_DAYS",
         "RECORDING_AVAILABLE_BODY_TEMPLATE",
         "RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
-        "SES_PROMOTIONAL_FROM_EMAIL",
-        "SES_TRANSACTIONAL_FROM_EMAIL",
+        "RELAY_PROMOTIONAL_FROM_EMAIL",
+        "RELAY_TRANSACTIONAL_FROM_EMAIL",
+        "RELAY_UNSUBSCRIBE_EMAIL",
+        "RELAY_WELCOME_FROM_EMAIL",
+        "RELAY_WELCOME_REPLY_TO_EMAIL",
         "SES_WEBHOOK_SHARED_SECRET",
         "SES_WEBHOOK_VALIDATION_ENABLED",
-        "SES_WELCOME_FROM_EMAIL",
         "SITE_BASE_URL",
         "SITE_BASE_URL_ALIASES",
         "SLACK_ANNOUNCEMENTS_CHANNEL_ID",
@@ -598,50 +601,62 @@ AWS_SECRET_ACCESS_KEY = declare(
     secret=True,
     docs_url="_docs/integrations/ses.md#aws_secret_access_key",
 )
-SES_TRANSACTIONAL_FROM_EMAIL = declare(
-    key="SES_TRANSACTIONAL_FROM_EMAIL",
+RELAY_TRANSACTIONAL_FROM_EMAIL = declare(
+    key="RELAY_TRANSACTIONAL_FROM_EMAIL",
     group="relay",
-    label="SES Transactional From Email",
+    label="Relay transactional sender",
     description="Sender address for required account and service email. Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
-    docs_url="_docs/integrations/ses.md#ses_transactional_from_email",
+    docs_url="_docs/integrations/relay.md#relay_transactional_from_email",
     optional=True,
 )
-SES_PROMOTIONAL_FROM_EMAIL = declare(
-    key="SES_PROMOTIONAL_FROM_EMAIL",
+RELAY_PROMOTIONAL_FROM_EMAIL = declare(
+    key="RELAY_PROMOTIONAL_FROM_EMAIL",
     group="relay",
-    label="SES Promotional From Email",
+    label="Relay promotional sender",
     description="Sender address for campaigns, newsletters, and marketing email. Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
-    docs_url="_docs/integrations/ses.md#ses_promotional_from_email",
+    docs_url="_docs/integrations/relay.md#relay_promotional_from_email",
     optional=True,
 )
-SES_WELCOME_FROM_EMAIL = declare(
-    key="SES_WELCOME_FROM_EMAIL",
+RELAY_WELCOME_FROM_EMAIL = declare(
+    key="RELAY_WELCOME_FROM_EMAIL",
     group="relay",
-    label="SES Welcome From Email",
+    label="Relay welcome sender",
     description="Sender address for welcome emails (welcome, paid-signup, imported-user welcomes). Must match a registered Relay sender.",
     value_type="str",
     default="",
     secret=False,
-    docs_url="_docs/integrations/ses.md#ses_welcome_from_email",
+    docs_url="_docs/integrations/relay.md#relay_welcome_from_email",
     optional=True,
 )
-SES_WELCOME_REPLY_TO_EMAIL = declare(
-    key="SES_WELCOME_REPLY_TO_EMAIL",
+RELAY_WELCOME_REPLY_TO_EMAIL = declare(
+    key="RELAY_WELCOME_REPLY_TO_EMAIL",
     group="relay",
-    label="SES Welcome Reply To Email",
-    description="Reply-To address set on welcome emails so a member who replies reaches a monitored, team-forwarded inbox instead of the send-only welcome/noreply mailbox. Defaults to welcome@aishippinglabs.com (forwarded to the founders by the inbound email-forwarder Lambda). Leave blank to send welcome emails with no Reply-To header.",
+    label="Relay welcome reply-to",
+    description="Reply-To address for welcome emails. Leave blank to omit Reply-To.",
     value_type="str",
     default="welcome@aishippinglabs.com",
     secret=False,
     optional=True,
     is_email=True,
-    docs_url="_docs/integrations/ses.md#ses_welcome_reply_to_email",
+    docs_url="_docs/integrations/relay.md#relay_welcome_reply_to_email",
+)
+RELAY_UNSUBSCRIBE_EMAIL = declare(
+    key="RELAY_UNSUBSCRIBE_EMAIL",
+    group="relay",
+    label="Relay unsubscribe email",
+    description="Optional mailto address included with one-click unsubscribe headers.",
+    value_type="str",
+    default="",
+    secret=False,
+    optional=True,
+    is_email=True,
+    docs_url="_docs/integrations/relay.md#relay_unsubscribe_email",
 )
 SES_WEBHOOK_VALIDATION_ENABLED = declare(
     key="SES_WEBHOOK_VALIDATION_ENABLED",
@@ -673,7 +688,7 @@ EMAIL_BATCH_SIZE = declare(
     default="200",
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#email_batch_size",
+    docs_url="_docs/integrations/relay.md#email_batch_size",
 )
 CAMPAIGN_DELIVERY_MAX_ATTEMPTS = declare(
     key="CAMPAIGN_DELIVERY_MAX_ATTEMPTS",
@@ -684,7 +699,7 @@ CAMPAIGN_DELIVERY_MAX_ATTEMPTS = declare(
     default="3",
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#campaign_delivery_max_attempts",
+    docs_url="_docs/integrations/relay.md#campaign_delivery_max_attempts",
 )
 CAMPAIGN_BATCH_INTERVAL_SECONDS = declare(
     key="CAMPAIGN_BATCH_INTERVAL_SECONDS",
@@ -695,7 +710,7 @@ CAMPAIGN_BATCH_INTERVAL_SECONDS = declare(
     default=0,
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#campaign_batch_interval_seconds",
+    docs_url="_docs/integrations/relay.md#campaign_batch_interval_seconds",
 )
 CAMPAIGN_TEST_RECIPIENTS = declare(
     key="CAMPAIGN_TEST_RECIPIENTS",
@@ -706,7 +721,7 @@ CAMPAIGN_TEST_RECIPIENTS = declare(
     default="",
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#campaign_test_recipients",
+    docs_url="_docs/integrations/relay.md#campaign_test_recipients",
 )
 RECORDING_AVAILABLE_SUBJECT_TEMPLATE = declare(
     key="RECORDING_AVAILABLE_SUBJECT_TEMPLATE",
@@ -717,7 +732,7 @@ RECORDING_AVAILABLE_SUBJECT_TEMPLATE = declare(
     default="",
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#recording_available_subject_template",
+    docs_url="_docs/integrations/relay.md#recording_available_subject_template",
 )
 RECORDING_AVAILABLE_BODY_TEMPLATE = declare(
     key="RECORDING_AVAILABLE_BODY_TEMPLATE",
@@ -728,7 +743,7 @@ RECORDING_AVAILABLE_BODY_TEMPLATE = declare(
     default="",
     secret=False,
     optional=True,
-    docs_url="_docs/integrations/ses.md#recording_available_body_template",
+    docs_url="_docs/integrations/relay.md#recording_available_body_template",
 )
 
 # --- S3 Recordings (s3_recordings) ---
@@ -1460,7 +1475,7 @@ STAFF_SIGNUP_NOTIFY_EMAIL = declare(
     key="STAFF_SIGNUP_NOTIFY_EMAIL",
     group="site",
     label="Staff Signup Notify Email",
-    description="Single staff mailbox used for paid signups: hidden BCC on the member-facing paid welcome, the structured internal heads-up email, and (issue #1133) the hidden BCC on the one-week onboarding reminder. Leave blank to skip these staff copies; the member welcome and reminder still send and Slack still runs when configured. Replies still route only via SES_WELCOME_REPLY_TO_EMAIL.",
+    description="Single staff mailbox used for paid-signup BCC and internal notices. Replies still route only via RELAY_WELCOME_REPLY_TO_EMAIL.",
     value_type="str",
     default="",
     secret=False,

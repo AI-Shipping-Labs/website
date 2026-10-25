@@ -20,7 +20,7 @@ from django.utils import timezone
 from content.access import LEVEL_MAIN, LEVEL_PREMIUM
 from email_app.models import EmailLog
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting
 from notifications.models import Notification
@@ -46,7 +46,7 @@ from tests.fixtures import TierSetupMixin, create_user_with_membership
 User = get_user_model()
 
 
-class FlakyThenHealthySESClient(StubSESClient):
+class FlakyThenHealthySESClient(StubRelayClient):
     """A transport that times out once, then recovers (worker retry)."""
 
     def __init__(self, **kwargs):
@@ -63,8 +63,8 @@ class FlakyThenHealthySESClient(StubSESClient):
 
 
 def _drain_one(delivery, client):
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=client,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})
@@ -277,7 +277,7 @@ class SprintEndRecapTaskTest(TierSetupMixin, TestCase):
             EmailLog.objects.filter(email_type='sprint_end_recap').exists(),
         )
         # The retried worker job completes the provider send.
-        _drain_one(delivery, StubSESClient())
+        _drain_one(delivery, StubRelayClient())
         delivery.refresh_from_db()
         self.assertEqual(
             delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED,

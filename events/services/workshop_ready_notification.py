@@ -10,9 +10,7 @@ from email_app.relay_transactional import (
     recipient_template_context,
     send_relay_transactional,
 )
-from email_app.services.email_rendering import (
-    render_template_parts,
-)
+from email_app.services.relay_templates import relay_template_subject
 from events.services.workshop_ready_recipients import (
     relay_recipient_identity as _relay_recipient_identity,
 )
@@ -82,10 +80,8 @@ def _send_one(event, workshop, recipient):
 
     user = _render_user(recipient)
     context = _build_context(event, workshop)
-    subject, _body, _html, _footer = render_template_parts(
-        EMAIL_TYPE,
-        user,
-        context,
+    subject = relay_template_subject(
+        EMAIL_TYPE, recipient_template_context(user, context),
     )
     identity = _relay_recipient_identity(recipient)
     dedupe_key = f'{EMAIL_TYPE}:{event.pk}:{identity}'

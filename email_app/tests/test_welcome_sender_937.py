@@ -89,7 +89,7 @@ class WelcomeSenderResolutionTest(TestCase):
 
     def test_db_override_changes_welcome_sender(self):
         setting = IntegrationSetting.objects.create(
-            key='SES_WELCOME_FROM_EMAIL',
+            key='RELAY_WELCOME_FROM_EMAIL',
             value='hello@aishippinglabs.com',
             group='ses',
         )
@@ -108,7 +108,7 @@ class WelcomeSenderResolutionTest(TestCase):
 
     def test_db_override_does_not_affect_other_senders(self):
         IntegrationSetting.objects.create(
-            key='SES_WELCOME_FROM_EMAIL',
+            key='RELAY_WELCOME_FROM_EMAIL',
             value='hello@aishippinglabs.com',
             group='ses',
         )
@@ -126,12 +126,12 @@ class WelcomeSenderResolutionTest(TestCase):
     def test_transactional_and_promotional_overrides_still_work(self):
         # Regression: the existing two senders remain editable the same way.
         IntegrationSetting.objects.create(
-            key='SES_TRANSACTIONAL_FROM_EMAIL',
+            key='RELAY_TRANSACTIONAL_FROM_EMAIL',
             value='svc@aishippinglabs.com',
             group='ses',
         )
         IntegrationSetting.objects.create(
-            key='SES_PROMOTIONAL_FROM_EMAIL',
+            key='RELAY_PROMOTIONAL_FROM_EMAIL',
             value='news@aishippinglabs.com',
             group='ses',
         )

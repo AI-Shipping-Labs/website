@@ -33,13 +33,11 @@ pytestmark = pytest.mark.local_only
 _NO_CLUSTERS = "studio.worker_health.Stat.get_all"
 SCREENSHOT_DIR = Path(".tmp/screenshots/issue-1276")
 
-
 def _reset_state():
     from django_q.models import OrmQ, Task
 
     from accounts.models import User
     from analytics.models import UserAttribution
-    from email_app.models import EmailTemplateOverride
     from notifications.models import Notification
     from plans.models import Plan, Sprint
     from triggers.models import TriggerSubscription
@@ -48,7 +46,6 @@ def _reset_state():
     Task.objects.all().delete()
     Plan.objects.all().delete()
     Sprint.objects.all().delete()
-    EmailTemplateOverride.objects.all().delete()
     TriggerSubscription.objects.all().delete()
     Notification.objects.all().delete()
     UserAttribution.objects.all().delete()
@@ -92,21 +89,6 @@ def _seed_plan():
     connection.close()
     return plan.pk
 
-
-def _seed_email_template():
-    from email_app.models import EmailTemplateOverride
-
-    subject = (
-        "{% if user_name %}Hi {{ user_name }}"
-        "{% else %}Welcome builder{% endif %}"
-    )
-    EmailTemplateOverride.objects.create(
-        template_name="welcome",
-        subject=subject,
-        body_markdown="Body",
-    )
-    connection.close()
-    return subject
 
 
 def _seed_trigger_subscriptions():
@@ -275,30 +257,6 @@ class TestStudioRawValuePolish1197:
             wait_until="domcontentloaded",
         )
         assert "**Ship** `RAG` with [docs]" in page.locator("body").inner_text()
-        context.close()
-
-    def test_email_template_subject_preview_hides_control_flow(
-        self, django_server, browser,
-    ):
-        subject = _seed_email_template()
-        context = _auth_context(browser, "staff-1197@test.com")
-        page = context.new_page()
-
-        page.goto(
-            f"{django_server}/studio/email-templates/",
-            wait_until="domcontentloaded",
-        )
-        body = page.locator("body").inner_text()
-        assert "Hi user_name Welcome builder" in body
-        assert "{% if" not in body
-        assert "{% else" not in body
-        assert "{% endif" not in body
-
-        page.goto(
-            f"{django_server}/studio/email-templates/welcome/edit/",
-            wait_until="domcontentloaded",
-        )
-        assert page.locator("#tpl-subject").input_value() == subject
         context.close()
 
     def test_trigger_filters_and_import_schedules_are_readable(

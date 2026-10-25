@@ -12,9 +12,7 @@ from email_app.relay_transactional import (
     recipient_template_context,
     send_relay_transactional,
 )
-from email_app.services.email_rendering import (
-    render_template_parts,
-)
+from email_app.services.relay_templates import relay_template_subject
 from events.services.calendar_invite import (
     AUDIENCE_ATTENDEE,
     generate_ics,
@@ -38,8 +36,8 @@ def send_registration_confirmation(registration):
     if existing_log is not None:
         return existing_log
     template_context = _registration_context(registration, is_host)
-    subject, _body, _html, _footer = render_template_parts(
-        'event_registration', user, template_context,
+    subject = relay_template_subject(
+        'event_registration', recipient_template_context(user, template_context),
     )
     message_id = _send_registration_calendar(
         registration, template_context, dedupe_key,

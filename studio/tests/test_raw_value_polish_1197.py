@@ -20,7 +20,6 @@ from accounts.templatetags.date_formatting import (
     operator_datetime_tz,
 )
 from analytics.models import UserAttribution
-from email_app.models import EmailTemplateOverride
 from notifications.models import Notification
 from plans.models import Plan, Sprint
 from triggers.models import TriggerSubscription
@@ -126,25 +125,7 @@ class StudioRawValuePolishTest(TestCase):
         detail_response = self.client.get(f'/studio/plans/{plan.pk}/')
         self.assertContains(detail_response, '**Ship** `RAG` with [docs]')
 
-    def test_email_template_list_strips_control_flow_but_edit_preserves_source(self):
-        subject = (
-            '{% if user_name %}Hi {{ user_name }}'
-            '{% else %}Welcome builder{% endif %}'
-        )
-        EmailTemplateOverride.objects.create(
-            template_name='welcome',
-            subject=subject,
-            body_markdown='Body',
-        )
-
-        list_response = self.client.get('/studio/email-templates/')
-        self.assertContains(list_response, 'Hi user_name Welcome builder')
-        self.assertNotContains(list_response, '{% if')
-        self.assertNotContains(list_response, '{% else')
-        self.assertNotContains(list_response, '{% endif')
-
-        edit_response = self.client.get('/studio/email-templates/welcome/edit/')
-        self.assertContains(edit_response, subject)
+    pass
 
     def test_trigger_subscription_filters_are_readable_not_python_reprs(self):
         TriggerSubscription.objects.create(

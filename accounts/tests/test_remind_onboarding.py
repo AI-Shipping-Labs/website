@@ -34,7 +34,7 @@ from email_app.services.email_classification import (
     classify_email_type,
     get_sender_for_email_type,
 )
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from payments.models import Tier, TierOverride
 from questionnaires.models import Questionnaire, Response
 from tests.fixtures import set_membership
@@ -102,9 +102,9 @@ class OnboardingReminderSweepTest(TestCase):
 
     def test_reminder_template_renders_link_and_subject(self):
         member = self._make_member("render@example.com", "basic")
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             send_package_mail(member, REMINDER_EMAIL_TYPE, {})

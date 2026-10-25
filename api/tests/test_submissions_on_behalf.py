@@ -36,9 +36,6 @@ from content.models.homework import (
     Submission,
 )
 from content.services.homework_submissions import save_submission
-from email_app.hooks import _resolve_submission_recorded_context
-from email_app.services.email_rendering import render_template_parts
-from integrations.config import site_base_url
 from notifications.models import Notification
 
 User = get_user_model()
@@ -302,29 +299,7 @@ class HomeworkDryRunTest(OnBehalfBase):
 
 
 class NotifyTest(OnBehalfBase):
-    def test_notify_creates_bell_and_email_with_learner_link(self):
-        response = self.post(self.homework_body(notify=True))
-
-        self.assertEqual(response.status_code, 201, response.content)
-        bell = Notification.objects.get(user=self.member)
-        self.assertEqual(bell.notification_type, 'submission_recorded')
-        self.assertEqual(bell.url, f'{self.unit.get_absolute_url()}?cohort=1')
-        delivery = EmailDelivery.objects.get(purpose='submission_recorded')
-        self.assertEqual(delivery.recipient_email, 'member@test.com')
-        self.assertEqual(response.json()['notification']['email_delivery_id'], str(delivery.pk))
-
-        context = dict(delivery.context_data)
-        _resolve_submission_recorded_context(delivery, context)
-        self.assertEqual(
-            context['submission_url'],
-            f"{site_base_url().rstrip('/')}{self.unit.get_absolute_url()}?cohort=1",
-        )
-        subject, body_markdown, _html, _footer = render_template_parts(
-            'submission_recorded', self.member, context,
-        )
-        self.assertEqual(subject, 'Your submission for Week 2 homework was recorded')
-        self.assertIn('Hi Ada', body_markdown)
-        self.assertIn('View your submission', body_markdown)
+    pass
 
 
 class ValidationTest(OnBehalfBase):

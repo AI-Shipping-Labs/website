@@ -25,7 +25,7 @@ from payments.models import Tier
 
 @override_settings(
     SITE_BASE_URL='https://env.example.com',
-    SES_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
+    RELAY_TRANSACTIONAL_FROM_EMAIL='noreply@aishippinglabs.com',
     AWS_SES_REGION='us-east-1',
     AWS_ACCESS_KEY_ID='test-key',
     AWS_SECRET_ACCESS_KEY='test-secret',

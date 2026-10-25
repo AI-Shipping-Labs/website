@@ -186,12 +186,12 @@ class PicklableTracebackRunner(DiscoverRunner):
         # A1.2: keep the mail transports offline for the whole run — the stubs
         # return synthetic ids so EmailLog assertions are unchanged on the
         # package mail path.
-        from email_app.testing import install_test_ses  # noqa: PLC0415
+        from email_app.testing import install_test_relay  # noqa: PLC0415
         from email_app.testing_relay_transactional import (  # noqa: PLC0415
             install_test_relay_transactional_transport,
         )
 
-        install_test_ses()
+        install_test_relay()
         install_test_relay_transactional_transport()
         try:
             super().setup_test_environment(**kwargs)

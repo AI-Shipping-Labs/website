@@ -153,8 +153,7 @@ from studio.views.email_templates import (
     email_template_edit,
     email_template_list,
     email_template_preview,
-    email_template_reset,
-    email_template_send_test,
+    email_template_publish,
 )
 from studio.views.enrollments import (
     enrollment_create,
@@ -432,8 +431,7 @@ from studio.views.workshops import (
 class EmailTemplateKeyConverter:
     """Email template keys: slugs plus dots (``coursework.pool_ready``).
 
-    Mirrors ``community_base.mail.template_keys.TEMPLATE_KEY_PATTERN`` so
-    every on-disk ``email_app/email_templates/*.md`` key has a Studio route.
+    Mirrors Relay's template-key pattern, including dotted coursework keys.
     """
 
     regex = r'[A-Za-z0-9][A-Za-z0-9._-]{0,127}'
@@ -1615,19 +1613,14 @@ urlpatterns = [
         name='studio_email_template_edit',
     ),
     path(
-        'email-templates/<email_template_key:template_name>/reset/',
-        email_template_reset,
-        name='studio_email_template_reset',
+        'email-templates/<email_template_key:template_name>/publish/',
+        email_template_publish,
+        name='studio_email_template_publish',
     ),
     path(
         'email-templates/<email_template_key:template_name>/preview/',
         email_template_preview,
         name='studio_email_template_preview',
-    ),
-    path(
-        'email-templates/<email_template_key:template_name>/send-test/',
-        email_template_send_test,
-        name='studio_email_template_send_test',
     ),
 
     # API tokens. Superuser-only; plaintext is shown exactly once on create

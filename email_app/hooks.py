@@ -1,10 +1,8 @@
-"""Transitional site hooks for community_base.mail (plan issue A1.2).
+"""Site policy, context, and audit hooks for durable Relay mail.
 
 The package owns the durable delivery, the worker and the Relay transport.
-These hooks keep the site behavior the EmailService path had: the EmailLog
-audit row, EmailTemplateOverride precedence, the newsletter opt-out, the
-promotional one-click unsubscribe URL and the issue #450 verify-email
-footer. Every hook receives package objects, never request state.
+These hooks keep EmailLog audit, consent, one-click unsubscribe, and
+verification behavior at the site boundary. Relay owns source and rendering.
 """
 
 from __future__ import annotations
@@ -17,14 +15,14 @@ from community_base.mail.service import MailError
 from django.utils import timezone
 
 from accounts.utils.display import GREETING_FALLBACK, greeting_name
+from email_app.services.campaign_message import UNSUBSCRIBED_AT_SEND
 from email_app.services.email_classification import (
     EMAIL_KIND_PROMOTIONAL,
     EmailClassificationError,
     classify_email_type,
 )
-from email_app.services.email_service import (
+from email_app.services.footer_context import (
     EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
-    UNSUBSCRIBED_AT_SEND,
     VERIFY_FOOTER_TOKEN_EXPIRY_HOURS,
 )
 
@@ -1200,20 +1198,10 @@ def resolve_auth_mail_context(*, delivery, context):
     # Render-only injection: templates render absolute links with it,
     # and it never enters the stored context.
     context.setdefault("site_url", site_base_url())
+    context.setdefault("footer_note", "")
+    context.setdefault("unsubscribe_url", unsubscribe_url_builder(delivery) or "")
+    context.setdefault("verify_email_url", verify_email_url_builder(delivery) or "")
     return context
-
-
-def template_override_loader(template_key):
-    """``(subject, body_markdown, footer_note)`` from EmailTemplateOverride."""
-
-    from email_app.models import EmailTemplateOverride  # noqa: PLC0415
-
-    override = EmailTemplateOverride.objects.filter(
-        template_name=template_key,
-    ).first()
-    if override is None:
-        return None
-    return override.subject, override.body_markdown, override.footer_note
 
 
 def record_send(delivery, rendered, result):

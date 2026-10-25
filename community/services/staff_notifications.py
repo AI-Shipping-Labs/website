@@ -175,7 +175,7 @@ def notify_paid_signup(
 
     # (A) Co-founder welcome to the user. Independent try/except.
     # Staff gets a hidden copy of the exact member-facing welcome, while
-    # replies continue through the single SES_WELCOME_REPLY_TO_EMAIL path.
+    # replies continue through the single RELAY_WELCOME_REPLY_TO_EMAIL path.
     try:
         _send_cofounder_welcome(
             user,

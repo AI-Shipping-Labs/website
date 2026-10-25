@@ -68,12 +68,12 @@ def _recipient_input(request, *, token_request):
     return raw.strip()
 
 
-def _send_recipients(campaign, recipients, *, service, send):
+def _send_recipients(campaign, recipients, *, send):
     sent = {}
     failed = {}
     for recipient in recipients:
         try:
-            message_id = send_campaign_test_recipient(campaign, recipient, service=service, send=send)
+            message_id = send_campaign_test_recipient(campaign, recipient, send=send)
         except CampaignTestRecipientError as exc:
             failed[recipient] = str(exc)
         except Exception:
@@ -117,7 +117,7 @@ def _session_result(request, campaign, raw, recipients, sent, failed):
     return redirect("studio_campaign_detail", campaign_id=campaign.pk)
 
 
-def campaign_test_send_response(request, campaign_id, *, service_factory, send):
+def campaign_test_send_response(request, campaign_id, *, send):
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
     token_request = hasattr(request, "auth_token")
     raw = _recipient_input(request, token_request=token_request)
@@ -127,7 +127,7 @@ def campaign_test_send_response(request, campaign_id, *, service_factory, send):
             return error_response("Provide exactly one valid test recipient.", "validation_error", status=422)
         messages.error(request, error)
         return _detail_response(request, campaign, raw)
-    sent, failed = _send_recipients(campaign, recipients, service=service_factory(), send=send)
+    sent, failed = _send_recipients(campaign, recipients, send=send)
     if token_request:
         return _token_response(campaign, sent, failed)
     return _session_result(request, campaign, raw, recipients, sent, failed)

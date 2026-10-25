@@ -23,6 +23,10 @@ from email_app.services.campaign_dispatch import (
     claim_and_enqueue_campaign,
     retry_delivery,
 )
+from email_app.services.campaign_message import (
+    CampaignMessage,
+    campaign_relay_context,
+)
 from email_app.services.campaign_recipients import (
     build_campaign_recipient_rows,
     campaign_recipient_mode,
@@ -35,12 +39,15 @@ from email_app.services.campaign_waves import (
     campaign_wave_summary,
     release_next_wave,
 )
-from email_app.services.email_service import EmailService
 from email_app.services.recording_available_prefill import (
     RECORDING_AVAILABLE_TEMPLATE,
     build_recording_available_prefill,
 )
 from email_app.services.relay_campaigns import send_campaign_delivery_to_relay
+from email_app.services.relay_templates import (
+    RelayTemplateError,
+    configured_template_client,
+)
 from events.models import Event
 from integrations.config import get_config
 from studio.decorators import staff_required
@@ -618,25 +625,26 @@ def campaign_detail(request, campaign_id):
     """View campaign details with preview and send controls."""
     campaign = get_object_or_404(EmailCampaign, pk=campaign_id)
 
-    # Render the full email HTML via the shared email pipeline so what
-    # the operator sees is exactly what the recipient would get (minus
-    # the personalized unsubscribe link).
-    service = EmailService()
     preview_body = (
         repermission_body(campaign.body, preview=True)
         if campaign.audience_verification
         == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY
         else campaign.body
     )
-    preview_html = service.render_markdown_email(
-        campaign.subject,
-        preview_body,
-        unsubscribe_url=None,
-        footer_note=(
-            "Studio preview — the unsubscribe link will be personalized "
-            "per recipient when the campaign is sent."
-        ),
+    preview_message = CampaignMessage(
+        subject=campaign.subject,
+        body_markdown=preview_body,
+        footer_note=("Studio preview — the unsubscribe link will be personalized "
+                     "per recipient when the campaign is sent."),
     )
+    try:
+        rendered = configured_template_client().preview(
+            "campaign-broadcast", campaign_relay_context(preview_message), version=2,
+        )
+        preview_html = rendered["html_body"]
+    except RelayTemplateError as error:
+        messages.error(request, f"Relay campaign preview unavailable ({error.code}).")
+        preview_html = ""
 
     context = _build_campaign_detail_context(
         campaign,
@@ -724,44 +732,23 @@ def _recipient_count_for_level(target_min_level):
 
 
 def _send_studio_test_campaign(
-    recipient: str,
-    subject: str,
-    html_body: str,
-    text_body: str,
+    message: CampaignMessage,
     campaign_id: int,
-    unsubscribe_url: str | None = None,
 ) -> str:
-    legacy_mock_send = getattr(EmailService, "send_prepared", None)
-    legacy_mock_ses = getattr(EmailService, "_send_relay", None)
-    if (
-        hasattr(legacy_mock_send, "mock_calls")
-        or hasattr(legacy_mock_send, "_mock_return_value")
-        or hasattr(legacy_mock_ses, "mock_calls")
-        or hasattr(legacy_mock_ses, "_mock_return_value")
-    ):
-        service = EmailService()
-        return service._send_relay(
-            recipient,
-            subject,
-            html_body,
-            text_body=text_body,
-            email_type="campaign",
-            unsubscribe_url=unsubscribe_url,
-        )
-
-    idempotency_key = f"campaign-test-{campaign_id}-{recipient}-{uuid.uuid4().hex}"
+    idempotency_key = f"campaign-test-{campaign_id}-{message.recipient}-{uuid.uuid4().hex}"
     metadata = {
         "campaign_id": campaign_id,
         "is_test_send": True,
-        "recipient": recipient,
+        "recipient": message.recipient,
     }
     return send_campaign_delivery_to_relay(
-        recipient_email=recipient,
-        subject=subject,
-        html_body=html_body,
-        text_body=text_body,
+        recipient_email=message.recipient,
+        subject=message.subject,
+        body_markdown=message.body_markdown,
         idempotency_key=idempotency_key,
-        unsubscribe_url=unsubscribe_url,
+        unsubscribe_url=message.unsubscribe_url,
+        verify_email_url=message.verify_email_url,
+        footer_note=message.footer_note,
         metadata=metadata,
     )
 
@@ -771,7 +758,7 @@ def _send_studio_test_campaign(
 def campaign_test_send(request, campaign_id):
     """Send explicit tests; staff tokens accept one recipient and receive JSON."""
     return campaign_test_send_response(
-        request, campaign_id, service_factory=EmailService, send=_send_studio_test_campaign,
+        request, campaign_id, send=_send_studio_test_campaign,
     )
 
 

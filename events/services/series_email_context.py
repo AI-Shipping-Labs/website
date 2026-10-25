@@ -7,10 +7,11 @@ from accounts.services.timezones import (
     format_user_datetime,
 )
 from content.access import _resolve_required_level, can_access, get_required_tier_name
-from email_app.services.email_rendering import (
-    render_html_email,
-    render_plain_text_email,
-    render_template_parts,
+from email_app.relay_transactional import recipient_template_context
+from email_app.relay_versions import template_version_for
+from email_app.services.relay_templates import (
+    configured_template_client,
+    relay_template_subject,
 )
 from events.services.series_registration import _eligible_occurrences
 from integrations.config import site_base_url
@@ -111,7 +112,7 @@ def render_series_email_parts(
     changed_event=None,
     old_start=None,
 ):
-    """Render the legacy local preview from the Relay-native context."""
+    """Render the pinned Relay template for calendar preview callers."""
     context = build_series_template_context(
         user,
         series,
@@ -119,14 +120,12 @@ def render_series_email_parts(
         changed_event=changed_event,
         old_start=old_start,
     )
-    subject, body_markdown, body_html, footer_note = render_template_parts(
+    rendered = configured_template_client().preview(
         template_name,
-        user,
-        context,
+        recipient_template_context(user, context),
+        version=template_version_for(template_name),
     )
-    full_html = render_html_email(subject, body_html, footer_note=footer_note)
-    plain_text = render_plain_text_email(body_markdown, footer_note=footer_note)
-    return subject, plain_text, full_html
+    return rendered["subject"], rendered["text_body"], rendered["html_body"]
 
 
 def build_series_subject_context(
@@ -145,10 +144,8 @@ def build_series_subject_context(
         changed_event=changed_event,
         old_start=old_start,
     )
-    subject, _body, _html, _footer = render_template_parts(
-        template_name,
-        user,
-        context,
+    subject = relay_template_subject(
+        template_name, recipient_template_context(user, context),
     )
     return subject, context
 

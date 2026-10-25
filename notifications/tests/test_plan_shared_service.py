@@ -16,7 +16,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 
 from email_app.models import EmailLog
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from notifications.models import Notification
 from notifications.services.notification_service import NotificationService
 from plans.models import Plan, Sprint
@@ -27,9 +27,9 @@ User = get_user_model()
 def _drain_with_stub():
     """Run pending deliveries through a fresh stub client; return it."""
 
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        'community_base.mail.backends.ses_local.configured_client',
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        'community_base.mail.backends.relay.configured_client',
         return_value=stub,
     ):
         deliver_pending_mail()

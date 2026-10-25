@@ -19,7 +19,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.testing import StubRelayClient, relay_test_backend
 from payments.models import (
     MonthlyPaymentGrace as Grace,
 )
@@ -33,13 +33,13 @@ BASE_URL = "https://site.test"
 def _drain_html(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
 
-    from email_app.testing import local_render_backend
+    from email_app.testing import relay_test_backend
 
-    stub = StubSESClient()
+    stub = StubRelayClient()
     with (
-        local_render_backend(),
+        relay_test_backend(),
         patch(
-            "community_base.mail.backends.ses_local.configured_client",
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ),
     ):
@@ -53,9 +53,9 @@ def _drain_html(delivery):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
-        return_value=StubSESClient(),
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
+        return_value=StubRelayClient(),
     ):
         with test.assertRaises(PermanentJobError) as caught:
             deliver_job(None, {"delivery_id": str(delivery.id)})

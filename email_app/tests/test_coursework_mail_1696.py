@@ -2,7 +2,7 @@
 
 ``community_base.coursework.notifications`` sends the four purposes itself.
 Each test sends through the package function, then delivers the durable row
-with the ``ses_local`` worker and a stub SES client, so it covers the
+with the ``relay`` worker and a stub SES client, so it covers the
 template file, the transactional classification, the review URL builder and
 the worker hook that makes the links absolute.
 """
@@ -26,7 +26,7 @@ from django.test import TestCase, override_settings
 from content.models import Cohort, Course
 from content.services.coursework_bridge import ensure_curriculum_enrollment
 from email_app.services.context_guard import ensure_no_rendered_urls
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.testing import StubRelayClient, relay_test_backend
 
 User = get_user_model()
 
@@ -39,18 +39,18 @@ def _deliver_latest(purpose):
     delivery = EmailDelivery.objects.filter(purpose=purpose).latest('created_at')
     # The durable row stores no link (#1613); the worker renders them.
     ensure_no_rendered_urls(purpose, delivery.context_data)
-    stub = StubSESClient()
+    stub = StubRelayClient()
     # This test asserts the locally-rendered HTML, so it opts the worker
     # into the package's local-render backend explicitly (Relay cutover
     # P4: the runner default is the relay backend, which renders
     # server-side).
     backend_override = override_settings(
-        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "relay"},
     )
     with (
         backend_override,
-        local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ),
     ):
@@ -99,7 +99,7 @@ class CourseworkMailTest(TestCase):
         )
 
     def setUp(self):
-        # The package sends without a per-purpose sender, so ses_local falls
+        # The package sends without a per-purpose sender, so relay falls
         # back to SES_FROM_EMAIL (phase 6 follow-up: the transactional sender
         # and the SES configuration set for package-originated mail).
         env = patch.dict(os.environ, {'SES_FROM_EMAIL': 'noreply@aishippinglabs.com'})

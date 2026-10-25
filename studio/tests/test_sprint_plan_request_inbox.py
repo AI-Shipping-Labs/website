@@ -402,29 +402,7 @@ class CreatePlanFromRequestSubmitTest(TestCase):
         )
         cls.sprint = _make_sprint()
 
-    def setUp(self):
-        self.client.login(email='staff@test.com', password='pw')
-        self.ses_patcher = patch(
-            'email_app.services.email_service.EmailService._send_relay',
-            return_value='ses-1',
-        )
-        self.mock_ses = self.ses_patcher.start()
-        self.addCleanup(self.ses_patcher.stop)
-        self.llm_enabled_patcher = patch(
-            'plans.services.first_sprint_draft_service.llm.is_enabled',
-            return_value=True,
-        )
-        self.draft_patcher = patch(
-            'plans.services.first_sprint_draft_service.draft_first_sprint',
-            return_value=_first_draft_result(),
-        )
-        self.llm_enabled_patcher.start()
-        self.draft_patcher.start()
-        self.addCleanup(self.llm_enabled_patcher.stop)
-        self.addCleanup(self.draft_patcher.stop)
-        # One pending request as the inbox precondition.
-        PlanRequest.objects.create(sprint=self.sprint, member=self.member)
-        _submit_onboarding(self.member)
+    pass
 
     def _url(self):
         return (

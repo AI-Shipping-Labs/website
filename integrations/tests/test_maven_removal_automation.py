@@ -25,7 +25,7 @@ from community.services.staff_notifications import (
     notify_maven_cohort_removal,
 )
 from content.models import Cohort, CohortEnrollment, Course, CourseAccess
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.testing import StubRelayClient, relay_test_backend
 from integrations.config import clear_config_cache
 from integrations.models import IntegrationSetting, MavenEnrollmentEvent
 from integrations.services.maven import (
@@ -49,9 +49,9 @@ def configure(**values):
 
 def _drain(delivery):
     """Deliver one delivery through the real worker; return (subject, html)."""
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         deliver_job(None, {"delivery_id": str(delivery.id)})

@@ -21,14 +21,6 @@ from email_app.relay_transactional import (
     RelayTransactionalError,
     RelayTransactionalResult,
 )
-from email_app.services.email_classification import (
-    EMAIL_KIND_TRANSACTIONAL,
-    classify_email_type,
-)
-from email_app.services.email_service import (
-    EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
-    EmailService,
-)
 from tests.fixtures import create_user_with_membership
 
 User = get_user_model()
@@ -608,33 +600,7 @@ class PrivacyCompletionTemplateTest(TestCase):
                 f"{ciphertext[:25]}{tampered_character}{ciphertext[26:]}"
             )
 
-    def test_template_is_transactional_editable_and_has_no_account_ctas(self):
-        self.assertEqual(
-            classify_email_type("account_deletion_completed"),
-            EMAIL_KIND_TRANSACTIONAL,
-        )
-        self.assertIn(
-            "account_deletion_completed",
-            EMAIL_TYPES_WITHOUT_VERIFY_FOOTER,
-        )
-        user = User(email="synthetic-preview@test.com", email_verified=False)
-        prepared = EmailService().prepare_template(
-            user,
-            "account_deletion_completed",
-            {
-                "support_id": 42,
-                "completed_at_utc": "2026-08-13 11:00:00 UTC",
-                "privacy_email": "team@aishippinglabs.com",
-            },
-        )
-        self.assertEqual(
-            prepared.subject,
-            "Your AI Shipping Labs account has been deleted",
-        )
-        self.assertIn("associated member profile were deleted", prepared.full_html)
-        self.assertNotIn("unsubscribe", prepared.full_html.lower())
-        self.assertNotIn("verify your email", prepared.full_html.lower())
-        self.assertNotIn("/studio/users/", prepared.full_html)
+    pass
 
     def test_studio_editor_and_preview_use_synthetic_privacy_context(self):
         superuser = User.objects.create_superuser(

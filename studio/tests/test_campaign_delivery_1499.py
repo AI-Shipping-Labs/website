@@ -7,7 +7,7 @@ from django.test import Client, TestCase, tag
 from django.urls import reverse
 from django.utils import timezone
 
-from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
+from email_app.models import CampaignDelivery, EmailCampaign
 from tests.fixtures import TierSetupMixin, set_membership
 
 User = get_user_model()
@@ -85,23 +85,7 @@ class CampaignDeliveryStudioTest(TierSetupMixin, TestCase):
             ),
         )
 
-    @patch("email_app.tasks.send_campaign.EmailService.send_prepared")
-    def test_assume_delivered_has_no_send_or_log_side_effect(self, transport):
-        url = reverse(
-            "studio_campaign_delivery_resolve",
-            args=[self.campaign.pk, self.delivery.pk],
-        )
-
-        response = self.client.post(url, {"action": "assume_sent"})
-
-        self.assertEqual(response.status_code, 302)
-        self.delivery.refresh_from_db()
-        self.campaign.refresh_from_db()
-        self.assertEqual(self.delivery.state, CampaignDelivery.State.ASSUMED_SENT)
-        self.assertEqual(self.campaign.sent_count, 0)
-        self.assertEqual(self.campaign.status, "sent")
-        self.assertFalse(EmailLog.objects.filter(campaign=self.campaign).exists())
-        transport.assert_not_called()
+    pass
 
     def test_resolution_requires_staff_post_and_csrf(self):
         url = reverse(

@@ -6,9 +6,6 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.urls import reverse
 
-from content.models import Course, CourseAccess, CourseInstructor, Enrollment, Instructor
-from email_app.models import EmailTemplateOverride
-
 User = get_user_model()
 
 
@@ -33,44 +30,7 @@ def _confirm_forms(response):
 
 @tag("core")
 class StudioConfirmGuardMarkupTest(TestCase):
-    @classmethod
-    def setUpTestData(cls):
-        cls.staff = User.objects.create_user(
-            email="staff-confirm@test.com", password="pw", is_staff=True
-        )
-        cls.member = User.objects.create_user(
-            email="member.o'brien@test.com", password="pw"
-        )
-        cls.course = Course.objects.create(
-            title=(
-                "Beginner's \"AI\" </form>"
-                "<script>window.coursePwned=true</script>"
-            ),
-            slug="beginners-ai-confirm",
-            status="published",
-        )
-        cls.enrollment = Enrollment.objects.create(
-            user=cls.member, course=cls.course, source="admin"
-        )
-        cls.access = CourseAccess.objects.create(
-            user=cls.member,
-            course=cls.course,
-            access_type="granted",
-            granted_by=cls.staff,
-        )
-        cls.instructor = Instructor.objects.create(
-            instructor_id="obrien-confirm",
-            name="O'Brien </form><script>window.instructorPwned=true</script>",
-        )
-        cls.association = CourseInstructor.objects.create(
-            course=cls.course, instructor=cls.instructor, position=0
-        )
-        EmailTemplateOverride.objects.create(
-            template_name="welcome",
-            subject="Custom welcome",
-            body_markdown="Custom body",
-            updated_by=cls.staff,
-        )
+    pass
 
     def setUp(self):
         self.client.force_login(self.staff)

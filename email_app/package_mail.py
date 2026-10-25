@@ -21,14 +21,13 @@ from email_app.services.email_classification import (
     WELCOME_EMAIL_TYPES,
     get_sender_for_email_type,
 )
-from email_app.services.email_service import (
-    DEFAULT_WELCOME_REPLY_TO_EMAIL,
-    WELCOME_REPLY_TO_KEY,
-)
 from integrations.config import (
     get_config,
     validate_email_config_value,
 )
+
+WELCOME_REPLY_TO_KEY = "RELAY_WELCOME_REPLY_TO_EMAIL"
+DEFAULT_WELCOME_REPLY_TO_EMAIL = "welcome@aishippinglabs.com"
 
 
 def send_package_mail(
@@ -48,11 +47,13 @@ def send_package_mail(
     ensure_no_rendered_urls(template_name, context)
     to_email = (recipient_email or getattr(user, "email", "") or "").strip()
     key = idempotency_key or f"{template_name}:{uuid4().hex}"
+    sender = _relay_sender(template_name)
+    extra = _mail_extra(template_name, cc, bcc)
     with transaction.atomic():
         return package_send(
             purpose=template_name, to=to_email, context=context, idempotency_key=key,
-            user=_saved_user(user), sender=_relay_sender(template_name),
-            extra=_mail_extra(template_name, cc, bcc), related=related, category=category,
+            user=_saved_user(user), sender=sender,
+            extra=extra, related=related, category=category,
         )
 
 

@@ -8,7 +8,7 @@ from django.test import TestCase, tag
 from django.utils import timezone
 
 from content.models import Article, Course, Download, Workshop
-from email_app.testing import deliver_pending_mail, local_render_backend
+from email_app.testing import deliver_pending_mail, relay_test_backend
 from events.models import Event
 from notifications.models import EventReminderLog, Notification
 from notifications.services.notification_service import NotificationService
@@ -594,7 +594,7 @@ class NotificationServiceWorkshopEmailTest(TestCase):
         description and the deep link."""
         from community_base.mail.models import EmailDelivery
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
         from integrations.config import site_base_url
 
         NotificationService.notify('workshop', self.workshop.pk)
@@ -610,9 +610,9 @@ class NotificationServiceWorkshopEmailTest(TestCase):
                 delivery.related_object_id, str(self.workshop.pk),
             )
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            'community_base.mail.backends.ses_local.configured_client',
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            'community_base.mail.backends.relay.configured_client',
             return_value=stub,
         ):
             deliver_pending_mail()

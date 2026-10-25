@@ -1,14 +1,19 @@
-"""Shared recipient rendering for explicit Studio campaign test sends."""
+"""Recipient context for explicit Studio campaign test sends."""
 
 from accounts.models import User
 from email_app.models import EmailCampaign
+from email_app.services.campaign_message import (
+    CampaignMessage,
+    prepare_campaign_message,
+)
 from email_app.services.campaign_repermission import (
     REPERMISSION_EMAIL_TYPE,
     repermission_body,
 )
 
 TEST_EMAIL_FOOTER_NOTE = (
-    "Test send only. This address is not linked to a subscriber record, so no unsubscribe link is included."
+    "Test send only. This address is not linked to a subscriber record, "
+    "so no unsubscribe link is included."
 )
 
 
@@ -16,7 +21,7 @@ class CampaignTestRecipientError(ValueError):
     """A controlled recipient does not meet a re-permission test's policy."""
 
 
-def _repermission_parts(service, campaign, user, subject):
+def _repermission_message(campaign, user, subject):
     if user is None:
         raise CampaignTestRecipientError(
             "Re-permission test sends require an existing controlled user."
@@ -28,36 +33,31 @@ def _repermission_parts(service, campaign, user, subject):
         raise CampaignTestRecipientError(
             "Re-permission test sends require an active subscribed user."
         )
-    prepared = service.prepare_rendered(
-        user, subject, repermission_body(campaign.body, user=user),
-        email_type=REPERMISSION_EMAIL_TYPE, campaign_id=campaign.pk,
+    return prepare_campaign_message(
+        user,
+        subject,
+        repermission_body(campaign.body, user=user),
+        email_type=REPERMISSION_EMAIL_TYPE,
     )
-    return prepared.full_html, prepared.plain_text, prepared.unsubscribe_url
 
 
-def _test_parts(service, campaign, user, subject):
+def _test_message(campaign, user, recipient, subject):
     if campaign.audience_verification == EmailCampaign.AUDIENCE_VERIFICATION_UNVERIFIED_ONLY:
-        return _repermission_parts(service, campaign, user, subject)
-    unsubscribe_url = None
-    footer_note = TEST_EMAIL_FOOTER_NOTE
+        return _repermission_message(campaign, user, subject)
     if user is not None:
-        unsubscribe_url = service._build_unsubscribe_url(user)
-        footer_note = None
-    html = service.render_markdown_email(
-        subject, campaign.body, unsubscribe_url=unsubscribe_url, footer_note=footer_note,
+        return prepare_campaign_message(
+            user, subject, campaign.body, email_type="campaign",
+        )
+    return CampaignMessage(
+        recipient=recipient,
+        subject=subject,
+        body_markdown=campaign.body,
+        footer_note=TEST_EMAIL_FOOTER_NOTE,
     )
-    text = service.render_plain_text_email(
-        campaign.body, unsubscribe_url=unsubscribe_url, footer_note=footer_note,
-    )
-    return html, text, unsubscribe_url
 
 
-def send_campaign_test_recipient(campaign, recipient, *, service, send):
-    """Render exactly one explicit test recipient without changing the campaign."""
+def send_campaign_test_recipient(campaign, recipient, *, send):
+    """Build and send one explicit test recipient without changing the draft."""
     user = User.objects.filter(email__iexact=recipient).first()
-    subject = f"[TEST] {campaign.subject}"
-    html, text, unsubscribe_url = _test_parts(service, campaign, user, subject)
-    return send(
-        recipient=recipient, subject=subject, html_body=html, text_body=text,
-        campaign_id=campaign.pk, unsubscribe_url=unsubscribe_url,
-    )
+    message = _test_message(campaign, user, recipient, f"[TEST] {campaign.subject}")
+    return send(message=message, campaign_id=campaign.pk)

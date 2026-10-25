@@ -75,7 +75,7 @@ def _render_welcome(user):
     stored delivery is re-rendered through the package renderer with the
     same resolver the worker runs.
     """
-    from community_base.mail.backends.ses_local import render_delivery
+    from community_base.mail.backends.relay import render_delivery
     from community_base.mail.models import EmailDelivery
     from django.db import connection
 

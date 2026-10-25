@@ -28,7 +28,7 @@ from unittest.mock import patch
 
 import pytest
 
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from playwright_tests.conftest import (
     create_user as _create_user,
 )
@@ -53,11 +53,11 @@ def _capture_send_html(user, template_name, context):
     the worker rendered for the recipient without any real API call.
     """
     from email_app.package_mail import send_package_mail
-    from email_app.testing import StubSESClient
+    from email_app.testing import StubRelayClient
 
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         send_package_mail(user, template_name, context)

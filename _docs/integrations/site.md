@@ -275,7 +275,7 @@ ops/notifications mailbox (`ops@<your-domain>`,
 
 Prereqs:
 - The platform must have SES configured (see `ses.md`) — internal
-  notifications use the same `SES_TRANSACTIONAL_FROM_EMAIL` sender
+  notifications use the same `RELAY_TRANSACTIONAL_FROM_EMAIL` sender
   as account email.
 - The recipient address need not be SES-verified (SES only requires
   the sender to be verified, not the recipient, once out of sandbox).
@@ -320,15 +320,15 @@ operator log names the setting key but never prints the rejected value.
 
 Reply rule: Do not use this setting as Reply-To and do not visible-CC
 staff on paid welcomes. Member replies go only to
-`SES_WELCOME_REPLY_TO_EMAIL` so there is one monitored conversation
+`RELAY_WELCOME_REPLY_TO_EMAIL` so there is one monitored conversation
 path.
 
 Where to find it: This is operator intent — pick the mailbox the
 founders read. A shared list address (`founders@<your-domain>`) so
 the alert is not tied to one human.
 
-Prereqs: Same as `PAYMENT_NOTIFICATION_EMAIL` — SES configured per
-`ses.md`; recipient need not be SES-verified.
+Prereqs: Same as `PAYMENT_NOTIFICATION_EMAIL` — Relay configured per
+`relay.md`.
 
 Rotation: Safe to change at any time. The next paid checkout uses
 the new value.

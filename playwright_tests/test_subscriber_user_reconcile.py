@@ -36,7 +36,7 @@ import os
 import pytest
 from django.utils import timezone
 
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from playwright_tests.conftest import (
     auth_context as _auth_context,
 )
@@ -429,11 +429,11 @@ class TestSubscribePageDiscloseAccount:
         user = User.objects.get(email=emails[0])
         from accounts.services.verification import resolve_unverified_ttl_days
         from email_app.package_mail import send_package_mail
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             send_package_mail(

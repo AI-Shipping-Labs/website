@@ -28,7 +28,7 @@ from accounts.services.email_change import (
     hash_email_change_token,
     request_email_change,
 )
-from email_app.testing import StubSESClient, local_render_backend
+from email_app.testing import StubRelayClient, relay_test_backend
 
 TEST_PURPOSE = "email_verification_signup"
 
@@ -40,14 +40,14 @@ def _drain(deliveries):
     # into the package's local-render backend explicitly (Relay cutover P4:
     # the runner default is now the relay backend, which renders
     # server-side and returns no local HTML).
-    stub = StubSESClient()
+    stub = StubRelayClient()
     backend_override = override_settings(
-        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "relay"},
     )
     with (
         backend_override,
-        local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ),
     ):
@@ -224,9 +224,9 @@ class EmailChangeWorkerMintTest(TestCase):
         ]
         for reason, delivery in cases:
             with self.subTest(reason=reason):
-                stub = StubSESClient()
-                with local_render_backend(), patch(
-                    "community_base.mail.backends.ses_local.configured_client",
+                stub = StubRelayClient()
+                with relay_test_backend(), patch(
+                    "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):
                     with self.assertRaises(Exception) as caught:
@@ -238,9 +238,9 @@ class EmailChangeWorkerMintTest(TestCase):
         EmailChangeRequest.objects.filter(pk=self.request_obj.pk).update(
             expires_at=timezone.now() - timedelta(minutes=1),
         )
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             with self.assertRaises(Exception):
@@ -527,9 +527,9 @@ class NotificationWorkerMintTest(TestCase):
                     related_object_type=related_type,
                     related_object_id="999999",
                 )
-                stub = StubSESClient()
-                with local_render_backend(), patch(
-                    "community_base.mail.backends.ses_local.configured_client",
+                stub = StubRelayClient()
+                with relay_test_backend(), patch(
+                    "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):
                     with self.assertRaises(Exception):

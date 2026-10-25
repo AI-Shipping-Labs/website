@@ -1,16 +1,13 @@
 """Central email kind classification and sender resolution."""
 
-from django.conf import settings
-
-from integrations.config import get_config, resolve_source
+from integrations.config import get_config
 
 EMAIL_KIND_TRANSACTIONAL = "transactional"
 EMAIL_KIND_PROMOTIONAL = "promotional"
 
-TRANSACTIONAL_FROM_KEY = "SES_TRANSACTIONAL_FROM_EMAIL"
-PROMOTIONAL_FROM_KEY = "SES_PROMOTIONAL_FROM_EMAIL"
-WELCOME_FROM_KEY = "SES_WELCOME_FROM_EMAIL"
-LEGACY_FROM_KEY = "SES_FROM_EMAIL"
+TRANSACTIONAL_FROM_KEY = "RELAY_TRANSACTIONAL_FROM_EMAIL"
+PROMOTIONAL_FROM_KEY = "RELAY_PROMOTIONAL_FROM_EMAIL"
+WELCOME_FROM_KEY = "RELAY_WELCOME_FROM_EMAIL"
 
 DEFAULT_TRANSACTIONAL_FROM_EMAIL = "noreply@aishippinglabs.com"
 DEFAULT_PROMOTIONAL_FROM_EMAIL = "content@aishippinglabs.com"
@@ -192,21 +189,10 @@ def classify_email_type(email_type):
     )
 
 
-def _has_runtime_value(key, default=""):
-    source = resolve_source(key)
-    if source is None:
-        return False
-    if source == 'django_settings':
-        settings_value = getattr(settings, key, '')
-        return bool(settings_value) and settings_value != default
-    return True
-
-
 def get_sender_for_kind(email_kind):
     """Resolve the configured sender for an email kind.
 
-    New explicit keys win. The legacy ``SES_FROM_EMAIL`` key remains a
-    migration fallback only when the new key is not configured.
+    Sender addresses are Relay configuration and have no transport fallback.
     """
     if email_kind == EMAIL_KIND_TRANSACTIONAL:
         key = TRANSACTIONAL_FROM_KEY
@@ -217,13 +203,7 @@ def get_sender_for_kind(email_kind):
     else:
         raise EmailClassificationError(f"Unknown email kind: {email_kind!r}")
 
-    if _has_runtime_value(key, default):
-        return get_config(key, default)
-
-    if _has_runtime_value(LEGACY_FROM_KEY):
-        return get_config(LEGACY_FROM_KEY, default)
-
-    return default
+    return get_config(key, default)
 
 
 def get_sender_for_email_type(email_type):
@@ -242,11 +222,7 @@ def get_sender_for_email_type(email_type):
     ``'campaign'`` explicitly; transport tests pass nothing).
     """
     if email_type in WELCOME_EMAIL_TYPES:
-        if _has_runtime_value(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL):
-            return get_config(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL)
-        if _has_runtime_value(LEGACY_FROM_KEY):
-            return get_config(LEGACY_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL)
-        return DEFAULT_WELCOME_FROM_EMAIL
+        return get_config(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL)
 
     if email_type in PROMOTIONAL_EMAIL_TYPES:
         return get_sender_for_kind(EMAIL_KIND_PROMOTIONAL)

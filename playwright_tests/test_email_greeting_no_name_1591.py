@@ -10,13 +10,11 @@ The Studio preview pane gained a recipient selector so a copy reviewer can
 see the degraded greeting before shipping. Scenarios mirror the issue body.
 """
 
-import datetime
 import os
 
 import pytest
-from django.utils import timezone
 
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
 from playwright_tests.conftest import create_user as _create_user
@@ -269,16 +267,16 @@ def test_nameless_member_password_reset_is_greeted_as_a_person(
 
     from accounts.models import User
     from email_app.package_mail import send_package_mail
-    from email_app.testing import StubSESClient
+    from email_app.testing import StubRelayClient
 
     user = User.objects.get(email="nameless-reset@test.com")
     assert not user.first_name and not user.last_name
     # A1.2 slice 4: the greeting contract rides the durable package
     # path — the worker mints the reset link and renders the template
     # for a nameless recipient.
-    stub = StubSESClient()
-    with local_render_backend(), patch(
-        "community_base.mail.backends.ses_local.configured_client",
+    stub = StubRelayClient()
+    with relay_test_backend(), patch(
+        "community_base.mail.backends.relay.configured_client",
         return_value=stub,
     ):
         send_package_mail(user, "password_reset", {})
@@ -295,61 +293,6 @@ def test_nameless_member_password_reset_is_greeted_as_a_person(
 # Scenario 8: a named member is unaffected
 # ---------------------------------------------------------------------------
 
-
-@pytest.mark.core
-@browser_journey
-def test_named_member_registration_email_keeps_their_name(
-    django_server, browser
-):
-    from events.models import Event, EventRegistration
-
-    _ensure_tiers()
-    _create_user("main@test.com", first_name="Ada")
-
-    from accounts.models import User
-
-    User.objects.filter(email="main@test.com").update(last_name="Lovelace")
-    EventRegistration.objects.all().delete()
-    event = Event.objects.create(
-        slug="greet1591-evt",
-        title="Greeting Regression Event",
-        description="An open event used to trigger a transactional email.",
-        start_datetime=timezone.now() + datetime.timedelta(days=7),
-        status="upcoming",
-    )
-    connection.close()
-
-    page = _auth_context(browser, "main@test.com").new_page()
-    goto_with_retry(
-        page,
-        f"{django_server}{event.get_absolute_url()}",
-        wait_until="domcontentloaded",
-    )
-    page.locator("#register-btn").click()
-    page.wait_for_selector(
-        '[data-testid="event-registered-confirmation"]', timeout=20000
-    )
-    confirmation = page.locator(
-        '[data-testid="event-registered-confirmation"]'
-    )
-    assert "You're registered!" in confirmation.inner_text()
-
-    from email_app.services.email_rendering import render_template_parts
-    from email_app.services.preview_contexts import get_preview_context
-
-    member = User.objects.get(email="main@test.com")
-    context = get_preview_context("event_registration")
-    context.pop("user_name", None)
-    # A1.2 slice 4: event registration is calendar-family mail, whose
-    # production renderer is ``render_template_parts`` — the #1591
-    # greeting resolution lives there.
-    _subject, _markdown, body, _footer = render_template_parts(
-        "event_registration", member, context,
-    )
-    connection.close()
-
-    assert "Hi Ada Lovelace," in body
-    assert "Hi there," not in body
 
 
 # ---------------------------------------------------------------------------

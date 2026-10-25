@@ -1,76 +1,27 @@
-"""Studio views for editing transactional email templates (issue #455).
-
-Operators get a list page that surfaces every transactional template, and
-an edit page with subject / body / footer fields plus an iframe-based live
-preview. Saves persist into ``EmailTemplateOverride``; the render path
-prefers the override row over the on-disk template, so deleting the row
-reverts to the file.
-"""
+"""Studio Relay template catalog, draft, publish, and preview views."""
 
 import logging
 
-import frontmatter
-from community_base.mail.models import EmailDelivery
-from community_base.mail.service import MailError
 from django.contrib import messages
-from django.http import (
-    Http404,
-    HttpResponse,
-    HttpResponseBadRequest,
-)
+from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils.html import escape
 from django.views.decorators.http import require_POST
 
-from accounts.utils.display import GREETING_FALLBACK, greeting_name
-from content.utils.template_comments import describe_offender, find_token_offenders
-from email_app.models import EmailTemplateOverride
-from email_app.package_mail import send_package_mail
-from email_app.services.context_guard import looks_like_url
-from email_app.services.email_classification import (
-    EMAIL_KIND_PROMOTIONAL,
-    EmailClassificationError,
-    classify_email_type,
-)
-from email_app.services.email_service import TEMPLATES_DIR
 from email_app.services.preview_contexts import (
     RECIPIENT_CHOICES,
     RECIPIENT_NAMED,
     RECIPIENT_NO_NAME,
     get_preview_context,
 )
+from email_app.services.relay_templates import (
+    READ_ONLY_TEMPLATE_KEYS,
+    RelayTemplateError,
+    configured_template_client,
+)
 from studio.decorators import staff_required
 
 logger = logging.getLogger(__name__)
-
-# A Studio test send marks its durable delivery with this category (A1.2
-# remainder slice 4) so the worker resolver knows the delivery has no
-# producer relation: test sends persist scalar placeholder copy only and
-# must never dispatch a relation-dependent production resolver.
-STUDIO_TEST_SEND_CATEGORY = "studio_test_send"
-
-
-def _durable_test_context(context):
-    """Drop URL-bearing placeholder values from a test-send context.
-
-    Issue #1613: a durable context may not carry a rendered link, and the
-    preview placeholders are demo links by design. A test send probes
-    deliverability with the persisted subject and body copy, so the
-    URL-shaped keys are removed and only the scalar copy travels in the
-    durable context. Uses the same predicate as the send-time guard, so a
-    stripped context can never trip it.
-    """
-
-    if isinstance(context, dict):
-        return {
-            key: _durable_test_context(value)
-            for key, value in context.items()
-            if not looks_like_url(value)
-        }
-    if isinstance(context, (list, tuple)):
-        return [_durable_test_context(item) for item in context]
-    return context
-
 
 # Display order on the list page. Mirrors the order operators usually
 # think about (onboarding -> account -> billing -> events -> imports).
@@ -169,384 +120,123 @@ TEMPLATE_SENT_WHEN = {
 
 
 def _sent_when(template_name):
-    """Return canonical trigger guidance, failing loudly if it is missing."""
-    return TEMPLATE_SENT_WHEN[template_name]
+    return TEMPLATE_SENT_WHEN.get(template_name, "Relay-managed template.")
 
 
-def _all_template_names():
-    """Return the canonical list of editable template slugs."""
-    # Every on-disk Markdown template is editable. Classification sets are
-    # delivery policy, not an editor registry, and may intentionally lag a
-    # newly introduced transactional variant.
-    on_disk = {path.stem for path in TEMPLATES_DIR.glob('*.md')}
-    ordered = [name for name in TEMPLATE_DISPLAY_ORDER if name in on_disk]
-    ordered.extend(sorted(on_disk - set(ordered)))
-    return ordered
+def _ordered_templates(templates):
+    order = {name: index for index, name in enumerate(TEMPLATE_DISPLAY_ORDER)}
+    return sorted(templates, key=lambda row: (order.get(row.get("key"), 999), row.get("key", "")))
 
 
-def _template_exists(template_name):
-    if (TEMPLATES_DIR / f'{template_name}.md').exists():
-        return True
-    return EmailTemplateOverride.objects.filter(
-        template_name=template_name,
-    ).exists()
-
-
-def _read_file_template(template_name):
-    """Load the on-disk template, return ``(subject, body_markdown)``.
-
-    Returns ``(None, None)`` when the file does not exist (override-only
-    template names should not normally occur but the model allows it).
-    """
-    template_path = TEMPLATES_DIR / f'{template_name}.md'
-    if not template_path.exists():
-        return None, None
-    post = frontmatter.load(str(template_path))
-    return post.metadata.get('subject', template_name), post.content
-
-
-def _resolve_initial(template_name):
-    """Pick the prefill values for the edit form.
-
-    Order: override row first, then the on-disk file. ``None`` if neither
-    exists (treated as 404 by the view).
-    """
-    override = EmailTemplateOverride.objects.filter(
-        template_name=template_name,
-    ).first()
-    if override is not None:
-        return {
-            'subject': override.subject,
-            'body_markdown': override.body_markdown,
-            'footer_note': override.footer_note,
-            'has_override': True,
-            'override': override,
-        }
-    file_subject, file_body = _read_file_template(template_name)
-    if file_subject is None:
-        return None
-    return {
-        'subject': file_subject,
-        'body_markdown': file_body,
-        'footer_note': '',
-        'has_override': False,
-        'override': None,
-    }
-
-
-def _render_preview_html(
-    template_name,
-    subject,
-    body_markdown,
-    footer_note,
-    recipient=RECIPIENT_NAMED,
-):
-    """Render the preview through the same chrome the real send uses.
-
-    Variables in the body are filled with placeholder values from
-    ``preview_contexts.PREVIEW_CONTEXTS`` so no real user data leaks.
-
-    ``recipient='no_name'`` shows the copy as a member with no name on file
-    receives it (issue #1591).
-    """
-    from django.template import Context, Template
-    from django.template.loader import render_to_string
-
-    from content.utils.markdown import render_email_markdown
-
-    placeholder = get_preview_context(template_name, recipient=recipient)
-    # ``user_name`` and ``user_email`` are also auto-injected by the send
-    # path for real mail; mirror that here so previews look the same.
-    if recipient == RECIPIENT_NO_NAME:
-        placeholder.setdefault('user_name', GREETING_FALLBACK)
-        placeholder.setdefault('member_name', GREETING_FALLBACK)
-        placeholder.setdefault('user_email', 'no-name@example.com')
-    else:
-        placeholder.setdefault('user_name', 'Ada')
-        placeholder.setdefault('user_email', 'ada@example.com')
-    placeholder.setdefault('site_url', 'https://aishippinglabs.com')
-    placeholder.setdefault('site_name', 'AI Shipping Labs')
-
-    rendered_subject = Template(subject or '').render(Context(placeholder))
-    rendered_body = Template(body_markdown or '').render(Context(placeholder))
-    body_html = render_email_markdown(rendered_body)
-
-    try:
-        is_promotional = (
-            classify_email_type(template_name) == EMAIL_KIND_PROMOTIONAL
-        )
-    except EmailClassificationError:
-        is_promotional = False
-
-    return render_to_string(
-        'email_app/base_email.html',
-        {
-            'subject': rendered_subject,
-            'body_html': body_html,
-            # Show a fake unsubscribe link so the operator sees the
-            # footer chrome that real recipients will get.
-            'unsubscribe_url': (
-                'https://aishippinglabs.com/api/unsubscribe?token=preview'
-                if is_promotional
-                else None
-            ),
-            'footer_note': footer_note or '',
-        },
-    )
+def _relay_error_message(error):
+    return f"Relay template operation failed ({error.code}). Try again or check Relay health."
 
 
 @staff_required
 def email_template_list(request):
-    """List every transactional template with edit / status info."""
-    overrides = {
-        o.template_name: o
-        for o in EmailTemplateOverride.objects.all()
+    """List editable Relay templates without any local fallback."""
+    try:
+        rows = _ordered_templates(configured_template_client().templates())
+    except RelayTemplateError as error:
+        rows = ()
+        messages.error(request, _relay_error_message(error))
+    for row in rows:
+        row["template_name"] = row["key"]
+        row["sent_when"] = _sent_when(row["key"])
+        row["read_only"] = row["key"] in READ_ONLY_TEMPLATE_KEYS
+    return render(request, "studio/email_templates/list.html", {"rows": rows})
+
+
+def _editor_context(template_name, template, versions, rendered=None):
+    return {
+        "template_name": template_name,
+        "initial": template,
+        "versions": versions,
+        "rendered": rendered,
+        "sent_when": _sent_when(template_name),
     }
-    rows = []
-    for template_name in _all_template_names():
-        override = overrides.get(template_name)
-        if override is not None:
-            subject = override.subject
-            updated_at = override.updated_at
-            edited = True
-        else:
-            file_subject, _ = _read_file_template(template_name)
-            subject = file_subject or template_name
-            updated_at = None
-            edited = False
-        rows.append({
-            'template_name': template_name,
-            'subject': subject,
-            'edited': edited,
-            'updated_at': updated_at,
-            'sent_when': _sent_when(template_name),
-        })
-    return render(
-        request,
-        'studio/email_templates/list.html',
-        {'rows': rows},
+
+
+def _draft_from_post(request, existing):
+    draft = dict(existing)
+    editable = (
+        "name", "description", "subject", "html_body", "text_body",
+        "markdown_body", "category", "default_sender_id",
     )
-
-
-def _template_syntax_errors(subject, body_markdown, footer_note):
-    """Return operator-facing errors for any construct Django cannot lex.
-
-    Shares ``content.utils.template_comments`` with the repository file lint, so
-    the rule applied to ``email_app/email_templates/*.md`` on disk and the rule
-    applied to operator-authored ``EmailTemplateOverride`` copy are literally
-    the same function. Fields are checked in form order and every offender is
-    reported, so one save surfaces every problem.
-    """
-    return [
-        describe_offender(offender)
-        for field_source in (subject, body_markdown, footer_note)
-        for offender in find_token_offenders(field_source)
-    ]
+    for field in editable:
+        draft[field] = request.POST.get(field, "")
+    draft["is_active"] = request.POST.get("is_active") == "on"
+    draft["markdown_layout_context"] = (
+        request.POST.get("markdown_layout_context") == "on"
+    )
+    return draft
 
 
 @staff_required
 def email_template_edit(request, template_name):
-    """Edit one template: GET prefills the form, POST upserts the row."""
-    initial = _resolve_initial(template_name)
-    if initial is None:
-        raise Http404(f'Unknown email template: {template_name}')
-
-    if request.method == 'POST':
-        subject = request.POST.get('subject', '').strip()
-        body_markdown = request.POST.get('body_markdown', '')
-        footer_note = request.POST.get('footer_note', '').strip()
-
-        def reject(errors):
-            """Re-render the form with the operator's text intact, writing nothing."""
-            for error in errors:
-                messages.error(request, error)
-            initial['subject'] = subject
-            initial['body_markdown'] = body_markdown
-            initial['footer_note'] = footer_note
-            return render(
-                request,
-                'studio/email_templates/edit.html',
-                {
-                    'template_name': template_name,
-                    'initial': initial,
-                    'sent_when': _sent_when(template_name),
-                },
-            )
-
-        if not subject:
-            return reject(['Subject is required.'])
-        if not body_markdown.strip():
-            return reject(['Body is required.'])
-
-        # Operator copy is compiled by the same ``django.template.Template``
-        # call as the shipped ``.md`` files, so it needs the same single-line
-        # rule the file lint enforces. A multi-line or unclosed construct is
-        # not lexed by Django and its raw source ships to the recipient.
-        syntax_errors = _template_syntax_errors(subject, body_markdown, footer_note)
-        if syntax_errors:
-            return reject(syntax_errors)
-
-        EmailTemplateOverride.objects.update_or_create(
-            template_name=template_name,
-            defaults={
-                'subject': subject,
-                'body_markdown': body_markdown,
-                'footer_note': footer_note,
-                'updated_by': request.user,
-            },
-        )
-        messages.success(
-            request,
-            f'Saved override for "{template_name}".',
-        )
-        return redirect('studio_email_template_list')
-
-    return render(
-        request,
-        'studio/email_templates/edit.html',
-        {
-            'template_name': template_name,
-            'initial': initial,
-            'sent_when': _sent_when(template_name),
-        },
-    )
+    """Read or save a Relay draft. Publishing remains a separate action."""
+    if template_name in READ_ONLY_TEMPLATE_KEYS:
+        raise Http404("This Relay compatibility template is read-only.")
+    try:
+        client = configured_template_client()
+        template = client.template(template_name)
+        if request.method == "POST":
+            template = client.save_draft(template_name, _draft_from_post(request, template))
+            messages.success(request, f'Saved Relay draft for "{template_name}".')
+        versions = client.versions(template_name)
+    except RelayTemplateError as error:
+        messages.error(request, _relay_error_message(error))
+        return redirect("studio_email_template_list")
+    return render(request, "studio/email_templates/edit.html", _editor_context(template_name, template, versions))
 
 
 @staff_required
 @require_POST
-def email_template_reset(request, template_name):
-    """Delete the override so the next send falls back to the file."""
-    initial = _resolve_initial(template_name)
-    if initial is None:
-        raise Http404(f'Unknown email template: {template_name}')
-
-    deleted, _ = EmailTemplateOverride.objects.filter(
-        template_name=template_name,
-    ).delete()
-    if deleted:
-        messages.success(
-            request,
-            f'Reverted "{template_name}" to the filesystem default.',
-        )
+def email_template_publish(request, template_name):
+    """Publish the saved Relay draft as a new immutable version."""
+    try:
+        version = configured_template_client().publish(template_name)
+    except RelayTemplateError as error:
+        messages.error(request, _relay_error_message(error))
     else:
-        messages.info(
-            request,
-            f'No override existed for "{template_name}".',
-        )
-    return redirect('studio_email_template_list')
+        messages.success(request, f'Published "{template_name}" as Relay version {version}.')
+    return redirect("studio_email_template_edit", template_name=template_name)
 
 
 @staff_required
 @require_POST
 def email_template_preview(request, template_name):
-    """Render the preview HTML for an in-progress edit.
-
-    Posts ``subject``, ``body_markdown``, ``footer_note`` from the editor
-    and returns the wrapped HTML that the iframe ``srcdoc`` uses.
-    """
-    if not _template_exists(template_name):
-        raise Http404(f'Unknown email template: {template_name}')
-
-    subject = request.POST.get('subject', '')
-    body_markdown = request.POST.get('body_markdown', '')
-    footer_note = request.POST.get('footer_note', '')
-    # Unknown values fall back to the named recipient rather than erroring:
-    # a stale tab or a hand-rolled POST must not break the editor.
-    recipient = request.POST.get('recipient') or RECIPIENT_NAMED
+    """Render a saved draft or immutable version through Relay."""
+    recipient = request.POST.get("recipient") or RECIPIENT_NAMED
     if recipient not in dict(RECIPIENT_CHOICES):
         recipient = RECIPIENT_NAMED
-
+    context = get_preview_context(template_name, recipient=recipient)
+    _add_preview_recipient(context, recipient)
+    raw_version = request.POST.get("version", "").strip()
     try:
-        html = _render_preview_html(
-            template_name,
-            subject,
-            body_markdown,
-            footer_note,
-            recipient=recipient,
+        version = int(raw_version) if raw_version else None
+        rendered = configured_template_client().preview(
+            template_name, context, version=version, draft=not raw_version,
         )
-    except Exception as exc:
-        # Don't leak the operator's typo as a 500. Render a minimal
-        # error block in the iframe so the editor stays usable.
-        logger.warning(
-            'Email template preview render failed for %s: %s',
-            template_name, exc,
-        )
+        return HttpResponse(rendered["html_body"], content_type="text/html")
+    except (RelayTemplateError, ValueError) as error:
+        code = error.code if isinstance(error, RelayTemplateError) else "invalid_version"
+        logger.warning("Relay template preview failed for %s: %s", template_name, code)
         html = (
-            '<!DOCTYPE html><html><body style="font-family:sans-serif;'
-            'padding:1rem;color:#900">'
-            '<p>Preview failed to render:</p>'
-            f'<pre>{escape(exc)}</pre>'
-            '</body></html>'
+            '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:1rem;color:#900">'
+            '<p>Relay preview failed. Save the draft or select a published version, then retry.</p>'
+            f'<pre>{escape(code)}</pre></body></html>'
         )
-        return HttpResponse(html, content_type='text/html', status=200)
-
-    return HttpResponse(html, content_type='text/html')
+        return HttpResponse(html, content_type="text/html", status=502)
 
 
-@staff_required
-@require_POST
-def email_template_send_test(request, template_name):
-    """Send a real email to the logged-in operator using the saved data.
-
-    Always uses the persisted state -- override if present, file otherwise.
-    The point is to verify deliverability after edits, not to preview an
-    unsaved draft (the iframe already does that).
-
-    The send goes through the durable package path (A1.2 remainder slice
-    4): ``sent`` means the durable delivery exists and the Relay outcome
-    lands from the worker. Placeholder links are stripped (#1613) and the
-    operator's own greeting scalar travels in the durable context.
-    """
-    if not _template_exists(template_name):
-        raise Http404(f'Unknown email template: {template_name}')
-
-    if not request.user.email:
-        return HttpResponseBadRequest(
-            'Logged-in user has no email address; cannot send test.',
-        )
-
-    # Strip ``user_name`` / ``user_email`` / ``site_url`` / ``site_name``
-    # from the placeholder context so the operator's real values flow
-    # through (the send path injects those from the recipient). The
-    # remaining scalar keys (``tier_name``, etc.) keep the copy realistic;
-    # URL-bearing placeholders are dropped by ``_durable_test_context``
-    # because a durable context may not carry a rendered link (#1613).
-    placeholder = get_preview_context(template_name)
-    for k in ('user_name', 'user_email', 'site_url', 'site_name'):
-        placeholder.pop(k, None)
-    # Issue #1591: the greeting is resolved for the operator, never an
-    # email handle; persisting it as a scalar keeps the worker render
-    # identical to what the synchronous send used to inject.
-    placeholder['user_name'] = greeting_name(request.user) or GREETING_FALLBACK
-    try:
-        delivery = send_package_mail(
-            request.user,
-            template_name,
-            _durable_test_context(placeholder),
-            category=STUDIO_TEST_SEND_CATEGORY,
-        )
-    except MailError as exc:
-        # Guard refusal or unknown purpose: nothing durable exists, so
-        # the loud operator message IS the failure surface.
-        logger.warning(
-            'Studio test send refused for %s: %s', template_name, exc,
-        )
-        messages.error(request, f'Failed to send test email: {exc}')
-        return redirect('studio_email_template_list')
-
-    if delivery.state == EmailDelivery.State.SUPPRESSED:
-        # Preference suppression: the delivery is durable but no mail
-        # will go out. Surface that to the operator so they know the
-        # send was a no-op.
-        messages.warning(
-            request,
-            'Test not sent: your account is marked unsubscribed.',
-        )
+def _add_preview_recipient(context, recipient):
+    if recipient == RECIPIENT_NO_NAME:
+        context.setdefault("user_name", "there")
+        context.setdefault("member_name", "there")
+        context.setdefault("user_email", "no-name@example.com")
     else:
-        # Honest convention: the delivery exists; the Relay outcome and
-        # the ``EmailLog`` audit row land from the worker.
-        messages.success(
-            request,
-            f'Test email sent to {request.user.email}.',
-        )
-    return redirect('studio_email_template_list')
+        context.setdefault("user_name", "Ada")
+        context.setdefault("user_email", "ada@example.com")
+    context.setdefault("site_url", "https://aishippinglabs.com")
+    context.setdefault("site_name", "AI Shipping Labs")

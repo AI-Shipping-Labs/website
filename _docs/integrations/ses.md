@@ -1,506 +1,66 @@
-# Email delivery and SES event ingest settings
+# SES event ingest and shared AWS storage credentials
 
-This page documents every SES-related setting declared in
-`integrations/settings_keys.py`. The `ses` group contains event-ingest
-settings only; sending settings live in `relay`, and AWS storage credentials
-live in `s3_content`. Existing sender key names are retained to preserve overrides. Each section
-follows the same template — Purpose, Without it, Where to find it,
-Prereqs, Rotation, Test vs live — so an operator can answer "do I need
-to set this right now, or can I defer it?" without leaving the page.
+The website does not send mail through SES. Relay owns outbound rendering and
+delivery. The remaining SES code accepts Relay's provider events so the site
+can correlate bounces and complaints with historical `EmailLog` records.
 
-All transactional email (verification, password reset, paid-tier
-notifications) and promotional email (newsletters, course campaigns)
-flow through Relay, which delivers via Amazon SES. The site itself
-holds no SES send path. Direct deep-link URLs are intentionally
-written in code blocks so they do not render as clickable links. Copy
-them into the browser.
-
-Campaign consent is enforced in two phases. Fan-out materializes only users
-who are eligible and globally subscribed at enqueue time. Each delayed batch
-then re-reads every recipient's current `unsubscribed` value immediately before
-building their unsubscribe/verification footer and handing the send to Relay. A recipient
-who opts out, permanently bounces, reaches the third-soft-bounce threshold, or
-complains after fan-out is skipped without a Relay send or `EmailLog`; a soft
-bounce below that threshold remains subscribed and sendable. SES account-level
-suppression remains enforced by SES itself—campaign workers do not perform a
-live suppression-list lookup. Transactional mail and explicit operator test
-sends keep their separate delivery semantics.
+The AWS credentials below are used for S3 content, recordings, and downloads.
+They are documented here because older deployments grouped them with SES.
 
 ## AWS_ACCESS_KEY_ID
 
-Purpose: AWS access key for the IAM user the platform uses for S3
-(recordings uploads at `jobs/tasks/recordings_s3.py`, content-image
-uploads at `integrations/services/github_sync/media.py`, and the
-GitHub App key fallback in `integrations/services/github_app.py`).
-Outbound email needs no AWS key on the site: all sends go through
-Relay. The same key is reused across S3, so a single IAM user holds
-permissions for both S3 buckets.
+Purpose: AWS access key for S3 recording uploads, content image uploads, and
+the GitHub App key fallback.
 
-Without it: S3 uploads fail — new recordings cannot upload and synced
-content images are skipped (existing CDN URLs keep resolving). Outbound
-mail is unaffected (Relay sends with its own credentials).
+Without it: new recording and content uploads fail. Existing CDN objects and
+outbound mail are unaffected.
 
-Where to find it:
-
-- AWS console > IAM > Users > pick the platform IAM user > "Security
-  credentials" > "Access keys" > "Create access key". AWS shows the
-  pair (key id + secret) once. Save both immediately.
-- Direct link:
-
-  ```
-  https://console.aws.amazon.com/iam/home#/users
-  ```
-
-Prereqs:
-- An IAM user attached to a policy that grants:
-  - `s3:PutObject`, `s3:GetObject` on the recordings and content
-    buckets (these are scoped per-bucket; see `s3_recordings` /
-    `s3_content` groups).
-- The sending region must already be out of SES sandbox (or the
-  recipients must be verified). See
-  `https://console.aws.amazon.com/ses/home#/account` to request
-  production access.
-
-Rotation: Safe to rotate.
-
-1. AWS console > IAM > Users > the IAM user > "Security credentials" >
-   "Create access key". AWS allows two active keys per user during the
-   transition window.
-2. Update both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` via
-   Studio (Integration settings > S3 Content Images) or via
-   `PUT /api/v1/settings/<key>`.
-3. Once the platform is using the new pair, delete the old key from
-   the same IAM console screen.
-4. Window of impact: between the moment you start the rotation and the
-   moment you save both new values together, in-flight S3 requests
-   may fail with `SignatureDoesNotMatch` if the old key was already
-   deleted. Keep the old key active until the new pair is saved.
-
-Test vs live: AWS does not have a sandbox vs live distinction for IAM
-keys — but SES itself has a sandbox in each region. If your region is
-in sandbox mode, you can only send to verified addresses regardless
-of the key. Request production access per-region from:
-
-```
-https://console.aws.amazon.com/ses/home#/account
-```
+Configure the key in Studio under S3 Content Images. Rotate it together with
+`AWS_SECRET_ACCESS_KEY`, keeping the old pair active until the new pair has
+been verified.
 
 ## AWS_SECRET_ACCESS_KEY
 
-Purpose: AWS secret key paired with `AWS_ACCESS_KEY_ID`. Used by
-boto3 to sign S3 requests (site email needs no AWS key — Relay sends
-with its own credentials). The platform stores it as
-the package secret store, so it is masked in Studio after
-saving.
+Purpose: secret paired with `AWS_ACCESS_KEY_ID` for S3 requests.
 
-Without it: Same failure mode as a missing `AWS_ACCESS_KEY_ID` — boto3
-raises `NoCredentialsError`, no S3 traffic leaves the box. Outbound
-mail is unaffected.
+Without it: S3 requests fail with `NoCredentialsError`. Outbound mail is
+unaffected.
 
-Where to find it: AWS shows the secret key exactly once, at the moment
-you create the access key. There is no way to retrieve it later — if
-lost, you must rotate. See the same console path as
-`AWS_ACCESS_KEY_ID`.
-
-Prereqs: Same IAM user and policy as `AWS_ACCESS_KEY_ID`.
-
-Rotation: Always rotate the secret alongside the access key id as a
-pair (they are minted together).
-
-1. Create a new access-key pair in the IAM console.
-2. Save both `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in Studio
-   in the same submit.
-3. Disable, then delete the old key from IAM. AWS allows two active
-   keys per user precisely to enable zero-downtime rotation.
-
-Test vs live: n/a. Same as `AWS_ACCESS_KEY_ID`.
-
-## SES_TRANSACTIONAL_FROM_EMAIL
-
-Purpose: Sender address for required, account-tied email — verification
-links, password resets, paid-tier confirmations, payment receipts.
-Selected by `email_app/services/email_classification.py` when the
-classification result is `EMAIL_KIND_TRANSACTIONAL` (see
-`get_sender_for_kind`). Default Django setting: `noreply@aishippinglabs.com`.
-
-Without it: Falls back to the Django settings default
-(`noreply@aishippinglabs.com`). If that address is not verified in
-the active SES region, every transactional email errors with
-`Email address is not verified` and account flows break.
-
-Where to find it:
-
-- AWS console > SES > "Verified identities" in the active region.
-- Direct link:
-
-  ```
-  https://console.aws.amazon.com/ses/home#/verified-identities
-  ```
-
-- The value must exactly match a verified email (or fall under a
-  verified domain). For domain-level verification, any address at
-  `@<verified-domain>` works.
-
-Prereqs: The sender must be one of the sender identities registered in Relay.
-Relay owns the SES region and verified identity used for provider delivery.
-Domain verification (DKIM + SPF records published) is strongly
-preferred over per-address verification — it covers any address at
-the domain and improves deliverability.
-
-Rotation: Safe to rotate.
-
-1. Verify the new identity in SES (domain or address).
-2. Update this setting via Studio (Integration settings > Email (Relay)
-   > `SES_TRANSACTIONAL_FROM_EMAIL`).
-3. Window of impact: zero if the old and new identities are both
-   verified at the moment of save. If you delete the old identity
-   before saving, in-flight transactional sends bounce.
-
-Test vs live: n/a in SES terms — there is one set of verified
-identities per region. Use a different verified address (e.g.
-`noreply@dev.example.com`) for non-prod environments, and pin it via
-the per-environment override.
-
-## SES_PROMOTIONAL_FROM_EMAIL
-
-Purpose: Sender address for marketing email — newsletters, course
-campaigns, event announcements. Selected by
-`email_app/services/email_classification.py` when the classification
-result is `EMAIL_KIND_PROMOTIONAL`. Default: `content@aishippinglabs.com`.
-
-The platform splits transactional and promotional senders so that
-suppression-list bounces and complaints on promotional traffic do not
-poison the deliverability of account-critical mail.
-
-Without it: Falls back to the Django settings default. If that address
-is unverified, promotional sends fail in the same way as transactional
-ones — but account flows continue to work because they use the
-transactional sender.
-
-Where to find it: Same as `SES_TRANSACTIONAL_FROM_EMAIL` — the SES
-"Verified identities" page in the active region.
-
-Prereqs:
-- Verified SES identity for this address.
-- A separate sub-domain (e.g. `content.<domain>`) is best practice so
-  promotional reputation issues stay off the apex domain. The DNS
-  records for the sub-domain are separate from the apex.
-
-Rotation: Same flow as `SES_TRANSACTIONAL_FROM_EMAIL`.
-
-Test vs live: n/a beyond per-environment override.
-
-## SES_WELCOME_FROM_EMAIL
-
-Purpose: Dedicated sender address for welcome emails — the welcome
-types `welcome`, `cofounder_welcome`, `basic_welcome`, `premium_welcome`,
-`welcome_imported`, and `welcome_back`. Selected by
-`email_app/services/email_classification.py` via the per-type override in
-`get_sender_for_email_type` (issue #937). Default:
-`welcome@aishippinglabs.com`.
-
-Welcome emails stay classified `transactional` — only the From address is
-overridden. Their delivery semantics are unchanged: an unsubscribed paid
-user still receives their welcome, and welcome mail carries no unsubscribe
-footer / `List-Unsubscribe` header. The dedicated sender just gives new
-members a friendlier, recognisable From line distinct from `noreply@`.
-
-Without it: Falls back to the legacy `SES_FROM_EMAIL` if set, then the
-Django settings default (`welcome@aishippinglabs.com`). If that address is
-unverified, welcome sends fail in the same way as other senders — but
-account flows that use the transactional sender continue to work.
-
-Where to find it: Same as `SES_TRANSACTIONAL_FROM_EMAIL` — the SES
-"Verified identities" page in the active region. Domain-level verification
-already covers any address at `@<verified-domain>`, so no per-address
-verification is needed when the domain is verified.
-
-Rotation: Same flow as `SES_TRANSACTIONAL_FROM_EMAIL`.
-
-Test vs live: n/a beyond per-environment override.
-
-## SES_WELCOME_REPLY_TO_EMAIL
-
-Purpose: Reply-To address set on the welcome types (`welcome`,
-`cofounder_welcome`, `basic_welcome`, `premium_welcome`,
-`welcome_imported`, `welcome_back`). A member who hits Reply on a welcome
-email reaches this monitored inbox instead of the send-only `welcome@` /
-`noreply@` mailbox. Default: `welcome@aishippinglabs.com`, which the inbound
-`email-forwarder` Lambda (see `DataTalksClub/aws-infra` at `main/aisl/email.tf`) forwards
-to both founders, so welcome replies land in a human inbox.
-
-Paid checkout welcomes additionally hide-copy `STAFF_SIGNUP_NOTIFY_EMAIL`
-on BCC when that site setting is configured. That BCC gives staff the exact
-member-facing Basic/Main/Premium/fallback/`welcome_back` email body without
-making staff visible to the member or adding staff to Reply All. It is
-separate from both the structured staff heads-up email, which is sent To
-`STAFF_SIGNUP_NOTIFY_EMAIL`, and this Reply-To setting.
-
-Duplicate-reply rule: `SES_WELCOME_REPLY_TO_EMAIL` is the only Reply-To path
-for welcome emails. Do not append `STAFF_SIGNUP_NOTIFY_EMAIL` as a second
-Reply-To and do not visible-CC staff on the member welcome.
-
-Without it: Leaving this blank omits the `Reply-To` header entirely —
-welcome emails then reply to the From address. Only welcome types get a
-Reply-To; every other transactional / promotional email is unaffected.
-
-Invalid value: Studio rejects a malformed address before saving any setting in
-the SES group. Runtime delivery also validates environment, import, and legacy
-values; a malformed optional Reply-To is omitted so SES still delivers the
-welcome to the member. The operator log names the setting key without printing
-the rejected value.
-
-Where to find it: Any mailbox you control and that the inbound forwarder
-routes to a real person. Must NOT be a black-hole address.
-
-Rotation: Change the Studio override (or env var) to a new monitored
-inbox; no redeploy needed.
-
-Test vs live: n/a beyond per-environment override.
+AWS displays this value only when the access key is created. Store it as a
+secret and rotate the pair together.
 
 ## SES_WEBHOOK_VALIDATION_ENABLED
 
-Purpose: When true, the SES events webhook (`api/views/ses_events.py`)
-verifies SNS message signatures against AWS's public certificate
-before processing. Implemented by
-`integrations/services/ses.py:validate_sns_notification`. Recommended
-in production; off by default to preserve intentional local replay
-workflows.
+Purpose: verify the SNS signing certificate and signature on SES bounce and
+complaint notifications received at `/api/webhooks/ses`.
 
-Validation is fail closed when enabled:
+Without it: the endpoint still applies the optional shared-secret check, but
+does not verify the SNS signature. Keep validation enabled in production.
 
-- `SigningCertURL` must use HTTPS, an explicitly supported regional SNS
-  hostname, and AWS's
-  `SimpleNotificationService-<certificate-id>.pem` path. Userinfo,
-  custom ports, redirects, query strings, fragments, lookalike hosts,
-  unsupported regions, whitespace/control characters, parser-normalized
-  variants, and even empty query/fragment/path-parameter delimiters are
-  rejected from the raw URL before a request is made.
-- Certificate downloads use a bounded timeout and do not follow
-  redirects. Non-200 responses, network errors, invalid PEM, and
-  non-RSA public keys are rejected.
-- Required SNS fields must be strings and use the canonical field
-  order for their message type. Signature version `1` uses RSA/SHA-1;
-  version `2` uses RSA/SHA-256. Unknown versions, invalid base64, and
-  signature mismatches are rejected.
-
-The validation-disabled setting is an explicit bypass: it returns
-before payload-shape, certificate URL, network, or cryptographic checks.
-Keep that bypass limited to local/test replay and configure validation
-on in production.
-
-Without it (false): The webhook still accepts SNS deliveries but does
-not verify their authenticity. In environments where the webhook URL
-is internet-reachable, this is a minor attack surface — anyone who
-discovers the URL can spoof bounce/complaint events and poison the
-suppression list. Set to `true` in production.
-
-Where to find it: Studio-only setting. There is no AWS dashboard to
-consult — this is operator intent (production vs lax dev).
-
-Prereqs: Outbound internet access to fetch SNS signing certs from
-`sns.<region>.amazonaws.com/SimpleNotificationService-*.pem`.
-
-Rotation: n/a. Toggle on or off; the next webhook delivery uses the
-new value.
-
-Test vs live: Set to `true` in production. Leaving it `false` in
-production is safe behaviour-wise (the platform still processes
-events) but loses the spoofing defence.
+The event endpoint accepts SNS subscription confirmation plus SES bounce and
+complaint notifications. It stores the provider event and updates the matching
+site recipient state. This inbound path is independent from outbound Relay
+template and send APIs.
 
 ## SES_WEBHOOK_SHARED_SECRET
 
-Purpose: Optional shared secret enforced by `api/views/ses_events.py`
-on the `POST /api/ses-events` webhook. When set, the view requires
-the request to carry an `X-SES-Webhook-Secret` header equal to this
-value (constant-time compare via `hmac.compare_digest`). The check
-runs *before* SNS signature validation, so an attacker without the
-secret never reaches the signature path. Rejected requests log a
-WARNING and return 403; no `SesEvent` audit row is written, which
-prevents an unauthenticated peer from poisoning the audit log.
+Purpose: require the exact secret in the `X-SES-Webhook-Secret` request header
+before processing an event.
 
-SNS signature verification already authenticates the caller
-cryptographically — the shared secret is defense-in-depth against
-anyone who somehow gets hold of a valid SNS payload (leaked logs,
-screenshots) and tries to replay it from outside AWS.
+Without it: no shared-secret header is required. This is convenient for local
+replay; production should configure a secret on both the event forwarder and
+the website.
 
-Without it: Leave blank in local dev so `manage.py runserver` can
-replay captured SNS payloads without forging the header. The webhook
-falls back to SNS-signature validation as the sole auth layer, which
-is the today-shipping behaviour from issue #453.
+Rotate both sides in one release window. Never print the value in logs or
+issue comments.
 
-Where to find it: This setting is paired with the infra-side Lambda
-forwarder defined in
-`DataTalksClub/aws-infra` (`main/aisl/ses_webhook.tf`). The Lambda
-pulls the secret from AWS Secrets Manager and injects it into the
-`X-SES-Webhook-Secret` header before forwarding the SNS payload to
-the Django webhook. The two values must match.
+## Historical correlation fields
 
-Prereqs:
-- An entry in AWS Secrets Manager holding the shared secret string.
-- A Lambda (infra repo) subscribed between SNS and the Django
-  webhook that reads the secret and adds the header.
-- The same secret stored in Studio (SES event ingest > `SES_WEBHOOK_SHARED_SECRET`).
+`EmailLog.ses_message_id`, `SesEvent`, and SES-named event API fields remain
+intentionally. They store provider identifiers already present in historical
+records and correlate current Relay delivery events with those records.
+Renaming them would be a data and public API migration unrelated to removing
+the old site-owned send path.
 
-Rotation: Generate a new random secret, update Secrets Manager and
-Studio in either order — there is a tiny window where the Lambda
-and Django side disagree. Set on both sides as close in time as
-possible. The webhook returns 403 for the mismatched-secret window,
-SNS retries, and once both sides match the retry succeeds. No
-events are lost.
-
-Test vs live: Set this in production. Leave blank in local dev. CI
-and Playwright tests do not need it set — the test suite mocks the
-webhook directly and does not depend on the secret being either
-present or absent.
-
-## EMAIL_BATCH_SIZE
-
-Purpose: Positive number of campaign recipients assigned to each background
-send task. Smaller batches isolate retries and reduce per-task runtime; larger
-batches create fewer queue rows. The default is 200 recipients.
-
-Without it: Campaign fan-out uses 200. Invalid, zero, and negative overrides
-also safely use 200 rather than breaking the chunk operation.
-
-Where to find it: This is an operator tuning value, not an AWS credential.
-Set it under Studio > Settings > Email (Relay), or through the authenticated
-integration-settings API. Tune it together with the campaign batch interval
-and Relay's provider quota.
-
-Test vs live: Leave the default in tests and local development. In production,
-reduce it if tasks approach their timeout; increase it only after confirming
-worker runtime and Relay's provider rate limits have enough headroom.
-
-## CAMPAIGN_DELIVERY_MAX_ATTEMPTS
-
-Purpose: Caps automatic retries of a campaign delivery that Relay definitively
-rejected. Recovery re-queues `failed` rows while `attempt_count` is below this
-integer, then leaves the row failed so the campaign can leave `sending` and
-show `needs_attention`. Ambiguous outcomes are never auto-retried.
-
-Without it: Recovery uses 3. Invalid, zero, and negative overrides also use 3
-rather than retrying forever or refusing to recover.
-
-Where to find it: Studio > Settings > Email (Relay), or the authenticated
-integration-settings API. This is operator tuning, not an AWS credential.
-
-Test vs live: Leave the default in tests and local development. Lower it in
-production only if a hard Relay rejection should surface faster; raise it only
-when transient definitive rejections are common and duplicate-send risk is
-accepted.
-
-## CAMPAIGN_BATCH_INTERVAL_SECONDS
-
-Purpose: Staggers campaign send batches apart so the fan-out does not
-burst past the provider send-rate limit (issue #922). The campaign sender
-splits recipients into batches and schedules batch `i` at
-`now + i * CAMPAIGN_BATCH_INTERVAL_SECONDS` via `Schedule.ONCE`. The
-first batch fires immediately; each subsequent batch is delayed by one
-more interval, spreading the load across time instead of hitting Relay
-all at once.
-
-Default: 60 seconds. Set to `0` to send every batch at once (no
-stagger) — only safe when the campaign size stays comfortably under
-the provider's per-second send quota.
-
-Where to find it: Studio-only setting (Email (Relay) group). This is
-operator intent tuned against the provider send-rate limit, not
-a value read from any AWS dashboard.
-
-Prereqs: None beyond a working Relay integration. Higher values trade
-slower overall delivery for a gentler send rate.
-
-Test vs live: Tests and local dev can leave it at the default. Tune
-it in production if provider throttling (rate-exceeded) errors appear in
-campaign sends.
-
-## CAMPAIGN_TEST_RECIPIENTS
-
-Purpose: A list of commonly-used test-send addresses surfaced as
-click-to-fill chips beneath the Test Recipients field on the campaign
-detail page (issue #921). Operators repeatedly send campaign tests to
-the same handful of mailboxes (a teammate, a QA seed inbox); this lets
-them fill the field with one click instead of retyping. The chips also
-include the operator's own email (always first) and the addresses they
-most recently test-sent to (remembered per browser session), so this
-setting only needs the shared/team addresses.
-
-Format: Comma-, space-, semicolon-, or newline-separated email
-addresses (e.g. `seed@example.com, team@example.com`). Invalid entries
-are silently dropped so a typo never errors the page. The merged
-suggestion list (own email + recent + this list) is de-duplicated
-case-insensitively and capped at 8 chips.
-
-Default: empty. When blank, only the operator's own email and their
-recently-sent addresses appear (and nothing at all renders if both are
-empty).
-
-Where to find it: Studio-only setting (Email (Relay) group). These are
-operator-chosen test mailboxes, not a value read from any AWS
-dashboard.
-
-Prereqs: None. Purely a UI convenience on the campaign test-send form;
-it does not affect who a real campaign send reaches.
-
-Test vs live: Safe to leave blank in tests and local dev. Set it in
-production with the team's shared QA/test inboxes.
-
-## RECORDING_AVAILABLE_SUBJECT_TEMPLATE
-
-Purpose: Default subject pre-filled into the "recording available"
-campaign draft an operator reaches from the host recording-ready email or
-the Studio event page (issue #1076). `{event_title}` is substituted with
-the event title. Pre-fill only — the operator reviews and edits the draft
-before sending, so a blank or odd setting can never auto-broadcast.
-
-Default: empty (no configured default); the draft form falls back to its
-built-in template when unset.
-
-Where to find it: Studio integration settings (Email (Relay) group). Plain
-text with the `{event_title}` placeholder.
-
-Prereqs: None. It only seeds the campaign draft; it does not send anything.
-
-Test vs live: Safe to leave blank in tests and local dev.
-
-## RECORDING_AVAILABLE_BODY_TEMPLATE
-
-Purpose: Default markdown body pre-filled into the "recording available"
-campaign draft (issue #1076). Placeholders: `{event_title}`,
-`{recording_url}`, and `{workshop_writeup}` (the linked workshop write-up,
-or a short generic line when the event has no linked workshop). Pre-fill
-only — never auto-sent.
-
-Default: empty (no configured default); the draft form falls back to its
-built-in template when unset.
-
-Where to find it: Studio integration settings (Email (Relay) group).
-Multiline markdown with the placeholders above.
-
-Prereqs: None. It only seeds the campaign draft body.
-
-Test vs live: Safe to leave blank in tests and local dev.
-
-## Monitored re-permission campaigns
-
-Studio campaigns with the `Unverified only` audience use a fixed monitored
-release sequence. The Send action freezes the current eligible audience in
-oldest-account-first order, releases a pilot of at most 100 recipients, and
-keeps later waves of at most 250 unscheduled. Studio re-checks each recipient's
-active, subscribed, unverified, and permanent-bounce state immediately before
-transport; a changed recipient is recorded as skipped.
-
-After a wave finishes, wait for Studio's 24-hour observation gate. The next
-wave can be released only when there is at least one confirmed send, no failed
-or ambiguous delivery, a per-wave and cumulative bounce rate below 2%, and no
-complaint. A 2% bounce rate or any complaint pauses the campaign without an
-override. Use the campaign's Recipient ledger and SES events links to reconcile
-delivery evidence. Retry work restarts that wave's observation window.
-
-Before a production pilot, approve the rendered HTML and plain text using a
-controlled existing unverified account, verify its personalized confirmation
-link, and record sanitized audience counts. Production use is gated on #1595
-having an owner and scheduled suppression date. After the final wave clears
-monitoring, hand its campaign ID and completion timestamp to #1595; suppression
-must start no earlier than 30 days after that completion.
+For outbound senders, campaign settings, and template operations, see
+[`relay.md`](relay.md).

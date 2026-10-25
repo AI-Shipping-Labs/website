@@ -26,8 +26,8 @@ class WelcomeRelayWireTest(TestCase):
         configured = {**settings.COMMUNITY_BASE, "MAIL_BACKEND": "relay"}
         self.settings_override = override_settings(
             COMMUNITY_BASE=configured,
-            SES_WELCOME_FROM_EMAIL="welcome@aishippinglabs.com",
-            SES_WELCOME_REPLY_TO_EMAIL="welcome@aishippinglabs.com",
+            RELAY_WELCOME_FROM_EMAIL="welcome@aishippinglabs.com",
+            RELAY_WELCOME_REPLY_TO_EMAIL="welcome@aishippinglabs.com",
             SES_CONFIGURATION_SET_NAME="fixture-ses-only",
         )
         self.settings_override.enable()
@@ -38,7 +38,7 @@ class WelcomeRelayWireTest(TestCase):
 
     def test_database_alternate_reply_to_and_hidden_staff_bcc_reach_relay(self):
         IntegrationSetting.objects.create(
-            key="SES_WELCOME_REPLY_TO_EMAIL",
+            key="RELAY_WELCOME_REPLY_TO_EMAIL",
             value="member-support@example.com",
             group="ses",
         )

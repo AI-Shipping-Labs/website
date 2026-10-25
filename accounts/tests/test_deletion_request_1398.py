@@ -15,8 +15,8 @@ from email_app.services.email_classification import (
     EMAIL_KIND_TRANSACTIONAL,
     classify_email_type,
 )
-from email_app.services.email_service import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.services.footer_context import EMAIL_TYPES_WITHOUT_VERIFY_FOOTER
+from email_app.testing import StubRelayClient, deliver_pending_mail, relay_test_backend
 from tests.fixtures import TierSetupMixin, set_membership
 
 
@@ -28,7 +28,7 @@ def _stub_send(stub):
     return to_addresses, cc_addresses, html
 
 
-class _FailingSESClient(StubSESClient):
+class _FailingSESClient(StubRelayClient):
     """SES stand-in whose transport always fails."""
 
     def __init__(self, error):
@@ -55,9 +55,9 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
         )
         self.client.force_login(user)
 
-        stub = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        stub = StubRelayClient()
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             response = self.client.post(
@@ -129,10 +129,10 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
     def test_repeated_posts_keep_one_request_and_one_email(self):
         user = self._user(email="repeat@example.com")
         self.client.force_login(user)
-        stub = StubSESClient()
+        stub = StubRelayClient()
 
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             first = self.client.post("/account/api/request-deletion")
@@ -167,10 +167,10 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
     def test_request_uses_validated_configured_team_recipient(self, _config):
         user = self._user(email="configured-requester@example.com")
         self.client.force_login(user)
-        stub = StubSESClient()
+        stub = StubRelayClient()
 
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             response = self.client.post("/account/api/request-deletion")
@@ -205,10 +205,10 @@ class AccountDeletionRequestViewTest(TierSetupMixin, TestCase):
                     "is_superuser": user.is_superuser,
                 }
                 self.client.force_login(user)
-                stub = StubSESClient()
+                stub = StubRelayClient()
 
-                with local_render_backend(), patch(
-                    "community_base.mail.backends.ses_local.configured_client",
+                with relay_test_backend(), patch(
+                    "community_base.mail.backends.relay.configured_client",
                     return_value=stub,
                 ):
                     response = self.client.post("/account/api/request-deletion")
@@ -304,11 +304,11 @@ class AccountDeletionRequestFailureTest(TestCase):
             requested_at=failed_attempt_at,
         )
 
-        stub = StubSESClient()
+        stub = StubRelayClient()
         with (
             patch("accounts.services.privacy.get_config", return_value="team@aishippinglabs.com"),
-            local_render_backend(), patch(
-                "community_base.mail.backends.ses_local.configured_client",
+            relay_test_backend(), patch(
+                "community_base.mail.backends.relay.configured_client",
                 return_value=stub,
             ),
         ):
@@ -348,8 +348,8 @@ class AccountDeletionRequestFailureTest(TestCase):
         # member did their part) with no EmailLog receipt.
         stub = _FailingSESClient(RuntimeError("private SES exception detail"))
 
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
+        with relay_test_backend(), patch(
+            "community_base.mail.backends.relay.configured_client",
             return_value=stub,
         ):
             response = self.client.post("/account/api/request-deletion")

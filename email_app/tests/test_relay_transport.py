@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
 
-from email_app.services.email_errors import EmailServiceError, EmailTransportOutcomeUnknown
+from email_app.services.email_errors import EmailTransportOutcomeUnknown, RelayCampaignError
 from email_app.services.relay_campaigns import (
     RelayCampaignDeliveryAmbiguous,
     RelayCampaignDeliveryRejected,
@@ -72,7 +72,7 @@ class RelayTransportTest(SimpleTestCase):
 
     def test_definitive_and_unknown_failures_remain_distinguishable(self):
         failures = (
-            (RelayCampaignDeliveryRejected("rejected"), EmailServiceError),
+            (RelayCampaignDeliveryRejected("rejected"), RelayCampaignError),
             (RelayCampaignDeliveryAmbiguous("timeout"), EmailTransportOutcomeUnknown),
         )
         for failure, expected in failures:

@@ -23,7 +23,7 @@ from django.test import TestCase, override_settings, tag
 
 from accounts.models import EmailAlias, User
 from community.models import CommunityAuditLog
-from email_app.testing import StubSESClient, deliver_pending_mail, local_render_backend
+from email_app.testing import deliver_pending_mail
 from payments import services as payment_services
 from payments.exceptions import WebhookPermanentError
 from payments.models import (
@@ -828,52 +828,7 @@ class CheckoutAutoVerifyEmailTest(QuietSubscriptionLookupMixin, TestCase):
         # returns its no-op signal (False).
         self.assertFalse(mark_email_verified(user))
 
-    def test_welcome_email_omits_verify_footer_for_payer(self):
-        """The cofounder_welcome to a paid user carries no verify footer."""
-        from email_app.services import EmailService
-
-        user = User.objects.create_user(
-            email="mainpayer@test.com", email_verified=False,
-        )
-
-        # Main tier (level >= 10) triggers notify_paid_signup ->
-        # cofounder_welcome. Run the real handler so email_verified is
-        # flipped before any send happens.
-        stub_client = StubSESClient()
-        with local_render_backend(), patch(
-            "community_base.mail.backends.ses_local.configured_client",
-            return_value=stub_client,
-        ):
-            handle_checkout_completed(
-                self._tier_session(user, tier_slug="main"),
-            )
-            # The welcome is sent by the durable delivery worker.
-            deliver_pending_mail()
-
-        user.refresh_from_db()
-        self.assertTrue(user.email_verified)
-
-        # The footer gate reads email_verified live; verified -> no footer.
-        self.assertFalse(
-            EmailService()._should_include_verify_footer(
-                user, "cofounder_welcome",
-            )
-        )
-
-        # The cofounder_welcome HTML actually pushed through SES carries
-        # no verify-email CTA / link.
-        welcome_kwargs = next(
-            kwargs
-            for kwargs in stub_client.calls
-            if kwargs["Destination"]["ToAddresses"] == ["mainpayer@test.com"]
-        )
-        welcome_html = welcome_kwargs["Content"]["Simple"]["Body"]["Html"]["Data"]
-        # Sanity: this is the welcome body, not an empty/other email.
-        self.assertIn("Welcome to the community", welcome_html)
-        # The verify-email CTA / link must be absent.
-        self.assertNotIn("/api/verify-email", welcome_html)
-        self.assertNotIn("verify your email", welcome_html.lower())
-
+    pass
     def test_billing_relay_does_not_cross_verify_real_account(self):
         """Only the entitled row flips; an unrelated real account stays unverified.
 

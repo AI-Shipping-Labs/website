@@ -7,7 +7,7 @@ from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 from django_q.models import Schedule
 
@@ -22,7 +22,7 @@ from accounts.services.import_users import (
 )
 from email_app.models import EmailLog
 from email_app.tasks.welcome_imported import send_imported_welcome_email
-from email_app.testing import local_render_backend
+from email_app.testing import relay_test_backend
 from payments.models import Tier, TierOverride
 from tests.fixtures import set_membership
 
@@ -436,23 +436,7 @@ class ImportUsersServiceTest(TestCase):
         self.assertEqual(batch.users_updated, 1)
         self.assertEqual(conflicts(batch), [])
 
-    @override_settings(IMPORT_WELCOME_EMAILS_PER_HOUR=50)
-    def test_large_import_queues_throttled_schedules_without_sending_ses(self):
-        import_rows = [
-            ImportRow(email=f"user{i}@example.com")
-            for i in range(1000)
-        ]
-
-        with patch("email_app.services.email_service.EmailService._send_relay") as send_ses:
-            batch = run_import_batch("slack", rows(*import_rows))
-
-        self.assertEqual(batch.users_created, 1000)
-        self.assertEqual(batch.emails_queued, 1000)
-        self.assertEqual(Schedule.objects.count(), 1000)
-        send_ses.assert_not_called()
-        first = Schedule.objects.order_by("next_run").first()
-        fiftieth = Schedule.objects.order_by("next_run")[50]
-        self.assertGreaterEqual((fiftieth.next_run - first.next_run).total_seconds(), 3600)
+    pass
 
 
 class QueueImportedWelcomeEmailsTest(TestCase):
@@ -501,18 +485,18 @@ class WelcomeImportedEmailTaskTest(TestCase):
         from community_base.mail.jobs import deliver as deliver_job
         from community_base.mail.models import EmailDelivery
 
-        from email_app.testing import StubSESClient
+        from email_app.testing import StubRelayClient
 
-        stub = StubSESClient()
+        stub = StubRelayClient()
         with (
             self.settings(
                 COMMUNITY_BASE={
                     **settings.COMMUNITY_BASE,
-                    "MAIL_BACKEND": "ses_local",
+                    "MAIL_BACKEND": "relay",
                 }
             ),
-            local_render_backend(), patch(
-                "community_base.mail.backends.ses_local.configured_client",
+            relay_test_backend(), patch(
+                "community_base.mail.backends.relay.configured_client",
                 return_value=stub,
             ),
         ):

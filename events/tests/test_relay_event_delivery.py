@@ -92,7 +92,7 @@ RELAY_SETTINGS = override_settings(
     RELAY_BASE_URL="https://relay.test",
     RELAY_API_KEY="test-relay-key",
     SITE_BASE_URL="https://aishippinglabs.test",
-    SES_TRANSACTIONAL_FROM_EMAIL="AI Shipping Labs <content@aishippinglabs.com>",
+    RELAY_TRANSACTIONAL_FROM_EMAIL="AI Shipping Labs <content@aishippinglabs.com>",
 )
 
 

@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_TIMEOUT_SECONDS = 30.0
 DEFAULT_TEMPLATE_KEY = "campaign-broadcast"
 DEFAULT_CATEGORY = "newsletter"
-DEFAULT_TEMPLATE_VERSION = 1
+DEFAULT_TEMPLATE_VERSION = 2
 
 
 class RelayCampaignError(Exception):
@@ -85,7 +85,7 @@ def build_relay_unsubscribe_headers(unsubscribe_url: str | None) -> dict[str, st
     if not unsubscribe_url:
         return {}
     parts = [f"<{unsubscribe_url}>"]
-    mailto = get_config("SES_UNSUBSCRIBE_EMAIL", "").strip()
+    mailto = get_config("RELAY_UNSUBSCRIBE_EMAIL", "").strip()
     if mailto:
         parts.append(f"<mailto:{mailto}>")
     return {
@@ -94,55 +94,15 @@ def build_relay_unsubscribe_headers(unsubscribe_url: str | None) -> dict[str, st
     }
 
 
-def ensure_relay_campaign_template(
-    base_url: str | None = None,
-    api_key: str | None = None,
-    template_key: str | None = None,
-    session: Any = None,
-) -> bool:
-    """Ensure that the campaign template exists and is published on Relay."""
-    base_url = base_url or get_relay_base_url()
-    api_key = api_key or get_relay_api_key()
-    template_key = template_key or get_relay_template_key()
-
-    if not base_url or not api_key:
-        return False
-
-    client = session or requests.Session()
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",
-    }
-    url = f"{base_url}/api/transactional/templates/{template_key}"
-    draft_payload = {
-        "name": "Campaign Broadcast",
-        "description": "Broadcast campaigns and newsletters to members",
-        "category": DEFAULT_CATEGORY,
-        "subject": "{{ subject }}",
-        "html_body": "{{ html_body }}",
-        "text_body": "{{ text_body }}",
-        "required_context": [],
-    }
-    try:
-        put_resp = client.request("PUT", url, json=draft_payload, headers=headers, timeout=10.0)
-        if put_resp.status_code in (200, 201):
-            pub_url = f"{base_url}/api/transactional/templates/{template_key}/publish"
-            pub_resp = client.request("POST", pub_url, json={}, headers=headers, timeout=10.0)
-            return pub_resp.status_code in (200, 201)
-        return False
-    except Exception as exc:
-        logger.warning("Failed to auto-ensure Relay campaign template: %s", exc)
-        return False
-
-
 def send_campaign_delivery_to_relay(
     recipient_email: str,
     subject: str,
-    html_body: str,
-    text_body: str,
+    body_markdown: str,
     *,
     idempotency_key: str,
     unsubscribe_url: str | None = None,
+    verify_email_url: str | None = None,
+    footer_note: str | None = None,
     metadata: dict[str, Any] | None = None,
     category: str = DEFAULT_CATEGORY,
     template_version: int = DEFAULT_TEMPLATE_VERSION,
@@ -172,8 +132,10 @@ def send_campaign_delivery_to_relay(
         recipient_email, template_key, template_version, idempotency_key, category,
         context={
             "subject": subject,
-            "html_body": html_body,
-            "text_body": text_body,
+            "body_markdown": body_markdown,
+            "footer_note": footer_note or "",
+            "verify_email_url": verify_email_url or "",
+            "unsubscribe_url": unsubscribe_url or "",
         },
         options={
             "headers": headers, "metadata": metadata,
@@ -210,28 +172,6 @@ def send_campaign_delivery_to_relay(
         raise RelayCampaignDeliveryAmbiguous(
             f"Relay network connection failed: {exc}"
         ) from exc
-
-    if response.status_code == 404:
-        # Check if template not found, attempt to ensure and retry once
-        try:
-            err_doc = response.json()
-        except Exception:
-            err_doc = {}
-        if isinstance(err_doc, dict) and err_doc.get("template_key") == "not_found":
-            logger.info("Relay template %s not found; ensuring and retrying", template_key)
-            if ensure_relay_campaign_template(base_url, api_key, template_key, session=http_client):
-                try:
-                    response = http_client.request(
-                        "POST",
-                        send_url,
-                        json=payload,
-                        headers=req_headers,
-                        timeout=request_timeout,
-                    )
-                except requests.exceptions.RequestException as exc:
-                    raise RelayCampaignDeliveryAmbiguous(
-                        f"Relay network connection failed on retry: {exc}"
-                    ) from exc
 
     if response.status_code in (200, 202):
         try:

@@ -129,6 +129,7 @@ class RelayTemplateEditorTest(TestCase):
         )
 
         self.assertEqual(response.content, b"<p>Relay draft</p>")
+        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
         call = configured.return_value.preview.call_args
         self.assertEqual(call.args[0], "coursework.pool_ready")
         self.assertEqual(call.kwargs, {"version": None, "draft": True})

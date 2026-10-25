@@ -1,22 +1,20 @@
 """Playwright E2E test for issue #450: verify-email footer CTA round trip.
 
 The footer renders inside an email client (out of browser scope), so the
-bulk of the coverage lives in Django unit tests
-(``email_app/tests/test_email_service.py::VerifyEmailFooterTest`` and
-``email_app/tests/test_campaigns.py::CampaignVerifyEmailFooterTest``).
+bulk of the coverage lives in
+``email_app/tests/test_campaigns.py::CampaignVerifyEmailFooterTest``.
 
 This single browser scenario verifies the end-to-end round trip a real
-recipient would take: the verify URL embedded in the footer must
+recipient would take: the footer's resolved verify URL must
 actually verify the user when clicked. It would fail if any of:
-- the verify CTA is missing from the rendered email,
+- the verify URL is missing from the resolved Relay context,
 - the URL points at the wrong endpoint,
 - the JWT is malformed or carries the wrong action,
 - the verify endpoint does not flip ``email_verified`` to True.
 
 A1.2 remainder slice 4: the send goes through the durable package path
 (``send_package_mail``) and the footer link is minted by the worker from
-the recipient row, so the captured HTML is exactly what the worker
-rendered.
+the recipient row, so the test captures the resolved Relay context.
 
 Usage:
     uv run pytest playwright_tests/test_verify_email_footer.py -v
@@ -92,7 +90,7 @@ class TestVerifyEmailFooterRoundTrip:
             {"tier_name": "Free"},
         )
         assert call["delivery"].purpose == "welcome"
-        verify_url = call["context"]["verify_url"]
+        verify_url = call["context"]["verify_email_url"]
         assert "/api/verify-email?token=" in verify_url
 
         # The captured URL embeds the production base URL via

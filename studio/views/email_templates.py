@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import Http404, HttpResponse
 from django.shortcuts import redirect, render
 from django.utils.html import escape
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.views.decorators.http import require_POST
 
 from email_app.relay_versions import template_version_for
@@ -227,6 +228,7 @@ def email_template_publish(request, template_name):
 
 @staff_required
 @require_POST
+@xframe_options_sameorigin
 def email_template_preview(request, template_name):
     """Render a saved draft or immutable version through Relay."""
     _require_manageable_template(template_name, allow_read_only=True)

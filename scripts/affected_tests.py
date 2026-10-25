@@ -655,6 +655,14 @@ REPO_WIDE_GUARDS: tuple[RepoWideGuard, ...] = (
         globs=("*.py",),
         labels=("email_app.tests.test_package_mail_context.DirectPackageSendContractTest",),
     ),
+    RepoWideGuard(
+        # The detector walks every production Python source below the repo
+        # root. Its exclusions are inline, so declare the row wide rather than
+        # risk the affected plan drifting narrower than the guard.
+        name="no-direct-ses-send-scan",
+        globs=("*.py",),
+        labels=("email_app.tests.test_no_direct_ses",),
+    ),
 )
 
 

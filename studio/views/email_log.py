@@ -1,4 +1,4 @@
-"""Read-only Studio browser for SES-accepted outbound sends."""
+"""Read-only Studio browser for Relay-accepted outbound sends."""
 
 import datetime
 from urllib.parse import urlencode

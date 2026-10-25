@@ -219,7 +219,7 @@ def _deliver_plan_recap(plan, *, today):
     # A1.2 slice 2: the recap goes through the durable package delivery.
     # The stored context carries scalars only (#1613); the worker resolver
     # mints the plan, feedback and next-action links at delivery time.
-    # ``sent`` means the durable delivery exists — the SES outcome and the
+    # ``sent`` means the durable delivery exists — the Relay outcome and the
     # ``EmailLog`` audit row land from the worker. A suppressed delivery
     # keeps the legacy not-logged error mapping (the preference resolver
     # never suppresses this transactional purpose in practice).

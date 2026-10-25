@@ -459,11 +459,9 @@ def _start_django_server():
     settings.SLACK_ANNOUNCEMENTS_CHANNEL_ID = ""
     settings.SLACK_COMMUNITY_CHANNEL_IDS = []
 
-    # Disable Amazon SES for E2E tests so no real emails are sent (issue #509).
-    # Belt-and-suspenders: blanking the AWS credentials means any future code path
-    # that slips past the gate would still fail with InvalidClientTokenId rather
-    # than reach a real account.
-    settings.SES_ENABLED = False
+    # Keep browser tests isolated from AWS. Mail uses the offline Relay and
+    # local-render stubs installed below; blank credentials also prevent any
+    # unrelated AWS client from reaching a real account.
     settings.AWS_ACCESS_KEY_ID = ""
     settings.AWS_SECRET_ACCESS_KEY = ""
 
@@ -477,16 +475,10 @@ def _start_django_server():
 
     install_test_relay_transactional_transport()
 
-    # Silence the SES-disabled-in-prod system check (email_app.E001) during
-    # Playwright runs — we deliberately disable SES here for E2E (see above),
-    # and pytest-django defaults DEBUG=False, so without this the runserver
-    # thread would raise SystemCheckError at startup and kill every E2E test.
-    settings.SILENCED_SYSTEM_CHECKS = ["email_app.E001"]
-
     # A1.2: package mail defers to the durable worker, so with the default
     # django_q backend a deferred send never drains in a run that only starts
-    # the web server. Run jobs inline and install the same SES stub the unit
-    # runner uses, so verification and reset mail reach EmailLog.
+    # the web server. Run jobs inline and install the same offline mail stubs
+    # the unit runner uses, so verification and reset mail reach EmailLog.
     settings.COMMUNITY_BASE = {
         **settings.COMMUNITY_BASE,
         "JOBS_BACKEND": "sync",

@@ -2185,6 +2185,7 @@ class RepoWideGuardTest(SimpleTestCase):
             "async-task-name-scan": ("events/views/detail.py", "playwright_tests/test_probe_1755.py"),
             "emailservice-inventory-scan": ("events/views/detail.py", "events/migrations/0042_probe.py"),
             "package-mail-boundary-scan": ("events/views/detail.py", "tests/test_probe_1755.py"),
+            "no-direct-ses-send-scan": ("events/views/detail.py", "tests/test_probe_1755.py"),
         }
         self.assertEqual(sorted(samples), sorted(guard.name for guard in REPO_WIDE_GUARDS))
         for guard in REPO_WIDE_GUARDS:

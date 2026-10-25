@@ -5,7 +5,6 @@ import time
 import uuid
 from datetime import timedelta
 
-from botocore.exceptions import ClientError
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
@@ -470,12 +469,12 @@ def _finalize_delivery_sent(delivery_id, claim_token, message_id):
 
 
 def _transport_failure_state(exc):
-    """Only a structured SES ClientError proves a definitive rejection."""
-    if isinstance(exc.__cause__, ClientError):
-        return CampaignDelivery.State.FAILED, 'SES definitively rejected the request.'
+    """Only a structured Relay rejection proves a definitive failure."""
+    if isinstance(exc.__cause__, RelayCampaignDeliveryRejected):
+        return CampaignDelivery.State.FAILED, 'Relay definitively rejected the request.'
     return (
         CampaignDelivery.State.AMBIGUOUS,
-        'SES transport outcome was indeterminate; automatic retry suppressed.',
+        'Relay transport outcome was indeterminate; automatic retry suppressed.',
     )
 
 
@@ -537,7 +536,7 @@ def send_campaign_batch(
         already_sent_count = 0
         if user_ids and campaign.status != 'needs_attention':
             # Rolling-deploy/direct-call compatibility: establish the durable
-            # ledger before crossing SES. Migration-quarantined legacy sends
+            # ledger before crossing Relay. Migration-quarantined legacy sends
             # are refused above by their needs_attention state.
             User = get_user_model()
             with transaction.atomic():

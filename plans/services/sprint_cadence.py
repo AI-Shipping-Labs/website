@@ -149,7 +149,7 @@ def _send_cadence_email(log, *, template_name, context, plan):
     the site-level ``_email_allowed`` gate below already skips the same
     recipients, so this path only fires if the package preference resolver
     opts the recipient out. Send-time exceptions (guard refusal, DB) are
-    logged and reported as the log's ``last_error``; SES transport trouble
+    logged and reported as the log's ``last_error``; Relay transport trouble
     is the worker's concern and never fails the fan-out.
     """
     if not _email_allowed(log.member):

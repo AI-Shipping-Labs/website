@@ -110,7 +110,7 @@
           <td class="py-3 pl-4">
             {% if row.delivery_state == "failed" or row.delivery_state == "ambiguous" %}
             <div class="flex flex-wrap gap-2">
-              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}"{% if row.delivery_state == "ambiguous" %} onsubmit="return confirm('SES may already have accepted this email. Retrying can send a duplicate. Retry anyway?');"{% endif %}>
+              <form method="post" action="{% url 'studio_campaign_delivery_resolve' campaign.pk row.delivery_id %}"{% if row.delivery_state == "ambiguous" %} onsubmit="return confirm('Relay may already have accepted this email. Retrying can send a duplicate. Retry anyway?');"{% endif %}>
                 {% csrf_token %}
                 <input type="hidden" name="action" value="retry">
                 <button type="submit" class="{% studio_action_class 'async' %}" data-testid="campaign-delivery-retry">Retry delivery</button>

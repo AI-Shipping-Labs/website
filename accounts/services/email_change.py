@@ -223,7 +223,7 @@ def request_email_change(user, raw_new_email, current_password=None, *, send=Tru
         try:
             _send_confirm_email(user, request_obj)
         except Exception:
-            # Only local refusals raise now (A1.2): SES transport outcomes
+            # Only local refusals raise now (A1.2): Relay transport outcomes
             # land on the durable delivery from the worker, leaving the
             # request valid while that delivery retries.
             cache.delete(f"email-change-request:{user.pk}:{new_email}")

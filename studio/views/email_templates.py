@@ -493,7 +493,7 @@ def email_template_send_test(request, template_name):
     unsaved draft (the iframe already does that).
 
     The send goes through the durable package path (A1.2 remainder slice
-    4): ``sent`` means the durable delivery exists and the SES outcome
+    4): ``sent`` means the durable delivery exists and the Relay outcome
     lands from the worker. Placeholder links are stripped (#1613) and the
     operator's own greeting scalar travels in the durable context.
     """
@@ -543,7 +543,7 @@ def email_template_send_test(request, template_name):
             'Test not sent: your account is marked unsubscribed.',
         )
     else:
-        # Honest convention: the delivery exists; the SES outcome and
+        # Honest convention: the delivery exists; the Relay outcome and
         # the ``EmailLog`` audit row land from the worker.
         messages.success(
             request,

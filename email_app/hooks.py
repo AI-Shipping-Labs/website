@@ -1,6 +1,6 @@
 """Transitional site hooks for community_base.mail (plan issue A1.2).
 
-The package owns the durable delivery, the worker and the SES transport.
+The package owns the durable delivery, the worker and the Relay transport.
 These hooks keep the site behavior the EmailService path had: the EmailLog
 audit row, EmailTemplateOverride precedence, the newsletter opt-out, the
 promotional one-click unsubscribe URL and the issue #450 verify-email

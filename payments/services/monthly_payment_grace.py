@@ -745,7 +745,7 @@ def _claim_delivery(delivery_id, now):
             # no re-claim, no backoff scheduling, attempt_count frozen.
             return None
         if delivery.transport_started_at:
-            # Once transport starts, automatic reclaim would permit two SES
+            # Once transport starts, automatic reclaim would permit two Relay
             # sends when the original worker completes late.  A caught
             # transport failure clears this marker below and remains
             # retryable.  An interrupted/unknown transport is instead frozen
@@ -784,7 +784,7 @@ def _claim_delivery(delivery_id, now):
 
 
 def _begin_delivery_transport(delivery_id, token, now):
-    """Fence stale workers immediately before the irreversible SES call."""
+    """Fence stale workers immediately before the irreversible Relay send."""
     with transaction.atomic():
         delivery = Delivery.objects.select_for_update(of=("self",)).select_related(
             "grace__user__membership__tier", "grace__base_tier_at_start",
@@ -872,7 +872,7 @@ def _send_delivery(delivery):
     ``State.SUPPRESSED`` result to the terminal non-retry
     ``STATUS_SUPPRESSED`` and links the row so operators can trace the
     package ``reason_code``. ``sent`` means the durable delivery exists,
-    and the SES outcome plus the audit ``EmailLog`` row land from the
+    and the Relay outcome plus the audit ``EmailLog`` row land from the
     worker.
     """
     template_name, context = _delivery_template(delivery)
@@ -926,7 +926,7 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
                 and email_delivery.state == EmailDelivery.State.SUPPRESSED
             ):
                 # Issue #1653: suppression is discovered synchronously before
-                # any SES call, so there is no unknown transport outcome to
+                # any Relay send, so there is no unknown transport outcome to
                 # protect — the fence is released and the row goes terminal:
                 # never retried, never re-claimed, ``sent_at`` stays null.
                 reason = email_delivery.reason_code or "preference_suppressed"
@@ -934,7 +934,7 @@ def process_due_deliveries(*, grace_ids=None, initial_only=False, now=None):
                 current.transport_started_at = None
                 current.email_delivery = email_delivery
                 current.last_error = (
-                    f"Suppressed by mail preference ({reason}): no SES send "
+                    f"Suppressed by mail preference ({reason}): no Relay send "
                     "was attempted and the delivery is not retried."
                 )
             else:

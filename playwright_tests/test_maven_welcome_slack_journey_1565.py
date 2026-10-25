@@ -46,7 +46,7 @@ def _enrol(email):
     # so this patch is a no-op guard against an accidental real API call
     # rather than a fixture for a "not in the workspace" code path. The
     # welcome mail is queued as a durable delivery and the session's sync
-    # jobs backend drains it against the installed SES stub (A1.2).
+    # jobs backend drains it against the installed offline mail stub (A1.2).
     with patch(
         "community.services.staff_notifications.notify_maven_enrollment",
         return_value=True,

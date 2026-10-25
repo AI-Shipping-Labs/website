@@ -1247,7 +1247,7 @@ class SuppressedDeliveryTest(GraceBase):
         self.assertEqual(delivery.attempt_count, 1)
         self.assertEqual(delivery.email_delivery_id, suppressed.pk)
         self.assertIn("unsubscribed_at_send", delivery.last_error)
-        self.assertIn("no SES send was attempted", delivery.last_error)
+        self.assertIn("no Relay send was attempted", delivery.last_error)
         self.assertIn("not retried", delivery.last_error)
 
     def test_suppressed_delivery_is_never_reclaimed_or_resent(self):

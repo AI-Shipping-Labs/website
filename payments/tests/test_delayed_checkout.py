@@ -177,7 +177,8 @@ class DelayedCheckoutTest(TierSetupMixin, TestCase):
             deliveries.get().idempotency_key,
             "checkout-payment-failed:cs_delayed",
         )
-        deliver_pending_mail()
+        with local_render_backend():
+            deliver_pending_mail()
         logs = EmailLog.objects.filter(email_type="checkout_payment_failed")
         self.assertEqual(logs.count(), 1)
         self.assertEqual(

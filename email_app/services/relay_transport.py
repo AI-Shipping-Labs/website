@@ -33,8 +33,22 @@ def send_rendered_relay(
             recipient_email=to_email, subject=subject, html_body=html_body,
             text_body=text_body, idempotency_key=idempotency_key or f"relay-{uuid4().hex}",
             unsubscribe_url=unsubscribe_url, metadata=metadata,
+            cc=normalize_recipients(cc), bcc=normalize_recipients(bcc),
         )
     except RelayCampaignDeliveryRejected as exc:
         raise EmailServiceError("Relay rejected the email") from exc
     except RelayCampaignDeliveryAmbiguous as exc:
         raise EmailTransportOutcomeUnknown("Relay send outcome is unknown") from exc
+
+
+def normalize_recipients(recipients):
+    """Return non-empty recipient addresses in Relay's list form."""
+    if not recipients:
+        return []
+    if isinstance(recipients, str):
+        recipients = [recipients]
+    addresses = []
+    for address in recipients:
+        if address and address.strip():
+            addresses.append(address.strip())
+    return addresses

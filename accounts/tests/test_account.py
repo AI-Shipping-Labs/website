@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings, tag
 from django.utils import timezone
+from freezegun import freeze_time
 
 from accounts.models import User
 from accounts.models.user import SIGNUP_SOURCE_NEWSLETTER
@@ -1337,6 +1338,7 @@ class TimezonePreferenceAPITest(TestCase):
 
 
 class AccountPageTimezonePreferenceDisplayTest(TestCase):
+    @freeze_time("2026-06-01T12:00:00Z")
     def test_account_timezone_renders_as_select_not_datalist(self):
         user = User.objects.create_user(email="tz-display@example.com")
         self.client.force_login(user)

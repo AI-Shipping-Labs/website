@@ -74,7 +74,7 @@ def test_staff_edits_previews_and_test_sends_maven_welcome(
     page.wait_for_load_state('domcontentloaded')
     row = page.locator('tr[data-template-name="maven_welcome"]')
     with patch.object(
-        EmailService, '_send_relay', return_value='playwright-template-ses',
+        EmailService, '_send_relay', return_value='playwright-template-relay',
     ):
         row.get_by_role('button', name='Send test to me').click()
         page.wait_for_load_state('domcontentloaded')
@@ -124,7 +124,7 @@ def test_staff_previews_and_test_sends_markdown_campaign(django_server, browser)
 
     page.locator('#test-recipients').fill(staff.email)
     with patch.object(
-        EmailService, '_send_relay', return_value='playwright-campaign-ses',
+        EmailService, '_send_relay', return_value='playwright-campaign-relay',
     ):
         page.get_by_role('button', name='Send Test').click()
         page.wait_for_load_state('domcontentloaded')

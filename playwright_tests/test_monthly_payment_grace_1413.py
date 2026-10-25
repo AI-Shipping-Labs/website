@@ -23,6 +23,7 @@ from django.test import override_settings  # noqa: E402
 from django.utils import timezone  # noqa: E402
 from playwright.sync_api import expect  # noqa: E402
 
+from email_app.testing import local_render_backend
 from tests.fixtures import create_user_with_membership
 
 pytestmark = pytest.mark.local_only
@@ -136,12 +137,15 @@ class TestMonthlyPaymentGrace1413:
         _create_staff_user("admin@test.com")
         _reset()
         user = _member()
-        with override_settings(
-            SES_ENABLED=False,
-            DEBUG=False,
-            PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",
-            STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
-        ), patch.object(service, "_audit"):
+        with (
+            local_render_backend(),
+            override_settings(
+                DEBUG=False,
+                PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",
+                STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
+            ),
+            patch.object(service, "_audit"),
+        ):
             grace, _ = service.start_grace_from_failure(
                 invoice=_invoice(user),
                 subscription=_subscription(user),
@@ -168,7 +172,7 @@ class TestMonthlyPaymentGrace1413:
         _create_staff_user("admin@test.com")
         _reset()
         user = _member()
-        with override_settings(SES_ENABLED=False, DEBUG=False), patch.object(
+        with override_settings(DEBUG=False), patch.object(
             service, "_audit",
         ):
             first, _ = service.start_grace_from_failure(
@@ -232,7 +236,6 @@ class TestMonthlyPaymentGrace1413:
         )
         with override_settings(
             STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
-            SES_ENABLED=False,
             DEBUG=False,
         ), patch.object(
             service, "_revalidate",
@@ -267,7 +270,6 @@ class TestMonthlyPaymentGrace1413:
         )
         with override_settings(
             STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
-            SES_ENABLED=False,
             DEBUG=False,
         ), patch.object(
             service, "_revalidate",
@@ -316,7 +318,6 @@ class TestMonthlyPaymentGrace1413:
         )
         with override_settings(
             STRIPE_MONTHLY_PAYMENT_GRACE_MODE="enforce",
-            SES_ENABLED=False,
             DEBUG=False,
         ), patch.object(
             service, "_revalidate",
@@ -409,7 +410,7 @@ class TestMonthlyPaymentGrace1413:
             stripe_status="past_due", latest_invoice_id="in_grace_1413",
             classification="monthly_payment_grace_active",
         )
-        with override_settings(SES_ENABLED=False, DEBUG=False), patch.object(
+        with override_settings(DEBUG=False), patch.object(
             service, "_retrieve_subscription",
             return_value=_subscription(user),
         ), patch.object(

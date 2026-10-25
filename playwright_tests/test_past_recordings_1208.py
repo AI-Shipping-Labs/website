@@ -1,6 +1,7 @@
 import datetime
 import os
 import re
+from urllib.parse import urlparse
 
 import pytest
 from django.utils import timezone
@@ -218,15 +219,31 @@ def test_past_recordings_list_ctas_gating_and_s3_safety(django_server, browser):
         assert "X-Amz-Signature" not in html
         s3_card = _card(page, "S3 Only Workshop Recording")
         expect(s3_card).to_be_visible()
+        expected_recording_path = (
+            f"/events/{s3_event.id}/s3-only-workshop-recording/recording.mp4"
+        )
+        page.route(
+            re.compile(
+                rf"^{re.escape(django_server + expected_recording_path)}(?:\?.*)?$"
+            ),
+            lambda route: route.abort(),
+        )
         s3_card.locator('[data-testid="past-card-recording-cta"]').click()
         expect(page).to_have_url(
             re.compile(r".*/workshops/s3-only-workshop-recording/video$")
         )
+        recording_source = page.locator("#video-player-self-hosted source")
+        expect(recording_source).to_have_attribute("src", re.compile(r"^http://"))
+        source_url = recording_source.get_attribute("src") or ""
+        parsed_source = urlparse(source_url)
+        parsed_server = urlparse(django_server)
+        assert parsed_source.hostname in {"localhost", "127.0.0.1", "::1"}
+        assert parsed_source.scheme == parsed_server.scheme
+        assert parsed_source.netloc == parsed_server.netloc
+        assert parsed_source.path == expected_recording_path
+        assert parsed_source.query == ""
+        assert parsed_source.fragment == ""
         video_html = page.content()
-        assert (
-            f"/events/{s3_event.id}/s3-only-workshop-recording/recording.mp4"
-            in video_html
-        )
         assert "amazonaws.com" not in video_html
         assert "X-Amz-Signature" not in video_html
 

@@ -251,7 +251,7 @@ def _send_email_channel(email_template, content_type, content):
     stored context stays empty (issue #1613) and the worker rebuilds the
     template context from the delivery's ``content.workshop`` relation.
     A suppressed delivery (promotional opt-out) is not counted, mirroring
-    the old ``None`` return; SES transport outcomes land on the delivery
+    the old ``None`` return; Relay transport outcomes land on the delivery
     from the worker.
     """
     sent = 0
@@ -819,7 +819,7 @@ class NotificationService:
         empty (issue #1613): the worker rebuilds the recipient-local time,
         the join link and the timezone line from the saved event at
         delivery time. A refused send raises only into this function's
-        logging — SES transport trouble retries from the worker.
+        logging — Relay transport trouble retries from the worker.
 
         Args:
             event: Event model instance.
@@ -902,7 +902,7 @@ class NotificationService:
         provider acceptance. Local refusals (unknown purpose, missing
         relation) are swallowed and logged via ``logger.exception`` so
         they do not unwind the bell row and do not propagate to the
-        caller (who has already saved ``Plan.shared_at``); SES transport
+        caller (who has already saved ``Plan.shared_at``); Relay transport
         trouble retries from the worker.
 
         Args:

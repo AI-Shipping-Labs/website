@@ -976,7 +976,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         from email_app.services.email_service import EmailServiceError
 
         mock_ses.side_effect = [
-            EmailServiceError('SES error'),
+            EmailServiceError('Relay error'),
             'ses-msg-002',
         ]
 

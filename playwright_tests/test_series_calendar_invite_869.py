@@ -179,7 +179,7 @@ class TestPartialGatedSeriesDashboardEnrollment:
     Confirms the register entry point enrolls the member in only the open
     sessions (the Premium-only session is not added to their dashboard
     upcoming-events list). The emailed upsell note itself is asserted in
-    ``events/tests/test_series_invite.py`` (SES is mocked there).
+    ``events/tests/test_series_invite.py`` (the mail transport is stubbed there).
     """
 
     @freeze_time("2026-08-11T12:00:00Z")

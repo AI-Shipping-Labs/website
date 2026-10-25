@@ -253,5 +253,5 @@ class TestStudioMemberOps1194:
         )
         page.on("dialog", lambda dialog: dialog.accept())
         page.get_by_test_id("user-alias-remove").click()
-        assert page.get_by_test_id("user-aliases-empty").is_visible()
+        expect(page.get_by_test_id("user-aliases-empty")).to_be_visible()
         _capture(page, "campaign-and-actions")

@@ -50,7 +50,7 @@ def send_imported_welcome_email(user_id):
     if delivery.state == EmailDelivery.State.SUPPRESSED:
         return {"status": "skipped", "reason": "unsubscribed", "user_id": user_id}
     # Honest convention: ``sent`` means the durable delivery exists; the
-    # SES outcome and the ``EmailLog`` audit row land from the worker. The
+    # Relay outcome and the ``EmailLog`` audit row land from the worker. The
     # ``email_log_id`` key carries the delivery id, same as the recap
     # summary mapping.
     return {

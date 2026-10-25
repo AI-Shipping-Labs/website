@@ -260,7 +260,7 @@ def test_staff_retries_failed_partner_intro_without_duplicate_sent(
         sprint=target,
         member=alice,
         status=PARTNER_INTRO_EMAIL_STATUS_FAILED,
-        last_error="SES timeout",
+        last_error="Relay timeout",
     )
     SprintPartnerIntroEmailLog.objects.create(
         sprint=target,

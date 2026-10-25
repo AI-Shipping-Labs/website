@@ -26,7 +26,7 @@ Studio and Stripe dashboard links are minted at delivery time by the
 worker resolver (``email_app.hooks.resolve_auth_mail_context``, issue
 #1613). The staff mailbox keeps its surrogate semantics: no ``User`` row
 is created, no ``EmailLog`` audit row is written, and ``sent`` means the
-durable delivery exists — the SES outcome and the member welcome's audit
+durable delivery exists — the Relay outcome and the member welcome's audit
 row land from the worker.
 """
 

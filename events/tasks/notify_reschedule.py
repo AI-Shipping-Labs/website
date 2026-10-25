@@ -15,7 +15,7 @@ Two-stage fan-out (issue #670):
    per-user send. Re-loads the recipient, formats both old and new
    start times in the recipient's timezone via the shared
    ``format_user_datetime`` helper, renders the ``event_rescheduled``
-   template, sends a raw SES message with a fresh ``.ics`` attachment
+   template, sends through Relay with a fresh ``.ics`` attachment
    carrying ``METHOD:REQUEST`` and a bumped SEQUENCE, and writes one
    ``EmailLog(email_type='event_rescheduled')`` row.
 

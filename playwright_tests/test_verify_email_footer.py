@@ -48,8 +48,8 @@ pytestmark = pytest.mark.local_only
 def _capture_send_html(user, template_name, context):
     """Send through the durable package path; return the rendered HTML.
 
-    The Playwright server drains mail jobs inline with the session SES
-    stub; capturing with a fresh local stub means we get the exact bytes
+    The Playwright server drains mail jobs inline with an offline transport;
+    capturing with a fresh local-render stub gives us the exact bytes
     the worker rendered for the recipient without any real API call.
     """
     from email_app.package_mail import send_package_mail
@@ -93,7 +93,7 @@ class TestVerifyEmailFooterRoundTrip:
         self, django_server, page,
     ):
         """Given an unverified Free user.
-        1. Trigger a welcome email; capture rendered HTML (SES mocked).
+        1. Trigger a welcome email; capture rendered HTML offline.
         2. Extract the verify URL from the footer CTA.
         3. Open the URL anonymously in the browser.
         Then: 200 + verification-success message.

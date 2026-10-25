@@ -1,9 +1,11 @@
 """No production module may bypass Relay for SES transport."""
 
 from pathlib import Path
+from unittest.mock import patch
 
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, override_settings
 
+from email_app.testing import StubSESClient, local_render_backend
 from email_app.tests.ses_send_guard import source_violations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,3 +65,49 @@ class NoDirectSesSendPathTest(SimpleTestCase):
         ):
             with self.subTest(source=source):
                 self.assertTrue(source_violations(source, "example.py"))
+
+
+class LocalRenderBackendSafetyTest(SimpleTestCase):
+    @override_settings(TESTING=False)
+    def test_rejects_use_outside_tests(self):
+        with self.assertRaisesMessage(
+            RuntimeError,
+            "local_render_backend requires TESTING=True",
+        ):
+            with local_render_backend():
+                pass
+
+    def test_replaces_unpatched_client_factory_with_offline_stub(self):
+        calls = []
+
+        def network_client_factory():
+            calls.append(True)
+            raise AssertionError("network client factory must not run")
+
+        with (
+            patch(
+                "community_base.mail.backends.ses_local.configured_client",
+                new=network_client_factory,
+            ),
+            local_render_backend(),
+        ):
+            from community_base.mail.backends import get_backend
+
+            self.assertIsInstance(get_backend().configured_client(), StubSESClient)
+
+        self.assertEqual(calls, [])
+
+    def test_preserves_existing_outer_stub(self):
+        outer_stub = StubSESClient("outer-stub")
+        with (
+            patch(
+                "community_base.mail.backends.ses_local.configured_client",
+                return_value=outer_stub,
+            ) as configured_client,
+            local_render_backend(),
+        ):
+            from community_base.mail.backends import get_backend
+
+            self.assertIs(get_backend().configured_client(), outer_stub)
+
+        configured_client.assert_called_once_with()

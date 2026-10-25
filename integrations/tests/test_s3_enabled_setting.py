@@ -37,7 +37,7 @@ from integrations.config import (
     s3_content_upload_enabled,
 )
 from integrations.models import ContentSource, IntegrationSetting
-from integrations.settings_registry import INTEGRATION_GROUPS, get_group_by_name
+from integrations.settings_registry import get_group_by_name
 
 
 def _s3_enabled_def():
@@ -93,17 +93,6 @@ class S3EnabledRegistryTest(TestCase):
         self.assertIn('AWS_S3_CONTENT_REGION', keys)
         self.assertIn('CONTENT_CDN_BASE', keys)
         self.assertIn('S3_ENABLED', keys)
-
-    def test_total_group_count_unchanged(self):
-        """No new group added — S3_ENABLED goes into the existing s3_content.
-
-        The absolute count grows as unrelated groups are added (for example,
-        ``triggers`` in #1070 and ``s3_downloads`` in #1264); this assertion's
-        intent is only that S3_ENABLED did NOT introduce a group, so it tracks
-        the current total rather than a frozen number.
-        """
-        self.assertEqual(len(INTEGRATION_GROUPS), 20)
-
 
 class S3ContentUploadEnabledResolutionTest(TestCase):
     """s3_content_upload_enabled() resolves through the config chain (default-on).

@@ -577,7 +577,7 @@ ZOOM_AUTO_RECORDING = declare(
     docs_url="_docs/integrations/zoom.md#zoom_auto_recording",
 )
 
-# --- Email (SES) (ses) ---
+# --- Email delivery, SES event ingest, and shared S3 credentials ---
 AWS_ACCESS_KEY_ID = declare(
     key="AWS_ACCESS_KEY_ID",
     group="s3_content",

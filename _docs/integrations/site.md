@@ -240,16 +240,14 @@ durable request without creating duplicate accepted mail.
 Where to find it: This is operator intent. Use the shared mailbox responsible
 for privacy requests rather than an individual address.
 
-Prereqs: Amazon SES transactional delivery must be configured and enabled.
-The sender domain must be verified; the recipient does not need separate SES
-verification once the AWS account is out of sandbox.
+Prereqs: Relay transactional delivery must be configured and enabled. The
+sender must be registered in Relay; Relay owns provider verification.
 
 Rotation: Safe to change at any time. New requests and failed-delivery retries
 use the current validated value; an already accepted request is not resent.
 
-Test vs live: Use a non-production team mailbox when exercising real SES in a
-non-production environment. Local and automated tests keep SES disabled or
-mock the send path.
+Test vs live: Use a non-production team mailbox when exercising Relay in a
+non-production environment. Local and automated tests use offline transports.
 
 ## PAYMENT_NOTIFICATION_EMAIL
 
@@ -317,7 +315,7 @@ email is skipped. The Slack post still fires if
 Invalid value: Studio rejects a malformed email address before saving any
 setting in the Site group. Runtime delivery also validates values supplied by
 the environment, imports, or legacy rows; an invalid value is omitted from the
-BCC and structured heads-up so SES can still deliver the member welcome. The
+BCC and structured heads-up so Relay can still deliver the member welcome. The
 operator log names the setting key but never prints the rejected value.
 
 Reply rule: Do not use this setting as Reply-To and do not visible-CC

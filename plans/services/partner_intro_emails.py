@@ -127,8 +127,8 @@ def send_partner_intro_emails(*, sprint, actor, dry_run=False):
         try:
             # A1.2 slice 2: the intro goes through the durable package
             # delivery with the sprint attached as the worker's relation.
-            # ``sent`` means the durable delivery exists — the SES outcome
-            # and the ``EmailLog`` audit row land from the worker, so SES
+            # ``sent`` means the durable delivery exists — the Relay outcome
+            # and the ``EmailLog`` audit row land from the worker, so Relay
             # transport trouble no longer fails the fan-out. A suppressed
             # delivery keeps the legacy not-logged error mapping.
             package_delivery = send_package_mail(

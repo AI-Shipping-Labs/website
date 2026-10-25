@@ -2187,7 +2187,7 @@
     },
     "/api/campaigns/{campaign_id}/recipients/{delivery_id}/assume-sent": {
       "post": {
-        "description": "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without calling SES or fabricating an ``EmailLog``. Matches Studio assume-sent semantics; a stale action returns 409 ``delivery_conflict``.",
+        "description": "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without calling Relay or fabricating an ``EmailLog``. Matches Studio assume-sent semantics; a stale action returns 409 ``delivery_conflict``.",
         "parameters": [
           {
             "in": "path",
@@ -6226,7 +6226,7 @@
     },
     "/api/email-log": {
       "get": {
-        "description": "Newest-first SES-accepted sends. Disposition is the exclusive strongest of sent, delivered, opened, clicked, bounced, and complained. Email bodies and raw provider payloads are omitted.",
+        "description": "Newest-first Relay-accepted sends. Disposition is the exclusive strongest of sent, delivered, opened, clicked, bounced, and complained. Email bodies and raw provider payloads are omitted.",
         "parameters": [
           {
             "in": "query",

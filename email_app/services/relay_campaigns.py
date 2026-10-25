@@ -17,6 +17,7 @@ import requests
 from django.conf import settings
 
 from email_app.services.email_classification import get_sender_for_email_type
+from email_app.services.relay_payload import build_campaign_payload
 from integrations.config import get_config
 
 logger = logging.getLogger(__name__)
@@ -148,6 +149,8 @@ def send_campaign_delivery_to_relay(
     dry_run: bool | None = None,
     session: Any = None,
     timeout: float | None = None,
+    cc: list[str] | None = None,
+    bcc: list[str] | None = None,
 ) -> str:
     """Send one rendered campaign email via Relay transactional send API.
 
@@ -165,27 +168,19 @@ def send_campaign_delivery_to_relay(
     if dry_run is None:
         dry_run = bool(get_config("RELAY_TRANSACTIONAL_DRY_RUN", False))
 
-    payload: dict[str, Any] = {
-        "email": recipient_email.strip(),
-        "template_key": template_key,
-        "template_version": template_version,
-        "idempotency_key": idempotency_key,
-        "context": {
+    payload = build_campaign_payload(
+        recipient_email, template_key, template_version, idempotency_key, category,
+        context={
             "subject": subject,
             "html_body": html_body,
             "text_body": text_body,
         },
-        "category": category,
-    }
-    if headers:
-        payload["headers"] = headers
-    if metadata:
-        payload["metadata"] = metadata
-    from_email = get_relay_from_email()
-    if from_email:
-        payload["from_email"] = from_email
-    if dry_run:
-        payload["dry_run"] = True
+        options={
+            "headers": headers, "metadata": metadata,
+            "cc": cc, "bcc": bcc, "from_email": get_relay_from_email(),
+            "dry_run": dry_run,
+        },
+    )
 
     http_client = session or requests.Session()
     req_headers = {

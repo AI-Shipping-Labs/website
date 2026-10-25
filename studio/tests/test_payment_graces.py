@@ -147,7 +147,7 @@ class PaymentGraceStudioTest(TestCase):
             recipient=self.member.email, status=Delivery.STATUS_SUPPRESSED,
             last_error=(
                 "Suppressed by mail preference (unsubscribed_at_send): "
-                "no SES send was attempted and the delivery is not retried."
+                "no Relay send was attempted and the delivery is not retried."
             ),
         )
         Delivery.objects.create(

@@ -307,7 +307,7 @@ access-loss, downgrade, or Free-account language. All member messages use only
 the stable validated `STRIPE_CUSTOMER_PORTAL_URL`; a missing/invalid URL is
 omitted with reply-for-help copy and a staff-visible error. Delivery claims
 expire after 15 minutes only before transport starts. Immediately before the
-irreversible SES call, a transactionally fenced `transport_started_at` marker
+irreversible Relay send, a transactionally fenced `transport_started_at` marker
 prevents a reclaimed/late worker from also sending. A caught transport failure
 clears that marker and uses bounded exponential backoff. If a worker disappears
 after transport begins and the result is unknowable, automatic resend is

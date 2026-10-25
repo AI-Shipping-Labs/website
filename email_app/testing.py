@@ -34,10 +34,30 @@ def local_render_backend():
     from django.conf import settings  # noqa: PLC0415
     from django.test import override_settings  # noqa: PLC0415
 
-    with override_settings(
-        COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+    if not settings.TESTING:
+        raise RuntimeError("local_render_backend requires TESTING=True")
+
+    with (
+        override_settings(
+            COMMUNITY_BASE={**settings.COMMUNITY_BASE, "MAIL_BACKEND": "ses_local"},
+        ),
+        _offline_ses_client_patch(),
     ):
         yield
+
+
+def _offline_ses_client_patch():
+    from unittest.mock import Mock, patch  # noqa: PLC0415
+
+    from community_base.mail.backends import ses_local  # noqa: PLC0415
+
+    if isinstance(ses_local.configured_client, Mock):
+        return contextlib.nullcontext()
+    return patch.object(
+        ses_local,
+        "configured_client",
+        return_value=StubSESClient(),
+    )
 
 
 class StubSESClient:

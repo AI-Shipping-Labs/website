@@ -4,7 +4,6 @@ import uuid
 from datetime import timedelta
 from unittest.mock import patch
 
-from botocore.exceptions import ClientError
 from django.contrib.auth import get_user_model
 from django.test import TestCase, tag
 from django.utils import timezone
@@ -12,6 +11,7 @@ from django_q.models import Schedule
 
 from email_app.models import CampaignDelivery, EmailCampaign, EmailLog
 from email_app.services.email_service import UNSUBSCRIBED_AT_SEND, EmailServiceError
+from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
 from email_app.tasks.campaign_delivery_recovery import (
     BATCH_FUNC,
     recover_campaign_deliveries,
@@ -371,11 +371,8 @@ class CampaignAttemptCapAndRecoveryTest(CampaignDelivery1506Base):
 
         def reject(_prepared):
             try:
-                raise ClientError(
-                    {"Error": {"Code": "MessageRejected", "Message": "rejected"}},
-                    "SendEmail",
-                )
-            except ClientError as exc:
+                raise RelayCampaignDeliveryRejected("rejected")
+            except RelayCampaignDeliveryRejected as exc:
                 raise EmailServiceError("send failed") from exc
 
         with patch(

@@ -49,7 +49,7 @@ INVITE_EMAIL_SENT = "email_sent"
 INVITE_EMAIL_FAILED = "email_failed"
 # The caller asked us not to send (it delivers the join link itself).
 INVITE_EMAIL_SUPPRESSED = "email_suppressed"
-# Delivery policy declined the send before it reached SES. Not a failure:
+# Delivery policy declined the send before it reached Relay. Not a failure:
 # nothing broke, and retrying would not change the decision.
 INVITE_EMAIL_SKIPPED = "email_skipped"
 
@@ -792,7 +792,7 @@ class SlackCommunityService(CommunityService):
         Never raises into ``invite()`` / ``reactivate()`` / the checkout
         hook: a local refusal (unknown purpose, invalid recipient,
         idempotency conflict) is logged and reported as ``email_failed``;
-        SES transport trouble retries from the durable worker and no longer
+        Relay transport trouble retries from the durable worker and no longer
         surfaces here.
 
         Args:
@@ -801,7 +801,7 @@ class SlackCommunityService(CommunityService):
         Returns:
             tuple[str, str]: ``INVITE_EMAIL_SENT`` when the durable
             delivery was queued — ``sent`` means the delivery exists, with
-            the SES outcome and the ``EmailLog`` audit row landing from the
+            the Relay outcome and the ``EmailLog`` audit row landing from the
             worker — ``INVITE_EMAIL_FAILED`` with the exception class when
             the send was refused locally, or ``INVITE_EMAIL_SKIPPED`` when
             the preference resolver suppressed the delivery. A policy skip

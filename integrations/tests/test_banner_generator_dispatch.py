@@ -12,7 +12,7 @@ from unittest.mock import patch
 from botocore.exceptions import ClientError
 from community_base.config.models import Setting
 from community_base.config.service import set as package_set
-from django.test import TestCase
+from django.test import TestCase, override_settings
 
 from content.access import LEVEL_BASIC, LEVEL_MAIN, LEVEL_OPEN, LEVEL_PREMIUM
 from content.models import Article, Course, Download, Project, Workshop
@@ -52,10 +52,18 @@ class _BannerGeneratorCacheCleanupMixin:
         env_patch = patch.dict(os.environ, {
             'BANNER_GENERATOR_FUNCTION_URL': '',
             'BANNER_GENERATOR_AUTH_TOKEN': '',
+            'AWS_ACCESS_KEY_ID': '',
+            'AWS_SECRET_ACCESS_KEY': '',
             'AWS_S3_CONTENT_BUCKET': '',
         })
         env_patch.start()
         self.addCleanup(env_patch.stop)
+        settings_patch = override_settings(
+            AWS_ACCESS_KEY_ID='',
+            AWS_SECRET_ACCESS_KEY='',
+        )
+        settings_patch.enable()
+        self.addCleanup(settings_patch.disable)
         from integrations.config import clear_config_cache
         clear_config_cache()
         self.addCleanup(clear_config_cache)

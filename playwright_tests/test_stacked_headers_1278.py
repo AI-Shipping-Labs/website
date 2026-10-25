@@ -187,9 +187,10 @@ def _assert_control_below(
         )
 
 
-def _assert_route_headers(page, route):
+def _assert_route_headers(page, route, *, authenticated):
     if route == '/':
-        if page.get_by_test_id('dashboard-heading').count():
+        if authenticated:
+            expect(page.get_by_test_id('dashboard-heading')).to_be_visible()
             feed = page.get_by_test_id('dashboard-home-feed')
             expect(feed.get_by_role('heading', name='For you')).to_be_visible()
             expect(page.get_by_test_id('dashboard-feed-destinations')).to_be_visible()
@@ -254,7 +255,7 @@ def test_stacked_header_visual_matrix(
         assert page.locator('text=Server Error').count() == 0
         assert ('dark' in (page.locator('html').get_attribute('class') or '').split()) is (theme == 'dark')
         canonical_route = route.split('?', maxsplit=1)[0]
-        _assert_route_headers(page, canonical_route)
+        _assert_route_headers(page, canonical_route, authenticated=email is not None)
         _assert_no_overflow(page)
         SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
         page.screenshot(

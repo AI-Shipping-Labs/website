@@ -13,7 +13,7 @@ Scenarios:
 5. No suggestions -> the test-send section renders cleanly, no chips.
 6. A bad config value does not break the page; only valid chips show.
 
-Test sends call SES, so we patch EmailService._send_relay /
+Test sends call Relay, so we patch EmailService._send_relay /
 render_markdown_email in-process — the django_server runs in the same
 process as the test, the same approach used in test_studio_campaigns.py.
 """
@@ -60,7 +60,7 @@ def _set_common_recipients(value):
         defaults={
             "value": value,
             "is_secret": False,
-            "group": "ses",
+            "group": "relay",
             "description": "",
         },
     )
@@ -112,7 +112,7 @@ class TestOwnEmailOneClickFill:
 
         with mock.patch(
             "email_app.services.email_service.EmailService._send_relay",
-            return_value="ses-id",
+            return_value="relay-id",
         ), mock.patch(
             "email_app.services.email_service.EmailService.render_markdown_email",
             return_value="<html>x</html>",
@@ -142,7 +142,7 @@ class TestReuseRecentAddress:
         _textarea(page).fill("qa@example.com")
         with mock.patch(
             "email_app.services.email_service.EmailService._send_relay",
-            return_value="ses-id",
+            return_value="relay-id",
         ), mock.patch(
             "email_app.services.email_service.EmailService.render_markdown_email",
             return_value="<html>x</html>",
@@ -213,7 +213,7 @@ class TestMultiRecipientFromChips:
 
         with mock.patch(
             "email_app.services.email_service.EmailService._send_relay",
-            return_value="ses-id",
+            return_value="relay-id",
         ), mock.patch(
             "email_app.services.email_service.EmailService.render_markdown_email",
             return_value="<html>x</html>",

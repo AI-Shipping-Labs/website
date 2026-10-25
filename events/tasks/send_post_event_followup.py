@@ -21,7 +21,7 @@ Three-function module modelled on
    through ``email_app.package_mail.send_package_mail`` (A1.2 slice 3)
    under the stable ``post_event_followup:{event}:{user}`` key, wrapped
    in ``try / except`` so a local refusal never blocks the fan-out,
-   same best-effort guarantee as #706. SES transport outcomes land on
+   same best-effort guarantee as #706. Relay transport outcomes land on
    the delivery from the worker and the ``EmailLog`` audit row is
    written there.
 
@@ -135,7 +135,7 @@ def send_post_event_followup_one(event_id, user_id):
       is the single dedup gate. When ``created=False`` we return
       immediately without re-sending and without re-writing an
       ``EmailLog`` row.
-    - The dedup row is created BEFORE the email send. A 5xx from SES
+    - The dedup row is created BEFORE the email send. A 5xx from Relay
       logs via ``logger.exception`` but the dedup row stays put — the
       next cron tick / manual press will NOT retry this user. This is
       the same trade-off ``create_event_reminder`` makes (issue #706):

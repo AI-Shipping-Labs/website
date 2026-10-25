@@ -120,7 +120,7 @@ STATUS_BADGE_CLASSES = {
     'revoked': 'bg-secondary text-muted-foreground',
     'review': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
     'pending': 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-300',
-    # Issue #1653: a preference-suppressed grace send never attempted SES
+    # Issue #1653: a preference-suppressed grace send never attempted Relay
     # transport and is never retried — grey-muted like ``skipped`` so it
     # reads as intentionally not-sent, never as a red ``failed`` fault.
     'suppressed': 'bg-secondary text-muted-foreground',

@@ -141,7 +141,8 @@ Where to find it:
   verified domain). For domain-level verification, any address at
   `@<verified-domain>` works.
 
-Prereqs: The sender must be a verified SES identity in `AWS_SES_REGION`.
+Prereqs: The sender must be one of the sender identities registered in Relay.
+Relay owns the SES region and verified identity used for provider delivery.
 Domain verification (DKIM + SPF records published) is strongly
 preferred over per-address verification — it covers any address at
 the domain and improves deliverability.
@@ -149,7 +150,7 @@ the domain and improves deliverability.
 Rotation: Safe to rotate.
 
 1. Verify the new identity in SES (domain or address).
-2. Update this setting via Studio (Integration settings > Email (SES)
+2. Update this setting via Studio (Integration settings > Email (Relay)
    > `SES_TRANSACTIONAL_FROM_EMAIL`).
 3. Window of impact: zero if the old and new identities are both
    verified at the moment of save. If you delete the old identity
@@ -339,7 +340,7 @@ Prereqs:
 - An entry in AWS Secrets Manager holding the shared secret string.
 - A Lambda (infra repo) subscribed between SNS and the Django
   webhook that reads the secret and adds the header.
-- The same secret stored in Studio (Email (SES) > `SES_WEBHOOK_SHARED_SECRET`).
+- The same secret stored in Studio (SES event ingest > `SES_WEBHOOK_SHARED_SECRET`).
 
 Rotation: Generate a new random secret, update Secrets Manager and
 Studio in either order — there is a tiny window where the Lambda
@@ -363,17 +364,17 @@ Without it: Campaign fan-out uses 200. Invalid, zero, and negative overrides
 also safely use 200 rather than breaking the chunk operation.
 
 Where to find it: This is an operator tuning value, not an AWS credential.
-Set it under Studio > Settings > Email (SES), or through the authenticated
+Set it under Studio > Settings > Email (Relay), or through the authenticated
 integration-settings API. Tune it together with the campaign batch interval
-and the account's SES quota.
+and Relay's provider quota.
 
 Test vs live: Leave the default in tests and local development. In production,
 reduce it if tasks approach their timeout; increase it only after confirming
-worker runtime and SES rate limits have enough headroom.
+worker runtime and Relay's provider rate limits have enough headroom.
 
 ## CAMPAIGN_DELIVERY_MAX_ATTEMPTS
 
-Purpose: Caps automatic retries of a campaign delivery that SES definitively
+Purpose: Caps automatic retries of a campaign delivery that Relay definitively
 rejected. Recovery re-queues `failed` rows while `attempt_count` is below this
 integer, then leaves the row failed so the campaign can leave `sending` and
 show `needs_attention`. Ambiguous outcomes are never auto-retried.
@@ -381,37 +382,37 @@ show `needs_attention`. Ambiguous outcomes are never auto-retried.
 Without it: Recovery uses 3. Invalid, zero, and negative overrides also use 3
 rather than retrying forever or refusing to recover.
 
-Where to find it: Studio > Settings > Email (SES), or the authenticated
+Where to find it: Studio > Settings > Email (Relay), or the authenticated
 integration-settings API. This is operator tuning, not an AWS credential.
 
 Test vs live: Leave the default in tests and local development. Lower it in
-production only if a hard SES rejection should surface faster; raise it only
+production only if a hard Relay rejection should surface faster; raise it only
 when transient definitive rejections are common and duplicate-send risk is
 accepted.
 
 ## CAMPAIGN_BATCH_INTERVAL_SECONDS
 
 Purpose: Staggers campaign send batches apart so the fan-out does not
-burst past the SES send-rate limit (issue #922). The campaign sender
+burst past the provider send-rate limit (issue #922). The campaign sender
 splits recipients into batches and schedules batch `i` at
 `now + i * CAMPAIGN_BATCH_INTERVAL_SECONDS` via `Schedule.ONCE`. The
 first batch fires immediately; each subsequent batch is delayed by one
-more interval, spreading the load across time instead of hitting SES
+more interval, spreading the load across time instead of hitting Relay
 all at once.
 
 Default: 60 seconds. Set to `0` to send every batch at once (no
 stagger) — only safe when the campaign size stays comfortably under
-the SES per-second send quota.
+the provider's per-second send quota.
 
-Where to find it: Studio-only setting (Email (SES) group). This is
-operator intent tuned against the account's SES send-rate limit, not
+Where to find it: Studio-only setting (Email (Relay) group). This is
+operator intent tuned against the provider send-rate limit, not
 a value read from any AWS dashboard.
 
-Prereqs: None beyond a working SES integration. Higher values trade
+Prereqs: None beyond a working Relay integration. Higher values trade
 slower overall delivery for a gentler send rate.
 
 Test vs live: Tests and local dev can leave it at the default. Tune
-it in production if SES throttling (rate-exceeded) errors appear in
+it in production if provider throttling (rate-exceeded) errors appear in
 campaign sends.
 
 ## CAMPAIGN_TEST_RECIPIENTS
@@ -435,7 +436,7 @@ Default: empty. When blank, only the operator's own email and their
 recently-sent addresses appear (and nothing at all renders if both are
 empty).
 
-Where to find it: Studio-only setting (Email (SES) group). These are
+Where to find it: Studio-only setting (Email (Relay) group). These are
 operator-chosen test mailboxes, not a value read from any AWS
 dashboard.
 
@@ -456,7 +457,7 @@ before sending, so a blank or odd setting can never auto-broadcast.
 Default: empty (no configured default); the draft form falls back to its
 built-in template when unset.
 
-Where to find it: Studio integration settings (Email (SES) group). Plain
+Where to find it: Studio integration settings (Email (Relay) group). Plain
 text with the `{event_title}` placeholder.
 
 Prereqs: None. It only seeds the campaign draft; it does not send anything.
@@ -474,7 +475,7 @@ only — never auto-sent.
 Default: empty (no configured default); the draft form falls back to its
 built-in template when unset.
 
-Where to find it: Studio integration settings (Email (SES) group).
+Where to find it: Studio integration settings (Email (Relay) group).
 Multiline markdown with the placeholders above.
 
 Prereqs: None. It only seeds the campaign draft body.

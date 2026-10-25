@@ -809,7 +809,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
     issue_1506_owners = frozenset({
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffSeesNeedsAttentionAfterHardRejection::"
-        "test_hard_ses_rejection_leaves_needs_attention_not_sending",
+        "test_hard_relay_rejection_leaves_needs_attention_not_sending",
         "playwright_tests/test_studio_campaigns.py::"
         "TestStaffRetriesFailedRecipient::"
         "test_retry_failed_recipient_can_finish_the_campaign",

@@ -57,7 +57,7 @@ from email_app.services.email_rendering import (
     render_template_parts,
     render_template_with_footer,
 )
-from email_app.services.relay_transport import send_rendered_relay
+from email_app.services.relay_transport import normalize_recipients, send_rendered_relay
 from integrations.config import site_base_url
 
 logger = logging.getLogger(__name__)
@@ -81,15 +81,7 @@ def normalize_cc(cc):
     nothing usable remains. (Relay cutover P4: moved here from the deleted
     ``ses_transport``; kept for the transport-seam kwargs contract.)
     """
-    if not cc:
-        return []
-    if isinstance(cc, str):
-        cc = [cc]
-    addresses = []
-    for address in cc:
-        if address and address.strip():
-            addresses.append(address.strip())
-    return addresses
+    return normalize_recipients(cc)
 
 
 # Old private name kept importable for existing callers and tests.

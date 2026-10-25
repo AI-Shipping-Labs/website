@@ -6,7 +6,6 @@ from datetime import timedelta
 from unittest import skipUnless
 from unittest.mock import ANY, patch
 
-from botocore.exceptions import ClientError
 from django.contrib.auth import get_user_model
 from django.db import close_old_connections, connection
 from django.test import TestCase, TransactionTestCase, tag
@@ -20,6 +19,7 @@ from email_app.services.campaign_dispatch import (
     retry_delivery,
 )
 from email_app.services.email_service import EmailServiceError
+from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
 from email_app.tasks.send_campaign import (
     INACTIVE_AT_SEND,
     _finalize_delivery_sent,
@@ -261,16 +261,13 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
         transport.assert_not_called()
 
-    def test_definitive_ses_rejection_is_failed(self):
+    def test_definitive_relay_rejection_is_failed(self):
         campaign, _user, delivery = self.make_campaign_delivery()
 
         def reject(_prepared):
             try:
-                raise ClientError(
-                    {"Error": {"Code": "MessageRejected", "Message": "rejected"}},
-                    "SendEmail",
-                )
-            except ClientError as exc:
+                raise RelayCampaignDeliveryRejected("rejected")
+            except RelayCampaignDeliveryRejected as exc:
                 raise EmailServiceError("send failed") from exc
 
         with patch(

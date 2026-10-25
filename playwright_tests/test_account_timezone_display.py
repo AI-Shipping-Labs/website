@@ -13,6 +13,7 @@ import os
 import re
 
 import pytest
+from freezegun import freeze_time
 from playwright.sync_api import expect
 
 from playwright_tests.conftest import DEFAULT_PASSWORD, VIEWPORT
@@ -123,6 +124,7 @@ def _wait_for_timezone_init(page):
 
 
 @pytest.mark.django_db(transaction=True)
+@freeze_time("2026-06-01T12:00:00Z")
 def test_no_preference_shows_detected_iana_name_in_select(
     django_server, django_db_blocker, browser
 ):

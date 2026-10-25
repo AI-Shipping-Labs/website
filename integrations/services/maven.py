@@ -715,7 +715,7 @@ def _send_welcome(occurrence, actions):
     # member-facing name is the linked Course's title, attached as the
     # delivery's natural relation and re-read by the worker resolver at
     # delivery time. The worker also mints every link and token then.
-    # ``sent`` means the durable delivery exists — the SES outcome and the
+    # ``sent`` means the durable delivery exists — the Relay outcome and the
     # ``EmailLog`` audit row land from the worker.
     try:
         course = resolve_maven_course(occurrence.course_key)

@@ -313,7 +313,7 @@ def request_account_deletion(user, request_context=None):
     The member row is locked across lifecycle resolution and delivery so two
     workers cannot both become senders. The partial unique constraint on
     ``PrivacyRequestLog`` is the database-level backstop for active requests.
-    ``STATUS_REQUESTED`` means the durable mail delivery exists; its SES
+    ``STATUS_REQUESTED`` means the durable mail delivery exists; its Relay
     outcome lands on the delivery from the worker. Local send refusals mark
     ``STATUS_DELIVERY_FAILED`` and reuse the same audit row and dedupe key
     on retry.

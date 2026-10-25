@@ -96,7 +96,7 @@ EMAIL_LOG_QUERY_SPEC = {
     methods={
         "GET": {
             "description": (
-                "Newest-first SES-accepted sends. Disposition is the exclusive "
+                "Newest-first Relay-accepted sends. Disposition is the exclusive "
                 "strongest of sent, delivered, opened, clicked, bounced, and "
                 "complained. Email bodies and raw provider payloads are omitted."
             ),

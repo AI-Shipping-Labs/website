@@ -1,6 +1,6 @@
 """Rendered sends fail visibly when Relay is unavailable or unconfigured."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.core.exceptions import ImproperlyConfigured
 from django.test import SimpleTestCase, override_settings
@@ -16,10 +16,10 @@ TRANSPORT = "email_app.services.relay_transport"
 
 
 class RelayTransportTest(SimpleTestCase):
-    def _send(self):
+    def _send(self, **kwargs):
         return send_rendered_relay(
             "recipient@example.com", "Subject", "<p>Body</p>", text_body="Body",
-            idempotency_key="stable-delivery-key",
+            idempotency_key="stable-delivery-key", **kwargs,
         )
 
     @override_settings(TESTING=False)
@@ -53,6 +53,22 @@ class RelayTransportTest(SimpleTestCase):
             self.assertEqual(self._send(), "relay-id")
             self.assertEqual(send.call_args.kwargs["idempotency_key"], "stable-delivery-key")
             self.assertEqual(send.call_count, 1)
+
+    def test_cc_and_bcc_reach_relay_payload(self):
+        response = MagicMock(status_code=200)
+        response.json.return_value = {"message": {"id": "relay-id"}}
+        with (
+            patch(f"{TRANSPORT}.get_relay_base_url", return_value="https://relay.example"),
+            patch(f"{TRANSPORT}.get_relay_api_key", return_value="test-key"),
+            patch("email_app.services.relay_campaigns.get_relay_base_url", return_value="https://relay.example"),
+            patch("email_app.services.relay_campaigns.get_relay_api_key", return_value="test-key"),
+            patch("email_app.services.relay_campaigns.get_relay_from_email", return_value="content"),
+            patch("email_app.services.relay_campaigns.requests.Session.request", return_value=response) as request,
+        ):
+            self._send(cc=" copy@example.com ", bcc=("audit@example.com", ""))
+        payload = request.call_args.kwargs["json"]
+        self.assertEqual(payload["cc"], ["copy@example.com"])
+        self.assertEqual(payload["bcc"], ["audit@example.com"])
 
     def test_definitive_and_unknown_failures_remain_distinguishable(self):
         failures = (

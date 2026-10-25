@@ -4,6 +4,7 @@ import datetime
 import os
 
 import pytest
+from playwright.sync_api import expect
 
 from playwright_tests.conftest import auth_context as _auth_context
 from playwright_tests.conftest import create_staff_user as _create_staff_user
@@ -162,7 +163,9 @@ def test_staff_scans_and_filters_sprint_roster_activity(django_server, browser):
     page.get_by_test_id("sprint-members-no-update-filter").click()
     assert "activity=no_update_this_week" in page.url
     assert page.locator('[data-user-email="pw-updated@test.com"]').count() == 0
-    visible_rows = page.locator('[data-testid$="member-row"]').evaluate_all(
+    filtered_rows = page.locator('[data-testid$="member-row"]')
+    expect(filtered_rows).to_have_count(3)
+    visible_rows = filtered_rows.evaluate_all(
         "(rows) => rows.map((row) => row.getAttribute('data-user-email'))"
     )
     assert visible_rows == [

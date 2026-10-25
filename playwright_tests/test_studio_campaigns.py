@@ -316,7 +316,7 @@ class TestStaffReconcilesAmbiguousDelivery:
         page.once("dialog", dismiss_retry)
         page.locator('[data-testid="campaign-delivery-retry"]').click()
         assert dismissed == [
-            "SES may already have accepted this email. Retrying can send a duplicate. Retry anyway?"
+            "Relay may already have accepted this email. Retrying can send a duplicate. Retry anyway?"
         ]
         assert page.get_by_test_id("campaign-delivery-state").get_by_text(
             "Ambiguous",
@@ -408,15 +408,14 @@ def _create_snapshotted_delivery(email, *, state, subject, unsubscribed=False):
 class TestStaffSeesNeedsAttentionAfterHardRejection:
     @pytest.mark.core
     @browser_journey
-    def test_hard_ses_rejection_leaves_needs_attention_not_sending(
+    def test_hard_relay_rejection_leaves_needs_attention_not_sending(
         self,
         django_server,
         browser,
     ):
-        from botocore.exceptions import ClientError
-
         from email_app.models import CampaignDelivery
         from email_app.services.email_service import EmailServiceError
+        from email_app.services.relay_campaigns import RelayCampaignDeliveryRejected
         from email_app.tasks.send_campaign import send_campaign, send_campaign_batch
 
         _ensure_tiers()
@@ -441,11 +440,8 @@ class TestStaffSeesNeedsAttentionAfterHardRejection:
 
         def reject(_prepared):
             try:
-                raise ClientError(
-                    {"Error": {"Code": "MessageRejected", "Message": "rejected"}},
-                    "SendEmail",
-                )
-            except ClientError as exc:
+                raise RelayCampaignDeliveryRejected("rejected")
+            except RelayCampaignDeliveryRejected as exc:
                 raise EmailServiceError("send failed") from exc
 
         send_campaign(campaign.pk)

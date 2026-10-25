@@ -243,12 +243,13 @@ class ContactsImportExtendedFieldsTest(TestCase):
     def test_import_first_row_wins_for_stripe_customer_id(self):
         # Two rows for the same email both carry an ID; the first should land,
         # the second should produce a conflict warning.
-        response = self._post({
-            "contacts": [
-                {"email": "race@test.com", "stripe_customer_id": "cus_FIRST"},
-                {"email": "race@test.com", "stripe_customer_id": "cus_SECOND"},
-            ],
-        })
+        with patch("studio.services.contacts_import.backfill_user_from_stripe"):
+            response = self._post({
+                "contacts": [
+                    {"email": "race@test.com", "stripe_customer_id": "cus_FIRST"},
+                    {"email": "race@test.com", "stripe_customer_id": "cus_SECOND"},
+                ],
+            })
         self.assertEqual(response.status_code, 200)
         # Second row is a duplicate-within-file; it does not re-run upsert.
         # So the only stripe write is from row 1; row 2 is "skipped".

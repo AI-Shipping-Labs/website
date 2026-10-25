@@ -872,7 +872,7 @@ def campaign_recipient_retry(request, campaign_id, delivery_id):
             "summary": "Assume a campaign recipient was sent",
             "description": (
                 "Resolves an ``ambiguous`` delivery to ``assumed_sent`` without "
-                "calling SES or fabricating an ``EmailLog``. Matches Studio "
+                "calling Relay or fabricating an ``EmailLog``. Matches Studio "
                 "assume-sent semantics; a stale action returns 409 "
                 "``delivery_conflict``."
             ),

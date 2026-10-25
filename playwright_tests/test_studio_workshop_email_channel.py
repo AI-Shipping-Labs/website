@@ -22,15 +22,13 @@ Scenarios
 3. Opted-out member gets the bell notification (count >= 1) but zero
    ``EmailLog`` rows after a notify.
 4. Subscribed member ends up with exactly one ``EmailLog`` row whose
-   ``ses_message_id`` is the ``ses-disabled-noop`` literal returned by
-   ``EmailService._send_relay`` when ``SES_ENABLED=False`` (the conftest
-   forces this for Playwright runs).
+   ``ses_message_id`` is the ``relay-test-noop`` literal returned by the
+   offline Relay stub installed for Playwright runs.
 5. Globally unsubscribed (``user.unsubscribed=True``) user gets zero
    ``EmailLog`` rows after a notify.
 
-The conftest forces ``SES_ENABLED=False`` (see
-``playwright_tests/conftest.py`` lines 53-61); no real SES traffic is
-sent and no ``send_mail`` patches are needed.
+The conftest installs offline mail transports; no real provider traffic is
+sent and no per-test transport patches are needed.
 """
 
 import datetime
@@ -365,7 +363,7 @@ class TestWorkshopOptOut:
 
 # ---------------------------------------------------------------
 # Scenario 4: Subscribed member sees the email row land with the
-# noop SES message id
+# offline Relay message id
 # ---------------------------------------------------------------
 
 class TestWorkshopSubscribedEmail:
@@ -409,9 +407,9 @@ class TestWorkshopSubscribedEmail:
         assert logs.count() == 1, (
             f'expected exactly one EmailLog row, got {logs.count()}'
         )
-        # The conftest forces SES_ENABLED=False, so _send_relay returns
-        # the noop literal and that's what lands in the DB.
-        assert logs.first().ses_message_id == 'ses-disabled-noop'
+        # The Playwright mail stub returns this deterministic Relay id,
+        # and the recorder stores it on the operator-visible audit row.
+        assert logs.first().ses_message_id == 'relay-test-noop'
 
 
 # ---------------------------------------------------------------

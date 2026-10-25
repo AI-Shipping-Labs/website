@@ -239,7 +239,7 @@ def get_sender_for_email_type(email_type):
     sender, matching the historical ``email_kind='transactional'`` default
     of ``_send_relay`` — this covers low-level callers that render their own
     HTML and pass no template name (e.g. campaign preview sends pass
-    ``'campaign'`` explicitly; SES-plumbing tests pass nothing).
+    ``'campaign'`` explicitly; transport tests pass nothing).
     """
     if email_type in WELCOME_EMAIL_TYPES:
         if _has_runtime_value(WELCOME_FROM_KEY, DEFAULT_WELCOME_FROM_EMAIL):

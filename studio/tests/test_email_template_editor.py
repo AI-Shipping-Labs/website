@@ -48,7 +48,6 @@ class RelayTemplateEditorTest(TestCase):
 
         response = self.client.get(reverse("studio_email_template_list"))
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Welcome")
         self.assertContains(response, "raw_transactional")
         self.assertContains(response, "Compatibility template")
@@ -76,7 +75,7 @@ class RelayTemplateEditorTest(TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Updated")
         draft = relay.save_draft.call_args.args[1]
         self.assertEqual(draft["subject"], "Updated")
         self.assertEqual(draft["required_context"], ["user_name"])
@@ -129,7 +128,6 @@ class RelayTemplateEditorTest(TestCase):
             {"recipient": "named", "version": ""},
         )
 
-        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"<p>Relay draft</p>")
         call = configured.return_value.preview.call_args
         self.assertEqual(call.args[0], "coursework.pool_ready")
@@ -141,7 +139,6 @@ class RelayTemplateEditorTest(TestCase):
 
         response = self.client.get(reverse("studio_email_template_list"))
 
-        self.assertEqual(response.status_code, 200)
         self.assertContains(response, "relay_unavailable")
 
     @patch("studio.views.email_templates.configured_template_client")

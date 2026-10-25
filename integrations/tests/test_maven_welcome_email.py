@@ -50,6 +50,19 @@ def _decode_user_action_token(token):
 
 
 class MavenWelcomeRelayContextTest(TestCase):
+    def test_unverified_welcome_has_only_the_consent_bearing_verify_link(self):
+        user = User.objects.create_user(
+            email="unverified@test.com", password="x", email_verified=False,
+        )
+
+        context = _relay_context(user)
+
+        self.assertIn(
+            "/api/verify-and-subscribe?token=",
+            context["newsletter_opt_in_url"],
+        )
+        self.assertEqual(context["verify_email_url"], "")
+
     def test_worker_resolves_all_member_links(self):
         user = User.objects.create_user(
             email="enrollee@test.com", password="x", first_name="Sam",

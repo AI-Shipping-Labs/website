@@ -396,7 +396,7 @@ class MavenRemovalStaffSummaryTest(TestCase):
         self.assertEqual(context["course"], "Buildcamp")
         self.assertEqual(context["cohort"], "5")
         self.assertFalse(context["user_known"])
-        self.assertEqual(context["summary_lines"], [])
+        self.assertNotIn("summary_lines", context)
 
 
 class MavenRemovalReapplyApiTest(TestCase):

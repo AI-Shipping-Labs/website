@@ -139,19 +139,19 @@ class NotifyPaidSignupHelperTest(TestCase):
                 billing_period="monthly",
             )
 
-        mock_welcome.assert_called_once()
+        self.assertEqual(mock_welcome.call_count, 1)
         welcome_kwargs = mock_welcome.call_args.kwargs
         self.assertNotIn("cc", welcome_kwargs)
         self.assertEqual(welcome_kwargs["bcc"], self.STAFF_EMAIL)
 
         # Internal email sent to the staff mailbox.
-        mock_staff_email.assert_called_once()
+        self.assertEqual(mock_staff_email.call_count, 1)
         self.assertEqual(
             mock_staff_email.call_args.args[0], self.STAFF_EMAIL,
         )
 
         # Slack post hit the configured channel.
-        mock_slack.assert_called_once()
+        self.assertEqual(mock_slack.call_count, 1)
         slack_payload = mock_slack.call_args.kwargs["json"]
         self.assertEqual(slack_payload["channel"], self.SLACK_CHANNEL)
         self.assertIn("New paid signup", slack_payload["text"])
@@ -551,7 +551,7 @@ class NotifyPaidSignupEndToEndTest(TestCase):
         self.assertFalse(
             EmailLog.objects.filter(user=user, email_type="cofounder_welcome").exists(),
         )
-        mock_slack.assert_called_once()
+        self.assertEqual(mock_slack.call_count, 1)
         self.assertEqual(
             mock_slack.call_args.kwargs["json"]["channel"], self.SLACK_CHANNEL,
         )

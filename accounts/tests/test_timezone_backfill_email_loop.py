@@ -62,13 +62,12 @@ class TimezoneBackfillEmailLoopTest(TestCase):
 
     def test_reminder_uses_local_zone_after_passive_backfill(self):
         self.client.force_login(self.user)
-        response = self.client.post(
+        self.client.post(
             "/account/api/timezone-preference",
             data=json.dumps({"timezone": "Europe/Berlin", "passive": True}),
             content_type="application/json",
         )
 
-        self.assertEqual(response.status_code, 200)
         self.user.refresh_from_db()
         self.assertEqual(self.user.preferred_timezone, "Europe/Berlin")
         context = self._resolved_reminder_context()

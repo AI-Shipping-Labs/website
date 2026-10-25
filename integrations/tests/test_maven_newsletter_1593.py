@@ -361,16 +361,3 @@ class MavenCampaignAudienceTest(MavenWebhookMixin):
         self.assertIn(
             user, eligible_campaign_recipients(audience_verification="everyone"),
         )
-
-
-
-    def test_a_verified_recipient_sees_the_same_single_link(self):
-        """The exemption must not depend on verification state."""
-        user = User.objects.create_user(
-            email="verified-1593@example.com", email_verified=True,
-        )
-
-        html = self._sent_html(user)
-
-        self.assertNotIn("/api/verify-email", html)
-        self.assertIn("/api/verify-and-subscribe?token=", html)

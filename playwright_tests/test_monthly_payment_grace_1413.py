@@ -27,6 +27,50 @@ from tests.fixtures import create_user_with_membership
 
 pytestmark = pytest.mark.local_only
 REPORT = "/studio/payments/subscription-reconciliation/?filter=payment_grace"
+PAYMENT_GRACE_SUBJECTS = {
+    "payment_grace_failure_member": "Relay member payment failure",
+    "payment_grace_failure_team": "Relay team payment failure",
+}
+
+
+def _payment_grace_relay():
+    from email_app.testing import StubRelayClient
+
+    relay = StubRelayClient()
+    original_preview = relay.preview_template
+
+    def preview(template_key, context, *, version=None):
+        rendered = original_preview(template_key, context, version=version)
+        rendered["subject"] = PAYMENT_GRACE_SUBJECTS[template_key]
+        return rendered
+
+    relay.preview_template = preview
+    return relay
+
+
+def _start_initial_failure(user, relay):
+    from payments.services import monthly_payment_grace as service
+
+    with (
+        override_settings(
+            DEBUG=False,
+            PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",
+            STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
+        ),
+        patch.object(service, "_audit"),
+        patch(
+            "community_base.mail.backends.relay.configured_client",
+            return_value=relay,
+        ),
+    ):
+        grace, _ = service.start_grace_from_failure(
+            invoice=_invoice(user),
+            subscription=_subscription(user),
+            event_id="evt_browser_initial",
+            event_created=1_786_528_800,
+            livemode=False,
+        )
+    return grace
 
 
 def _reset():
@@ -130,32 +174,16 @@ class TestMonthlyPaymentGrace1413:
     @pytest.mark.core
     def test_scenario_1_member_and_team_initial_failure_visible_once(self, django_server, browser):
         from email_app.models import EmailLog
-        from payments.services import monthly_payment_grace as service
 
         _ensure_tiers()
         _create_staff_user("admin@test.com")
         _reset()
         user = _member()
-        with (
-            override_settings(
-                DEBUG=False,
-                PAYMENT_FAILURE_TEAM_EMAIL="team@aishippinglabs.com",
-                STRIPE_CUSTOMER_PORTAL_URL="https://billing.stripe.com/p/login/safe",
-            ),
-            patch.object(service, "_audit"),
-        ):
-            grace, _ = service.start_grace_from_failure(
-                invoice=_invoice(user),
-                subscription=_subscription(user),
-                event_id="evt_browser_initial",
-                event_created=1_786_528_800,
-                livemode=False,
-            )
+        grace = _start_initial_failure(user, _payment_grace_relay())
         assert grace.deliveries.filter(status="sent").count() == 2
-        assert set(EmailLog.objects.values_list("subject", flat=True)) == {
-            "Payment failed — please retry your AI Shipping Labs payment",
-            "[Payments] Member payment failed",
-        }
+        assert set(EmailLog.objects.values_list("subject", flat=True)) == set(
+            PAYMENT_GRACE_SUBJECTS.values(),
+        )
         connection.close()
         page = _staff_page(django_server, browser)
         row = page.get_by_test_id("payment-grace-row")

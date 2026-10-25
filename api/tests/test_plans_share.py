@@ -179,4 +179,7 @@ class PlanSharePatchTest(PlansApiShareTestBase):
         self.assertEqual(response.status_code, 200)
         self.plan.refresh_from_db()
         self.assertIsNotNone(self.plan.shared_at)
-        mock_log_exc.assert_called_once()
+        mock_log_exc.assert_called_once_with(
+            'Failed to fire plan_shared notification for plan %s',
+            self.plan.pk,
+        )

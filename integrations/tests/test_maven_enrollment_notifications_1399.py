@@ -105,7 +105,7 @@ class MavenEnrollmentNotificationTest(TestCase):
         self.assertEqual(response.json(), {"status": "onboarded"})
         event = MavenEnrollmentEvent.objects.get()
         self.assertEqual(event.notification_status, event.STEP_SUCCEEDED)
-        send.assert_called_once()
+        self.assertEqual(send.call_count, 1)
         recipient, context = send.call_args.args
         self.assertEqual(recipient, "staff@example.com")
         self.assertEqual(context["enrolled_user_email"], "new@example.com")

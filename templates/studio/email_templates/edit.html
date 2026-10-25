@@ -10,7 +10,7 @@
     <span class="mx-2">/</span><code>{{ template_name }}</code>
   </p>
   <h1 class="text-2xl font-semibold text-foreground mt-1">Edit <code>{{ template_name }}</code></h1>
-  <p class="mt-2 text-sm text-foreground"><span class="font-medium">Sent when:</span> {{ sent_when }}</p>
+  <p data-testid="template-sent-when" class="mt-2 text-sm text-foreground"><span class="font-medium">Sent when:</span> {{ sent_when }}</p>
   <p class="text-muted-foreground mt-1">Relay stores the draft and published versions. Saving never publishes or sends email.</p>
   <p class="text-muted-foreground mt-1" data-testid="active-send-version">Website sends currently use immutable Relay v{{ active_send_version }}. Publishing a newer version does not change that release pin.</p>
 </div>

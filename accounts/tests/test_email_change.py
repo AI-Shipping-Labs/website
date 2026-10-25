@@ -521,4 +521,4 @@ class EmailChangeConfirmServiceTest(TestCase):
         self.assertEqual(len(stub.calls), 1)
         context = stub.calls[0]["context"]
         self.assertIn("/account/change-email/confirm?token=", context["confirm_url"])
-        self.assertNotIn("verify_email_url", context)
+        self.assertEqual(context["verify_email_url"], "")

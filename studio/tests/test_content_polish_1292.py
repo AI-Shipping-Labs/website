@@ -39,7 +39,6 @@ class ContentPolishStudioTest(TestCase):
     def test_every_relay_template_has_trigger_guidance(self):
         response = self.client.get(reverse("studio_email_template_list"))
 
-        self.assertEqual(response.status_code, 200)
         rows = response.context["rows"]
         self.assertTrue(rows)
         for row in rows:

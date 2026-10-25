@@ -279,7 +279,7 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         self.assertEqual(delivery.state, CampaignDelivery.State.FAILED)
         self.assertEqual(delivery.attempt_count, 1)
         self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
-        transport.assert_called_once()
+        self.assertEqual(transport.call_count, 1)
 
     def test_timeout_and_missing_message_id_are_ambiguous(self):
         outcomes = (TimeoutError("timed out"), "")
@@ -330,7 +330,7 @@ class CampaignDeliveryFailureSemanticsTest(CampaignDeliveryBase, TestCase):
         delivery.refresh_from_db()
         self.assertEqual(delivery.state, CampaignDelivery.State.AMBIGUOUS)
         self.assertFalse(EmailLog.objects.filter(campaign=campaign).exists())
-        transport.assert_called_once()
+        self.assertEqual(transport.call_count, 1)
 
     def test_wrong_claim_token_cannot_finalize_or_log(self):
         campaign, _user, delivery = self.make_campaign_delivery(
@@ -590,7 +590,7 @@ class CampaignPostgresConcurrencyTest(CampaignDeliveryBase, TransactionTestCase)
             "campaign delivery worker threads did not finish",
         )
         self.assertEqual(errors, [])
-        send.assert_called_once()
+        self.assertEqual(send.call_count, 1)
         delivery.refresh_from_db()
         self.assertEqual(delivery.state, CampaignDelivery.State.SENT)
         self.assertEqual(EmailLog.objects.filter(campaign=campaign).count(), 1)

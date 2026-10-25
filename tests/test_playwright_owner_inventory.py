@@ -776,9 +776,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_studio_confirm_guard_1529.py::"
         "TestStudioConfirmGuard::"
         "test_revoke_access_keeps_dynamic_email_and_existing_post",
-        "playwright_tests/test_studio_confirm_guard_1529.py::"
-        "TestStudioConfirmGuard::"
-        "test_email_reset_cancels_from_list_and_keyboard_then_accepts_from_edit",
     })
     issue_1530_owners = frozenset({
         "playwright_tests/test_account_email_preference_switches_1530.py::"
@@ -890,8 +887,6 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
         "test_enrollee_follows_the_welcome_email_into_slack",
         "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
-        "test_staff_preview_shows_the_ordered_steps_and_the_slack_link",
-        "playwright_tests/test_maven_welcome_slack_journey_1565.py::"
         "test_support_reads_the_join_link_note_on_the_slack_step",
     })
     issue_1566_owners = frozenset({
@@ -902,7 +897,10 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
         "playwright_tests/test_maven_attention_1566.py::"
         "test_staff_reaches_old_exhausted_occurrence_with_attention_filter_preserved",
     })
-    issue_1567_owners = frozenset()
+    issue_1567_owners = frozenset({
+        "playwright_tests/test_plain_text_email_1567.py::"
+        "test_staff_previews_and_test_sends_markdown_campaign",
+    })
     issue_1568_owners = frozenset({
         "playwright_tests/test_maven_occurrences_api_1568.py::"
         "test_staff_finds_alias_linked_failure_and_reads_the_step_ledger",
@@ -987,23 +985,18 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
 
     issue_1591_owners = frozenset({
         "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_copy_reviewer_sees_the_nameless_greeting",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_copy_reviewer_switches_back_to_the_named_recipient",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_operator_override_still_degrades_for_nameless_members",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_security_notice_greets_nameless_members_neutrally",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_maven_welcome_greets_nameless_enrollees_neutrally",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_sprint_partner_intro_keeps_partner_labels",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_nameless_member_password_reset_is_greeted_as_a_person",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_named_member_registration_email_keeps_their_name",
-        "playwright_tests/test_email_greeting_no_name_1591.py::"
-        "test_send_test_addresses_the_operator_by_their_own_name",
+        "test_nameless_member_password_reset_uses_neutral_relay_context",
+    })
+
+    issue_2009_owners = frozenset({
+        "playwright_tests/test_studio_relay_email_templates.py::"
+        "test_staff_saves_previews_and_explicitly_publishes_relay_draft",
+        "playwright_tests/test_studio_relay_email_templates.py::"
+        "test_relay_preview_failure_is_safe_and_does_not_publish",
+        "playwright_tests/test_studio_action_cells.py::"
+        "TestStudioActionCells::test_email_template_row_has_one_relay_edit_action",
+        "playwright_tests/test_series_email_previews_869.py::"
+        "test_series_email_editor_previews_through_relay",
     })
 
     issue_1590_owners = frozenset({
@@ -2209,7 +2202,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             self.assertNotIn(owner, manifest["LEGACY_NON_BROWSER"])
             self.assertNotIn(owner, manifest["LEGACY_DECLARED_BROWSER"])
             self.assertIn(owner, LEGACY_NON_BROWSER_CEILING)
-        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2245)
+        self.assertEqual(len(manifest["LEGACY_DECLARED_BROWSER"]), 2238)
         self.assertEqual(len(manifest["LEGACY_NON_BROWSER"]), 0)
         self.assertEqual(len(LEGACY_DECLARED_BROWSER_CEILING), 2258)
         self.assertEqual(len(LEGACY_NON_BROWSER_CEILING), 81)
@@ -2267,6 +2260,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             5,
         )
 
+    # Cohesion exception: this explicit union is the authoritative reviewed
+    # inventory, and splitting it would obscure exact owner-set drift.
     def test_current_collection_exactly_matches_live_partition_without_runtime_startup(self):
         inventory = collect_inventory(extra_env={"PLAYWRIGHT_DJANGO_PORT": "65534"})
         errors = validate_inventory(
@@ -2275,8 +2270,8 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             declared_owners=inventory.declared_owners,
         )
 
-        self.assertEqual(inventory.item_count, 2976)
-        self.assertEqual(len(inventory.owners), 2771)
+        self.assertEqual(inventory.item_count, 2958)
+        self.assertEqual(len(inventory.owners), 2753)
         self.assertEqual(
             inventory.declared_owners,
             {self.migrated_owner, self.campaign_owner}
@@ -2340,6 +2335,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1541_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
+            | self.issue_2009_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1594_owners
@@ -2394,6 +2390,7 @@ class CurrentRepositoryInventoryTests(SimpleTestCase):
             | self.issue_1531_owners
             | self.issue_1589_owners
             | self.issue_1591_owners
+            | self.issue_2009_owners
             | self.issue_1590_owners
             | self.issue_1593_owners
             | self.issue_1594_owners

@@ -324,7 +324,8 @@ class NotifyTest(OnBehalfBase):
 
         self.assertEqual(len(stub.calls), 1)
         context = stub.calls[0]['context']
-        self.assertEqual(context['unit_title'], 'Week 2 homework')
+        self.assertEqual(context['assignment_title'], 'Week 2 homework')
+        self.assertEqual(context['course_title'], 'AI Buildcamp')
         self.assertEqual(context['user_name'], 'Ada')
         self.assertTrue(context['submission_url'].endswith(expected_path))
 

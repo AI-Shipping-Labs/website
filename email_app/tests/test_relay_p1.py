@@ -23,6 +23,7 @@ from email_app.checks import (
     check_relay_configuration_in_production,
 )
 from email_app.health import get_relay_health_status, validate_relay_config
+from email_app.models import EmailLog
 from email_app.package_mail import send_package_mail
 
 
@@ -163,6 +164,11 @@ class TestRelayPackageMailDelivery(TestCase):
             template_version=1,
             idempotent_replay=False,
         )
+        mock_client.preview_template.return_value = {
+            "subject": "Distinct Relay package preview",
+            "html_body": "<p>Preview</p>",
+            "text_body": "Preview",
+        }
         mock_configured_client.return_value = mock_client
 
         delivery = send_package_mail(
@@ -180,6 +186,10 @@ class TestRelayPackageMailDelivery(TestCase):
         self.assertEqual(delivery.state, EmailDelivery.State.PROVIDER_ACCEPTED)
         self.assertEqual(delivery.external_message_id, "relay-msg-999")
         self.assertEqual(delivery.template_version, 1)
+        self.assertEqual(
+            EmailLog.objects.get(dedupe_key=delivery.idempotency_key).subject,
+            "Distinct Relay package preview",
+        )
 
     @patch("community_base.mail.backends.relay.configured_client")
     def test_send_package_mail_idempotency_preserved(self, mock_configured_client):

@@ -184,7 +184,10 @@ class PartnerIntroEmailServiceTest(TestCase):
         self.assertEqual(len(contexts), 2)
         context = contexts['alice@test.com']
         self.assertEqual(context['member_name'], 'there')
-        self.assertEqual(context['partners'][0]['name'], 'Bobby Slack')
+        self.assertEqual(context['partners'][0]['name'], 'Bob')
+        self.assertEqual(
+            context['partners'][0]['slack_identity'], 'Bobby Slack',
+        )
         self.assertEqual(
             context['partners'][0]['slack_profile_url'],
             'https://app.slack.com/client/TTEAM/UBOB',
@@ -239,9 +242,9 @@ class PartnerIntroEmailServiceTest(TestCase):
         self.assertEqual(alice_row['partners'][0]['slack_identity'], 'UBOB')
         self.assertEqual(alice_row['partners'][0]['slack_profile_url'], '')
         self.assertEqual(sent['sent_count'], 2)
-        html = self._drain_and_collect()['alice@test.com']
-        self.assertIn('Slack: UBOB', html)
-        self.assertIn('Slack profile link unavailable', html)
+        context = self._drain_and_collect()['alice@test.com']
+        self.assertEqual(context['partners'][0]['slack_identity'], 'UBOB')
+        self.assertEqual(context['partners'][0]['slack_profile_url'], '')
 
     def test_second_send_skips_successful_logs(self):
         self._ready_pair()

@@ -95,8 +95,7 @@ class RelayCampaignDeliveryTest(TierSetupMixin, TestCase):
 
         context = payload["context"]
         self.assertEqual(context["subject"], self.campaign.subject)
-        self.assertIn("Hello", context["html_body"])
-        self.assertIn("Hello", context["text_body"])
+        self.assertEqual(context["body_markdown"], self.campaign.body)
 
         # Verify delivery ledger updated
         self.delivery.refresh_from_db()
@@ -245,5 +244,8 @@ class RelayStudioCampaignTestSendTest(TierSetupMixin, TestCase):
         self.assertEqual(payload["email"], "alexey.s.grigoriev@gmail.com")
         self.assertEqual(payload["template_key"], "campaign-broadcast")
         self.assertEqual(payload["context"]["subject"], "[TEST] Studio Test Newsletter")
-        self.assertIn("Hello from Studio test send.", payload["context"]["html_body"])
+        self.assertEqual(
+            payload["context"]["body_markdown"],
+            "Hello from Studio test send.",
+        )
         self.assertTrue(payload["metadata"]["is_test_send"])

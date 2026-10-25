@@ -622,8 +622,10 @@ class NotificationServiceWorkshopEmailTest(TestCase):
             context = call['context']
             self.assertEqual(context['workshop_title'], 'Build a RAG App')
             self.assertEqual(context['workshop_description'], 'Hands-on workshop')
+            self.assertEqual(context['site_url'], site_base_url())
+            self.assertEqual(context['workshop_url'], '/workshops/build-a-rag-app')
             self.assertEqual(
-                context['workshop_url'],
+                f"{context['site_url']}{context['workshop_url']}",
                 f'{site_base_url()}/workshops/build-a-rag-app',
             )
 

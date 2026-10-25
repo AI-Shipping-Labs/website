@@ -61,7 +61,7 @@ class CampaignTestTokenTest(TestCase):
         payload = request.call_args.kwargs["json"]
         self.assertEqual(payload["email"], "controlled@example.com")
         self.assertEqual(payload["context"]["subject"], "[TEST] Proof")
-        self.assertIn("A controlled test.", payload["context"]["html_body"])
+        self.assertEqual(payload["context"]["body_markdown"], "A controlled test.")
         self.assertTrue(payload["metadata"]["is_test_send"])
         self.campaign.refresh_from_db()
         self.assertEqual((self.campaign.status, self.campaign.sent_count), ("draft", 0))

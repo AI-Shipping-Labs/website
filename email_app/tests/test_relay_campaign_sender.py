@@ -39,7 +39,6 @@ class SenderContractAdapter(requests.adapters.BaseAdapter):
 @override_settings(
     RELAY_BASE_URL="https://relay.example",
     RELAY_API_KEY="fixture-relay-key",
-    RELAY_PROMOTIONAL_FROM_EMAIL="",
 )
 class CampaignSenderWireTest(TestCase):
     def setUp(self):
@@ -63,7 +62,7 @@ class CampaignSenderWireTest(TestCase):
             session.mount("https://", adapter)
             with patch("socket.socket.connect", side_effect=AssertionError("network forbidden")):
                 message_id = send_campaign_delivery_to_relay(
-                    "member@example.com", "Subject", "<p>Body</p>", "Body",
+                    "member@example.com", "Subject", "Body",
                     idempotency_key="campaign:sender:fixture", dry_run=False, session=session,
                 )
         self.assertEqual(message_id, "177")

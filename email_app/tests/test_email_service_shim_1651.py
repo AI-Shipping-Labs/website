@@ -66,7 +66,7 @@ EXEMPT_PRODUCER_SURFACE = (
     "render_html_email",
     "render_markdown_email",
     "render_plain_text_email",
-    "_send_ses",
+    "_send_relay",
     "_build_unsubscribe_url",
 )
 

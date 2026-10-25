@@ -28,7 +28,7 @@ from accounts.services.email_change import (
     hash_email_change_token,
     request_email_change,
 )
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 
 TEST_PURPOSE = "email_verification_signup"
 
@@ -46,7 +46,7 @@ def _drain(deliveries):
     )
     with (
         backend_override,
-        patch(
+        local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ),
@@ -225,7 +225,7 @@ class EmailChangeWorkerMintTest(TestCase):
         for reason, delivery in cases:
             with self.subTest(reason=reason):
                 stub = StubSESClient()
-                with patch(
+                with local_render_backend(), patch(
                     "community_base.mail.backends.ses_local.configured_client",
                     return_value=stub,
                 ):
@@ -239,7 +239,7 @@ class EmailChangeWorkerMintTest(TestCase):
             expires_at=timezone.now() - timedelta(minutes=1),
         )
         stub = StubSESClient()
-        with patch(
+        with local_render_backend(), patch(
             "community_base.mail.backends.ses_local.configured_client",
             return_value=stub,
         ):
@@ -528,7 +528,7 @@ class NotificationWorkerMintTest(TestCase):
                     related_object_id="999999",
                 )
                 stub = StubSESClient()
-                with patch(
+                with local_render_backend(), patch(
                     "community_base.mail.backends.ses_local.configured_client",
                     return_value=stub,
                 ):

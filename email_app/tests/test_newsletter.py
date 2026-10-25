@@ -592,7 +592,7 @@ class FooterSubscribeFormTest(TestCase):
 class EmailServiceUnsubscribeLinkTest(TestCase):
     """Transactional EmailService sends do not include marketing unsubscribe UI."""
 
-    @patch("email_app.services.email_service.EmailService._send_ses", return_value="msg-id")
+    @patch("email_app.services.email_service.EmailService._send_relay", return_value="msg-id")
     def test_transactional_email_excludes_unsubscribe_link(self, mock_ses):
         from email_app.services.email_service import EmailService
 

@@ -7,7 +7,7 @@ Covers:
 - HTML email wrapping with header, footer, unsubscribe link
 - EmailLog creation on send
 - Skipping unsubscribed users
-- Relay transport seam (mocked at ``_send_ses``)
+- Relay transport seam (mocked at ``_send_relay``)
 - Missing template error handling
 - All 6 transactional template types
 """
@@ -56,7 +56,7 @@ class EmailServiceSendTest(TestCase):
     def tearDown(self):
         clear_config_cache()
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-001')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-001')
     def test_send_creates_email_log(self, mock_ses):
         log = self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
 
@@ -68,7 +68,7 @@ class EmailServiceSendTest(TestCase):
         self.assertEqual(log.ses_message_id, 'ses-msg-001')
         self.assertEqual(EmailLog.objects.count(), 1)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-002')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-002')
     def test_send_calls_ses_with_correct_email(self, mock_ses):
         self.service.send(self.user, 'welcome', {'tier_name': 'Basic'})
 
@@ -78,7 +78,7 @@ class EmailServiceSendTest(TestCase):
         self.assertIn('Welcome to Basic', subject)
         self.assertIn('Basic', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-003')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-003')
     def test_transactional_send_delivers_to_unsubscribed_user(self, mock_ses):
         self.user.unsubscribed = True
         self.user.save()
@@ -93,7 +93,7 @@ class EmailServiceSendTest(TestCase):
         mock_ses.assert_called_once()
         self.assertEqual(EmailLog.objects.count(), 1)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-004')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-004')
     def test_send_renders_user_name_in_body(self, mock_ses):
         self.service.send(self.user, 'welcome', {'tier_name': 'Premium'})
 
@@ -101,7 +101,7 @@ class EmailServiceSendTest(TestCase):
         html_body = call_args[0][2]  # full HTML
         self.assertIn('Alice', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-004b')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-004b')
     def test_send_renders_full_display_name_in_body(self, mock_ses):
         user = User.objects.create_user(
             email='ada@example.com',
@@ -114,7 +114,7 @@ class EmailServiceSendTest(TestCase):
         html_body = mock_ses.call_args[0][2]
         self.assertIn('Ada Lovelace', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-005')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-005')
     def test_send_greets_nameless_user_without_their_email_handle(self, mock_ses):
         """Issue #1591: a member with no name gets ``Hi there,``, never
         ``Hi bob,``."""
@@ -126,7 +126,7 @@ class EmailServiceSendTest(TestCase):
         self.assertIn('Hi there,', html_body)
         self.assertNotIn('Hi bob,', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-005b')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-005b')
     def test_send_treats_whitespace_only_names_as_nameless(self, mock_ses):
         user = User.objects.create_user(
             email='builder@example.com',
@@ -146,7 +146,7 @@ class EmailServiceSendTest(TestCase):
             self.service.send(self.user, 'nonexistent_template', {})
         self.assertIn('not classified', str(ctx.exception))
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-006')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-006')
     def test_transactional_send_excludes_unsubscribe_link(self, mock_ses):
         self.service.send(
             self.user,
@@ -159,7 +159,7 @@ class EmailServiceSendTest(TestCase):
         self.assertNotIn('Unsubscribe', html_body)
         self.assertNotIn('/api/unsubscribe?token=', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-006b')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-006b')
     def test_transactional_send_passes_email_type_and_no_unsubscribe(self, mock_ses):
         # Issue #937: send() threads the template name through as email_type
         # so the transport can resolve the sender per type.
@@ -172,7 +172,7 @@ class EmailServiceSendTest(TestCase):
         self.assertEqual(mock_ses.call_args.kwargs['email_type'], 'password_reset')
         self.assertIsNone(mock_ses.call_args.kwargs['unsubscribe_url'])
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-007')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-007')
     def test_send_includes_header_and_footer(self, mock_ses):
         self.service.send(self.user, 'welcome', {'tier_name': 'Main'})
 
@@ -184,7 +184,7 @@ class EmailServiceSendTest(TestCase):
         # Footer
         self.assertIn('email-footer', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-msg-008')
+    @patch.object(EmailService, '_send_relay', return_value='ses-msg-008')
     def test_send_default_context(self, mock_ses):
         """send() with no context dict should still work."""
         log = self.service.send(self.user, 'welcome')
@@ -215,7 +215,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         )
         self.service = EmailService()
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_welcome_template(self, mock_ses):
         self.service.send(self.user, 'welcome', {
             'tier_name': 'Main',
@@ -228,7 +228,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         # #954: the gated /community/slack redirect, not a raw invite URL.
         self.assertIn('/community/slack', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_free_welcome_template(self, mock_ses):
         self.service.send(self.user, 'free_welcome')
 
@@ -243,7 +243,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertNotIn('Slack', html)
         self.assertEqual(call_args.kwargs['email_type'], 'free_welcome')
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_payment_failed_template(self, mock_ses):
         self.service.send(self.user, 'payment_failed', {
             'tier_name': 'Premium',
@@ -256,7 +256,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('Premium', html)
         self.assertIn('billing.stripe.com/update', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_cancellation_template(self, mock_ses):
         self.service.send(self.user, 'cancellation', {
             'tier_name': 'Main',
@@ -268,7 +268,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('cancelled', subject)
         self.assertIn('March 15, 2026', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_community_invite_template(self, mock_ses):
         # Issue #953: the invite links to the gated /community/slack
         # redirect (built from the injected site_url), never the raw
@@ -288,7 +288,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
             html,
         )
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_lead_magnet_delivery_template(self, mock_ses):
         self.service.send(self.user, 'lead_magnet_delivery', {
             'resource_title': 'AI Cheat Sheet',
@@ -301,7 +301,7 @@ class EmailServiceTemplateRenderingTest(TestCase):
         self.assertIn('AI Cheat Sheet', html)
         self.assertIn('download/ai-cheat-sheet', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='test-id')
+    @patch.object(EmailService, '_send_relay', return_value='test-id')
     def test_event_reminder_template(self, mock_ses):
         self.service.send(self.user, 'event_reminder', {
             'event_title': 'AI Workshop',
@@ -392,7 +392,7 @@ class VerifyEmailFooterTest(TestCase):
         )
         self.service = EmailService()
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-1')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-1')
     def test_unverified_recipient_email_contains_verify_cta(self, mock_ses):
         self.service.send(
             self.unverified, 'welcome', {'tier_name': 'Free'},
@@ -407,7 +407,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertIn('/api/verify-email?token=', verify_url)
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-2')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-2')
     def test_verified_recipient_email_omits_verify_cta(self, mock_ses):
         self.service.send(
             self.verified, 'welcome', {'tier_name': 'Free'},
@@ -422,7 +422,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertNotIn('/api/verify-email?token=', html)
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-3a')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-3a')
     def test_email_verification_signup_template_does_not_carry_verify_footer(
         self, mock_ses,
     ):
@@ -444,7 +444,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertIsNone(_extract_verify_url_from_footer(html))
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-3b')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-3b')
     def test_email_verification_subscribe_template_does_not_carry_verify_footer(
         self, mock_ses,
     ):
@@ -466,7 +466,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertIsNone(_extract_verify_url_from_footer(html))
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-4')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-4')
     def test_password_reset_template_does_not_carry_verify_footer(
         self, mock_ses,
     ):
@@ -481,7 +481,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertIsNone(_extract_verify_url_from_footer(html))
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-5')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-5')
     def test_verify_cta_renders_without_transactional_unsubscribe(self, mock_ses):
         self.service.send(
             self.unverified, 'welcome', {'tier_name': 'Free'},
@@ -494,7 +494,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertNotIn('/api/unsubscribe?token=', html)
         assert_no_internal_footer_text(self, html)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-6')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-6')
     def test_verify_url_is_one_click_jwt_token(self, mock_ses):
         import jwt as _jwt
 
@@ -515,7 +515,7 @@ class VerifyEmailFooterTest(TestCase):
         self.assertEqual(payload['action'], 'verify_email')
         self.assertEqual(payload['user_id'], self.unverified.pk)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-7')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-7')
     def test_verify_url_token_expires_in_seven_days(self, mock_ses):
         import datetime
 
@@ -551,7 +551,7 @@ class VerifyEmailFooterTest(TestCase):
         # Patch the helper at its definition site so any import path the
         # service uses goes through the mock.
         with (
-            patch.object(EmailService, '_send_ses', return_value='ses-450-8'),
+            patch.object(EmailService, '_send_relay', return_value='ses-450-8'),
             patch(
                 'accounts.views.auth._generate_verification_token',
             ) as mock_mint,
@@ -561,7 +561,7 @@ class VerifyEmailFooterTest(TestCase):
             )
         mock_mint.assert_not_called()
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-450-9')
+    @patch.object(EmailService, '_send_relay', return_value='ses-450-9')
     def test_render_html_email_passes_verify_url_to_template(self, mock_ses):
         # Direct unit test of the keyword-arg plumbing: when the caller
         # passes ``verify_email_url`` to ``render_html_email`` the wrapped

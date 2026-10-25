@@ -66,7 +66,9 @@ def patch_configured_client(stub):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    with patch_configured_client(StubSESClient()):
+    from email_app.testing import local_render_backend
+
+    with local_render_backend(), patch_configured_client(StubSESClient()):
         with test.assertRaises(PermanentJobError) as caught:
             deliver_job(None, {"delivery_id": str(delivery.id)})
     test.assertEqual(caught.exception.code, reason)

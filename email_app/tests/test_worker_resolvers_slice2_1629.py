@@ -19,7 +19,7 @@ from django.utils import timezone
 from accounts.models import User
 from content.models import Course
 from email_app.package_mail import send_package_mail
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 from payments.models import (
     MonthlyPaymentGrace as Grace,
 )
@@ -53,7 +53,7 @@ def _drain_html(delivery):
 def _deliver_expect_permanent_error(test, delivery, reason):
     """Drain one delivery and assert it fails closed with ``reason``."""
 
-    with patch(
+    with local_render_backend(), patch(
         "community_base.mail.backends.ses_local.configured_client",
         return_value=StubSESClient(),
     ):

@@ -133,7 +133,7 @@ class EmailPlainTextPreparationTest(TestCase):
                     self.assertEqual(needle in html, should_exist)
                     self.assertEqual(needle in plain_text, should_exist)
 
-    @patch.object(EmailService, '_send_ses', return_value='maven-ses-id')
+    @patch.object(EmailService, '_send_relay', return_value='maven-ses-id')
     def test_maven_welcome_plain_text_keeps_every_action_url(self, mock_ses):
         urls = {
             'sign_in_url': 'https://example.test/accounts/login/',
@@ -198,7 +198,7 @@ class EmailPlainTextPreparationTest(TestCase):
 @tag('core')
 @override_settings(SITE_BASE_URL='https://example.test')
 class CampaignPlainTextDeliveryTest(TestCase):
-    @patch.object(EmailService, '_send_ses', return_value='campaign-ses-id')
+    @patch.object(EmailService, '_send_relay', return_value='campaign-ses-id')
     def test_confirmed_delivery_carries_both_parts_and_keeps_one_log(self, mock_ses):
         user = User.objects.create_user(
             email='campaign@example.test',

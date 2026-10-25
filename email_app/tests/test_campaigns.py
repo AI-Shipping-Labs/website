@@ -855,7 +855,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-msg-001',
     )
     def test_batch_sends_to_specified_users(self, mock_ses):
@@ -875,7 +875,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(log_emails, {'user1@test.com', 'user2@test.com'})
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='active-message',
     )
     def test_compatibility_batch_skips_inactive_and_sends_active(self, mock_ses):
@@ -930,7 +930,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(self.campaign.sent_count, 1)
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-123',
     )
     def test_batch_creates_email_logs_with_correct_fields(self, mock_ses):
@@ -951,7 +951,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             self.assertEqual(log.subject, self.campaign.subject)
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-123',
     )
     def test_batch_calls_ses_per_recipient(self, mock_ses):
@@ -970,7 +970,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             self.assertEqual(call.kwargs['email_type'], 'campaign')
             self.assertIn('/api/unsubscribe?token=', call.kwargs['unsubscribe_url'])
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay')
     def test_batch_continues_on_individual_failure(self, mock_ses):
         """If one email fails, the rest of the batch continues."""
         from email_app.services.email_service import EmailServiceError
@@ -998,7 +998,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-retry',
     )
     def test_batch_skips_users_with_existing_log(self, mock_ses):
@@ -1035,7 +1035,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(user1_logs.first().ses_message_id, 'earlier-attempt')
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-final',
     )
     def test_last_batch_transitions_campaign_to_sent(self, mock_ses):
@@ -1077,7 +1077,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
             send_campaign_batch(99999, user_ids=[1], send_delay=0)
         self.assertIn('not found', str(ctx.exception))
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay')
     @patch('email_app.tasks.send_campaign.EmailService._build_unsubscribe_url')
     @patch('email_app.tasks.send_campaign.EmailService._build_verify_email_url')
     def test_batch_optout_before_turn_skips_without_tokens_log_or_transport(
@@ -1119,7 +1119,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertNotIn(self.user1.email, diagnostic)
         self.assertNotIn('token=', diagnostic)
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay')
     def test_all_opted_out_batch_finishes_without_logs(self, mock_ses):
         User.objects.filter(pk__in=[self.user1.pk, self.user2.pk]).update(
             unsubscribed=True,
@@ -1145,7 +1145,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(self.campaign.sent_count, 0)
         self.assertIsNotNone(self.campaign.sent_at)
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay')
     def test_optout_during_running_batch_wins_and_batch_completes(
         self,
         mock_ses,
@@ -1184,7 +1184,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertEqual(self.campaign.sent_count, 1)
         self.assertEqual(self.campaign.status, 'sent')
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay')
     def test_retry_distinguishes_already_sent_and_consent_skips(self, mock_ses):
         EmailLog.objects.create(
             campaign=self.campaign,
@@ -1214,7 +1214,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='resubscribed-message',
     )
     def test_resubscription_before_recipient_turn_sends(self, mock_ses):
@@ -1239,7 +1239,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         )
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='soft-bounce-message',
     )
     def test_bounce_and_complaint_policy_flows_through_unsubscribe(
@@ -1296,7 +1296,7 @@ class SendCampaignBatchTest(TierSetupMixin, TestCase):
         self.assertFalse(below_threshold.unsubscribed)
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='actual-send',
     )
     def test_status_count_keeps_actual_log_after_recipient_opts_out(
@@ -1420,7 +1420,7 @@ class SendCampaignEndToEndTest(TierSetupMixin, TestCase):
     """End-to-end: fan-out + batch execution with chunking."""
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-id',
     )
     def test_full_pipeline_chunks_and_completes(self, mock_ses):
@@ -1508,9 +1508,9 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         self.assertNotContains(response, 'Send Campaign')
 
     @patch('jobs.tasks.async_task')
-    @patch('email_app.services.email_service.EmailService._send_ses')
+    @patch('email_app.services.email_service.EmailService._send_relay')
     def test_retired_action_routes_are_unhandled_404_without_side_effects(
-        self, mock_send_ses, mock_async_task,
+        self, mock_send_relay, mock_async_task,
     ):
         paths = [
             f'/admin/email_app/emailcampaign/{self.campaign.pk}/send-test/',
@@ -1531,7 +1531,7 @@ class CampaignAdminTest(TierSetupMixin, TestCase):
         self.campaign.refresh_from_db()
         self.assertEqual(self.campaign.status, 'draft')
         self.assertFalse(self.campaign.deliveries.exists())
-        mock_send_ses.assert_not_called()
+        mock_send_relay.assert_not_called()
         mock_async_task.assert_not_called()
 
     def test_registered_admin_model_routes_remain_available(self):
@@ -1568,7 +1568,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
             status='sending',
         )
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c1')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay', return_value='ses-450-c1')
     def test_campaign_recipient_unverified_at_send_time_sees_cta(
         self, mock_ses,
     ):
@@ -1584,7 +1584,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
             send_delay=0,
         )
 
-        # Captured HTML is the third positional arg to _send_ses.
+        # Captured HTML is the third positional arg to _send_relay.
         html = mock_ses.call_args[0][2]
         self.assertIn('<p class="verify-email-cta">', html)
         self.assertIn('Your email is not verified on our platform.', html)
@@ -1593,7 +1593,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         self.assertIn('/api/unsubscribe?token=', html)
         assert_no_internal_footer_text(self, html)
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c2')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay', return_value='ses-450-c2')
     def test_campaign_recipient_verified_at_send_time_omits_cta(
         self, mock_ses,
     ):
@@ -1615,7 +1615,7 @@ class CampaignVerifyEmailFooterTest(TierSetupMixin, TestCase):
         self.assertIn('/api/unsubscribe?token=', html)
         assert_no_internal_footer_text(self, html)
 
-    @patch('email_app.tasks.send_campaign.EmailService._send_ses', return_value='ses-450-c3')
+    @patch('email_app.tasks.send_campaign.EmailService._send_relay', return_value='ses-450-c3')
     def test_campaign_recipient_verified_after_enqueue_omits_cta(
         self, mock_ses,
     ):
@@ -1656,7 +1656,7 @@ class CampaignEligibilityCriteriaTest(TierSetupMixin, TestCase):
     """
 
     @patch(
-        'email_app.tasks.send_campaign.EmailService._send_ses',
+        'email_app.tasks.send_campaign.EmailService._send_relay',
         return_value='ses-msg-id',
     )
     def test_campaign_send_respects_tier_verification_and_subscription(

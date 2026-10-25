@@ -30,7 +30,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
     def setUp(self):
         self.service = EmailService()
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-001')
+    @patch.object(EmailService, '_send_relay', return_value='ses-001')
     def test_send_uses_override_body_when_present(self, mock_ses):
         EmailTemplateOverride.objects.create(
             template_name='welcome',
@@ -49,7 +49,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
         self.assertNotIn('Welcome to **AI Shipping Labs**', html_body)
         self.assertNotIn('Browse our', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-002')
+    @patch.object(EmailService, '_send_relay', return_value='ses-002')
     def test_send_falls_back_to_file_when_no_override(self, mock_ses):
         # No override row: guarantee using the filesystem template.
         self.assertFalse(EmailTemplateOverride.objects.exists())
@@ -61,7 +61,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
         self.assertIn('Browse our', html_body)
         self.assertNotIn('OVERRIDE BODY', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-003')
+    @patch.object(EmailService, '_send_relay', return_value='ses-003')
     def test_send_uses_override_subject(self, mock_ses):
         EmailTemplateOverride.objects.create(
             template_name='welcome',
@@ -74,7 +74,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
         subject = mock_ses.call_args[0][1]
         self.assertEqual(subject, 'OVERRIDE SUBJECT')
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-004')
+    @patch.object(EmailService, '_send_relay', return_value='ses-004')
     def test_override_footer_note_appears_in_chrome(self, mock_ses):
         EmailTemplateOverride.objects.create(
             template_name='welcome',
@@ -94,7 +94,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
         footer_segment = html_body[footer_idx:]
         self.assertIn('P.S. limited time', footer_segment)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-005')
+    @patch.object(EmailService, '_send_relay', return_value='ses-005')
     def test_no_footer_note_for_file_template(self, mock_ses):
         # When using the file (no override), footer_note should be empty
         # so the chrome's ``{% if footer_note %}`` block is not rendered.
@@ -103,7 +103,7 @@ class EmailServiceOverridePrecedenceTest(TestCase):
         html_body = mock_ses.call_args[0][2]
         self.assertNotIn('P.S. limited time', html_body)
 
-    @patch.object(EmailService, '_send_ses', return_value='ses-006')
+    @patch.object(EmailService, '_send_relay', return_value='ses-006')
     def test_override_deleted_falls_back_to_file(self, mock_ses):
         # First send with override, then delete and send again -- second
         # send must use the file content.

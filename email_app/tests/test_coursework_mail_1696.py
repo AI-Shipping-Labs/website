@@ -26,7 +26,7 @@ from django.test import TestCase, override_settings
 from content.models import Cohort, Course
 from content.services.coursework_bridge import ensure_curriculum_enrollment
 from email_app.services.context_guard import ensure_no_rendered_urls
-from email_app.testing import StubSESClient
+from email_app.testing import StubSESClient, local_render_backend
 
 User = get_user_model()
 
@@ -49,7 +49,7 @@ def _deliver_latest(purpose):
     )
     with (
         backend_override,
-        patch(
+        local_render_backend(), patch(
             'community_base.mail.backends.ses_local.configured_client',
             return_value=stub,
         ),

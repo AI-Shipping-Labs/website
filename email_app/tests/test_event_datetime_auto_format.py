@@ -35,7 +35,7 @@ class EmailServiceEventDatetimeAutoFormatTest(TestCase):
             preferred_timezone='',
         )
 
-    @patch.object(EmailService, '_send_ses', return_value='auto-fmt-1')
+    @patch.object(EmailService, '_send_relay', return_value='auto-fmt-1')
     def test_raw_datetime_is_formatted_in_user_timezone(self, mock_ses):
         service = EmailService()
         service.send(
@@ -54,7 +54,7 @@ class EmailServiceEventDatetimeAutoFormatTest(TestCase):
         self.assertIn('18:00 Europe/Berlin', html)
         self.assertNotIn('16:00 UTC', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='auto-fmt-2')
+    @patch.object(EmailService, '_send_relay', return_value='auto-fmt-2')
     def test_raw_datetime_falls_back_to_utc_for_unset_preference(self, mock_ses):
         service = EmailService()
         service.send(
@@ -71,7 +71,7 @@ class EmailServiceEventDatetimeAutoFormatTest(TestCase):
 
         self.assertIn('16:00 UTC', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='auto-fmt-3')
+    @patch.object(EmailService, '_send_relay', return_value='auto-fmt-3')
     def test_pre_formatted_string_passes_through_unchanged(self, mock_ses):
         """Existing callers that already pre-formatted the string keep
         working — the guardrail only converts datetimes, never strings.
@@ -91,7 +91,7 @@ class EmailServiceEventDatetimeAutoFormatTest(TestCase):
 
         self.assertIn('March 20, 2026 at 18:00 Custom/Zone', html)
 
-    @patch.object(EmailService, '_send_ses', return_value='auto-fmt-4')
+    @patch.object(EmailService, '_send_relay', return_value='auto-fmt-4')
     def test_cancellation_access_until_datetime_is_auto_formatted(self, mock_ses):
         """The cancellation template's ``access_until`` field is
         currently only fed pre-formatted strings, but a future sender

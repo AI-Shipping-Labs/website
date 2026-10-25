@@ -546,5 +546,3 @@ def test_staff_is_stopped_by_unsafe_feedback_and_can_open_evidence(
     assert Schedule.objects.count() == 0
     connection.close()
     context.close()
-
-

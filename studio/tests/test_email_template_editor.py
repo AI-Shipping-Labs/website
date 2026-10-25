@@ -164,4 +164,3 @@ class RelayTemplateEditorTest(TestCase):
 
         self.assertEqual(response.status_code, 404)
         configured.assert_not_called()
-

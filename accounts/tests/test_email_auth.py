@@ -1090,17 +1090,24 @@ class EmailSendHelperExceptionHandlingTest(TestCase):
             started_at + datetime.timedelta(hours=1, minutes=1),
         )
 
-    def test_resolver_leaves_other_purposes_untouched(self):
+    def test_resolver_adds_layout_context_to_other_purposes(self):
         from types import SimpleNamespace
 
         from email_app import hooks
 
         resolved = hooks.resolve_auth_mail_context(
-            delivery=SimpleNamespace(purpose="free_welcome", category=""),
+            delivery=SimpleNamespace(
+                purpose="free_welcome", category="", recipient_user=None,
+            ),
             context={"site_url": "https://example.com"},
         )
 
-        self.assertEqual(resolved, {"site_url": "https://example.com"})
+        self.assertEqual(resolved, {
+            "site_url": "https://example.com",
+            "footer_note": "",
+            "unsubscribe_url": "",
+            "verify_email_url": "",
+        })
 
     def test_resolver_skips_surrogate_recipients(self):
         from types import SimpleNamespace

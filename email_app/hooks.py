@@ -1162,9 +1162,8 @@ def resolve_auth_mail_context(*, delivery, context):
         _resolve_studio_test_send_context(delivery, context)
     else:
         resolver = _PURPOSE_CONTEXT_RESOLVERS.get(delivery.purpose)
-        if resolver is None:
-            return context
-        resolver(delivery, context)
+        if resolver is not None:
+            resolver(delivery, context)
 
     # Render-only injection: templates render absolute links with it,
     # and it never enters the stored context.

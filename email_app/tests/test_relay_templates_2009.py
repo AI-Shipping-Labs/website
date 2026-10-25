@@ -83,4 +83,3 @@ class RelayTemplateVersionPolicyTest(SimpleTestCase):
         self.assertEqual(template_version_for("raw_transactional"), 1)
         self.assertEqual(template_version_for("relay-inbound-forward"), 1)
         self.assertEqual(template_version_for("future-template"), 1)
-
